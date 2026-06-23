@@ -260,6 +260,31 @@ public class PredefinedSearchesControllerTests
     }
 
     [Test]
+    public async Task CreateChildCriteriaGroupAsync_WithValidParent_ReturnsCreatedAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        _mockSearchRepo.Setup(r => r.CreatePredefinedSearchCriteriaGroupAsync(SearchId, GroupId, SearchGroupType.Any, 0))
+            .ReturnsAsync(new PredefinedSearchCriteriaGroup { Id = 50, Type = SearchGroupType.Any });
+
+        var result = await _controller.CreateChildCriteriaGroupAsync(SearchId, GroupId, new CreatePredefinedSearchCriteriaGroupRequest { Type = "Any" });
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var dto = (PredefinedSearchCriteriaGroupDto)((CreatedAtRouteResult)result).Value!;
+        Assert.That(dto.Type, Is.EqualTo("Any"));
+    }
+
+    [Test]
+    public async Task CreateChildCriteriaGroupAsync_WithUnknownParent_ReturnsNotFoundAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+
+        var result = await _controller.CreateChildCriteriaGroupAsync(SearchId, groupId: 999, new CreatePredefinedSearchCriteriaGroupRequest { Type = "Any" });
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+        _mockSearchRepo.Verify(r => r.CreatePredefinedSearchCriteriaGroupAsync(It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<SearchGroupType>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Test]
     public async Task DeleteCriteriaGroupAsync_WithUnknownGroup_ReturnsNotFoundAsync()
     {
         _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());

@@ -138,7 +138,7 @@ Set-JIMPredefinedSearch -Id 3 -IsEnabled $false -WhatIf
 
 ## Criteria groups and criteria
 
-These cmdlets manage the criteria that filter a Predefined Search's results. Criteria live in **criteria groups**; add a group first, then add criteria to it. See [Filtering with criteria](../configuration/predefined-searches.md#filtering-with-criteria) for the operators available per attribute type and how criteria currently combine (all criteria are AND-ed).
+These cmdlets manage the criteria that filter a Predefined Search's results. Criteria live in **criteria groups**; add a group first, then add criteria to it. See [Filtering with criteria](../configuration/predefined-searches.md#filtering-with-criteria) for the operators available per attribute type and how criteria combine (each group is All/AND or Any/OR, top-level groups are OR-ed, and groups can nest one level for mixed logic).
 
 All the write cmdlets support `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm.
 
@@ -147,7 +147,7 @@ All the write cmdlets support `ShouldProcess`; use `-WhatIf` or `-Confirm` to pr
 | Cmdlet | Purpose |
 |--------|---------|
 | `Get-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int>` | List the criteria groups (and their criteria) for a search. |
-| `New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> [-Type All\|Any] [-Position <int>] [-PassThru]` | Create a criteria group. |
+| `New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> [-ParentGroupId <int>] [-Type All\|Any] [-Position <int>] [-PassThru]` | Create a criteria group; pass `-ParentGroupId` to nest it under an existing group. |
 | `Set-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> -GroupId <int> [-Type All\|Any] [-Position <int>] [-PassThru]` | Update a group's logic type or position. |
 | `Remove-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> -GroupId <int>` | Delete a group and everything in it. |
 
@@ -177,6 +177,16 @@ New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 `
 ```powershell title="Filter on a date attribute (compared in UTC)"
 New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 `
     -MetaverseAttributeName 'AccountExpiry' -ComparisonType LessThan -DateTimeValue '2026-01-01'
+```
+
+```powershell title="Mixed logic: (Department = Finance OR Sales) AND IsActive"
+# Top-level All group with the IsActive criterion, plus a nested Any group for the departments.
+$all = New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -Type All -PassThru
+New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $all.id `
+    -MetaverseAttributeName 'IsActive' -ComparisonType Equals -BoolValue $true
+$any = New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -ParentGroupId $all.id -Type Any -PassThru
+New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $any.id -MetaverseAttributeName 'Department' -ComparisonType Equals -StringValue 'Finance'
+New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $any.id -MetaverseAttributeName 'Department' -ComparisonType Equals -StringValue 'Sales'
 ```
 
 ```powershell title="List the criteria groups for a search"

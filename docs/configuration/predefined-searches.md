@@ -81,11 +81,18 @@ For **Date/Time** attributes the editor shows the operators in calendar wording:
 
 ### How criteria combine
 
-In the current release, **all criteria across all groups are combined with AND**: an object matches only when every criterion is satisfied. A search with no criteria returns every object of its Metaverse Object Type. Per-group **All / Any** (AND / OR) logic and nested groups are honoured in a later release.
+Each group has a **logic type**:
+
+- **All (AND)**<br /> the group matches only when every criterion (and nested child group) in it matches.
+- **Any (OR)**<br /> the group matches when at least one criterion (or nested child group) in it matches.
+
+**Top-level groups are combined with OR**: an object matches the search when it matches any one of the top-level groups. A search with no criteria returns every object of its Metaverse Object Type, and an empty group matches everything.
+
+**Nested groups** let you express mixed logic. For example, "in Finance or Sales, and active" is a top-level **All** group containing the `IsActive = true` criterion and a child **Any** group containing `Department = Finance` and `Department = Sales`, giving `(Department = Finance OR Department = Sales) AND IsActive = true`. (Nesting is supported one level deep, which covers these mixed-logic expressions.)
 
 ### Editing criteria
 
-On the Predefined Search detail page in the portal, the **Criteria** panel lets you add a criteria group, then add criteria to it, each with the attribute, operator and value controls above. Removing a group removes the criteria within it. The same operations are available through the [PowerShell cmdlets](../powershell/predefined-searches.md) and the REST API.
+On the Predefined Search detail page in the portal, the **Criteria** panel lets you add a criteria group, then add criteria to it, each with the attribute, operator and value controls above. Within a group you can also add a nested child group (with its own All / Any logic). Removing a group removes everything within it. The same operations are available through the [PowerShell cmdlets](../powershell/predefined-searches.md) and the REST API.
 
 ## Manage Predefined Searches
 
