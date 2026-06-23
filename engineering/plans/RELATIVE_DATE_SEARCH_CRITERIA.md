@@ -1,6 +1,6 @@
 # Relative Date/Time Search and Scoping Criteria: Implementation Plan
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Doing (Phases 1-2 complete)
 - **Issue:** [#85](https://github.com/TetronIO/JIM/issues/85) (sub-tasks [#849](https://github.com/TetronIO/JIM/issues/849), [#850](https://github.com/TetronIO/JIM/issues/850))
 - **PRD:** [`engineering/prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md`](../prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md)
 
@@ -127,9 +127,11 @@ For a `DateTime` attribute in this phase the value control is the existing `MudD
 
 ---
 
-## Phase 2: Predefined-search group semantics (#850)
+## Phase 2: Predefined-search group semantics (#850) ✅
 
 **Goal:** the query translator honours `All` (AND), `Any` (OR), and nested groups for all criteria types, matching the semantics the scoping evaluator already implements in memory.
+
+**Delivered** (commits on `claude/gh-issue-85-prd-oizdqr`): recursive raw-SQL group composition (All=AND, Any=OR, top-level groups OR-ed, empty group always-true), one-level child-group loading in `GetPredefinedSearchAsync`, the two dead EF `GetMetaverseObjectsOfTypeAsync` overloads removed, the child-groups REST endpoint + `-ParentGroupId` PowerShell parameter + nested-group portal editor, controller tests, and docs/changelog. Verified end-to-end against PostgreSQL (single-All regression, All-AND, Any-OR, nested `(A OR B) AND C`, top-level OR, empty group). Full build and all C#/Pester tests green; `mkdocs build --strict` and the lints pass.
 
 ### Data / query translation (raw SQL, not EF expression trees)
 **Corrected approach.** The live path is the raw-SQL `GetMetaverseObjectHeadersPagedAsync`, so group logic is **SQL-string composition**, not EF `Expression` composition. The original `ExpressionVisitor`/`Expression.AndAlso`/no-LINQKit guidance is obsolete and is dropped.
