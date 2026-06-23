@@ -148,8 +148,8 @@
 
                 @if (_newCriterionAttribute != null)
                 {
-                    <MudSelect T="SearchComparisonType"
-                               @bind-Value="_newCriterion.ComparisonType"
+                    <MudSelect T="SearchComparisonType?"
+                               @bind-Value="NewCriterionComparisonType"
                                Label="Comparison Type"
                                Placeholder="Please select the type of comparison to make"
                                Required="true"
@@ -195,6 +195,14 @@
     private int? _editingCriterionId;
     private PredefinedSearchCriteria? _newCriterion;
     private MetaverseAttribute? _newCriterionAttribute;
+
+    // Adapter that maps the model's NotSet sentinel to null at the binding boundary, so the
+    // Comparison Type select shows its placeholder (and enforces Required) until the user chooses.
+    private SearchComparisonType? NewCriterionComparisonType
+    {
+        get => _newCriterion is { ComparisonType: not SearchComparisonType.NotSet } c ? c.ComparisonType : null;
+        set { if (_newCriterion != null) _newCriterion.ComparisonType = value ?? SearchComparisonType.NotSet; }
+    }
 
     private sealed record OperatorOption(SearchComparisonType Operator, string Label);
 

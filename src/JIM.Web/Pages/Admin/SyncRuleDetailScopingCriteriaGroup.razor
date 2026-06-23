@@ -148,11 +148,11 @@
             }
         }
 
-        <MudSelect T="string"
+        <MudSelect T="SearchComparisonType?"
                     Label="Comparison Type"
                     Placeholder="Please select the type of comparison to make"
                     Required="true"
-                    ValueChanged="HandleComparisonTypeSelection"
+                    @bind-Value="NewScopingComparisonType"
                     Class="mt-5"
                     Variant="Variant.Outlined">
             @foreach (SearchComparisonType searchComparisonType in Enum.GetValues(typeof(SearchComparisonType)))
@@ -160,7 +160,7 @@
                 if (searchComparisonType == SearchComparisonType.NotSet)
                     continue;
 
-                <MudSelectItem Value="@searchComparisonType.ToString()">@searchComparisonType.ToString().SplitOnCapitalLetters()</MudSelectItem>
+                <MudSelectItem T="SearchComparisonType?" Value="@searchComparisonType">@searchComparisonType.ToString().SplitOnCapitalLetters()</MudSelectItem>
             }
         </MudSelect>
 
@@ -226,15 +226,12 @@
         SyncRuleScopingCriteriaGroupChanged.InvokeAsync(SyncRuleScopingCriteriaGroup);
     }
 
-    private void HandleComparisonTypeSelection(string searchComparisonTypeName)
+    // Adapter that maps the model's NotSet sentinel to null at the binding boundary, so the
+    // Comparison Type select shows its placeholder (and enforces Required) until the user chooses.
+    private SearchComparisonType? NewScopingComparisonType
     {
-        // convert to enum and assign
-        // should never happen, but performing for linting reasons
-        if (SyncRule == null || _newSyncRuleScopingCriteria == null)
-            return;
-
-        var searchComparisonType = (SearchComparisonType)Enum.Parse(typeof(SearchComparisonType), searchComparisonTypeName);
-        _newSyncRuleScopingCriteria.ComparisonType = searchComparisonType;
+        get => _newSyncRuleScopingCriteria is { ComparisonType: not SearchComparisonType.NotSet } c ? c.ComparisonType : null;
+        set { if (_newSyncRuleScopingCriteria != null) _newSyncRuleScopingCriteria.ComparisonType = value ?? SearchComparisonType.NotSet; }
     }
 
     private bool DisableAddCriteriaButton()
