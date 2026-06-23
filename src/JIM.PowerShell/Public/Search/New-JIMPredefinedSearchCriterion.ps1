@@ -52,6 +52,20 @@ function New-JIMPredefinedSearchCriterion {
         When provided as $false, text comparisons ignore case differences. When omitted the server
         default (true) applies. Only meaningful for Text attribute comparisons.
 
+    .PARAMETER ValueMode
+        For DateTime attributes, 'Absolute' (compare against -DateTimeValue, the default) or 'Relative'
+        (compare against a date resolved relative to now). Relative requires -RelativeCount, -RelativeUnit
+        and -RelativeDirection, and is mutually exclusive with -DateTimeValue.
+
+    .PARAMETER RelativeCount
+        The relative offset count (zero or positive).
+
+    .PARAMETER RelativeUnit
+        The relative offset unit: Hours, Days, Weeks, Months or Years.
+
+    .PARAMETER RelativeDirection
+        The relative offset direction: Ago (past) or FromNow (future).
+
     .PARAMETER PassThru
         If specified, returns the created criterion object.
 
@@ -114,6 +128,21 @@ function New-JIMPredefinedSearchCriterion {
         [Parameter()]
         [bool]$CaseSensitive,
 
+        [Parameter()]
+        [ValidateSet('Absolute', 'Relative')]
+        [string]$ValueMode,
+
+        [Parameter()]
+        [int]$RelativeCount,
+
+        [Parameter()]
+        [ValidateSet('Hours', 'Days', 'Weeks', 'Months', 'Years')]
+        [string]$RelativeUnit,
+
+        [Parameter()]
+        [ValidateSet('Ago', 'FromNow')]
+        [string]$RelativeDirection,
+
         [switch]$PassThru
     )
 
@@ -147,6 +176,24 @@ function New-JIMPredefinedSearchCriterion {
         if ($PSBoundParameters.ContainsKey('BoolValue')) { $body.boolValue = $BoolValue }
         if ($PSBoundParameters.ContainsKey('GuidValue')) { $body.guidValue = $GuidValue.ToString() }
         if ($PSBoundParameters.ContainsKey('CaseSensitive')) { $body.caseSensitive = $CaseSensitive }
+
+        # Relative date handling (DateTime attributes only; validated server-side too).
+        $relativeRequested = ($PSBoundParameters.ContainsKey('ValueMode') -and $ValueMode -eq 'Relative') -or
+            $PSBoundParameters.ContainsKey('RelativeCount') -or $PSBoundParameters.ContainsKey('RelativeUnit') -or $PSBoundParameters.ContainsKey('RelativeDirection')
+        if ($relativeRequested) {
+            if ($PSBoundParameters.ContainsKey('DateTimeValue')) {
+                Write-Error "Provide either -DateTimeValue (absolute) or the relative parameters, not both."
+                return
+            }
+            if (-not ($PSBoundParameters.ContainsKey('RelativeCount') -and $PSBoundParameters.ContainsKey('RelativeUnit') -and $PSBoundParameters.ContainsKey('RelativeDirection'))) {
+                Write-Error "Relative criteria require -RelativeCount, -RelativeUnit and -RelativeDirection."
+                return
+            }
+            $body.valueMode = 'Relative'
+            $body.relativeCount = $RelativeCount
+            $body.relativeUnit = $RelativeUnit
+            $body.relativeDirection = $RelativeDirection
+        }
 
         if ($PSCmdlet.ShouldProcess("Criteria Group $GroupId on Predefined Search $PredefinedSearchId", "Add Criterion (Attribute $attributeId $ComparisonType)")) {
             Write-Verbose "Creating criterion in group $GroupId for Predefined Search $PredefinedSearchId"

@@ -75,6 +75,7 @@
         'Set-JIMScopingCriteriaGroup',
         'Remove-JIMScopingCriteriaGroup',
         'New-JIMScopingCriterion',
+        'Set-JIMScopingCriterion',
         'Remove-JIMScopingCriterion',
 
         # Run Profiles

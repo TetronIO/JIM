@@ -121,6 +121,44 @@ Describe 'Set-JIMPredefinedSearchCriterion' {
     }
 }
 
+Describe 'Relative date parameters' {
+
+    It '<_> exposes ValueMode, RelativeCount, RelativeUnit and RelativeDirection' -ForEach @(
+        'New-JIMPredefinedSearchCriterion'
+        'Set-JIMPredefinedSearchCriterion'
+        'New-JIMScopingCriterion'
+        'Set-JIMScopingCriterion'
+    ) {
+        $command = Get-Command $_
+        foreach ($p in 'ValueMode', 'RelativeCount', 'RelativeUnit', 'RelativeDirection') {
+            $command.Parameters[$p] | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    It 'New-JIMPredefinedSearchCriterion restricts ValueMode, RelativeUnit and RelativeDirection' {
+        $command = Get-Command New-JIMPredefinedSearchCriterion
+        ($command.Parameters['ValueMode'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }).ValidValues | Should -Contain 'Relative'
+        ($command.Parameters['RelativeUnit'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }).ValidValues | Should -Contain 'Days'
+        ($command.Parameters['RelativeDirection'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }).ValidValues | Should -Contain 'FromNow'
+    }
+}
+
+Describe 'Set-JIMScopingCriterion' {
+
+    BeforeAll { $command = Get-Command Set-JIMScopingCriterion }
+
+    It 'Has a mandatory CriterionId parameter aliased Id' {
+        $param = $command.Parameters['CriterionId']
+        $param | Should -Not -BeNullOrEmpty
+        $param.Aliases | Should -Contain 'Id'
+    }
+
+    It 'Throws when not connected' {
+        Disconnect-JIM
+        { Set-JIMScopingCriterion -SyncRuleId 1 -GroupId 1 -CriterionId 1 -MetaverseAttributeId 1 -ComparisonType Equals -StringValue 'x' -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+    }
+}
+
 Describe 'Remove-JIMPredefinedSearchCriterion' {
 
     BeforeAll { $command = Get-Command Remove-JIMPredefinedSearchCriterion }

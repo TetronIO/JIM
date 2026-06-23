@@ -1,18 +1,19 @@
 # Copyright (c) Tetron Limited. All rights reserved.
 # Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-function Set-JIMPredefinedSearchCriterion {
+function Set-JIMScopingCriterion {
     <#
     .SYNOPSIS
-        Updates a criterion on a Predefined Search criteria group.
+        Updates a criterion in a scoping criteria group (full replacement).
 
     .DESCRIPTION
-        Replaces a criterion's attribute, comparison operator and value. This is a full update;
-        provide the value carrier that matches the attribute's data type. The operator must be
-        applicable to the attribute's data type (see New-JIMPredefinedSearchCriterion).
+        Replaces a scoping criterion's attribute, comparison operator and value. For export sync rules
+        provide a Metaverse attribute; for import sync rules a Connected System attribute. For DateTime
+        attributes set -ValueMode Relative and supply -RelativeCount/-RelativeUnit/-RelativeDirection to
+        compare against a date resolved relative to now (re-evaluated on each sync run).
 
-    .PARAMETER PredefinedSearchId
-        The unique identifier of the Predefined Search.
+    .PARAMETER SyncRuleId
+        The unique identifier of the sync rule.
 
     .PARAMETER GroupId
         The unique identifier of the criteria group containing the criterion.
@@ -21,40 +22,44 @@ function Set-JIMPredefinedSearchCriterion {
         The unique identifier of the criterion to update.
 
     .PARAMETER MetaverseAttributeId
-        The unique identifier of the Metaverse attribute to evaluate.
+        The unique identifier of the Metaverse attribute to evaluate (for export sync rules).
 
     .PARAMETER MetaverseAttributeName
-        Alternative to MetaverseAttributeId. The name of the Metaverse attribute to evaluate.
+        Alternative to MetaverseAttributeId. The name of the Metaverse attribute to evaluate (for export sync rules).
+
+    .PARAMETER ConnectedSystemAttributeId
+        The unique identifier of the Connected System attribute to evaluate (for import sync rules).
+
+    .PARAMETER ConnectedSystemAttributeName
+        Alternative to ConnectedSystemAttributeId. The name of the Connected System attribute to evaluate (for import sync rules).
 
     .PARAMETER ComparisonType
         The comparison operator.
 
     .PARAMETER StringValue
-        The string value to compare against (for Text attributes).
+        The string value to compare against (for text attributes).
 
     .PARAMETER IntValue
-        The integer value to compare against (for Number attributes).
+        The integer value to compare against (for number attributes).
 
     .PARAMETER LongValue
-        The 64-bit integer value to compare against (for LongNumber attributes).
+        The 64-bit integer value to compare against (for long number attributes).
 
     .PARAMETER DateTimeValue
-        The date/time value to compare against (for DateTime attributes). Interpreted as UTC.
+        The date/time value to compare against (for absolute datetime criteria).
 
     .PARAMETER BoolValue
-        The boolean value to compare against (for Boolean attributes).
+        The boolean value to compare against (for boolean attributes).
 
     .PARAMETER GuidValue
-        The GUID value to compare against (for Guid attributes).
+        The GUID value to compare against (for GUID attributes).
 
     .PARAMETER CaseSensitive
-        When provided as $false, text comparisons ignore case differences. When omitted the server
-        default (true) applies. Only meaningful for Text attribute comparisons.
+        When provided as $false, text comparisons ignore case differences. Only meaningful for Text attributes.
 
     .PARAMETER ValueMode
-        For DateTime attributes, 'Absolute' (compare against -DateTimeValue, the default) or 'Relative'
-        (compare against a date resolved relative to now). Relative requires -RelativeCount, -RelativeUnit
-        and -RelativeDirection, and is mutually exclusive with -DateTimeValue.
+        For DateTime attributes, 'Absolute' (compare against -DateTimeValue, the default) or 'Relative'.
+        Relative requires -RelativeCount, -RelativeUnit and -RelativeDirection, and is mutually exclusive with -DateTimeValue.
 
     .PARAMETER RelativeCount
         The relative offset count (zero or positive).
@@ -72,20 +77,20 @@ function Set-JIMPredefinedSearchCriterion {
         If -PassThru is specified, returns the updated criterion.
 
     .EXAMPLE
-        Set-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 -CriterionId 15 -MetaverseAttributeName 'Department' -ComparisonType Contains -StringValue 'Fin'
+        Set-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 -CriterionId 15 -MetaverseAttributeName 'AccountExpiry' -ComparisonType LessThanOrEquals -ValueMode Relative -RelativeCount 7 -RelativeUnit Days -RelativeDirection FromNow
 
-        Updates criterion 15 to match Department containing 'Fin'.
+        Updates criterion 15 to match when AccountExpiry is on or before 7 days from now.
 
     .LINK
-        Get-JIMPredefinedSearchCriteriaGroup
-        New-JIMPredefinedSearchCriterion
-        Remove-JIMPredefinedSearchCriterion
+        New-JIMScopingCriterion
+        Get-JIMScopingCriteria
+        Remove-JIMScopingCriterion
     #>
-    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
+    [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ByMvId')]
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
-        [int]$PredefinedSearchId,
+        [int]$SyncRuleId,
 
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$GroupId,
@@ -94,11 +99,17 @@ function Set-JIMPredefinedSearchCriterion {
         [Alias('Id')]
         [int]$CriterionId,
 
-        [Parameter(Mandatory, ParameterSetName = 'ById')]
+        [Parameter(Mandatory, ParameterSetName = 'ByMvId')]
         [int]$MetaverseAttributeId,
 
-        [Parameter(Mandatory, ParameterSetName = 'ByName')]
+        [Parameter(Mandatory, ParameterSetName = 'ByMvName')]
         [string]$MetaverseAttributeName,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByCsId')]
+        [int]$ConnectedSystemAttributeId,
+
+        [Parameter(Mandatory, ParameterSetName = 'ByCsName')]
+        [string]$ConnectedSystemAttributeName,
 
         [Parameter(Mandatory)]
         [ValidateSet('Equals', 'NotEquals', 'StartsWith', 'NotStartsWith', 'EndsWith', 'NotEndsWith',
@@ -150,23 +161,48 @@ function Set-JIMPredefinedSearchCriterion {
             return
         }
 
-        $attributeId = $MetaverseAttributeId
-        if ($PSCmdlet.ParameterSetName -eq 'ByName') {
-            Write-Verbose "Looking up Metaverse attribute: $MetaverseAttributeName"
+        $body = @{
+            comparisonType = $ComparisonType
+        }
+
+        if ($PSCmdlet.ParameterSetName -eq 'ByMvId') {
+            $body.metaverseAttributeId = $MetaverseAttributeId
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq 'ByMvName') {
             $attributes = Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes"
             $attribute = $attributes | Where-Object { $_.name -eq $MetaverseAttributeName } | Select-Object -First 1
             if (-not $attribute) {
                 Write-Error "Metaverse attribute '$MetaverseAttributeName' not found."
                 return
             }
-            $attributeId = $attribute.id
-            Write-Verbose "Resolved '$MetaverseAttributeName' to attribute ID $attributeId"
+            $body.metaverseAttributeId = $attribute.id
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq 'ByCsId') {
+            $body.connectedSystemAttributeId = $ConnectedSystemAttributeId
+        }
+        elseif ($PSCmdlet.ParameterSetName -eq 'ByCsName') {
+            $syncRule = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId"
+            if (-not $syncRule) {
+                Write-Error "Sync rule $SyncRuleId not found."
+                return
+            }
+            if ($syncRule.direction -ne 'Import') {
+                Write-Error "Connected System attributes can only be used with import sync rules. This sync rule is an export rule."
+                return
+            }
+            $objectType = Invoke-JIMApi -Endpoint "/api/v1/connected-systems/$($syncRule.connectedSystemId)/object-types/$($syncRule.connectedSystemObjectTypeId)"
+            if (-not $objectType -or -not $objectType.attributes) {
+                Write-Error "Could not find object type attributes."
+                return
+            }
+            $attribute = $objectType.attributes | Where-Object { $_.name -eq $ConnectedSystemAttributeName } | Select-Object -First 1
+            if (-not $attribute) {
+                Write-Error "Connected System attribute '$ConnectedSystemAttributeName' not found on object type '$($objectType.name)'."
+                return
+            }
+            $body.connectedSystemAttributeId = $attribute.id
         }
 
-        $body = @{
-            metaverseAttributeId = $attributeId
-            comparisonType = $ComparisonType
-        }
         if ($PSBoundParameters.ContainsKey('StringValue')) { $body.stringValue = $StringValue }
         if ($PSBoundParameters.ContainsKey('IntValue')) { $body.intValue = $IntValue }
         if ($PSBoundParameters.ContainsKey('LongValue')) { $body.longValue = $LongValue }
@@ -175,7 +211,6 @@ function Set-JIMPredefinedSearchCriterion {
         if ($PSBoundParameters.ContainsKey('GuidValue')) { $body.guidValue = $GuidValue.ToString() }
         if ($PSBoundParameters.ContainsKey('CaseSensitive')) { $body.caseSensitive = $CaseSensitive }
 
-        # Relative date handling (DateTime attributes only; validated server-side too).
         $relativeRequested = ($PSBoundParameters.ContainsKey('ValueMode') -and $ValueMode -eq 'Relative') -or
             $PSBoundParameters.ContainsKey('RelativeCount') -or $PSBoundParameters.ContainsKey('RelativeUnit') -or $PSBoundParameters.ContainsKey('RelativeDirection')
         if ($relativeRequested) {
@@ -193,12 +228,11 @@ function Set-JIMPredefinedSearchCriterion {
             $body.relativeDirection = $RelativeDirection
         }
 
-        if ($PSCmdlet.ShouldProcess("Criterion $CriterionId in Group $GroupId on Predefined Search $PredefinedSearchId", "Update")) {
-            Write-Verbose "Updating criterion $CriterionId in group $GroupId for Predefined Search $PredefinedSearchId"
+        if ($PSCmdlet.ShouldProcess("Criterion $CriterionId in Group $GroupId", "Update")) {
             try {
-                $result = Invoke-JIMApi -Endpoint "/api/v1/predefined-searches/$PredefinedSearchId/criteria-groups/$GroupId/criteria/$CriterionId" -Method 'PUT' -Body $body
+                $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria/$GroupId/criteria/$CriterionId" -Method 'PUT' -Body $body
                 if ($PassThru) {
-                    $result | Add-Member -NotePropertyName 'PredefinedSearchId' -NotePropertyValue $PredefinedSearchId -Force
+                    $result | Add-Member -NotePropertyName 'SyncRuleId' -NotePropertyValue $SyncRuleId -Force
                     $result | Add-Member -NotePropertyName 'GroupId' -NotePropertyValue $GroupId -PassThru -Force
                 }
             }
