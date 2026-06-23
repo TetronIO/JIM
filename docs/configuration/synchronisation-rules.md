@@ -13,7 +13,7 @@ Synchronisation Rules are the central configuration mechanism for identity synch
 1. **Direction**<br /> Whether data flows inbound (a source system into the metaverse) or outbound (the metaverse out to a target system).
 2. **Scoping criteria**<br /> Which objects the rule applies to.
 3. **Object Matching Rules**<br /> How to match a Connected System Object to an existing Metaverse Object.
-4. **Projection or provisioning**<br /> What to do when no match is found.
+4. **Projection or Provisioning**<br /> What to do when no match is found.
 5. **Attribute mappings**<br /> Which attributes to synchronise and how to transform them.
 
 ## Direction
@@ -137,16 +137,31 @@ A multi-source mapping combines several source attributes into one target. This 
 
 Mappings support both single-valued and multi-valued attributes. Multi-valued attributes hold a list of values (group memberships, email aliases, and so on). Mappings can flow multi-valued to multi-valued, or use functions like `Join()` and `Split()` to convert between multi-valued and single-valued representations.
 
-## Precedence
+### Value processing (inbound)
 
-When multiple import rules write to the same MVO attribute, **precedence** determines which rule's value wins. Each Synchronisation Rule has a precedence level, and the rule with the highest precedence takes priority.
+Source text is often dirty: stray padding, inconsistent casing, or a "value" that is really just spaces. For **import** mappings that target a **text** Metaverse attribute, you can clean and normalise the imported value before it flows to the Metaverse, configured per mapping in the Attribute Flow editor. Value processing applies to direct and expression mappings alike, and only to text attributes; it does not appear for export mappings or non-text targets.
+
+Four controls are available:
+
+- **Treat whitespace as no value**<br /> A whitespace-only or empty value is treated as no value: it does not flow, and clears any existing Metaverse value. This is **on by default**, so a stray space no longer masquerades as a real value. Switch it off where whitespace is genuinely meaningful.
+- **Trim leading and trailing whitespace**<br /> Removes surrounding whitespace, so `" John "` becomes `"John"`.
+- **Collapse internal whitespace**<br /> Reduces runs of consecutive whitespace inside the value to a single space, so multiple spaces or tabs between words collapse to one. For example, `John···Smith` becomes `John Smith` (each `·` represents a space).
+- **Case normalisation**<br /> Converts the value to `Upper`, `Lower`, or `Title` case, or leaves it unchanged (`None`). Useful for folding usernames or email addresses to a consistent case.
+
+The transforms run in a fixed order: **trim, then collapse, then case normalisation, then the whitespace-as-no-value decision**. Because the whitespace decision runs last, a value that trims down to nothing is correctly treated as no value. Value processing is *normalisation*; it runs before [priority](#priority) resolves which rule's value wins.
+
+When **Treat whitespace as no value** is switched off and a whitespace-only value is therefore stored, the portal flags it with a `(whitespace)` indicator rather than rendering a misleading blank cell, so administrators can tell a real-but-invisible value apart from an absent one.
+
+## Priority
+
+When multiple import rules write to the same MVO attribute, **priority** determines which rule's value wins. Each Synchronisation Rule has a priority level, and the rule with the highest priority wins.
 
 This matters when an identity has data flowing from multiple source systems. For example:
 
-- HR system provides `First Name` and `Last Name` (high precedence: authoritative)
-- Badge system also provides `First Name` (lower precedence: secondary)
+- HR system provides `First Name` and `Last Name` (high priority: authoritative)
+- Badge system also provides `First Name` (lower priority: secondary)
 
-The HR system's values take precedence because its Synchronisation Rule has a higher priority.
+The HR system's values win because its Synchronisation Rule has a higher priority.
 
 ## Common workflows
 
