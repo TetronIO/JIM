@@ -136,6 +136,55 @@ Set-JIMPredefinedSearch -Id 3 -IsEnabled $false -WhatIf
 
 ---
 
+## Criteria groups and criteria
+
+These cmdlets manage the criteria that filter a Predefined Search's results. Criteria live in **criteria groups**; add a group first, then add criteria to it. See [Filtering with criteria](../configuration/predefined-searches.md#filtering-with-criteria) for the operators available per attribute type and how criteria currently combine (all criteria are AND-ed).
+
+All the write cmdlets support `ShouldProcess`; use `-WhatIf` or `-Confirm` to preview or confirm.
+
+### Group cmdlets
+
+| Cmdlet | Purpose |
+|--------|---------|
+| `Get-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int>` | List the criteria groups (and their criteria) for a search. |
+| `New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> [-Type All\|Any] [-Position <int>] [-PassThru]` | Create a criteria group. |
+| `Set-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> -GroupId <int> [-Type All\|Any] [-Position <int>] [-PassThru]` | Update a group's logic type or position. |
+| `Remove-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> -GroupId <int>` | Delete a group and everything in it. |
+
+### Criterion cmdlets
+
+`New-JIMPredefinedSearchCriterion` and `Set-JIMPredefinedSearchCriterion` take the attribute (by `-MetaverseAttributeId` or `-MetaverseAttributeName`), a `-ComparisonType`, and the value parameter that matches the attribute's data type (`-StringValue`, `-IntValue`, `-LongValue`, `-DateTimeValue`, `-BoolValue`, or `-GuidValue`). `-CaseSensitive $false` makes a text comparison case-insensitive.
+
+| Cmdlet | Purpose |
+|--------|---------|
+| `New-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> ...` | Add a criterion to a group. |
+| `Set-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -CriterionId <int> ...` | Replace a criterion's attribute, operator and value. |
+| `Remove-JIMPredefinedSearchCriterion -PredefinedSearchId <int> -GroupId <int> -CriterionId <int>` | Delete a criterion. |
+
+### Examples
+
+```powershell title="Add a group, then filter on a text attribute"
+$group = New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -Type All -PassThru
+New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $group.id `
+    -MetaverseAttributeName 'Department' -ComparisonType Equals -StringValue 'Finance'
+```
+
+```powershell title="Filter on a number attribute"
+New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 `
+    -MetaverseAttributeName 'MemberCount' -ComparisonType GreaterThan -IntValue 0
+```
+
+```powershell title="Filter on a date attribute (compared in UTC)"
+New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 `
+    -MetaverseAttributeName 'AccountExpiry' -ComparisonType LessThan -DateTimeValue '2026-01-01'
+```
+
+```powershell title="List the criteria groups for a search"
+Get-JIMPredefinedSearch -Uri people | Get-JIMPredefinedSearchCriteriaGroup
+```
+
+---
+
 ## See also
 
 - [Search-JIMMetaverseObject](metaverse.md): run a Predefined Search to return matching objects
