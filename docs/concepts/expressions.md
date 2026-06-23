@@ -212,6 +212,86 @@ These functions are primarily used with Active Directory's `userAccountControl` 
 | `ClearBit(value, bit)` | Turn off a specific flag | `ClearBit(mv["uac"], 65536)` |
 | `HasBit(value, bit)` | Check if a specific flag is turned on | `HasBit(cs["userAccountControl"], 2)` |
 
+## ⚠️ Nulls, Missing Inputs, and Whitespace
+
+This is the most important section to read before you write an expression that references an attribute which might be absent. How JIM treats a missing input decides whether a target value is **cleared**, **kept**, or **silently filled with malformed data**. Get this wrong and an expression can quietly clear good data, or write a broken value that passes straight through to the target system.
+
+When you reference an attribute the object does not have (for example `cs["middleName"]` on a person with no middle name), the expression sees **null**. There are three behaviours to understand.
+
+<!-- MAINTENANCE (#91 attribute priority): point 1 below describes today's unconditional clear on
+     null (SyncEngine.AttributeFlow.cs:204), correct only for a single contributor. When #91 lands,
+     a null becomes ConnectedNoValue and the resolver decides based on priority/NullIsValue, so a
+     null from a non-winning rule no longer clears. Reconcile this section and the date-function
+     note that links here. Points 2 and 3 remain valid. Tracked in
+     engineering/plans/doing/ATTRIBUTE_PRIORITY.md Phase 5. -->
+### 1. A null result means "no value", and clears the target
+
+When an expression evaluates to null, JIM treats that as a **deliberate assertion that the attribute should have no value**, not as "no opinion, leave it alone". For an import mapping, JIM removes any existing value from the target Metaverse attribute.
+
+This is intentionally different from the behaviour of some traditional ILM tools, where a function call that returned null meant "do nothing". In JIM, null means **no value**, and a null result on an import mapping clears the target.
+
+Which rule's value ultimately wins (and therefore whether a null from one rule actually clears a value contributed by another) is resolved by [priority](../configuration/synchronisation-rules.md#priority). The key authoring takeaway is simpler: **a null result is a clear, not a skip.** If you do not want an expression to clear the target when an input is missing, you must guard it (see point 3).
+
+### 2. Built-in string functions are null-safe and propagate null
+
+The string functions (`Trim`, `Upper`, `Lower`, `Capitalise`, `Left`, `Right`, `Substring`, `Replace`, `EscapeDN`, and similar) are null-safe: given a null input, they return null rather than erroring. That is convenient, but it means **null travels through them unchanged**.
+
+So a bare `Trim(cs["middleName"])` on a person with no middle name evaluates to null, which (per point 1) **clears** the target attribute:
+
+```csharp
+// HAZARD -- if middleName is absent, this evaluates to null and CLEARS the target
+Trim(cs["middleName"])
+
+// SAFE -- fall back to the existing target value, or to an empty result you control
+Coalesce(Trim(cs["middleName"]), mv["Middle Name"])
+```
+
+To avoid an accidental clear, guard the expression so it never resolves to a bare null for a value you want to preserve: use `Coalesce()` to supply a fallback, or `IIF()` with an `IsNullOrEmpty()` / `IsNullOrWhitespace()` check (see point 3).
+
+### 3. String concatenation does NOT yield null; it yields a malformed value
+
+This is the more dangerous case, because it fails **silently with wrong data** rather than clearing. In a `+` concatenation, a null operand is treated as an **empty string**, not as null. So the whole expression produces a real, non-null value that is stored as-is and bypasses the null/clear path entirely.
+
+```csharp
+// HAZARD -- if Last Name is absent, this produces "jane." (a real value), not null
+Lower(cs["First Name"]) + "." + Lower(cs["Last Name"]) + "@company.com"
+// Result: "jane.@company.com" -- a malformed email, written without complaint
+```
+
+The same hazard produces malformed LDAP distinguished names when a component is missing:
+
+```csharp
+// HAZARD -- if Account Name is absent, this produces "CN=,OU=Users,..." -- a broken DN
+"CN=" + mv["Account Name"] + ",OU=Users,DC=company,DC=local"
+```
+
+Steer around it by validating or supplying fallbacks **before** composing the value:
+
+| Technique | Use it to | Example |
+|-----------|-----------|---------|
+| `Coalesce(a, b)` | Supply a fallback when the first value is missing | `Coalesce(mv["Preferred Name"], mv["First Name"])` |
+| `IIF(condition, trueVal, falseVal)` | Build the composed value only when its inputs are present, otherwise fall back to a safe value | `IIF(IsNullOrWhitespace(cs["Last Name"]), mv["Email"], Lower(cs["First Name"]) + "." + Lower(cs["Last Name"]) + "@company.com")` |
+| `IsNullOrEmpty` / `IsNullOrWhitespace` | Test an input before composing with it | `IsNullOrWhitespace(cs["Last Name"])` |
+| `EscapeDN` plus careful construction | Build directory DNs safely; still guard each required component for presence | `"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,DC=company,DC=local"` |
+
+`EscapeDN()` protects against special characters such as commas in a value; it does **not** protect against a value being absent. A missing required component still yields a malformed DN, so guard for presence as well as escaping for safety.
+
+### 4. Whitespace-only results become no value (by default)
+
+A result that is only whitespace (spaces, tabs, newlines) is, by default, collapsed to **no value** and clears the target, exactly like null. This is governed per import mapping by the **Treat whitespace as no value** control in [inbound value processing](../configuration/synchronisation-rules.md#value-processing-inbound), which is **on by default**. Switch it off for a mapping where whitespace is genuinely meaningful, and a whitespace-only result is stored as a literal value instead (the portal flags it with a `(whitespace)` indicator so it is not mistaken for an empty cell).
+
+### Summary
+
+| Expression evaluates to | Stored as | Effect on target |
+|-------------------------|-----------|------------------|
+| `null` (for example `Trim()` of an absent attribute) | No value | ❌ Clears any existing value |
+| Whitespace only, **Treat whitespace as no value** on (default) | No value | ❌ Clears any existing value |
+| Whitespace only, **Treat whitespace as no value** off | Literal whitespace | ✅ Stored (flagged `(whitespace)` in the portal) |
+| Concatenation with a missing operand (for example `a + "." + null`) | A real, possibly malformed value | ✅ Stored as-is, bypassing the null/clear path |
+| A non-empty value | That value | ✅ Stored |
+
+The rule of thumb: **reference a possibly-absent attribute and you risk clearing the target; concatenate one and you risk writing malformed data.** Guard with `Coalesce()`, `IIF()`, and the `IsNullOrEmpty` / `IsNullOrWhitespace` checks, and test with sample data (including the missing-input case) before you deploy.
+
 ## Common Scenarios
 
 This section shows practical examples of expressions you will use when setting up identity synchronisation.
@@ -258,7 +338,7 @@ FromFileTime(cs["accountExpires"])
 
 **Important notes:**
 
-- If the date attribute is empty or missing, these functions return nothing (null) -- no change is made to the target
+- If the date attribute is empty or missing, these functions return nothing (null), which clears the target (any existing value is removed); see [Nulls, Missing Inputs, and Whitespace](#nulls-missing-inputs-and-whitespace)
 - AD treats `0` and very large numbers as "never expires" -- `FromFileTime()` returns nothing for these values
 - `ToFileTime()` safely handles empty text, missing values, and invalid dates by returning nothing
 
@@ -379,7 +459,7 @@ When an expression does not produce the result you expect:
 
 1. **Check the attribute name spelling**<br /> Attribute names are matched case-insensitively, so `mv["department"]` and `mv["Department"]` are equivalent; casing is never the cause. Do check the name is spelled correctly and matches an attribute that exists in the JIM admin UI.
 2. **Use `Eq()` for text comparisons**<br /> Using `==` for text is a common mistake (see [String Comparison](#string-comparison)).
-3. **Check for missing values**<br /> If an attribute does not exist on the object, it returns nothing (null), which can affect the result. Use `Coalesce()` or `IsNullOrEmpty()` to handle this.
+3. **Check for missing values**<br /> If an attribute does not exist on the object, it returns nothing (null), which can clear the target or, in a concatenation, produce a malformed value. Use `Coalesce()` or `IsNullOrEmpty()` to handle this; see [Nulls, Missing Inputs, and Whitespace](#nulls-missing-inputs-and-whitespace) for the full picture.
 4. **Test with sample data**<br /> Use the expression test feature in the Synchronisation Rule editor to try your expression with real attribute values before saving.
 5. **Check the worker logs**<br /> If expressions fail during sync, the worker service logs the error details.
 
@@ -387,7 +467,7 @@ When an expression does not produce the result you expect:
 
 1. **Always use `Eq()` for text comparisons**<br /> The `==` operator can give incorrect results when comparing attribute values.
 
-2. **Handle missing values**<br /> Use `Coalesce()` to provide a fallback, or `IsNullOrEmpty()` to check before using a value. This prevents unexpected results when an attribute has not been populated yet.
+2. **Handle missing values**<br /> Use `Coalesce()` to provide a fallback, or `IsNullOrEmpty()` to check before using a value. This prevents an expression clearing the target or writing malformed data when an attribute has not been populated yet; see [Nulls, Missing Inputs, and Whitespace](#nulls-missing-inputs-and-whitespace).
 
 3. **Always use `EscapeDN()` in distinguished names**<br /> This prevents special characters in names from breaking LDAP paths.
 
