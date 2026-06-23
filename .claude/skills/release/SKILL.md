@@ -343,7 +343,9 @@ https://github.com/TetronIO/JIM/actions
 
 ## Step 9: Long-form Release Announcement (GitHub Discussions)
 
-The curated `CHANGELOG.md` / GitHub Release notes are intentionally terse and customer-facing. The detail that does NOT belong there (performance work, test-coverage expansion, internal hardening) has a home here instead: a long-form announcement in GitHub Discussions, written for an interested-but-external reader. This is where the entries the Changelog Validation step removed can resurface, reframed as outcomes.
+The curated `CHANGELOG.md` / GitHub Release notes are intentionally terse. The detail that does not fit there (performance work, test-coverage expansion, internal hardening) has a home here instead: a long-form announcement in GitHub Discussions. The difference from the changelog is **depth and length, not audience** — the announcement is just as public and customer-facing as the changelog, only more expansive. This is where the entries the Changelog Validation step removed can resurface, reframed as outcomes.
+
+**Audience guardrail (do not get this wrong):** the announcement is public, customer-facing content. Do NOT write anything that frames it as internal, behind-the-scenes, or for a different/"external" reader, and do NOT contrast it against the changelog on the basis of who reads it (e.g. "the changelog stays customer-facing, so X lives here instead" wrongly implies this post is not). Frame the "Under the hood" section by depth ("beyond the headline features, this release also included…"), never by audience.
 
 **Prerequisites:** Discussions enabled on the repo with an **Announcements** category (maintainer-post-only, which suits release notes), and `gh` authenticated with permission to create discussions. If Discussions is disabled or the user does not want an announcement for this release, skip this step; it is additive.
 
