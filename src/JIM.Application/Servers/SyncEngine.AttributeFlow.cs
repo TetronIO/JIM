@@ -10,17 +10,19 @@ using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Utility;
 using Serilog;
+using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace JIM.Application.Servers;
 
 /// <summary>
-/// Attribute flow logic for the sync engine.
-/// Contains all sync rule mapping processing — formerly SyncRuleMappingProcessor.
+/// Attribute Flow logic for the sync engine.
+/// Contains all Synchronisation Rule mapping processing — formerly SyncRuleMappingProcessor.
 /// </summary>
 public partial class SyncEngine
 {
     /// <summary>
-    /// Processes a sync rule mapping to flow attribute values from CSO to MVO.
+    /// Processes a Synchronisation Rule mapping to flow attribute values from CSO to MVO.
     /// </summary>
     internal static void ProcessMapping(
         ConnectedSystemObject cso,
@@ -41,7 +43,7 @@ public partial class SyncEngine
 
         if (syncRuleMapping.TargetMetaverseAttribute == null)
         {
-            Log.Error("ProcessMapping: Sync Rule mapping has no TargetMetaverseAttribute set!");
+            Log.Error("ProcessMapping: Synchronisation Rule mapping has no TargetMetaverseAttribute set!");
             return;
         }
 
@@ -104,7 +106,11 @@ public partial class SyncEngine
                         switch (csotAttribute.Type)
                         {
                             case AttributeDataType.Text:
-                                ProcessTextAttribute(mvo, syncRuleMapping, sourceAttributeId, cso, csoAttributeValues, csotAttribute, contributingSystemId);
+                                // Apply the mapping's inbound value processing (#843) to the source text values,
+                                // dropping any that collapse to no value, before diffing against the MVO.
+                                ProcessTextAttribute(mvo, syncRuleMapping,
+                                    ProcessInboundTextValues(csoAttributeValues.Select(av => av.StringValue), syncRuleMapping),
+                                    contributingSystemId);
                                 break;
                             case AttributeDataType.Number:
                                 ProcessNumberAttribute(mvo, syncRuleMapping, sourceAttributeId, cso, csoAttributeValues, contributingSystemId);
@@ -150,7 +156,7 @@ public partial class SyncEngine
     }
 
     /// <summary>
-    /// Processes an expression-based sync rule mapping source.
+    /// Processes an expression-based Synchronisation Rule mapping source.
     /// </summary>
     private static void ProcessExpressionMapping(
         ConnectedSystemObject cso,
@@ -207,11 +213,13 @@ public partial class SyncEngine
 
         if (result is string[] stringArrayResult)
         {
-            ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute!, stringArrayResult, contributingSystemId);
+            ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute!,
+                ProcessInboundTextValues(stringArrayResult, syncRuleMapping).ToArray(), contributingSystemId);
         }
         else if (result is IEnumerable<string> stringEnumerableResult && result is not string)
         {
-            ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute!, stringEnumerableResult.ToArray(), contributingSystemId);
+            ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute!,
+                ProcessInboundTextValues(stringEnumerableResult, syncRuleMapping).ToArray(), contributingSystemId);
         }
         else
         {
@@ -219,6 +227,22 @@ public partial class SyncEngine
                 mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id);
 
             var resultString = result.ToString();
+            var isTextTarget = syncRuleMapping.TargetMetaverseAttribute!.Type == AttributeDataType.Text;
+
+            if (isTextTarget)
+            {
+                // Apply the mapping's inbound value processing (#843) to the scalar expression result.
+                var processed = ApplyInboundTextProcessing(resultString, syncRuleMapping.InboundValueProcessing, syncRuleMapping.CaseNormalisation);
+                if (processed == null)
+                {
+                    // The processed result is no value: clear any existing value (same as a null result).
+                    if (existingMvoValue != null)
+                        mvo.PendingAttributeValueRemovals.Add(existingMvoValue);
+                    return;
+                }
+                resultString = processed;
+            }
+
             var valueChanged = existingMvoValue == null ||
                 !string.Equals(existingMvoValue.StringValue, resultString, StringComparison.Ordinal);
 
@@ -227,8 +251,18 @@ public partial class SyncEngine
                 if (existingMvoValue != null)
                     mvo.PendingAttributeValueRemovals.Add(existingMvoValue);
 
-                var newMvoValue = CreateMvoAttributeValueFromExpressionResult(
-                    mvo, syncRuleMapping.TargetMetaverseAttribute!, result, contributingSystemId);
+                // For a text target use the processed string directly; for other types convert from the raw result.
+                var newMvoValue = isTextTarget
+                    ? new MetaverseObjectAttributeValue
+                    {
+                        MetaverseObject = mvo,
+                        Attribute = syncRuleMapping.TargetMetaverseAttribute!,
+                        AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
+                        StringValue = resultString,
+                        ContributedBySystemId = contributingSystemId
+                    }
+                    : CreateMvoAttributeValueFromExpressionResult(
+                        mvo, syncRuleMapping.TargetMetaverseAttribute!, result, contributingSystemId);
 
                 if (newMvoValue != null)
                 {
@@ -251,52 +285,93 @@ public partial class SyncEngine
         return new SyncExpressionEvaluationException(source.Expression, targetAttributeName, innerException);
     }
 
+    private static readonly Regex InternalWhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Applies a mapping's inbound text value-processing transforms to a single value (#843), in the fixed
+    /// canonical order: trim, then collapse internal whitespace, then case normalisation, then the
+    /// whitespace-as-no-value decision. Returns the transformed value, or <c>null</c> when the value
+    /// collapses to no value (whitespace-only or empty, with <see cref="InboundValueProcessing.TreatWhitespaceAsNoValue"/>
+    /// enabled). A <c>null</c> input always returns <c>null</c>. Only meaningful for text attribute values.
+    /// </summary>
+    internal static string? ApplyInboundTextProcessing(
+        string? value,
+        InboundValueProcessing processing,
+        InboundCaseNormalisation caseNormalisation)
+    {
+        if (value == null)
+            return null;
+
+        if (processing.HasFlag(InboundValueProcessing.TrimWhitespace))
+            value = value.Trim();
+
+        if (processing.HasFlag(InboundValueProcessing.CollapseInternalWhitespace))
+            value = InternalWhitespaceRegex.Replace(value, " ");
+
+        value = caseNormalisation switch
+        {
+            InboundCaseNormalisation.Upper => value.ToUpperInvariant(),
+            InboundCaseNormalisation.Lower => value.ToLowerInvariant(),
+            // Lower-case first so already-upper-case words ("ALICE") are title-cased rather than left as-is.
+            InboundCaseNormalisation.Title => CultureInfo.InvariantCulture.TextInfo.ToTitleCase(value.ToLowerInvariant()),
+            _ => value
+        };
+
+        if (processing.HasFlag(InboundValueProcessing.TreatWhitespaceAsNoValue) && string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value;
+    }
+
+    /// <summary>
+    /// Applies a mapping's inbound text value processing to a set of source string values, dropping any that
+    /// collapse to no value and de-duplicating the result. Used for multi-valued text flow (direct and
+    /// expression-array) so whitespace-only entries are removed from the set when enabled.
+    /// </summary>
+    private static List<string> ProcessInboundTextValues(IEnumerable<string?> values, SyncRuleMapping syncRuleMapping)
+    {
+        return values
+            .Select(v => ApplyInboundTextProcessing(v, syncRuleMapping.InboundValueProcessing, syncRuleMapping.CaseNormalisation))
+            .Where(v => v != null)
+            .Select(v => v!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Flows a processed set of text values to the target Metaverse attribute. The supplied
+    /// <paramref name="effectiveValues"/> have already had the mapping's inbound value processing applied
+    /// (whitespace-as-no-value drops removed, transforms applied, de-duplicated), so this method only
+    /// diffs them against the existing MVO values. An empty set clears the attribute.
+    /// </summary>
     private static void ProcessTextAttribute(
         MetaverseObject mvo,
         SyncRuleMapping syncRuleMapping,
-        int sourceAttributeId,
-        ConnectedSystemObject cso,
-        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
-        ConnectedSystemObjectTypeAttribute csotAttribute,
+        List<string> effectiveValues,
         int? contributingSystemId)
     {
-        var existingMvoValues = mvo.AttributeValues
-            .Where(mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id)
-            .Select(mvoav => mvoav.StringValue)
-            .ToList();
-        var incomingCsoValues = csoAttributeValues.Select(csoav => csoav.StringValue).ToList();
+        var targetAttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id;
 
-        Log.Debug("SyncEngine: Comparing attribute '{AttrName}' for CSO. MVO values: [{MvoValues}], CSO values: [{CsoValues}]",
-            csotAttribute.Name,
-            string.Join(", ", existingMvoValues.Select(v => v ?? "(null)")),
-            string.Join(", ", incomingCsoValues.Select(v => v ?? "(null)")));
-
+        // Remove MVO values that are not present in the processed source set.
         var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
-            mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
-            !csoAttributeValues.Any(csoav => csoav.StringValue != null && csoav.StringValue.Equals(mvoav.StringValue)));
+            mvoav.AttributeId == targetAttributeId &&
+            !effectiveValues.Any(ev => ev.Equals(mvoav.StringValue, StringComparison.Ordinal)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        // Use the (possibly truncated) csoAttributeValues list rather than cso.AttributeValues
-        // to respect MVA->SVA first-value selection (#435)
-        var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
+        // Add processed source values not already on the MVO.
+        var valuesToAdd = effectiveValues.Where(ev =>
             !mvo.AttributeValues.Any(mvoav =>
-                mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
-                mvoav.StringValue != null && mvoav.StringValue.Equals(csoav.StringValue)));
+                mvoav.AttributeId == targetAttributeId &&
+                ev.Equals(mvoav.StringValue, StringComparison.Ordinal)));
 
-        if (mvoObsoleteAttributeValues.Any() || csoNewAttributeValues.Any())
-        {
-            Log.Debug("SyncEngine: Attribute '{AttrName}' has changes. Removing {RemoveCount}, Adding {AddCount}",
-                csotAttribute.Name, mvoObsoleteAttributeValues.Count(), csoNewAttributeValues.Count());
-        }
-
-        foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
+        foreach (var value in valuesToAdd)
         {
             mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
             {
                 MetaverseObject = mvo,
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
-                AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                StringValue = newCsoNewAttributeValue.StringValue,
+                AttributeId = targetAttributeId,
+                StringValue = value,
                 ContributedBySystemId = contributingSystemId
             });
         }

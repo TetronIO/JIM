@@ -44,7 +44,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetObjectTypesAsync([FromQuery] PaginationRequest pagination, bool includeChildObjects = false)
     {
-        _logger.LogTrace("Requested metaverse object types (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
+        _logger.LogTrace("Requested Metaverse Object Types (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
         var objectTypes = await _application.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects);
         var headers = objectTypes.Select(MetaverseObjectTypeHeader.FromEntity).AsQueryable();
 
@@ -89,7 +89,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateObjectTypeAsync([FromBody] CreateMetaverseObjectTypeRequest request)
     {
-        _logger.LogInformation("Creating metaverse object type: {Name}", LogSanitiser.Sanitise(request.Name));
+        _logger.LogInformation("Creating Metaverse Object Type: {Name}", LogSanitiser.Sanitise(request.Name));
 
         // Reject collisions on Name or PluralName up front. The DB has unique constraints
         // but a 400 with a clear message is a better caller experience than a 500 from EF.
@@ -122,7 +122,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             {
                 var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
                 if (connectedSystem == null)
-                    return BadRequest(ApiErrorResponse.BadRequest($"Connected system with ID {connectedSystemId} not found."));
+                    return BadRequest(ApiErrorResponse.BadRequest($"Connected System with ID {connectedSystemId} not found."));
             }
         }
 
@@ -161,7 +161,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         else
             await _application.Metaverse.CreateMetaverseObjectTypeAsync(objectType, (MetaverseObject?)null);
 
-        _logger.LogInformation("Created metaverse object type: {Id} ({Name})", objectType.Id, LogSanitiser.Sanitise(objectType.Name));
+        _logger.LogInformation("Created Metaverse Object Type: {Id} ({Name})", objectType.Id, LogSanitiser.Sanitise(objectType.Name));
 
         var result = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectType.Id, includeChildObjects: false);
         return Created($"/api/v1/metaverse/object-types/{objectType.Id}", MetaverseObjectTypeDetailDto.FromEntity(result!));
@@ -184,7 +184,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateObjectTypeAsync(int id, [FromBody] UpdateMetaverseObjectTypeRequest request)
     {
-        _logger.LogInformation("Updating metaverse object type: {Id}", id);
+        _logger.LogInformation("Updating Metaverse Object Type: {Id}", id);
 
         var objectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(id, false);
         if (objectType == null)
@@ -203,12 +203,12 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         if (request.DeletionTriggerConnectedSystemIds != null)
         {
-            // Validate that the connected system IDs exist (Core retrieval — we only need existence).
+            // Validate that the Connected System IDs exist (Core retrieval — we only need existence).
             foreach (var connectedSystemId in request.DeletionTriggerConnectedSystemIds)
             {
                 var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
                 if (connectedSystem == null)
-                    return BadRequest(ApiErrorResponse.BadRequest($"Connected system with ID {connectedSystemId} not found."));
+                    return BadRequest(ApiErrorResponse.BadRequest($"Connected System with ID {connectedSystemId} not found."));
             }
             objectType.DeletionTriggerConnectedSystemIds = request.DeletionTriggerConnectedSystemIds;
         }
@@ -224,7 +224,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         await _application.Metaverse.UpdateMetaverseObjectTypeAsync(objectType);
 
-        _logger.LogInformation("Updated metaverse object type: {Id} ({Name}) - DeletionRule: {DeletionRule}, GracePeriod: {GracePeriod}",
+        _logger.LogInformation("Updated Metaverse Object Type: {Id} ({Name}) - DeletionRule: {DeletionRule}, GracePeriod: {GracePeriod}",
             objectType.Id, LogSanitiser.Sanitise(objectType.Name), objectType.DeletionRule.ToString(), objectType.DeletionGracePeriod?.ToString());
 
         var result = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectType.Id, false);
@@ -499,7 +499,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         [FromQuery] string? filterAttributeName = null,
         [FromQuery] string? filterAttributeValue = null)
     {
-        _logger.LogDebug("Getting metaverse objects (Page: {Page}, PageSize: {PageSize}, TypeId: {TypeId}, Search: {Search}, FilterAttr: {FilterAttr}={FilterValue}, Attributes: {Attributes})",
+        _logger.LogDebug("Getting Metaverse Objects (Page: {Page}, PageSize: {PageSize}, TypeId: {TypeId}, Search: {Search}, FilterAttr: {FilterAttr}={FilterValue}, Attributes: {Attributes})",
             pagination.Page, pagination.PageSize, objectTypeId, LogSanitiser.Sanitise(search), LogSanitiser.Sanitise(filterAttributeName), LogSanitiser.Sanitise(filterAttributeValue),
             LogSanitiser.Sanitise(attributes != null ? string.Join(",", attributes) : "DisplayName only"));
 
@@ -543,7 +543,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         [FromQuery] string? filterAttributeName = null,
         [FromQuery] string? filterAttributeValue = null)
     {
-        _logger.LogDebug("Getting metaverse objects count (TypeId: {TypeId}, Search: {Search}, FilterAttr: {FilterAttr}={FilterValue})",
+        _logger.LogDebug("Getting Metaverse Objects count (TypeId: {TypeId}, Search: {Search}, FilterAttr: {FilterAttr}={FilterValue})",
             objectTypeId, LogSanitiser.Sanitise(search), LogSanitiser.Sanitise(filterAttributeName), LogSanitiser.Sanitise(filterAttributeValue));
 
         var count = await _application.Repository.Metaverse.GetMetaverseObjectsCountAsync(
@@ -572,7 +572,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         [FromQuery] PaginationRequest pagination,
         [FromQuery] string? search = null)
     {
-        _logger.LogDebug("Searching metaverse objects via predefined search (Uri: {Uri}, Page: {Page}, PageSize: {PageSize}, Search: {Search})",
+        _logger.LogDebug("Searching Metaverse Objects via predefined search (Uri: {Uri}, Page: {Page}, PageSize: {PageSize}, Search: {Search})",
             LogSanitiser.Sanitise(predefinedSearchUri), pagination.Page, pagination.PageSize, LogSanitiser.Sanitise(search));
 
         var predefinedSearch = await _application.Search.GetPredefinedSearchAsync(predefinedSearchUri);
@@ -611,10 +611,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetObjectAsync(Guid id)
     {
-        _logger.LogTrace("Requested metaverse object: {Id}", id);
+        _logger.LogTrace("Requested Metaverse Object: {Id}", id);
         var obj = await _application.Metaverse.GetMetaverseObjectAsync(id);
         if (obj == null)
-            return NotFound(ApiErrorResponse.NotFound($"Metaverse object with ID {id} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id} not found."));
 
         return Ok(MetaverseObjectDto.FromEntity(obj));
     }
@@ -625,7 +625,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <remarks>
     /// Returns a paginated list of change records for the specified Metaverse Object,
     /// ordered by change time descending (most recent first). Each row carries the
-    /// initiator, sync rule, and run profile context, plus the per-attribute value changes.
+    /// initiator, Synchronisation Rule, and Run Profile context, plus the per-attribute value changes.
     /// </remarks>
     /// <param name="id">The unique identifier (GUID) of the Metaverse Object.</param>
     /// <param name="pagination">Pagination parameters (page, pageSize). Page size is clamped to [1, 100].</param>
@@ -636,12 +636,12 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetObjectChangeHistoryAsync(Guid id, [FromQuery] PaginationRequest pagination)
     {
-        _logger.LogTrace("Requested change history for metaverse object: {Id}", id);
+        _logger.LogTrace("Requested change history for Metaverse Object: {Id}", id);
 
         // Verify the MVO exists so a missing id returns 404 rather than an empty page.
         var exists = await _application.Metaverse.GetMetaverseObjectHeaderAsync(id);
         if (exists == null)
-            return NotFound(ApiErrorResponse.NotFound($"Metaverse object with ID {id} not found."));
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id} not found."));
 
         var (items, totalCount) = await _application.Metaverse.GetMvoChangeHistoryAsync(id, pagination.Page, pagination.PageSize);
         return Ok(PaginatedResponse<MvoChangeHistoryDto>.Create(items, totalCount, pagination.Page, pagination.PageSize));

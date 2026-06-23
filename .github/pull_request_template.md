@@ -28,9 +28,28 @@ Closes #
 - [ ] `dotnet test JIM.sln` passes
 - [ ] New functionality has tests (unit, workflow, or integration as appropriate)
 - [ ] Manually tested in a local development environment
-- [ ] Documentation updated (if behaviour changed)
 
 <!-- If integration testing was relevant, briefly describe the scenario(s) you exercised. -->
+
+## Documentation
+
+<!--
+Tick what applies (do not leave all unticked). Public docs live in docs/
+(customer-facing how-to, reference, concepts). Engineering reference docs live
+in engineering/ (architecture, developer guide, living design docs). Do NOT
+retro-edit completed plans (engineering/plans/done/) or PRDs; they are
+point-in-time records.
+
+CI requires a docs/ change for any user-facing (✨/🔄) changelog entry. If none
+is needed, uncomment and complete the "Docs: n/a" line below so CI (and
+reviewers) can see the reason.
+-->
+
+- [ ] Public documentation updated (`docs/`); page(s):
+- [ ] Engineering reference documentation updated (`engineering/`) where a design/architecture doc would otherwise be stale
+- [ ] No documentation needed
+
+<!-- Docs: n/a - <reason> -->
 
 ## Screenshots / output (if applicable)
 

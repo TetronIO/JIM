@@ -14,8 +14,8 @@ public class PendingExport
     //   Connected System being updated, then a Pending Export object is needed (essentially, an MVO change results
     //   in the same outcome, a change to this Connected System).
 
-    // the pending export is processed on an export sync run, with the change being attempted against
-    // the connected system. Changes would be made and then when a confirming import and sync is performed, the sync
+    // the Pending Export is processed on an export sync run, with the change being attempted against
+    // the Connected System. Changes would be made and then when a confirming import and sync is performed, the sync
     // would work out if the Pending Export was fully applied. If only partially applied, then the Pending Export
     // will have the relevant committed changes removed and any error count necessary, increased.
 
@@ -29,7 +29,7 @@ public class PendingExport
     public Guid Id { get; set; }
 
     /// <summary>
-    /// If the change type is create, then it's essential we know what connected system this applies to :)
+    /// If the change type is create, then it's essential we know what Connected System this applies to :)
     /// </summary>
     public ConnectedSystem ConnectedSystem { get; set; } = null!;
     public int ConnectedSystemId { get; set; }
@@ -97,14 +97,14 @@ public class PendingExport
 
     /// <summary>
     /// Indicates whether this export has reference attributes that couldn't be resolved
-    /// because the target objects don't yet exist in the target connected system.
+    /// because the target objects don't yet exist in the target Connected System.
     /// </summary>
     public bool HasUnresolvedReferences { get; set; }
 
     #endregion
 
     /// <summary>
-    /// When this pending export was created.
+    /// When this Pending Export was created.
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -1,0 +1,36 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Low-lighted indicator for a value that is present but consists only of whitespace, so it is not *@
+@* mistaken for no value (which renders as a hyphen via <EmptyValue />). The tooltip reveals the *@
+@* literal content with whitespace characters visualised. See JIM.Web/CLAUDE.md "Empty values". *@
+<MudTooltip Arrow="true" Placement="Placement.Top" Text="@TooltipText">
+    <span class="mud-text-disabled" style="font-style: italic;">(whitespace)</span>
+</MudTooltip>
+
+@code {
+    /// <summary>
+    /// The whitespace value being represented. Used to describe the content in the tooltip.
+    /// </summary>
+    [Parameter]
+    public string? Value { get; set; }
+
+    private string TooltipText
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(Value))
+                return "Present, but contains no visible characters.";
+
+            // Visualise whitespace so an administrator can see what is actually stored.
+            var visualised = Value
+                .Replace(" ", "·")   // middle dot for spaces
+                .Replace("\t", "→")  // right arrow for tabs
+                .Replace("\r", string.Empty)
+                .Replace("\n", "¶"); // pilcrow for newlines
+
+            var characters = Value.Length == 1 ? "character" : "characters";
+            return $"Present, but whitespace only ({Value.Length} {characters}): {visualised}";
+        }
+    }
+}

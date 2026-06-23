@@ -54,15 +54,15 @@ public class ImportDeleteObjectTests
         TestUtilities.SetEnvironmentVariables();
         InitiatedBy = TestUtilities.GetInitiatedBy();
 
-        // set up the connected systems mock
+        // set up the Connected Systems mock
         ConnectedSystemsData = TestUtilities.GetConnectedSystemData();
         MockDbSetConnectedSystems = ConnectedSystemsData.BuildMockDbSet();
 
-        // setup up the connected system run profiles mock
+        // setup up the Connected System Run Profiles mock
         ConnectedSystemRunProfilesData = TestUtilities.GetConnectedSystemRunProfileData();
         MockDbSetConnectedSystemRunProfiles = ConnectedSystemRunProfilesData.BuildMockDbSet();
 
-        // set up the connected system object types mock. this acts as the persisted schema in JIM
+        // set up the Connected System Object Types mock. this acts as the persisted schema in JIM
         ConnectedSystemObjectTypesData = TestUtilities.GetConnectedSystemObjectTypeData();
         MockDbSetConnectedSystemObjectTypes = ConnectedSystemObjectTypesData.BuildMockDbSet();
 
@@ -79,7 +79,7 @@ public class ImportDeleteObjectTests
         ServiceSettingsData = TestUtilities.GetServiceSettingsData();
         MockDbSetServiceSettings = ServiceSettingsData.BuildMockDbSet();
 
-        // set up the pending exports mock (empty - import tests don't have pending exports to reconcile)
+        // set up the Pending Exports mock (empty - import tests don't have Pending Exports to reconcile)
         PendingExportsData = new List<PendingExport>();
         MockDbSetPendingExports = PendingExportsData.BuildMockDbSet();
 
@@ -223,7 +223,7 @@ public class ImportDeleteObjectTests
         SyncRepo = TestUtilities.CreateSyncRepository(csos: connectedSystemObjectData, activity: ActivitiesData.First());
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
 
-        // mock up a connector that will return updates for our existing connected system objects above.
+        // mock up a connector that will return updates for our existing Connected System Objects above.
         var mockFileConnector = new MockFileConnector();
         mockFileConnector.TestImportObjects.Add(new ConnectedSystemImportObject
         {
@@ -432,5 +432,5 @@ public class ImportDeleteObjectTests
             "Expected no CSOs to be created when deleting a non-existent object.");
     }
 
-    // todo: test activity/run profile execution item/change object creation
+    // todo: test activity/Run Profile execution item/change object creation
 }

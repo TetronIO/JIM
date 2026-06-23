@@ -16,7 +16,7 @@ public static class ConnectedSystemExtensions
     private const string ModeBidirectional = "Bidirectional";
 
     /// <summary>
-    /// Gets the current mode setting value for the connected system.
+    /// Gets the current mode setting value for the Connected System.
     /// Returns null if no Mode setting exists (connector doesn't support modes).
     /// </summary>
     public static string? GetMode(this ConnectedSystem connectedSystem)
@@ -26,7 +26,7 @@ public static class ConnectedSystemExtensions
     }
 
     /// <summary>
-    /// Determines whether the connected system is in Export Only mode.
+    /// Determines whether the Connected System is in Export Only mode.
     /// Returns false if the connector doesn't have a Mode setting.
     /// </summary>
     public static bool IsExportOnlyMode(this ConnectedSystem connectedSystem)
@@ -35,7 +35,7 @@ public static class ConnectedSystemExtensions
     }
 
     /// <summary>
-    /// Determines whether the connected system supports import operations
+    /// Determines whether the Connected System supports import operations
     /// based on its mode setting. Returns true for Import Only and Bidirectional modes,
     /// or if the connector doesn't have a Mode setting.
     /// </summary>
@@ -51,7 +51,7 @@ public static class ConnectedSystemExtensions
     }
 
     /// <summary>
-    /// Determines whether the connected system supports export operations
+    /// Determines whether the Connected System supports export operations
     /// based on its mode setting. Returns true for Export Only and Bidirectional modes,
     /// or if the connector doesn't have a Mode setting.
     /// </summary>
@@ -75,7 +75,7 @@ public static class ConnectedSystemExtensions
     ///   <item>The connector doesn't support partitions (no selection needed)</item>
     ///   <item>At least one partition is selected AND (if containers are supported) at least one container is selected within a selected partition</item>
     /// </list>
-    /// Returns <c>false</c> otherwise, indicating that run profiles cannot be executed.
+    /// Returns <c>false</c> otherwise, indicating that Run Profiles cannot be executed.
     /// </remarks>
     /// <param name="connectedSystem">The Connected System to check.</param>
     /// <returns><c>true</c> if the system has valid partition/container selections or doesn't require them; otherwise <c>false</c>.</returns>

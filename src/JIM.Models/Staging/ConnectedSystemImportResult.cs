@@ -8,7 +8,7 @@ namespace JIM.Models.Staging;
 public class ConnectedSystemImportResult
 {
     /// <summary>
-    /// The objects imported from the connected system, i.e. users, groups, etc.
+    /// The objects imported from the Connected System, i.e. users, groups, etc.
     /// </summary>
     public List<ConnectedSystemImportObject> ImportObjects { get; set; } = new();
 

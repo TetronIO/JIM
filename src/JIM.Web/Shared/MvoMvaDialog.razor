@@ -44,7 +44,7 @@
                         }
                         else
                         {
-                            @GetDisplayValue(context)
+                            <TextValueDisplay Value="@GetDisplayValue(context)" />
                         }
                     </MudTd>
                     <MudTd DataLabel="Object Type">
@@ -85,7 +85,7 @@
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Value">
-                        @GetDisplayValue(context)
+                        <TextValueDisplay Value="@GetDisplayValue(context)" />
                     </MudTd>
                 </RowTemplate>
                 <PagerContent>

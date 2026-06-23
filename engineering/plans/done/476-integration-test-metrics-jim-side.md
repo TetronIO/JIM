@@ -89,7 +89,7 @@ MetricsCheckpoint: Export processed=500 elapsed=4321ms total=2000
 ```
 - Emit after each batch (batch size = 100, so every 100 exports)
 
-**Implementation detail**: Use `_logger.LogInformation(...)` with the exact prefix `MetricsCheckpoint:` so the streaming script can filter for it alongside `DiagnosticListener:` lines. Include the connected system name for context.
+**Implementation detail**: Use `_logger.LogInformation(...)` with the exact prefix `MetricsCheckpoint:` so the streaming script can filter for it alongside `DiagnosticListener:` lines. Include the Connected System name for context.
 
 ### Files changed (Phase 1)
 

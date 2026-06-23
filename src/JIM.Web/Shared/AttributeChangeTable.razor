@@ -162,11 +162,11 @@
                 @* Simple scalar Add/Remove - bold for Set/Add, de-emphasised for Removed/Remove *@
                 @if (context.DisplayChangeType == "Removed" || context.DisplayChangeType == "Remove")
                 {
-                    <MudText Class="mud-text-secondary">@context.DisplayValue</MudText>
+                    <MudText Class="mud-text-secondary"><TextValueDisplay Value="@context.DisplayValue" /></MudText>
                 }
                 else
                 {
-                    <MudText>@context.DisplayValue</MudText>
+                    <MudText><TextValueDisplay Value="@context.DisplayValue" /></MudText>
                 }
             }
         </MudTd>
@@ -181,7 +181,7 @@
     public List<ConnectedSystemObjectChangeAttribute>? AttributeChanges { get; set; }
 
     /// <summary>
-    /// Optional MVO attribute changes (from sync operations that produce metaverse object changes).
+    /// Optional MVO attribute changes (from sync operations that produce Metaverse Object changes).
     /// Merged with CSO attribute changes into a single display table.
     /// </summary>
     [Parameter]
@@ -263,7 +263,7 @@
                 })));
         }
 
-        // MVO attribute changes (sync operations — attribute flow to metaverse)
+        // MVO attribute changes (sync operations — Attribute Flow to metaverse)
         if (MvoAttributeChanges is { Count: > 0 })
         {
             flatChanges.AddRange(MvoAttributeChanges
@@ -410,7 +410,7 @@
         public AttributeDataType AttributeType { get; set; }
         /// <summary>True when the attribute is a Reference type but the reference could not be resolved to a CSO.</summary>
         public bool IsUnresolvedReference { get; set; }
-        /// <summary>True when the value represents a pending export stub — the display identifier is in Value.</summary>
+        /// <summary>True when the value represents a Pending Export stub — the display identifier is in Value.</summary>
         public bool IsPendingExportStub { get; set; }
     }
 
@@ -429,7 +429,7 @@
         public string? NewValue { get; set; }
         /// <summary>True when the attribute is a Reference type but the reference could not be resolved to a CSO.</summary>
         public bool IsUnresolvedReference { get; set; }
-        /// <summary>True when the value represents a pending export stub — the display identifier is in DisplayValue.</summary>
+        /// <summary>True when the value represents a Pending Export stub — the display identifier is in DisplayValue.</summary>
         public bool IsPendingExportStub { get; set; }
     }
 

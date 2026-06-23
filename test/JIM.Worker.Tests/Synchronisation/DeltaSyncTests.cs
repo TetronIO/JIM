@@ -249,7 +249,7 @@ public class DeltaSyncTests
     [Test]
     public async Task GetConnectedSystemObjectModifiedSinceCountAsync_WithDifferentConnectedSystems_ReturnsCorrectCountAsync()
     {
-        // Arrange - Different connected systems have different modification counts
+        // Arrange - Different Connected Systems have different modification counts
         var watermark = DateTime.UtcNow.AddDays(-1);
 
         _mockCsRepo.Setup(r => r.GetConnectedSystemObjectModifiedSinceCountAsync(1, watermark))

@@ -62,7 +62,7 @@ internal class FileConnectorImport
                 return result;
             }
 
-            // start building the object that we pass back to JIM, representing the connected system object.
+            // start building the object that we pass back to JIM, representing the Connected System Object.
             // Use NotSet for Full Imports - JIM will determine Create vs Update based on CSO existence.
             // Only delta imports with change tracking should specify explicit Create/Update/Delete.
             var importObject = new ConnectedSystemImportObject { ChangeType = Models.Enums.ObjectChangeType.NotSet };

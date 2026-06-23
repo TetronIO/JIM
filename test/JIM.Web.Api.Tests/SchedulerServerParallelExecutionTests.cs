@@ -64,7 +64,7 @@ public class SchedulerServerParallelExecutionTests
             .Callback<WorkerTask>(task => _capturedTasks.Add(task))
             .Returns(Task.CompletedTask);
 
-        // Set up connected systems that pass partition validation (SupportsPartitions=false)
+        // Set up Connected Systems that pass partition validation (SupportsPartitions=false)
         var connectorDefinition = new ConnectorDefinition
         {
             Id = 1,
@@ -194,7 +194,7 @@ public class SchedulerServerParallelExecutionTests
         await _application.Scheduler.StartScheduleExecutionAsync(
             schedule, ActivityInitiatorType.System, null, "Test");
 
-        // Assert: Both tasks created with correct connected system IDs
+        // Assert: Both tasks created with correct Connected System IDs
         var syncTasks = _capturedTasks.Cast<SynchronisationWorkerTask>().ToList();
         Assert.That(syncTasks.Select(t => t.ConnectedSystemId), Is.EquivalentTo(new[] { 1, 2 }));
     }

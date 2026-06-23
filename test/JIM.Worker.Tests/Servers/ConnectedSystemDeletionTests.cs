@@ -196,7 +196,7 @@ public class ConnectedSystemDeletionTests
         var result = await _jim.ConnectedSystems.GetDeletionPreviewAsync(1);
 
         // Assert
-        Assert.That(result!.Warnings, Has.Some.Contains("sync rule"));
+        Assert.That(result!.Warnings, Has.Some.Contains("Synchronisation Rule"));
     }
 
     [Test]
@@ -244,7 +244,7 @@ public class ConnectedSystemDeletionTests
         var result = await _jim.ConnectedSystems.GetDeletionPreviewAsync(1);
 
         // Assert
-        Assert.That(result!.Warnings, Has.Some.Contains("pending export"));
+        Assert.That(result!.Warnings, Has.Some.Contains("Pending Export"));
     }
 
     [Test]
@@ -577,7 +577,7 @@ public class ConnectedSystemDeletionTests
     [Test]
     public async Task DeleteAsync_WithZeroCsos_ExecutesSynchronouslyAsync()
     {
-        // Arrange - empty connected system
+        // Arrange - empty Connected System
         var connectedSystem = new ConnectedSystem
         {
             Id = 1,

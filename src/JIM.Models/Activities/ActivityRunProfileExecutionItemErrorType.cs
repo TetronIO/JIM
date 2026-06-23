@@ -86,16 +86,16 @@ public enum ActivityRunProfileExecutionItemErrorType
     UnhandledError,
 
     /// <summary>
-    /// An expression-based attribute flow mapping threw while evaluating (for example a registered
+    /// An expression-based Attribute Flow mapping threw while evaluating (for example a registered
     /// function received an unexpected value type, or the expression failed to parse). This is a
-    /// configuration or data issue with the sync rule's expression, not a JIM bug. The object is
+    /// configuration or data issue with the Synchronisation Rule's expression, not a JIM bug. The object is
     /// errored and no value is flowed for the failing mapping; the target attribute is left untouched
     /// (a thrown expression is never treated as a deliberate null/clear).
     /// </summary>
     ExpressionEvaluationError,
 
     /// <summary>
-    /// During import attribute flow, a multi-valued source attribute was mapped to a single-valued
+    /// During import Attribute Flow, a multi-valued source attribute was mapped to a single-valued
     /// target attribute. The first value was used. This is informational — the sync succeeded,
     /// but the administrator should verify the correct value was selected.
     /// </summary>

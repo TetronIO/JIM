@@ -9,8 +9,8 @@ using Serilog;
 namespace JIM.Application.Servers;
 
 /// <summary>
-/// Evaluates scoping criteria for sync rules.
-/// Supports both export (MVO evaluation) and import (CSO evaluation) sync rules.
+/// Evaluates scoping criteria for Synchronisation Rules.
+/// Supports both export (MVO evaluation) and import (CSO evaluation) Synchronisation Rules.
 /// </summary>
 public class ScopingEvaluationServer
 {

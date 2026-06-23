@@ -52,7 +52,7 @@ public class WorkflowStateSnapshot
     public int TotalCsoCount => ConnectedSystemObjects.Values.Sum(list => list.Count);
 
     /// <summary>
-    /// Quick access to pending export count.
+    /// Quick access to Pending Export count.
     /// </summary>
     public int PendingExportCount => PendingExports.Count;
 
@@ -137,7 +137,7 @@ public class WorkflowStateSnapshot
     }
 
     /// <summary>
-    /// Gets CSOs for a specific connected system.
+    /// Gets CSOs for a specific Connected System.
     /// </summary>
     public IReadOnlyList<ConnectedSystemObjectSnapshot> GetCsos(string systemName)
     {
@@ -158,7 +158,7 @@ public class WorkflowStateSnapshot
     }
 
     /// <summary>
-    /// Gets pending exports with null CSO FK (the issue #234 symptom).
+    /// Gets Pending Exports with null CSO FK (the issue #234 symptom).
     /// </summary>
     public IReadOnlyList<PendingExportSnapshot> GetPendingExportsWithNullCsoFk()
     {
@@ -166,7 +166,7 @@ public class WorkflowStateSnapshot
     }
 
     /// <summary>
-    /// Gets pending exports with a specific status.
+    /// Gets Pending Exports with a specific status.
     /// </summary>
     public IReadOnlyList<PendingExportSnapshot> GetPendingExportsWithStatus(PendingExportStatus status)
     {
@@ -205,7 +205,7 @@ public class WorkflowStateSnapshot
         var nullCsoCount = GetPendingExportsWithNullCsoFk().Count;
         if (nullCsoCount > 0)
         {
-            lines.Add($"  WARNING: {nullCsoCount} pending exports have NULL CSO FK!");
+            lines.Add($"  WARNING: {nullCsoCount} Pending Exports have NULL CSO FK!");
         }
 
         var byPeStatus = PendingExports.GroupBy(pe => pe.Status).ToDictionary(g => g.Key, g => g.Count());

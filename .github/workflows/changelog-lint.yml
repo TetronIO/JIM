@@ -1,9 +1,17 @@
 name: changelog-lint
 
-# Mechanical backstop for the changelog quality rules in engineering/CLAUDE.md.
-# Hard-fails when an entry in the [Unreleased] section does not lead with a
-# canonical emoji (the tell for a non-customer-facing entry); verbose/internal-
-# looking entries are surfaced as warnings for the author to confirm or remove.
+# Mechanical backstops for the documentation rules in engineering/CLAUDE.md:
+#   1. Changelog quality: every [Unreleased] entry must lead with a canonical
+#      emoji; internal-looking or over-long entries are warned.
+#   2. Docs coupling: a PR that adds a user-facing entry (✨ new feature or
+#      🔄 changed behaviour) must also update public docs under docs/, unless it
+#      opts out explicitly (a "Docs: n/a - <reason>" line in the PR body, or the
+#      'docs-not-needed' label).
+#
+# Both run in this single job so docs coupling is enforced via the existing
+# required "changelog-lint" status, without registering a second required check
+# in the branch ruleset. A docs-coupling failure therefore surfaces as the
+# "changelog-lint" check failing.
 #
 # Runs on every PR (no path filter) so it always reports a status and can safely
 # be a required check: a path-filtered required check never reports on PRs that
@@ -24,5 +32,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          fetch-depth: 0  # need base..head history to compute the PR's changed files
       - name: Lint the [Unreleased] changelog section
         run: pwsh -File ./scripts/Lint-Changelog.ps1
+      - name: Enforce public docs coupling for user-facing changes
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Three-dot diff: the PR's own changes since the merge-base, not
+          # unrelated commits that landed on the base branch in the meantime.
+          CHANGED_FILES="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+          export CHANGED_FILES
+          pwsh -File ./scripts/Lint-DocsCoupling.ps1

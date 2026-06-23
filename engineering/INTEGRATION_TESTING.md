@@ -74,8 +74,8 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario6-SchedulerService"        # Scheduler service testing
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario7-ClearConnectedSystemObjects" # Clear connector space testing
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync"  # Group sync between domains
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario9-PartitionScopedImports"  # Partition-scoped import run profiles
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario10-SyncRuleScoping"          # Sync rule scoping behaviour (inbound + outbound)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario9-PartitionScopedImports"  # Partition-scoped import Run Profiles
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario10-SyncRuleScoping"          # Synchronisation Rule scoping behaviour (inbound + outbound)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix"    # Scoping criteria evaluation matrix (Default tier)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Quick      # Quick tier (~12 cells, < 90s)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Exhaustive # Exhaustive tier (~152 cells, < 10 min)
@@ -143,12 +143,12 @@ This single script handles everything:
 | `Scenario2-CrossDomainSync` | APAC -> EMEA directory sync | samba-ad-source, samba-ad-target / openldap-primary | ✅ |
 | `Scenario3-GALSYNC` | AD -> CSV global address list export (stub, not implemented) | samba-ad-primary / openldap-primary | ✅ |
 | `Scenario4-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary / openldap-primary | ✅ |
-| `Scenario5-MatchingRules` | Object matching rules testing | samba-ad-primary / openldap-primary | ✅ |
+| `Scenario5-MatchingRules` | Object Matching Rules testing | samba-ad-primary / openldap-primary | ✅ |
 | `Scenario6-SchedulerService` | Scheduler service end-to-end testing | samba-ad-primary / openldap-primary | ✅ |
 | `Scenario7-ClearConnectedSystemObjects` | Clear connector space testing | samba-ad-primary / openldap-primary | ✅ |
 | `Scenario8-CrossDomainEntitlementSync` | Group sync between APAC and EMEA domains | samba-ad-source, samba-ad-target / openldap-primary | ✅ |
-| `Scenario9-PartitionScopedImports` | Partition-scoped import run profiles | samba-ad-primary / openldap-primary | ✅ |
-| `Scenario10-SyncRuleScoping` | Sync rule scoping behaviour: inbound enter/in-scope-update/exit (Disconnect, RemainJoined); outbound enter/exit (Disconnect, Delete); cross-system inline cascade; criteria persistence | file (HR CSV), samba-ad-primary / openldap-primary | ✅ |
+| `Scenario9-PartitionScopedImports` | Partition-scoped import Run Profiles | samba-ad-primary / openldap-primary | ✅ |
+| `Scenario10-SyncRuleScoping` | Synchronisation Rule scoping behaviour: inbound enter/in-scope-update/exit (Disconnect, RemainJoined); outbound enter/exit (Disconnect, Delete); cross-system inline cascade; criteria persistence | file (HR CSV), samba-ad-primary / openldap-primary | ✅ |
 | `Scenario11-ScopingCriteriaMatrix` | Scoping criteria evaluation matrix: full operator x value-type x group-structure coverage via batched per-cell CSO and MV types. Three tiers: Quick (~12 cells, < 90s), Default (~41 cells, < 5 min), Exhaustive (~152 cells, < 10 min). Round-trip persistence and API negative-cell probes run first. | file (bespoke deterministic seed) | n/a |
 
 **Available Templates (`-Template` parameter):**
@@ -247,7 +247,7 @@ flowchart TD
 | Stand up external systems | `docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d` | Start Samba AD, databases |
 | Stand up JIM | `jim-stack` or `docker compose up -d` | Start JIM services |
 | Populate test data | `./Populate-SambaAD.ps1 -Template Small` | Create users/groups in external systems |
-| Configure JIM | `./Setup-Scenario1.ps1` | Create Connected Systems, Sync Rules |
+| Configure JIM | `./Setup-Scenario1.ps1` | Create Connected Systems, Synchronisation Rules |
 | Run tests | `./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step All` | Execute test scenario |
 | Reset external systems | `docker compose -f test/integration/docker/docker-compose.integration-tests.yml down -v` | Remove external system data |
 | Reset JIM | `docker compose -f docker-compose.yml down -v` | Remove JIM database (metaverse, config) |
@@ -285,7 +285,7 @@ Integration tests create real data in JIM:
 
 - **Metaverse Objects** - Identity records from imports
 - **Connected System Objects** - Links to external systems
-- **Sync Rules** - Attribute flow configurations
+- **Synchronisation Rules** - Attribute Flow configurations
 - **Run Profiles** - Execution schedules
 - **Activity History** - Sync operation logs
 
@@ -305,7 +305,7 @@ This guarantees a clean slate for each test run.
 
 ## Overview
 
-The Integration Testing Framework provides end-to-end validation of JIM's synchronisation capabilities against real connected systems running in Docker containers. This enables:
+The Integration Testing Framework provides end-to-end validation of JIM's synchronisation capabilities against real Connected Systems running in Docker containers. This enables:
 
 - **Capability Validation**: Prove JIM works in real-world scenarios
 - **Regression Prevention**: Catch breaking changes before production
@@ -389,7 +389,7 @@ flowchart TB
 flowchart TD
     A["<b>1. Stand Up Systems</b><br/>docker&nbsp;compose&nbsp;up&nbsp;(selected&nbsp;services&nbsp;based&nbsp;on&nbsp;phase/scenario)"]
     B["<b>2. Populate Test Data</b><br/>PowerShell scripts generate realistic data:<br/>-&nbsp;Populate-SambaAD.ps1&nbsp;-Template&nbsp;Medium<br/>-&nbsp;Generate-TestCSV.ps1&nbsp;-Template&nbsp;Medium<br/>-&nbsp;Populate-SqlServer.ps1&nbsp;-Template&nbsp;Medium&nbsp;(Phase&nbsp;2)"]
-    C["<b>3. Configure JIM</b><br/>PowerShell module creates Connected Systems, Sync Rules, Run Profiles:<br/>-&nbsp;Connect-JIM&nbsp;-ApiKey&nbsp;$env:JIM_API_KEY<br/>-&nbsp;New-JIMConnectedSystem&nbsp;(HR&nbsp;CSV,&nbsp;Samba&nbsp;AD)<br/>-&nbsp;New-JIMSyncRule&nbsp;(attribute&nbsp;flows)<br/>-&nbsp;New-JIMRunProfile&nbsp;(import,&nbsp;sync,&nbsp;export&nbsp;steps)"]
+    C["<b>3. Configure JIM</b><br/>PowerShell module creates Connected Systems, Synchronisation Rules, Run Profiles:<br/>-&nbsp;Connect-JIM&nbsp;-ApiKey&nbsp;$env:JIM_API_KEY<br/>-&nbsp;New-JIMConnectedSystem&nbsp;(HR&nbsp;CSV,&nbsp;Samba&nbsp;AD)<br/>-&nbsp;New-JIMSyncRule&nbsp;(attribute&nbsp;flows)<br/>-&nbsp;New-JIMRunProfile&nbsp;(import,&nbsp;sync,&nbsp;export&nbsp;steps)"]
     D["<b>4. Execute Scenarios</b><br/>Run scenario scripts:<br/>-&nbsp;Invoke-Scenario1-HRToIdentityDirectory.ps1<br/>-&nbsp;Invoke-Scenario2-CrossDomainSync.ps1<br/>-&nbsp;Invoke-Scenario3-GALSYNC.ps1<br/>-&nbsp;Invoke-Scenario7-ClearConnectedSystemObjects.ps1<br/>-&nbsp;..."]
     E["<b>5. Validate Results</b><br/>Assertions check expected outcomes:<br/>-&nbsp;User&nbsp;provisioned&nbsp;correctly?<br/>-&nbsp;Attributes&nbsp;flowed&nbsp;as&nbsp;configured?<br/>-&nbsp;Performance&nbsp;within&nbsp;thresholds?"]
     F["<b>6. Tear Down</b><br/>docker&nbsp;compose&nbsp;down&nbsp;-v&nbsp;(complete&nbsp;cleanup)"]
@@ -467,7 +467,7 @@ All templates generate realistic enterprise data following normal distribution p
 | Step | Action |
 |------|--------|
 | **ImportOnly** | Runs the HR CSV Full Import and stops before sync, for debugging CSO creation issues |
-| **SyncOnly** | Runs HR CSV Full Import + Full Sync and stops before exports, so pending exports can be inspected before they fire |
+| **SyncOnly** | Runs HR CSV Full Import + Full Sync and stops before exports, so Pending Exports can be inspected before they fire |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1`
 
@@ -612,12 +612,12 @@ This shape lets the same scenario cover both *attribute recall* (Training source
 
 | Step | Test Case | Description |
 |------|-----------|-------------|
-| 1 | **WhenLastConnectorRecall** | `WhenLastConnectorDisconnected` rule + recall enabled. Training CSO removed; Training-contributed attributes are recalled from the MVO, pending exports clear them from AD, HR-contributed attributes and the AD account stay intact. |
-| 2 | **WhenLastConnectorNoRecall** | Same rule but `RemoveContributedAttributesOnObsoletion=false` and `GracePeriod=0`. HR CSO removed; MVO survives (LDAP CSO still joined), attributes remain on the MVO, no pending exports are queued. |
-| 3 | **AuthoritativeImmediate** | `WhenAuthoritativeSourceDisconnected` rule + `GracePeriod=0`. HR (authoritative) CSO removed; MVO is deleted immediately during sync, and a delete pending export is queued for LDAP. |
+| 1 | **WhenLastConnectorRecall** | `WhenLastConnectorDisconnected` rule + recall enabled. Training CSO removed; Training-contributed attributes are recalled from the MVO, Pending Exports clear them from AD, HR-contributed attributes and the AD account stay intact. |
+| 2 | **WhenLastConnectorNoRecall** | Same rule but `RemoveContributedAttributesOnObsoletion=false` and `GracePeriod=0`. HR CSO removed; MVO survives (LDAP CSO still joined), attributes remain on the MVO, no Pending Exports are queued. |
+| 3 | **AuthoritativeImmediate** | `WhenAuthoritativeSourceDisconnected` rule + `GracePeriod=0`. HR (authoritative) CSO removed; MVO is deleted immediately during sync, and a delete Pending Export is queued for LDAP. |
 | 4 | **AuthoritativeGracePeriod** | Same as Test 3 but with `GracePeriod=1 minute`. After HR CSO removal, the MVO is marked for deletion but not deleted; once the grace period elapses, the housekeeping worker completes the deletion. |
 | 5 | **ManualRecall** | `Manual` rule + recall enabled. Same recall behaviour as Test 1 but the MVO is never auto-deleted regardless of connector state (`isPendingDeletion=false`). |
-| 6 | **ManualNoRecall** | `Manual` rule + `RemoveContributedAttributesOnObsoletion=false`. MVO survives, attributes are retained, no pending exports queued. |
+| 6 | **ManualNoRecall** | `Manual` rule + `RemoveContributedAttributesOnObsoletion=false`. MVO survives, attributes are retained, no Pending Exports queued. |
 | 7 | **InternalProtection** | MVOs with `Origin=Internal` must never be auto-deleted regardless of rule. **Deferred** pending the Internal MVO management feature. |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario4-DeletionRules.ps1`
@@ -694,15 +694,15 @@ When two CSV rows with identical external IDs are processed in the same import b
 
 **Concept**: This scenario tests the scheduler component of JIM that allows administrators to automate synchronisation tasks. It verifies that schedules are properly created, picked up by the scheduler service at the right times, executed through the worker, and that multi-step schedules (including parallel step execution) progress correctly.
 
-**Infrastructure**: The enhanced Scenario1 setup creates 4 connected systems required for comprehensive parallel testing:
+**Infrastructure**: The enhanced Scenario1 setup creates 4 Connected Systems required for comprehensive parallel testing:
 - **HR CSV Source** - Primary identity source
 - **Training Records Source** - Secondary source (contributes training attributes)
 - **Samba AD** - Primary identity target
 - **Cross-Domain Export** - Secondary target (CSV export)
 
 **Systems**:
-- Uses any existing connected systems (typically from Scenario1, Scenario2, or Scenario8 setup)
-- Requires at least one connected system with run profiles configured
+- Uses any existing Connected Systems (typically from Scenario1, Scenario2, or Scenario8 setup)
+- Requires at least one Connected System with Run Profiles configured
 
 **Test Steps** (can be run individually or all together):
 
@@ -713,7 +713,7 @@ When two CSV rows with identical external IDs are processed in the same import b
 | 3 | **AutoTrigger** | Enable a schedule with immediate trigger (every minute) and verify scheduler picks it up |
 | 4 | **Overlap** | Verify that multiple manual executions can run concurrently for the same schedule |
 | 5 | **MultiStep** | Create a schedule with multiple sequential steps and verify they execute in order |
-| 6 | **Parallel** | Create a complex 10-step schedule with parallel imports, sequential syncs, parallel exports (requires 4 connected systems from Scenario1) |
+| 6 | **Parallel** | Create a complex 10-step schedule with parallel imports, sequential syncs, parallel exports (requires 4 Connected Systems from Scenario1) |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario6-SchedulerService.ps1`
 
@@ -733,7 +733,7 @@ When two CSV rows with identical external IDs are processed in the same import b
 ```
 
 **Prerequisites**:
-- **Requires 4 connected systems** - Run Scenario1 setup first to create the full test infrastructure
+- **Requires 4 Connected Systems** - Run Scenario1 setup first to create the full test infrastructure
 - The extended Scenario1 setup creates: HR CSV, Training CSV, Samba AD, Cross-Domain CSV
 - Example: `./Run-IntegrationTests.ps1 -Scenario Scenario1-HRToIdentityDirectory -Step Joiner` then run Scenario6
 
@@ -755,14 +755,14 @@ Step 8 [SEQUENTIAL]:  Delta Sync AD
 **Notes**:
 - This scenario does not use the Template parameter (template-irrelevant)
 - Accepts `-ExportConcurrency` and `-MaxExportParallelism` parameters for export performance tuning
-- The Parallel step test requires all 4 connected systems; skipped if missing
+- The Parallel step test requires all 4 Connected Systems; skipped if missing
 - The AutoTrigger test is excluded from "All" runs due to timing dependencies; run explicitly with `-Step AutoTrigger`
 
 ---
 
 #### Scenario 7: Clear Connected System Objects
 
-**Purpose**: Validate the Clear Connected System Objects feature, which removes all CSOs from a connected system's connector space, with optional preservation of change history.
+**Purpose**: Validate the Clear Connected System Objects feature, which removes all CSOs from a Connected System's connector space, with optional preservation of change history.
 
 **Concept**: Administrators occasionally need to wipe a connector space to start over (recovering from bad data, migrating ownership, resetting a test environment). The clear operation supports two modes: discard change history entirely, or preserve it for audit purposes while still removing the live CSOs.
 
@@ -776,7 +776,7 @@ Step 8 [SEQUENTIAL]:  Delta Sync AD
 |------|-----------|-------------|
 | 1 | **DeleteHistory** | Import CSV data to create CSOs with change history, then clear the connector space with `deleteChangeHistory=true` (default). Asserts CSOs are gone (re-import shows all new adds) and `changeRecordCount=0`. |
 | 2 | **KeepHistory** | Re-import to recreate CSOs and change history, then clear with `-KeepChangeHistory`. Asserts CSOs are gone but `changeRecordCount > 0` so audit data is preserved. |
-| 3 | **EdgeCases** | Clearing an already-empty connector space succeeds without error; clearing one connected system does not affect CSOs in another. |
+| 3 | **EdgeCases** | Clearing an already-empty connector space succeeds without error; clearing one Connected System does not affect CSOs in another. |
 
 **Script**: `test/integration/scenarios/Invoke-Scenario7-ClearConnectedSystemObjects.ps1`
 
@@ -846,7 +846,7 @@ These scenarios test group management capabilities - a core ILM function where t
 | Step | Test Case | Description |
 |------|-----------|-------------|
 | 1 | **ImportGroups** | Existing AD groups imported into JIM metaverse with current membership |
-| 2 | **ConvertAuthority** | Groups marked as JIM-authoritative (export sync rule enabled) |
+| 2 | **ConvertAuthority** | Groups marked as JIM-authoritative (export Synchronisation Rule enabled) |
 | 3 | **UpdateViaJIM** | Membership changed via JIM API -> changes exported to AD |
 | 4 | **DetectDrift** | Admin manually modifies group in AD -> JIM detects drift |
 | 5 | **ReassertState** | JIM overwrites AD changes, reasserting JIM-managed membership |
@@ -903,9 +903,9 @@ These scenarios test group management capabilities - a core ILM function where t
 
 #### Scenario 9: Partition-Scoped Import Run Profiles
 
-**Purpose**: Validate that partition-scoped import run profiles correctly filter to a specified partition, and that unscoped import run profiles import from all selected partitions.
+**Purpose**: Validate that partition-scoped import Run Profiles correctly filter to a specified partition, and that unscoped import Run Profiles import from all selected partitions.
 
-**Concept**: A connected system may expose multiple partitions (e.g. an OpenLDAP server with two suffixes, or an AD forest with multiple domains). Administrators should be able to define a Full Import run profile that targets just one partition rather than the whole connected system. This scenario verifies both the scoped and unscoped code paths, and that the two are consistent.
+**Concept**: A Connected System may expose multiple partitions (e.g. an OpenLDAP server with two suffixes, or an AD forest with multiple domains). Administrators should be able to define a Full Import Run Profile that targets just one partition rather than the whole Connected System. This scenario verifies both the scoped and unscoped code paths, and that the two are consistent.
 
 **Systems**:
 - Samba AD (single domain partition) -> scoped and unscoped imports return the same data, proving the scoped code path does not regress single-partition behaviour
@@ -938,15 +938,15 @@ These scenarios test group management capabilities - a core ILM function where t
 
 ---
 
-#### Scenario 10: Sync Rule Scoping Behaviour
+#### Scenario 10: Synchronisation Rule Scoping Behaviour
 
-**Purpose**: Validate the full sync rule scoping transition matrix end-to-end — what JIM does when an object enters scope, stays in scope while attributes change, and leaves scope, on both the inbound (Import rule) and outbound (Export rule) sides; plus the cross-system inline cascade and round-trip persistence of common criteria operators.
+**Purpose**: Validate the full Synchronisation Rule scoping transition matrix end-to-end — what JIM does when an object enters scope, stays in scope while attributes change, and leaves scope, on both the inbound (Import rule) and outbound (Export rule) sides; plus the cross-system inline cascade and round-trip persistence of common criteria operators.
 
 **Systems**:
 - Source: CSV (HR system, File connector)
 - Target: Panoply AD (or OpenLDAP)
 
-Both connected systems are built from scratch by `Setup-Scenario10.ps1`; the scenario is independent of Scenario 1's larger HR + Training fixture.
+Both Connected Systems are built from scratch by `Setup-Scenario10.ps1`; the scenario is independent of Scenario 1's larger HR + Training fixture.
 
 **Test Steps** (executed sequentially by `-Step All`):
 
@@ -955,7 +955,7 @@ Both connected systems are built from scratch by `Setup-Scenario10.ps1`; the sce
 | 1 | **InboundEnterScope** | New CSO matching `department=Finance` projects an MVO |
 | 2 | **InboundInScopeUpdate** | In-scope CSO update flows the title change to the MVO |
 | 3 | **InboundExitDisconnect** | CSO moves to `Sales` with `InboundOutOfScopeAction=Disconnect` -> `DisconnectedOutOfScope` RPEI, join broken |
-| 4 | **InboundExitRemainJoined** | Same exit with `RemainJoined` -> `OutOfScopeRetainJoin` RPEI, join preserved, no attribute flow |
+| 4 | **InboundExitRemainJoined** | Same exit with `RemainJoined` -> `OutOfScopeRetainJoin` RPEI, join preserved, no Attribute Flow |
 | 5 | **OutboundEnterScope** | In-scope MVO provisions a CSO in the target directory |
 | 6 | **OutboundExitDisconnect** | MVO leaves scope with `OutboundDeprovisionAction=Disconnect` -> target row preserved, no PendingExport queued |
 | 7 | **OutboundExitDelete** | MVO leaves scope with `Delete` -> Deprovisioned RPEI on next Export run, target row removed |
@@ -1015,7 +1015,7 @@ The dedicated scoping evaluation matrix scenario is Scenario 11 (below).
 1. The seed CSV is fanned out so each cell has its own copy of the 15-row seed, tagged with a unique `ObjectType` column value.
 2. The file connector's column-based object-type discovery creates one CSO type per cell.
 3. The scenario creates one MV object type per cell so per-cell projection sets can be read back by type.
-4. The scenario creates one inbound sync rule per cell with its scoping criteria attached.
+4. The scenario creates one inbound Synchronisation Rule per cell with its scoping criteria attached.
 5. **One** Full Import run evaluates every rule against the seed (the worker's `EvaluateProjection` runs once per CSO; because each rule's source CSO type is unique to that cell, the `FirstOrDefault` contest is uncontested).
 6. Per-cell assertions query MVOs by their dedicated MV type Id and compare the `EmployeeId` set to the manifest's expected list.
 
@@ -1051,13 +1051,13 @@ The batched approach is what makes Exhaustive fit inside its wall-clock budget; 
 | 2 | **Negative-cell probes** | Three or more semantically-invalid `(operator, value-type)` combinations (e.g. `Contains` on Boolean, `GreaterThan` on Guid). Observed API status recorded; informational only - the current evaluator silently returns false rather than 400-ing, which is a known SHOULD. Skip with `-IncludeNegativeCells:$false`. |
 | 3 | **Matrix cells** | Every cell in the selected tier runs as its own pass/fail assertion. Per-cell expected `EmployeeId` set is pre-computed in the manifest using the same null-handling and case-folding logic as `ScopingEvaluationServer`. |
 
-**Teardown**: A single `Reset-JIMSystem -Force` at scenario end wipes every sandbox object type, attribute, sync rule, and projected MVO so the host is left re-runnable.
+**Teardown**: A single `Reset-JIMSystem -Force` at scenario end wipes every sandbox object type, attribute, Synchronisation Rule, and projected MVO so the host is left re-runnable.
 
 ---
 
 ### Phase 2 (Road-mapped) - Database Scenarios
 
-> The scenario numbers below (Multi-Source Aggregation, Database Source/Target, Performance Baselines) were originally drafted as 9, 10, and 11; those numbers are now taken by implemented Phase 1 scenarios (Partition-Scoped Imports, Sync Rule Scoping, Scoping Criteria Matrix). The renumbered planned scenarios start at 12.
+> The scenario numbers below (Multi-Source Aggregation, Database Source/Target, Performance Baselines) were originally drafted as 9, 10, and 11; those numbers are now taken by implemented Phase 1 scenarios (Partition-Scoped Imports, Synchronisation Rule Scoping, Scoping Criteria Matrix). The renumbered planned scenarios start at 12.
 
 #### Scenario 12: Multi-Source Aggregation
 
@@ -1074,7 +1074,7 @@ The batched approach is what makes Exhaustive fit inside its wall-clock budget; 
 | Step | Test Case | Description |
 |------|-----------|-------------|
 | 1 | **InitialLoad** | Both sources -> metaverse -> both targets |
-| 2 | **JoinRules** | Matching employeeID across sources -> single metaverse object |
+| 2 | **JoinRules** | Matching employeeID across sources -> single Metaverse Object |
 | 3 | **Precedence** | SQL Server authoritative for email/phone, Oracle for department/title |
 | 4 | **DataTypes** | VARCHAR, NVARCHAR, DATE, DATETIME, INT, BIT -> correct mapping |
 
@@ -1177,7 +1177,7 @@ The batched approach is what makes Exhaustive fit inside its wall-clock budget; 
 
 ### JIM Configuration via PowerShell Module
 
-Integration tests require JIM to be configured with Connected Systems, Sync Rules, and Run Profiles. This is automated using the **JIM PowerShell Module** ([#176](https://github.com/TetronIO/JIM/issues/176)) with **API Key Authentication** ([#175](https://github.com/TetronIO/JIM/issues/175)).
+Integration tests require JIM to be configured with Connected Systems, Synchronisation Rules, and Run Profiles. This is automated using the **JIM PowerShell Module** ([#176](https://github.com/TetronIO/JIM/issues/176)) with **API Key Authentication** ([#175](https://github.com/TetronIO/JIM/issues/175)).
 
 #### Why PowerShell Module?
 
@@ -1232,7 +1232,7 @@ $adSystem = New-JIMConnectedSystem -Name "Panoply AD" `
         UserContainer = "OU=Users,OU=Corp,DC=panoply,DC=local"
     }
 
-# Create Inbound Sync Rule (HR -> Metaverse)
+# Create Inbound Synchronisation Rule (HR -> Metaverse)
 New-JIMSyncRule -Name "HR Users Inbound" `
     -ConnectedSystemId $hrSystem.Id `
     -Direction Inbound `
@@ -1250,7 +1250,7 @@ New-JIMSyncRule -Name "HR Users Inbound" `
         @{ Source = "title"; Target = "title"; Type = "Direct" }
     )
 
-# Create Outbound Sync Rule (Metaverse -> AD)
+# Create Outbound Synchronisation Rule (Metaverse -> AD)
 New-JIMSyncRule -Name "AD Users Outbound" `
     -ConnectedSystemId $adSystem.Id `
     -Direction Outbound `
@@ -1317,9 +1317,9 @@ The issue was that ASP.NET Core's authentication pipeline only runs the DefaultS
 **Completed Cmdlets:**
 - ✅ `Connect-JIM` - API key authentication
 - ✅ `Get-JIMConnectorDefinition` - List and retrieve connector definitions
-- ✅ `Get-JIMConnectedSystem` / `New-JIMConnectedSystem` / `Set-JIMConnectedSystem` - Manage connected systems
-- ✅ `Get-JIMRunProfile` / `New-JIMRunProfile` / `Start-JIMRunProfile` - Manage and execute run profiles
-- ✅ `Get-JIMSyncRule` / `New-JIMSyncRule` - Manage sync rules
+- ✅ `Get-JIMConnectedSystem` / `New-JIMConnectedSystem` / `Set-JIMConnectedSystem` - Manage Connected Systems
+- ✅ `Get-JIMRunProfile` / `New-JIMRunProfile` / `Start-JIMRunProfile` - Manage and execute Run Profiles
+- ✅ `Get-JIMSyncRule` / `New-JIMSyncRule` - Manage Synchronisation Rules
 
 **Fixes Applied:**
 - ✅ Fixed pagination handling for empty arrays (Get-JIMConnectedSystem, Get-JIMSyncRule)
@@ -1327,7 +1327,7 @@ The issue was that ASP.NET Core's authentication pipeline only runs the DefaultS
 - ✅ Fixed JSON serialization of hashtable keys (Set-JIMConnectedSystem)
 
 **Remaining Work:**
-- Sync rules require object type IDs from imported connector schema (needs schema import cmdlet)
+- Synchronisation Rules require object type IDs from imported connector schema (needs schema import cmdlet)
 
 ---
 
@@ -1603,7 +1603,7 @@ foreach ($attr in $ldapUserType.attributes) {
 }
 ```
 
-Select only the attributes needed for your sync rules:
+Select only the attributes needed for your Synchronisation Rules:
 ```powershell
 # ✅ Do this - select only required attributes
 $requiredLdapAttributes = @(
@@ -1708,7 +1708,7 @@ The following sync operations are instrumented:
 
 | Operation | Description |
 |-----------|-------------|
-| `FullImport` | Complete import from a connected system |
+| `FullImport` | Complete import from a Connected System |
 | `CallBasedImport` | Import using connector API calls |
 | `FileBasedImport` | Import from file-based connectors |
 | `ImportPage` | Single page of paginated import |
@@ -1718,11 +1718,11 @@ The following sync operations are instrumented:
 | `ResolveReferences` | Resolving object references |
 | `PersistConnectedSystemObjects` | Database persistence |
 | `FullSync` | Full synchronisation cycle |
-| `LoadSyncRules` | Loading sync rules |
+| `LoadSyncRules` | Loading Synchronisation Rules |
 | `LoadObjectTypes` | Loading object types |
 | `ProcessConnectedSystemObjects` | Processing CSOs during sync |
-| `Export` | Export to connected system |
-| `ExecuteExports` | Executing pending exports |
+| `Export` | Export to Connected System |
+| `ExecuteExports` | Executing Pending Exports |
 
 ### Adding Custom Instrumentation
 
@@ -1948,12 +1948,12 @@ The map size cannot be reliably increased on a running instance; it requires a c
 **User not provisioned**:
 1. Check JIM logs: `docker logs jim.web`
 2. Verify Connected System configured correctly
-3. Verify Sync Rule attribute flows
+3. Verify Synchronisation Rule Attribute Flows
 4. Check Run Profile executed successfully
 5. Review Activity history in JIM UI
 
-**Attribute flow incorrect**:
-1. Review Sync Rule configuration
+**Attribute Flow incorrect**:
+1. Review Synchronisation Rule configuration
 2. Check attribute precedence rules
 3. Verify source attribute populated
 4. Check for transformation functions
@@ -2025,8 +2025,8 @@ JIM/
         │   ├── Invoke-Scenario6-SchedulerService.ps1             # Scheduler service testing
         │   ├── Invoke-Scenario7-ClearConnectedSystemObjects.ps1  # Clear connector space testing
         │   ├── Invoke-Scenario8-CrossDomainEntitlementSync.ps1   # Group sync between domains
-        │   ├── Invoke-Scenario9-PartitionScopedImports.ps1       # Partition-scoped import run profiles
-        │   ├── Invoke-Scenario10-SyncRuleScoping.ps1             # Sync rule scoping behaviour
+        │   ├── Invoke-Scenario9-PartitionScopedImports.ps1       # Partition-scoped import Run Profiles
+        │   ├── Invoke-Scenario10-SyncRuleScoping.ps1             # Synchronisation Rule scoping behaviour
         │   ├── Invoke-Scenario11-ScopingCriteriaMatrix.ps1       # Scoping criteria evaluation matrix
         │   ├── data/                                             # Per-scenario data + manifests (incl. Scenario 11 matrix)
         │   └── data/                                              # Scenario-specific CSV overlays (Scenarios 4, 5)
@@ -2091,7 +2091,7 @@ JIM/
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Infrastructure | ✅ Complete | Samba AD, CSV file mounting, volume orchestration |
-| API Endpoints | ✅ Complete | Schema management, sync rules, mappings, run profiles |
+| API Endpoints | ✅ Complete | Schema management, Synchronisation Rules, mappings, Run Profiles |
 | PowerShell Module | ✅ Complete | Cmdlets cover every scenario currently in use (1, 2, 4, 5, 6, 7, 8, 9, 10) |
 | Scenario 1 | ✅ Complete | 8 lifecycle tests (Joiner, Mover, Mover-Rename, Mover-Move, Disable, Enable, Leaver, Reconnection) plus ImportOnly/SyncOnly diagnostic steps |
 | Scenario 2 | ✅ Complete | All 4 tests (Provision, ForwardSync, ReverseSync, Conflict) |
@@ -2101,8 +2101,8 @@ JIM/
 | Scenario 6 | ✅ Complete | Scheduler service (Create, ManualTrigger, AutoTrigger, Overlap, MultiStep, Parallel) |
 | Scenario 7 | ✅ Complete | Clear Connected System Objects (DeleteHistory, KeepHistory, EdgeCases) |
 | Scenario 8 | ✅ Complete | All 6 tests (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup) plus ImportToMV diagnostic step |
-| Scenario 9 | ✅ Complete | Partition-scoped import run profiles |
-| Scenario 10 | ✅ Complete | Sync rule scoping behaviour: 9 sub-tests covering the full inbound + outbound scope transition matrix, cross-system inline cascade, and criteria persistence (#656) |
+| Scenario 9 | ✅ Complete | Partition-scoped import Run Profiles |
+| Scenario 10 | ✅ Complete | Synchronisation Rule scoping behaviour: 9 sub-tests covering the full inbound + outbound scope transition matrix, cross-system inline cascade, and criteria persistence (#656) |
 | Scenario 11 | ✅ Complete | Scoping criteria evaluation matrix: three tiers (Quick / Default / Exhaustive) covering operator x value-type x group-structure end-to-end via batched per-cell CSO types, plus round-trip persistence and API negative-cell probes |
 | Entitlement (JIM-to-AD) | ⏸️ Deferred | Requires Internal MVO design |
 | Entitlement (Convert Authority) | ⏸️ Deferred | Requires Internal MVO design |

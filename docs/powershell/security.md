@@ -51,7 +51,7 @@ New-JIMApiKey -Name "Admin Key" -RoleIds @($adminRole.id) -PassThru
 
 ## Get-JIMRoleMember
 
-Retrieves metaverse objects assigned to a security role.
+Retrieves Metaverse Objects assigned to a security role.
 
 ### Syntax
 
@@ -71,7 +71,7 @@ Get-JIMRoleMember -InputObject <PSCustomObject>
 
 ### Output
 
-Metaverse object members with `id`, `displayName`, `typeId`, and `typeName` properties.
+Metaverse Object members with `id`, `displayName`, `typeId`, and `typeName` properties.
 
 ### Examples
 
@@ -98,7 +98,7 @@ Get-JIMRole | ForEach-Object {
 
 ## Get-JIMMetaverseObjectRole
 
-Lists the security roles a metaverse object is a member of.
+Lists the security roles a Metaverse Object is a member of.
 
 ### Syntax
 
@@ -110,7 +110,7 @@ Get-JIMMetaverseObjectRole -Id <guid>
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `guid` | Yes | | The unique identifier of the metaverse object. Accepts pipeline input by property name (e.g. from `Get-JIMMetaverseObject`). |
+| `Id` | `guid` | Yes | | The unique identifier of the Metaverse Object. Accepts pipeline input by property name (e.g. from `Get-JIMMetaverseObject`). |
 
 ### Output
 
@@ -144,7 +144,7 @@ Get-JIMRole -Name "Administrator" |
 
 ## Add-JIMRoleMember
 
-Adds a metaverse object to a security role.
+Adds a Metaverse Object to a security role.
 
 ### Syntax
 
@@ -158,8 +158,8 @@ Add-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject>
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `RoleId` | `int` | Yes | | The unique identifier of the role to add the member to. |
-| `MetaverseObjectId` | `guid` | Yes* | | The unique identifier of the metaverse object. |
-| `InputObject` | `PSCustomObject` | Yes* | | Metaverse object from the pipeline (e.g., from `Get-JIMMetaverseObject`). |
+| `MetaverseObjectId` | `guid` | Yes* | | The unique identifier of the Metaverse Object. |
+| `InputObject` | `PSCustomObject` | Yes* | | Metaverse Object from the pipeline (e.g., from `Get-JIMMetaverseObject`). |
 
 *One of `MetaverseObjectId` or `InputObject` is required.
 
@@ -182,7 +182,7 @@ Add-JIMRoleMember -RoleId $adminRole.id -MetaverseObjectId "a1b2c3d4-..."
 
 ## Remove-JIMRoleMember
 
-Removes a metaverse object from a security role.
+Removes a Metaverse Object from a security role.
 
 ### Syntax
 
@@ -196,8 +196,8 @@ Remove-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-Force]
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `RoleId` | `int` | Yes | | The unique identifier of the role to remove the member from. |
-| `MetaverseObjectId` | `guid` | Yes* | | The unique identifier of the metaverse object. |
-| `InputObject` | `PSCustomObject` | Yes* | | Metaverse object from the pipeline. |
+| `MetaverseObjectId` | `guid` | Yes* | | The unique identifier of the Metaverse Object. |
+| `InputObject` | `PSCustomObject` | Yes* | | Metaverse Object from the pipeline. |
 | `Force` | `switch` | No | `$false` | Suppresses confirmation prompts. |
 
 *One of `MetaverseObjectId` or `InputObject` is required.

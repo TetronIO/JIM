@@ -4,7 +4,7 @@ title: Metaverse
 
 # Metaverse
 
-The **metaverse** is JIM's central identity store. It contains object types (the schema), attributes (the fields), and the identity objects themselves. All synchronisation flows through the metaverse: import rules bring data in from [connected systems](connected-systems.md), and export rules push data out.
+The **metaverse** is JIM's central identity store. It contains object types (the schema), attributes (the fields), and the identity objects themselves. All synchronisation flows through the metaverse: import rules bring data in from [Connected Systems](connected-systems.md), and export rules push data out.
 
 The metaverse schema is administrator-defined. JIM does not impose a fixed schema, so you can model any identity domain that fits your organisation, from the conventional `person` and `group` types through to bespoke types like `serviceAccount`, `mailbox`, or `device`.
 
@@ -23,20 +23,20 @@ The grace period is the right default for production: it protects against transi
 
 ## Attributes
 
-**Attributes** define the fields available on metaverse objects. Examples include `displayName`, `mail`, and `employeeId`. Attributes can be:
+**Attributes** define the fields available on Metaverse Objects. Examples include `displayName`, `mail`, and `employeeId`. Attributes can be:
 
 - **Single-valued or multi-valued**<br /> A multi-valued attribute holds a list of values (e.g. group memberships, email aliases).
-- **Of various data types**<br /> String, integer, datetime, boolean, reference (a link to another metaverse object), and so on.
+- **Of various data types**<br /> String, integer, datetime, boolean, reference (a link to another Metaverse Object), and so on.
 
 Attributes are scoped to the object types that use them: when you add an attribute to the metaverse, you choose which object types it applies to. The same attribute name can carry different meanings on different object types if you genuinely need that, though in practice most attributes are reused identically across types where they apply.
 
 ## Objects
 
-**Objects** are the identity records: a single `person`, `group`, or whatever object types you have defined. Each object has a type, attribute values, and may be linked to one or more Connected System Objects in connected systems. Those links are how data flows between the external systems and the metaverse during synchronisation.
+**Objects** are the identity records: a single `person`, `group`, or whatever object types you have defined. Each object has a type, attribute values, and may be linked to one or more Connected System Objects in Connected Systems. Those links are how data flows between the external systems and the metaverse during synchronisation.
 
 ## Pending deletions
 
-Pending deletions track metaverse objects awaiting final deletion after all their connector space links have been removed. The grace period (configured per object type) gives administrators time to intervene before deletion is finalised.
+Pending deletions track Metaverse Objects awaiting final deletion after all their connector space links have been removed. The grace period (configured per object type) gives administrators time to intervene before deletion is finalised.
 
 JIM exposes both the list of currently pending deletions and a summary view, which is useful for spotting unexpected mass-deletion events early.
 
@@ -54,6 +54,6 @@ The metaverse supports filtering and a fast named-search API. The named-search A
 
 - [Concepts: Architecture](../concepts/architecture.md) -- how the metaverse fits into JIM's hub-and-spoke architecture
 - [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md) -- how data flows through the metaverse during import, sync, and export
-- [Concepts: JML Lifecycle](../concepts/jml-lifecycle.md) -- joiner/mover/leaver lifecycle and how it relates to metaverse object state
+- [Concepts: JML Lifecycle](../concepts/jml-lifecycle.md) -- joiner/mover/leaver lifecycle and how it relates to Metaverse Object state
 - [Synchronisation Rules](synchronisation-rules.md) -- how data flows in and out of the metaverse
-- [Predefined Searches](predefined-searches.md) -- named, reusable searches over metaverse objects
+- [Predefined Searches](predefined-searches.md) -- named, reusable searches over Metaverse Objects

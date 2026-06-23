@@ -4,7 +4,7 @@ title: API
 
 # API
 
-JIM exposes a REST API for programmatic access to all identity management operations: configuring connected systems, triggering synchronisation runs, querying the metaverse, and integrating JIM into wider infrastructure workflows. The API is served from the same application as the web UI; there is no separate service to deploy.
+JIM exposes a REST API for programmatic access to all identity management operations: configuring Connected Systems, triggering synchronisation runs, querying the metaverse, and integrating JIM into wider infrastructure workflows. The API is served from the same application as the web UI; there is no separate service to deploy.
 
 ## Where to find what
 
@@ -37,7 +37,7 @@ These behaviours are common across the API. The interactive API reference is aut
 
 **Errors.** All errors return a consistent JSON shape with a machine-readable `code`, a human-readable `message`, optional `details` and `validationErrors`, and a `timestamp`. The full set of error codes is documented per endpoint in the interactive API reference.
 
-**Asynchronous operations.** Long-running operations (schema import, run profile execution, connected system deletion) return `202 Accepted` with an activity ID; poll [Activities](../configuration/activities.md) to track progress.
+**Asynchronous operations.** Long-running operations (schema import, Run Profile execution, Connected System deletion) return `202 Accepted` with an activity ID; poll [Activities](../configuration/activities.md) to track progress.
 
 ## System endpoints
 

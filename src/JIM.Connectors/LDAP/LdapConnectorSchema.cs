@@ -74,7 +74,7 @@ internal class LdapConnectorSchema
                 throw new Exception($"No success getting object types. Result code: {response.ResultCode}");
 
             if (response.Entries.Count == 0)
-                throw new Exception($"Couldn't get object types. Non returned from connected system. Result code: {response.ResultCode}");
+                throw new Exception($"Couldn't get object types. Non returned from Connected System. Result code: {response.ResultCode}");
 
             // enumerate each object class entry
             foreach (SearchResultEntry entry in response.Entries)

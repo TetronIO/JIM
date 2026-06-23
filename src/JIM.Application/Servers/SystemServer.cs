@@ -132,7 +132,7 @@ public class SystemServer
         }
 
         Log.Information(
-            "ResetSystemAsync: Factory reset completed by {User}. Removed {CsCount} connected systems, {MvoCount} metaverse objects; {AdminsRetained} administrators retained",
+            "ResetSystemAsync: Factory reset completed by {User}. Removed {CsCount} Connected Systems, {MvoCount} Metaverse Objects; {AdminsRetained} administrators retained",
             LogSanitiser.Sanitise(initiatorName),
             result.ConnectedSystemsRemoved,
             result.MetaverseObjectsRemoved,

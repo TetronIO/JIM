@@ -1,4 +1,4 @@
-# Sync Rule Scoping
+# Synchronisation Rule Scoping
 
 | | |
 |---|---|
@@ -6,11 +6,11 @@
 | **Last Updated** | 2026-04-23 |
 | **Status** | Active |
 
-This document describes the behaviour of sync rule scoping in JIM, the administrator-facing scenarios it supports, and how each scenario is realised in code.
+This document describes the behaviour of Synchronisation Rule scoping in JIM, the administrator-facing scenarios it supports, and how each scenario is realised in code.
 
 ## Business scenarios supported today
 
-Scoping rules on a sync rule determine which connected system objects (CSOs) or metaverse objects (MVOs) the rule applies to. Transitions in and out of scope drive the following business scenarios:
+Scoping rules on a Synchronisation Rule determine which Connected System Objects (CSOs) or Metaverse Objects (MVOs) the rule applies to. Transitions in and out of scope drive the following business scenarios:
 
 - **Onboarding**: a new CSO from an authoritative system (for example HR) enters scope of an import rule, causing the identity to be projected into the metaverse and subsequently provisioned into downstream systems by matching export rules.
 - **Ongoing attribute updates**: CSOs and MVOs that remain in scope have their attribute changes flowed through the normal precedence logic.
@@ -29,9 +29,9 @@ The rest of this document shows the specific code paths that realise these scena
 |---|---|---|---|
 | `SyncRule.InboundOutOfScopeAction` | Import rules | `Disconnect`, `RemainJoined` | `Disconnect` |
 | `SyncRule.OutboundDeprovisionAction` | Export rules | `Disconnect`, `Delete` | `Disconnect` |
-| `MetaverseObjectType.DeletionRule` | Metaverse object type | `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected` | per type |
-| `MetaverseObjectType.DeletionTriggerConnectedSystemIds` | Metaverse object type | Set of connected system IDs | empty |
-| `MetaverseObjectType.DeletionGracePeriod` | Metaverse object type | Timespan (nullable) | null (immediate) |
+| `MetaverseObjectType.DeletionRule` | Metaverse Object Type | `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected` | per type |
+| `MetaverseObjectType.DeletionTriggerConnectedSystemIds` | Metaverse Object Type | Set of Connected System IDs | empty |
+| `MetaverseObjectType.DeletionGracePeriod` | Metaverse Object Type | Timespan (nullable) | null (immediate) |
 
 ## Inbound (import rule) scope transitions
 
@@ -49,7 +49,7 @@ flowchart TD
     InNow -->|Yes| FlowUpdate[Flow attribute updates to MVO<br/>Change type: AttributeFlow]
     InNow -->|No| OutAction{InboundOutOfScopeAction}
 
-    OutAction -->|RemainJoined| Retain[Keep join, stop attribute flow<br/>Change type: OutOfScopeRetainJoin]
+    OutAction -->|RemainJoined| Retain[Keep join, stop Attribute Flow<br/>Change type: OutOfScopeRetainJoin]
     OutAction -->|Disconnect| Disconnect[Recall CSO's attributes from MVO<br/>Break join<br/>Evaluate MVO deletion rule<br/>Change type: DisconnectedOutOfScope]
 
     Disconnect --> MvoDeletion([See: MVO deletion cascade])
@@ -63,7 +63,7 @@ Relevant code:
 
 ## Outbound (export rule) scope transitions
 
-An export rule's scoping rules control whether an MVO projects into a target connected system. Re-evaluation happens in two places: inline during inbound sync when an MVO's attributes change, and during a normal export run.
+An export rule's scoping rules control whether an MVO projects into a target Connected System. Re-evaluation happens in two places: inline during inbound sync when an MVO's attributes change, and during a normal export run.
 
 ```mermaid
 flowchart TD
@@ -134,14 +134,14 @@ flowchart LR
     Export[Outbound sync run] --> Eval
 ```
 
-The inline call at `SyncTaskProcessorBase.cs:1364` is what makes "HR changes department, DB row removed in the same sync" work. Without it, the deprovision would be deferred to the next export run against the target connected system.
+The inline call at `SyncTaskProcessorBase.cs:1364` is what makes "HR changes department, DB row removed in the same sync" work. Without it, the deprovision would be deferred to the next export run against the target Connected System.
 
 ## What scoping does not do today
 
 The following behaviours are out of scope for the current implementation. They are captured here for administrators planning deployments and for future design work.
 
 - **Deprovision joined or matched CSOs on MVO deletion**: the cascade in `EvaluateMvoDeletionAsync` only issues delete `PendingExport`s for CSOs with `JoinType = Provisioned`. CSOs that JIM matched onto pre-existing target objects are disconnected but not removed from the target system. Review in progress in [issue #655](https://github.com/TetronIO/JIM/issues/655).
-- **Cascade back to the source connected system**: an outbound deprovision does not trigger a write back to the originating system. This is intentional to prevent circular exports.
+- **Cascade back to the source Connected System**: an outbound deprovision does not trigger a write back to the originating system. This is intentional to prevent circular exports.
 - **End-to-end integration test coverage of the full scope transition matrix**: individual transitions are covered by unit tests, but no single integration scenario exercises every combination against a running stack. Tracked in [issue #656](https://github.com/TetronIO/JIM/issues/656).
 
 ## References

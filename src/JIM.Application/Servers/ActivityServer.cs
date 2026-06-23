@@ -290,13 +290,13 @@ public class ActivityServer
     }
 
     /// <summary>
-    /// Retrieves a page's worth of worker task activities (run profile executions, data generation, system operations).
+    /// Retrieves a page's worth of worker task activities (Run Profile executions, data generation, system operations).
     /// Filtered to show only activities related to worker tasks for the Operations page History tab.
     /// </summary>
     /// <param name="page">The page number (1-based).</param>
     /// <param name="pageSize">The number of items per page.</param>
-    /// <param name="connectedSystemFilter">Optional filter for connected system names (additive/OR within filter).</param>
-    /// <param name="runProfileFilter">Optional filter for run profile names (additive/OR within filter).</param>
+    /// <param name="connectedSystemFilter">Optional filter for Connected System names (additive/OR within filter).</param>
+    /// <param name="runProfileFilter">Optional filter for Run Profile names (additive/OR within filter).</param>
     /// <param name="statusFilter">Optional filter for activity statuses (additive/OR within filter).</param>
     /// <param name="initiatedByFilter">Optional text search on initiator name.</param>
     /// <param name="sortBy">Optional column to sort by.</param>

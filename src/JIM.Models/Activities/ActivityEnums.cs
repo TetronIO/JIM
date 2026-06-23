@@ -27,7 +27,7 @@ public enum ActivityOutcomeType
 
 /// <summary>
 /// The type of outcome recorded in an RPEI sync outcome node.
-/// Covers all three run profile types: import, sync, and export.
+/// Covers all three Run Profile types: import, sync, and export.
 /// </summary>
 public enum ActivityRunProfileExecutionItemSyncOutcomeType
 {
@@ -50,7 +50,7 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     MvoDeleted,
     DriftCorrection,
 
-    // Sync outcomes — outbound (pending export creation during sync)
+    // Sync outcomes — outbound (Pending Export creation during sync)
     Provisioned,
     PendingExportCreated,
 

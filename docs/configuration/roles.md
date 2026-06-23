@@ -12,7 +12,7 @@ Roles marked **built-in** ship with JIM and cannot be deleted. They can have mem
 
 ## Static membership
 
-A role's static members are the metaverse objects (typically `person` objects) explicitly assigned to the role. Membership is established by adding a metaverse object as a member, and removed by deleting that membership.
+A role's static members are the Metaverse Objects (typically `person` objects) explicitly assigned to the role. Membership is established by adding a Metaverse Object as a member, and removed by deleting that membership.
 
 API keys carry roles directly rather than via metaverse-object membership. This means rotating a person's role membership doesn't affect already-issued API keys, and revoking an API key doesn't change a person's role membership. Manage the two surfaces independently.
 
@@ -29,8 +29,8 @@ If you genuinely need to transfer admin to a different identity, add the new adm
 
 **Granting administrator access to a new user:**
 
-1. Confirm the user has a corresponding metaverse object (created via synchronisation from a source system, or manually)
-2. Add the metaverse object as a member of the Administrator role
+1. Confirm the user has a corresponding Metaverse Object (created via synchronisation from a source system, or manually)
+2. Add the Metaverse Object as a member of the Administrator role
 
 **Transferring administrator access:**
 

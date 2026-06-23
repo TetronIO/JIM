@@ -44,7 +44,7 @@ public interface ISyncRepository
     #region Connected System Object — Reads
 
     /// <summary>
-    /// Gets the total number of CSOs for a connected system.
+    /// Gets the total number of CSOs for a Connected System.
     /// Used to calculate page count at sync start.
     /// </summary>
     Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? partitionId = null);
@@ -110,7 +110,7 @@ public interface ISyncRepository
     Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(int connectedSystemId, string secondaryExternalIdValue);
 
     /// <summary>
-    /// Bulk-loads all CSO external ID mappings for a connected system into a lightweight dictionary.
+    /// Bulk-loads all CSO external ID mappings for a Connected System into a lightweight dictionary.
     /// Returns a dictionary mapping cache keys ("cso:{connectedSystemId}:{attributeId}:{lowerExternalIdValue}")
     /// to CSO GUIDs. Used as the lookup phase of the import pipeline to answer "does this CSO exist?"
     /// in O(1) without loading full entity graphs.
@@ -144,7 +144,7 @@ public interface ISyncRepository
     Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues);
 
     /// <summary>
-    /// Gets all external ID attribute values of type int for a connected system and object type.
+    /// Gets all external ID attribute values of type int for a Connected System and object type.
     /// Used during import to build the full set of known external IDs for deletion detection.
     /// </summary>
     Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId, int? partitionId = null);
@@ -177,13 +177,13 @@ public interface ISyncRepository
     Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId);
 
     /// <summary>
-    /// Gets the count of CSOs joined to a specific MVO across all connected systems.
+    /// Gets the count of CSOs joined to a specific MVO across all Connected Systems.
     /// Used to determine whether an MVO should be deleted when its last CSO is disconnected.
     /// </summary>
     Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
-    /// Gets the count of CSOs joined to a specific MVO within a single connected system.
+    /// Gets the count of CSOs joined to a specific MVO within a single Connected System.
     /// Used during join validation to check maximum join cardinality.
     /// </summary>
     Task<int> GetConnectedSystemObjectCountByMvoAsync(int connectedSystemId, Guid metaverseObjectId);
@@ -239,7 +239,7 @@ public interface ISyncRepository
     /// Resolves cross-batch reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues)
     /// that were nulled during COPY binary persistence to avoid FK violations. The DN string is preserved
     /// in StringValue and is matched against the secondary external ID attribute values of CSOs in the
-    /// same connected system using case-insensitive comparison.
+    /// same Connected System using case-insensitive comparison.
     /// </summary>
     Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId);
 
@@ -311,86 +311,86 @@ public interface ISyncRepository
     #region Pending Exports
 
     /// <summary>
-    /// Gets all pending exports for a connected system.
-    /// Used at sync start to build the O(1) pending export lookup by CSO ID.
+    /// Gets all Pending Exports for a Connected System.
+    /// Used at sync start to build the O(1) Pending Export lookup by CSO ID.
     /// </summary>
     Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
 
     /// <summary>
-    /// Gets the count of pending exports for a connected system.
+    /// Gets the count of Pending Exports for a Connected System.
     /// Used by the export processor to determine paging.
     /// </summary>
     Task<int> GetPendingExportsCountAsync(int connectedSystemId);
 
     /// <summary>
-    /// Bulk creates pending exports with their attribute value changes.
+    /// Bulk creates Pending Exports with their attribute value changes.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>
     Task CreatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
-    /// Bulk deletes pending exports.
+    /// Bulk deletes Pending Exports.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>
     Task DeletePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
-    /// Bulk updates pending exports.
+    /// Bulk updates Pending Exports.
     /// Uses raw SQL bulk operations in production for performance.
     /// </summary>
     Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports);
 
     /// <summary>
-    /// Deletes pending exports by their associated CSO IDs.
-    /// Returns the count of deleted pending exports.
+    /// Deletes Pending Exports by their associated CSO IDs.
+    /// Returns the count of deleted Pending Exports.
     /// Used during obsolete CSO processing to clean up orphaned exports.
     /// </summary>
     Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
     /// <summary>
-    /// Gets a single pending export by its associated CSO ID.
-    /// Used during export evaluation to check for existing pending exports in the database.
+    /// Gets a single Pending Export by its associated CSO ID.
+    /// Used during export evaluation to check for existing Pending Exports in the database.
     /// </summary>
     Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
 
     /// <summary>
-    /// Gets pending exports for multiple CSOs in a single query.
+    /// Gets Pending Exports for multiple CSOs in a single query.
     /// Returns a dictionary keyed by CSO ID.
     /// </summary>
     Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
     /// <summary>
     /// Lightweight version of <see cref="GetPendingExportsByConnectedSystemObjectIdsAsync"/> for reconciliation.
-    /// Returns pending exports with only scalar fields loaded (no attribute value changes).
+    /// Returns Pending Exports with only scalar fields loaded (no attribute value changes).
     /// </summary>
     Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
     /// <summary>
-    /// Gets CSO IDs that have pending exports for a connected system.
+    /// Gets CSO IDs that have Pending Exports for a Connected System.
     /// Used during import reconciliation to identify which CSOs have outstanding exports.
     /// </summary>
     Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId);
 
     /// <summary>
-    /// Loads all pending exports for a connected system in a single bulk query, keyed by CSO ID.
+    /// Loads all Pending Exports for a Connected System in a single bulk query, keyed by CSO ID.
     /// More efficient than per-page loading for large-scale reconciliation.
     /// </summary>
     Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId);
 
     /// <summary>
-    /// Deletes pending exports that are not tracked by the EF change tracker.
+    /// Deletes Pending Exports that are not tracked by the EF change tracker.
     /// Used during import reconciliation to clean up confirmed exports.
     /// </summary>
     Task DeleteUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports);
 
     /// <summary>
-    /// Deletes pending export attribute value changes that are not tracked by the EF change tracker.
+    /// Deletes Pending Export attribute value changes that are not tracked by the EF change tracker.
     /// Used during import reconciliation to clean up partially confirmed exports.
     /// </summary>
     Task DeleteUntrackedPendingExportAttributeValueChangesAsync(IEnumerable<PendingExportAttributeValueChange> untrackedAttributeValueChanges);
 
     /// <summary>
-    /// Updates pending exports that are not tracked by the EF change tracker.
+    /// Updates Pending Exports that are not tracked by the EF change tracker.
     /// Used during import reconciliation to update export status after confirmation.
     /// </summary>
     Task UpdateUntrackedPendingExportsAsync(IEnumerable<PendingExport> untrackedPendingExports);
@@ -434,7 +434,7 @@ public interface ISyncRepository
     /// <summary>
     /// Loads persisted RPEIs (with their SyncOutcomes) and the id of each RPEI's existing
     /// MetaverseObjectChange, in a single round-trip. Used by cross-page reference resolution to
-    /// merge reference attribute flow into existing RPEIs and to route the new attribute rows
+    /// merge reference Attribute Flow into existing RPEIs and to route the new attribute rows
     /// under the already-persisted MvoChange parent (respecting the unique constraint
     /// <c>IX_MetaverseObjectChanges_ActivityRunProfileExecutionItemId</c>). Previous implementations
     /// relied on <c>_activity.RunProfileExecutionItems</c> as a lookup source, but per-page raw-SQL
@@ -470,28 +470,28 @@ public interface ISyncRepository
 
     #endregion
 
-    #region Sync Rules and Configuration
+    #region Synchronisation Rules and Configuration
 
     /// <summary>
-    /// Gets sync rules for a connected system.
+    /// Gets Synchronisation Rules for a Connected System.
     /// When <paramref name="includeDisabled"/> is false, only active rules are returned.
     /// </summary>
     Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabled, bool withChangeTracking = false);
 
     /// <summary>
-    /// Gets all sync rules across all connected systems.
+    /// Gets all Synchronisation Rules across all Connected Systems.
     /// Used to build the drift detection cache which needs rules from all systems.
     /// </summary>
     Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false);
 
     /// <summary>
-    /// Gets the object types (schema) for a connected system.
+    /// Gets the object types (schema) for a Connected System.
     /// Used during sync to resolve attribute mappings.
     /// </summary>
     Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId);
 
     /// <summary>
-    /// Updates a connected system's fields (e.g., LastSyncCompletedAt watermark).
+    /// Updates a Connected System's fields (e.g., LastSyncCompletedAt watermark).
     /// </summary>
     Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem);
 
@@ -582,17 +582,17 @@ public interface ISyncRepository
     #region Pending Export — Singular Convenience Methods
 
     /// <summary>
-    /// Creates a single pending export. Convenience wrapper around <see cref="CreatePendingExportsAsync"/>.
+    /// Creates a single Pending Export. Convenience wrapper around <see cref="CreatePendingExportsAsync"/>.
     /// </summary>
     Task CreatePendingExportAsync(PendingExport pendingExport);
 
     /// <summary>
-    /// Deletes a single pending export. Convenience wrapper around <see cref="DeletePendingExportsAsync"/>.
+    /// Deletes a single Pending Export. Convenience wrapper around <see cref="DeletePendingExportsAsync"/>.
     /// </summary>
     Task DeletePendingExportAsync(PendingExport pendingExport);
 
     /// <summary>
-    /// Updates a single pending export. Convenience wrapper around <see cref="UpdatePendingExportsAsync"/>.
+    /// Updates a single Pending Export. Convenience wrapper around <see cref="UpdatePendingExportsAsync"/>.
     /// </summary>
     Task UpdatePendingExportAsync(PendingExport pendingExport);
 
@@ -601,20 +601,20 @@ public interface ISyncRepository
     #region Export Evaluation Support
 
     /// <summary>
-    /// Gets all CSOs joined to a specific MVO across all connected systems.
+    /// Gets all CSOs joined to a specific MVO across all Connected Systems.
     /// Used during MVO deletion to find all provisioned CSOs for delete exports.
     /// </summary>
     Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
-    /// Gets CSOs joined to MVOs that are targeted by the specified connected systems.
+    /// Gets CSOs joined to MVOs that are targeted by the specified Connected Systems.
     /// Returns a dictionary keyed by (MvoId, ConnectedSystemId) for O(1) lookup during export evaluation.
     /// </summary>
     Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(
         IEnumerable<int> targetConnectedSystemIds);
 
     /// <summary>
-    /// Gets CSOs joined to specific MVOs within the specified target connected systems.
+    /// Gets CSOs joined to specific MVOs within the specified target Connected Systems.
     /// Used for per-page export evaluation cache refresh — loads only CSOs relevant to the current page's MVOs.
     /// Returns a dictionary keyed by (MvoId, ConnectedSystemId) for O(1) lookup.
     /// </summary>
@@ -628,13 +628,13 @@ public interface ISyncRepository
     Task<List<ConnectedSystemObjectAttributeValue>> GetCsoAttributeValuesByCsoIdsAsync(IEnumerable<Guid> csoIds);
 
     /// <summary>
-    /// Gets a single CSO joined to a specific MVO within a connected system.
+    /// Gets a single CSO joined to a specific MVO within a Connected System.
     /// Used during export evaluation to find existing CSOs for provisioning decisions.
     /// </summary>
     Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId);
 
     /// <summary>
-    /// Gets CSOs joined to multiple MVOs within a connected system.
+    /// Gets CSOs joined to multiple MVOs within a Connected System.
     /// Returns a dictionary keyed by MVO ID for O(1) lookup.
     /// Used for reference resolution during export processing.
     /// </summary>
@@ -642,13 +642,13 @@ public interface ISyncRepository
         IEnumerable<Guid> metaverseObjectIds, int connectedSystemId);
 
     /// <summary>
-    /// Gets a single connected system object type attribute by ID.
+    /// Gets a single Connected System Object Type attribute by ID.
     /// Used during export to determine attribute data types.
     /// </summary>
     Task<ConnectedSystemObjectTypeAttribute?> GetAttributeAsync(int id);
 
     /// <summary>
-    /// Gets multiple connected system object type attributes by their IDs.
+    /// Gets multiple Connected System Object Type attributes by their IDs.
     /// Returns a dictionary keyed by attribute ID for O(1) lookup.
     /// Used during batch export processing to pre-fetch attribute definitions.
     /// </summary>
@@ -659,13 +659,13 @@ public interface ISyncRepository
     #region Export Execution Support
 
     /// <summary>
-    /// Gets the count of pending exports that are ready for execution.
+    /// Gets the count of Pending Exports that are ready for execution.
     /// Applies database-level filtering for status, retry timing, and max retries.
     /// </summary>
     Task<int> GetExecutableExportCountAsync(int connectedSystemId);
 
     /// <summary>
-    /// Gets all pending exports that are ready for execution.
+    /// Gets all Pending Exports that are ready for execution.
     /// Applies database-level filtering for status, retry timing, and max retries.
     /// </summary>
     Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId);
@@ -685,19 +685,19 @@ public interface ISyncRepository
     Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId);
 
     /// <summary>
-    /// Deletes pending exports by their IDs using raw SQL.
+    /// Deletes Pending Exports by their IDs using raw SQL.
     /// Used by reconciliation which operates on lightweight summaries, not full entities.
     /// </summary>
     Task DeletePendingExportsByIdsAsync(IList<Guid> pendingExportIds);
 
     /// <summary>
-    /// Marks pending exports as Executing with the current UTC timestamp.
+    /// Marks Pending Exports as Executing with the current UTC timestamp.
     /// Uses raw SQL in production for efficiency.
     /// </summary>
     Task MarkPendingExportsAsExecutingAsync(IList<PendingExport> pendingExports);
 
     /// <summary>
-    /// Reloads pending exports by their IDs with full object graph.
+    /// Reloads Pending Exports by their IDs with full object graph.
     /// Used during parallel export processing to reload exports in a separate context.
     /// </summary>
     Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds);

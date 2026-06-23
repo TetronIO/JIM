@@ -38,7 +38,7 @@ public class ObjectMatchingServer
     /// <param name="connectedSystemObject">The CSO to find a matching MVO for.</param>
     /// <param name="matchingRules">The matching rules to evaluate. Each rule must carry its own
     /// <see cref="ObjectMatchingRule.MetaverseObjectType"/> (simple mode) or the caller must set it
-    /// from the sync rule before passing (advanced mode).</param>
+    /// from the Synchronisation Rule before passing (advanced mode).</param>
     /// <returns>The matching MVO, or null if no match found.</returns>
     /// <exception cref="MultipleMatchesException">Thrown if multiple MVOs match the criteria.</exception>
     public async Task<MetaverseObject?> FindMatchingMetaverseObjectAsync(
@@ -141,7 +141,7 @@ public class ObjectMatchingServer
 
     /// <summary>
     /// Evaluates a single matching rule to compute the expected external ID value that would be used
-    /// to create a new object in the connected system. This is used during provisioning to pre-populate
+    /// to create a new object in the Connected System. This is used during provisioning to pre-populate
     /// CSO attributes before export.
     /// </summary>
     /// <param name="metaverseObject">The source MVO being provisioned.</param>

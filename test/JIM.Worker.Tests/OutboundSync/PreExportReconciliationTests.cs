@@ -8,7 +8,7 @@ namespace JIM.Worker.Tests.OutboundSync;
 
 /// <summary>
 /// Tests for SyncEngine.ReconcileCreateDeletePairs — pure logic that identifies
-/// pending export pairs (CREATE+DELETE, UPDATE+DELETE) targeting the same CSO
+/// Pending Export pairs (CREATE+DELETE, UPDATE+DELETE) targeting the same CSO
 /// that cancel each other out and should not be exported.
 /// </summary>
 public class PreExportReconciliationTests

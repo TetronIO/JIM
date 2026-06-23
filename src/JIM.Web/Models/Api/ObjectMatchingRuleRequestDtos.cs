@@ -7,7 +7,7 @@ using JIM.Models.Staging;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// Request DTO for creating an object matching rule source.
+/// Request DTO for creating an Object Matching Rule source.
 /// </summary>
 public class CreateObjectMatchingRuleSourceRequest
 {
@@ -30,7 +30,7 @@ public class CreateObjectMatchingRuleSourceRequest
 }
 
 /// <summary>
-/// Request DTO for creating an object matching rule.
+/// Request DTO for creating an Object Matching Rule.
 /// </summary>
 public class CreateObjectMatchingRuleRequest
 {
@@ -75,8 +75,8 @@ public class CreateObjectMatchingRuleRequest
 }
 
 /// <summary>
-/// Request DTO for creating an object matching rule on a sync rule (advanced mode).
-/// The MetaverseObjectType is derived from the sync rule, not specified explicitly.
+/// Request DTO for creating an Object Matching Rule on a Synchronisation Rule (advanced mode).
+/// The MetaverseObjectType is derived from the Synchronisation Rule, not specified explicitly.
 /// </summary>
 public class CreateSyncRuleObjectMatchingRuleRequest
 {
@@ -108,12 +108,12 @@ public class CreateSyncRuleObjectMatchingRuleRequest
 }
 
 /// <summary>
-/// Request DTO for switching the object matching rule mode on a connected system.
+/// Request DTO for switching the Object Matching Rule mode on a Connected System.
 /// </summary>
 public class SwitchObjectMatchingModeRequest
 {
     /// <summary>
-    /// The new object matching rule mode.
+    /// The new Object Matching Rule mode.
     /// 0 = ConnectedSystem (simple mode), 1 = SyncRule (advanced mode).
     /// </summary>
     [Required]
@@ -121,7 +121,7 @@ public class SwitchObjectMatchingModeRequest
 }
 
 /// <summary>
-/// Request DTO for updating an object matching rule.
+/// Request DTO for updating an Object Matching Rule.
 /// </summary>
 public class UpdateObjectMatchingRuleRequest
 {

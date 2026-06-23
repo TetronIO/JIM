@@ -10,7 +10,7 @@ using Serilog;
 namespace JIM.Application.Services;
 
 /// <summary>
-/// Thin orchestration wrapper for pending export reconciliation.
+/// Thin orchestration wrapper for Pending Export reconciliation.
 /// Loads data from the database, delegates to <see cref="ISyncEngine"/> for pure reconciliation logic,
 /// and persists the results. All decision-making logic lives in SyncEngine.
 /// </summary>
@@ -26,8 +26,8 @@ public class PendingExportReconciliationService
     }
 
     /// <summary>
-    /// Reconciles a Connected System Object's imported attribute values against any pending exports.
-    /// Loads the pending export from the database, delegates reconciliation to SyncEngine,
+    /// Reconciles a Connected System Object's imported attribute values against any Pending Exports.
+    /// Loads the Pending Export from the database, delegates reconciliation to SyncEngine,
     /// and persists the outcome. For bulk operations, use SyncEngine.ReconcileCsoAgainstPendingExport directly
     /// with pre-loaded data and batch persistence.
     /// </summary>
@@ -41,7 +41,7 @@ public class PendingExportReconciliationService
 
         if (pendingExport == null)
         {
-            Log.Debug("ReconcileAsync: No pending export found for CSO {CsoId}", connectedSystemObject.Id);
+            Log.Debug("ReconcileAsync: No Pending Export found for CSO {CsoId}", connectedSystemObject.Id);
             return result;
         }
 
@@ -52,12 +52,12 @@ public class PendingExportReconciliationService
         if (result.PendingExportDeleted)
         {
             await _syncRepo.DeletePendingExportAsync(pendingExport);
-            Log.Information("ReconcileAsync: All attribute changes confirmed. Deleted pending export {ExportId}", pendingExport.Id);
+            Log.Information("ReconcileAsync: All attribute changes confirmed. Deleted Pending Export {ExportId}", pendingExport.Id);
         }
         else if (result.HasChanges)
         {
             await _syncRepo.UpdatePendingExportAsync(pendingExport);
-            Log.Debug("ReconcileAsync: Updated pending export {ExportId} with {Confirmed} confirmed, {Retry} for retry, {Failed} failed",
+            Log.Debug("ReconcileAsync: Updated Pending Export {ExportId} with {Confirmed} confirmed, {Retry} for retry, {Failed} failed",
                 pendingExport.Id, result.ConfirmedChanges.Count, result.RetryChanges.Count, result.FailedChanges.Count);
         }
 

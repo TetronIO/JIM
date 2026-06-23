@@ -19,7 +19,7 @@ namespace JIM.Worker.Tests.Workflows;
 /// 2. CSO is disconnected from MVO during sync
 /// 3. MVO deletion rule is evaluated
 /// 4. MVO is marked for deletion (LastConnectorDisconnectedDate set)
-/// 5. Housekeeping deletes MVO and creates delete pending exports for downstream CSOs
+/// 5. Housekeeping deletes MVO and creates delete Pending Exports for downstream CSOs
 ///
 /// Test scenarios cover:
 /// - DeletionRule.Manual - no automatic deletion
@@ -342,7 +342,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
             gracePeriod: TimeSpan.FromDays(30),  // 30 day grace period - handled by housekeeping
             triggerConnectedSystemIds: new List<int> { sourceSystem.Id });
 
-        // Create sync rules
+        // Create Synchronisation Rules
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
         var targetExportRule = await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export");
 
@@ -396,7 +396,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
 
     /// <summary>
     /// Verifies that MVOs with zero grace period are deleted synchronously
-    /// when a specific trigger system disconnects, and delete pending exports
+    /// when a specific trigger system disconnects, and delete Pending Exports
     /// are created for any remaining Provisioned CSOs.
     /// </summary>
     [Test]
@@ -415,7 +415,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
             gracePeriod: TimeSpan.Zero,  // Zero grace period - delete synchronously
             triggerConnectedSystemIds: new List<int> { sourceSystem.Id });
 
-        // Create sync rules
+        // Create Synchronisation Rules
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
         var targetExportRule = await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export");
 
@@ -466,15 +466,15 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         Assert.That(mvo, Is.Null,
             "MVO with grace period = 0 should be deleted immediately during sync");
 
-        // Assert: Delete pending export should be created for Target CSO (Provisioned)
+        // Assert: Delete Pending Export should be created for Target CSO (Provisioned)
         var deletePendingExports = SyncRepo.PendingExports.Values
             .Where(pe => pe.ConnectedSystemId == targetSystem.Id &&
                         pe.ChangeType == JIM.Models.Transactional.PendingExportChangeType.Delete)
             .ToList();
         Assert.That(deletePendingExports, Has.Count.EqualTo(1),
-            "Delete pending export should be created for the Provisioned target CSO");
+            "Delete Pending Export should be created for the Provisioned target CSO");
         Assert.That(deletePendingExports[0].ConnectedSystemObjectId, Is.EqualTo(targetCsoId),
-            "Delete pending export should reference the target CSO");
+            "Delete Pending Export should reference the target CSO");
     }
 
     /// <summary>
@@ -497,7 +497,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
 
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
 
-        // Create a second (non-authoritative) system and sync rule BEFORE any processor runs
+        // Create a second (non-authoritative) system and Synchronisation Rule BEFORE any processor runs
         // to avoid EF Core in-memory change tracker conflicts
         var targetSystem = await CreateConnectedSystemAsync("Target AD System");
         var targetType = await CreateCsoTypeAsync(targetSystem.Id, "User");
@@ -598,11 +598,11 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         mvType.Attributes.Add(trainingCompletedAttr);
         mvType.Attributes.Add(trainingExpiresAttr);
 
-        // Create import sync rules for HR and Training (both contribute attributes)
+        // Create import Synchronisation Rules for HR and Training (both contribute attributes)
         await CreateImportSyncRuleAsync(hrSystem.Id, hrUserType, mvType, "HR Import");
         await CreateImportSyncRuleAsync(trainingSystem.Id, trainingUserType, mvType, "Training Import");
 
-        // Create export sync rule for AD
+        // Create export Synchronisation Rule for AD
         await CreateExportSyncRuleAsync(adSystem.Id, adUserType, mvType, "AD Export");
 
         // Create HR CSO and run Full Sync to project to MVO
@@ -679,15 +679,15 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
             "MVO with grace period = 0 should be deleted immediately when HR (authoritative source) disconnects. " +
             "This is the core Leaver scenario with synchronous deletion.");
 
-        // Verify delete pending export was created for AD CSO (Provisioned)
+        // Verify delete Pending Export was created for AD CSO (Provisioned)
         var deletePendingExports = SyncRepo.PendingExports.Values
             .Where(pe => pe.ConnectedSystemId == adSystem.Id &&
                         pe.ChangeType == JIM.Models.Transactional.PendingExportChangeType.Delete)
             .ToList();
         Assert.That(deletePendingExports, Has.Count.EqualTo(1),
-            "Delete pending export should be created for the Provisioned AD CSO");
+            "Delete Pending Export should be created for the Provisioned AD CSO");
         Assert.That(deletePendingExports[0].ConnectedSystemObjectId, Is.EqualTo(adCsoId),
-            "Delete pending export should reference the AD CSO");
+            "Delete Pending Export should reference the AD CSO");
     }
 
     #endregion
@@ -815,7 +815,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
     }
 
     /// <summary>
-    /// Creates an export sync rule.
+    /// Creates an export Synchronisation Rule.
     /// </summary>
     protected async Task<SyncRule> CreateExportSyncRuleAsync(
         int connectedSystemId,

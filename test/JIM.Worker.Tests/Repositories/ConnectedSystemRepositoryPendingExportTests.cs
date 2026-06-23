@@ -13,7 +13,7 @@ namespace JIM.Worker.Tests.Repositories;
 
 /// <summary>
 /// Tests for GetPendingExportsByConnectedSystemObjectIdsAsync in ConnectedSystemRepository.
-/// Validates that duplicate pending exports for the same CSO are self-healed (newest kept, older deleted).
+/// Validates that duplicate Pending Exports for the same CSO are self-healed (newest kept, older deleted).
 /// </summary>
 [TestFixture]
 public class ConnectedSystemRepositoryPendingExportTests
@@ -108,7 +108,7 @@ public class ConnectedSystemRepositoryPendingExportTests
     [Test]
     public async Task GetPendingExportsByConnectedSystemObjectIdsAsync_WithNoPendingExports_ReturnsEmptyDictionaryAsync()
     {
-        // Arrange - no pending exports in data
+        // Arrange - no Pending Exports in data
         var csoIds = new[] { _cso1.Id };
 
         // Act
@@ -122,7 +122,7 @@ public class ConnectedSystemRepositoryPendingExportTests
     [Test]
     public async Task GetPendingExportsByConnectedSystemObjectIdsAsync_WithSinglePendingExportPerCso_ReturnsDictionaryAsync()
     {
-        // Arrange - one pending export per CSO (normal case)
+        // Arrange - one Pending Export per CSO (normal case)
         var pe1 = CreatePendingExport(_cso1);
         var pe2 = CreatePendingExport(_cso2);
         _pendingExportsData.AddRange(new[] { pe1, pe2 });
@@ -144,7 +144,7 @@ public class ConnectedSystemRepositoryPendingExportTests
     [Test]
     public async Task GetPendingExportsByConnectedSystemObjectIdsAsync_WithDuplicatePendingExportsForSameCso_SelfHealsKeepingNewestAsync()
     {
-        // Arrange - TWO pending exports for the SAME CSO (data integrity violation to self-heal)
+        // Arrange - TWO Pending Exports for the SAME CSO (data integrity violation to self-heal)
         var pe1 = CreatePendingExport(_cso1, createdAt: DateTime.UtcNow.AddMinutes(-10));
         var pe2 = CreatePendingExport(_cso1, createdAt: DateTime.UtcNow.AddMinutes(-1)); // Newer duplicate
         _pendingExportsData.AddRange(new[] { pe1, pe2 });
@@ -185,7 +185,7 @@ public class ConnectedSystemRepositoryPendingExportTests
     [Test]
     public async Task GetPendingExportsByConnectedSystemObjectIdsAsync_WithPendingExportsForUnrequestedCsos_OnlyReturnsRequestedAsync()
     {
-        // Arrange - pending exports exist for both CSOs, but we only request CSO1
+        // Arrange - Pending Exports exist for both CSOs, but we only request CSO1
         var pe1 = CreatePendingExport(_cso1);
         var pe2 = CreatePendingExport(_cso2);
         _pendingExportsData.AddRange(new[] { pe1, pe2 });

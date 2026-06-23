@@ -8,7 +8,7 @@ namespace JIM.Models.Transactional;
 
 /// <summary>
 /// Tracks references that couldn't be resolved during export because
-/// the target object doesn't yet exist in the target connected system.
+/// the target object doesn't yet exist in the target Connected System.
 ///
 /// This supports event-based sync where objects may arrive out of order
 /// (e.g., an employee arrives before their manager).

@@ -48,7 +48,7 @@ public class ConnectedSystem : IAuditable
 
     /// <summary>
     /// We track whether setting values have been validated by the Connector so that we can prevent the user from navigating to configuration phases that are dependent upon valid setting values.
-    /// When a connected system is created, this will be false as there are no values supplied yet.
+    /// When a Connected System is created, this will be false as there are no values supplied yet.
     /// When any setting values are changed by the user, this will be toggled to false until the settings are validated.
     /// </summary>
     public bool SettingValuesValid { get; set; }
@@ -66,9 +66,9 @@ public class ConnectedSystem : IAuditable
     public string? PersistedConnectorData { get; set; }
 
     /// <summary>
-    /// Determines where object matching rules are configured for this Connected System.
-    /// ConnectedSystem (default): Rules are defined per object type and shared across sync rules.
-    /// SyncRule: Rules are defined per sync rule for advanced scenarios.
+    /// Determines where Object Matching Rules are configured for this Connected System.
+    /// ConnectedSystem (default): Rules are defined per object type and shared across Synchronisation Rules.
+    /// SyncRule: Rules are defined per Synchronisation Rule for advanced scenarios.
     /// </summary>
     public ObjectMatchingRuleMode ObjectMatchingRuleMode { get; set; } = ObjectMatchingRuleMode.ConnectedSystem;
 

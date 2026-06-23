@@ -4,14 +4,14 @@
 namespace JIM.Models.Sync;
 
 /// <summary>
-/// Records a warning generated during inbound attribute flow when a multi-valued
+/// Records a warning generated during inbound Attribute Flow when a multi-valued
 /// source attribute was mapped to a single-valued target attribute. The first value
 /// was selected and all others were discarded.
 /// </summary>
 public class AttributeFlowWarning
 {
     /// <summary>
-    /// The name of the source connected system attribute.
+    /// The name of the source Connected System attribute.
     /// </summary>
     public required string SourceAttributeName { get; set; }
 

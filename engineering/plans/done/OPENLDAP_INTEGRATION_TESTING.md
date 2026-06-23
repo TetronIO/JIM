@@ -343,7 +343,7 @@ $ldapSettings = @{
 }
 ```
 
-Sync rule attribute mappings also vary by directory type; the setup script branches on `$DirectoryConfig.UserObjectClass` to select the appropriate attribute names.
+Synchronisation Rule attribute mappings also vary by directory type; the setup script branches on `$DirectoryConfig.UserObjectClass` to select the appropriate attribute names.
 
 ## Connector Code Gaps
 
@@ -437,7 +437,7 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 - `Get-DirectoryConfig` function in `Test-Helpers.ps1`: returns directory-specific config (container, host, port, bind DN, object classes, etc.) for SambaAD or OpenLDAP
 - `-DirectoryType` parameter on `Run-IntegrationTests.ps1`: controls Docker profile, health checks, population, and OU preparation
 - Refactored `LDAP-Helpers.ps1`: all functions accept `$DirectoryConfig` hashtable alongside individual params for backward compatibility
-- Parameterised `Setup-Scenario1.ps1`: LDAP connected system name, host, port, bind DN, SSL, and auth type all driven by `$DirectoryConfig`
+- Parameterised `Setup-Scenario1.ps1`: LDAP Connected System name, host, port, bind DN, SSL, and auth type all driven by `$DirectoryConfig`
 - Parameterised `Invoke-Scenario1.ps1`: container name for docker exec calls driven by `$DirectoryConfig`
 - SambaAD remains the default; all existing behaviour preserved when `-DirectoryType` is not specified
 
@@ -453,7 +453,7 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 - OpenLDAP detection via `structuralObjectClass: OpenLDAProotDSE` (fallback when `vendorName` not set)
 - DN-aware RDN attribute detection in export (`IsRdnAttribute` parses RDN from DN, not hardcoded `cn`)
 - Changelog query gated behind delta import only (not full import)
-- "Include Auxiliary Classes" connected system setting (both AD and RFC paths)
+- "Include Auxiliary Classes" Connected System setting (both AD and RFC paths)
 - Related issues created: #433 (AD schema batch optimisation), #434 (filter internal object classes from UI)
 
 ### Phase 5: End-to-End Validation ✅
@@ -490,7 +490,7 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 | 1 | **S9: Partition-Scoped Imports** | 5 | Low | ✅ Done | True multi-partition filtering with Yellowstone + Glitterband suffixes |
 | 2 | **S7: Clear Connected System Objects** | 0 | Low | ✅ Done | DirectoryConfig threading only; scenario is entirely CSV-based |
 | 3 | **S6: Scheduler Service** | 2 | Low | ✅ Done | DirectoryConfig, system name parameterised, docker cp replaced with bind mount |
-| 4 | **S2: Cross-Domain Sync** | 11 | Medium | ✅ Done | Two LDAP connected systems (Yellowstone→Glitterband), all 4 tests passing. Unblocked by #435. |
+| 4 | **S2: Cross-Domain Sync** | 11 | Medium | ✅ Done | Two LDAP Connected Systems (Yellowstone→Glitterband), all 4 tests passing. Unblocked by #435. |
 | 5 | **S5: Matching Rules** | 17 | Medium | ✅ Done | DirectoryConfig threading, docker cp removed, user cleanup parameterised |
 | 6 | **S3: GAL Sync** | 0 | N/A | ⏭ Deferred | Not yet implemented; placeholder script only. Out of scope for this phase. |
 | 7 | **S4: Deletion Rules** | 26 | High | ✅ Done | All 7 tests passing; LDAP-Helpers replace samba-tool, .ContainsKey() for missing attrs |
@@ -498,9 +498,9 @@ This will throw `InvalidOperationException` for OpenLDAP (which has `entryUUID`,
 
 **Implementation advice for each scenario:**
 
-**S9 (Partition-Scoped Imports):** ✅ Complete. Both `Setup-Scenario9.ps1` and `Invoke-Scenario9-PartitionScopedImports.ps1` parameterised with `$DirectoryConfig`. For OpenLDAP: selects both partitions (Yellowstone + Glitterband), creates four run profiles (scoped primary, scoped second, unscoped, full sync), and asserts true partition isolation; scoped imports to each partition return only that partition's users, and combined counts match total. `Run-IntegrationTests.ps1` updated with Step 4c to call `Populate-OpenLDAP.ps1` before scenarios when using OpenLDAP.
+**S9 (Partition-Scoped Imports):** ✅ Complete. Both `Setup-Scenario9.ps1` and `Invoke-Scenario9-PartitionScopedImports.ps1` parameterised with `$DirectoryConfig`. For OpenLDAP: selects both partitions (Yellowstone + Glitterband), creates four Run Profiles (scoped primary, scoped second, unscoped, full sync), and asserts true partition isolation; scoped imports to each partition return only that partition's users, and combined counts match total. `Run-IntegrationTests.ps1` updated with Step 4c to call `Populate-OpenLDAP.ps1` before scenarios when using OpenLDAP.
 
-**S2 (Cross-Domain Sync):** Requires two LDAP connected systems pointing at the same OpenLDAP instance but different suffixes. The `Get-DirectoryConfig` function already has `SecondSuffix` and `SecondBindDN` for this purpose. Setup script needs a second connected system creation block.
+**S2 (Cross-Domain Sync):** Requires two LDAP Connected Systems pointing at the same OpenLDAP instance but different suffixes. The `Get-DirectoryConfig` function already has `SecondSuffix` and `SecondBindDN` for this purpose. Setup script needs a second Connected System creation block.
 
 **S5 (Matching Rules):** Primarily attribute name substitution (`sAMAccountName`→`uid`, `employeeID`→`employeeNumber`, etc.) and object type substitution (`user`→`inetOrgPerson`). Follow the same parameterisation pattern used in S1's `Setup-Scenario1.ps1`.
 

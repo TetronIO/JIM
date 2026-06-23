@@ -6,7 +6,7 @@
 
 ## Problem
 
-When the JIM scheduler executes a multi-step schedule, individual run profile steps can fail with `FailedWithError` or `CompleteWithError`, yet the schedule execution is incorrectly marked as "Completed". This means:
+When the JIM scheduler executes a multi-step schedule, individual Run Profile steps can fail with `FailedWithError` or `CompleteWithError`, yet the schedule execution is incorrectly marked as "Completed". This means:
 
 1. **Users see false success** -- schedule executions appear to complete normally despite step failures
 2. **Integration tests don't catch regressions** -- Scenario 6 passes when it should fail

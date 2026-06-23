@@ -57,15 +57,15 @@ public class ActivityRunProfileExecutionItemTests
         TestUtilities.SetEnvironmentVariables();
         InitiatedBy = TestUtilities.GetInitiatedBy();
 
-        // set up the connected systems mock
+        // set up the Connected Systems mock
         ConnectedSystemsData = TestUtilities.GetConnectedSystemData();
         MockDbSetConnectedSystems = ConnectedSystemsData.BuildMockDbSet();
 
-        // setup up the connected system run profiles mock
+        // setup up the Connected System Run Profiles mock
         ConnectedSystemRunProfilesData = TestUtilities.GetConnectedSystemRunProfileData();
         MockDbSetConnectedSystemRunProfiles = ConnectedSystemRunProfilesData.BuildMockDbSet();
 
-        // set up the connected system object types mock. this acts as the persisted schema in JIM
+        // set up the Connected System Object Types mock. this acts as the persisted schema in JIM
         ConnectedSystemObjectTypesData = TestUtilities.GetConnectedSystemObjectTypeData();
         MockDbSetConnectedSystemObjectTypes = ConnectedSystemObjectTypesData.BuildMockDbSet();
 

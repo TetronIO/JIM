@@ -19,7 +19,7 @@ public class ConnectedSystemPartition
     public ConnectedSystem ConnectedSystem { get; set; } = null!;
 
     /// <summary>
-    /// The unique identifier for this partition in the connected system.
+    /// The unique identifier for this partition in the Connected System.
     /// For example, with LDAP systems this would be the DN (Distinguished Name).
     /// </summary>
     public string ExternalId { get; set; } = null!;

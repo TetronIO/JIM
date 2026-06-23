@@ -13,7 +13,7 @@ Two root causes have been empirically identified:
 
 1. **EF Core change tracker accumulation**: A single `DbContext` lives for the entire sync run. Every entity touched (CSOs, MVOs, attribute values, RPEIs) remains tracked. At 100K objects with ~5 entities each, the tracker grows to 500K+ entries, consuming multiple GB and slowing every subsequent `SaveChanges` call.
 
-2. **Export evaluation cache**: `BuildExportEvaluationCacheAsync` loads ALL connected system objects and their attribute values for every target system into memory before processing begins. For a deployment with 100K objects and 2 target systems, this is ~200K CSOs + attribute values loaded upfront.
+2. **Export evaluation cache**: `BuildExportEvaluationCacheAsync` loads ALL Connected System Objects and their attribute values for every target system into memory before processing begins. For a deployment with 100K objects and 2 target systems, this is ~200K CSOs + attribute values loaded upfront.
 
 Together, these cause superlinear memory growth; doubling the object count more than doubles memory consumption. The current architecture has no mechanism to bound memory usage regardless of dataset size.
 
@@ -21,7 +21,7 @@ Together, these cause superlinear memory growth; doubling the object count more 
 
 - JIM must be able to Full Sync 100,000+ identity objects without crashing
 - Memory consumption during sync must be bounded, proportional to page size, not total dataset size
-- No regression in sync correctness (attribute flow, reference resolution, export evaluation, change tracking)
+- No regression in sync correctness (Attribute Flow, reference resolution, export evaluation, change tracking)
 - No regression in sync performance for deployments under 50K objects
 - Existing integration tests (Scenarios 1-8, all templates up to Large) must continue to pass
 
@@ -70,7 +70,7 @@ Together, these cause superlinear memory growth; doubling the object count more 
 
 ### Scenario 1: Scale100K Full Sync Completes
 
-**Given**: A JIM deployment with 100,000 users and 50 groups across 2 connected systems, worker allocated 8 GB RAM
+**Given**: A JIM deployment with 100,000 users and 50 groups across 2 Connected Systems, worker allocated 8 GB RAM
 **When**: A Full Sync is triggered on the source system
 **Then**: The sync completes successfully, all objects are synchronised correctly, memory usage stays bounded throughout
 
@@ -82,7 +82,7 @@ Together, these cause superlinear memory growth; doubling the object count more 
 
 ### Scenario 3: Export Evaluation Correctness
 
-**Given**: An MVO on page 50 has export rules targeting 2 connected systems
+**Given**: An MVO on page 50 has export rules targeting 2 Connected Systems
 **When**: Export evaluation runs for this MVO
 **Then**: The correct target CSOs are found and attribute changes are evaluated identically to the current architecture, with no missing exports, no phantom exports
 

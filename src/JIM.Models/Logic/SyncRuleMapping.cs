@@ -8,7 +8,7 @@ using JIM.Models.Staging;
 namespace JIM.Models.Logic;
 
 /// <summary>
-/// Defines how data should flow from JIM to a connected system (or vice versa) for a specific attribute.
+/// Defines how data should flow from JIM to a Connected System (or vice versa) for a specific attribute.
 /// There can only be one mapping per target attribute.
 /// i.e. you might be mapping a single source attribute to a target attribute, or you might use an expression as a
 /// source that references multiple attributes.
@@ -83,6 +83,21 @@ public class SyncRuleMapping : IAuditable
     /// </summary>
     public ConnectedSystemObjectTypeAttribute? TargetConnectedSystemAttribute { get; set; }
     public int? TargetConnectedSystemAttributeId { get; set; }
+
+    /// <summary>
+    /// Inbound (import) text value-processing transforms applied to the value as it flows to the target
+    /// Metaverse attribute. Defaults to <see cref="InboundValueProcessing.TreatWhitespaceAsNoValue"/>
+    /// (JIM's opinionated default). Only applies to import mappings targeting text attributes; ignored for
+    /// export mappings and non-text attribute types. See <see cref="CaseNormalisation"/> for the case option.
+    /// </summary>
+    public InboundValueProcessing InboundValueProcessing { get; set; } = InboundValueProcessing.TreatWhitespaceAsNoValue;
+
+    /// <summary>
+    /// Inbound (import) case normalisation applied to the text value as it flows to the target Metaverse
+    /// attribute. Defaults to <see cref="InboundCaseNormalisation.None"/>. Only applies to import mappings
+    /// targeting text attributes.
+    /// </summary>
+    public InboundCaseNormalisation CaseNormalisation { get; set; } = InboundCaseNormalisation.None;
 
     /// <summary>
     /// Helper method to provide a description for the user on what type of source configuration this is.

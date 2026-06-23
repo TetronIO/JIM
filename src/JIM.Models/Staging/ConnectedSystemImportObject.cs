@@ -5,14 +5,14 @@ using JIM.Models.Enums;
 namespace JIM.Models.Staging;
 
 /// <summary>
-/// Represents an object imported from a connected system. Connectors populate these lightweight
+/// Represents an object imported from a Connected System. Connectors populate these lightweight
 /// objects during import, and JIM handles matching them to connector space objects, processing
-/// pending exports, and synchronising attribute values.
+/// Pending Exports, and synchronising attribute values.
 /// </summary>
 public class ConnectedSystemImportObject
 {
     /// <summary>
-    /// The object type in the connected system, e.g. user, group.
+    /// The object type in the Connected System, e.g. user, group.
     /// </summary>
     public string? ObjectType { get; set; }
 

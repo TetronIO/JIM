@@ -19,7 +19,7 @@ namespace JIM.Web.Api.Tests;
 
 /// <summary>
 /// Tests for attribute type compatibility validation in ConnectedSystemServer.
-/// Validates that sync rule mappings enforce type and plurality compatibility
+/// Validates that Synchronisation Rule mappings enforce type and plurality compatibility
 /// at the Application layer (GH-308).
 /// </summary>
 [TestFixture]

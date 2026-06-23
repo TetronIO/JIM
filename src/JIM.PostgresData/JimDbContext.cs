@@ -222,7 +222,7 @@ public class JimDbContext : DbContext
             .WithOne(av => av.ConnectedSystemObjectChangeAttribute)
             .OnDelete(DeleteBehavior.Cascade); // let the db delete all dependent ConnectedSystemObjectChangeAttributeValue objects when the parent is deleted.
 
-        // When a connected system attribute definition is deleted, preserve the change history record
+        // When a Connected System attribute definition is deleted, preserve the change history record
         // by setting the FK to null. The AttributeName and AttributeType sibling properties retain
         // the attribute metadata even after the definition is removed.
         modelBuilder.Entity<ConnectedSystemObjectChangeAttribute>()
@@ -280,6 +280,13 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<SyncRule>()
             .HasMany(sr => sr.AttributeFlowRules)
             .WithOne(afr => afr.SyncRule);
+
+        // Inbound value processing defaults to TreatWhitespaceAsNoValue (JIM's opinionated default).
+        // The store-level default backfills existing rows on migration so the whitespace-as-no-value
+        // behaviour applies to mappings created before this feature shipped (#843).
+        modelBuilder.Entity<SyncRuleMapping>()
+            .Property(srm => srm.InboundValueProcessing)
+            .HasDefaultValue(InboundValueProcessing.TreatWhitespaceAsNoValue);
 
         // ObjectMatchingRule can belong to either SyncRule or ConnectedSystemObjectType (mutually exclusive)
         modelBuilder.Entity<SyncRule>()
@@ -368,8 +375,8 @@ public class JimDbContext : DbContext
             .HasIndex(pe => new { pe.ConnectedSystemId, pe.Status })
             .HasDatabaseName("IX_PendingExports_ConnectedSystemId_Status");
 
-        // PendingExport: filtered unique index to prevent duplicate pending exports for the same CSO.
-        // Only one pending export should exist per CSO at any time. The filter excludes rows where
+        // PendingExport: filtered unique index to prevent duplicate Pending Exports for the same CSO.
+        // Only one Pending Export should exist per CSO at any time. The filter excludes rows where
         // ConnectedSystemObjectId is NULL (e.g., PEs for unresolved references not yet matched to a CSO).
         modelBuilder.Entity<PendingExport>()
             .HasIndex(pe => pe.ConnectedSystemObjectId)
@@ -445,14 +452,14 @@ public class JimDbContext : DbContext
             .HasIndex(o => new { o.ActivityRunProfileExecutionItemId, o.OutcomeType })
             .HasDatabaseName("IX_ActivityRunProfileExecutionItemSyncOutcomes_RpeiId_OutcomeType");
 
-        // Performance index for metaverse object deletion automation
+        // Performance index for Metaverse Object deletion automation
         // Optimises GetMetaverseObjectsEligibleForDeletionAsync queries
         // Uses string-based column name to reference the shadow foreign key property "TypeId"
         modelBuilder.Entity<MetaverseObject>()
             .HasIndex(new[] { nameof(MetaverseObject.Origin), "TypeId", nameof(MetaverseObject.LastConnectorDisconnectedDate) })
             .HasDatabaseName("IX_MetaverseObjects_Origin_Type_LastDisconnected");
 
-        // Performance index for metaverse object type lookups
+        // Performance index for Metaverse Object Type lookups
         // Optimises name-based type lookups with deletion rule filtering
         modelBuilder.Entity<MetaverseObjectType>()
             .HasIndex(mot => new { mot.Name, mot.DeletionRule })

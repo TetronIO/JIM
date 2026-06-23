@@ -72,7 +72,7 @@ The error manifests at different points in the cross-page resolution flow depend
 
 **Fix**: `_activity.RunProfileExecutionItems.Clear()` before `ClearChangeTracker()`.
 
-### Fix 3: Raw SQL delete for pending exports ✅ RESOLVED Stage 2
+### Fix 3: Raw SQL delete for Pending Exports ✅ RESOLVED Stage 2
 
 **Files**: `ConnectedSystemRepository.cs`, `IConnectedSystemRepository.cs`, `ConnectedSystemServer.cs`
 

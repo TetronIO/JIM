@@ -267,7 +267,7 @@
 
         <MudText Typo="Typo.h5" Class="mt-5">Clear Summary</MudText>
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2 mb-4">
-            All connector space objects and pending exports were removed from this connected system.
+            All connector space objects and Pending Exports were removed from this Connected System.
         </MudText>
 
         <MudStack Row="true" Class="mt-2 mb-5 flex-wrap" Spacing="3">
@@ -314,7 +314,7 @@
                         <MudText Typo="Typo.h4" Color="Color.Error">@_activityRunProfileExecutionStats.TotalCsoDeletes.ToString("N0")</MudText>
                     </MudPaper>
 
-                    @* Pending export confirmation stats - shown during confirming import *@
+                    @* Pending Export confirmation stats - shown during confirming import *@
                     @if (_activityRunProfileExecutionStats.TotalPendingExportsConfirmed > 0)
                     {
                         <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Green.Default}; min-width: 120px;")">

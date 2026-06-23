@@ -7,12 +7,12 @@ namespace JIM.Models.Tasking;
 public class SynchronisationWorkerTask : WorkerTask
 {
     /// <summary>
-    /// The id for the connected system the run profile relates to.
+    /// The id for the Connected System the Run Profile relates to.
     /// </summary>
     public int ConnectedSystemId { get; set; }
 
     /// <summary>
-    /// The id for the connected system run profile to execute via this task.
+    /// The id for the Connected System Run Profile to execute via this task.
     /// </summary>
     public int ConnectedSystemRunProfileId { get; set; }
 

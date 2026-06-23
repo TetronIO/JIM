@@ -313,7 +313,7 @@ public class PendingExportReconciliationTests
         Assert.That(result.RetryChanges.Count, Is.EqualTo(1), "One change should need retry");
         Assert.That(result.PendingExportDeleted, Is.False, "PendingExport should NOT be deleted");
         Assert.That(displayNameChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation),
-            "Confirmed change should have been removed from the pending export (not in changes list anymore)");
+            "Confirmed change should have been removed from the Pending Export (not in changes list anymore)");
         Assert.That(mailChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed),
             "Non-matching change should be marked for retry");
     }
@@ -362,7 +362,7 @@ public class PendingExportReconciliationTests
             status: PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
             exportAttemptCount: 1);
 
-        // New change that was just added (pending export)
+        // New change that was just added (Pending Export)
         var newChange = CreateTestAttributeChange(
             pendingExport, MailAttr, "john@panoply.org",
             status: PendingExportAttributeChangeStatus.Pending,
@@ -551,7 +551,7 @@ public class PendingExportReconciliationTests
         var result = await service.ReconcileAsync(cso);
 
         // Assert
-        Assert.That(result.HasChanges, Is.False, "No reconciliation should happen for Pending exports");
+        Assert.That(result.HasChanges, Is.False, "No reconciliation should happen for Pending Exports");
         Assert.That(result.PendingExportDeleted, Is.False);
     }
 
@@ -563,7 +563,7 @@ public class PendingExportReconciliationTests
     {
         // Arrange
         var cso = CreateTestCso();
-        // Don't create any pending export
+        // Don't create any Pending Export
 
         var service = new PendingExportReconciliationService(SyncRepo, new JIM.Application.Servers.SyncEngine());
 
@@ -640,7 +640,7 @@ public class PendingExportReconciliationTests
     #region Create to Update Transition Tests
 
     /// <summary>
-    /// Tests that a Create pending export transitions to Update when the Secondary External ID attribute
+    /// Tests that a Create Pending Export transitions to Update when the Secondary External ID attribute
     /// is confirmed but other attribute changes remain. This is critical for retry scenarios where the
     /// object was successfully created (Secondary External ID confirmed) but some attributes weren't
     /// applied correctly. Without this transition, retries would fail because connectors require the
@@ -691,7 +691,7 @@ public class PendingExportReconciliationTests
     }
 
     /// <summary>
-    /// Tests that a Create pending export does NOT transition to Update when the Secondary External ID
+    /// Tests that a Create Pending Export does NOT transition to Update when the Secondary External ID
     /// is NOT confirmed.
     /// </summary>
     [Test]
@@ -735,7 +735,7 @@ public class PendingExportReconciliationTests
     }
 
     /// <summary>
-    /// Tests that an Update pending export is not affected by the Create->Update transition logic.
+    /// Tests that an Update Pending Export is not affected by the Create->Update transition logic.
     /// </summary>
     [Test]
     public async Task ReconcileAsync_UpdateWithSecondaryExternalIdConfirmed_RemainsUpdateAsync()
@@ -1277,7 +1277,7 @@ public class PendingExportReconciliationTests
         var accountExpiresAttr = TargetUserType.Attributes.Single(a => a.Name == "accountExpires");
 
         // This represents the "never expires" value that the LDAP connector substitutes
-        // when a sync rule returns null for accountExpires
+        // when a Synchronisation Rule returns null for accountExpires
         var attrChange = new PendingExportAttributeValueChange
         {
             Id = Guid.NewGuid(),
@@ -1316,12 +1316,12 @@ public class PendingExportReconciliationTests
 
     /// <summary>
     /// Tests the scenario where a protected attribute (accountExpires) had its value substituted
-    /// by the LDAP connector. The pending export's LongValue should have been updated to the
+    /// by the LDAP connector. The Pending Export's LongValue should have been updated to the
     /// substituted value, allowing reconciliation to confirm successfully.
     ///
     /// This simulates what happens when:
-    /// 1. Sync rule evaluates ToFileTime(mv["Employee End Date"]) and returns null
-    /// 2. Drift detection creates a pending export with no value (clearing the attribute)
+    /// 1. Synchronisation Rule evaluates ToFileTime(mv["Employee End Date"]) and returns null
+    /// 2. Drift detection creates a Pending Export with no value (clearing the attribute)
     /// 3. LDAP connector substitutes the "never expires" default (9223372036854775807)
     /// 4. LDAP connector updates the PendingExportAttributeValueChange.LongValue
     /// 5. Confirming import reads the value from AD
@@ -1336,7 +1336,7 @@ public class PendingExportReconciliationTests
         var accountExpiresAttr = TargetUserType.Attributes.Single(a => a.Name == "accountExpires");
 
         // Simulating what the LDAP connector does after substitution:
-        // The pending export attribute change has been updated with the substituted value
+        // The Pending Export attribute change has been updated with the substituted value
         var attrChange = new PendingExportAttributeValueChange
         {
             Id = Guid.NewGuid(),
@@ -1585,7 +1585,7 @@ public class PendingExportReconciliationTests
         };
         TargetUserType.Attributes.Add(managedByAttr);
 
-        // Pending export has an Update with null value (clearing the attribute)
+        // Pending Export has an Update with null value (clearing the attribute)
         var attrChange = new PendingExportAttributeValueChange
         {
             Id = Guid.NewGuid(),
@@ -1626,7 +1626,7 @@ public class PendingExportReconciliationTests
         var cso = CreateTestCso();
         var pendingExport = CreateTestPendingExport(cso);
 
-        // Pending export has an Update with null string value (clearing the attribute)
+        // Pending Export has an Update with null string value (clearing the attribute)
         var attrChange = new PendingExportAttributeValueChange
         {
             Id = Guid.NewGuid(),
@@ -1673,7 +1673,7 @@ public class PendingExportReconciliationTests
         };
         TargetUserType.Attributes.Add(managedByAttr);
 
-        // Pending export has an Update with null value (clearing the attribute)
+        // Pending Export has an Update with null value (clearing the attribute)
         var attrChange = new PendingExportAttributeValueChange
         {
             Id = Guid.NewGuid(),

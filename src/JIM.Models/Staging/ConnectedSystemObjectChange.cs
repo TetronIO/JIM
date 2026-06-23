@@ -13,9 +13,9 @@ public class ConnectedSystemObjectChange
     public Guid Id { get; set; }
 
     /// <summary>
-    /// The connected system object change would have been created after a sync run profile execution, access that here if it still exists.
+    /// The Connected System Object change would have been created after a sync Run Profile execution, access that here if it still exists.
     /// It's worth bearing in mind that sync run history can be cleared down so a reference may not always be present,
-    /// depending on how old the connected system object change is.
+    /// depending on how old the Connected System Object change is.
     /// </summary>
     public ActivityRunProfileExecutionItem? ActivityRunProfileExecutionItem { get; set; }
     public Guid? ActivityRunProfileExecutionItemId { get; set; }
@@ -66,7 +66,7 @@ public class ConnectedSystemObjectChange
     public string? InitiatedByName { get; set; }
 
     /// <summary>
-    /// Enables access to per-attribute value changes for the connected system object in question.
+    /// Enables access to per-attribute value changes for the Connected System Object in question.
     /// </summary>
     public List<ConnectedSystemObjectChangeAttribute> AttributeChanges { get; set; } = new();
 

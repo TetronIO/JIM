@@ -31,9 +31,9 @@ namespace JIM.Worker;
 // - Execute the tasks
 //
 // The sync tasks will need to perform:
-// - Import data from connected systems via connectors
-// - Reconcile updates to objects internally, i.e. connector space and metaverse objects
-// - Export data to connected systems via connectors
+// - Import data from Connected Systems via connectors
+// - Reconcile updates to objects internally, i.e. connector space and Metaverse Objects
+// - Export data to Connected Systems via connectors
 //
 // Required environment variables:
 // -------------------------------
@@ -69,7 +69,7 @@ public class Worker : BackgroundService
     }
 
     /// <summary>
-    /// Maximum number of connected systems to warm concurrently during startup.
+    /// Maximum number of Connected Systems to warm concurrently during startup.
     /// Configurable via JIM_CACHE_WARM_PARALLELISM environment variable.
     /// </summary>
     private static int CacheWarmParallelism =>
@@ -93,7 +93,7 @@ public class Worker : BackgroundService
         using var mainLoopJim = _jimFactory.Create();
         await mainLoopJim.InitialiseDatabaseAsync();
 
-        // Warm the CSO lookup cache for all connected systems before accepting tasks.
+        // Warm the CSO lookup cache for all Connected Systems before accepting tasks.
         // This is a blocking operation — tasks queue until warming is complete.
         await WarmCsoCacheForAllConnectedSystemsAsync(mainLoopJim);
 
@@ -270,24 +270,24 @@ public class Worker : BackgroundService
                                     var initiatedByDisplay = newWorkerTask.InitiatedByName ?? "Unknown";
                                     if (isParallel)
                                     {
-                                        Log.Information("ExecuteAsync: SynchronisationWorkerTask received for run profile id: {RunProfileId}, initiated by: {InitiatedBy} [PARALLEL execution]",
+                                        Log.Information("ExecuteAsync: SynchronisationWorkerTask received for Run Profile id: {RunProfileId}, initiated by: {InitiatedBy} [PARALLEL execution]",
                                             syncWorkerTask.ConnectedSystemRunProfileId, initiatedByDisplay);
                                     }
                                     else
                                     {
-                                        Log.Information("ExecuteAsync: SynchronisationWorkerTask received for run profile id: {RunProfileId}, initiated by: {InitiatedBy}",
+                                        Log.Information("ExecuteAsync: SynchronisationWorkerTask received for Run Profile id: {RunProfileId}, initiated by: {InitiatedBy}",
                                             syncWorkerTask.ConnectedSystemRunProfileId, initiatedByDisplay);
                                     }
                                     {
                                         // Load with change tracking so EF Core identity-fixes overlapping entities
-                                        // across the multiple queries used during sync (object types, sync rules, etc.)
+                                        // across the multiple queries used during sync (object types, Synchronisation Rules, etc.)
                                         var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemAsync(syncWorkerTask.ConnectedSystemId, withChangeTracking: true);
                                         if (connectedSystem != null)
                                         {
-                                            // Resolve the connector for this connected system's connector definition
+                                            // Resolve the connector for this Connected System's connector definition
                                             var connector = _connectorFactory.Create(connectedSystem.ConnectorDefinition.Name);
 
-                                            // work out what type of run profile we're being asked to run
+                                            // work out what type of Run Profile we're being asked to run
                                             var runProfile = connectedSystem.RunProfiles?.SingleOrDefault(rp => rp.Id == syncWorkerTask.ConnectedSystemRunProfileId);
                                             if (runProfile != null)
                                             {
@@ -306,7 +306,7 @@ public class Worker : BackgroundService
                                                         case ConnectedSystemRunType.DeltaImport:
                                                         {
                                                             // Delta Import uses the same import processor as Full Import.
-                                                            // The connector's ImportAsync method checks the run profile type
+                                                            // The connector's ImportAsync method checks the Run Profile type
                                                             // to determine whether to do full or delta import.
                                                             var syncEngine = new JIM.Application.Servers.SyncEngine();
                                                             var importProcessor = new SyncImportTaskProcessor(taskJim, syncRepo, syncServer, syncEngine, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource, _dbContextFactory);
@@ -369,37 +369,37 @@ public class Worker : BackgroundService
                                             }
                                             else
                                             {
-                                                Log.Warning($"ExecuteAsync: sync task specifies run profile id {syncWorkerTask.ConnectedSystemRunProfileId} but no such profile found on connected system id {syncWorkerTask.ConnectedSystemId}.");
+                                                Log.Warning($"ExecuteAsync: sync task specifies Run Profile id {syncWorkerTask.ConnectedSystemRunProfileId} but no such profile found on Connected System id {syncWorkerTask.ConnectedSystemId}.");
                                             }
                                         }
                                         else
                                         {
-                                            Log.Warning($"ExecuteAsync: sync task specifies connected system id {syncWorkerTask.ConnectedSystemId} but no such connected system found.");
+                                            Log.Warning($"ExecuteAsync: sync task specifies Connected System id {syncWorkerTask.ConnectedSystemId} but no such Connected System found.");
                                         }
                                     }
                                     break;
                                 }
                                 case ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask:
                                 {
-                                    Log.Information("ExecuteAsync: ClearConnectedSystemObjectsTask received for connected system id: " + clearConnectedSystemObjectsTask.ConnectedSystemId);
+                                    Log.Information("ExecuteAsync: ClearConnectedSystemObjectsTask received for Connected System id: " + clearConnectedSystemObjectsTask.ConnectedSystemId);
                                     if (clearConnectedSystemObjectsTask.InitiatedByType == ActivityInitiatorType.NotSet)
                                     {
                                         Log.Error($"ExecuteAsync: ClearConnectedSystemObjectsTask {clearConnectedSystemObjectsTask.Id} is missing initiator information. Cannot continue processing worker task.");
                                     }
                                     else
                                     {
-                                        // we just need to verify the connected system exists; ClearConnectedSystemObjectsAsync
+                                        // we just need to verify the Connected System exists; ClearConnectedSystemObjectsAsync
                                         // operates on the ID directly, so Core is sufficient here.
                                         var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemCoreAsync(clearConnectedSystemObjectsTask.ConnectedSystemId, withChangeTracking: true);
                                         if (connectedSystem == null)
                                         {
-                                            Log.Warning($"ExecuteAsync: Connected system id {clearConnectedSystemObjectsTask.ConnectedSystemId} doesn't exist. Cannot continue.");
+                                            Log.Warning($"ExecuteAsync: Connected System id {clearConnectedSystemObjectsTask.ConnectedSystemId} doesn't exist. Cannot continue.");
                                             return;
                                         }
 
                                         try
                                         {
-                                            // initiate clearing the connected system
+                                            // initiate clearing the Connected System
                                             var clearResult = await taskJim.ConnectedSystems.ClearConnectedSystemObjectsAsync(
                                                 clearConnectedSystemObjectsTask.ConnectedSystemId,
                                                 clearConnectedSystemObjectsTask.DeleteChangeHistory);
@@ -414,12 +414,12 @@ public class Worker : BackgroundService
                                         catch (Exception ex)
                                         {
                                             await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
-                                            Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing clear connected system task.");
+                                            Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing clear Connected System task.");
                                         }
                                         finally
                                         {
                                             // record how long the sync run took, whether it was successful, or not.
-                                            Log.Information($"ExecuteAsync: Completed clearing the connected system ({clearConnectedSystemObjectsTask.ConnectedSystemId}) in {newWorkerTask.Activity.ExecutionTime}.");
+                                            Log.Information($"ExecuteAsync: Completed clearing the Connected System ({clearConnectedSystemObjectsTask.ConnectedSystemId}) in {newWorkerTask.Activity.ExecutionTime}.");
                                         }
                                     }
 
@@ -427,7 +427,7 @@ public class Worker : BackgroundService
                                 }
                                 case DeleteConnectedSystemWorkerTask deleteConnectedSystemTask:
                                 {
-                                    Log.Information("ExecuteAsync: DeleteConnectedSystemWorkerTask received for connected system id: {ConnectedSystemId}, EvaluateMvoDeletionRules: {EvaluateMvo}, DeleteChangeHistory: {DeleteHistory}",
+                                    Log.Information("ExecuteAsync: DeleteConnectedSystemWorkerTask received for Connected System id: {ConnectedSystemId}, EvaluateMvoDeletionRules: {EvaluateMvo}, DeleteChangeHistory: {DeleteHistory}",
                                         deleteConnectedSystemTask.ConnectedSystemId, deleteConnectedSystemTask.EvaluateMvoDeletionRules, deleteConnectedSystemTask.DeleteChangeHistory);
 
                                     try
@@ -461,11 +461,11 @@ public class Worker : BackgroundService
                                         }
 
                                         await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
-                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing delete connected system task.");
+                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing delete Connected System task.");
                                     }
                                     finally
                                     {
-                                        Log.Information("ExecuteAsync: Completed deleting connected system ({ConnectedSystemId}) in {ExecutionTime}",
+                                        Log.Information("ExecuteAsync: Completed deleting Connected System ({ConnectedSystemId}) in {ExecutionTime}",
                                             deleteConnectedSystemTask.ConnectedSystemId, newWorkerTask.Activity.ExecutionTime);
                                     }
 
@@ -503,8 +503,8 @@ public class Worker : BackgroundService
     #region private methods
 
     /// <summary>
-    /// Warms the CSO lookup cache for all connected systems at startup.
-    /// Connected systems are warmed with limited parallelism to balance startup speed against database load.
+    /// Warms the CSO lookup cache for all Connected Systems at startup.
+    /// Connected Systems are warmed with limited parallelism to balance startup speed against database load.
     /// This is a blocking operation — the Worker does not accept tasks until warming is complete.
     /// </summary>
     private async Task WarmCsoCacheForAllConnectedSystemsAsync(JimApplication jim)
@@ -514,12 +514,12 @@ public class Worker : BackgroundService
 
         if (connectedSystems.Count == 0)
         {
-            Log.Information("WarmCsoCacheForAllConnectedSystemsAsync: No connected systems found. Cache warming skipped.");
+            Log.Information("WarmCsoCacheForAllConnectedSystemsAsync: No Connected Systems found. Cache warming skipped.");
             return;
         }
 
         var parallelism = CacheWarmParallelism;
-        Log.Information("WarmCsoCacheForAllConnectedSystemsAsync: Warming CSO lookup cache for {Count} connected system(s) with parallelism {Parallelism}...",
+        Log.Information("WarmCsoCacheForAllConnectedSystemsAsync: Warming CSO lookup cache for {Count} Connected System(s) with parallelism {Parallelism}...",
             connectedSystems.Count, parallelism);
 
         using var semaphore = new SemaphoreSlim(parallelism);
@@ -535,7 +535,7 @@ public class Worker : BackgroundService
             catch (Exception ex)
             {
                 // Log but don't fail startup — the cache will warm on demand for this CS
-                Log.Warning(ex, "WarmCsoCacheForAllConnectedSystemsAsync: Failed to warm cache for connected system {ConnectedSystemName} ({ConnectedSystemId}). Cache will populate on demand.",
+                Log.Warning(ex, "WarmCsoCacheForAllConnectedSystemsAsync: Failed to warm cache for Connected System {ConnectedSystemName} ({ConnectedSystemId}). Cache will populate on demand.",
                     cs.Name, cs.Id);
             }
             finally
@@ -547,7 +547,7 @@ public class Worker : BackgroundService
         await Task.WhenAll(warmingTasks);
 
         stopwatch.Stop();
-        Log.Information("WarmCsoCacheForAllConnectedSystemsAsync: Cache warming complete for {Count} connected system(s) in {ElapsedMs}ms",
+        Log.Information("WarmCsoCacheForAllConnectedSystemsAsync: Cache warming complete for {Count} Connected System(s) in {ElapsedMs}ms",
             connectedSystems.Count, stopwatch.ElapsedMilliseconds);
     }
 
@@ -593,7 +593,7 @@ public class Worker : BackgroundService
                         Log.Information("PerformHousekeepingAsync: Deleting MVO {MvoId} ({DisplayName}) - disconnected at {DisconnectedDate}, rule: {DeletionRule}",
                             mvo.Id, mvo.DisplayName ?? "No display name", mvo.LastConnectorDisconnectedDate, mvo.Type?.DeletionRule);
 
-                        // Evaluate export rules for the MVO deletion (create delete pending exports for provisioned CSOs)
+                        // Evaluate export rules for the MVO deletion (create delete Pending Exports for provisioned CSOs)
                         // WhenAuthoritativeSourceDisconnected MVOs may still have target CSOs that need delete exports
                         await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
 
@@ -674,7 +674,7 @@ public class Worker : BackgroundService
     }
 
     /// <summary>
-    /// Completes an activity based on the execution results of its run profile execution items.
+    /// Completes an activity based on the execution results of its Run Profile execution items.
     /// Determines whether to mark as complete, complete with warning, or failed based on error counts.
     /// Also calculates and persists summary stats for display in the activity list view.
     /// This method is wrapped in robust error handling to ensure activities are always finalised.
@@ -708,7 +708,7 @@ public class Worker : BackgroundService
 
             if (allErrors)
             {
-                await jim.Activities.FailActivityWithErrorAsync(activity, "All run profile execution items experienced an error. Review the items for more information.");
+                await jim.Activities.FailActivityWithErrorAsync(activity, "All Run Profile execution items experienced an error. Review the items for more information.");
                 Log.Information("CompleteActivityBasedOnExecutionResultsAsync: Activity {ActivityId} failed - all items had errors", activity.Id);
             }
             else if (hasUnhandledErrors)
@@ -858,7 +858,7 @@ public class Worker : BackgroundService
             activity.TotalExported = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
             activity.TotalDeprovisioned = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned);
 
-            // Pending export stats from outcomes
+            // Pending Export stats from outcomes
             activity.TotalPendingExports = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
 
             // Drift correction from outcomes
@@ -877,8 +877,8 @@ public class Worker : BackgroundService
             activity.TotalProjected = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Projected);
             activity.TotalJoined = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.Joined);
 
-            // Attribute flows: count objects whose primary change was AttributeFlow only.
-            // Joins, projections, and disconnections inherently include attribute flow but are
+            // Attribute Flows: count objects whose primary change was AttributeFlow only.
+            // Joins, projections, and disconnections inherently include Attribute Flow but are
             // already counted in their own stats — counting them again here would be redundant.
             activity.TotalAttributeFlows = rpeis.Count(r => r.ObjectChangeType is ObjectChangeType.AttributeFlow);
 

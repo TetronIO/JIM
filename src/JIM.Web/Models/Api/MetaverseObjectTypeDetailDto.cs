@@ -87,7 +87,7 @@ public class CreateMetaverseObjectTypeRequest
     public TimeSpan? DeletionGracePeriod { get; set; }
 
     /// <summary>
-    /// List of connected system IDs that are authoritative sources for deletion.
+    /// List of Connected System IDs that are authoritative sources for deletion.
     /// Required when DeletionRule is WhenAuthoritativeSourceDisconnected.
     /// </summary>
     public List<int>? DeletionTriggerConnectedSystemIds { get; set; }
@@ -110,7 +110,7 @@ public class UpdateMetaverseObjectTypeRequest
     public TimeSpan? DeletionGracePeriod { get; set; }
 
     /// <summary>
-    /// List of connected system IDs that are authoritative sources for deletion.
+    /// List of Connected System IDs that are authoritative sources for deletion.
     /// Required when DeletionRule is WhenAuthoritativeSourceDisconnected.
     /// When set: Delete MVO if ANY of these specific systems disconnect.
     /// Ignored when DeletionRule is Manual or WhenLastConnectorDisconnected.

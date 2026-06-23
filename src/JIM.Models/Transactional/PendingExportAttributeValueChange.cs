@@ -33,7 +33,7 @@ public class PendingExportAttributeValueChange
     public bool? BoolValue { get; set; }
 
     /// <summary>
-    /// Contains the unique identifier that the connected system uses to refer to references in string form.
+    /// Contains the unique identifier that the Connected System uses to refer to references in string form.
     /// </summary>
     public string? UnresolvedReferenceValue { get; set; }
 
@@ -58,7 +58,7 @@ public class PendingExportAttributeValueChange
     public DateTime? LastExportedAt { get; set; }
 
     /// <summary>
-    /// The value that was returned by the connected system during confirming import
+    /// The value that was returned by the Connected System during confirming import
     /// when it didn't match our expected value. Useful for debugging mismatches.
     /// </summary>
     public string? LastImportedValue { get; set; }

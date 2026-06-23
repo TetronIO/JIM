@@ -107,7 +107,7 @@
             }
             else
             {
-                @attributeValue.StringValue
+                <TextValueDisplay Value="@attributeValue.StringValue" />
             }
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.Number)
@@ -159,7 +159,7 @@
 
 @code {
     /// <summary>
-    /// The metaverse object whose attributes to display in table format.
+    /// The Metaverse Object whose attributes to display in table format.
     /// </summary>
     [Parameter]
     public MetaverseObject MetaverseObject { get; set; } = null!;

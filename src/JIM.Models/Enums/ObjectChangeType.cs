@@ -5,7 +5,7 @@ namespace JIM.Models.Enums;
 
 /// <summary>
 /// Represents the type of change that occurred during a synchronisation operation.
-/// Different run profile types use different subsets of these values.
+/// Different Run Profile types use different subsets of these values.
 /// </summary>
 public enum ObjectChangeType
 {
@@ -50,22 +50,22 @@ public enum ObjectChangeType
     Disconnected,
 
     /// <summary>
-    /// CSO disconnected from MVO because it fell out of scope of import sync rule scoping criteria.
+    /// CSO disconnected from MVO because it fell out of scope of import Synchronisation Rule scoping criteria.
     /// This provides clear audit trail showing WHY the disconnection occurred, enabling the UI
     /// to explain consequences (attribute removal, MVO deletion rules, etc).
     /// </summary>
     DisconnectedOutOfScope,
 
     /// <summary>
-    /// CSO fell out of scope of import sync rule scoping criteria but remained joined
-    /// because InboundOutOfScopeAction was set to RemainJoined. Attribute flow has stopped
+    /// CSO fell out of scope of import Synchronisation Rule scoping criteria but remained joined
+    /// because InboundOutOfScopeAction was set to RemainJoined. Attribute Flow has stopped
     /// but the join is preserved ("once managed, always managed" pattern).
     /// </summary>
     OutOfScopeRetainJoin,
 
     /// <summary>
     /// Drift was detected during delta sync: the CSO attribute values in the target system
-    /// differed from the expected values on the MVO. A corrective pending export was created
+    /// differed from the expected values on the MVO. A corrective Pending Export was created
     /// to restore the expected state. This provides visibility into drift enforcement.
     /// </summary>
     DriftCorrection,
@@ -87,21 +87,21 @@ public enum ObjectChangeType
     // Shared
     /// <summary>
     /// Indicates that export evaluation detected the CSO already has the target value(s),
-    /// so no pending export was created. Used for tracking/reporting purposes.
+    /// so no Pending Export was created. Used for tracking/reporting purposes.
     /// </summary>
     NoChange,
 
-    // Pending export visibility (surfaced during sync)
+    // Pending Export visibility (surfaced during sync)
     /// <summary>
-    /// A pending export exists that is staged for the next export run.
+    /// A Pending Export exists that is staged for the next export run.
     /// This surfaces unconfirmed exports (ExportNotConfirmed status) so operators
-    /// can see what changes will be made to connected systems.
+    /// can see what changes will be made to Connected Systems.
     /// </summary>
     PendingExport,
 
-    // Pending export reconciliation (surfaced during confirming import)
+    // Pending Export reconciliation (surfaced during confirming import)
     /// <summary>
-    /// A pending export was confirmed during the confirming import.
+    /// A Pending Export was confirmed during the confirming import.
     /// The exported attribute values matched the imported values.
     /// </summary>
     PendingExportConfirmed,

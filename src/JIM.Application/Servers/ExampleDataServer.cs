@@ -107,7 +107,7 @@ public class ExampleDataServer
     }
 
     /// <summary>
-    /// Executes a data generation template to create metaverse objects.
+    /// Executes a data generation template to create Metaverse Objects.
     /// </summary>
     /// <param name="templateId">The ID of the template to execute.</param>
     /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
@@ -195,7 +195,7 @@ public class ExampleDataServer
             }
 
             var objectTypeStopWatch = Stopwatch.StartNew();
-            Log.Verbose($"ExecuteTemplateAsync: Processing metaverse object type: {objectType.MetaverseObjectType.Name}");
+            Log.Verbose($"ExecuteTemplateAsync: Processing Metaverse Object Type: {objectType.MetaverseObjectType.Name}");
             var trackers = dataGenerationValueTrackers;
             var create = metaverseObjectsToCreate;
             Parallel.For(0, objectType.ObjectsToCreate,
@@ -308,7 +308,7 @@ public class ExampleDataServer
             GenerateManagerAssignments(metaverseObjectsToCreate, objectType, random);
 
             objectTypeStopWatch.Stop();
-            Log.Information($"ExecuteTemplateAsync: It took {objectTypeStopWatch.Elapsed} to process the {objectType.MetaverseObjectType.Name} metaverse object type");
+            Log.Information($"ExecuteTemplateAsync: It took {objectTypeStopWatch.Elapsed} to process the {objectType.MetaverseObjectType.Name} Metaverse Object Type");
         }
 
         // ensure that attribute population percentage values are respected
@@ -375,7 +375,7 @@ public class ExampleDataServer
         foreach (var av in metaverseObjectsToCreate.SelectMany(mvo => mvo.AttributeValues).Where(av => av.AttributeId == 0 && av.Attribute is not null))
             av.AttributeId = av.Attribute.Id;
 
-        // submit metaverse objects to data layer for creation (batched for memory efficiency and progress)
+        // submit Metaverse Objects to data layer for creation (batched for memory efficiency and progress)
         var persistenceStopwatch = new Stopwatch();
         persistenceStopwatch.Start();
 
@@ -685,7 +685,7 @@ public class ExampleDataServer
 
         if (templateAttribute.MetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued)
         {
-            // pick a random metaverse object and assign
+            // pick a random Metaverse Object and assign
             var referencedMetaverseObjectIndex = random.Next(0, metaverseObjectsOfTypes.Count);
             var referencedMetaverseObject = metaverseObjectsOfTypes[referencedMetaverseObjectIndex];
             metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
@@ -792,7 +792,7 @@ public class ExampleDataServer
             {
                 // determine how many attributes we have
                 // determine how many we need to eliminate
-                // randomly clear that many from the metaverse objects
+                // randomly clear that many from the Metaverse Objects
 
                 var percentage = dataGenAttributeToReduce.PopulatedValuesPercentage ?? 100;
                 var needToRemove = metaverseObjectsOfType.Count * (100 - percentage) / 100;

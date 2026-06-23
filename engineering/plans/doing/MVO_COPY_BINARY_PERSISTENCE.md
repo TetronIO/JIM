@@ -108,8 +108,8 @@ Creates are a single operation (INSERT rows). Updates involve **four distinct op
 | Operation | What | Raw SQL approach |
 |-----------|------|-----------------|
 | UPDATE parent MVO rows | Scalar property changes (Status, LastUpdated, deletion fields) | `UPDATE ... FROM (VALUES ...)` batch; straightforward |
-| INSERT new attribute values | AVs added during inbound attribute flow | COPY binary; proven pattern from creates |
-| UPDATE existing attribute values | AVs modified during inbound attribute flow | `UPDATE ... FROM (VALUES ...)`: 13 nullable columns |
+| INSERT new attribute values | AVs added during inbound Attribute Flow | COPY binary; proven pattern from creates |
+| UPDATE existing attribute values | AVs modified during inbound Attribute Flow | `UPDATE ... FROM (VALUES ...)`: 13 nullable columns |
 | DELETE removed attribute values | AVs recalled during disconnect/out-of-scope | `DELETE ... WHERE "Id" IN (...)`: need to identify which |
 
 The crux is **knowing which attribute values are new vs modified vs deleted** without EF's change tracker. Currently:

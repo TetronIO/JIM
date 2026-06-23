@@ -222,7 +222,7 @@
                     else
                     {
                         @* No CSO and no external ID snapshot - the object has been deleted *@
-                        <MudText Class="mud-text-secondary">The connected system object has been deleted.</MudText>
+                        <MudText Class="mud-text-secondary">The Connected System Object has been deleted.</MudText>
                     }
                 </MudItem>
             </MudGrid>
@@ -260,7 +260,7 @@
         {
             <MudText Typo="Typo.h6" Class="mb-3">Projection Details</MudText>
             <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
-                The following connected system object was projected to create a new metaverse object.
+                The following Connected System Object was projected to create a new Metaverse Object.
             </MudText>
 
             <MudGrid Spacing="3" Class="mb-5">
@@ -524,7 +524,7 @@
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                         <MudIcon Icon="@Icons.Material.Filled.PersonRemove" />
                         <MudText Typo="Typo.body1">
-                            <strong>The metaverse object was deleted.</strong>
+                            <strong>The Metaverse Object was deleted.</strong>
                             @if (!string.IsNullOrEmpty(mvoDeletedOutcome.TargetEntityDescription))
                             {
                                 <text> The identity <strong>@mvoDeletedOutcome.TargetEntityDescription</strong> was removed from the metaverse immediately (no grace period).</text>
@@ -539,7 +539,7 @@
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                         <MudIcon Icon="@Icons.Material.Filled.HourglassBottom" />
                         <MudText Typo="Typo.body1">
-                            <strong>The metaverse object is scheduled for deletion.</strong>
+                            <strong>The Metaverse Object is scheduled for deletion.</strong>
                             @if (!string.IsNullOrEmpty(mvoDeletionScheduledOutcome.TargetEntityDescription))
                             {
                                 <text> The identity </text>
@@ -572,14 +572,14 @@
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                         <MudIcon Icon="@Icons.Material.Filled.CheckCircle" />
                         <MudText Typo="Typo.body1">
-                            <strong>The metaverse object was not deleted.</strong>
+                            <strong>The Metaverse Object was not deleted.</strong>
                             @switch (_metaverseObjectType?.DeletionRule)
                             {
                                 case MetaverseObjectDeletionRule.Manual:
                                     <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects is set to <strong>manual deletion only</strong> — automatic deletion is disabled.</text>
                                     break;
                                 case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
-                                    <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects requires <strong>all connectors</strong> to be disconnected. Other connected systems still have active connectors to this metaverse object.</text>
+                                    <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects requires <strong>all connectors</strong> to be disconnected. Other Connected Systems still have active connectors to this Metaverse Object.</text>
                                     break;
                                 case MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected:
                                     <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects requires an <strong>authoritative source</strong> to disconnect.</text>
@@ -605,8 +605,8 @@
                     @* Import context: deletion detected but not yet processed by sync *@
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-3">
                         <MudText Typo="Typo.body1">
-                            The connected system object has been detected as deleted from the source system and marked for removal.
-                            When a Full Synchronisation or Delta Synchronisation run profile is executed, JIM will disconnect
+                            The Connected System Object has been detected as deleted from the source system and marked for removal.
+                            When a Full Synchronisation or Delta Synchronisation Run Profile is executed, JIM will disconnect
                             this object from the metaverse and evaluate the deletion rule for its object type.
                         </MudText>
                     </MudAlert>
@@ -625,7 +625,7 @@
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                     <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Warning" />
                                     <MudText Typo="Typo.body1">
-                                        <strong>Manual deletion only.</strong> The metaverse object will not be automatically deleted
+                                        <strong>Manual deletion only.</strong> The Metaverse Object will not be automatically deleted
                                         even when all connectors are removed. An administrator must manually delete it.
                                     </MudText>
                                 </MudStack>
@@ -635,7 +635,7 @@
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                     <MudIcon Icon="@Icons.Material.Filled.LinkOff" Color="Color.Info" />
                                     <MudText Typo="Typo.body1">
-                                        <strong>Delete when last connector disconnects.</strong> The metaverse object will be
+                                        <strong>Delete when last connector disconnects.</strong> The Metaverse Object will be
                                         @if (_metaverseObjectType.DeletionGracePeriod.HasValue && _metaverseObjectType.DeletionGracePeriod.Value
                                                         > TimeSpan.Zero)
                                         {
@@ -647,7 +647,7 @@
                                             {
                                                 <text>deleted immediately</text>
                                             }
-                                            when all connected system objects are removed.
+                                            when all Connected System Objects are removed.
                                         </MudText>
                                     </MudStack>
                                     break;
@@ -656,7 +656,7 @@
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                             <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Color="Color.Info" />
                                             <MudText Typo="Typo.body1">
-                                                <strong>Delete when authoritative source disconnects.</strong> The metaverse object will be
+                                                <strong>Delete when authoritative source disconnects.</strong> The Metaverse Object will be
                                                 @if (_metaverseObjectType.DeletionGracePeriod.HasValue && _metaverseObjectType.DeletionGracePeriod.Value
                                                                 > TimeSpan.Zero)
                                                 {
@@ -689,7 +689,7 @@
                                                     <MudText Typo="Typo.body1">
                                                         <strong>@_connectedSystemHeader.Name</strong> is an authoritative source for @_metaverseObjectType.Name
                                                         objects.
-                                                        This deletion will trigger the deletion rule for any joined metaverse objects.
+                                                        This deletion will trigger the deletion rule for any joined Metaverse Objects.
                                                     </MudText>
                                                 </MudAlert>
                                             }
@@ -697,7 +697,7 @@
                                             {
                                                 <MudText Typo="Typo.body1" Class="ml-6 mud-text-secondary">
                                                     <strong>@_connectedSystemHeader.Name</strong> is not an authoritative source. This deletion alone
-                                                    will not trigger metaverse object deletion.
+                                                    will not trigger Metaverse Object deletion.
                                                 </MudText>
                                             }
                                             break;
@@ -712,9 +712,9 @@ else
                             {
                                 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
                                     <MudText Typo="Typo.body1">
-                                        The connected system object has been detected as deleted from the source system and marked for removal.
-                                        When a Full Synchronisation or Delta Synchronisation run profile is executed, JIM will disconnect
-                                        this object from the metaverse. The metaverse object deletion rule for this object type determines
+                                        The Connected System Object has been detected as deleted from the source system and marked for removal.
+                                        When a Full Synchronisation or Delta Synchronisation Run Profile is executed, JIM will disconnect
+                                        this object from the metaverse. The Metaverse Object deletion rule for this object type determines
                                         what happens next.
                                     </MudText>
                                 </MudAlert>
@@ -723,8 +723,8 @@ else
                             {
                                 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
                                     <MudText Typo="Typo.body1">
-                                        When a connected system object is deleted from the source system, JIM disconnects it from
-                                        the metaverse. The metaverse object deletion rule for this object type determines what happens next.
+                                        When a Connected System Object is deleted from the source system, JIM disconnects it from
+                                        the metaverse. The Metaverse Object deletion rule for this object type determines what happens next.
                                     </MudText>
                                 </MudAlert>
                             }
@@ -852,7 +852,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                                     @if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.PendingExport
                                          && _activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
                                     {
-                                        <text>The following attribute changes are staged and awaiting export to the connected system.</text>
+                                        <text>The following attribute changes are staged and awaiting export to the Connected System.</text>
                                     }
                                     else if (_activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed)
                                     {
@@ -946,7 +946,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                                                             @context.Status.ToString().SplitOnCapitalLetters()
                                                         </MudChip>
                                                     </MudTd>
-                                                    <MudTd DataLabel="Value">@GetPendingExportAttributeValue(context)</MudTd>
+                                                    <MudTd DataLabel="Value"><TextValueDisplay Value="@GetPendingExportAttributeValue(context)" /></MudTd>
                                                 </RowTemplate>
                                                 <NoRecordsContent>
                                                     <MudText Class="pa-4">No attribute changes recorded.</MudText>
@@ -954,7 +954,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                                             </MudTable>
                                         }
 
-                                        @* Link to full pending export details *@
+                                        @* Link to full Pending Export details *@
                                         @if (_connectedSystemHeader != null)
                                         {
                                             <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.OpenInNew"
@@ -1082,7 +1082,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             ?? _activityRunProfileExecutionItem.ConnectedSystemObject?.MetaverseObject;
         }
 
-        // Load associated pending export for:
+        // Load associated Pending Export for:
         // - Export-related errors (ExportNotConfirmed, ExportConfirmationFailed)
         // - PendingExport items surfaced during sync (informational, no error)
         if (_activityRunProfileExecutionItem.ErrorType is ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed
@@ -1104,7 +1104,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
         // Resolve the MVO type for headings and deletion rule display
         {
-            // Try to get the MVO type from the CSO's linked MetaverseObject, or from sync rules
+            // Try to get the MVO type from the CSO's linked MetaverseObject, or from Synchronisation Rules
             int? mvoTypeId = null;
             int? csoTypeId = null;
 
@@ -1141,7 +1141,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                 }
             }
 
-            // Fourth try: if we don't have MVO type yet but have CSO type, look up via sync rules
+            // Fourth try: if we don't have MVO type yet but have CSO type, look up via Synchronisation Rules
             if (!mvoTypeId.HasValue && csoTypeId.HasValue)
             {
                 var syncRules = await jim.ConnectedSystems.GetSyncRulesAsync();
@@ -1306,7 +1306,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     }
 
     /// <summary>
-    /// Returns true if the parent activity is a sync run profile, indicating that
+    /// Returns true if the parent activity is a sync Run Profile, indicating that
     /// ObjectChangeType.Deleted means "deletion processed" rather than "deletion detected".
     /// </summary>
     private bool IsSyncContext()
@@ -1377,7 +1377,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     }
 
     /// <summary>
-    /// Returns the Metaverse Object type name (e.g., "User", "Group"), or "Object" as a fallback.
+    /// Returns the Metaverse Object Type name (e.g., "User", "Group"), or "Object" as a fallback.
     /// </summary>
     private string GetMetaverseObjectTypeName()
     {
@@ -1440,30 +1440,30 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
     private string GetStatusDescription()
     {
-        // The connected system object's external ID is rendered as a separate chip immediately
+        // The Connected System Object's external ID is rendered as a separate chip immediately
         // below this summary line, so we deliberately omit it from the prose to avoid duplication.
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
-            return "An error occurred while synchronising the connected system object.";
+            return "An error occurred while synchronising the Connected System Object.";
 
         return _activityRunProfileExecutionItem?.ObjectChangeType switch
         {
             // Import operations
-            ObjectChangeType.Added => "A new connected system object was imported and added to the connector space.",
-            ObjectChangeType.Updated => "The connected system object was updated with new attribute values.",
+            ObjectChangeType.Added => "A new Connected System Object was imported and added to the connector space.",
+            ObjectChangeType.Updated => "The Connected System Object was updated with new attribute values.",
             ObjectChangeType.Deleted => IsSyncContext()
-                ? "The connected system object was removed from the connector space after the source system deletion was confirmed."
-                : "The connected system object was detected as deleted from the source system and marked for removal.",
+                ? "The Connected System Object was removed from the connector space after the source system deletion was confirmed."
+                : "The Connected System Object was detected as deleted from the source system and marked for removal.",
             // Sync operations
-            ObjectChangeType.Projected => "A new metaverse object was created via projection from the connected system object.",
-            ObjectChangeType.Joined => "The connected system object was joined to an existing metaverse object.",
-            ObjectChangeType.AttributeFlow => "Attributes were flowed between the connected system object and metaverse.",
-            ObjectChangeType.Disconnected => "The connected system object was disconnected from the metaverse. Join and metaverse deletion rules were evaluated.",
+            ObjectChangeType.Projected => "A new Metaverse Object was created via projection from the Connected System Object.",
+            ObjectChangeType.Joined => "The Connected System Object was joined to an existing Metaverse Object.",
+            ObjectChangeType.AttributeFlow => "Attributes were flowed between the Connected System Object and metaverse.",
+            ObjectChangeType.Disconnected => "The Connected System Object was disconnected from the metaverse. Join and metaverse deletion rules were evaluated.",
             // Export operations
-            ObjectChangeType.Exported => "The connected system object was exported to the target system.",
-            ObjectChangeType.Deprovisioned => "The connected system object was deprovisioned from the target system.",
+            ObjectChangeType.Exported => "The Connected System Object was exported to the target system.",
+            ObjectChangeType.Deprovisioned => "The Connected System Object was deprovisioned from the target system.",
             // Other
-            ObjectChangeType.NoChange => "The connected system object was already up to date.",
-            _ => "Synchronisation completed for the connected system object."
+            ObjectChangeType.NoChange => "The Connected System Object was already up to date.",
+            _ => "Synchronisation completed for the Connected System Object."
         };
     }
 
