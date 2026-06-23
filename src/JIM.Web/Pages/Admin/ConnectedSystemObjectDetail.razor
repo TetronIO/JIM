@@ -155,7 +155,7 @@
                             @context.ChangeType
                         </MudChip>
                     </MudTd>
-                    <MudTd DataLabel="Value">@GetAttributeValue(context)</MudTd>
+                    <MudTd DataLabel="Value"><TextValueDisplay Value="@GetAttributeValue(context)" /></MudTd>
                     <MudTd DataLabel="Status">
                         <MudChip T="string" Variant="Variant.Text" Color="GetAttributeChangeStatusColor(context.Status)"
                            >

@@ -221,6 +221,7 @@ Use `-D` (capital D), not `-d`. We squash-merge by default, so the feature branc
 
 - Add entries under `## [Unreleased]` in `CHANGELOG.md` for user-facing changes (features, fixes, performance, changed behaviour, removals)
 - Skip changelog entries for docs, CI/CD, dev tooling, refactoring, test-only, and trivial UI tweaks
+- **User-facing changes need docs too:** a new feature or changed behaviour (a `✨`/`🔄` changelog entry) must update public docs under `docs/` in the same PR; CI (`changelog-lint`) enforces this, with an opt-out via a `Docs: n/a - <reason>` line in the PR body or the `docs-not-needed` label. Keep `engineering/` reference docs current too, but never retro-edit completed plans/PRDs. See `engineering/CLAUDE.md` → Keeping Documentation Current.
 - **Never modify `VERSION` without explicit user instruction.** Use `/release <version>` to create a release.
 
 > **Full audience/tone, categories, formatting, release procedure:** `engineering/CLAUDE.md`

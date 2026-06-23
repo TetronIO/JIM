@@ -1,0 +1,29 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Renders a text value, distinguishing the three cases an administrator needs to tell apart: *@
+@*  - no value (null/empty)        -> <EmptyValue /> (low-lighted hyphen) *@
+@*  - present but whitespace only  -> <WhitespaceValue /> ("(whitespace)" affordance) *@
+@*  - a real value                 -> the value itself *@
+@* Use this for any attribute-value text display so whitespace is never rendered as a visually blank *@
+@* cell. Non-text values (already formatted to a non-whitespace string) render unchanged. *@
+@if (string.IsNullOrEmpty(Value))
+{
+    <EmptyValue />
+}
+else if (string.IsNullOrWhiteSpace(Value))
+{
+    <WhitespaceValue Value="@Value" />
+}
+else
+{
+    @Value
+}
+
+@code {
+    /// <summary>
+    /// The text value to display. May be null, empty, whitespace-only, or a real value.
+    /// </summary>
+    [Parameter]
+    public string? Value { get; set; }
+}

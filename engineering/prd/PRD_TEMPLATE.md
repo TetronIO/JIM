@@ -111,6 +111,18 @@
 | Application | e.g., new server method |
 | UI | e.g., new page, modified component |
 
+## Documentation Impact
+<!-- OPTIONAL but recommended: What documentation must change so it ships WITH the feature, not after? -->
+<!-- Public docs live in docs/ (customer-facing how-to, reference, concepts). -->
+<!-- Engineering reference docs live in engineering/ (architecture, developer guide, living design docs). -->
+<!-- Do NOT list completed plans (engineering/plans/done/) or PRDs; those are point-in-time records. -->
+<!-- CI enforces that a user-facing change updates docs/, so list the specific pages here. -->
+
+| Doc | Change |
+|------|--------|
+| `docs/...` | e.g., new "Value processing" section under Synchronisation Rules |
+| `engineering/...` | e.g., update the architecture doc if a new component is introduced |
+
 ## Dependencies
 <!-- OPTIONAL: Other features, issues, or external factors this depends on. -->
 <!-- Example: "Requires #288 (Sync Preview) to be completed first" -->

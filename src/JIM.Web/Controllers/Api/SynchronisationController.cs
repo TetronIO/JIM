@@ -1881,6 +1881,13 @@ public class SynchronisationController(
 
             mapping.TargetMetaverseAttributeId = mvAttr.Id;
             mapping.TargetMetaverseAttribute = mvAttr;
+
+            // Inbound value processing applies to import mappings only (#843). The entity carries the
+            // defaults (TreatWhitespaceAsNoValue / None); only override when the request supplies a value.
+            if (request.InboundValueProcessing.HasValue)
+                mapping.InboundValueProcessing = request.InboundValueProcessing.Value;
+            if (request.CaseNormalisation.HasValue)
+                mapping.CaseNormalisation = request.CaseNormalisation.Value;
         }
         else // Export
         {

@@ -56,7 +56,7 @@ Inbound sync processes CSOs from source systems and updates the metaverse. For e
 
 3. **Projection**<br /> If no matching MVO is found and the Synchronisation Rule allows projection, JIM creates a new MVO. The projected MVO is linked to the CSO.
 
-4. **Attribute Flow**<br /> Once a CSO is joined or projected to an MVO, JIM applies the Attribute Flow Rules. Inbound Attribute Flows copy values from the CSO to the MVO, optionally transforming them using [expressions](expressions.md).
+4. **Attribute Flow**<br /> Once a CSO is joined or projected to an MVO, JIM applies the Attribute Flow Rules. Inbound Attribute Flows copy values from the CSO to the MVO, optionally transforming them using [expressions](expressions.md). For text attributes, per-mapping [value processing](../configuration/synchronisation-rules.md#value-processing-inbound) (trim, collapse, case normalisation, and the default treat-whitespace-as-no-value) runs at this step, normalising the value before priority resolves which rule's value wins.
 
 ### Outbound Sync (Metaverse to Target)
 

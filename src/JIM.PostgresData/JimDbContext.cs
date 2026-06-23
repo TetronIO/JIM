@@ -281,6 +281,13 @@ public class JimDbContext : DbContext
             .HasMany(sr => sr.AttributeFlowRules)
             .WithOne(afr => afr.SyncRule);
 
+        // Inbound value processing defaults to TreatWhitespaceAsNoValue (JIM's opinionated default).
+        // The store-level default backfills existing rows on migration so the whitespace-as-no-value
+        // behaviour applies to mappings created before this feature shipped (#843).
+        modelBuilder.Entity<SyncRuleMapping>()
+            .Property(srm => srm.InboundValueProcessing)
+            .HasDefaultValue(InboundValueProcessing.TreatWhitespaceAsNoValue);
+
         // ObjectMatchingRule can belong to either SyncRule or ConnectedSystemObjectType (mutually exclusive)
         modelBuilder.Entity<SyncRule>()
             .HasMany(sr => sr.ObjectMatchingRules)

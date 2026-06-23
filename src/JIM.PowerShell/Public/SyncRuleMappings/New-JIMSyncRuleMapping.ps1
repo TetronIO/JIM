@@ -37,6 +37,21 @@ function New-JIMSyncRuleMapping {
         Uses DynamicExpresso syntax with mv["AttributeName"] and cs["AttributeName"] for attribute access.
         Example: '"CN=" + EscapeDN(mv["Display Name"]) + ",OU=Users,DC=domain,DC=local"'
 
+    .PARAMETER PreserveWhitespace
+        For import mappings only. By default JIM treats a whitespace-only or empty imported text value as no
+        value (it does not flow, and clears any existing Metaverse value). Use this switch to preserve
+        whitespace as a literal value instead.
+
+    .PARAMETER TrimWhitespace
+        For import mappings only. Removes leading and trailing whitespace from the imported text value.
+
+    .PARAMETER CollapseInternalWhitespace
+        For import mappings only. Collapses runs of internal whitespace down to a single space.
+
+    .PARAMETER CaseNormalisation
+        For import mappings only. Normalises the case of the imported text value: None (default), Upper, Lower
+        or Title.
+
     .OUTPUTS
         PSCustomObject representing the created Sync Rule Mapping.
 
@@ -59,6 +74,12 @@ function New-JIMSyncRuleMapping {
         New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -Expression 'Lower(cs["FirstName"]) + "." + Lower(cs["LastName"]) + "@company.com"'
 
         Creates an import mapping that uses an expression to construct an email address.
+
+    .EXAMPLE
+        New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -SourceConnectedSystemAttributeId 10 -TrimWhitespace -CaseNormalisation Lower
+
+        Creates an import mapping that trims surrounding whitespace and lower-cases the value (and, by default,
+        treats whitespace-only values as no value).
 
     .LINK
         Get-JIMSyncRuleMapping
@@ -92,7 +113,26 @@ function New-JIMSyncRuleMapping {
 
         [Parameter(ParameterSetName = 'ImportExpression')]
         [Parameter(ParameterSetName = 'ExportExpression')]
-        [string]$Expression
+        [string]$Expression,
+
+        # Inbound value processing (import mappings only). Whitespace-only/empty text values are treated as
+        # no value by default; use -PreserveWhitespace to keep them as literal values instead.
+        [Parameter(ParameterSetName = 'ImportAttribute')]
+        [Parameter(ParameterSetName = 'ImportExpression')]
+        [switch]$PreserveWhitespace,
+
+        [Parameter(ParameterSetName = 'ImportAttribute')]
+        [Parameter(ParameterSetName = 'ImportExpression')]
+        [switch]$TrimWhitespace,
+
+        [Parameter(ParameterSetName = 'ImportAttribute')]
+        [Parameter(ParameterSetName = 'ImportExpression')]
+        [switch]$CollapseInternalWhitespace,
+
+        [Parameter(ParameterSetName = 'ImportAttribute')]
+        [Parameter(ParameterSetName = 'ImportExpression')]
+        [ValidateSet('None', 'Upper', 'Lower', 'Title')]
+        [string]$CaseNormalisation = 'None'
     )
 
     process {
@@ -142,6 +182,15 @@ function New-JIMSyncRuleMapping {
                 Write-Error "-SourceConnectedSystemAttributeId or -Expression is required for import mappings."
                 return
             }
+
+            # Inbound value processing (#843) — import mappings only. The flags enum is sent as a
+            # comma-separated set of names; whitespace is treated as no value unless -PreserveWhitespace.
+            $processingFlags = @()
+            if (-not $PreserveWhitespace) { $processingFlags += 'TreatWhitespaceAsNoValue' }
+            if ($TrimWhitespace) { $processingFlags += 'TrimWhitespace' }
+            if ($CollapseInternalWhitespace) { $processingFlags += 'CollapseInternalWhitespace' }
+            $body.inboundValueProcessing = if ($processingFlags.Count -gt 0) { $processingFlags -join ', ' } else { 'None' }
+            $body.caseNormalisation = $CaseNormalisation
 
             $targetDescription = "MV Attribute $TargetMetaverseAttributeId"
         }

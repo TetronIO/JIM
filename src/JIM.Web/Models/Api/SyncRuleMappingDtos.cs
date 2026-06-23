@@ -18,6 +18,20 @@ public class SyncRuleMappingDto
     public int? TargetConnectedSystemAttributeId { get; set; }
     public string? TargetConnectedSystemAttributeName { get; set; }
     public string SourceType { get; set; } = null!;
+
+    /// <summary>
+    /// Inbound (import) text value-processing transforms applied to the value as it flows to the target
+    /// Metaverse attribute. Only meaningful for import mappings targeting text attributes. Serialised as a
+    /// comma-separated set of flag names.
+    /// </summary>
+    public InboundValueProcessing InboundValueProcessing { get; set; }
+
+    /// <summary>
+    /// Inbound (import) case normalisation applied to the text value. Only meaningful for import mappings
+    /// targeting text attributes.
+    /// </summary>
+    public InboundCaseNormalisation CaseNormalisation { get; set; }
+
     public List<SyncRuleMappingSourceDto> Sources { get; set; } = new();
 
     public static SyncRuleMappingDto FromEntity(SyncRuleMapping entity)
@@ -31,6 +45,8 @@ public class SyncRuleMappingDto
             TargetConnectedSystemAttributeId = entity.TargetConnectedSystemAttributeId,
             TargetConnectedSystemAttributeName = entity.TargetConnectedSystemAttribute?.Name,
             SourceType = entity.GetSourceType().ToString(),
+            InboundValueProcessing = entity.InboundValueProcessing,
+            CaseNormalisation = entity.CaseNormalisation,
             Sources = entity.Sources.Select(SyncRuleMappingSourceDto.FromEntity).ToList()
         };
     }
@@ -83,6 +99,19 @@ public class CreateSyncRuleMappingRequest
     /// For export rules: The target Connected System Attribute ID.
     /// </summary>
     public int? TargetConnectedSystemAttributeId { get; set; }
+
+    /// <summary>
+    /// For import rules only: inbound text value-processing transforms applied to the value as it flows to
+    /// the target Metaverse attribute (a comma-separated set of flag names, e.g. "TreatWhitespaceAsNoValue,
+    /// TrimWhitespace"). When omitted, defaults to TreatWhitespaceAsNoValue. Ignored for export rules.
+    /// </summary>
+    public InboundValueProcessing? InboundValueProcessing { get; set; }
+
+    /// <summary>
+    /// For import rules only: case normalisation applied to the inbound text value (None, Upper, Lower or
+    /// Title). When omitted, defaults to None. Ignored for export rules.
+    /// </summary>
+    public InboundCaseNormalisation? CaseNormalisation { get; set; }
 
     /// <summary>
     /// The sources for this mapping (attribute mappings or expressions).

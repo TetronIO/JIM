@@ -162,11 +162,11 @@
                 @* Simple scalar Add/Remove - bold for Set/Add, de-emphasised for Removed/Remove *@
                 @if (context.DisplayChangeType == "Removed" || context.DisplayChangeType == "Remove")
                 {
-                    <MudText Class="mud-text-secondary">@context.DisplayValue</MudText>
+                    <MudText Class="mud-text-secondary"><TextValueDisplay Value="@context.DisplayValue" /></MudText>
                 }
                 else
                 {
-                    <MudText>@context.DisplayValue</MudText>
+                    <MudText><TextValueDisplay Value="@context.DisplayValue" /></MudText>
                 }
             }
         </MudTd>
