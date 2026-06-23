@@ -1,6 +1,6 @@
 # Relative Date/Time Search and Scoping Criteria: Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 complete)
 - **Issue:** [#85](https://github.com/TetronIO/JIM/issues/85) (sub-tasks [#849](https://github.com/TetronIO/JIM/issues/849), [#850](https://github.com/TetronIO/JIM/issues/850))
 - **PRD:** [`engineering/prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md`](../prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md)
 
@@ -18,14 +18,16 @@ Sequencing rationale and resolved decisions (whole-day rounding with an Hours ex
 
 - **Scoping evaluation** (`src/JIM.Application/Servers/ScopingEvaluationServer.cs`): already does full recursive `All`/`Any`/nested-group evaluation and per-type comparison, including `EvaluateDateTimeComparison` against a literal `DateTimeValue`. This is the reference pattern for Phase 2 and the insertion point for Phase 3 relative resolution.
 - **Scoping criterion model** (`src/JIM.Models/Logic/SyncRuleScopingCriteria.cs`): carries typed value carriers (`StringValue`, `IntValue`, `LongValue`, `DateTimeValue`, `BoolValue`, `GuidValue`) and `CaseSensitive`.
-- **Predefined-search criterion model** (`src/JIM.Models/Search/PredefinedSearchCriteria.cs`): carries **only** `StringValue` (non-nullable). Needs typed carriers.
+- **Predefined-search criterion model** (`src/JIM.Models/Search/PredefinedSearchCriteria.cs`): **[Phase 1 done]** now carries typed value carriers (`StringValue` nullable, `IntValue`, `LongValue`, `DateTimeValue`, `BoolValue`, `GuidValue`), `CaseSensitive`, and an explicit `MetaverseAttributeId` FK scalar.
 - **Predefined-search group model** (`src/JIM.Models/Search/PredefinedSearchCriteriaGroup.cs`): already has `Type` (All/Any), `Criteria`, `Position`, `ChildGroups`, `ParentGroup`. Nesting is modelled; only the query translator ignores it.
-- **Query translator** (`src/JIM.PostgresData/Repositories/MetaverseRepository.cs`, `GetMetaverseObjectsOfTypeAsync`, around lines 886-961): handles text equality/prefix/suffix only; throws `NotSupportedException` for ordering operators; has stubbed `// err?` group-type handling and a `// todo: handle group nesting` comment, so groups are effectively flattened and ANDed.
-- **Predefined-search API** (`src/JIM.Web/Controllers/Api/PredefinedSearchesController.cs`): GET (all / by id / by uri) and PATCH (update, `isEnabled` only). No criteria/group write endpoints.
-- **Scoping API** (`src/JIM.Web/Controllers/Api/SynchronisationController.cs`): criteria-group CRUD (`Create`/`Update`/`Delete` group, plus child-group create) exists; criteria have **POST and DELETE only**, no update path.
-- **Predefined-search UI** (`src/JIM.Web/Pages/Admin/PredefinedSearchDetail.razor`): read-only display of criteria, showing `StringValue` only.
+- **Query translator — important correction from the original plan.** There are two predefined-search query methods in `MetaverseRepository`:
+  - **LIVE:** `GetMetaverseObjectHeadersPagedAsync(PredefinedSearch, ...)` (raw Npgsql SQL). This is the only path actually used in production: the portal list view (`src/JIM.Web/Pages/Types/Index.razor`) and the REST search endpoint (`MetaverseController`) both call it. **[Phase 1 done]** it now builds a typed `EXISTS` predicate per criterion (`BuildPredefinedSearchCriterionSql`), selecting the attribute-value column by data type and supporting ordering operators for Number/LongNumber/DateTime and equality for Boolean/Guid, with case-(in)sensitive text. Criteria are still combined with `AND` across all groups; **group `All`/`Any` and nesting are Phase 2** (the `foreach` over `CriteriaGroups`/`Criteria` currently just `AND`s every criterion).
+  - **DEAD:** the EF `GetMetaverseObjectsOfTypeAsync(PredefinedSearch, ...)` (header overload) and `GetMetaverseObjectsOfTypeAsync(int typeId, ...)` (full-entity overload) have **no callers** anywhere in `JIM.Web` or the tests (only their own server wrappers reference them). They were superseded by the raw-SQL header method. Phase 1 only null-guarded the header overload; **both should be removed (see Phase 2 cleanup step).** Consequence: **Phase 2 is raw-SQL string composition, not EF expression-tree composition** — the original plan's `ExpressionVisitor`/LINQKit approach does not apply.
+- **Predefined-search API** (`src/JIM.Web/Controllers/Api/PredefinedSearchesController.cs`): **[Phase 1 done]** GET/PATCH plus full criteria-group and criterion CRUD (`GET/POST/PUT/DELETE .../criteria-groups[/{groupId}]` and `.../criteria[/{criterionId}]`) with per-data-type operator/value validation. The **child-groups (nesting) endpoint is deliberately deferred to Phase 2** (the Phase 1 query flattens groups, so it would be a silent no-op).
+- **Scoping API** (`src/JIM.Web/Controllers/Api/SynchronisationController.cs`): criteria-group CRUD (`Create`/`Update`/`Delete` group, plus child-group create) exists; criteria have **POST and DELETE only**, no update path (the criterion `PUT` retrofit is Phase 3).
+- **Predefined-search UI** (`src/JIM.Web/Pages/Admin/PredefinedSearchDetail.razor`): **[Phase 1 done]** read-only display replaced with an editor (add/remove groups + typed criteria via a dialog, per-type value inputs, friendly DateTime operator labels, persists per-action through the application layer). The shared "Add Criteria" component extraction was **deferred to Phase 3** (do it once, alongside the relative-date control, rather than refactor the working scoping editor now with no UI tests).
 - **Scoping UI** (`src/JIM.Web/Pages/Admin/SyncRuleDetailScopingCriteriaGroup.razor`): full add/remove criteria + nested groups; `MudDatePicker` for DateTime.
-- **PowerShell** (`src/JIM.PowerShell/Public/`): `ScopingCriteria/` has `Get`/`New`(group, criterion)/`Set`(group)/`Remove`(group, criterion); no criterion `Set`. `Search/` has only `Get-JIMPredefinedSearch` and `Set-JIMPredefinedSearch`.
+- **PowerShell** (`src/JIM.PowerShell/Public/`): `ScopingCriteria/` has `Get`/`New`(group, criterion)/`Set`(group)/`Remove`(group, criterion); no criterion `Set` (Phase 3). `Search/` **[Phase 1 done]** now has `Get-JIMPredefinedSearch`, `Set-JIMPredefinedSearch`, the criteria-group cmdlets (`Get`/`New`/`Set`/`Remove-JIMPredefinedSearchCriteriaGroup`), and the criterion cmdlets (`New`/`Set`/`Remove-JIMPredefinedSearchCriterion`).
 - **Post-merge context (from `main`):** `SyncRuleScopingCriteria` now exposes attribute FK scalars (`MetaverseAttributeId`, `ConnectedSystemAttributeId`); new model relationships should follow the FK-scalar convention. The sync-rule detail UI is now composed of tab components (`src/JIM.Web/Pages/Admin/Components/SyncRuleScopeTab.razor` hosts `SyncRuleDetailScopingCriteriaGroup`), so Phase 3 scoping UI work lands in/under that component. Public-docs coupling is now mechanically enforced (`scripts/Lint-DocsCoupling.ps1` via the `changelog-lint` workflow): a `[Unreleased]` ✨/🔄 changelog entry requires a `docs/` change in the same PR.
 
 ## Shared design decisions (apply across phases)
@@ -39,9 +41,11 @@ Sequencing rationale and resolved decisions (whole-day rounding with an Hours ex
 
 ---
 
-## Phase 1: Predefined-search typed comparison support (#849)
+## Phase 1: Predefined-search typed comparison support (#849) ✅
 
 **Goal:** object/predefined searches can filter on `DateTime`, `Number`, `LongNumber`, `Boolean`, and `Guid` attributes (literal values), configured and edited through API, PowerShell, and UI. No relative dates yet, no group semantics beyond what exists.
+
+**Delivered** (commits on `claude/gh-issue-85-prd-oizdqr`): typed value carriers + append-only migration (verified against a real PostgreSQL, snapshot in sync); typed `EXISTS` comparison in the **live raw-SQL** path (verified end-to-end against PostgreSQL for number/date ordering, case-sensitive/insensitive text, contains, starts-with); criteria-group + criterion CRUD through application/repository/REST API with per-type validation; seven PowerShell cmdlets; the portal criteria editor; docs + changelog. Full solution build clean; all C# and Pester tests green. Two deviations from the original plan were taken deliberately and are reflected in Current State above and Phase 2 below: the live query path is raw SQL (not the dead EF method), and the child-groups endpoint + shared Add-Criteria component were deferred.
 
 ### Model and persistence
 - `PredefinedSearchCriteria`: make `StringValue` nullable; add `int? IntValue`, `long? LongValue`, `DateTime? DateTimeValue`, `bool? BoolValue`, `Guid? GuidValue`, `bool CaseSensitive = true`, to mirror `SyncRuleScopingCriteria`.
@@ -127,15 +131,26 @@ For a `DateTime` attribute in this phase the value control is the existing `MudD
 
 **Goal:** the query translator honours `All` (AND), `Any` (OR), and nested groups for all criteria types, matching the semantics the scoping evaluator already implements in memory.
 
-### Data / query translation
-- Replace the flattened per-group loop in `GetMetaverseObjectsOfTypeAsync` with a recursive builder that turns each `PredefinedSearchCriteriaGroup` into an `Expression<Func<MetaverseObject, bool>>`: each criterion becomes `mo => mo.AttributeValues.Any(av => av.Attribute.Id == X && <typed comparison>)`; a group combines its criteria and child groups with `Expression.AndAlso` (All) or `Expression.OrElse` (Any); the top-level groups combine per existing top-level semantics. Apply the final composed expression with a single `.Where(...)`.
-- Use a small hand-rolled parameter-rebinding helper (an `ExpressionVisitor` that replaces the lambda parameter) to combine expressions, so EF Core can translate the tree. **Do not** use `Expression.Invoke` (EF cannot translate it) and **do not** add LINQKit (no new NuGet).
+### Data / query translation (raw SQL, not EF expression trees)
+**Corrected approach.** The live path is the raw-SQL `GetMetaverseObjectHeadersPagedAsync`, so group logic is **SQL-string composition**, not EF `Expression` composition. The original `ExpressionVisitor`/`Expression.AndAlso`/no-LINQKit guidance is obsolete and is dropped.
+- Phase 1 already produces a per-criterion `EXISTS (...)` fragment via `BuildPredefinedSearchCriterionSql`. Phase 2 replaces the flat `" AND " + fragment` loop with a **recursive group builder**: each `PredefinedSearchCriteriaGroup` becomes `( <criterion fragments and child-group fragments joined by AND or OR> )`, where the join is `AND` for `All` and `OR` for `Any`; child groups recurse to produce parenthesised nested clauses. Empty groups contribute no clause (treated as always-true, matching `ScopingEvaluationServer`). The top-level groups combine per the existing top-level semantics.
+- Keep using a single shared `List<NpgsqlParameter>` with the existing `criteriaIdx`-based unique parameter names; the recursion must keep incrementing the index so parameter names stay unique across nested groups. The composed `WHERE` clause is still applied to both the count query and the page query (they share `whereClause`/`sharedParams`).
+- `ScopingEvaluationServer` already implements the exact `All`/`Any`/nested semantics in memory; use it as the behavioural reference so scoping and search agree.
+
+### Cleanup: remove the dead EF query methods
+- Delete the two unused EF overloads `GetMetaverseObjectsOfTypeAsync(PredefinedSearch, ...)` and `GetMetaverseObjectsOfTypeAsync(int metaverseObjectTypeId, ...)` from `MetaverseRepository`, `IMetaverseRepository`, and their `MetaverseServer` wrappers (no callers in `JIM.Web` or tests; superseded by `GetMetaverseObjectHeadersPagedAsync`). This removes the second, now-divergent criteria switch so there is a single query path to reason about. Confirm `GetMetaverseObjectOfTypeCountAsync` and `GetMetaverseObjectHeadersPagedAsync` (both live) are untouched. Build + full test suite green after removal.
+
+### API
+- Add the deferred **child-groups** endpoint now that nesting takes effect: `POST /predefined-searches/{id}/criteria-groups/{groupId}/child-groups` (the repository/server `CreatePredefinedSearchCriteriaGroupAsync` already accepts a `parentGroupId`; only the controller endpoint + `GetPredefinedSearchAsync` include for `ChildGroups` are needed). Extend the predefined-search GET include chain to load `ChildGroups` recursively so the tree round-trips.
+
+### PowerShell
+- Add `-ParentGroupId` to `New-JIMPredefinedSearchCriteriaGroup` (mirroring `New-JIMScopingCriteriaGroup`) to create nested groups.
 
 ### Tests
-- Repository/integration tests for: single `All` group (AND), single `Any` group (OR), and at least one nested `(A OR B) AND C` construction, across text and at least one numeric/date type. Confirm Phase 1 single-group behaviour is unchanged.
+- Repository/integration tests (against real PostgreSQL, per the verification approach used in Phase 1) for: single `All` group (AND), single `Any` group (OR), and at least one nested `(A OR B) AND C` construction, across text and at least one numeric/date type. Confirm Phase 1 single-group behaviour is unchanged.
 
 ### UI
-- Ensure the Phase 1 predefined-search editor supports adding nested groups and choosing group type (the scoping editor already does; the shared component should cover both).
+- Extend the Phase 1 predefined-search editor (`PredefinedSearchDetail.razor`) to add nested child groups and render them indented, mirroring the scoping editor. (Shared-component extraction remains a Phase 3 task.)
 
 #### UI mock: nested groups in the predefined-search editor
 
@@ -254,11 +269,11 @@ Maps to the PRD acceptance criteria. In brief: relative criteria configurable an
 
 ## Risks and Mitigations
 
-- **EF expression composition (Phase 2).** Combining predicates into an EF-translatable tree is the main technical risk. Mitigation: hand-rolled parameter-rebinding `ExpressionVisitor`, no `Expression.Invoke`, no new dependency; cover with integration tests against real PostgreSQL (EF in-memory would mask translation failures).
-- **Shared "Add Criteria" component.** Two editors will need the same dialog. Mitigation: extract the scoping dialog into a shared component in `JIM.Web/Shared/` during Phase 1 rather than copy-pasting (per the JIM.Web conventions on componentising repeated UI).
-- **Scoping criterion PATCH is new public API.** Slightly beyond issue #85's literal wording. Mitigation: isolate as its own change set with dedicated tests; called out explicitly here and in the PRD.
-- **`StringValue` nullability change (Phase 1).** Relaxing a non-null column is a schema change. Mitigation: append-only migration; verify no code assumes non-null `StringValue` on predefined-search criteria.
-- **Index usage for relative queries.** Resolving the boundary to a constant before building the predicate keeps the `DateTimeValue` index usable; verified by inspecting the generated SQL / query plan in integration tests.
+- **Raw-SQL group composition (Phase 2).** Recursively building a correct, fully parenthesised `WHERE` clause with unique, correctly-typed parameters is the main Phase 2 risk (parameter-name collisions across nested groups, operator precedence, empty-group handling). Mitigation: single shared parameter list with the monotonic `criteriaIdx`; explicit parentheses per group; behavioural parity checked against `ScopingEvaluationServer`; cover with repository tests against real PostgreSQL (verified the Phase 1 way, since EF in-memory does not exercise the raw SQL).
+- **Shared "Add Criteria" component (Phase 3).** The scoping and predefined-search editors now duplicate the add-criteria dialog. Mitigation: extract a shared component in `JIM.Web/Shared/` in Phase 3, when the relative-date control must be added to both anyway (doing the extraction once, with the relative work, avoids two refactors and avoids destabilising the working scoping editor with no UI tests now). Phase 2's nesting UI work is additive and does not require the extraction first.
+- **Scoping criterion PATCH is new public API (Phase 3).** Slightly beyond issue #85's literal wording. Mitigation: isolate as its own change set with dedicated tests; called out explicitly here and in the PRD.
+- **`StringValue` nullability change (Phase 1) — resolved.** Done via an append-only migration (verified applied against real PostgreSQL with the model snapshot in sync); no code assumed non-null `StringValue` on predefined-search criteria.
+- **Index usage for relative queries (Phase 3).** Resolving the boundary to a constant before building the predicate keeps the `DateTimeValue` index usable; verified by inspecting the generated SQL / query plan in integration tests.
 
 ## Dependencies
 
