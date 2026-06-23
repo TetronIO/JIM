@@ -26,6 +26,7 @@ Sequencing rationale and resolved decisions (whole-day rounding with an Hours ex
 - **Predefined-search UI** (`src/JIM.Web/Pages/Admin/PredefinedSearchDetail.razor`): read-only display of criteria, showing `StringValue` only.
 - **Scoping UI** (`src/JIM.Web/Pages/Admin/SyncRuleDetailScopingCriteriaGroup.razor`): full add/remove criteria + nested groups; `MudDatePicker` for DateTime.
 - **PowerShell** (`src/JIM.PowerShell/Public/`): `ScopingCriteria/` has `Get`/`New`(group, criterion)/`Set`(group)/`Remove`(group, criterion); no criterion `Set`. `Search/` has only `Get-JIMPredefinedSearch` and `Set-JIMPredefinedSearch`.
+- **Post-merge context (from `main`):** `SyncRuleScopingCriteria` now exposes attribute FK scalars (`MetaverseAttributeId`, `ConnectedSystemAttributeId`); new model relationships should follow the FK-scalar convention. The sync-rule detail UI is now composed of tab components (`src/JIM.Web/Pages/Admin/Components/SyncRuleScopeTab.razor` hosts `SyncRuleDetailScopingCriteriaGroup`), so Phase 3 scoping UI work lands in/under that component. Public-docs coupling is now mechanically enforced (`scripts/Lint-DocsCoupling.ps1` via the `changelog-lint` workflow): a `[Unreleased]` ✨/🔄 changelog entry requires a `docs/` change in the same PR.
 
 ## Shared design decisions (apply across phases)
 
@@ -34,6 +35,7 @@ Sequencing rationale and resolved decisions (whole-day rounding with an Hours ex
 - **Relative fields** added to both `SyncRuleScopingCriteria` and `PredefinedSearchCriteria`: `DateCriteriaValueMode ValueMode` (default `Absolute`), `int? RelativeCount`, `RelativeDateUnit? RelativeUnit`, `RelativeDateDirection? RelativeDirection`.
 - **Friendly date operator labels** in the UI: for `DateTime` attributes the editor shows "before / on or before / after / on or after / equals / does not equal" mapped to the existing `SearchComparisonType` values, mirroring the prior-art wording; no new enum values.
 - **No new NuGet packages.** Phase 2 expression composition is hand-rolled (see Risks).
+- **Documentation is part of every phase, not a follow-up** (per the "Keeping Documentation Current" rule in `engineering/CLAUDE.md`). Each phase that ships user-facing behaviour must, in the same change set: add a `[Unreleased]` changelog entry (✨ new / 🔄 changed); update the relevant **public docs** under `docs/` (mechanically enforced by `scripts/Lint-DocsCoupling.ps1`, so a missing `docs/` change fails CI); and refresh **engineering docs** under `engineering/` where the change makes them stale. `mkdocs build --strict` must pass (no orphaned pages / broken links); if a new public page is added, register it in `mkdocs.yml` nav per `docs/CLAUDE.md`. Completed plans and PRDs are point-in-time records and are not retro-edited; the living reference docs are updated instead. Per-phase doc targets are listed in each phase's **Documentation** step below.
 
 ---
 
@@ -111,7 +113,13 @@ For a `DateTime` attribute in this phase the value control is the existing `MudD
 - `JIM.Web.Api.Tests`: each new endpoint, plus validation (`400`) cases.
 - Repository/integration tests (not EF in-memory, per the `.Include` masking caveat in CLAUDE.md): typed predicates return the correct objects for each data type and operator against PostgreSQL.
 
-**Phase 1 done when:** literal typed criteria can be created/edited/deleted via API, PowerShell, and UI, and predefined searches return correct results for each data type and ordered operator; build and full test suite green.
+### Documentation
+- **Public docs (`docs/`, enforced):** update `docs/configuration/predefined-searches.md` (object searches now filter on non-text attribute types; document the criteria editor, operators per type, and groups) and `docs/powershell/predefined-searches.md` (the new criteria/group cmdlets with examples). Mention the new criteria endpoints in `docs/api/index.md` if it enumerates endpoints (Scalar renders the detail from XML docs).
+- **Changelog:** add a ✨ `[Unreleased]` entry for typed object-search criteria.
+- **Engineering docs:** none expected unless the query-translator change is significant enough to note in `engineering/DEVELOPER_GUIDE.md`.
+- Run `mkdocs build --strict` locally; no nav change expected (existing pages updated).
+
+**Phase 1 done when:** literal typed criteria can be created/edited/deleted via API, PowerShell, and UI, and predefined searches return correct results for each data type and ordered operator; the public docs and changelog above are updated and `mkdocs build --strict` passes; build and full test suite green.
 
 ---
 
@@ -150,7 +158,13 @@ A child group renders indented inside its parent with its own logic type, mirror
    [ + Add Criteria Group ]    [ + Add Criteria ]
 ```
 
-**Phase 2 done when:** multi-criteria and nested predefined searches return correct results; build and full test suite green.
+### Documentation
+- **Public docs (`docs/`, enforced):** extend `docs/configuration/predefined-searches.md` to document `All`/`Any` group logic and nested groups for object searches (mirror the wording used for sync rule scope groups in `docs/configuration/synchronisation-rules.md`); include a worked `(A OR B) AND C` example.
+- **Changelog:** add a ✨ (or 🔄 if framed as completing existing search behaviour) `[Unreleased]` entry for multi-criteria and nested object searches.
+- **Engineering docs:** none expected (model already supports nesting; this is query-translator work).
+- Run `mkdocs build --strict` locally.
+
+**Phase 2 done when:** multi-criteria and nested predefined searches return correct results; the public docs and changelog above are updated and `mkdocs build --strict` passes; build and full test suite green.
 
 ---
 
@@ -214,8 +228,15 @@ Saved relative criteria read as plain language, never a resolved literal date, a
 
 Notes: `Value mode` is a `MudRadioGroup`; the Relative inputs are `MudNumericField` (min 0) + two `MudSelect`s. The preview restates the resolved meaning and that it re-evaluates each run. The `Hours` unit gives instant precision; `Days` and coarser round to midnight UTC (Resolved Decision 1).
 
-### Docs
-- `engineering/SYNC_RULE_SCOPING.md`: add relative-date examples (two worked examples). Update changelog under `[Unreleased]` for the user-facing capability.
+### Documentation
+- **Public docs (`docs/`, enforced):**
+  - `docs/configuration/synchronisation-rules.md`: document relative scope-filter dates (value mode, units incl. Hours, Ago/From now, the friendly date operator labels, whole-day rounding, on-demand evaluation cadence). Include the leaver example (terminated between 30 and 364 days ago).
+  - `docs/configuration/predefined-searches.md`: document relative dates in object searches.
+  - `docs/powershell/synchronisation-rules.md` and `docs/powershell/predefined-searches.md`: document the relative-date parameters and `Set-JIMScopingCriterion` / criterion in-place edit, with examples.
+  - Consider a short concept note (e.g. in `docs/concepts/`) on relative dates if the configuration pages need a shared explanation; if a **new page** is added, register it in `mkdocs.yml` nav.
+- **Changelog:** add a ✨ `[Unreleased]` entry for relative date criteria across scoping and searches.
+- **Engineering docs:** `engineering/SYNC_RULE_SCOPING.md` gains two worked relative-date examples; note `RelativeDateResolver` and the resolve-before-query approach in `engineering/DEVELOPER_GUIDE.md` if it documents the scoping/search internals.
+- Run `mkdocs build --strict` locally.
 
 ### Tests
 - `JIM.Models.Tests`: `RelativeDateResolver` per unit/direction, month/year calendar edge cases (e.g. 31 Mar minus 1 month), whole-day truncation vs Hours instant, zero offset.
@@ -223,13 +244,13 @@ Notes: `Value mode` is a `MudRadioGroup`; the Relative inputs are `MudNumericFie
 - `JIM.Web.Api.Tests`: relative round-trip on both surfaces; the new scoping criterion PATCH; all `400` validation cases.
 - Integration: predefined search with a relative date criterion returns the correct objects.
 
-**Phase 3 done when:** all PRD acceptance criteria are met; `dotnet build JIM.sln` and `dotnet test JIM.sln` are green.
+**Phase 3 done when:** all PRD acceptance criteria are met; the public docs, engineering docs, and changelog above are updated and `mkdocs build --strict` passes; `dotnet build JIM.sln` and `dotnet test JIM.sln` are green.
 
 ---
 
 ## Success Criteria
 
-Maps to the PRD acceptance criteria. In brief: relative criteria configurable and editable in place on both surfaces via UI, API, and PowerShell; calendar-correct, whole-day-rounded (Hours excepted) resolution computed fresh each evaluation; predefined searches gain typed date comparison and correct `All`/`Any`/nesting; existing literal behaviour and tests unchanged; append-only migrations; full build/test green.
+Maps to the PRD acceptance criteria. In brief: relative criteria configurable and editable in place on both surfaces via UI, API, and PowerShell; calendar-correct, whole-day-rounded (Hours excepted) resolution computed fresh each evaluation; predefined searches gain typed date comparison and correct `All`/`Any`/nesting; existing literal behaviour and tests unchanged; append-only migrations; public docs (`docs/`) and changelog updated per phase with `mkdocs build --strict` and the `changelog-lint` / docs-coupling checks green; engineering docs refreshed where stale; full build/test green.
 
 ## Risks and Mitigations
 
