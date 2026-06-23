@@ -157,7 +157,7 @@
                                Variant="Variant.Outlined">
                         @foreach (var op in GetOperatorsForType(_newCriterionAttribute.Type))
                         {
-                            <MudSelectItem Value="@op.Operator">@op.Label</MudSelectItem>
+                            <MudSelectItem T="SearchComparisonType?" Value="@op.Operator">@op.Label</MudSelectItem>
                         }
                     </MudSelect>
 
