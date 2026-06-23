@@ -427,6 +427,75 @@ public class PredefinedSearchesControllerTests
     }
 
     [Test]
+    public async Task CreateCriterionAsync_WithRelativeDate_ReturnsCreatedAndPersistsRelativeFieldsAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(22, "AccountExpiry", AttributeDataType.DateTime);
+        PredefinedSearchCriteria? captured = null;
+        _mockSearchRepo.Setup(r => r.CreatePredefinedSearchCriterionAsync(GroupId, It.IsAny<PredefinedSearchCriteria>()))
+            .ReturnsAsync((int _, PredefinedSearchCriteria c) => { c.Id = 9; captured = c; return c; });
+
+        var request = new PredefinedSearchCriterionRequest
+        {
+            MetaverseAttributeId = 22,
+            ComparisonType = "LessThanOrEquals",
+            ValueMode = "Relative",
+            RelativeCount = 7,
+            RelativeUnit = "Days",
+            RelativeDirection = "FromNow"
+        };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.ValueMode, Is.EqualTo(DateCriteriaValueMode.Relative));
+        Assert.That(captured.RelativeCount, Is.EqualTo(7));
+        Assert.That(captured.RelativeUnit, Is.EqualTo(RelativeDateUnit.Days));
+        Assert.That(captured.RelativeDirection, Is.EqualTo(RelativeDateDirection.FromNow));
+        Assert.That(captured.DateTimeValue, Is.Null);
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithRelativeOnNonDateAttribute_ReturnsBadRequestAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(20, "Department", AttributeDataType.Text);
+
+        var request = new PredefinedSearchCriterionRequest
+        {
+            MetaverseAttributeId = 20,
+            ComparisonType = "Equals",
+            ValueMode = "Relative",
+            RelativeCount = 7,
+            RelativeUnit = "Days",
+            RelativeDirection = "FromNow"
+        };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockSearchRepo.Verify(r => r.CreatePredefinedSearchCriterionAsync(It.IsAny<int>(), It.IsAny<PredefinedSearchCriteria>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithRelativeMissingUnit_ReturnsBadRequestAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(22, "AccountExpiry", AttributeDataType.DateTime);
+
+        var request = new PredefinedSearchCriterionRequest
+        {
+            MetaverseAttributeId = 22,
+            ComparisonType = "LessThanOrEquals",
+            ValueMode = "Relative",
+            RelativeCount = 7,
+            RelativeDirection = "FromNow"
+        };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
     public async Task CreateCriterionAsync_WithUnknownGroup_ReturnsNotFoundAsync()
     {
         _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());

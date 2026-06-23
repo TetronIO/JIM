@@ -72,6 +72,27 @@ public class PredefinedSearchCriteriaDto
     public bool CaseSensitive { get; set; } = true;
 
     /// <summary>
+    /// For DateTime attributes, whether the criterion compares against a fixed date ("Absolute", the default)
+    /// or a date resolved relative to now ("Relative").
+    /// </summary>
+    public string ValueMode { get; set; } = nameof(DateCriteriaValueMode.Absolute);
+
+    /// <summary>
+    /// The relative offset count (when ValueMode is Relative).
+    /// </summary>
+    public int? RelativeCount { get; set; }
+
+    /// <summary>
+    /// The relative offset unit: Hours, Days, Weeks, Months, Years (when ValueMode is Relative).
+    /// </summary>
+    public string? RelativeUnit { get; set; }
+
+    /// <summary>
+    /// The relative offset direction: Ago or FromNow (when ValueMode is Relative).
+    /// </summary>
+    public string? RelativeDirection { get; set; }
+
+    /// <summary>
     /// Creates a DTO from an entity. The entity's MetaverseAttribute navigation should be populated.
     /// </summary>
     public static PredefinedSearchCriteriaDto FromEntity(PredefinedSearchCriteria entity)
@@ -89,7 +110,11 @@ public class PredefinedSearchCriteriaDto
             DateTimeValue = entity.DateTimeValue,
             BoolValue = entity.BoolValue,
             GuidValue = entity.GuidValue,
-            CaseSensitive = entity.CaseSensitive
+            CaseSensitive = entity.CaseSensitive,
+            ValueMode = entity.ValueMode.ToString(),
+            RelativeCount = entity.RelativeCount,
+            RelativeUnit = entity.RelativeUnit?.ToString(),
+            RelativeDirection = entity.RelativeDirection?.ToString()
         };
     }
 }
@@ -228,4 +253,26 @@ public class PredefinedSearchCriterionRequest
     /// When true (default), text value comparisons are case-sensitive. Only applies to Text attributes.
     /// </summary>
     public bool CaseSensitive { get; set; } = true;
+
+    /// <summary>
+    /// For DateTime attributes, whether the criterion compares against a fixed date ("Absolute", the default)
+    /// or a date resolved relative to now ("Relative"). When Relative, supply RelativeCount/RelativeUnit/RelativeDirection
+    /// instead of DateTimeValue.
+    /// </summary>
+    public string? ValueMode { get; set; }
+
+    /// <summary>
+    /// The relative offset count, zero or positive (required when ValueMode is Relative).
+    /// </summary>
+    public int? RelativeCount { get; set; }
+
+    /// <summary>
+    /// The relative offset unit: Hours, Days, Weeks, Months, Years (required when ValueMode is Relative).
+    /// </summary>
+    public string? RelativeUnit { get; set; }
+
+    /// <summary>
+    /// The relative offset direction: Ago or FromNow (required when ValueMode is Relative).
+    /// </summary>
+    public string? RelativeDirection { get; set; }
 }

@@ -6,6 +6,7 @@ using JIM.Web.Extensions.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Application.Interfaces;
+using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Application.Services;
@@ -2332,57 +2333,10 @@ public class SynchronisationController(
         if (group == null)
             return NotFound(ApiErrorResponse.NotFound($"Scoping criteria group with ID {groupId} not found."));
 
-        // Validate comparison type
-        if (!Enum.TryParse<SearchComparisonType>(request.ComparisonType, true, out var comparisonType) || comparisonType == SearchComparisonType.NotSet)
-            return BadRequest(ApiErrorResponse.BadRequest($"Invalid comparison type '{request.ComparisonType}'."));
-
-        var criterion = new SyncRuleScopingCriteria
-        {
-            ComparisonType = comparisonType,
-            StringValue = request.StringValue,
-            IntValue = request.IntValue,
-            LongValue = request.LongValue,
-            DateTimeValue = request.DateTimeValue,
-            BoolValue = request.BoolValue,
-            GuidValue = request.GuidValue,
-            CaseSensitive = request.CaseSensitive
-        };
-
-        // Set the appropriate attribute based on Synchronisation Rule direction
-        if (syncRule.Direction == SyncRuleDirection.Export)
-        {
-            // Export rules evaluate Metaverse attributes. Resolve the attribute from the
-            // Synchronisation Rule's already-tracked MetaverseObjectType.Attributes graph rather than
-            // a separate Metaverse repository call: that would return a second untracked
-            // instance with the same Id and throw "another instance with the same key value
-            // is already being tracked" on SaveChanges. This mirrors the inbound path
-            // immediately below.
-            if (!request.MetaverseAttributeId.HasValue)
-                return BadRequest(ApiErrorResponse.BadRequest("MetaverseAttributeId is required for export Synchronisation Rules."));
-
-            var mvAttribute = syncRule.MetaverseObjectType?.Attributes
-                .FirstOrDefault(a => a.Id == request.MetaverseAttributeId);
-
-            if (mvAttribute == null)
-                return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {request.MetaverseAttributeId} not found on this Synchronisation Rule's Metaverse Object Type."));
-
-            criterion.MetaverseAttribute = mvAttribute;
-        }
-        else
-        {
-            // Import rules evaluate Connected System attributes
-            if (!request.ConnectedSystemAttributeId.HasValue)
-                return BadRequest(ApiErrorResponse.BadRequest("ConnectedSystemAttributeId is required for import Synchronisation Rules."));
-
-            // Get the CS attribute from the Synchronisation Rule's Connected System Object Type
-            var csAttribute = syncRule.ConnectedSystemObjectType?.Attributes
-                .FirstOrDefault(a => a.Id == request.ConnectedSystemAttributeId);
-
-            if (csAttribute == null)
-                return NotFound(ApiErrorResponse.NotFound($"Connected System attribute with ID {request.ConnectedSystemAttributeId} not found in Synchronisation Rule's object type."));
-
-            criterion.ConnectedSystemAttribute = csAttribute;
-        }
+        var criterion = new SyncRuleScopingCriteria();
+        var (error, notFound) = ApplyScopingCriterionRequest(syncRule, criterion, request);
+        if (error != null)
+            return notFound ? NotFound(ApiErrorResponse.NotFound(error)) : BadRequest(ApiErrorResponse.BadRequest(error));
 
         group.Criteria.Add(criterion);
 
@@ -2401,6 +2355,145 @@ public class SynchronisationController(
             _logger.LogWarning(ex, "Failed to create criterion: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
+    }
+
+    /// <summary>
+    /// Update a criterion in a Scoping Criteria group (full replacement of attribute, operator and value).
+    /// </summary>
+    /// <remarks>
+    /// For Export Synchronisation Rules, provide <c>MetaverseAttributeId</c>. For Import Synchronisation Rules, provide <c>ConnectedSystemAttributeId</c>.
+    /// For DateTime attributes set <c>valueMode</c> to <c>Relative</c> and supply <c>relativeCount</c>/<c>relativeUnit</c>/<c>relativeDirection</c> to compare against a date relative to now.
+    /// </remarks>
+    /// <param name="syncRuleId">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="groupId">The unique identifier of the criteria group.</param>
+    /// <param name="criterionId">The unique identifier of the criterion to update.</param>
+    /// <param name="request">The new criterion values.</param>
+    /// <returns>The updated criterion.</returns>
+    [HttpPut("sync-rules/{syncRuleId:int}/scoping-criteria/{groupId:int}/criteria/{criterionId:int}", Name = "UpdateScopingCriterion")]
+    [ProducesResponseType(typeof(SyncRuleScopingCriteriaDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateScopingCriterionAsync(int syncRuleId, int groupId, int criterionId, [FromBody] CreateScopingCriterionRequest request)
+    {
+        _logger.LogInformation("Updating criterion {CriterionId} in group {GroupId} for Synchronisation Rule: {SyncRuleId}", criterionId, groupId, syncRuleId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+
+        var syncRule = await _application.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (syncRule == null)
+            return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
+
+        var group = FindScopingCriteriaGroup(syncRule.ObjectScopingCriteriaGroups, groupId);
+        if (group == null)
+            return NotFound(ApiErrorResponse.NotFound($"Scoping criteria group with ID {groupId} not found."));
+
+        var criterion = group.Criteria.FirstOrDefault(c => c.Id == criterionId);
+        if (criterion == null)
+            return NotFound(ApiErrorResponse.NotFound($"Criterion with ID {criterionId} not found in group {groupId}."));
+
+        var (error, notFound) = ApplyScopingCriterionRequest(syncRule, criterion, request);
+        if (error != null)
+            return notFound ? NotFound(ApiErrorResponse.NotFound(error)) : BadRequest(ApiErrorResponse.BadRequest(error));
+
+        try
+        {
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+            else
+                await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            _logger.LogInformation("Updated criterion {CriterionId} in group {GroupId}", criterionId, groupId);
+            return Ok(SyncRuleScopingCriteriaDto.FromEntity(criterion));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to update criterion: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Resolves the attribute, validates and applies a scoping-criterion request onto <paramref name="criterion"/>
+    /// (used by both create and update). The attribute is resolved from the Synchronisation Rule's already-tracked
+    /// object-type graph so EF does not track a duplicate. Returns (error, notFound) where notFound distinguishes a
+    /// 404 (attribute not found) from a 400 (bad request); null error means success.
+    /// </summary>
+    private static (string? error, bool notFound) ApplyScopingCriterionRequest(SyncRule syncRule, SyncRuleScopingCriteria criterion, CreateScopingCriterionRequest request)
+    {
+        if (!Enum.TryParse<SearchComparisonType>(request.ComparisonType, true, out var comparisonType) || comparisonType == SearchComparisonType.NotSet)
+            return ($"Invalid comparison type '{request.ComparisonType}'.", false);
+
+        AttributeDataType attributeType;
+        if (syncRule.Direction == SyncRuleDirection.Export)
+        {
+            if (!request.MetaverseAttributeId.HasValue)
+                return ("MetaverseAttributeId is required for export Synchronisation Rules.", false);
+
+            var mvAttribute = syncRule.MetaverseObjectType?.Attributes
+                .FirstOrDefault(a => a.Id == request.MetaverseAttributeId);
+            if (mvAttribute == null)
+                return ($"Metaverse attribute with ID {request.MetaverseAttributeId} not found on this Synchronisation Rule's Metaverse Object Type.", true);
+
+            criterion.MetaverseAttribute = mvAttribute;
+            criterion.ConnectedSystemAttribute = null;
+            attributeType = mvAttribute.Type;
+        }
+        else
+        {
+            if (!request.ConnectedSystemAttributeId.HasValue)
+                return ("ConnectedSystemAttributeId is required for import Synchronisation Rules.", false);
+
+            var csAttribute = syncRule.ConnectedSystemObjectType?.Attributes
+                .FirstOrDefault(a => a.Id == request.ConnectedSystemAttributeId);
+            if (csAttribute == null)
+                return ($"Connected System attribute with ID {request.ConnectedSystemAttributeId} not found in Synchronisation Rule's object type.", true);
+
+            criterion.ConnectedSystemAttribute = csAttribute;
+            criterion.MetaverseAttribute = null;
+            attributeType = csAttribute.Type;
+        }
+
+        var relativeError = RelativeDateCriterionValidation.Validate(
+            request.ValueMode, request.RelativeCount, request.RelativeUnit, request.RelativeDirection,
+            attributeType, request.DateTimeValue.HasValue,
+            out var valueMode, out var relativeCount, out var relativeUnit, out var relativeDirection);
+        if (relativeError != null)
+            return (relativeError, false);
+
+        criterion.ComparisonType = comparisonType;
+        criterion.CaseSensitive = request.CaseSensitive;
+        criterion.ValueMode = valueMode;
+
+        if (valueMode == DateCriteriaValueMode.Relative)
+        {
+            criterion.RelativeCount = relativeCount;
+            criterion.RelativeUnit = relativeUnit;
+            criterion.RelativeDirection = relativeDirection;
+            // Relative criteria are DateTime-only; clear the absolute value carriers.
+            criterion.StringValue = null;
+            criterion.IntValue = null;
+            criterion.LongValue = null;
+            criterion.DateTimeValue = null;
+            criterion.BoolValue = null;
+            criterion.GuidValue = null;
+        }
+        else
+        {
+            criterion.StringValue = request.StringValue;
+            criterion.IntValue = request.IntValue;
+            criterion.LongValue = request.LongValue;
+            criterion.DateTimeValue = request.DateTimeValue;
+            criterion.BoolValue = request.BoolValue;
+            criterion.GuidValue = request.GuidValue;
+            criterion.RelativeCount = null;
+            criterion.RelativeUnit = null;
+            criterion.RelativeDirection = null;
+        }
+
+        return (null, false);
     }
 
     /// <summary>

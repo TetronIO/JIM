@@ -484,6 +484,26 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
             CaseSensitive = request.CaseSensitive
         };
 
+        // Relative-date validation (rejects relative-on-non-date, missing/negative offset, both-modes-set).
+        var relativeError = RelativeDateCriterionValidation.Validate(
+            request.ValueMode, request.RelativeCount, request.RelativeUnit, request.RelativeDirection,
+            attribute.Type, request.DateTimeValue.HasValue,
+            out var valueMode, out var relativeCount, out var relativeUnit, out var relativeDirection);
+        if (relativeError != null)
+            return (null, relativeError);
+
+        if (valueMode == DateCriteriaValueMode.Relative)
+        {
+            // Validation has confirmed the attribute is DateTime; only date operators apply.
+            if (!IsOrderedOperator(op))
+                return (null, $"Operator '{op}' is not valid for the DateTime attribute '{attribute.Name}'.");
+            criterion.ValueMode = DateCriteriaValueMode.Relative;
+            criterion.RelativeCount = relativeCount;
+            criterion.RelativeUnit = relativeUnit;
+            criterion.RelativeDirection = relativeDirection;
+            return (criterion, null);
+        }
+
         switch (attribute.Type)
         {
             case AttributeDataType.Text:
