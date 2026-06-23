@@ -74,32 +74,34 @@ Sequencing rationale and resolved decisions (whole-day rounding with an Hours ex
 The Criteria panel gains the same add/remove affordances the scoping editor already has. Today it only lists `StringValue`; after Phase 1 it edits typed criteria.
 
 ```
-Predefined Search: "Distribution groups"            [ Run ]
-------------------------------------------------------------------
+Predefined Search: "Distribution groups"                  [ Run ]
+-----------------------------------------------------------------
  Object type: Group
 
- CRITERIA GROUP. LOGIC TYPE: ALL                          [ 🗑 ]
+ CRITERIA GROUP    logic type: ALL                          [del]
 
-   (MV) GroupType    [ Equals ]          [ Text: Distribution ]  🗑
-   (MV) MemberCount  [ Greater Than ]    [ Number: 0 ]           🗑
+  (MV) GroupType     equals         Text: Distribution    [del]
+  (MV) MemberCount   greater than   Number: 0             [del]
 
-            [ + Add Criteria Group ]   [ + Add Criteria ]
-------------------------------------------------------------------
- Results (live):  37 groups
+   [ + Add Criteria Group ]    [ + Add Criteria ]
+-----------------------------------------------------------------
+ Results (live): 37 groups
 ```
 
 #### UI mock: "Add Criteria" dialog, literal typed value (Number shown)
 
+For a `DateTime` attribute in this phase the value control is the existing `MudDatePicker`; the Comparison Type dropdown precedes the value and (for dates) shows the friendly labels described below.
+
 ```
-+------------------------------------------------------------+
-|  ⚖  Add Criteria                                           |
-+------------------------------------------------------------+
-|  Metaverse Attribute            [ MemberCount        ▼ ]   |
-|  Comparison Type                [ Greater Than       ▼ ]   |
-|  Number Value                   [ 0                    ]   |
-+------------------------------------------------------------+
-|                                   [ Cancel ]  [ Add Criteria ]
-+------------------------------------------------------------+
++----------------------------------------------------------+
+| Add Criteria                                             |
++----------------------------------------------------------+
+| Metaverse Attribute     [ MemberCount             v ]    |
+| Comparison Type         [ Greater Than            v ]    |
+| Number Value            [ 0                          ]   |
++----------------------------------------------------------+
+|                     [ Cancel ]      [ Add Criteria ]     |
++----------------------------------------------------------+
 ```
 
 For a `DateTime` attribute in this phase the value control is the existing `MudDatePicker`, and the Comparison Type dropdown shows the friendly labels ("before", "on or before", "after", "on or after", "equals", "does not equal") mapping to the `SearchComparisonType` values.
@@ -132,19 +134,20 @@ For a `DateTime` attribute in this phase the value control is the existing `MudD
 A child group renders indented inside its parent with its own logic type, mirroring the scoping editor. This expresses `(A OR B) AND C`.
 
 ```
- CRITERIA GROUP. LOGIC TYPE: ALL                          [ 🗑 ]
+ CRITERIA GROUP    logic type: ALL                          [del]
 
-   (MV) IsActive    [ Equals ]            [ Boolean: true ]      🗑
+  (MV) IsActive      equals         Boolean: true         [del]
 
-   ┌── CRITERIA GROUP. LOGIC TYPE: ANY                    [ 🗑 ] ┐
-   │                                                            │
-   │   (MV) Department [ Equals ]   [ Text: Finance ]       🗑  │
-   │   (MV) Department [ Equals ]   [ Text: Sales ]         🗑  │
-   │                                                            │
-   │        [ + Add Criteria Group ]   [ + Add Criteria ]       │
-   └────────────────────────────────────────────────────────────┘
+  +----------------------------------------------------------+
+  | CRITERIA GROUP   logic type: ANY                   [del] |
+  |                                                          |
+  | (MV) Department   equals   Text: Finance           [del] |
+  | (MV) Department   equals   Text: Sales             [del] |
+  |                                                          |
+  | [ + Add Criteria Group ]   [ + Add Criteria ]            |
+  +----------------------------------------------------------+
 
-            [ + Add Criteria Group ]   [ + Add Criteria ]
+   [ + Add Criteria Group ]    [ + Add Criteria ]
 ```
 
 **Phase 2 done when:** multi-criteria and nested predefined searches return correct results; build and full test suite green.
@@ -181,26 +184,21 @@ A child group renders indented inside its parent with its own logic type, mirror
 The `Value mode` toggle and the Relative sub-form appear only for `DateTime` attributes; all other types are unchanged from Phase 1. In Edit mode the dialog opens pre-populated with the existing criterion's values (in-place edit, requirement 24).
 
 ```
-+------------------------------------------------------------+
-|  ⚖  Edit Criteria                                          |
-+------------------------------------------------------------+
-|  Metaverse Attribute            [ AccountExpiry      ▼ ]   |
-|  Comparison Type                [ On or before       ▼ ]   |
-|                                                            |
-|  Value mode      ( ○ Absolute )  ( • Relative )            |
-|                                                            |
-|   Count            Unit                Direction           |
-|  [   7   ]        [ Days        ▼ ]   [ From now    ▼ ]    |
-|                    Hours / Days / Weeks / Months / Years   |
-|                    Ago / From now                          |
-|                                                            |
-|  ┌──────────────────────────────────────────────────┐     |
-|  │ ℹ Matches when AccountExpiry is on or before      │     |
-|  │   7 days from now (re-evaluated each run).         │     |
-|  └──────────────────────────────────────────────────┘     |
-+------------------------------------------------------------+
-|                                   [ Cancel ]  [ Save ]      |
-+------------------------------------------------------------+
++----------------------------------------------------------+
+| Edit Criteria                                            |
++----------------------------------------------------------+
+| Metaverse Attribute     [ AccountExpiry          v ]     |
+| Comparison Type         [ On or before           v ]     |
+|                                                          |
+| Value mode      ( ) Absolute      (o) Relative           |
+|                                                          |
+| Count [ 7 ]   Unit [ Days    v ]   Dir [ From now v ]    |
+|                                                          |
+| Note: matches when AccountExpiry is on or before         |
+|       7 days from now (re-evaluated each run).           |
++----------------------------------------------------------+
+|                     [ Cancel ]          [ Save ]         |
++----------------------------------------------------------+
 ```
 
 #### UI mock: relative criterion chips (both editors)
@@ -208,10 +206,10 @@ The `Value mode` toggle and the Relative sub-form appear only for `DateTime` att
 Saved relative criteria read as plain language, never a resolved literal date, and each row gains an Edit affordance (the in-place edit path).
 
 ```
- CRITERIA GROUP. LOGIC TYPE: ALL                          [ 🗑 ]
+ CRITERIA GROUP    logic type: ALL                          [del]
 
-   (MV) AccountExpiry  [ On or before ]  [ 7 days from now ]  ✎  🗑
-   (MV) Department     [ Equals ]        [ Text: Finance ]    ✎  🗑
+  (MV) AccountExpiry on or before   7 days from now       [edit] [del]
+  (MV) Department    equals         Text: Finance         [edit] [del]
 ```
 
 Notes: `Value mode` is a `MudRadioGroup`; the Relative inputs are `MudNumericField` (min 0) + two `MudSelect`s. The preview restates the resolved meaning and that it re-evaluates each run. The `Hours` unit gives instant precision; `Days` and coarser round to midnight UTC (Resolved Decision 1).
