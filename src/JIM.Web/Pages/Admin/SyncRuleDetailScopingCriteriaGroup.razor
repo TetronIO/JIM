@@ -3,6 +3,7 @@
 @using JIM.Models.Search
 @using JIM.Models.Staging
 @using JIM.Utilities
+@using JIM.Web.Models
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -56,7 +57,7 @@
                 </AvatarContent>
                 <ChildContent>@criteria.GetAttributeName()</ChildContent>
             </MudChip>
-            <MudChip T="string">@criteria.ComparisonType.ToString().SplitOnCapitalLetters()</MudChip>
+            <MudChip T="string">@CriterionOperatorOptions.FriendlyComparison(criteria.ComparisonType, criteria.GetAttributeDataType())</MudChip>
             <MudChip T="string">@criteria.ToString()</MudChip>
             <MudTooltip Text="Delete criteria" Arrow="true" Placement="Placement.Top">
                 <MudIconButton
@@ -119,6 +120,7 @@
             {
                 <MudSelect T="MetaverseAttribute"
                            @bind-Value="_newSyncRuleScopingCriteria.MetaverseAttribute"
+                           @bind-Value:after="HandleAttributeChanged"
                            Label="Metaverse Attribute"
                            Placeholder="Please select a Metaverse attribute"
                            Required="true"
@@ -135,6 +137,7 @@
             {
                 <MudSelect T="ConnectedSystemObjectTypeAttribute"
                            @bind-Value="_newSyncRuleScopingCriteria.ConnectedSystemAttribute"
+                           @bind-Value:after="HandleAttributeChanged"
                            Label="Connected System Attribute"
                            Placeholder="Please select a Connected System attribute"
                            Required="true"
@@ -155,12 +158,9 @@
                     @bind-Value="NewScopingComparisonType"
                     Class="mt-5"
                     Variant="Variant.Outlined">
-            @foreach (SearchComparisonType searchComparisonType in Enum.GetValues(typeof(SearchComparisonType)))
+            @foreach (var op in CriterionOperatorOptions.ForType(GetSelectedAttributeType() ?? AttributeDataType.NotSet))
             {
-                if (searchComparisonType == SearchComparisonType.NotSet)
-                    continue;
-
-                <MudSelectItem T="SearchComparisonType?" Value="@searchComparisonType">@searchComparisonType.ToString().SplitOnCapitalLetters()</MudSelectItem>
+                <MudSelectItem T="SearchComparisonType?" Value="@op.Operator">@op.Label</MudSelectItem>
             }
         </MudSelect>
 
@@ -234,6 +234,18 @@
         set { if (_newSyncRuleScopingCriteria != null) _newSyncRuleScopingCriteria.ComparisonType = value ?? SearchComparisonType.NotSet; }
     }
 
+    // When the attribute changes, clear any operator that is no longer valid for the new attribute's data type,
+    // so the Comparison Type select returns to its placeholder rather than holding a stale, invalid operator.
+    private void HandleAttributeChanged()
+    {
+        if (_newSyncRuleScopingCriteria == null)
+            return;
+
+        var type = GetSelectedAttributeType();
+        if (type == null || !SearchComparisonOperators.IsValid(_newSyncRuleScopingCriteria.ComparisonType, type.Value))
+            _newSyncRuleScopingCriteria.ComparisonType = SearchComparisonType.NotSet;
+    }
+
     private bool DisableAddCriteriaButton()
     {
         if (_newSyncRuleScopingCriteria == null)
@@ -251,7 +263,9 @@
                 return true;
         }
 
-        if (_newSyncRuleScopingCriteria.ComparisonType == SearchComparisonType.NotSet)
+        // Require a comparison operator that is valid for the selected attribute's data type.
+        var attributeType = GetSelectedAttributeType();
+        if (attributeType == null || !SearchComparisonOperators.IsValid(_newSyncRuleScopingCriteria.ComparisonType, attributeType.Value))
             return true;
 
         // A relative DateTime criterion is valid once its count, unit and direction are set (no absolute value).

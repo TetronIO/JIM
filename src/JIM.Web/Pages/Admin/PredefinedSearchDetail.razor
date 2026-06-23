@@ -3,6 +3,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Search
 @using JIM.Utilities
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
@@ -155,7 +156,7 @@
                                Required="true"
                                Class="mt-5"
                                Variant="Variant.Outlined">
-                        @foreach (var op in GetOperatorsForType(_newCriterionAttribute.Type))
+                        @foreach (var op in CriterionOperatorOptions.ForType(_newCriterionAttribute.Type))
                         {
                             <MudSelectItem T="SearchComparisonType?" Value="@op.Operator">@op.Label</MudSelectItem>
                         }
@@ -203,8 +204,6 @@
         get => _newCriterion is { ComparisonType: not SearchComparisonType.NotSet } c ? c.ComparisonType : null;
         set { if (_newCriterion != null) _newCriterion.ComparisonType = value ?? SearchComparisonType.NotSet; }
     }
-
-    private sealed record OperatorOption(SearchComparisonType Operator, string Label);
 
     // ─── Render helpers (shared by top-level and nested groups) ───
 
@@ -481,72 +480,10 @@
     }
 
     /// <summary>
-    /// Returns the comparison operators applicable to a data type, with friendly labels.
-    /// DateTime uses prior-art wording (before / on or before / after / on or after).
-    /// </summary>
-    private static List<OperatorOption> GetOperatorsForType(AttributeDataType type)
-    {
-        switch (type)
-        {
-            case AttributeDataType.Text:
-                return new()
-                {
-                    new(SearchComparisonType.Equals, "equals"),
-                    new(SearchComparisonType.NotEquals, "does not equal"),
-                    new(SearchComparisonType.StartsWith, "starts with"),
-                    new(SearchComparisonType.NotStartsWith, "does not start with"),
-                    new(SearchComparisonType.EndsWith, "ends with"),
-                    new(SearchComparisonType.NotEndsWith, "does not end with"),
-                    new(SearchComparisonType.Contains, "contains"),
-                    new(SearchComparisonType.NotContains, "does not contain")
-                };
-            case AttributeDataType.DateTime:
-                return new()
-                {
-                    new(SearchComparisonType.LessThan, "before"),
-                    new(SearchComparisonType.LessThanOrEquals, "on or before"),
-                    new(SearchComparisonType.GreaterThan, "after"),
-                    new(SearchComparisonType.GreaterThanOrEquals, "on or after"),
-                    new(SearchComparisonType.Equals, "equals"),
-                    new(SearchComparisonType.NotEquals, "does not equal")
-                };
-            case AttributeDataType.Number:
-            case AttributeDataType.LongNumber:
-                return new()
-                {
-                    new(SearchComparisonType.Equals, "equals"),
-                    new(SearchComparisonType.NotEquals, "does not equal"),
-                    new(SearchComparisonType.LessThan, "less than"),
-                    new(SearchComparisonType.LessThanOrEquals, "less than or equal to"),
-                    new(SearchComparisonType.GreaterThan, "greater than"),
-                    new(SearchComparisonType.GreaterThanOrEquals, "greater than or equal to")
-                };
-            case AttributeDataType.Boolean:
-            case AttributeDataType.Guid:
-                return new()
-                {
-                    new(SearchComparisonType.Equals, "equals"),
-                    new(SearchComparisonType.NotEquals, "does not equal")
-                };
-            default:
-                return new();
-        }
-    }
-
-    /// <summary>
     /// Renders a criterion's comparison operator in friendly wording (DateTime uses the prior-art labels).
     /// </summary>
-    private static string FriendlyComparison(PredefinedSearchCriteria criteria)
-    {
-        var type = criteria.GetAttributeDataType();
-        if (type.HasValue)
-        {
-            var match = GetOperatorsForType(type.Value).FirstOrDefault(o => o.Operator == criteria.ComparisonType);
-            if (match != null)
-                return match.Label;
-        }
-        return criteria.ComparisonType.ToString().SplitOnCapitalLetters();
-    }
+    private static string FriendlyComparison(PredefinedSearchCriteria criteria) =>
+        CriterionOperatorOptions.FriendlyComparison(criteria.ComparisonType, criteria.GetAttributeDataType());
 
     private async Task ToggleEnabledAsync(bool isEnabled)
     {

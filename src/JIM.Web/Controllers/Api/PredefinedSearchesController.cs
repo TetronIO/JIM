@@ -495,7 +495,7 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
         if (valueMode == DateCriteriaValueMode.Relative)
         {
             // Validation has confirmed the attribute is DateTime; only date operators apply.
-            if (!IsOrderedOperator(op))
+            if (!SearchComparisonOperators.IsValid(op, attribute.Type))
                 return (null, $"Operator '{op}' is not valid for the DateTime attribute '{attribute.Name}'.");
             criterion.ValueMode = DateCriteriaValueMode.Relative;
             criterion.RelativeCount = relativeCount;
@@ -507,42 +507,42 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
         switch (attribute.Type)
         {
             case AttributeDataType.Text:
-                if (!IsTextOperator(op))
+                if (!SearchComparisonOperators.IsValid(op, attribute.Type))
                     return (null, $"Operator '{op}' is not valid for the Text attribute '{attribute.Name}'.");
                 if (request.StringValue == null)
                     return (null, "StringValue is required for a Text criterion.");
                 criterion.StringValue = request.StringValue;
                 break;
             case AttributeDataType.Number:
-                if (!IsOrderedOperator(op))
+                if (!SearchComparisonOperators.IsValid(op, attribute.Type))
                     return (null, $"Operator '{op}' is not valid for the Number attribute '{attribute.Name}'.");
                 if (!request.IntValue.HasValue)
                     return (null, "IntValue is required for a Number criterion.");
                 criterion.IntValue = request.IntValue;
                 break;
             case AttributeDataType.LongNumber:
-                if (!IsOrderedOperator(op))
+                if (!SearchComparisonOperators.IsValid(op, attribute.Type))
                     return (null, $"Operator '{op}' is not valid for the LongNumber attribute '{attribute.Name}'.");
                 if (!request.LongValue.HasValue)
                     return (null, "LongValue is required for a LongNumber criterion.");
                 criterion.LongValue = request.LongValue;
                 break;
             case AttributeDataType.DateTime:
-                if (!IsOrderedOperator(op))
+                if (!SearchComparisonOperators.IsValid(op, attribute.Type))
                     return (null, $"Operator '{op}' is not valid for the DateTime attribute '{attribute.Name}'.");
                 if (!request.DateTimeValue.HasValue)
                     return (null, "DateTimeValue is required for a DateTime criterion.");
                 criterion.DateTimeValue = ToUtc(request.DateTimeValue.Value);
                 break;
             case AttributeDataType.Boolean:
-                if (!IsEqualityOperator(op))
+                if (!SearchComparisonOperators.IsValid(op, attribute.Type))
                     return (null, $"Operator '{op}' is not valid for the Boolean attribute '{attribute.Name}'.");
                 if (!request.BoolValue.HasValue)
                     return (null, "BoolValue is required for a Boolean criterion.");
                 criterion.BoolValue = request.BoolValue;
                 break;
             case AttributeDataType.Guid:
-                if (!IsEqualityOperator(op))
+                if (!SearchComparisonOperators.IsValid(op, attribute.Type))
                     return (null, $"Operator '{op}' is not valid for the Guid attribute '{attribute.Name}'.");
                 if (!request.GuidValue.HasValue)
                     return (null, "GuidValue is required for a Guid criterion.");
@@ -554,20 +554,6 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
 
         return (criterion, null);
     }
-
-    private static bool IsTextOperator(SearchComparisonType op) => op is
-        SearchComparisonType.Equals or SearchComparisonType.NotEquals or
-        SearchComparisonType.StartsWith or SearchComparisonType.NotStartsWith or
-        SearchComparisonType.EndsWith or SearchComparisonType.NotEndsWith or
-        SearchComparisonType.Contains or SearchComparisonType.NotContains;
-
-    private static bool IsOrderedOperator(SearchComparisonType op) => op is
-        SearchComparisonType.Equals or SearchComparisonType.NotEquals or
-        SearchComparisonType.LessThan or SearchComparisonType.LessThanOrEquals or
-        SearchComparisonType.GreaterThan or SearchComparisonType.GreaterThanOrEquals;
-
-    private static bool IsEqualityOperator(SearchComparisonType op) => op is
-        SearchComparisonType.Equals or SearchComparisonType.NotEquals;
 
     /// <summary>
     /// Normalises a DateTime to UTC before persistence (JIM stores DateTime values in UTC).

@@ -5,6 +5,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Search;
 using JIM.Models.Staging;
+using JIM.Utilities;
 using Serilog;
 namespace JIM.Application.Servers;
 
@@ -87,6 +88,11 @@ public class ScopingEvaluationServer
     {
         if (criterion.MetaverseAttribute == null)
             return false;
+
+        // Fail fast (and loudly) if the operator cannot apply to this attribute type. Such a criterion should
+        // never have been persisted (the write path now rejects it), but if a legacy or externally-mutated rule
+        // carries one, evaluating it would silently drop objects from scope; hard-fail so it is reported instead.
+        EnsureOperatorValidForType(criterion, criterion.MetaverseAttribute.Type, criterion.MetaverseAttribute.Name);
 
         // Get the MVO attribute value
         var mvoAttributeValue = mvo.AttributeValues
@@ -192,6 +198,11 @@ public class ScopingEvaluationServer
         if (criterion.ConnectedSystemAttribute == null)
             return false;
 
+        // Fail fast (and loudly) if the operator cannot apply to this attribute type. Such a criterion should
+        // never have been persisted (the write path now rejects it), but if a legacy or externally-mutated rule
+        // carries one, evaluating it would silently drop objects from scope; hard-fail so it is reported instead.
+        EnsureOperatorValidForType(criterion, criterion.ConnectedSystemAttribute.Type, criterion.ConnectedSystemAttribute.Name);
+
         // Get the CSO attribute value
         var csoAttributeValue = cso.AttributeValues
             .FirstOrDefault(av => av.AttributeId == criterion.ConnectedSystemAttribute.Id);
@@ -222,6 +233,24 @@ public class ScopingEvaluationServer
             AttributeDataType.Guid => EvaluateGuidComparison(csoAttributeValue.GuidValue, criterion.GuidValue, criterion.ComparisonType),
             _ => false
         };
+    }
+
+    /// <summary>
+    /// Throws <see cref="InvalidOperationException"/> if the criterion's comparison operator is not applicable
+    /// to the attribute's data type (per the shared <see cref="SearchComparisonOperators"/> rule), after logging
+    /// the misconfiguration. Defence in depth: the write path rejects such combinations, so reaching here means a
+    /// rule was persisted before that guard existed or was mutated outside it; failing loudly surfaces the problem
+    /// rather than silently mis-scoping objects.
+    /// </summary>
+    private static void EnsureOperatorValidForType(SyncRuleScopingCriteria criterion, AttributeDataType type, string attributeName)
+    {
+        if (SearchComparisonOperators.IsValid(criterion.ComparisonType, type))
+            return;
+
+        Log.Error("Scoping evaluation: comparison operator {Operator} is not valid for the {Type} attribute {Attribute}; " +
+                  "the Synchronisation Rule is misconfigured", criterion.ComparisonType, type, attributeName);
+        throw new InvalidOperationException(
+            $"Comparison operator '{criterion.ComparisonType}' is not valid for the {type} attribute '{attributeName}' on scoping criteria.");
     }
 
     /// <summary>

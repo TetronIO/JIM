@@ -26,6 +26,65 @@ public class ScopingEvaluationTests
         _scopingEvaluation = new ScopingEvaluationServer();
     }
 
+    #region Invalid operator/type hardening
+
+    [Test]
+    public void IsMvoInScopeForExportRule_InvalidOperatorForAttributeType_ThrowsInvalidOperationException()
+    {
+        // Arrange: a DateTime attribute scoped with a text operator ("Starts With"). Such a criterion should
+        // never persist, but if one reaches the evaluator it must fail loudly rather than silently mis-scope.
+        var accountExpires = new MetaverseAttribute { Id = 9, Name = "Account Expires", Type = AttributeDataType.DateTime };
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            AttributeId = 9,
+            Attribute = accountExpires,
+            DateTimeValue = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        });
+
+        var exportRule = CreateExportSyncRule();
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            MetaverseAttribute = accountExpires,
+            ComparisonType = SearchComparisonType.StartsWith
+        });
+        exportRule.ObjectScopingCriteriaGroups.Add(group);
+
+        // Act & Assert
+        var ex = Assert.Throws<InvalidOperationException>(() => _scopingEvaluation.IsMvoInScopeForExportRule(mvo, exportRule));
+        Assert.That(ex!.Message, Does.Contain("Account Expires"));
+    }
+
+    [Test]
+    public void IsCsoInScopeForImportRule_InvalidOperatorForAttributeType_ThrowsInvalidOperationException()
+    {
+        // Arrange: import-side equivalent, a DateTime attribute scoped with "Contains".
+        var accountExpires = new ConnectedSystemObjectTypeAttribute { Id = 9, Name = "accountExpires", Type = AttributeDataType.DateTime };
+        var cso = CreateTestCso();
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = 9,
+            Attribute = accountExpires,
+            DateTimeValue = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        });
+
+        var importRule = CreateImportSyncRule();
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            ConnectedSystemAttribute = accountExpires,
+            ComparisonType = SearchComparisonType.Contains
+        });
+        importRule.ObjectScopingCriteriaGroups.Add(group);
+
+        // Act & Assert
+        var ex = Assert.Throws<InvalidOperationException>(() => _scopingEvaluation.IsCsoInScopeForImportRule(cso, importRule));
+        Assert.That(ex!.Message, Does.Contain("accountExpires"));
+    }
+
+    #endregion
+
     #region Export (MVO) Scoping Tests
 
     [Test]

@@ -18,6 +18,7 @@ using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using JIM.Application.Diagnostics;
 using JIM.Application.Utilities;
+using JIM.Utilities;
 using Microsoft.Extensions.Caching.Memory;
 using Serilog;
 
@@ -4222,6 +4223,41 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Validates that every scoping criterion uses a comparison operator applicable to its attribute's data type,
+    /// using the shared <see cref="SearchComparisonOperators"/> rule. Throws <see cref="ArgumentException"/> on the
+    /// first invalid combination found, so a Synchronisation Rule with, for example, "Starts With" on a DateTime
+    /// attribute can never be persisted (the evaluator could never satisfy it, silently dropping objects from scope).
+    /// Must run before <see cref="DetachExistingEntityReferences"/>, while the attribute navigation properties are
+    /// still populated. Criteria whose attribute type cannot be resolved are left for the model's own validation.
+    /// </summary>
+    private static void ValidateScopingCriteriaOperators(SyncRule syncRule)
+    {
+        foreach (var group in syncRule.ObjectScopingCriteriaGroups)
+            ValidateScopingGroupOperators(group);
+    }
+
+    private static void ValidateScopingGroupOperators(SyncRuleScopingCriteriaGroup group)
+    {
+        foreach (var criterion in group.Criteria)
+        {
+            var attributeType = criterion.GetAttributeDataType();
+            if (attributeType == null)
+                continue;
+
+            if (!SearchComparisonOperators.IsValid(criterion.ComparisonType, attributeType.Value))
+            {
+                var message = $"Comparison operator '{criterion.ComparisonType}' is not valid for the {attributeType.Value} " +
+                              $"attribute '{criterion.GetAttributeName()}' on scoping criteria.";
+                Log.Warning("CreateOrUpdateSyncRuleAsync: rejecting Synchronisation Rule; {Message}", message);
+                throw new ArgumentException(message);
+            }
+        }
+
+        foreach (var child in group.ChildGroups)
+            ValidateScopingGroupOperators(child);
+    }
+
+    /// <summary>
     /// Clears navigation properties on a new SyncRuleMapping (and its sources) that reference
     /// existing entities, so that EF Core's Add() graph traversal does not attempt to insert them
     /// as duplicates. FK IDs remain set.
@@ -4516,10 +4552,15 @@ public class ConnectedSystemServer
             throw new NullReferenceException(nameof(syncRule));
 
         Log.Verbose($"CreateOrUpdateSyncRuleAsync() called for: {syncRule}");
-        
+
         if (!syncRule.IsValid())
             return false;
-        
+
+        // reject any scoping criterion whose comparison operator is invalid for its attribute's data type
+        // (for example "Starts With" on a DateTime). Hard-fail rather than persist a criterion the evaluator
+        // can never satisfy, which would silently drop objects out of scope.
+        ValidateScopingCriteriaOperators(syncRule);
+
         // remove any mutually-exclusive property combinations
         if (syncRule.Direction == SyncRuleDirection.Import)
         {
@@ -4603,6 +4644,11 @@ public class ConnectedSystemServer
 
         if (!syncRule.IsValid())
             return false;
+
+        // reject any scoping criterion whose comparison operator is invalid for its attribute's data type
+        // (for example "Starts With" on a DateTime). Hard-fail rather than persist a criterion the evaluator
+        // can never satisfy, which would silently drop objects out of scope.
+        ValidateScopingCriteriaOperators(syncRule);
 
         if (syncRule.Direction == SyncRuleDirection.Import)
         {
