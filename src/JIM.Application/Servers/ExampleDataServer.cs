@@ -156,13 +156,22 @@ public class ExampleDataServer
         // Use an array to hold the counter - arrays are reference types so they work correctly
         // with closures and allow thread-safe access via Interlocked/Volatile
         var objectsGeneratedHolder = new int[1];
-        // Track when we last reported progress (for time-based updates)
-        var lastProgressReport = Stopwatch.StartNew();
-        var progressIntervalMs = progressUpdateInterval?.TotalMilliseconds ?? 2000;
 
         // Report initial progress (total objects to create, none processed yet)
         if (progressCallback != null)
             await progressCallback(totalObjectsToCreate, 0, "Generating objects...");
+
+        // Progress is reported from a dedicated background task, NOT from inside the parallel generation loop below.
+        // Reporting inline meant a generation thread ran the asynchronous Activity database write synchronously (via
+        // GetAwaiter().GetResult()) while holding _metaverseObjectLock, the same lock every other generation thread
+        // needs to add its object. That serialised the whole loop behind a blocking I/O call and starved the thread
+        // pool, so generating the built-in 10,000-object template crawled at roughly one object per second at ~0% CPU.
+        // The loop now only increments the atomic counter; this task samples it on an interval and reports
+        // asynchronously, holding no lock. It is cancelled once generation completes (before any further database work).
+        using var progressReporterCts = new CancellationTokenSource();
+        var progressReporterTask = progressCallback == null
+            ? Task.CompletedTask
+            : ReportGenerationProgressAsync(progressCallback, totalObjectsToCreate, objectsGeneratedHolder, progressUpdateInterval ?? TimeSpan.FromSeconds(2), progressReporterCts.Token);
 
         // object type dependency graph needs considering
         // for now we should probably just advise people to add template object types in reverse order to how they're referenced.
@@ -289,27 +298,10 @@ public class ExampleDataServer
                     lock (_metaverseObjectLock)
                         create.Add(metaverseObject);
 
-                    var currentCount = Interlocked.Add(ref totalObjectsCreated, 1);
+                    // Atomic counters only; the background reporter (see above) reads objectsGeneratedHolder and does
+                    // the asynchronous progress write off this thread, so the loop never blocks on I/O.
+                    Interlocked.Increment(ref totalObjectsCreated);
                     Interlocked.Increment(ref objectsGeneratedHolder[0]);
-
-                    // Check if we should report progress (time-based, inside the parallel loop)
-                    // Only one thread will win the race to report, others will see the reset stopwatch
-                    if (progressCallback != null && lastProgressReport.ElapsedMilliseconds >= progressIntervalMs)
-                    {
-                        lock (_metaverseObjectLock) // Reuse existing lock to avoid creating another
-                        {
-                            // Double-check after acquiring lock
-                            if (lastProgressReport.ElapsedMilliseconds >= progressIntervalMs)
-                            {
-                                var progress = objectsGeneratedHolder[0];
-                                Log.Debug("ExecuteTemplateAsync: Progress update - {Current}/{Total} objects generated",
-                                    progress, totalObjectsToCreate);
-                                lastProgressReport.Restart();
-                                // Wait for the database write to complete so UI can see the update
-                                progressCallback(totalObjectsToCreate, progress, "Generating objects...").GetAwaiter().GetResult();
-                            }
-                        }
-                    }
                 });
 
             // user manager attributes need assigning after all users have been prepared
@@ -318,6 +310,11 @@ public class ExampleDataServer
             objectTypeStopWatch.Stop();
             Log.Information($"ExecuteTemplateAsync: It took {objectTypeStopWatch.Elapsed} to process the {objectType.MetaverseObjectType.Name} Metaverse Object Type");
         }
+
+        // generation is complete: stop the background progress reporter before the change-history and persistence work
+        // below touches this database context, and surface any failure the reporter captured.
+        progressReporterCts.Cancel();
+        await progressReporterTask;
 
         // ensure that attribute population percentage values are respected
         // do this by assigning all attributes with values (done), then go and randomly delete the required amount
@@ -422,6 +419,34 @@ public class ExampleDataServer
         metaverseObjectsToCreate.Clear();
 
         return totalObjectsCreated;
+    }
+
+    /// <summary>
+    /// Periodically reports generation progress (the current value of the shared atomic object counter) to the supplied
+    /// callback from a dedicated task, so the parallel generation loop never blocks on the asynchronous progress write.
+    /// Runs until cancelled, which the caller does once generation has finished. Any failure other than cancellation
+    /// faults the returned task and is surfaced when the caller awaits it.
+    /// </summary>
+    private static async Task ReportGenerationProgressAsync(
+        Func<int, int, string?, Task> progressCallback,
+        int totalObjectsToCreate,
+        int[] objectsGeneratedHolder,
+        TimeSpan interval,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(interval, cancellationToken);
+                var generated = Volatile.Read(ref objectsGeneratedHolder[0]);
+                await progressCallback(totalObjectsToCreate, generated, "Generating objects...");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // expected when generation completes and the reporter is cancelled
+        }
     }
 
     /// <summary>
