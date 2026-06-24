@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Application.Servers;
 using JIM.Application.Services;
@@ -36,6 +37,14 @@ public class JimApplication : IDisposable
     /// </summary>
     public ISyncRepository SyncRepo { get; }
 
+    /// <summary>
+    /// The expression evaluator (DynamicExpresso) shared with Synchronisation Rule Attribute Flows and used by
+    /// example data generation to evaluate attribute-generation expressions. Defaults to a new
+    /// <see cref="DynamicExpressoEvaluator"/> when one is not supplied; the underlying compiled-expression cache
+    /// is static, so the fallback shares it with every other instance.
+    /// </summary>
+    public IExpressionEvaluator ExpressionEvaluator { get; }
+
     internal SeedingServer Seeding { get; }
     public ActivityServer Activities { get; }
     public AuthServer Auth { get; }
@@ -57,8 +66,9 @@ public class JimApplication : IDisposable
     public SystemServer System { get; }
     public TaskingServer Tasking { get; }
 
-    public JimApplication(IRepository dataRepository, IMemoryCache? cache = null, ISyncRepository? syncRepository = null)
+    public JimApplication(IRepository dataRepository, IMemoryCache? cache = null, ISyncRepository? syncRepository = null, IExpressionEvaluator? expressionEvaluator = null)
     {
+        ExpressionEvaluator = expressionEvaluator ?? new DynamicExpressoEvaluator();
         Activities = new ActivityServer(this);
         Auth = new AuthServer(this);
         Certificates = new CertificateServer(this);

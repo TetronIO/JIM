@@ -51,6 +51,17 @@ public class ExampleDataTemplateAttribute
     public string? Pattern { get; set; }
 
     /// <summary>
+    /// An optional expression (evaluated by the DynamicExpresso expression engine, the same one used by
+    /// Synchronisation Rule Attribute Flows) that constructs this attribute's value by reading and transforming
+    /// other already-generated attributes on the same object via the mv["Attribute Name"] accessor, i.e.
+    /// Lower(mv["First Name"]) + "." + Lower(mv["Last Name"]) + "@" + Lower(Replace(mv["Company"], " ", "")) + ".io".
+    /// Only valid on Text attributes, and mutually exclusive with Pattern, ExampleDataSetInstances and WeightedStringValues
+    /// (an expression fully determines the value). Attributes referenced by an expression are generated first; see
+    /// ExampleDataServer's attribute ordering.
+    /// </summary>
+    public string? Expression { get; set; }
+
+    /// <summary>
     /// The example data sets that can be used to populate a string value.
     /// Multiple example data sets can be supplied with no Pattern value and an even distribution will be used from both sets, i.e. male/female firstname data sets.
     /// One or more can be supplied with a Pattern value and index-based pattern variables can be used to say how the ExampleDataSets should be used, 
@@ -109,13 +120,20 @@ public class ExampleDataTemplateAttribute
     public bool IsUsingStrings()
     {
         return !string.IsNullOrEmpty(Pattern) ||
+               !string.IsNullOrEmpty(Expression) ||
                ExampleDataSetInstances.Count > 0 ||
                WeightedStringValues is { Count: > 0 };
+    }
+
+    public bool IsUsingExpression()
+    {
+        return !string.IsNullOrEmpty(Expression);
     }
 
     public void Validate()
     {
         var usingPattern = !string.IsNullOrEmpty(Pattern);
+        var usingExpression = !string.IsNullOrEmpty(Expression);
         var usingExampleData = ExampleDataSetInstances.Count > 0;
         var usingMvaRefMinMaxAttributes = MvaRefMinAssignments.HasValue || MvaRefMaxAssignments.HasValue;
         var usingWeightedStringValues = WeightedStringValues is { Count: > 0 };
@@ -164,7 +182,15 @@ public class ExampleDataTemplateAttribute
             // Example Data can only be used with string attributes
             if (usingExampleData)
                 throw new ExampleDataTemplateAttributeException("Not string but using example data");
+
+            // Expressions can only be used with string attributes
+            if (usingExpression)
+                throw new ExampleDataTemplateAttributeException("Not string but using expression");
         }
+
+        // an expression fully determines the value, so it cannot be combined with other string-value mechanisms
+        if (usingExpression && (usingPattern || usingExampleData || usingWeightedStringValues))
+            throw new ExampleDataTemplateAttributeException("Expression cannot be combined with Pattern, ExampleDataSets or WeightedStringValues");
 
         if (attributeDataType != AttributeDataType.Reference)
         {
@@ -181,8 +207,8 @@ public class ExampleDataTemplateAttribute
         if (attributeDataType != AttributeDataType.Text && usingWeightedStringValues)
             throw new ExampleDataTemplateAttributeException("WeightedStringValues can only be used with text attribute data types");
 
-        if (attributeDataType == AttributeDataType.Text && !usingPattern && !usingExampleData && !usingWeightedStringValues && !IsUsingNumbers())
-            throw new ExampleDataTemplateAttributeException("String but not using pattern, example data, weighted string values or numbers");
+        if (attributeDataType == AttributeDataType.Text && !usingPattern && !usingExpression && !usingExampleData && !usingWeightedStringValues && !IsUsingNumbers())
+            throw new ExampleDataTemplateAttributeException("String but not using pattern, expression, example data, weighted string values or numbers");
 
         if (attributeDataType == AttributeDataType.Boolean)
         {

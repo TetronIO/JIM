@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ✨ Example data generation templates can now construct a text attribute from an expression, using the same `mv["Attribute Name"]` syntax and function library as Synchronisation Rule Attribute Flows, so a generated value can be transformed from other attributes on the same object (for example an email domain derived from the assigned company). Referenced attributes are generated first, and circular references are detected up front.
+
 ## [0.12.0] - 2026-06-23
 
 ### Added

@@ -6,6 +6,7 @@ using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.ExampleData.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Expressions;
 using JIM.Models.Utility;
 using Serilog;
 using System.Diagnostics;
@@ -198,6 +199,10 @@ public class ExampleDataServer
             Log.Verbose($"ExecuteTemplateAsync: Processing Metaverse Object Type: {objectType.MetaverseObjectType.Name}");
             var trackers = dataGenerationValueTrackers;
             var create = metaverseObjectsToCreate;
+            // Order attributes so that any attribute an expression (or conditional dependency) references is generated
+            // first. Computed once per object type (the dependency graph is static across generated objects), and any
+            // circular dependency throws here, before generation begins. See ExampleDataObjectType.
+            var orderedTemplateAttributes = objectType.GetTemplateAttributesInDependencyOrder();
             Parallel.For(0, objectType.ObjectsToCreate,
                 index =>
                 {
@@ -206,8 +211,7 @@ public class ExampleDataServer
                         Type = objectType.MetaverseObjectType,
                         Origin = MetaverseObjectOrigin.Internal
                     };
-                    // make sure we process attributes with no dependencies first
-                    foreach (var templateAttribute in objectType.TemplateAttributes.OrderBy(q => q.AttributeDependency))
+                    foreach (var templateAttribute in orderedTemplateAttributes)
                     {
                         if (cancellationToken.IsCancellationRequested)
                         {
@@ -462,6 +466,18 @@ public class ExampleDataServer
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
+        // expression-based generation: evaluate the expression against the object's already-generated attributes.
+        // handled before the pattern/data-set paths because an expression fully determines the value.
+        if (dataGenerationTemplateAttribute.IsUsingExpression())
+        {
+            metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
+            {
+                Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
+                StringValue = EvaluateAttributeExpression(metaverseObject, dataGenerationTemplateAttribute)
+            });
+            return;
+        }
+
         // a string attribute can have a string type or number type value assigned
         if (dataGenerationTemplateAttribute.IsUsingStrings())
         {
@@ -549,6 +565,65 @@ public class ExampleDataServer
         {
             throw new ArgumentException("dataGenerationTemplateAttribute isn't using strings or numbers on a string attribute type");
         }
+    }
+
+    /// <summary>
+    /// Evaluates an attribute's generation expression against the Metaverse Object's already-generated attribute values
+    /// (exposed to the expression via the mv["Attribute Name"] accessor) and returns the resulting string.
+    /// Reuses the shared DynamicExpresso evaluator. A failed evaluation throws, failing the template execution with an
+    /// attributed error rather than silently producing a blank value.
+    /// </summary>
+    private string EvaluateAttributeExpression(MetaverseObject metaverseObject, ExampleDataTemplateAttribute templateAttribute)
+    {
+        var attributeName = templateAttribute.MetaverseAttribute!.Name;
+        var context = BuildExpressionContext(metaverseObject);
+
+        // Test() evaluates and captures any failure as a result rather than throwing, so we attribute the error here.
+        var result = Application.ExpressionEvaluator.Test(templateAttribute.Expression!, context);
+        if (!result.IsValid)
+            throw new InvalidDataException($"ExampleDataServer: failed to evaluate generation expression for attribute '{attributeName}': {result.ErrorMessage}");
+
+        return result.Result?.ToString() ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Builds an <see cref="ExpressionContext"/> exposing the Metaverse Object's already-generated attribute values via
+    /// the mv accessor. There is no Connected System Object during generation, so the cs accessor is empty.
+    /// </summary>
+    private static ExpressionContext BuildExpressionContext(MetaverseObject metaverseObject)
+    {
+        var mv = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var attributeValues in metaverseObject.AttributeValues.Where(av => av.Attribute != null).GroupBy(av => av.Attribute.Name))
+        {
+            var values = attributeValues.ToList();
+            if (values.Count == 1)
+                mv[attributeValues.Key] = GetExpressionScalarValue(values[0]);
+            else
+                mv[attributeValues.Key] = values.Select(GetExpressionScalarValue).Where(v => v != null).Select(v => v!.ToString()).ToArray();
+        }
+
+        return new ExpressionContext(mv);
+    }
+
+    /// <summary>
+    /// Returns the most appropriate scalar value of a Metaverse Object attribute value for use in an expression.
+    /// </summary>
+    private static object? GetExpressionScalarValue(MetaverseObjectAttributeValue attributeValue)
+    {
+        if (attributeValue.StringValue != null)
+            return attributeValue.StringValue;
+        if (attributeValue.IntValue.HasValue)
+            return attributeValue.IntValue.Value;
+        if (attributeValue.LongValue.HasValue)
+            return attributeValue.LongValue.Value;
+        if (attributeValue.BoolValue.HasValue)
+            return attributeValue.BoolValue.Value;
+        if (attributeValue.DateTimeValue.HasValue)
+            return attributeValue.DateTimeValue.Value;
+        if (attributeValue.GuidValue.HasValue)
+            return attributeValue.GuidValue.Value;
+
+        return null;
     }
 
     private static void GenerateMetaverseGuidValue(MetaverseObject metaverseObject, ExampleDataTemplateAttribute dataGenerationTemplateAttribute)
