@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ Example data generation templates can now construct a text attribute from an expression, using the same `mv["Attribute Name"]` syntax and function library as Synchronisation Rule Attribute Flows, so a generated value can be transformed from other attributes on the same object (for example an email domain derived from the assigned company). Referenced attributes are generated first, and circular references are detected up front.
 
+### Performance
+
+- ⚡ Generating example data is dramatically faster for large templates: the built-in "Users & Groups" template (10,000 users) now completes generation in seconds rather than minutes. Previously the generator rescanned an ever-growing list of already-used values for every value it produced, and serialised the parallel generation loop on a single lock, so the time grew with the square of the object count; unique and sequential values are now tracked with constant-time lookups.
+
 ## [0.12.0] - 2026-06-23
 
 ### Added

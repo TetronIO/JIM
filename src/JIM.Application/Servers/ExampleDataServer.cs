@@ -22,7 +22,6 @@ public class ExampleDataServer
     #endregion
 
     #region members
-    private readonly object _valuesLock = new();
     private readonly object _metaverseObjectLock = new();
     // The expression evaluator used to evaluate attribute-generation expressions. Instantiated directly, as
     // ExportEvaluationServer and the worker's sync processor also do; the underlying compiled-expression cache is static.
@@ -171,7 +170,7 @@ public class ExampleDataServer
 
         var random = new Random();
         var metaverseObjectsToCreate = new List<MetaverseObject>();
-        var dataGenerationValueTrackers = new List<ExampleDataValueTracker>();
+        var trackerStore = new ExampleDataValueTrackerStore();
             
         // we've had issues with EF not returning values for example datasets when retrieving the template
         // so we're going to get all the example datasets referenced in a template separately and passing them in as needed.
@@ -202,7 +201,7 @@ public class ExampleDataServer
 
             var objectTypeStopWatch = Stopwatch.StartNew();
             Log.Verbose($"ExecuteTemplateAsync: Processing Metaverse Object Type: {objectType.MetaverseObjectType.Name}");
-            var trackers = dataGenerationValueTrackers;
+            var trackers = trackerStore;
             var create = metaverseObjectsToCreate;
             // Order attributes so that any attribute an expression (or conditional dependency) references is generated
             // first. Computed once per object type (the dependency graph is static across generated objects), and any
@@ -421,7 +420,6 @@ public class ExampleDataServer
 
         // trying to help garbage collection along. data generation results in a lot of ram usage.
         metaverseObjectsToCreate.Clear();
-        dataGenerationValueTrackers.Clear();
 
         return totalObjectsCreated;
     }
@@ -466,7 +464,7 @@ public class ExampleDataServer
         ExampleDataTemplateAttribute dataGenerationTemplateAttribute,
         IEnumerable<ExampleDataSet> exampleDataSets,
         Random random,
-        List<ExampleDataValueTracker> dataGenerationValueTrackers)
+        ExampleDataValueTrackerStore trackerStore)
     {
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
@@ -537,8 +535,8 @@ public class ExampleDataServer
                 // later on we can look at encapsulation, i.e. functions around vars, and functions around functions.
                 // replace attribute vars first, then check system vars, i.e. uniqueness ids against complete generated string.
                 output = ReplaceAttributeVariables(metaverseObject, dataGenerationTemplateAttribute.Pattern);
-                output = ReplaceSystemVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, dataGenerationValueTrackers, output);
-                output = ReplaceExampleDataSetVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, dataGenerationTemplateAttribute.ExampleDataSetInstances, dataGenerationValueTrackers, random, output);
+                output = ReplaceSystemVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, trackerStore, output);
+                output = ReplaceExampleDataSetVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, dataGenerationTemplateAttribute.ExampleDataSetInstances, trackerStore, random, output);
             }
             else if (dataGenerationTemplateAttribute.WeightedStringValues is { Count: > 0 })
             {
@@ -559,7 +557,7 @@ public class ExampleDataServer
         }
         else if (dataGenerationTemplateAttribute.IsUsingNumbers())
         {
-            var numberValue = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, dataGenerationValueTrackers);
+            var numberValue = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, trackerStore);
             metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
             {
                 Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
@@ -647,13 +645,13 @@ public class ExampleDataServer
         MetaverseObject metaverseObject,
         ExampleDataTemplateAttribute dataGenerationTemplateAttribute,
         Random random,
-        List<ExampleDataValueTracker> dataGenerationValueTrackers)
+        ExampleDataValueTrackerStore trackerStore)
     {
         // todo: make use of data gen value trackers to get next highest value
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
-        var value = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, dataGenerationValueTrackers);
+        var value = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, trackerStore);
         metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
             Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
@@ -665,14 +663,14 @@ public class ExampleDataServer
         MetaverseObject metaverseObject,
         ExampleDataTemplateAttribute dataGenerationTemplateAttribute,
         Random random,
-        List<ExampleDataValueTracker> dataGenerationValueTrackers)
+        ExampleDataValueTrackerStore trackerStore)
     {
         // todo: make use of data gen value trackers to get next highest value
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
         // Generate a long value - for now, use int generator and cast to long
-        var value = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, dataGenerationValueTrackers);
+        var value = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, trackerStore);
         metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
             Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
@@ -908,10 +906,10 @@ public class ExampleDataServer
         return textToProcess;
     }
 
-    private string ReplaceSystemVariables(
+    private static string ReplaceSystemVariables(
         MetaverseObject metaverseObject,
         MetaverseAttribute metaverseAttribute,
-        List<ExampleDataValueTracker> dataGenerationValueTrackers,
+        ExampleDataValueTrackerStore trackerStore,
         string textToProcess)
     {
         // match system variables
@@ -924,47 +922,34 @@ public class ExampleDataServer
             var variableName = match.Value[1..^1];
 
             // keeping these as strings for now. They will need evolving into part of the Functions feature at some point
-            if (variableName != "UniqueInt") 
+            if (variableName != "UniqueInt")
                 continue;
-                
+
             // is the string value unique amongst all MetaverseObjects of the same type?
             // if so, replace the system variable with an empty string
             // if not, add a uniqueness in in place of the system variable
 
             // get the text value without any unique int added, i.e. "joe.bloggs@demo.tetron.io"
             var textWithoutSystemVar = textToProcess.Replace(match.Value, string.Empty);
-                
-            lock (_valuesLock)
-            {
-                // have we already generated this value, and therefore need to add a unique int to it?
-                var uniqueIntTracker = dataGenerationValueTrackers.SingleOrDefault(q => q.ObjectTypeId == metaverseObject.Type.Id && q.AttributeId == metaverseAttribute.Id && q.StringValue == textWithoutSystemVar);
-                if (uniqueIntTracker == null)
-                {
-                    // this is a unique value, not previously assigned. it does not need a unique int added.
-                    textToProcess = textWithoutSystemVar;
 
-                    // add it to the tracker
-                    dataGenerationValueTrackers.Add(new ExampleDataValueTracker { ObjectTypeId = metaverseObject.Type.Id, AttributeId = metaverseAttribute.Id, StringValue = textWithoutSystemVar, LastIntAssigned = 1 });
-                }
-                else
-                {
-                    // this is not a unique value, we've generated it before. we need a unique int added.
-                    // increase the tracker last int assigned value by one as well for next time we generate the same value again
-                    uniqueIntTracker.LastIntAssigned += 1;
-                            
-                    textToProcess = textToProcess.Replace(match.Value, uniqueIntTracker.LastIntAssigned.ToString());
-                }
-            }
+            // ask the tracker how many times this base value has been generated for this object type and attribute.
+            // 1 means it is unique so far, so we emit it without a unique int. 2, 3, ... means we have generated it
+            // before, so we append that integer to disambiguate. This is atomic, so concurrent generation of the same
+            // base value still yields distinct suffixes.
+            var occurrence = trackerStore.NextUniqueIntSuffix(metaverseObject.Type.Id, metaverseAttribute.Id, textWithoutSystemVar);
+            textToProcess = occurrence == 1
+                ? textWithoutSystemVar
+                : textToProcess.Replace(match.Value, occurrence.ToString());
         }
 
         return textToProcess;
     }
 
-    private string ReplaceExampleDataSetVariables(
+    private static string ReplaceExampleDataSetVariables(
         MetaverseObject metaverseObject,
         MetaverseAttribute metaverseAttribute,
         List<ExampleDataSetInstance> exampleDataSetInstances,
-        List<ExampleDataValueTracker> dataGenerationValueTrackers,
+        ExampleDataValueTrackerStore trackerStore,
         Random random,
         string textToProcess)
     {
@@ -1010,31 +995,23 @@ public class ExampleDataServer
                 completeGeneratedValue = completeGeneratedValue.Replace(match.Value, randomValue);
             }
 
-            lock (_valuesLock)
+            // atomically reserve the generated value for this object type and attribute. if it was already used,
+            // TryReserveValue returns false and we loop round to generate another candidate; otherwise it is now
+            // reserved and we keep it. The check-and-reserve is atomic, so two threads that independently generate the
+            // same value cannot both keep it.
+            if (trackerStore.TryReserveValue(metaverseObject.Type.Id, metaverseAttribute.Id, completeGeneratedValue))
             {
-                // is the generated value unique? exit if so
-                var uniqueStringTracker = dataGenerationValueTrackers.SingleOrDefault(q => q.ObjectTypeId == metaverseObject.Type.Id && q.AttributeId == metaverseAttribute.Id && q.StringValue == completeGeneratedValue);
-                if (uniqueStringTracker == null)
-                {
-                    // generated value is unique
-                    isGeneratedValueUnique = true;
-                    textToProcess = completeGeneratedValue;
-
-                    // add the generated value to the tracker so we don't end up generating and assigning it again
-                    dataGenerationValueTrackers.Add(new ExampleDataValueTracker { ObjectTypeId = metaverseObject.Type.Id, AttributeId = metaverseAttribute.Id, StringValue = textToProcess });
-                }
-                else
-                {
-                    // this is not a unique value, we've generated it before. go round again until it is unique
-                    //Log.Verbose($"ReplaceExampleDataSetVariables: Duplicate generated value detected. Skipping: {completeGeneratedValue}");
-                }
+                // generated value is unique
+                isGeneratedValueUnique = true;
+                textToProcess = completeGeneratedValue;
             }
+            // else: this is not a unique value, we've generated it before. go round again until it is unique.
         }
 
         return textToProcess;
     }
 
-    private int GenerateNumberValue(MetaverseObjectType metaverseObjectType, ExampleDataTemplateAttribute dataGenTemplateAttribute, Random random, ICollection<ExampleDataValueTracker> trackers)
+    private static int GenerateNumberValue(MetaverseObjectType metaverseObjectType, ExampleDataTemplateAttribute dataGenTemplateAttribute, Random random, ExampleDataValueTrackerStore trackerStore)
     {
         var value = 1;
         int attributeId;
@@ -1064,31 +1041,11 @@ public class ExampleDataServer
         }
         else
         {
-            lock (_valuesLock)
-            {
-                // sequential numbers
-                // query last value used for this object type and attribute. totally inefficient, but let's see what the performance is like first
-                var tracker = trackers.SingleOrDefault(t => t.ObjectTypeId == metaverseObjectType.Id && dataGenTemplateAttribute.MetaverseAttribute != null && t.AttributeId == dataGenTemplateAttribute.MetaverseAttribute.Id);
-                if (tracker is { LastIntAssigned: not null })
-                {
-                    // we've assigned a value for this attribute already. increment the value and use it
-                    tracker.LastIntAssigned += 1;
-                    value = tracker.LastIntAssigned.Value;
-                }
-                else
-                {
-                    // we've not assigned a value to this attribute yet
-                    if (dataGenTemplateAttribute.MinNumber.HasValue)
-                        value = dataGenTemplateAttribute.MinNumber.Value;
-
-                    trackers.Add(new ExampleDataValueTracker
-                    {
-                        ObjectTypeId = metaverseObjectType.Id,
-                        AttributeId = attributeId,
-                        LastIntAssigned = value
-                    });
-                }
-            }
+            // sequential numbers: the first value generated for this object type and attribute is the configured
+            // minimum (or 1 if unset), and each subsequent value is one higher. The store assigns these atomically
+            // with an O(1) keyed lookup, so the parallel generation loop is not serialised on a single lock.
+            var seed = dataGenTemplateAttribute.MinNumber ?? 1;
+            value = trackerStore.NextSequential(metaverseObjectType.Id, attributeId, seed);
         }
 
         return value;
