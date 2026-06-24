@@ -126,6 +126,18 @@ Lower(mv["First Name"]) + "." + Lower(mv["Last Name"]) + "@" + Lower(Replace(mv[
 
 - None blocking. Builds entirely on the existing `IExpressionEvaluator` infrastructure.
 
+## Alternatives Considered
+
+### Retiring `Pattern` entirely in favour of `Expression`
+
+Considered and **deferred** (not in scope for this feature). The appeal is one value-construction concept and a single execution path. The reasons not to do it now:
+
+- **It is a code simplification, not a product one.** Templates are code-defined with no authoring UI, so there is no user-facing "Pattern or Expression" choice to eliminate; the only saving is internal (the regex `Replace*` helpers in `ExampleDataServer`). The bar is "is the churn worth the dead code", and it is marginal while `Expression` has not yet shipped.
+- **Pattern does something expressions cannot.** Beyond `{Attribute Name}` interpolation (which `mv["..."]` already covers) and `[UniqueInt]` (which is leaving Pattern anyway under the uniqueness-flag decision), Pattern's `{0}`/`{1}` syntax selects a **random value from the Nth attached ExampleDataSet**, the foundational generation primitive, used in seeding (e.g. `"{0} {1} {2} {3}"`). Expressions have no equivalent. Replacing it means adding a dataset-selection function (e.g. `DataSet(0)`) and threading the ExampleDataSets + an RNG into `ExpressionContext`. Those are **generation-only** functions that make no sense in a Synchronisation Rule, which erodes the "one consistent language" rationale.
+- **Readability regression for the dominant case.** `{First Name} {Last Name}` reads better than `mv["First Name"] + " " + mv["Last Name"]`; example data is a demo/POC convenience, so verbosity in the common case is a real cost.
+
+If convergence to a single engine is wanted later, the clean mechanism is to make **`Pattern` compile to an `Expression`** at save/seed time (Expression as the canonical IR, one execution path, Pattern preserved as readable front-end syntax), not to delete Pattern. That is a larger, separate change and is gated on first solving random dataset selection in expressions.
+
 ## Open Questions
 
 1. **Uniqueness mechanism.** Keep the `[UniqueInt]` token (and make expressions emit it, which composes awkwardly) versus promote uniqueness to a first-class per-attribute flag that post-processes both Pattern and Expression output. Recommendation: the **flag** - it is cleaner, works for both mechanisms, and removes a token-parsing edge case. The existing `[UniqueInt]` token stays supported for back-compat on patterns.
