@@ -1,8 +1,8 @@
 # Attribute Priority Design Document
 
-- **Status:** Doing (design approved; implementation deferred)
+- **Status:** Doing (design approved; Phase 1 schema/model/API landed, engine + UI deferred)
 - **Issue:** [#91](https://github.com/TetronIO/JIM/issues/91)
-- **Last Updated**: 2026-06-19
+- **Last Updated**: 2026-06-24
 
 ## Overview
 
@@ -665,13 +665,13 @@ Not a sub-issue: **#846** (holistic Guardrails) is deliberately *out of scope* (
 
 - [x] Add `ContributedBySystemId` scalar FK to `MetaverseObjectAttributeValue` (prerequisite; Feb 2026, commit `41116255`)
 - [x] Thread `contributingSystemId` through all 14 attribute creation paths in `SyncEngine.AttributeFlow.cs` (then `SyncRuleMappingProcessor`)
-- [ ] Add `Priority` property to `SyncRuleMapping` model (default: int.MaxValue)
-- [ ] Add `NullIsValue` property to `SyncRuleMapping` model (default: false)
-- [ ] Add `ContributedBySyncRuleId` FK to `MetaverseObjectAttributeValue` (winning rule provenance); thread it through the same attribute creation paths that set `ContributedBySystemId`
-- [ ] Add `NullValue` boolean to `MetaverseObjectAttributeValue` (default: false; asserted-null marker)
-- [ ] Create database migration
-- [ ] Update API DTOs
-- [ ] Add API endpoint to get/set attribute priority order
+- [x] Add `Priority` property to `SyncRuleMapping` model (default: int.MaxValue)
+- [x] Add `NullIsValue` property to `SyncRuleMapping` model (default: false)
+- [~] Add `ContributedBySyncRuleId` FK to `MetaverseObjectAttributeValue` (winning rule provenance): model property, nav, `OnDelete(SetNull)` config and migration **done**; threading it through the attribute creation paths that set `ContributedBySystemId` remains Phase 2 engine work
+- [x] Add `NullValue` boolean to `MetaverseObjectAttributeValue` (default: false; asserted-null marker)
+- [x] Create database migration (`20260624174100_AddAttributePriorityAndProvenance`)
+- [x] Update API DTOs (`SyncRuleMappingDto.Priority`/`NullIsValue`; `CreateSyncRuleMappingRequest.NullIsValue`)
+- [x] Add API endpoint to get/set attribute priority order (`GET`/`PUT /synchronisation/attribute-priority/{metaverseObjectTypeId}/{metaverseAttributeId}`; transactional renumber with complete-set validation; unit-tested)
 
 #### Phase 2: Attribute Priority Logic
 

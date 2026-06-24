@@ -1888,6 +1888,12 @@ public class SynchronisationController(
                 mapping.InboundValueProcessing = request.InboundValueProcessing.Value;
             if (request.CaseNormalisation.HasValue)
                 mapping.CaseNormalisation = request.CaseNormalisation.Value;
+
+            // "Null is a value" is a property of this mapping (#91), set at creation. Priority is left at its
+            // safe-addition default (int.MaxValue) so the new contribution never wins until ordered via the
+            // attribute-priority-order endpoint.
+            if (request.NullIsValue.HasValue)
+                mapping.NullIsValue = request.NullIsValue.Value;
         }
         else // Export
         {
@@ -2026,6 +2032,90 @@ public class SynchronisationController(
         _logger.LogInformation("Deleted mapping {MappingId} from Synchronisation Rule {SyncRuleId}", mappingId, syncRuleId);
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Get an attribute's priority order
+    /// </summary>
+    /// <remarks>
+    /// Returns the ordered list of import contributions to a single Metaverse attribute for a single Metaverse
+    /// Object Type (#91), highest priority first. Disabled Synchronisation Rules are included; they hold position
+    /// but never contribute during resolution. An empty list means the attribute has no import contributors.
+    /// </remarks>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the priority list.</param>
+    /// <param name="metaverseAttributeId">The target Metaverse attribute.</param>
+    [HttpGet("attribute-priority/{metaverseObjectTypeId:int}/{metaverseAttributeId:int}", Name = "GetAttributePriorityOrder")]
+    [ProducesResponseType(typeof(AttributePriorityOrderDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetAttributePriorityOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId)
+    {
+        _logger.LogTrace("Requested attribute priority order for Metaverse attribute {AttributeId} on object type {ObjectTypeId}", metaverseAttributeId, metaverseObjectTypeId);
+
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(metaverseAttributeId);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {metaverseAttributeId} not found."));
+
+        var mappings = await _application.ConnectedSystems.GetAttributePriorityOrderAsync(metaverseObjectTypeId, metaverseAttributeId);
+        return Ok(AttributePriorityOrderDto.FromEntities(metaverseObjectTypeId, metaverseAttributeId, mappings));
+    }
+
+    /// <summary>
+    /// Set an attribute's priority order
+    /// </summary>
+    /// <remarks>
+    /// Transactionally renumbers the priorities of all import contributions to a single Metaverse attribute for a
+    /// single Metaverse Object Type (#91), and applies each contribution's "Null is a value" flag. The request must
+    /// list every current contributing mapping for the attribute exactly once, in the desired priority order
+    /// (highest first).
+    /// </remarks>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the priority list.</param>
+    /// <param name="metaverseAttributeId">The target Metaverse attribute.</param>
+    /// <param name="request">The contributors in the desired priority order.</param>
+    /// <response code="200">Priority order updated successfully; returns the updated order.</response>
+    /// <response code="400">The requested order does not match the attribute's current contributor set.</response>
+    /// <response code="404">Metaverse attribute not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("attribute-priority/{metaverseObjectTypeId:int}/{metaverseAttributeId:int}", Name = "SetAttributePriorityOrder")]
+    [ProducesResponseType(typeof(AttributePriorityOrderDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetAttributePriorityOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, [FromBody] SetAttributePriorityOrderRequest request)
+    {
+        _logger.LogInformation("Setting attribute priority order for Metaverse attribute {AttributeId} on object type {ObjectTypeId}", metaverseAttributeId, metaverseObjectTypeId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for attribute priority order update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(metaverseAttributeId);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {metaverseAttributeId} not found."));
+
+        var orderedContributors = request.Contributors
+            .Select(c => (c.MappingId, c.NullIsValue))
+            .ToList();
+
+        try
+        {
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.ConnectedSystems.SetAttributePriorityOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors, apiKey);
+            else
+                await _application.ConnectedSystems.SetAttributePriorityOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors, initiatedBy);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to set attribute priority order: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+
+        var updated = await _application.ConnectedSystems.GetAttributePriorityOrderAsync(metaverseObjectTypeId, metaverseAttributeId);
+        return Ok(AttributePriorityOrderDto.FromEntities(metaverseObjectTypeId, metaverseAttributeId, updated));
     }
 
     #endregion
