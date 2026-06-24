@@ -39,11 +39,11 @@ public class JimApplication : IDisposable
 
     /// <summary>
     /// The expression evaluator (DynamicExpresso) shared with Synchronisation Rule Attribute Flows and used by
-    /// example data generation to evaluate attribute-generation expressions. Defaults to a new
-    /// <see cref="DynamicExpressoEvaluator"/> when one is not supplied; the underlying compiled-expression cache
-    /// is static, so the fallback shares it with every other instance.
+    /// example data generation to evaluate attribute-generation expressions. Instantiated directly (as
+    /// <see cref="ExportEvaluationServer"/> and the worker's sync processor also do); the underlying
+    /// compiled-expression cache is static, so every instance shares it.
     /// </summary>
-    public IExpressionEvaluator ExpressionEvaluator { get; }
+    public IExpressionEvaluator ExpressionEvaluator { get; } = new DynamicExpressoEvaluator();
 
     internal SeedingServer Seeding { get; }
     public ActivityServer Activities { get; }
@@ -66,9 +66,8 @@ public class JimApplication : IDisposable
     public SystemServer System { get; }
     public TaskingServer Tasking { get; }
 
-    public JimApplication(IRepository dataRepository, IMemoryCache? cache = null, ISyncRepository? syncRepository = null, IExpressionEvaluator? expressionEvaluator = null)
+    public JimApplication(IRepository dataRepository, IMemoryCache? cache = null, ISyncRepository? syncRepository = null)
     {
-        ExpressionEvaluator = expressionEvaluator ?? new DynamicExpressoEvaluator();
         Activities = new ActivityServer(this);
         Auth = new AuthServer(this);
         Certificates = new CertificateServer(this);
