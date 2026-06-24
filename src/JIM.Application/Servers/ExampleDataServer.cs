@@ -1,12 +1,14 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Expressions;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.ExampleData.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Expressions;
+using JIM.Models.Interfaces;
 using JIM.Models.Utility;
 using Serilog;
 using System.Diagnostics;
@@ -22,6 +24,9 @@ public class ExampleDataServer
     #region members
     private readonly object _valuesLock = new();
     private readonly object _metaverseObjectLock = new();
+    // The expression evaluator used to evaluate attribute-generation expressions. Instantiated directly, as
+    // ExportEvaluationServer and the worker's sync processor also do; the underlying compiled-expression cache is static.
+    private readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
     #endregion
 
     internal ExampleDataServer(JimApplication application)
@@ -579,7 +584,7 @@ public class ExampleDataServer
         var context = BuildExpressionContext(metaverseObject);
 
         // Test() evaluates and captures any failure as a result rather than throwing, so we attribute the error here.
-        var result = Application.ExpressionEvaluator.Test(templateAttribute.Expression!, context);
+        var result = _expressionEvaluator.Test(templateAttribute.Expression!, context);
         if (!result.IsValid)
             throw new InvalidDataException($"ExampleDataServer: failed to evaluate generation expression for attribute '{attributeName}': {result.ErrorMessage}");
 

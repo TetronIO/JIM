@@ -1,7 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using JIM.Application.Expressions;
 using JIM.Application.Interfaces;
 using JIM.Application.Servers;
 using JIM.Application.Services;
@@ -36,14 +35,6 @@ public class JimApplication : IDisposable
     /// Tests use <c>InMemoryData.SyncRepository</c> for deterministic behaviour.
     /// </summary>
     public ISyncRepository SyncRepo { get; }
-
-    /// <summary>
-    /// The expression evaluator (DynamicExpresso) shared with Synchronisation Rule Attribute Flows and used by
-    /// example data generation to evaluate attribute-generation expressions. Instantiated directly (as
-    /// <see cref="ExportEvaluationServer"/> and the worker's sync processor also do); the underlying
-    /// compiled-expression cache is static, so every instance shares it.
-    /// </summary>
-    public IExpressionEvaluator ExpressionEvaluator { get; } = new DynamicExpressoEvaluator();
 
     internal SeedingServer Seeding { get; }
     public ActivityServer Activities { get; }
