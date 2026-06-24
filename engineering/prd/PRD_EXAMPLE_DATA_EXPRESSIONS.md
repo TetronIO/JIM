@@ -125,6 +125,7 @@ Lower(mv["First Name"]) + "." + Lower(mv["Last Name"]) + "@" + Lower(Replace(mv[
 ## Dependencies
 
 - None blocking. Builds entirely on the existing `IExpressionEvaluator` infrastructure.
+- **Related: [#242](https://github.com/TetronIO/JIM/issues/242) (unique value generation for MVO/CSO attributes).** Different scope (production sync-rule attribute flow vs example data generation) but a shared uniqueness/collision primitive (see Open Question 1). Coordinate so the collision-and-suffix strategy is built once. #242 also proposes an `UniqueValue("{template}", "attribute")` expression function for sync rules; if that lands, the uniqueness primitive used here should be the same one.
 
 ## Alternatives Considered
 
@@ -140,7 +141,7 @@ If convergence to a single engine is wanted later, the clean mechanism is to mak
 
 ## Open Questions
 
-1. **Uniqueness mechanism.** Keep the `[UniqueInt]` token (and make expressions emit it, which composes awkwardly) versus promote uniqueness to a first-class per-attribute flag that post-processes both Pattern and Expression output. Recommendation: the **flag** - it is cleaner, works for both mechanisms, and removes a token-parsing edge case. The existing `[UniqueInt]` token stays supported for back-compat on patterns.
+1. **Uniqueness mechanism (shared with [#242](https://github.com/TetronIO/JIM/issues/242)).** Keep the `[UniqueInt]` token (and make expressions emit it, which composes awkwardly) versus promote uniqueness to a first-class per-attribute flag that post-processes both Pattern and Expression output. Recommendation: the **flag** - it is cleaner, works for both mechanisms, and removes a token-parsing edge case. The existing `[UniqueInt]` token stays supported for back-compat on patterns. **Note:** #242 (unique value generation for sync-rule attribute flow) needs the same "generate a candidate, check for collision, append an incrementing suffix" primitive. The uniqueness/collision logic should be designed as one shared mechanism, not implemented twice; whichever feature lands first should expose it so the other consumes it. The scopes differ (this feature dedupes within a generation run; #242 dedupes against existing MVOs/CSOs), so the shared piece is the collision-and-suffix strategy, parameterised by uniqueness scope.
 
 2. **Relationship to Pattern (considered, not blocking).** A lighter single-model alternative is to drop the separate `Expression` field and instead allow inline functions inside pattern braces, e.g. `{Lower(Replace(Company, " ", ""))}.io`. Recommendation: **keep Pattern and Expression as two distinct fields** - Pattern stays the readable choice for pure interpolation, Expression is the power tier for transforms. The inline-functions-in-braces model is recorded as considered-and-declined (it needs a brace mini-parser and diverges from the `mv["..."]` syntax used in Synchronisation Rules) unless review prefers a single syntax.
 
