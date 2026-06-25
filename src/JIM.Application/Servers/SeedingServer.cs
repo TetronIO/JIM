@@ -1194,6 +1194,46 @@ internal class SeedingServer
     }
 
     /// <summary>
+    /// Ensures the built-in "Users &amp; Groups" example data template exists and is complete, (re)creating it from the
+    /// same definition used at first-run seeding when it is missing or has lost its attributes. A factory reset's
+    /// TRUNCATE ... CASCADE removes the template's attributes as collateral (they share a foreign-key graph with the
+    /// Connected System schema), leaving an attribute-less shell that ordinary seeding does not repair (it skips an
+    /// existing template). This restores the out-of-box template so it survives a reset. Idempotent: a present, complete
+    /// template is left untouched, so it is safe to call on every startup and after a reset.
+    /// </summary>
+    internal async Task EnsureBuiltInExampleDataTemplateAsync()
+    {
+        const string templateName = "Users & Groups";
+
+        var existing = await Application.Repository.ExampleData.GetTemplateAsync(templateName);
+        if (existing != null && existing.ObjectTypes.Any(ot => ot.TemplateAttributes.Count > 0))
+            return; // present and complete: the common case, kept cheap.
+
+        var userType = await Application.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.User, includeChildObjects: false);
+        var groupType = await Application.Metaverse.GetMetaverseObjectTypeAsync(Constants.BuiltInObjectTypes.Group, includeChildObjects: false);
+        if (userType == null || groupType == null)
+        {
+            Log.Warning("EnsureBuiltInExampleDataTemplateAsync: built-in User/Group Metaverse Object Types not found; cannot restore the example data template.");
+            return;
+        }
+
+        // remove the incomplete shell (if any) so the template is recreated whole.
+        if (existing != null)
+            await Application.Repository.ExampleData.DeleteTemplateAsync(existing.Id);
+
+        var metaverseAttributes = (await Application.Metaverse.GetMetaverseAttributesAsync())?.ToList() ?? new List<MetaverseAttribute>();
+        var dataSets = await Application.ExampleData.GetExampleDataSetsAsync();
+
+        var template = new ExampleDataTemplate { Name = templateName, BuiltIn = true };
+        AddUsersToExampleDataTemplate(template, userType, dataSets, metaverseAttributes);
+        AddGroupsToExampleDataTemplate(template, groupType, userType, dataSets, metaverseAttributes);
+        await Application.Repository.ExampleData.CreateTemplateGraphAsync(template);
+
+        Log.Information("EnsureBuiltInExampleDataTemplateAsync: (re)created the built-in '{TemplateName}' example data template (was {State}).",
+            templateName, existing == null ? "missing" : "an incomplete shell");
+    }
+
+    /// <summary>
     /// Prepare the built-in connectors for seeding.
     /// </summary>
     private async Task<ConnectorDefinition?> PrepareConnectorDefinitionAsync(IConnector connector)

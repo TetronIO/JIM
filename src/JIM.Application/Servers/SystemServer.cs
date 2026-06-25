@@ -102,6 +102,11 @@ public class SystemServer
 
         var result = await Application.Repository.System.ResetSystemAsync(includeAdministrators);
 
+        // Restore the built-in example data template. The wipe's TRUNCATE ... CASCADE removes its attributes as
+        // collateral (they share a foreign-key graph with the Connected System schema), even though built-in data is
+        // meant to survive a reset. Recreating it here keeps the out-of-box schema intact without a restart.
+        await Application.Seeding.EnsureBuiltInExampleDataTemplateAsync();
+
         // Record the reset as an Activity AFTER the wipe so it survives it. This is the auditable
         // record of who initiated the reset; it is never optional.
         var activity = new Activity

@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.ExampleData;
@@ -264,5 +265,74 @@ public class SystemResetDatabaseTests
         Assert.That(await verify.ConnectedSystemObjectChanges.AnyAsync(), Is.False);
         Assert.That(await verify.ExampleDataTemplates.AnyAsync(t => !t.BuiltIn), Is.False, "Custom template must be removed.");
         Assert.That(await verify.ExampleDataTemplates.AnyAsync(t => t.BuiltIn), Is.True, "Built-in template must be preserved.");
+    }
+
+    /// <summary>
+    /// The reset's TRUNCATE ... CASCADE wipes the built-in example data template's attributes as collateral (they are
+    /// pulled in via ExampleDataTemplateAttributes -> ConnectedSystemAttributes -> ... -> ConnectedSystems). The
+    /// built-in template is meant to survive a reset, so EnsureBuiltInExampleDataTemplateAsync recreates it. This
+    /// verifies the recreate against real PostgreSQL, including the many-to-many reference object types (which a naive
+    /// re-insert of a graph referencing existing rows would get wrong).
+    /// </summary>
+    [Test]
+    public async Task EnsureBuiltInExampleDataTemplate_AfterAttributesAreCascadeWiped_RestoresThemIncludingReferencesAsync()
+    {
+        // Arrange: a full first-run seed creates the built-in "Users & Groups" template with all its attributes.
+        await using (var ctx = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            await jim.Seeding.SeedAsync();
+        }
+
+        int seededAttributeCount;
+        await using (var ctx = NewContext())
+            seededAttributeCount = await ctx.ExampleDataTemplateAttributes.CountAsync();
+        Assert.That(seededAttributeCount, Is.GreaterThan(0), "seeding should create the built-in template's attributes");
+
+        // Simulate the reset's cascade wiping the attributes (leaving the template + object-type shell).
+        await using (var ctx = NewContext())
+            await ctx.Database.ExecuteSqlRawAsync(@"TRUNCATE TABLE ""ExampleDataTemplateAttributes"" CASCADE;");
+        await using (var ctx = NewContext())
+            Assert.That(await ctx.ExampleDataTemplateAttributes.CountAsync(), Is.EqualTo(0), "precondition: the cascade wiped the attributes");
+
+        // Act: the repair.
+        await using (var ctx = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            await jim.Seeding.EnsureBuiltInExampleDataTemplateAsync();
+        }
+
+        // Assert: every attribute is restored.
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            var template = await repository.ExampleData.GetTemplateAsync("Users & Groups");
+            Assert.That(template, Is.Not.Null);
+
+            var restoredAttributes = template!.ObjectTypes.SelectMany(ot => ot.TemplateAttributes).ToList();
+            Assert.That(restoredAttributes.Count, Is.EqualTo(seededAttributeCount), "all attributes should be restored");
+        }
+
+        // And the many-to-many reference object types (e.g. Manager -> User) are wired up again. Assert against the
+        // join table directly: it is the source of truth and does not depend on which navigation properties a given
+        // retrieval query happens to eager-load (the by-name GetTemplateAsync does not include them).
+        await using (var ctx = NewContext())
+        {
+            var referenceRowCount = await ctx.Database
+                .SqlQueryRaw<int>(@"SELECT COUNT(*)::int AS ""Value"" FROM ""ExampleDataTemplateAttributeMetaverseObjectType""")
+                .SingleAsync();
+            Assert.That(referenceRowCount, Is.GreaterThan(0),
+                "reference attributes (e.g. Manager) should have their many-to-many object types restored");
+        }
+
+        // And it is idempotent: a second call against a now-complete template changes nothing.
+        await using (var ctx = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            await jim.Seeding.EnsureBuiltInExampleDataTemplateAsync();
+        }
+        await using (var ctx = NewContext())
+            Assert.That(await ctx.ExampleDataTemplateAttributes.CountAsync(), Is.EqualTo(seededAttributeCount),
+                "a second EnsureBuiltIn call on a complete template must be a no-op");
     }
 }
