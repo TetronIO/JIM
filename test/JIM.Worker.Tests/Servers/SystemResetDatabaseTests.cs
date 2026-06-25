@@ -302,7 +302,7 @@ public class SystemResetDatabaseTests
             await jim.Seeding.EnsureBuiltInExampleDataTemplateAsync();
         }
 
-        // Assert: every attribute is restored, and the many-to-many reference object types are wired up again.
+        // Assert: every attribute is restored.
         await using (var ctx = NewContext())
         {
             var repository = new PostgresDataRepository(ctx);
@@ -311,7 +311,17 @@ public class SystemResetDatabaseTests
 
             var restoredAttributes = template!.ObjectTypes.SelectMany(ot => ot.TemplateAttributes).ToList();
             Assert.That(restoredAttributes.Count, Is.EqualTo(seededAttributeCount), "all attributes should be restored");
-            Assert.That(restoredAttributes.Any(a => a.ReferenceMetaverseObjectTypes.Count > 0), Is.True,
+        }
+
+        // And the many-to-many reference object types (e.g. Manager -> User) are wired up again. Assert against the
+        // join table directly: it is the source of truth and does not depend on which navigation properties a given
+        // retrieval query happens to eager-load (the by-name GetTemplateAsync does not include them).
+        await using (var ctx = NewContext())
+        {
+            var referenceRowCount = await ctx.Database
+                .SqlQueryRaw<int>(@"SELECT COUNT(*)::int AS ""Value"" FROM ""ExampleDataTemplateAttributeMetaverseObjectType""")
+                .SingleAsync();
+            Assert.That(referenceRowCount, Is.GreaterThan(0),
                 "reference attributes (e.g. Manager) should have their many-to-many object types restored");
         }
 
