@@ -462,6 +462,147 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         return NoContent();
     }
 
+    #region Attribute Priority
+
+    /// <summary>
+    /// Get an Attribute's priority order
+    /// </summary>
+    /// <remarks>
+    /// Returns the ordered list of import contributions to this Metaverse Attribute for a given Metaverse Object
+    /// Type (#91), highest priority first. Disabled Synchronisation Rules are included; they hold position but
+    /// never contribute during resolution. An empty list means the Attribute has no import contributors.
+    /// </remarks>
+    /// <param name="metaverseAttributeId">The Metaverse Attribute.</param>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the priority list.</param>
+    [HttpGet("attributes/{metaverseAttributeId:int}/priorities/{metaverseObjectTypeId:int}", Name = "GetAttributePriorityOrder")]
+    [ProducesResponseType(typeof(AttributePriorityOrderDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetAttributePriorityOrderAsync(int metaverseAttributeId, int metaverseObjectTypeId)
+    {
+        _logger.LogTrace("Requested attribute priority order for Metaverse attribute {AttributeId} on object type {ObjectTypeId}", metaverseAttributeId, metaverseObjectTypeId);
+
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(metaverseAttributeId);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {metaverseAttributeId} not found."));
+
+        var mappings = await _application.ConnectedSystems.GetAttributePriorityOrderAsync(metaverseObjectTypeId, metaverseAttributeId);
+        return Ok(AttributePriorityOrderDto.FromEntities(metaverseObjectTypeId, metaverseAttributeId, mappings));
+    }
+
+    /// <summary>
+    /// Replace an Attribute's priority order
+    /// </summary>
+    /// <remarks>
+    /// Transactionally renumbers the priorities of all import contributions to this Metaverse Attribute for a
+    /// given Metaverse Object Type (#91), and applies each contribution's "Null is a value" flag. The request must
+    /// list every current contributing mapping for the Attribute exactly once, in the desired priority order
+    /// (highest first). To move a single mapping without restating the whole list, use the move endpoint instead.
+    /// Returns the resulting order.
+    /// </remarks>
+    /// <param name="metaverseAttributeId">The Metaverse Attribute.</param>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the priority list.</param>
+    /// <param name="request">The contributors in the desired priority order.</param>
+    /// <response code="200">Priority order updated successfully; returns the updated order.</response>
+    /// <response code="400">The requested order does not match the Attribute's current contributor set.</response>
+    /// <response code="404">Metaverse Attribute not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("attributes/{metaverseAttributeId:int}/priorities/{metaverseObjectTypeId:int}", Name = "SetAttributePriorityOrder")]
+    [ProducesResponseType(typeof(AttributePriorityOrderDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> SetAttributePriorityOrderAsync(int metaverseAttributeId, int metaverseObjectTypeId, [FromBody] SetAttributePriorityOrderRequest request)
+    {
+        _logger.LogInformation("Setting attribute priority order for Metaverse attribute {AttributeId} on object type {ObjectTypeId}", metaverseAttributeId, metaverseObjectTypeId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for attribute priority order update");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(metaverseAttributeId);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {metaverseAttributeId} not found."));
+
+        var orderedContributors = request.Contributors
+            .Select(c => (c.MappingId, c.NullIsValue))
+            .ToList();
+
+        try
+        {
+            var apiKey = await GetCurrentApiKeyAsync();
+            var updated = apiKey != null
+                ? await _application.ConnectedSystems.SetAttributePriorityOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors, apiKey)
+                : await _application.ConnectedSystems.SetAttributePriorityOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors, initiatedBy);
+
+            return Ok(AttributePriorityOrderDto.FromEntities(metaverseObjectTypeId, metaverseAttributeId, updated));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to set attribute priority order: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Move a mapping to a new priority position
+    /// </summary>
+    /// <remarks>
+    /// Repositions a single contributing mapping to the given 1-based priority position for this Metaverse
+    /// Attribute on a given Metaverse Object Type (#91), shuffling the other contributors to keep the list
+    /// contiguous, then renumbering all affected rows in one transaction. The caller states only the new position;
+    /// the engine keeps the order gap-free and duplicate-free. Optionally also updates the moved mapping's "Null is
+    /// a value" flag. Returns the resulting order, so the caller never has to renumber siblings or re-fetch.
+    /// </remarks>
+    /// <param name="metaverseAttributeId">The Metaverse Attribute.</param>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the priority list.</param>
+    /// <param name="mappingId">The contributing mapping to move.</param>
+    /// <param name="request">The desired position (and optional "Null is a value" flag).</param>
+    /// <response code="200">Mapping moved successfully; returns the resulting order.</response>
+    /// <response code="400">The mapping is not a contributor to the Attribute.</response>
+    /// <response code="404">Metaverse Attribute not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpPut("attributes/{metaverseAttributeId:int}/priorities/{metaverseObjectTypeId:int}/mappings/{mappingId:int}", Name = "MoveAttributePriority")]
+    [ProducesResponseType(typeof(AttributePriorityOrderDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> MoveAttributePriorityAsync(int metaverseAttributeId, int metaverseObjectTypeId, int mappingId, [FromBody] MoveAttributePriorityRequest request)
+    {
+        _logger.LogInformation("Moving mapping {MappingId} to position {Position} for Metaverse attribute {AttributeId} on object type {ObjectTypeId}", mappingId, request.Position, metaverseAttributeId, metaverseObjectTypeId);
+
+        var initiatedBy = await GetCurrentUserAsync();
+        if (initiatedBy == null && !IsApiKeyAuthenticated())
+        {
+            _logger.LogWarning("Could not identify user from JWT claims for attribute priority move");
+            return Unauthorized(ApiErrorResponse.Unauthorised("Could not identify user from authentication token."));
+        }
+
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(metaverseAttributeId);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {metaverseAttributeId} not found."));
+
+        try
+        {
+            var apiKey = await GetCurrentApiKeyAsync();
+            var updated = apiKey != null
+                ? await _application.ConnectedSystems.MoveAttributePriorityAsync(metaverseObjectTypeId, metaverseAttributeId, mappingId, request.Position, request.NullIsValue, apiKey)
+                : await _application.ConnectedSystems.MoveAttributePriorityAsync(metaverseObjectTypeId, metaverseAttributeId, mappingId, request.Position, request.NullIsValue, initiatedBy);
+
+            return Ok(AttributePriorityOrderDto.FromEntities(metaverseObjectTypeId, metaverseAttributeId, updated));
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "Failed to move mapping in attribute priority order: {Message}", ex.Message);
+            return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
+        }
+    }
+
+    #endregion
+
     /// <summary>
     /// List Metaverse Objects
     /// </summary>
@@ -775,6 +916,61 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return null;
 
         return await _application.Repository.ApiKeys.GetByIdAsync(apiKeyId);
+    }
+
+    /// <summary>
+    /// Resolves the current user from JWT claims by looking up their SSO identifier in the Metaverse.
+    /// Returns null for API key authentication (which is valid - use IsApiKeyAuthenticated() to check).
+    /// </summary>
+    private async Task<MetaverseObject?> GetCurrentUserAsync()
+    {
+        if (User.Identity?.IsAuthenticated != true)
+            return null;
+
+        // API key authentication doesn't map to a Metaverse user object
+        // This is valid - the caller should check IsApiKeyAuthenticated() separately
+        if (IsApiKeyAuthenticated())
+        {
+            _logger.LogDebug("API key authentication detected - no Metaverse user lookup needed");
+            return null;
+        }
+
+        // Get the service settings to know which claim type contains the unique identifier
+        var serviceSettings = await _application.ServiceSettings.GetServiceSettingsAsync();
+        if (serviceSettings?.SSOUniqueIdentifierClaimType == null ||
+            serviceSettings.SSOUniqueIdentifierMetaverseAttribute == null)
+        {
+            _logger.LogError("Service settings are not configured for SSO claim mapping");
+            return null;
+        }
+
+        // Get the unique identifier from the JWT claims
+        var uniqueIdClaimValue = IdentityUtilities.GetSsoUniqueIdentifier(
+            User,
+            serviceSettings.SSOUniqueIdentifierClaimType);
+
+        if (string.IsNullOrEmpty(uniqueIdClaimValue))
+        {
+            _logger.LogWarning("JWT does not contain the expected claim: {ClaimType}",
+                serviceSettings.SSOUniqueIdentifierClaimType);
+            return null;
+        }
+
+        // Look up the user in the Metaverse
+        var userType = await _application.Metaverse.GetMetaverseObjectTypeAsync(
+            Constants.BuiltInObjectTypes.User,
+            false);
+
+        if (userType == null)
+        {
+            _logger.LogError("Could not find User object type in Metaverse");
+            return null;
+        }
+
+        return await _application.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(
+            userType,
+            serviceSettings.SSOUniqueIdentifierMetaverseAttribute,
+            uniqueIdClaimValue);
     }
 
     #endregion

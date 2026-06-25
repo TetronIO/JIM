@@ -675,10 +675,11 @@ Not a sub-issue: **#846** (holistic Guardrails) is deliberately *out of scope* (
 - [x] Add `NullValue` boolean to `MetaverseObjectAttributeValue` (default: false; asserted-null marker)
 - [x] Create database migration (`20260624174100_AddAttributePriorityAndProvenance`)
 - [x] Update API DTOs (`SyncRuleMappingDto.Priority`/`NullIsValue`; `CreateSyncRuleMappingRequest.NullIsValue`)
-- [x] Add API endpoints to get/set/move attribute priority order, all keyed by (Metaverse Object Type, Metaverse attribute), all transactional and returning the resulting order; unit-tested:
-  - `GET /synchronisation/attribute-priority/{metaverseObjectTypeId}/{metaverseAttributeId}` reads the ordered contributor list.
-  - `PUT /synchronisation/attribute-priority/{metaverseObjectTypeId}/{metaverseAttributeId}` replaces the **whole** order (complete-set validation; for drag-reorder-then-save surfaces).
-  - `PUT /synchronisation/attribute-priority/{metaverseObjectTypeId}/{metaverseAttributeId}/mappings/{mappingId}` **moves a single mapping** to a 1-based position (body: `position`, optional `nullIsValue`); the engine shuffles the other contributors and renumbers, so a caller never restates the whole list or renumbers siblings itself. This is the footgun-free reorder primitive the drag-drop UI and PowerShell will use. Position is clamped to range; only rows that actually changed are persisted/audited; a no-op move writes nothing.
+- [x] Add API endpoints to get/set/move attribute priority order, all keyed by (Metaverse Object Type, Metaverse attribute) and homed under the Metaverse Attribute resource (priority is a Metaverse Attribute concern, so the endpoints live on `MetaverseController`, not `SynchronisationController`), all transactional and returning the resulting order; unit-tested:
+  - `GET /metaverse/attributes/{metaverseAttributeId}/priorities/{metaverseObjectTypeId}` reads the ordered contributor list.
+  - `PUT /metaverse/attributes/{metaverseAttributeId}/priorities/{metaverseObjectTypeId}` replaces the **whole** order (complete-set validation; for drag-reorder-then-save surfaces).
+  - `PUT /metaverse/attributes/{metaverseAttributeId}/priorities/{metaverseObjectTypeId}/mappings/{mappingId}` **moves a single mapping** to a 1-based position (body: `position`, optional `nullIsValue`); the engine shuffles the other contributors and renumbers, so a caller never restates the whole list or renumbers siblings itself. This is the footgun-free reorder primitive the drag-drop UI and PowerShell will use. Position is clamped to range; only rows that actually changed are persisted/audited; a no-op move writes nothing.
+  - Routing note: nesting `priorities` under `attributes/{id:int}` does not clash with `GET /metaverse/attributes/{id:int}`; the int route constraint and ASP.NET Core's literal-over-parameter precedence keep them distinct. The application-layer logic stays on `ConnectedSystemServer` (it operates on `SyncRuleMapping` rows alongside the other mapping methods); only the HTTP surface moved.
 
 #### Phase 2: Attribute Priority Logic
 
