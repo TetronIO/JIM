@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260624105858_AddExpressionToExampleDataTemplateAttribute")]
+    partial class AddExpressionToExampleDataTemplateAttribute
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -451,9 +454,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<byte[]>("ByteValue")
                         .HasColumnType("bytea");
 
-                    b.Property<int?>("ContributedBySyncRuleId")
-                        .HasColumnType("integer");
-
                     b.Property<int?>("ContributedBySystemId")
                         .HasColumnType("integer");
 
@@ -472,11 +472,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid>("MetaverseObjectId")
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("NullValue")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
                     b.Property<Guid?>("ReferenceValueId")
                         .HasColumnType("uuid");
 
@@ -487,8 +482,6 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ContributedBySyncRuleId");
 
                     b.HasIndex("ContributedBySystemId");
 
@@ -1384,16 +1377,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("LastUpdatedByType")
                         .HasColumnType("integer");
-
-                    b.Property<bool>("NullIsValue")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
-                    b.Property<int>("Priority")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(2147483647);
 
                     b.Property<int?>("SyncRuleId")
                         .HasColumnType("integer");
@@ -3259,11 +3242,6 @@ namespace JIM.PostgresData.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("JIM.Models.Logic.SyncRule", "ContributedBySyncRule")
-                        .WithMany()
-                        .HasForeignKey("ContributedBySyncRuleId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", "ContributedBySystem")
                         .WithMany()
                         .HasForeignKey("ContributedBySystemId");
@@ -3283,8 +3261,6 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("UnresolvedReferenceValueId");
 
                     b.Navigation("Attribute");
-
-                    b.Navigation("ContributedBySyncRule");
 
                     b.Navigation("ContributedBySystem");
 

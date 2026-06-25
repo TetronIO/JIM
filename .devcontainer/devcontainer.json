@@ -1,5 +1,5 @@
 {
-  "name": "JIM Development Environment",
+  "name": "JIM Dev",
   "build": {
     "dockerfile": "Dockerfile"
   },
@@ -79,9 +79,7 @@
         // GitHub Actions workflow support
         "github.vscode-github-actions",
         // GitHub Pull Requests & Issues
-        "github.vscode-pull-request-github",
-        // Mermaid diagrams
-        "MermaidChart.vscode-mermaid-chart"
+        "github.vscode-pull-request-github"
       ],
       // VS Code settings
       "settings": {

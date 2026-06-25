@@ -1,11 +1,14 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Expressions;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.ExampleData.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Expressions;
+using JIM.Models.Interfaces;
 using JIM.Models.Utility;
 using Serilog;
 using System.Diagnostics;
@@ -19,8 +22,10 @@ public class ExampleDataServer
     #endregion
 
     #region members
-    private readonly object _valuesLock = new();
     private readonly object _metaverseObjectLock = new();
+    // The expression evaluator used to evaluate attribute-generation expressions. Instantiated directly, as
+    // ExportEvaluationServer and the worker's sync processor also do; the underlying compiled-expression cache is static.
+    private readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
     #endregion
 
     internal ExampleDataServer(JimApplication application)
@@ -151,13 +156,22 @@ public class ExampleDataServer
         // Use an array to hold the counter - arrays are reference types so they work correctly
         // with closures and allow thread-safe access via Interlocked/Volatile
         var objectsGeneratedHolder = new int[1];
-        // Track when we last reported progress (for time-based updates)
-        var lastProgressReport = Stopwatch.StartNew();
-        var progressIntervalMs = progressUpdateInterval?.TotalMilliseconds ?? 2000;
 
         // Report initial progress (total objects to create, none processed yet)
         if (progressCallback != null)
             await progressCallback(totalObjectsToCreate, 0, "Generating objects...");
+
+        // Progress is reported from a dedicated background task, NOT from inside the parallel generation loop below.
+        // Reporting inline meant a generation thread ran the asynchronous Activity database write synchronously (via
+        // GetAwaiter().GetResult()) while holding _metaverseObjectLock, the same lock every other generation thread
+        // needs to add its object. That serialised the whole loop behind a blocking I/O call and starved the thread
+        // pool, so generating the built-in 10,000-object template crawled at roughly one object per second at ~0% CPU.
+        // The loop now only increments the atomic counter; this task samples it on an interval and reports
+        // asynchronously, holding no lock. It is cancelled once generation completes (before any further database work).
+        using var progressReporterCts = new CancellationTokenSource();
+        var progressReporterTask = progressCallback == null
+            ? Task.CompletedTask
+            : ReportGenerationProgressAsync(progressCallback, totalObjectsToCreate, objectsGeneratedHolder, progressUpdateInterval ?? TimeSpan.FromSeconds(2), progressReporterCts.Token);
 
         // object type dependency graph needs considering
         // for now we should probably just advise people to add template object types in reverse order to how they're referenced.
@@ -165,7 +179,7 @@ public class ExampleDataServer
 
         var random = new Random();
         var metaverseObjectsToCreate = new List<MetaverseObject>();
-        var dataGenerationValueTrackers = new List<ExampleDataValueTracker>();
+        var trackerStore = new ExampleDataValueTrackerStore();
             
         // we've had issues with EF not returning values for example datasets when retrieving the template
         // so we're going to get all the example datasets referenced in a template separately and passing them in as needed.
@@ -196,8 +210,12 @@ public class ExampleDataServer
 
             var objectTypeStopWatch = Stopwatch.StartNew();
             Log.Verbose($"ExecuteTemplateAsync: Processing Metaverse Object Type: {objectType.MetaverseObjectType.Name}");
-            var trackers = dataGenerationValueTrackers;
+            var trackers = trackerStore;
             var create = metaverseObjectsToCreate;
+            // Order attributes so that any attribute an expression (or conditional dependency) references is generated
+            // first. Computed once per object type (the dependency graph is static across generated objects), and any
+            // circular dependency throws here, before generation begins. See ExampleDataObjectType.
+            var orderedTemplateAttributes = objectType.GetTemplateAttributesInDependencyOrder();
             Parallel.For(0, objectType.ObjectsToCreate,
                 index =>
                 {
@@ -206,8 +224,7 @@ public class ExampleDataServer
                         Type = objectType.MetaverseObjectType,
                         Origin = MetaverseObjectOrigin.Internal
                     };
-                    // make sure we process attributes with no dependencies first
-                    foreach (var templateAttribute in objectType.TemplateAttributes.OrderBy(q => q.AttributeDependency))
+                    foreach (var templateAttribute in orderedTemplateAttributes)
                     {
                         if (cancellationToken.IsCancellationRequested)
                         {
@@ -281,27 +298,10 @@ public class ExampleDataServer
                     lock (_metaverseObjectLock)
                         create.Add(metaverseObject);
 
-                    var currentCount = Interlocked.Add(ref totalObjectsCreated, 1);
+                    // Atomic counters only; the background reporter (see above) reads objectsGeneratedHolder and does
+                    // the asynchronous progress write off this thread, so the loop never blocks on I/O.
+                    Interlocked.Increment(ref totalObjectsCreated);
                     Interlocked.Increment(ref objectsGeneratedHolder[0]);
-
-                    // Check if we should report progress (time-based, inside the parallel loop)
-                    // Only one thread will win the race to report, others will see the reset stopwatch
-                    if (progressCallback != null && lastProgressReport.ElapsedMilliseconds >= progressIntervalMs)
-                    {
-                        lock (_metaverseObjectLock) // Reuse existing lock to avoid creating another
-                        {
-                            // Double-check after acquiring lock
-                            if (lastProgressReport.ElapsedMilliseconds >= progressIntervalMs)
-                            {
-                                var progress = objectsGeneratedHolder[0];
-                                Log.Debug("ExecuteTemplateAsync: Progress update - {Current}/{Total} objects generated",
-                                    progress, totalObjectsToCreate);
-                                lastProgressReport.Restart();
-                                // Wait for the database write to complete so UI can see the update
-                                progressCallback(totalObjectsToCreate, progress, "Generating objects...").GetAwaiter().GetResult();
-                            }
-                        }
-                    }
                 });
 
             // user manager attributes need assigning after all users have been prepared
@@ -310,6 +310,11 @@ public class ExampleDataServer
             objectTypeStopWatch.Stop();
             Log.Information($"ExecuteTemplateAsync: It took {objectTypeStopWatch.Elapsed} to process the {objectType.MetaverseObjectType.Name} Metaverse Object Type");
         }
+
+        // generation is complete: stop the background progress reporter before the change-history and persistence work
+        // below touches this database context, and surface any failure the reporter captured.
+        progressReporterCts.Cancel();
+        await progressReporterTask;
 
         // ensure that attribute population percentage values are respected
         // do this by assigning all attributes with values (done), then go and randomly delete the required amount
@@ -412,9 +417,36 @@ public class ExampleDataServer
 
         // trying to help garbage collection along. data generation results in a lot of ram usage.
         metaverseObjectsToCreate.Clear();
-        dataGenerationValueTrackers.Clear();
 
         return totalObjectsCreated;
+    }
+
+    /// <summary>
+    /// Periodically reports generation progress (the current value of the shared atomic object counter) to the supplied
+    /// callback from a dedicated task, so the parallel generation loop never blocks on the asynchronous progress write.
+    /// Runs until cancelled, which the caller does once generation has finished. Any failure other than cancellation
+    /// faults the returned task and is surfaced when the caller awaits it.
+    /// </summary>
+    private static async Task ReportGenerationProgressAsync(
+        Func<int, int, string?, Task> progressCallback,
+        int totalObjectsToCreate,
+        int[] objectsGeneratedHolder,
+        TimeSpan interval,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(interval, cancellationToken);
+                var generated = Volatile.Read(ref objectsGeneratedHolder[0]);
+                await progressCallback(totalObjectsToCreate, generated, "Generating objects...");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // expected when generation completes and the reporter is cancelled
+        }
     }
 
     /// <summary>
@@ -457,10 +489,22 @@ public class ExampleDataServer
         ExampleDataTemplateAttribute dataGenerationTemplateAttribute,
         IEnumerable<ExampleDataSet> exampleDataSets,
         Random random,
-        List<ExampleDataValueTracker> dataGenerationValueTrackers)
+        ExampleDataValueTrackerStore trackerStore)
     {
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
+
+        // expression-based generation: evaluate the expression against the object's already-generated attributes.
+        // handled before the pattern/data-set paths because an expression fully determines the value.
+        if (dataGenerationTemplateAttribute.IsUsingExpression())
+        {
+            metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
+            {
+                Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
+                StringValue = EvaluateAttributeExpression(metaverseObject, dataGenerationTemplateAttribute)
+            });
+            return;
+        }
 
         // a string attribute can have a string type or number type value assigned
         if (dataGenerationTemplateAttribute.IsUsingStrings())
@@ -516,8 +560,8 @@ public class ExampleDataServer
                 // later on we can look at encapsulation, i.e. functions around vars, and functions around functions.
                 // replace attribute vars first, then check system vars, i.e. uniqueness ids against complete generated string.
                 output = ReplaceAttributeVariables(metaverseObject, dataGenerationTemplateAttribute.Pattern);
-                output = ReplaceSystemVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, dataGenerationValueTrackers, output);
-                output = ReplaceExampleDataSetVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, dataGenerationTemplateAttribute.ExampleDataSetInstances, dataGenerationValueTrackers, random, output);
+                output = ReplaceSystemVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, trackerStore, output);
+                output = ReplaceExampleDataSetVariables(metaverseObject, dataGenerationTemplateAttribute.MetaverseAttribute, dataGenerationTemplateAttribute.ExampleDataSetInstances, trackerStore, random, output);
             }
             else if (dataGenerationTemplateAttribute.WeightedStringValues is { Count: > 0 })
             {
@@ -538,7 +582,7 @@ public class ExampleDataServer
         }
         else if (dataGenerationTemplateAttribute.IsUsingNumbers())
         {
-            var numberValue = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, dataGenerationValueTrackers);
+            var numberValue = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, trackerStore);
             metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
             {
                 Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
@@ -549,6 +593,64 @@ public class ExampleDataServer
         {
             throw new ArgumentException("dataGenerationTemplateAttribute isn't using strings or numbers on a string attribute type");
         }
+    }
+
+    /// <summary>
+    /// Evaluates an attribute's generation expression against the Metaverse Object's already-generated attribute values
+    /// (exposed to the expression via the mv["Attribute Name"] accessor) and returns the resulting string.
+    /// Reuses the shared DynamicExpresso evaluator. A failed evaluation throws, failing the template execution with an
+    /// attributed error rather than silently producing a blank value.
+    /// </summary>
+    private string EvaluateAttributeExpression(MetaverseObject metaverseObject, ExampleDataTemplateAttribute templateAttribute)
+    {
+        var attributeName = templateAttribute.MetaverseAttribute!.Name;
+        var context = BuildExpressionContext(metaverseObject);
+
+        // Test() evaluates and captures any failure as a result rather than throwing, so we attribute the error here.
+        var result = _expressionEvaluator.Test(templateAttribute.Expression!, context);
+        if (!result.IsValid)
+            throw new InvalidDataException($"ExampleDataServer: failed to evaluate generation expression for attribute '{attributeName}': {result.ErrorMessage}");
+
+        return result.Result?.ToString() ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Builds an <see cref="ExpressionContext"/> exposing the Metaverse Object's already-generated attribute values via
+    /// the mv accessor. There is no Connected System Object during generation, so the cs accessor is empty.
+    /// </summary>
+    private static ExpressionContext BuildExpressionContext(MetaverseObject metaverseObject)
+    {
+        var mv = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var attributeValues in metaverseObject.AttributeValues.Where(av => av.Attribute != null).GroupBy(av => av.Attribute.Name))
+        {
+            var values = attributeValues.ToList();
+            mv[attributeValues.Key] = values.Count == 1
+                ? GetExpressionScalarValue(values[0])
+                : values.Select(GetExpressionScalarValue).Where(v => v != null).Select(v => v!.ToString()).ToArray();
+        }
+
+        return new ExpressionContext(mv);
+    }
+
+    /// <summary>
+    /// Returns the most appropriate scalar value of a Metaverse Object attribute value for use in an expression.
+    /// </summary>
+    private static object? GetExpressionScalarValue(MetaverseObjectAttributeValue attributeValue)
+    {
+        if (attributeValue.StringValue != null)
+            return attributeValue.StringValue;
+        if (attributeValue.IntValue.HasValue)
+            return attributeValue.IntValue.Value;
+        if (attributeValue.LongValue.HasValue)
+            return attributeValue.LongValue.Value;
+        if (attributeValue.BoolValue.HasValue)
+            return attributeValue.BoolValue.Value;
+        if (attributeValue.DateTimeValue.HasValue)
+            return attributeValue.DateTimeValue.Value;
+        if (attributeValue.GuidValue.HasValue)
+            return attributeValue.GuidValue.Value;
+
+        return null;
     }
 
     private static void GenerateMetaverseGuidValue(MetaverseObject metaverseObject, ExampleDataTemplateAttribute dataGenerationTemplateAttribute)
@@ -567,13 +669,13 @@ public class ExampleDataServer
         MetaverseObject metaverseObject,
         ExampleDataTemplateAttribute dataGenerationTemplateAttribute,
         Random random,
-        List<ExampleDataValueTracker> dataGenerationValueTrackers)
+        ExampleDataValueTrackerStore trackerStore)
     {
         // todo: make use of data gen value trackers to get next highest value
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
-        var value = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, dataGenerationValueTrackers);
+        var value = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, trackerStore);
         metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
             Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
@@ -585,14 +687,14 @@ public class ExampleDataServer
         MetaverseObject metaverseObject,
         ExampleDataTemplateAttribute dataGenerationTemplateAttribute,
         Random random,
-        List<ExampleDataValueTracker> dataGenerationValueTrackers)
+        ExampleDataValueTrackerStore trackerStore)
     {
         // todo: make use of data gen value trackers to get next highest value
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
         // Generate a long value - for now, use int generator and cast to long
-        var value = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, dataGenerationValueTrackers);
+        var value = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, trackerStore);
         metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
         {
             Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
@@ -828,10 +930,10 @@ public class ExampleDataServer
         return textToProcess;
     }
 
-    private string ReplaceSystemVariables(
+    private static string ReplaceSystemVariables(
         MetaverseObject metaverseObject,
         MetaverseAttribute metaverseAttribute,
-        List<ExampleDataValueTracker> dataGenerationValueTrackers,
+        ExampleDataValueTrackerStore trackerStore,
         string textToProcess)
     {
         // match system variables
@@ -844,47 +946,34 @@ public class ExampleDataServer
             var variableName = match.Value[1..^1];
 
             // keeping these as strings for now. They will need evolving into part of the Functions feature at some point
-            if (variableName != "UniqueInt") 
+            if (variableName != "UniqueInt")
                 continue;
-                
+
             // is the string value unique amongst all MetaverseObjects of the same type?
             // if so, replace the system variable with an empty string
             // if not, add a uniqueness in in place of the system variable
 
             // get the text value without any unique int added, i.e. "joe.bloggs@demo.tetron.io"
             var textWithoutSystemVar = textToProcess.Replace(match.Value, string.Empty);
-                
-            lock (_valuesLock)
-            {
-                // have we already generated this value, and therefore need to add a unique int to it?
-                var uniqueIntTracker = dataGenerationValueTrackers.SingleOrDefault(q => q.ObjectTypeId == metaverseObject.Type.Id && q.AttributeId == metaverseAttribute.Id && q.StringValue == textWithoutSystemVar);
-                if (uniqueIntTracker == null)
-                {
-                    // this is a unique value, not previously assigned. it does not need a unique int added.
-                    textToProcess = textWithoutSystemVar;
 
-                    // add it to the tracker
-                    dataGenerationValueTrackers.Add(new ExampleDataValueTracker { ObjectTypeId = metaverseObject.Type.Id, AttributeId = metaverseAttribute.Id, StringValue = textWithoutSystemVar, LastIntAssigned = 1 });
-                }
-                else
-                {
-                    // this is not a unique value, we've generated it before. we need a unique int added.
-                    // increase the tracker last int assigned value by one as well for next time we generate the same value again
-                    uniqueIntTracker.LastIntAssigned += 1;
-                            
-                    textToProcess = textToProcess.Replace(match.Value, uniqueIntTracker.LastIntAssigned.ToString());
-                }
-            }
+            // ask the tracker how many times this base value has been generated for this object type and attribute.
+            // 1 means it is unique so far, so we emit it without a unique int. 2, 3, ... means we have generated it
+            // before, so we append that integer to disambiguate. This is atomic, so concurrent generation of the same
+            // base value still yields distinct suffixes.
+            var occurrence = trackerStore.NextUniqueIntSuffix(metaverseObject.Type.Id, metaverseAttribute.Id, textWithoutSystemVar);
+            textToProcess = occurrence == 1
+                ? textWithoutSystemVar
+                : textToProcess.Replace(match.Value, occurrence.ToString());
         }
 
         return textToProcess;
     }
 
-    private string ReplaceExampleDataSetVariables(
+    private static string ReplaceExampleDataSetVariables(
         MetaverseObject metaverseObject,
         MetaverseAttribute metaverseAttribute,
         List<ExampleDataSetInstance> exampleDataSetInstances,
-        List<ExampleDataValueTracker> dataGenerationValueTrackers,
+        ExampleDataValueTrackerStore trackerStore,
         Random random,
         string textToProcess)
     {
@@ -930,31 +1019,23 @@ public class ExampleDataServer
                 completeGeneratedValue = completeGeneratedValue.Replace(match.Value, randomValue);
             }
 
-            lock (_valuesLock)
+            // atomically reserve the generated value for this object type and attribute. if it was already used,
+            // TryReserveValue returns false and we loop round to generate another candidate; otherwise it is now
+            // reserved and we keep it. The check-and-reserve is atomic, so two threads that independently generate the
+            // same value cannot both keep it.
+            if (trackerStore.TryReserveValue(metaverseObject.Type.Id, metaverseAttribute.Id, completeGeneratedValue))
             {
-                // is the generated value unique? exit if so
-                var uniqueStringTracker = dataGenerationValueTrackers.SingleOrDefault(q => q.ObjectTypeId == metaverseObject.Type.Id && q.AttributeId == metaverseAttribute.Id && q.StringValue == completeGeneratedValue);
-                if (uniqueStringTracker == null)
-                {
-                    // generated value is unique
-                    isGeneratedValueUnique = true;
-                    textToProcess = completeGeneratedValue;
-
-                    // add the generated value to the tracker so we don't end up generating and assigning it again
-                    dataGenerationValueTrackers.Add(new ExampleDataValueTracker { ObjectTypeId = metaverseObject.Type.Id, AttributeId = metaverseAttribute.Id, StringValue = textToProcess });
-                }
-                else
-                {
-                    // this is not a unique value, we've generated it before. go round again until it is unique
-                    //Log.Verbose($"ReplaceExampleDataSetVariables: Duplicate generated value detected. Skipping: {completeGeneratedValue}");
-                }
+                // generated value is unique
+                isGeneratedValueUnique = true;
+                textToProcess = completeGeneratedValue;
             }
+            // else: this is not a unique value, we've generated it before. go round again until it is unique.
         }
 
         return textToProcess;
     }
 
-    private int GenerateNumberValue(MetaverseObjectType metaverseObjectType, ExampleDataTemplateAttribute dataGenTemplateAttribute, Random random, ICollection<ExampleDataValueTracker> trackers)
+    private static int GenerateNumberValue(MetaverseObjectType metaverseObjectType, ExampleDataTemplateAttribute dataGenTemplateAttribute, Random random, ExampleDataValueTrackerStore trackerStore)
     {
         var value = 1;
         int attributeId;
@@ -984,31 +1065,11 @@ public class ExampleDataServer
         }
         else
         {
-            lock (_valuesLock)
-            {
-                // sequential numbers
-                // query last value used for this object type and attribute. totally inefficient, but let's see what the performance is like first
-                var tracker = trackers.SingleOrDefault(t => t.ObjectTypeId == metaverseObjectType.Id && dataGenTemplateAttribute.MetaverseAttribute != null && t.AttributeId == dataGenTemplateAttribute.MetaverseAttribute.Id);
-                if (tracker is { LastIntAssigned: not null })
-                {
-                    // we've assigned a value for this attribute already. increment the value and use it
-                    tracker.LastIntAssigned += 1;
-                    value = tracker.LastIntAssigned.Value;
-                }
-                else
-                {
-                    // we've not assigned a value to this attribute yet
-                    if (dataGenTemplateAttribute.MinNumber.HasValue)
-                        value = dataGenTemplateAttribute.MinNumber.Value;
-
-                    trackers.Add(new ExampleDataValueTracker
-                    {
-                        ObjectTypeId = metaverseObjectType.Id,
-                        AttributeId = attributeId,
-                        LastIntAssigned = value
-                    });
-                }
-            }
+            // sequential numbers: the first value generated for this object type and attribute is the configured
+            // minimum (or 1 if unset), and each subsequent value is one higher. The store assigns these atomically
+            // with an O(1) keyed lookup, so the parallel generation loop is not serialised on a single lock.
+            var seed = dataGenTemplateAttribute.MinNumber ?? 1;
+            value = trackerStore.NextSequential(metaverseObjectType.Id, attributeId, seed);
         }
 
         return value;
