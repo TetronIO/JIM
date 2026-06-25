@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Generating example data is dramatically faster: the built-in "Users & Groups" template (10,000 users) now completes generation in seconds rather than minutes. Live progress updates were being written to the database from inside the parallel generation loop in a way that blocked it (a generation thread held the lock other threads needed while waiting on the database write), stalling generation to roughly one object per second; progress is now reported from a background task that never blocks generation.
 - ⚡ Example data value uniqueness (the `[UniqueInt]` suffix, single-use values, and sequential numbering) is now tracked with constant-time lookups instead of rescanning an ever-growing list under a global lock, removing a cost that grew with the square of the object count at larger template sizes.
 
+### Fixed
+
+- 🐛 A completed example data generation Activity no longer shows a stale "Persisting to database..." progress line; the transient progress message is cleared when the Activity completes.
+
 ## [0.12.0] - 2026-06-23
 
 ### Added

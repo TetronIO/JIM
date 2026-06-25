@@ -250,6 +250,9 @@ public class Worker : BackgroundService
                                                 dataGenTemplateServiceTask.InitiatedById,
                                                 dataGenTemplateServiceTask.InitiatedByName);
                                             newWorkerTask.Activity.TotalCreated = objectsCreated;
+                                            // Clear the transient progress message ("Persisting to database... batch X/Y")
+                                            // so the completed Activity does not retain a stale in-progress status line.
+                                            newWorkerTask.Activity.Message = null;
                                             await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
                                         }
                                         catch (Exception ex)
