@@ -1,5 +1,5 @@
 {
-  "name": "JIM Development Environment",
+  "name": "JIM Dev",
   "build": {
     "dockerfile": "Dockerfile"
   },
