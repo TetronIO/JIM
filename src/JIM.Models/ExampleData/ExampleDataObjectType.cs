@@ -75,13 +75,12 @@ public partial class ExampleDataObjectType
         // expression mv["..."] references
         if (!string.IsNullOrEmpty(attribute.Expression))
         {
-            foreach (var referencedName in MetaverseAttributeReferenceRegex()
-                         .Matches(attribute.Expression)
-                         .Select(match => match.Groups[1].Value))
-            {
-                if (attributesByName.TryGetValue(referencedName, out var referenced) && !ReferenceEquals(referenced, attribute))
-                    dependencies.Add(referenced);
-            }
+            var referencedAttributes = MetaverseAttributeReferenceRegex()
+                .Matches(attribute.Expression)
+                .Select(match => attributesByName.TryGetValue(match.Groups[1].Value, out var referenced) ? referenced : null)
+                .Where(referenced => referenced != null && !ReferenceEquals(referenced, attribute))
+                .Select(referenced => referenced!);
+            dependencies.AddRange(referencedAttributes);
         }
 
         // conditional attribute dependency (generate only when another attribute holds a given value)
