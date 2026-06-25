@@ -120,6 +120,179 @@ Reuse the `ChangeHistoryTimeline` shell (lazy load, badge, load-more, version li
 
 Because the payload lives on the Activity, "keep configuration history longer than identity data" becomes target-type-aware Activity retention. Add a configuration-change Activity retention Service Setting (default notably longer than the identity default; see Open Questions), and make `PerformChangeHistoryCleanupAsync` retain configuration-change Activities for their own period while continuing to flush sync/identity Activities on the existing schedule. Cleanup remains audited via an Activity.
 
+## UI Mockups
+
+Illustrative ASCII mocks of each impacted surface. They show intent and information hierarchy, not pixel-exact MudBlazor layout. Colour is described in words: in the web UI it maps to MudBlazor `Success` (green) / `Error` (red) / `Warning` (amber); in PowerShell it maps to `$PSStyle` ANSI, git-style.
+
+### 1. Changes tab: version timeline (per-object entry view)
+
+Added as a new tab on `SyncRuleDetail.razor` and `ConnectedSystemDetail.razor`, with a count badge and lazy load. The `AuditInfo` chips (Created / Updated) already sit in the page header.
+
+```
+Synchronisation Rule: HR Inbound          [Created 2 Jun by A. Mehta · Updated 3h ago by J. Doe]
+┌───────────────────────────────────────────────────────────────────────────────────────────┐
+│ Details │ Matching │ Scope │ Attribute Flow │ Changes (7) │ Danger Zone                      │
+├───────────────────────────────────────────────────────────────────────────────────────────┤
+│  [ Search changes… ]   [ Change type ▾ ]   [ Initiator ▾ ]            [ Compare versions ]   │
+│                                                                                              │
+│  ●  v7 · Updated      👤 J. Doe (User)            3 hours ago                                 │
+│  │     “Tighten scope to exclude contractors (CHG0098)”                                      │
+│  │     Scope: +1 criterion · Attribute Flow ‘mail’: source expression changed               │
+│  │                                                          [ View diff ]   [ Compare ]      │
+│  │                                                                                           │
+│  ●  v6 · Updated      ⚙ System (Sync)             yesterday 02:14                            │
+│  │     Attribute Flow ‘employeeId’: added                                                    │
+│  │                                                          [ View diff ]   [ Compare ]      │
+│  │                                                                                           │
+│  ●  v5 · Updated      🔑 prov-api (API key)        14 Jun 09:31                               │
+│  │     2 Attribute Flows changed                                                             │
+│  │                                                          [ View diff ]   [ Compare ]      │
+│  ⋮                                                                                           │
+│                              [ Load more (2 remaining) ]                                     │
+└───────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2. Changes tab: single-version tree diff (the centrepiece)
+
+Opens from “View diff”. Renders the object in its natural tree; unchanged branches collapsed (`▸`); additions green, removals red, modifications amber with old/new lines. `v6 → v7` selectors allow re-pointing the comparison.
+
+```
+┌─ Change v7 · Synchronisation Rule “HR Inbound” ─────────────────────────────────────────────┐
+│ Updated by 👤 J. Doe (User) · 25 Jun 2026 14:30 · comparing  [ v6 ▾ ] → [ v7 ▾ ]            │
+│ Reason: “Tighten scope to exclude contractors (CHG0098)”                      [ View raw ]    │
+├─────────────────────────────────────────────────────────────────────────────────────────────┤
+│  Synchronisation Rule                                                                         │
+│    Details                                                              (no changes)   ▸      │
+│    Scope                                                                                ▾      │
+│      Group 1 (All of)                                                                          │
+│  +     Criterion   employeeType  Is not  “Contractor”                          added          │
+│    Attribute Flow                                                                       ▾      │
+│  ~     mail                                                                                    │
+│  -        Source expression   Trim([mail])                                                     │
+│  +        Source expression   Trim(ToLower([mail]))                                            │
+│        displayName                                                      (no changes)   ▸       │
+│    Object Matching Rules                                                (no changes)   ▸       │
+└─────────────────────────────────────────────────────────────────────────────────────────────┘
+   Legend:  + added (green)    - removed (red)    ~ modified (amber)    ▸ collapsed, click to expand
+```
+
+### 3. Tree diff with a redacted secret (Connected System)
+
+Demonstrates the redaction requirement: a changed credential is shown as changed, never revealing the value (detected via the keyed hash).
+
+```
+┌─ Change v4 · Connected System “Active Directory” ───────────────────────────────────────────┐
+│ Updated by 👤 A. Mehta (User) · 25 Jun 2026 11:02 · comparing  [ v3 ▾ ] → [ v4 ▾ ]          │
+├─────────────────────────────────────────────────────────────────────────────────────────────┤
+│  Connected System                                                                             │
+│    Settings                                                                             ▾      │
+│  ~     Bind password         ●●●●●●●●  →  ●●●●●●●●        secret changed · value hidden 🔒    │
+│  ~     Server                                                                                  │
+│  -        ldaps://dc1.corp.local                                                               │
+│  +        ldaps://dc1.corp.local, ldaps://dc2.corp.local                                       │
+│    Run Profiles                                                         (no changes)   ▸       │
+│    Object Types                                                         (no changes)   ▸       │
+└─────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 4. Comment-on-save dialog (optional reason)
+
+Shown on saving a configuration change in the UI; skippable. Becomes the version’s “commit message”.
+
+```
+┌─ Save changes to “HR Inbound”? ───────────────────────────────────┐
+│                                                                    │
+│  You are updating this Synchronisation Rule.                       │
+│                                                                    │
+│  Reason for change (optional)                                      │
+│  ┌──────────────────────────────────────────────────────────────┐ │
+│  │ Tighten scope to exclude contractors (CHG0098)               │ │
+│  └──────────────────────────────────────────────────────────────┘ │
+│  Shown in the change history and the audit log.                    │
+│                                                                    │
+│                                      [ Cancel ]   [ Save changes ] │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+### 5. Activities list: category quick-filter, new filters, and a configuration row
+
+No new page (per the agreed scope); the existing `ActivityList.razor` gains a category quick-filter, an initiator-type filter, a date range, and URL-persisted state. A configuration-change row links through to the object’s Changes tab at that version.
+
+```
+Activity
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Category:  ( All )  [ Configuration ]  ( Business data )  ( Sync runs )  ( System )           │
+│ [ Operation ▾ ] [ Outcome ▾ ] [ Type ▾ ] [ Status ▾ ] [ Initiator ▾ ]  [ From 📅 ] [ To 📅 ] │
+│ [ Search target or initiator… ]                                    🔗 filters saved in the URL │
+├──────────┬──────────────────────────────┬───────────────────────┬──────────────┬─────────────┤
+│ Operation│ Target                       │ Type                  │ Initiated by │ When        │
+├──────────┼──────────────────────────────┼───────────────────────┼──────────────┼─────────────┤
+│ Updated  │ AD → HR Inbound              │ Synchronisation Rule  │ 👤 J. Doe    │ 3 hours ago │
+│          │ “Tighten scope (CHG0098)”    │                       │              │ → View changes
+│ Updated  │ Active Directory             │ Connected System      │ 👤 A. Mehta  │ today 11:02 │
+│ Created  │ employeeId                   │ Metaverse Attribute   │ 🔑 prov-api  │ 14 Jun      │
+└──────────┴──────────────────────────────┴───────────────────────┴──────────────┴─────────────┘
+```
+
+### 6. Activity detail: configuration change renders the same diff
+
+The same renderer as the Changes tab, embedded on `ActivityDetail.razor`, so the list → activity → diff path and the object → Changes tab → diff path share one component.
+
+```
+Activity: Update Synchronisation Rule “HR Inbound”
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ Status: Complete   Initiated by: 👤 J. Doe (User)   When: 3 hours ago            │
+│ Reason: “Tighten scope to exclude contractors (CHG0098)”                         │
+│ Target: AD → HR Inbound · v6 → v7                          [ Open on object ↗ ]   │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  ‹ the same tree diff component as mock 2, rendered inline ›                     │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 7. Service Settings: enable toggle and split retention
+
+Extends the existing `History` / `ChangeTracking` settings on `Settings.razor`.
+
+```
+History & Change Tracking
+┌────────────────────────────────────────────────────────────────────────────────┐
+│ Track configuration changes               [ On ]                                 │
+│ Track Connected System Object changes     [ On ]                                 │
+│ Track Metaverse Object changes            [ On ]                                 │
+│                                                                                  │
+│ Configuration change retention            [  3650  ] days   (≈ 10 years)         │
+│ Business-data change retention            [    90  ] days                         │
+│ Activity retention (sync / business)      [    90  ] days                         │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 8. PowerShell: summary table and git-style diff
+
+`Get-JIMConfigurationChangeHistory` returns objects (formatted as a table by default) for the summary, and a colourised git-style diff for a single change. Pipeline-friendly.
+
+```
+PS> Get-JIMConfigurationChangeHistory -SyncRule "HR Inbound"
+
+Version Operation InitiatedBy        When              Reason                     Summary
+------- --------- -----------        ----              ------                     -------
+      7 Updated   J. Doe (User)      2026-06-25 14:30  Tighten scope (CHG0098)    Scope +1; flow 'mail' changed
+      6 Updated   System (Sync)      2026-06-24 02:14                             flow 'employeeId' added
+      5 Updated   prov-api (ApiKey)  2026-06-14 09:31                             2 Attribute Flows changed
+
+PS> Get-JIMSyncRule -Name "HR Inbound" | Get-JIMConfigurationChangeHistory -Version 7 -AsDiff
+
+  Synchronisation Rule "HR Inbound"   (v6 -> v7)
+  Updated by J. Doe · 2026-06-25 14:30 · Reason: Tighten scope (CHG0098)
+
+    Scope > Group 1 (All of)
+  + Criterion: employeeType Is not "Contractor"
+    Attribute Flow > mail
+  -   Source: Trim([mail])
+  +   Source: Trim(ToLower([mail]))
+```
+
+In `-AsDiff`, `+` lines render green and `-` lines red via `$PSStyle` (git-style); headers are dim. `-Raw` instead returns the structured change object for further processing. Secret changes render as `~ Bind password  (secret changed; value hidden)`, never the value.
+
 ## Implementation Phases
 
 ### Phase 1: Capture foundation, storage, and redaction (generic; SyncRule + Connected System enabled)
