@@ -1,10 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Security.Claims;
 using Asp.Versioning;
 using JIM.Application;
-using JIM.Models.Security;
 using JIM.Utilities;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
@@ -28,7 +26,7 @@ namespace JIM.Web.Controllers.Api;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrator")]
 [Produces("application/json")]
-public class ServiceSettingsController(ILogger<ServiceSettingsController> logger, JimApplication application) : ControllerBase
+public class ServiceSettingsController(ILogger<ServiceSettingsController> logger, JimApplication application) : ApiControllerBase(application, logger)
 {
     private readonly ILogger<ServiceSettingsController> _logger = logger;
     private readonly JimApplication _application = application;
@@ -167,20 +165,4 @@ public class ServiceSettingsController(ILogger<ServiceSettingsController> logger
         return Ok(ServiceSettingDto.FromEntity(reverted!));
     }
 
-    private bool IsApiKeyAuthenticated()
-    {
-        return User.HasClaim("auth_method", "api_key");
-    }
-
-    private async Task<ApiKey?> GetCurrentApiKeyAsync()
-    {
-        if (!IsApiKeyAuthenticated())
-            return null;
-
-        var apiKeyIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(apiKeyIdClaim) || !Guid.TryParse(apiKeyIdClaim, out var apiKeyId))
-            return null;
-
-        return await _application.Repository.ApiKeys.GetByIdAsync(apiKeyId);
-    }
 }

@@ -1,7 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Security.Claims;
 using Asp.Versioning;
 using JIM.Web.Extensions.Api;
 using JIM.Web.Models.Api;
@@ -9,7 +8,6 @@ using JIM.Application;
 using JIM.Application.Exceptions;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
-using JIM.Models.Security;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -28,7 +26,7 @@ namespace JIM.Web.Controllers.Api;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrator")]
 [Produces("application/json")]
-public class MetaverseController(ILogger<MetaverseController> logger, JimApplication application) : ControllerBase
+public class MetaverseController(ILogger<MetaverseController> logger, JimApplication application) : ApiControllerBase(application, logger)
 {
     private readonly ILogger<MetaverseController> _logger = logger;
     private readonly JimApplication _application = application;
@@ -891,87 +889,4 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         return Ok(summary);
     }
-
-    #region Private Helpers
-
-    /// <summary>
-    /// Checks if the current authentication is via API key.
-    /// </summary>
-    private bool IsApiKeyAuthenticated()
-    {
-        return User.HasClaim("auth_method", "api_key");
-    }
-
-    /// <summary>
-    /// Gets the current API key entity if authenticated via API key.
-    /// </summary>
-    private async Task<ApiKey?> GetCurrentApiKeyAsync()
-    {
-        if (!IsApiKeyAuthenticated())
-            return null;
-
-        // The API key ID is stored in the NameIdentifier claim
-        var apiKeyIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(apiKeyIdClaim) || !Guid.TryParse(apiKeyIdClaim, out var apiKeyId))
-            return null;
-
-        return await _application.Repository.ApiKeys.GetByIdAsync(apiKeyId);
-    }
-
-    /// <summary>
-    /// Resolves the current user from JWT claims by looking up their SSO identifier in the Metaverse.
-    /// Returns null for API key authentication (which is valid - use IsApiKeyAuthenticated() to check).
-    /// </summary>
-    private async Task<MetaverseObject?> GetCurrentUserAsync()
-    {
-        if (User.Identity?.IsAuthenticated != true)
-            return null;
-
-        // API key authentication doesn't map to a Metaverse user object
-        // This is valid - the caller should check IsApiKeyAuthenticated() separately
-        if (IsApiKeyAuthenticated())
-        {
-            _logger.LogDebug("API key authentication detected - no Metaverse user lookup needed");
-            return null;
-        }
-
-        // Get the service settings to know which claim type contains the unique identifier
-        var serviceSettings = await _application.ServiceSettings.GetServiceSettingsAsync();
-        if (serviceSettings?.SSOUniqueIdentifierClaimType == null ||
-            serviceSettings.SSOUniqueIdentifierMetaverseAttribute == null)
-        {
-            _logger.LogError("Service settings are not configured for SSO claim mapping");
-            return null;
-        }
-
-        // Get the unique identifier from the JWT claims
-        var uniqueIdClaimValue = IdentityUtilities.GetSsoUniqueIdentifier(
-            User,
-            serviceSettings.SSOUniqueIdentifierClaimType);
-
-        if (string.IsNullOrEmpty(uniqueIdClaimValue))
-        {
-            _logger.LogWarning("JWT does not contain the expected claim: {ClaimType}",
-                serviceSettings.SSOUniqueIdentifierClaimType);
-            return null;
-        }
-
-        // Look up the user in the Metaverse
-        var userType = await _application.Metaverse.GetMetaverseObjectTypeAsync(
-            Constants.BuiltInObjectTypes.User,
-            false);
-
-        if (userType == null)
-        {
-            _logger.LogError("Could not find User object type in Metaverse");
-            return null;
-        }
-
-        return await _application.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(
-            userType,
-            serviceSettings.SSOUniqueIdentifierMetaverseAttribute,
-            uniqueIdClaimValue);
-    }
-
-    #endregion
 }
