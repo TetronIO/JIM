@@ -184,8 +184,9 @@
                 <MudTabPanel Text="Steps" Icon="@Icons.Material.Filled.List" BadgeData="@_schedule.Steps.Count" BadgeColor="Color.Primary">
                     @if (_editingStep != null)
                     {
-                        @* Step Editor (inline) *@
-                        <MudPaper Outlined="true" Class="pa-4">
+                        @* Step Editor (inline). mb-4 (16px) + the dialog content's 8px bottom padding gives a 24px
+                           bottom gap matching the 24px side padding, since the dialog's action bar is hidden while editing a step. *@
+                        <MudPaper Outlined="true" Class="pa-4 mb-4">
                             <MudStack Spacing="3">
                                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                     <MudText Typo="Typo.h6">@(_isNewStep ? "Add Step" : "Edit Step")</MudText>
@@ -194,9 +195,9 @@
 
                                 <MudSelect T="ScheduleStepType" @bind-Value="_editingStep.StepType" Label="Step Type" Variant="Variant.Outlined">
                                     <MudSelectItem Value="ScheduleStepType.RunProfile">Run Profile</MudSelectItem>
-                                    <MudSelectItem Value="ScheduleStepType.PowerShell" Disabled="true">PowerShell Script (Post-MVP)</MudSelectItem>
-                                    <MudSelectItem Value="ScheduleStepType.Executable" Disabled="true">Executable (Post-MVP)</MudSelectItem>
-                                    <MudSelectItem Value="ScheduleStepType.SqlScript" Disabled="true">SQL Script (Post-MVP)</MudSelectItem>
+                                    <MudSelectItem Value="ScheduleStepType.PowerShell" Disabled="true">PowerShell Script (Coming soon)</MudSelectItem>
+                                    <MudSelectItem Value="ScheduleStepType.Executable" Disabled="true">Executable (Coming soon)</MudSelectItem>
+                                    <MudSelectItem Value="ScheduleStepType.SqlScript" Disabled="true">SQL Script (Coming soon)</MudSelectItem>
                                 </MudSelect>
 
                                 @if (_editingStep.StepType == ScheduleStepType.RunProfile)
