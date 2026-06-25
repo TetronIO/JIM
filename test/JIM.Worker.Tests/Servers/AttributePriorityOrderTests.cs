@@ -216,4 +216,95 @@ public class AttributePriorityOrderTests
         Assert.That(result[1].Id, Is.EqualTo(20));
         _mockCsRepo.Verify(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(ObjectTypeId, AttributeId), Times.Once);
     }
+
+    [Test]
+    public async Task MoveAttributePriorityAsync_MoveThirdToSecond_ShufflesPreviousSecondDownAsync()
+    {
+        // Current order: 10 (1), 20 (2), 30 (3). The user's scenario: move the third to position 2.
+        var m10 = BuildMapping(10, 1, false);
+        var m20 = BuildMapping(20, 2, false);
+        var m30 = BuildMapping(30, 3, false);
+        SetupContributors(m10, m20, m30);
+
+        var result = await _jim.ConnectedSystems.MoveAttributePriorityAsync(ObjectTypeId, AttributeId, mappingId: 30, targetPosition: 2, nullIsValue: null, _user);
+
+        // Expected: 10 stays at 1, 30 takes position 2, the previous second (20) shuffles down to 3.
+        Assert.That(m10.Priority, Is.EqualTo(1));
+        Assert.That(m30.Priority, Is.EqualTo(2));
+        Assert.That(m20.Priority, Is.EqualTo(3));
+
+        // Returned order reflects the new arrangement, highest priority first.
+        Assert.That(result.Select(m => m.Id), Is.EqualTo(new[] { 10, 30, 20 }));
+
+        // Only the rows that actually changed are persisted (10 did not move).
+        _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(
+            It.Is<IReadOnlyCollection<SyncRuleMapping>>(c => c.Count == 2 && c.All(m => m.Id != 10))), Times.Once);
+    }
+
+    [Test]
+    public async Task MoveAttributePriorityAsync_WithNullIsValueOverride_AppliesItToTheMovedMappingAsync()
+    {
+        var m10 = BuildMapping(10, 1, false);
+        var m20 = BuildMapping(20, 2, false);
+        SetupContributors(m10, m20);
+
+        await _jim.ConnectedSystems.MoveAttributePriorityAsync(ObjectTypeId, AttributeId, mappingId: 20, targetPosition: 1, nullIsValue: true, _user);
+
+        Assert.That(m20.Priority, Is.EqualTo(1));
+        Assert.That(m10.Priority, Is.EqualTo(2));
+        Assert.That(m20.NullIsValue, Is.True);
+    }
+
+    [Test]
+    public async Task MoveAttributePriorityAsync_PositionBeyondEnd_ClampsToLastAsync()
+    {
+        var m10 = BuildMapping(10, 1, false);
+        var m20 = BuildMapping(20, 2, false);
+        var m30 = BuildMapping(30, 3, false);
+        SetupContributors(m10, m20, m30);
+
+        // Position 99 is out of range; it should clamp to the last position.
+        var result = await _jim.ConnectedSystems.MoveAttributePriorityAsync(ObjectTypeId, AttributeId, mappingId: 10, targetPosition: 99, nullIsValue: null, _user);
+
+        Assert.That(result.Select(m => m.Id), Is.EqualTo(new[] { 20, 30, 10 }));
+        Assert.That(m10.Priority, Is.EqualTo(3));
+    }
+
+    [Test]
+    public async Task MoveAttributePriorityAsync_NoOpMove_PersistsNothingAsync()
+    {
+        var m10 = BuildMapping(10, 1, false);
+        var m20 = BuildMapping(20, 2, false);
+        SetupContributors(m10, m20);
+
+        // Moving the first mapping to position 1 changes nothing.
+        var result = await _jim.ConnectedSystems.MoveAttributePriorityAsync(ObjectTypeId, AttributeId, mappingId: 10, targetPosition: 1, nullIsValue: null, _user);
+
+        Assert.That(result.Select(m => m.Id), Is.EqualTo(new[] { 10, 20 }));
+        _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()), Times.Never);
+    }
+
+    [Test]
+    public void MoveAttributePriorityAsync_UnknownMapping_ThrowsAndDoesNotPersist()
+    {
+        var m10 = BuildMapping(10, 1, false);
+        var m20 = BuildMapping(20, 2, false);
+        SetupContributors(m10, m20);
+
+        Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _jim.ConnectedSystems.MoveAttributePriorityAsync(ObjectTypeId, AttributeId, mappingId: 99, targetPosition: 1, nullIsValue: null, _user));
+
+        _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()), Times.Never);
+    }
+
+    [Test]
+    public void MoveAttributePriorityAsync_NoContributors_ThrowsAndDoesNotPersist()
+    {
+        SetupContributors();
+
+        Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _jim.ConnectedSystems.MoveAttributePriorityAsync(ObjectTypeId, AttributeId, mappingId: 10, targetPosition: 1, nullIsValue: null, _user));
+
+        _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()), Times.Never);
+    }
 }

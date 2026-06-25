@@ -91,3 +91,23 @@ public class SetAttributePriorityContributorRequest
     public int MappingId { get; set; }
     public bool NullIsValue { get; set; }
 }
+
+/// <summary>
+/// Request DTO for moving a single contributing mapping to a new priority position (#91). The server shuffles the
+/// other contributors to keep the list contiguous and renumbers everything, so the caller need only state the new
+/// position; it never has to renumber siblings itself.
+/// </summary>
+public class MoveAttributePriorityRequest
+{
+    /// <summary>
+    /// The desired 1-based priority position for the mapping (1 = highest priority). Clamped to the valid range
+    /// for the attribute's contributor list.
+    /// </summary>
+    public int Position { get; set; }
+
+    /// <summary>
+    /// When supplied, also sets the moved mapping's "Null is a value" flag as part of the same transaction. When
+    /// omitted, the flag is left unchanged.
+    /// </summary>
+    public bool? NullIsValue { get; set; }
+}

@@ -3958,15 +3958,44 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Validates a requested attribute priority order against the attribute's current contributors and renumbers
-    /// the sibling <see cref="SyncRuleMapping.Priority"/> rows to a deterministic 1..N in the requested order,
-    /// applying each contribution's "Null is a value" flag. The request must list every current contributor for
-    /// the attribute exactly once and no others, so that renumbering produces no gaps or duplicate priorities.
+    /// Snapshots the current priority/null-handling of a set of mappings, keyed by mapping id, so a subsequent
+    /// renumber can determine which rows actually changed (and avoid auditing/persisting no-op rows).
+    /// </summary>
+    private static Dictionary<int, (int Priority, bool NullIsValue)> SnapshotPriorityState(IEnumerable<SyncRuleMapping> mappings)
+    {
+        return mappings.ToDictionary(m => m.Id, m => (m.Priority, m.NullIsValue));
+    }
+
+    /// <summary>
+    /// Renumbers an ordered list of mappings to a deterministic 1..N (1 = highest priority) and returns the subset
+    /// whose <see cref="SyncRuleMapping.Priority"/> or <see cref="SyncRuleMapping.NullIsValue"/> differs from the
+    /// supplied pre-change snapshot. Reordering one mapping inherently renumbers its siblings, so the changed set
+    /// may be larger than the single mapping an admin moved; rows whose number did not actually change are left
+    /// untouched (no audit churn, no redundant write).
+    /// </summary>
+    private static List<SyncRuleMapping> RenumberAndCollectChanges(List<SyncRuleMapping> ordered, IReadOnlyDictionary<int, (int Priority, bool NullIsValue)> snapshot)
+    {
+        var changed = new List<SyncRuleMapping>();
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var mapping = ordered[i];
+            mapping.Priority = i + 1; // 1 = highest priority
+            var before = snapshot[mapping.Id];
+            if (before.Priority != mapping.Priority || before.NullIsValue != mapping.NullIsValue)
+                changed.Add(mapping);
+        }
+        return changed;
+    }
+
+    /// <summary>
+    /// Builds the renumbered ordered list from a complete-order request: the request must list every current
+    /// contributor for the attribute exactly once and no others, so renumbering produces no gaps or duplicate
+    /// priorities. Used by the "replace the whole order" surface (drag-reorder-then-save).
     /// </summary>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="orderedContributors"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when the attribute has no contributors, or the requested order
     /// does not match the attribute's current contributor set exactly.</exception>
-    private async Task<List<SyncRuleMapping>> RenumberAttributePriorityOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors)
+    private async Task<(List<SyncRuleMapping> Ordered, List<SyncRuleMapping> Changed)> BuildAttributePriorityFromFullOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors)
     {
         if (orderedContributors == null)
             throw new ArgumentNullException(nameof(orderedContributors));
@@ -3975,8 +4004,6 @@ public class ConnectedSystemServer
         if (existing.Count == 0)
             throw new ArgumentException($"No import attribute contributions exist for Metaverse attribute {metaverseAttributeId} on Metaverse Object Type {metaverseObjectTypeId}.");
 
-        // The request must be a complete reordering of exactly the existing contributors so renumbering yields a
-        // deterministic 1..N with no gaps and no duplicate priorities within the attribute's list.
         var requestedIds = orderedContributors.Select(c => c.MappingId).ToList();
         var requestedDistinct = new HashSet<int>(requestedIds);
         if (requestedDistinct.Count != requestedIds.Count)
@@ -3986,72 +4013,165 @@ public class ConnectedSystemServer
         if (!requestedDistinct.SetEquals(existingIds))
             throw new ArgumentException("The attribute priority order must list every contributing mapping for the attribute exactly once, and no others.");
 
+        var snapshot = SnapshotPriorityState(existing);
         var byId = existing.ToDictionary(m => m.Id);
         var ordered = new List<SyncRuleMapping>(orderedContributors.Count);
-        for (var i = 0; i < orderedContributors.Count; i++)
+        foreach (var contributor in orderedContributors)
         {
-            var contributor = orderedContributors[i];
             var mapping = byId[contributor.MappingId];
-            mapping.Priority = i + 1; // 1 = highest priority
             mapping.NullIsValue = contributor.NullIsValue;
             ordered.Add(mapping);
         }
 
-        return ordered;
+        var changed = RenumberAndCollectChanges(ordered, snapshot);
+        return (ordered, changed);
     }
 
     /// <summary>
-    /// Sets the attribute priority order for a (Metaverse Object Type, Metaverse attribute) pair (#91),
-    /// transactionally renumbering all contributing mappings' priorities and applying their "Null is a value"
-    /// flags in a single SaveChanges.
+    /// Builds the renumbered ordered list from a single-mapping move: the named mapping is repositioned to the
+    /// 1-based <paramref name="targetPosition"/> and every other contributor shuffles to accommodate it. This is
+    /// the ergonomic, footgun-free reorder: the caller states only "put this mapping at position N" and the engine
+    /// keeps the rest of the list contiguous and duplicate-free. The target position is clamped to the valid range.
+    /// </summary>
+    /// <exception cref="ArgumentException">Thrown when the attribute has no contributors, or the named mapping is
+    /// not one of them.</exception>
+    private async Task<(List<SyncRuleMapping> Ordered, List<SyncRuleMapping> Changed)> BuildAttributePriorityFromMoveAsync(int metaverseObjectTypeId, int metaverseAttributeId, int mappingId, int targetPosition, bool? nullIsValue)
+    {
+        var existing = await Application.Repository.ConnectedSystems.GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
+        if (existing.Count == 0)
+            throw new ArgumentException($"No import attribute contributions exist for Metaverse attribute {metaverseAttributeId} on Metaverse Object Type {metaverseObjectTypeId}.");
+
+        var moving = existing.SingleOrDefault(m => m.Id == mappingId);
+        if (moving == null)
+            throw new ArgumentException($"Mapping {mappingId} is not a contributor to Metaverse attribute {metaverseAttributeId} on Metaverse Object Type {metaverseObjectTypeId}.");
+
+        var snapshot = SnapshotPriorityState(existing);
+
+        if (nullIsValue.HasValue)
+            moving.NullIsValue = nullIsValue.Value;
+
+        // existing is already ordered by Priority then Id. Remove the moving mapping and re-insert it at the
+        // requested position, clamped to [1, N], so the rest of the list shuffles around it.
+        var targetIndex = Math.Clamp(targetPosition, 1, existing.Count) - 1;
+        var ordered = new List<SyncRuleMapping>(existing);
+        ordered.Remove(moving);
+        ordered.Insert(targetIndex, moving);
+
+        var changed = RenumberAndCollectChanges(ordered, snapshot);
+        return (ordered, changed);
+    }
+
+    /// <summary>
+    /// Builds an Activity describing an attribute priority order change, for audit attribution.
+    /// </summary>
+    private static Activity BuildAttributePriorityActivity(int metaverseAttributeId, List<SyncRuleMapping> ordered)
+    {
+        var attributeName = ordered.Count > 0 ? ordered[0].TargetMetaverseAttribute?.Name ?? $"#{metaverseAttributeId}" : $"#{metaverseAttributeId}";
+        return new Activity
+        {
+            TargetName = $"Attribute priority order for {attributeName}",
+            TargetType = ActivityTargetType.SyncRule,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+    }
+
+    /// <summary>
+    /// Audits and persists the changed mappings of an attribute priority change in a single transaction
+    /// (user-initiated). A no-op change (nothing actually moved) writes nothing and records no Activity.
+    /// </summary>
+    private async Task PersistAttributePriorityChangesAsync(int metaverseAttributeId, List<SyncRuleMapping> ordered, List<SyncRuleMapping> changed, MetaverseObject? initiatedBy)
+    {
+        if (changed.Count == 0)
+            return;
+
+        var activity = BuildAttributePriorityActivity(metaverseAttributeId, ordered);
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        foreach (var mapping in changed)
+            AuditHelper.SetUpdated(mapping, initiatedBy);
+
+        await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Audits and persists the changed mappings of an attribute priority change in a single transaction
+    /// (API key initiated). A no-op change writes nothing and records no Activity.
+    /// </summary>
+    private async Task PersistAttributePriorityChangesAsync(int metaverseAttributeId, List<SyncRuleMapping> ordered, List<SyncRuleMapping> changed, ApiKey initiatedByApiKey)
+    {
+        if (changed.Count == 0)
+            return;
+
+        var activity = BuildAttributePriorityActivity(metaverseAttributeId, ordered);
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        foreach (var mapping in changed)
+            AuditHelper.SetUpdated(mapping, initiatedByApiKey);
+
+        await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Replaces the entire attribute priority order for a (Metaverse Object Type, Metaverse attribute) pair (#91),
+    /// transactionally renumbering all contributing mappings' priorities and applying their "Null is a value" flags.
+    /// The request must list every current contributor exactly once. Use <see cref="MoveAttributePriorityAsync(int, int, int, int, bool?, MetaverseObject?)"/>
+    /// for the simpler "move one mapping to position N" gesture. Returns the resulting order (highest priority first).
     /// </summary>
     /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the priority list.</param>
     /// <param name="metaverseAttributeId">The target Metaverse attribute.</param>
     /// <param name="orderedContributors">The contributors in the desired priority order (highest first), each with its "Null is a value" flag.</param>
     /// <param name="initiatedBy">The user who initiated the change.</param>
-    public async Task SetAttributePriorityOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors, MetaverseObject? initiatedBy)
+    public async Task<List<SyncRuleMapping>> SetAttributePriorityOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors, MetaverseObject? initiatedBy)
     {
-        var ordered = await RenumberAttributePriorityOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors);
-
-        var attributeName = ordered[0].TargetMetaverseAttribute?.Name ?? $"#{metaverseAttributeId}";
-        var activity = new Activity
-        {
-            TargetName = $"Attribute priority order for {attributeName}",
-            TargetType = ActivityTargetType.SyncRule,
-            TargetOperationType = ActivityTargetOperationType.Update
-        };
-        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
-
-        foreach (var mapping in ordered)
-            AuditHelper.SetUpdated(mapping, initiatedBy);
-
-        await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(ordered);
-
-        await Application.Activities.CompleteActivityAsync(activity);
+        var (ordered, changed) = await BuildAttributePriorityFromFullOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors);
+        await PersistAttributePriorityChangesAsync(metaverseAttributeId, ordered, changed, initiatedBy);
+        return ordered;
     }
 
     /// <summary>
-    /// Sets the attribute priority order for a (Metaverse Object Type, Metaverse attribute) pair (#91, API key initiated).
+    /// Replaces the entire attribute priority order for a (Metaverse Object Type, Metaverse attribute) pair (#91, API key initiated).
+    /// Returns the resulting order (highest priority first).
     /// </summary>
-    public async Task SetAttributePriorityOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors, ApiKey initiatedByApiKey)
+    public async Task<List<SyncRuleMapping>> SetAttributePriorityOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors, ApiKey initiatedByApiKey)
     {
-        var ordered = await RenumberAttributePriorityOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors);
+        var (ordered, changed) = await BuildAttributePriorityFromFullOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors);
+        await PersistAttributePriorityChangesAsync(metaverseAttributeId, ordered, changed, initiatedByApiKey);
+        return ordered;
+    }
 
-        var attributeName = ordered[0].TargetMetaverseAttribute?.Name ?? $"#{metaverseAttributeId}";
-        var activity = new Activity
-        {
-            TargetName = $"Attribute priority order for {attributeName}",
-            TargetType = ActivityTargetType.SyncRule,
-            TargetOperationType = ActivityTargetOperationType.Update
-        };
-        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+    /// <summary>
+    /// Moves a single contributing mapping to the given 1-based priority position for a (Metaverse Object Type,
+    /// Metaverse attribute) pair (#91), shuffling the other contributors to keep the list contiguous, then
+    /// transactionally renumbering all affected rows. Optionally updates the moved mapping's "Null is a value"
+    /// flag. This is the deterministic, single-request reorder: the admin states only the new position and the
+    /// engine maintains a gap-free, duplicate-free order. Returns the resulting order (highest priority first).
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the priority list.</param>
+    /// <param name="metaverseAttributeId">The target Metaverse attribute.</param>
+    /// <param name="mappingId">The contributing mapping to move.</param>
+    /// <param name="targetPosition">The desired 1-based priority position (1 = highest). Clamped to the valid range.</param>
+    /// <param name="nullIsValue">When supplied, also sets the moved mapping's "Null is a value" flag.</param>
+    /// <param name="initiatedBy">The user who initiated the change.</param>
+    public async Task<List<SyncRuleMapping>> MoveAttributePriorityAsync(int metaverseObjectTypeId, int metaverseAttributeId, int mappingId, int targetPosition, bool? nullIsValue, MetaverseObject? initiatedBy)
+    {
+        var (ordered, changed) = await BuildAttributePriorityFromMoveAsync(metaverseObjectTypeId, metaverseAttributeId, mappingId, targetPosition, nullIsValue);
+        await PersistAttributePriorityChangesAsync(metaverseAttributeId, ordered, changed, initiatedBy);
+        return ordered;
+    }
 
-        foreach (var mapping in ordered)
-            AuditHelper.SetUpdated(mapping, initiatedByApiKey);
-
-        await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(ordered);
-
-        await Application.Activities.CompleteActivityAsync(activity);
+    /// <summary>
+    /// Moves a single contributing mapping to the given 1-based priority position (#91, API key initiated).
+    /// Returns the resulting order (highest priority first).
+    /// </summary>
+    public async Task<List<SyncRuleMapping>> MoveAttributePriorityAsync(int metaverseObjectTypeId, int metaverseAttributeId, int mappingId, int targetPosition, bool? nullIsValue, ApiKey initiatedByApiKey)
+    {
+        var (ordered, changed) = await BuildAttributePriorityFromMoveAsync(metaverseObjectTypeId, metaverseAttributeId, mappingId, targetPosition, nullIsValue);
+        await PersistAttributePriorityChangesAsync(metaverseAttributeId, ordered, changed, initiatedByApiKey);
+        return ordered;
     }
     #endregion
 
