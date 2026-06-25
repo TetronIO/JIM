@@ -624,10 +624,9 @@ public class ExampleDataServer
         foreach (var attributeValues in metaverseObject.AttributeValues.Where(av => av.Attribute != null).GroupBy(av => av.Attribute.Name))
         {
             var values = attributeValues.ToList();
-            if (values.Count == 1)
-                mv[attributeValues.Key] = GetExpressionScalarValue(values[0]);
-            else
-                mv[attributeValues.Key] = values.Select(GetExpressionScalarValue).Where(v => v != null).Select(v => v!.ToString()).ToArray();
+            mv[attributeValues.Key] = values.Count == 1
+                ? GetExpressionScalarValue(values[0])
+                : values.Select(GetExpressionScalarValue).Where(v => v != null).Select(v => v!.ToString()).ToArray();
         }
 
         return new ExpressionContext(mv);

@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
+using System.Linq;
 using System.Text.RegularExpressions;
 namespace JIM.Models.ExampleData;
 
@@ -74,9 +75,10 @@ public partial class ExampleDataObjectType
         // expression mv["..."] references
         if (!string.IsNullOrEmpty(attribute.Expression))
         {
-            foreach (Match match in MetaverseAttributeReferenceRegex().Matches(attribute.Expression))
+            foreach (var referencedName in MetaverseAttributeReferenceRegex()
+                         .Matches(attribute.Expression)
+                         .Select(match => match.Groups[1].Value))
             {
-                var referencedName = match.Groups[1].Value;
                 if (attributesByName.TryGetValue(referencedName, out var referenced) && !ReferenceEquals(referenced, attribute))
                     dependencies.Add(referenced);
             }
