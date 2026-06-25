@@ -27,7 +27,7 @@
             <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pt-4" @bind-ActivePanelIndex="_activeTab">
                 <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Settings">
                     <MudStack Spacing="3">
-                        <MudTextField @bind-Value="_schedule.Name" Label="Name" Variant="Variant.Outlined"
+                        <MudTextField @bind-Value="_schedule.Name" Immediate="true" Label="Name" Variant="Variant.Outlined"
                                       Required="true" RequiredError="Name is required"
                                       HelperText="A descriptive name for this schedule" />
 
@@ -390,7 +390,7 @@
         @if (_editingStep == null)
         {
             <MudButton OnClick="Cancel">Cancel</MudButton>
-            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="@_saving">
+            <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveAsync" Disabled="@(_saving || !CanSave())">
                 @if (_saving)
                 {
                     <MudProgressCircular Indeterminate="true" Class="mr-2" />
@@ -740,6 +740,28 @@
     }
 
     private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>
+    /// Whether the schedule has the mandatory input needed to save, gating the Save button. Mirrors the
+    /// blocking pre-conditions in <see cref="SaveAsync"/> so the button's enabled state matches what would
+    /// actually save: a name is always required; a scheduled (Cron) trigger additionally needs at least one
+    /// day (unless using a custom expression) and, for specific-times patterns, at least one run time.
+    /// </summary>
+    private bool CanSave()
+    {
+        if (_schedule == null || string.IsNullOrWhiteSpace(_schedule.Name))
+            return false;
+
+        if (_schedule.TriggerType == ScheduleTriggerType.Cron)
+        {
+            if (_patternType != SchedulePatternType.Custom && _selectedDays.Count == 0)
+                return false;
+            if (_patternType == SchedulePatternType.SpecificTimes && _runTimes.Count == 0)
+                return false;
+        }
+
+        return true;
+    }
 
     private async Task SaveAsync()
     {
