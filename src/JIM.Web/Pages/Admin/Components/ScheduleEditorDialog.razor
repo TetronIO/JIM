@@ -226,7 +226,7 @@
                                 else
                                 {
                                     @* Non-RunProfile steps require a user-specified name *@
-                                    <MudTextField @bind-Value="_editingStep.Name" Label="Step Name" Variant="Variant.Outlined"
+                                    <MudTextField @bind-Value="_editingStep.Name" Immediate="true" Label="Step Name" Variant="Variant.Outlined"
                                                   Required="true" RequiredError="Name is required for this step type"
                                                   HelperText="A descriptive name for this step" />
                                 }
@@ -238,7 +238,7 @@
 
                                 <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
                                     <MudButton OnClick="CancelStepEditor">Cancel</MudButton>
-                                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveStepAsync">Save Step</MudButton>
+                                    <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SaveStepAsync" Disabled="@(!CanSaveStep())">Save Step</MudButton>
                                 </MudStack>
                             </MudStack>
                         </MudPaper>
@@ -1238,6 +1238,22 @@
     private void CancelStepEditor()
     {
         _editingStep = null;
+    }
+
+    /// <summary>
+    /// Whether the step being edited has the mandatory input needed to save, gating the Save Step button.
+    /// Mirrors the blocking checks in <see cref="SaveStepAsync"/>: a Run Profile step needs both a Connected
+    /// System and a Run Profile selected; any other step type needs a name.
+    /// </summary>
+    private bool CanSaveStep()
+    {
+        if (_editingStep == null)
+            return false;
+
+        if (_editingStep.StepType == ScheduleStepType.RunProfile)
+            return _selectedConnectedSystemId != 0 && _selectedRunProfileId != 0;
+
+        return !string.IsNullOrWhiteSpace(_editingStep.Name);
     }
 
     private Task SaveStepAsync()
