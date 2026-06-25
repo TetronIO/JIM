@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260624105858_AddExpressionToExampleDataTemplateAttribute")]
+    partial class AddExpressionToExampleDataTemplateAttribute
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1464,22 +1467,10 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("MetaverseAttributeId")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("RelativeCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("RelativeDirection")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("RelativeUnit")
-                        .HasColumnType("integer");
-
                     b.Property<string>("StringValue")
                         .HasColumnType("text");
 
                     b.Property<int?>("SyncRuleScopingCriteriaGroupId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ValueMode")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
@@ -1841,26 +1832,8 @@ namespace JIM.PostgresData.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<bool?>("BoolValue")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("CaseSensitive")
-                        .HasColumnType("boolean");
-
                     b.Property<int>("ComparisonType")
                         .HasColumnType("integer");
-
-                    b.Property<DateTime?>("DateTimeValue")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("GuidValue")
-                        .HasColumnType("uuid");
-
-                    b.Property<int?>("IntValue")
-                        .HasColumnType("integer");
-
-                    b.Property<long?>("LongValue")
-                        .HasColumnType("bigint");
 
                     b.Property<int>("MetaverseAttributeId")
                         .HasColumnType("integer");
@@ -1868,20 +1841,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("PredefinedSearchCriteriaGroupId")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("RelativeCount")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("RelativeDirection")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("RelativeUnit")
-                        .HasColumnType("integer");
-
                     b.Property<string>("StringValue")
+                        .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<int>("ValueMode")
-                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 

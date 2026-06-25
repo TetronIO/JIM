@@ -30,6 +30,15 @@ public interface IExampleDataRepository
     public Task<ExampleDataTemplate?> GetTemplateAsync(int id);
     public Task<ExampleDataTemplateHeader?> GetTemplateHeaderAsync(int id);
     public Task CreateTemplateAsync(ExampleDataTemplate template);
+
+    /// <summary>
+    /// Persists a newly-built template graph whose navigation properties reference entities that already exist in the
+    /// database (Metaverse Object Types, Metaverse Attributes, Example Data Sets and their values). Existing entities
+    /// (those with a key already set) are tracked as Unchanged so EF inserts only the new template, object type,
+    /// attribute and child rows and wires foreign keys to the existing entities rather than trying to re-insert them.
+    /// </summary>
+    public Task CreateTemplateGraphAsync(ExampleDataTemplate template);
+
     public Task UpdateTemplateAsync(ExampleDataTemplate template);
     public Task DeleteTemplateAsync(int templateId);
 

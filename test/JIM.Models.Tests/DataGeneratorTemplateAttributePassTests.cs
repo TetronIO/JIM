@@ -30,6 +30,19 @@ public class DataGeneratorTemplateAttributePassTests
     }
 
     [Test]
+    public void TestIsValidExpressionPass()
+    {
+        var subject = new ExampleDataTemplateAttribute
+        {
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
+            PopulatedValuesPercentage = 100,
+            Expression = "Lower(mv[\"First Name\"]) + \".\" + Lower(mv[\"Last Name\"]) + \"@example.io\""
+        };
+
+        Assert.DoesNotThrow(subject.Validate);
+    }
+
+    [Test]
     public void TestIsValidCsAttributePass()
     {
         var subject = new ExampleDataTemplateAttribute

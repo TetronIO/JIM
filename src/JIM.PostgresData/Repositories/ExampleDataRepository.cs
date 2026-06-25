@@ -208,6 +208,18 @@ public class ExampleDataRepository : IExampleDataRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    public async Task CreateTemplateGraphAsync(ExampleDataTemplate template)
+    {
+        // Insert the new template subtree while treating any already-persisted entities it references (Metaverse Object
+        // Types, Metaverse Attributes, Example Data Sets and their values) as existing rather than new. TrackGraph walks
+        // the whole graph (including the many-to-many reference rows) and, keyed on whether the entity already has its
+        // primary key set, marks existing entities Unchanged and new ones Added. This lets EF wire foreign keys to the
+        // existing entities instead of attempting to re-insert them (which would violate their primary keys).
+        Repository.Database.ChangeTracker.TrackGraph(template, node =>
+            node.Entry.State = node.Entry.IsKeySet ? EntityState.Unchanged : EntityState.Added);
+        await Repository.Database.SaveChangesAsync();
+    }
+
     public async Task UpdateTemplateAsync(ExampleDataTemplate template)
     {
         await Repository.Database.SaveChangesAsync();
