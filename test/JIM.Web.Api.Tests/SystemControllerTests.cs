@@ -36,6 +36,11 @@ public class SystemControllerTests
         var mockActivityRepo = new Mock<IActivityRepository>();
         var mockSystemRepo = new Mock<ISystemRepository>();
         var mockServiceSettingsRepo = new Mock<IServiceSettingsRepository>();
+        // The reset restores the built-in example data template (EnsureBuiltInExampleDataTemplateAsync), which reads
+        // the example data and Metaverse repositories. Unset methods return null Tasks, so the restore finds no
+        // template / object types and returns early, which is all these reset-flow tests need.
+        var mockExampleDataRepo = new Mock<IExampleDataRepository>();
+        var mockMetaverseRepo = new Mock<IMetaverseRepository>();
 
         mockActivityRepo.Setup(a => a.GetActivitiesAsync(
             It.IsAny<int>(),
@@ -67,6 +72,8 @@ public class SystemControllerTests
         mockRepository.Setup(r => r.Activity).Returns(mockActivityRepo.Object);
         mockRepository.Setup(r => r.System).Returns(mockSystemRepo.Object);
         mockRepository.Setup(r => r.ServiceSettings).Returns(mockServiceSettingsRepo.Object);
+        mockRepository.Setup(r => r.ExampleData).Returns(mockExampleDataRepo.Object);
+        mockRepository.Setup(r => r.Metaverse).Returns(mockMetaverseRepo.Object);
 
         var application = new JimApplication(mockRepository.Object);
         var controller = new SystemController(NullLogger<SystemController>.Instance, application)

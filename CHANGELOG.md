@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 A completed example data generation Activity no longer shows a stale "Persisting to database..." progress line; the transient progress message is cleared when the Activity completes.
+- 🐛 A factory reset no longer strips the built-in "Users & Groups" example data template of its attributes. The reset's bulk wipe removed them as a side effect (they share a foreign-key graph with Connected System schema), so generating example data after a reset produced objects with no attribute values. The built-in template is now restored as part of the reset, and repaired on startup if a previous reset left it incomplete, keeping the out-of-box configuration intact.
 
 ## [0.12.0] - 2026-06-23
 
