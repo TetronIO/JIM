@@ -1,8 +1,8 @@
 # Attribute Priority Design Document
 
-- **Status:** Doing (design approved; Phase 1 schema/model/API landed, engine + UI deferred)
+- **Status:** Doing (Phase 1 schema/model/API landed; Phase 2 engine design proposed, awaiting approval; UI deferred)
 - **Issue:** [#91](https://github.com/TetronIO/JIM/issues/91)
-- **Last Updated**: 2026-06-24
+- **Last Updated**: 2026-06-26
 
 ## Overview
 
@@ -475,6 +475,79 @@ AttributeResolution ResolveAttributeValue(MetaverseObject mvo, MetaverseAttribut
 ```
 
 > **Implementation notes:** the MVO stores only the *winning* contribution (`MetaverseObjectAttributeValue` stamped with `ContributedBySyncRuleId` and `ContributedBySystemId`); it does not retain the losing contributions. `EvaluateContribution` therefore implies reading the MVO's other joined CSOs, and evaluating scoping criteria against them, at resolution time whenever fallback is needed. `AssertedNull` persists a row with `NullValue=true` and provenance, whereas `NoContributor` persists no row; the two are distinct at rest (see "Asserted-null observability" in the decision section).
+
+#### Engine Integration and Pipeline Placement (Phase 2)
+
+> **Status:** design proposed Jun 2026; awaiting approval before implementation. The `ResolveAttributeValue` pseudo-code above defines the *semantics*; this section pins down *where* resolution runs in the engine and *how* it stays fast.
+
+**Requirement: the inbound pipeline stays linear.** Resolution happens at the point the Metaverse Object attribute is written, as part of attribute flow; it is **not** a separate re-evaluation pass run after attribute flow has already mutated the Metaverse Object. The per-object inbound pipeline is:
+
+```mermaid
+flowchart LR
+    A["Import: staged CSO data"] --> B["CSO create / update"]
+    B --> C["Join / project to MVO"]
+    C --> D{"Per mapped MVO attribute:<br/>priority resolution"}
+    D --> E["Write winning MVO attribute value<br/>+ provenance (winning rule + system)"]
+    E --> F["Export evaluation"]
+```
+
+Resolution is step D, inline. Inbound never writes to a Connected System Object or a Connected System; a losing contribution simply never reaches the Metaverse Object.
+
+**Current state (to be replaced).** Today attribute flow is applied per Connected System Object independently: each CSO's mapping diffs its own value into the Metaverse Object and, for a single-valued attribute, the last CSO processed wins (`SyncEngine.AttributeFlow.cs`). No point in the flow sees all contributors to one attribute together, so the result depends on sync order.
+
+**The performance lever: the winner's provenance is already on the row.** Phase 1 stamps every contributed Metaverse Object attribute value with `ContributedBySyncRuleId` (the rule that won). So when a contribution arrives, the engine does not re-evaluate every contributor; it compares the incoming rule's priority against the *stored incumbent's* priority. That is an O(1) decision in the common case, with a full re-evaluation only in the rare case where the current winner retracts.
+
+**Per-contribution decision (step D):**
+
+```mermaid
+flowchart TD
+    S["Rule R wants to set attribute A on this MVO"] --> M{"Does A have more than one contributing rule? (cached)"}
+    M -- "No, single contributor" --> W["Write directly, stamp provenance R (today's fast path)"]
+    M -- "Yes" --> I{"Is there a current winner row for A?"}
+    I -- "No row" --> RC{"R's contribution state"}
+    I -- "Yes, incumbent rule X" --> CMP{"Compare R to X"}
+    CMP -- "R is X: winner updating itself" --> RU{"Does R still have a value?"}
+    CMP -- "R higher priority than X" --> RWIN["R wins: write value, provenance R"]
+    CMP -- "R lower priority than X" --> RLOSE["R loses: skip write; export EnforceState corrects the source"]
+    RU -- "Yes" --> RWIN
+    RU -- "No, R cleared" --> FB["Next-contributor fallback"]
+    RC -- "Connected with value" --> RWIN
+    RC -- "Connected, no value, Null is a value" --> AN["Assert null: write NullValue row, provenance R"]
+    RC -- "Connected, no value, not Null is a value" --> NOOP["No contribution"]
+    FB --> RES["Evaluate remaining contributors via Resolve, loading other joined CSOs + scoping; rare"]
+```
+
+**Next-contributor fallback (the only expensive path).** When the current winner stops contributing (its rule clears the value without `NullIsValue`, or its CSO disconnects or falls out of scope), the engine evaluates the remaining contributors for that attribute to find the new winner, calling the `AttributePriorityService.Resolve` core over the freshly evaluated contributions. This is where the Metaverse Object's other joined CSOs and their scoping are read. It is bounded by the join count (usually a handful) and only fires on retraction/disconnect, not on every sync. This same path replaces the interim grace-period recall freeze (Phase 2c).
+
+**Options considered.**
+
+| Option | Where resolution runs | Cost model | Verdict |
+|--------|-----------------------|------------|---------|
+| **A. Inline at attribute write, incumbent-comparison** | Step D of the linear pipeline; compare the incoming rule's priority to the stored winner's | Single-contributor attributes unchanged. Multi-contributor: +1 cached lookup per contribution; losers skip the write. Full re-evaluation only on winner retraction. | **Recommended.** Linear, elegant, common path O(1); can *reduce* writes for multi-contributor attributes. |
+| **B. Post-flow re-evaluation pass** | A second pass after attribute flow, before export | Re-evaluates all contributors for every touched attribute, every run | Rejected: non-linear (the "update then re-evaluate" shape), and re-reads contributors even when nothing changed. |
+| **C. Collect-all-then-resolve per MVO** | Gather every contributor's value for the Metaverse Object, then resolve per attribute in one place | Loads all joined CSOs and evaluates all their mappings up front, per Metaverse Object, every run | Rejected: breaks per-CSO streaming, higher memory and CPU at scale, larger hot-path rewrite. |
+
+```mermaid
+flowchart LR
+    subgraph OptA["Option A: inline (recommended)"]
+      direction LR
+      a1["CSO syncs"] --> a2["compare to stored winner"] --> a3["write or skip"]
+    end
+    subgraph OptB["Option B: post-flow pass"]
+      direction LR
+      b1["all CSOs sync, last-writer-wins"] --> b2["re-evaluate every touched attribute"] --> b3["rewrite winners"]
+    end
+```
+
+**Performance analysis (the headline).**
+
+- **Single-contributor attributes (the vast majority) cost nothing extra.** A per-run cache lookup says an attribute has one contributor, and the engine uses today's write path unchanged; the priority machinery never engages.
+- **Multi-contributor attributes add one dictionary lookup per contribution** (the incumbent rule's priority), with no extra database round-trips in the steady state: the incumbent's identity is already on the Metaverse Object attribute value row, and the priority list is cached per run.
+- **It can reduce work.** Today every CSO contributing to a shared attribute writes to the Metaverse Object (last-writer-wins overwrites). Under Option A a losing contribution is detected by an O(1) comparison and **skips the write and its change record entirely**, so multi-contributor attributes generate fewer Metaverse Object writes and less change history.
+- **The expensive path is rare and bounded.** Loading other joined CSOs only happens on winner retraction/disconnect, bounded by the Metaverse Object's join count.
+- **Caches:** the per-(Metaverse Object Type, attribute) priority list and the per-(system, attribute) contributor lookup are built once per run, mirroring (and ideally sharing) the existing `DriftDetectionService` import-mapping cache. No per-object query.
+
+**Relationship to the resolver core.** The pure `AttributePriorityService.Resolve(contributions)` (built and unit-tested in Phase 2a) defines the canonical semantics. The inline incumbent-comparison is an O(1) specialisation that yields the identical outcome for the common single-incoming-contribution case; the fallback path calls `Resolve` directly over the gathered contributions. The two are consistent by construction and can be cross-checked with a property test (fast-path result equals `Resolve` result).
 
 #### Interaction with Drift Detection (priority-aware contributor check)
 
