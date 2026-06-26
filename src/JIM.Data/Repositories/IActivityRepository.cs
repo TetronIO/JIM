@@ -99,6 +99,28 @@ public interface IActivityRepository
     /// </summary>
     public Task<int> GetMaxConfigurationChangeVersionAsync(ActivityTargetType targetType, int targetObjectId);
 
+    /// <summary>
+    /// Counts the versioned configuration-change activities recorded for a configuration object.
+    /// </summary>
+    public Task<int> GetConfigurationChangeCountAsync(ActivityTargetType targetType, int targetObjectId);
+
+    /// <summary>
+    /// Returns a page of versioned configuration-change activities for a configuration object, newest version first,
+    /// each including the raw snapshot JSON so the application layer can build summaries and diffs.
+    /// </summary>
+    public Task<List<ConfigurationChangeActivityData>> GetConfigurationChangeActivitiesAsync(ActivityTargetType targetType, int targetObjectId, int skip, int take);
+
+    /// <summary>
+    /// Returns the configuration-change activity for a specific version of a configuration object, or null if absent.
+    /// </summary>
+    public Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityByVersionAsync(ActivityTargetType targetType, int targetObjectId, int version);
+
+    /// <summary>
+    /// Returns the configuration-change activity for the highest version below <paramref name="version"/> (the
+    /// immediate predecessor), or null if none exists. Used to diff a version against the one before it.
+    /// </summary>
+    public Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityBeforeVersionAsync(ActivityTargetType targetType, int targetObjectId, int version);
+
 
     /// <summary>
     /// Queries the database for RPEI error counts for an activity, returning the total number of
