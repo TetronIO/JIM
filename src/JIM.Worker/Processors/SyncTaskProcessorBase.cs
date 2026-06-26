@@ -52,6 +52,12 @@ public abstract class SyncTaskProcessorBase
     // Cache of export rules for drift detection (filtered to EnforceState = true)
     protected List<SyncRule>? _driftDetectionExportRules;
 
+    // Per-run attribute priority context (#91): contributors per (Metaverse Object Type, Metaverse Attribute) across
+    // all Connected Systems, backing the inline incumbent-comparison gate in the attribute-flow engine. Null until
+    // built. Built with null assertions disabled until the NullValue read-query filter lands, so the gate (priority
+    // resolution among value contributors) is live but no asserted-null markers are written yet.
+    protected AttributePriorityContext? _attributePriorityContext;
+
     // Object type IDs that have inbound import rules with reference attribute mappings.
     // Used to skip reference attribute queueing for unchanged CSOs whose types have no reference rules.
     protected HashSet<int>? _objectTypesWithReferenceRules;
@@ -2615,6 +2621,13 @@ public abstract class SyncTaskProcessorBase
     /// <param name="valueChangeType">The type of change (Add or Remove).</param>
     private static void AddMvoChangeAttributeValueObject(MetaverseObjectChange metaverseObjectChange, MetaverseObjectAttributeValue metaverseObjectAttributeValue, ValueChangeType valueChangeType)
     {
+        // Asserted-null markers (#91) carry no value; their addition/removal is an internal representation of
+        // "asserted null", not a tracked value. The meaningful change (the real value being cleared) is recorded via
+        // the removal of the real value, so skip the marker itself here. Richer asserted-null history is the
+        // SyncOutcome surface (#363), not the attribute value-change log.
+        if (metaverseObjectAttributeValue.NullValue)
+            return;
+
         var attributeChange = metaverseObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute!.Id == metaverseObjectAttributeValue.Attribute.Id);
         if (attributeChange == null)
         {
@@ -3081,7 +3094,7 @@ public abstract class SyncTaskProcessorBase
         if (_objectTypes == null)
             throw new MissingMemberException("_objectTypes is null!");
 
-        return _syncEngine.FlowInboundAttributes(connectedSystemObject, syncRule, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass);
+        return _syncEngine.FlowInboundAttributes(connectedSystemObject, syncRule, _objectTypes, _expressionEvaluator, skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass, _attributePriorityContext);
     }
 
     /// <summary>
@@ -3264,6 +3277,12 @@ public abstract class SyncTaskProcessorBase
         // Without all import rules, export-only systems would have an empty cache and incorrectly detect
         // drift on attributes that are legitimately sourced from other systems.
         _importMappingCache = DriftDetectionService.BuildImportMappingCache(allSyncRules);
+
+        // Build the attribute priority context (#91) from the same all-systems rule set: contributors per
+        // (Metaverse Object Type, Metaverse Attribute), backing the inline incumbent-comparison gate. Null assertions
+        // are honoured now the NullValue read-query filter is in place (markers are excluded from export/drift/scoping
+        // value sourcing, so an asserted null clears downstream targets and cannot resurrect a lower-priority value).
+        _attributePriorityContext = new AttributePriorityContext(allSyncRules, honourNullAssertions: true);
 
         // Cache export rules with EnforceState = true for THIS Connected System only
         _driftDetectionExportRules = currentSystemSyncRules
