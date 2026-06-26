@@ -46,17 +46,11 @@ public sealed class AttributePriorityContext
         ArgumentNullException.ThrowIfNull(allSyncRules);
         HonourNullAssertions = honourNullAssertions;
 
-        foreach (var rule in allSyncRules)
+        foreach (var rule in allSyncRules.Where(r => r.Enabled && r.Direction == SyncRuleDirection.Import))
         {
-            if (!rule.Enabled || rule.Direction != SyncRuleDirection.Import)
-                continue;
-
-            foreach (var mapping in rule.AttributeFlowRules)
+            foreach (var mapping in rule.AttributeFlowRules.Where(m => m.TargetMetaverseAttribute != null && m.SyncRuleId.HasValue))
             {
-                if (mapping.TargetMetaverseAttribute == null || !mapping.SyncRuleId.HasValue)
-                    continue;
-
-                var attributeId = mapping.TargetMetaverseAttribute.Id;
+                var attributeId = mapping.TargetMetaverseAttribute!.Id;
                 var listKey = (rule.MetaverseObjectTypeId, attributeId);
 
                 if (!_contributorsByAttribute.TryGetValue(listKey, out var list))
@@ -66,7 +60,7 @@ public sealed class AttributePriorityContext
                 }
 
                 list.Add(mapping);
-                _contributorBySyncRule[(rule.MetaverseObjectTypeId, attributeId, mapping.SyncRuleId.Value)] = mapping;
+                _contributorBySyncRule[(rule.MetaverseObjectTypeId, attributeId, mapping.SyncRuleId!.Value)] = mapping;
             }
         }
 

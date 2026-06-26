@@ -267,7 +267,8 @@ public partial class SyncEngine
         // contributors; otherwise (sole contributor, self-retraction, or no priority context) clear it.
         var incumbentSyncRuleId = FindEffectiveIncumbentSyncRuleId(mvo, attributeId);
         var incumbentIsAnotherRule = incumbentSyncRuleId != null && incumbentSyncRuleId != contributingSyncRuleId;
-        if (priorityContext != null && incumbentIsAnotherRule &&
+        // priorityContext is non-null here: the early return above handles the null case.
+        if (incumbentIsAnotherRule &&
             priorityContext.GetContributorCount(mvoObjectTypeId, attributeId) > 1)
             return;
 
