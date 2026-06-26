@@ -98,6 +98,7 @@ nav:
       - Architecture: concepts/architecture.md
       - Synchronisation Pipeline: concepts/synchronisation-pipeline.md
       - JML Lifecycle: concepts/jml-lifecycle.md
+      - Attribute Priority: concepts/attribute-priority.md
       - Expressions: concepts/expressions.md
       - Case Sensitivity: concepts/case-sensitivity.md
   - Configuration:
