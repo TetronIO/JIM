@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using DynamicExpresso.Exceptions;
+using JIM.Application.Services;
 using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
@@ -33,7 +34,9 @@ public partial class SyncEngine
         bool onlyReferenceAttributes = false,
         bool isFinalReferencePass = false,
         int? contributingSystemId = null,
-        List<AttributeFlowWarning>? warnings = null)
+        List<AttributeFlowWarning>? warnings = null,
+        int mvoObjectTypeId = 0,
+        AttributePriorityContext? priorityContext = null)
     {
         if (cso.MetaverseObject == null)
         {
@@ -53,6 +56,23 @@ public partial class SyncEngine
         // Provenance: stamp the winning sync rule alongside the contributing system on every value this mapping
         // writes (#91), so the Metaverse Object value records which rule contributed it, not just which system.
         var contributingSyncRuleId = syncRuleMapping.SyncRuleId;
+
+        // Attribute priority gate (#91): when an attribute has more than one contributing rule, a contribution that
+        // loses priority resolution to the rule currently owning the value (the incumbent) must never reach the
+        // Metaverse Object. Single-contributor attributes, and runs without a priority context, use the unchanged
+        // write path: the gate adds one cached lookup and never engages for the common single-contributor case.
+        if (priorityContext != null && contributingSyncRuleId.HasValue &&
+            priorityContext.GetContributorCount(mvoObjectTypeId, syncRuleMapping.TargetMetaverseAttribute.Id) > 1)
+        {
+            var incumbentSyncRuleId = FindEffectiveIncumbentSyncRuleId(mvo, syncRuleMapping.TargetMetaverseAttribute.Id);
+            if (!priorityContext.ShouldApply(mvoObjectTypeId, syncRuleMapping.TargetMetaverseAttribute.Id, syncRuleMapping, incumbentSyncRuleId))
+            {
+                Log.Verbose("ProcessMapping: contribution from Synchronisation Rule {RuleId} loses priority resolution for " +
+                    "attribute {AttributeId} on MVO {MvoId}; skipping write.",
+                    contributingSyncRuleId, syncRuleMapping.TargetMetaverseAttribute.Id, mvo.Id);
+                return;
+            }
+        }
 
         foreach (var source in syncRuleMapping.Sources.OrderBy(q => q.Order))
         {
@@ -157,6 +177,24 @@ public partial class SyncEngine
             else
                 throw new InvalidDataException("Expected ConnectedSystemAttribute or Expression to be populated in a SyncRuleMappingSource object.");
         }
+    }
+
+    /// <summary>
+    /// Identifies the Synchronisation Rule that currently owns a Metaverse Object attribute's value (the incumbent,
+    /// for the attribute priority gate, #91). Prefers a value written earlier in this run by another mapping (a
+    /// pending addition), otherwise the current persisted row value, ignoring values already pending removal. Under
+    /// winner-takes-all-values any value for the attribute identifies the owning rule. Returns null when nothing owns
+    /// the attribute or the value is internally managed (no contributing rule stamped).
+    /// </summary>
+    private static int? FindEffectiveIncumbentSyncRuleId(MetaverseObject mvo, int attributeId)
+    {
+        var pendingOwner = mvo.PendingAttributeValueAdditions.LastOrDefault(av => av.AttributeId == attributeId);
+        if (pendingOwner != null)
+            return pendingOwner.ContributedBySyncRuleId;
+
+        var current = mvo.AttributeValues.FirstOrDefault(av =>
+            av.AttributeId == attributeId && !mvo.PendingAttributeValueRemovals.Contains(av));
+        return current?.ContributedBySyncRuleId;
     }
 
     /// <summary>
