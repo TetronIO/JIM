@@ -349,4 +349,22 @@ public class SyncEnginePriorityFlowTests
         Assert.That(marker.NullValue, Is.True);
         Assert.That(marker.ContributedBySyncRuleId, Is.EqualTo(1));
     }
+
+    [Test]
+    public void FlowInboundAttributes_NullIsValueButNoPriorityContext_ClearsWithoutMarker()
+    {
+        // The feature is inert without a priority context: even a "Null is a value" mapping clears as before and
+        // never writes a NullValue marker, so the marker is never persisted before the read-query filter exists.
+        var dept = DeptAttr();
+        var rule = PriorityRule(syncRuleId: 1, priority: 1, dept, nullIsValue: true);
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        SeedIncumbent(mvo, dept, "X", syncRuleId: 1, systemId: 5);
+        var cso = CsoJoinedNoValue(mvo, connectedSystemId: 5);
+
+        _engine.FlowInboundAttributes(cso, rule, ObjectTypes()); // no priorityContext supplied
+
+        Assert.That(mvo.PendingAttributeValueRemovals.Select(v => v.StringValue), Does.Contain("X"));
+        Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty, "no asserted-null marker is written without a priority context");
+    }
 }

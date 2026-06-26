@@ -227,6 +227,16 @@ public partial class SyncEngine
         var attributeId = syncRuleMapping.TargetMetaverseAttribute!.Id;
         var existingValues = mvo.AttributeValues.Where(av => av.AttributeId == attributeId).ToList();
 
+        // Inert without a priority context: preserve the historic clear behaviour exactly (no asserted-null markers,
+        // no abstention). Markers and abstention only engage once the worker supplies a context, which it does
+        // together with the NullValue read-query filter, so a marker is never written before the read paths exclude
+        // it (the integrity invariant, #91).
+        if (priorityContext == null)
+        {
+            mvo.PendingAttributeValueRemovals.AddRange(existingValues);
+            return;
+        }
+
         if (syncRuleMapping.NullIsValue)
         {
             // Assert null: remove any real values, then ensure exactly one NullValue marker stamped with this rule.
