@@ -307,4 +307,96 @@ public class AttributePriorityOrderTests
 
         _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()), Times.Never);
     }
+
+    // ─── Auto-assign priority on new import mapping creation (#91, "safe addition") ───
+
+    /// <summary>
+    /// Builds a freshly-created import mapping targeting the shared attribute: sentinel priority, no sources (so
+    /// type-compatibility validation is a no-op), and a SyncRule carrying the object type and Import direction.
+    /// </summary>
+    private static SyncRuleMapping BuildNewImportMapping(int id)
+    {
+        return new SyncRuleMapping
+        {
+            Id = id,
+            Priority = int.MaxValue,
+            NullIsValue = false,
+            TargetMetaverseAttributeId = AttributeId,
+            TargetMetaverseAttribute = new MetaverseAttribute { Id = AttributeId, Name = "department" },
+            SyncRule = new SyncRule
+            {
+                Id = id * 100,
+                Name = $"Rule {id}",
+                Enabled = true,
+                Direction = SyncRuleDirection.Import,
+                MetaverseObjectTypeId = ObjectTypeId,
+                ConnectedSystem = new ConnectedSystem { Id = id, Name = $"System {id}" }
+            }
+        };
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_SecondImportContributor_DensifiesAndNewMappingLandsLastAsync()
+    {
+        // An attribute with one existing contributor (at the safe-addition sentinel) gains a second. The whole list
+        // must densify to 1..N in precedence order with the newcomer last, so it never wins resolution until reordered.
+        var existing = BuildMapping(10, priority: int.MaxValue, nullIsValue: false);
+        var created = BuildNewImportMapping(20);
+
+        // After the create, the DB holds both, ordered by (Priority asc, Id asc): existing (10), then the newcomer (20).
+        SetupContributors(existing, created);
+        _mockCsRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
+
+        await _jim.ConnectedSystems.CreateSyncRuleMappingAsync(created, _user);
+
+        // Densified: the incumbent becomes priority 1; the newcomer lands last at priority 2.
+        Assert.That(existing.Priority, Is.EqualTo(1), "the incumbent should take the top, explicit priority");
+        Assert.That(created.Priority, Is.EqualTo(2), "the newcomer must land at the bottom of the priority list");
+
+        // Both sentinels became explicit, so both are persisted, transactionally, once.
+        _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(
+            It.Is<IReadOnlyCollection<SyncRuleMapping>>(c => c.Count == 2)), Times.Once);
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_FirstImportContributor_LeavesSafeAdditionSentinelAsync()
+    {
+        // The sole contributor to an attribute: priority is meaningless, so the sentinel is left untouched and no
+        // renumbering write occurs.
+        var created = BuildNewImportMapping(20);
+        SetupContributors(created);
+        _mockCsRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
+
+        await _jim.ConnectedSystems.CreateSyncRuleMappingAsync(created, _user);
+
+        Assert.That(created.Priority, Is.EqualTo(int.MaxValue), "a sole contributor stays at the safe-addition sentinel");
+        _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ExportMapping_DoesNotAssignPriorityAsync()
+    {
+        // Priority is an inbound concern: creating an export mapping must not read the contributor list or renumber.
+        var export = new SyncRuleMapping
+        {
+            Id = 30,
+            TargetConnectedSystemAttributeId = 5,
+            TargetConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Id = 5, Name = "displayName" },
+            SyncRule = new SyncRule
+            {
+                Id = 3000,
+                Name = "Export Rule",
+                Enabled = true,
+                Direction = SyncRuleDirection.Export,
+                MetaverseObjectTypeId = ObjectTypeId,
+                ConnectedSystem = new ConnectedSystem { Id = 3, Name = "Target System" }
+            }
+        };
+        _mockCsRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
+
+        await _jim.ConnectedSystems.CreateSyncRuleMappingAsync(export, _user);
+
+        _mockCsRepo.Verify(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+        _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()), Times.Never);
+    }
 }

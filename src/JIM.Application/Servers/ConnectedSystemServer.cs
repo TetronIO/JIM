@@ -3823,9 +3823,15 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
+        // Capture the object type before ClearMappingNavigationProperties detaches the SyncRule nav; auto-assign
+        // needs it to scope the attribute's priority list.
+        var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
+
         AuditHelper.SetCreated(mapping, initiatedBy);
         ClearMappingNavigationProperties(mapping);
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
+
+        await AutoAssignImportMappingPriorityAsync(mapping, metaverseObjectTypeId);
 
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -3853,9 +3859,15 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
+        // Capture the object type before ClearMappingNavigationProperties detaches the SyncRule nav; auto-assign
+        // needs it to scope the attribute's priority list.
+        var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
+
         AuditHelper.SetCreated(mapping, initiatedByApiKey);
         ClearMappingNavigationProperties(mapping);
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
+
+        await AutoAssignImportMappingPriorityAsync(mapping, metaverseObjectTypeId);
 
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -3985,6 +3997,40 @@ public class ConnectedSystemServer
                 changed.Add(mapping);
         }
         return changed;
+    }
+
+    /// <summary>
+    /// Gives a newly-created import mapping an explicit priority when its target Metaverse attribute already has
+    /// other contributors for the object type (#91, "safe addition"). The whole contributor list is densified to a
+    /// dense 1..N in its existing precedence order ((Priority asc, Id asc), as the query returns it) with the new
+    /// mapping last, so the new flow never wins resolution until an admin reorders it. This both makes the priorities
+    /// explicit (replacing the int.MaxValue sentinels) and avoids the overflow of a literal "max + 1" while every
+    /// existing contributor is still at the sentinel. A no-op for export mappings (priority is an inbound concern)
+    /// and when the attribute has a single contributor (priority is meaningless, so the new mapping keeps the
+    /// sentinel). Order-preserving: the densified ranks match the precedence the id tie-break already produced, so no
+    /// resolution outcome changes; only the stored numbers become explicit.
+    /// </summary>
+    /// <param name="mapping">The just-persisted mapping.</param>
+    /// <param name="metaverseObjectTypeId">The object type that scopes the priority list (from the mapping's
+    /// Synchronisation Rule). When null the attribute's priority list cannot be scoped, so the mapping is left at the
+    /// safe-addition sentinel.</param>
+    private async Task AutoAssignImportMappingPriorityAsync(SyncRuleMapping mapping, int? metaverseObjectTypeId)
+    {
+        // Export mappings do not participate in attribute priority; only import mappings target a Metaverse attribute.
+        if (!mapping.TargetMetaverseAttributeId.HasValue || !metaverseObjectTypeId.HasValue)
+            return;
+
+        var contributors = await Application.Repository.ConnectedSystems
+            .GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId.Value, mapping.TargetMetaverseAttributeId.Value);
+
+        // Sole contributor: priority is meaningless, so leave the safe-addition sentinel untouched.
+        if (contributors.Count <= 1)
+            return;
+
+        var snapshot = SnapshotPriorityState(contributors);
+        var changed = RenumberAndCollectChanges(contributors, snapshot);
+        if (changed.Count > 0)
+            await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
     }
 
     /// <summary>
