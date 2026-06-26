@@ -3,9 +3,12 @@
 
 using JIM.Application.Services;
 using JIM.Models.Core;
+using JIM.Models.Expressions;
+using JIM.Models.Interfaces;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
+using Moq;
 using NUnit.Framework;
 
 namespace JIM.Worker.Tests.SyncEngineTests;
@@ -76,9 +79,12 @@ public class SyncEnginePriorityFlowTests
     private static MetaverseAttribute DeptAttr() => new() { Id = 100, Name = "department", Type = AttributeDataType.Text };
 
     /// <summary>An enabled import rule with a single text mapping to <paramref name="target"/> at the given priority.</summary>
-    private static SyncRule PriorityRule(int syncRuleId, int priority, MetaverseAttribute target, int csoAttrId = 200)
+    private static SyncRule PriorityRule(int syncRuleId, int priority, MetaverseAttribute target, int csoAttrId = 200, bool nullIsValue = false)
     {
-        var mapping = new SyncRuleMapping { Id = syncRuleId, SyncRuleId = syncRuleId, TargetMetaverseAttribute = target, Priority = priority };
+        var mapping = new SyncRuleMapping
+        {
+            Id = syncRuleId, SyncRuleId = syncRuleId, TargetMetaverseAttribute = target, Priority = priority, NullIsValue = nullIsValue
+        };
         mapping.Sources.Add(new SyncRuleMappingSource { ConnectedSystemAttributeId = csoAttrId, Order = 1 });
         return new SyncRule
         {
@@ -95,6 +101,28 @@ public class SyncEnginePriorityFlowTests
         var cso = new ConnectedSystemObject { Id = Guid.NewGuid(), TypeId = 1, ConnectedSystemId = connectedSystemId, MetaverseObject = mvo };
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { AttributeId = csoAttrId, StringValue = sourceValue });
         return cso;
+    }
+
+    /// <summary>A joined CSO that contributes no value for the source attribute (the ConnectedNoValue state).</summary>
+    private static ConnectedSystemObject CsoJoinedNoValue(MetaverseObject mvo, int connectedSystemId) =>
+        new() { Id = Guid.NewGuid(), TypeId = 1, ConnectedSystemId = connectedSystemId, MetaverseObject = mvo };
+
+    /// <summary>An enabled import rule whose single mapping flows from an expression (evaluated by a mocked evaluator).</summary>
+    private static SyncRule ExpressionRule(int syncRuleId, int priority, MetaverseAttribute target, bool nullIsValue = false)
+    {
+        var mapping = new SyncRuleMapping
+        {
+            Id = syncRuleId, SyncRuleId = syncRuleId, TargetMetaverseAttribute = target, Priority = priority, NullIsValue = nullIsValue
+        };
+        mapping.Sources.Add(new SyncRuleMappingSource { Expression = "SomeExpression()", Order = 1 });
+        return new SyncRule
+        {
+            Id = syncRuleId,
+            MetaverseObjectTypeId = MvoTypeId,
+            Direction = SyncRuleDirection.Import,
+            Enabled = true,
+            AttributeFlowRules = [mapping]
+        };
     }
 
     /// <summary>Seeds an existing winning value on the MVO row, stamped with its contributing rule/system (the incumbent).</summary>
@@ -207,5 +235,118 @@ public class SyncEnginePriorityFlowTests
         var added = mvo.PendingAttributeValueAdditions.Single();
         Assert.That(added.StringValue, Is.EqualTo("Engineering"));
         Assert.That(added.ContributedBySyncRuleId, Is.EqualTo(1));
+    }
+
+    // ----- ACT node for no-value winners: assert-null / abstain (1c) -----
+
+    [Test]
+    public void FlowInboundAttributes_WinnerConnectedNoValueWithNullIsValue_AssertsNullMarkerOverIncumbent()
+    {
+        // Higher-priority rule has "Null is a value" and contributes no value: it must overwrite the lower-priority
+        // incumbent value with an asserted-null marker (the "clears must propagate" case), not fall through.
+        var dept = DeptAttr();
+        var highRule = PriorityRule(syncRuleId: 1, priority: 1, dept, nullIsValue: true);
+        var lowRule = PriorityRule(syncRuleId: 2, priority: 2, dept);
+        var context = new AttributePriorityContext(new[] { highRule, lowRule });
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        SeedIncumbent(mvo, dept, "IT", syncRuleId: 2, systemId: 9);
+        var cso = CsoJoinedNoValue(mvo, connectedSystemId: 5);
+
+        _engine.FlowInboundAttributes(cso, highRule, ObjectTypes(), priorityContext: context);
+
+        Assert.That(mvo.PendingAttributeValueRemovals.Select(v => v.StringValue), Does.Contain("IT"), "the lower-priority value is cleared");
+        var marker = mvo.PendingAttributeValueAdditions.Single();
+        Assert.That(marker.NullValue, Is.True, "an asserted-null marker row is written");
+        Assert.That(marker.StringValue, Is.Null);
+        Assert.That(marker.ContributedBySyncRuleId, Is.EqualTo(1), "the asserting rule's provenance is stamped");
+        Assert.That(marker.ContributedBySystemId, Is.EqualTo(5));
+    }
+
+    [Test]
+    public void FlowInboundAttributes_WinnerConnectedNoValueWithoutNullIsValue_LeavesLowerPriorityIncumbent()
+    {
+        // Higher-priority rule contributes no value and does NOT assert null: it abstains, so the lower-priority
+        // incumbent value must be left in place (fall-through), not cleared.
+        var dept = DeptAttr();
+        var highRule = PriorityRule(syncRuleId: 1, priority: 1, dept, nullIsValue: false);
+        var lowRule = PriorityRule(syncRuleId: 2, priority: 2, dept);
+        var context = new AttributePriorityContext(new[] { highRule, lowRule });
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        SeedIncumbent(mvo, dept, "IT", syncRuleId: 2, systemId: 9);
+        var cso = CsoJoinedNoValue(mvo, connectedSystemId: 5);
+
+        _engine.FlowInboundAttributes(cso, highRule, ObjectTypes(), priorityContext: context);
+
+        Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty, "an abstaining higher-priority rule must not clear the incumbent");
+        Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty);
+        Assert.That(mvo.AttributeValues.Single().StringValue, Is.EqualTo("IT"));
+    }
+
+    [Test]
+    public void FlowInboundAttributes_SoleContributorNullIsValue_AssertsNullMarker()
+    {
+        // A sole contributor that asserts null replaces its value with a marker row (asserted empty, observable),
+        // not just an absent row.
+        var dept = DeptAttr();
+        var onlyRule = PriorityRule(syncRuleId: 1, priority: 1, dept, nullIsValue: true);
+        var context = new AttributePriorityContext(new[] { onlyRule });
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        SeedIncumbent(mvo, dept, "X", syncRuleId: 1, systemId: 5);
+        var cso = CsoJoinedNoValue(mvo, connectedSystemId: 5);
+
+        _engine.FlowInboundAttributes(cso, onlyRule, ObjectTypes(), priorityContext: context);
+
+        Assert.That(mvo.PendingAttributeValueRemovals.Select(v => v.StringValue), Does.Contain("X"));
+        var marker = mvo.PendingAttributeValueAdditions.Single();
+        Assert.That(marker.NullValue, Is.True);
+        Assert.That(marker.ContributedBySyncRuleId, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void FlowInboundAttributes_WinnerRetractsItsOwnValueWithoutNullIsValue_Clears()
+    {
+        // The current winner stops contributing (no value, no NullIsValue) and is its own incumbent: its value is
+        // cleared. (Re-electing a lower-priority next contributor is the fallback path, handled later.)
+        var dept = DeptAttr();
+        var highRule = PriorityRule(syncRuleId: 1, priority: 1, dept, nullIsValue: false);
+        var lowRule = PriorityRule(syncRuleId: 2, priority: 2, dept);
+        var context = new AttributePriorityContext(new[] { highRule, lowRule });
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        SeedIncumbent(mvo, dept, "X", syncRuleId: 1, systemId: 5);
+        var cso = CsoJoinedNoValue(mvo, connectedSystemId: 5);
+
+        _engine.FlowInboundAttributes(cso, highRule, ObjectTypes(), priorityContext: context);
+
+        Assert.That(mvo.PendingAttributeValueRemovals.Select(v => v.StringValue), Does.Contain("X"));
+        Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty, "no marker when the rule is not asserting null");
+    }
+
+    [Test]
+    public void FlowInboundAttributes_ExpressionReturnsNull_WithNullIsValue_AssertsNullMarkerOverIncumbent()
+    {
+        // Expression null is a positive ConnectedNoValue assertion (not "no opinion"), so a higher-priority rule with
+        // "Null is a value" must assert null over a lower-priority incumbent rather than clearing unconditionally.
+        var dept = DeptAttr();
+        var highRule = ExpressionRule(syncRuleId: 1, priority: 1, dept, nullIsValue: true);
+        var lowRule = PriorityRule(syncRuleId: 2, priority: 2, dept);
+        var context = new AttributePriorityContext(new[] { highRule, lowRule });
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        SeedIncumbent(mvo, dept, "IT", syncRuleId: 2, systemId: 9);
+        var cso = CsoJoinedTo(mvo, "ignored", connectedSystemId: 5);
+
+        var evaluator = new Mock<IExpressionEvaluator>();
+        evaluator.Setup(e => e.Evaluate(It.IsAny<string>(), It.IsAny<ExpressionContext>())).Returns((object?)null);
+
+        _engine.FlowInboundAttributes(cso, highRule, ObjectTypes(), expressionEvaluator: evaluator.Object, priorityContext: context);
+
+        Assert.That(mvo.PendingAttributeValueRemovals.Select(v => v.StringValue), Does.Contain("IT"));
+        var marker = mvo.PendingAttributeValueAdditions.Single();
+        Assert.That(marker.NullValue, Is.True);
+        Assert.That(marker.ContributedBySyncRuleId, Is.EqualTo(1));
     }
 }
