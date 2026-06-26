@@ -100,6 +100,28 @@ public class SyncRuleMapping : IAuditable
     public InboundCaseNormalisation CaseNormalisation { get; set; } = InboundCaseNormalisation.None;
 
     /// <summary>
+    /// Priority for this attribute contribution when multiple import Synchronisation Rules flow to the same
+    /// Metaverse Object attribute. Lower numbers win (1 is the highest priority). The priority list for a
+    /// Metaverse attribute is the ordered set of import mappings targeting it; a Connected System may appear
+    /// multiple times via differently-scoped Synchronisation Rules, which is what enables fine-grained authority.
+    /// Defaults to <see cref="int.MaxValue"/> (a safe-addition sentinel): a newly added import mapping never wins
+    /// resolution until an admin explicitly orders the attribute's priority list. Only applies to import mappings
+    /// (mappings with a <see cref="TargetMetaverseAttribute"/>); ignored for export mappings.
+    /// </summary>
+    public int Priority { get; set; } = int.MaxValue;
+
+    /// <summary>
+    /// When true, if this mapping's Synchronisation Rule is connected to the Metaverse Object and in scope but
+    /// contributes null/absent for this attribute, resolution stops immediately without falling back to
+    /// lower-priority contributions ("Null is a value"; the authoritative source asserts no value). Has no effect
+    /// when the rule has no opinion for the Metaverse Object (disabled rule, no joined Connected System Object, or
+    /// the Connected System Object is out of the rule's scope); in that case the mapping is skipped and evaluation
+    /// continues to the next priority regardless of this flag. When false (default), null contributions fall
+    /// through to the next priority level. Only applies to import mappings; ignored for export mappings.
+    /// </summary>
+    public bool NullIsValue { get; set; }
+
+    /// <summary>
     /// Helper method to provide a description for the user on what type of source configuration this is.
     /// </summary>
     public SyncRuleMappingSourcesType GetSourceType()

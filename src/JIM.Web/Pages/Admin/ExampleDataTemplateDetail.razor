@@ -46,6 +46,11 @@
                             <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Pattern:</b>&nbsp;@context.Pattern</MudChip>
                         }
 
+                        if (!string.IsNullOrEmpty(context.Expression))
+                        {
+                            <MudChip T="string" Color="Color.Primary" Variant="Variant.Text"><b>Expression:</b>&nbsp;@context.Expression</MudChip>
+                        }
+
                         if (context.ExampleDataSetInstances is { Count: > 0 })
                         {
                             var setValues = context.ExampleDataSetInstances.Aggregate("", (current, set) => current + set.ExampleDataSet.Name + ", ");

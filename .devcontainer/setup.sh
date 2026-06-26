@@ -381,6 +381,23 @@ else
     print_step "No host SSH config to mirror (/host-ssh empty or absent)"
 fi
 
+# Pre-create the integration-test worker log bind-mount directory so the Docker daemon does
+# not auto-create it as root when the stack first starts. docker-compose.override.yml mounts
+# test/integration/results/logs/worker into the worker container (non-root UID 1654); on a
+# Linux host an absent bind-mount source is created root-owned by the daemon, which then blocks
+# both the worker's Serilog file sink and the integration runner's transcript. Creating it here
+# (as the vscode user) up front means every later stack-up (jim-stack / jim-reset /
+# jim-build-light and the integration runner) finds it already present and correctly owned;
+# 0777 keeps it writable by the worker UID too. No effect on Docker Desktop (macOS/Windows),
+# which remaps bind-mount ownership to the host user regardless.
+print_step "Pre-creating integration-test log directories..."
+if mkdir -p "$WORKDIR/test/integration/results/logs/worker" 2>/dev/null; then
+    chmod -R 0777 "$WORKDIR/test/integration/results/logs" 2>/dev/null || true
+    print_success "Integration-test log directories ready"
+else
+    print_warning "Could not pre-create integration-test log directories (pre-existing root-owned dirs?). If integration tests later fail to write logs, run: sudo chown -R \$(id -un):\$(id -gn) test/integration/results"
+fi
+
 # 15. Display useful information
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

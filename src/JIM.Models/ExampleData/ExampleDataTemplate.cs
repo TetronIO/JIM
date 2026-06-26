@@ -36,5 +36,9 @@ public class ExampleDataTemplate : IAuditable
 
         foreach (var attribute in ObjectTypes.SelectMany(type => type.TemplateAttributes))
             attribute.Validate();
+
+        // verify there are no circular dependencies between attribute generation expressions/dependencies (throws if one exists)
+        foreach (var objectType in ObjectTypes)
+            objectType.GetTemplateAttributesInDependencyOrder();
     }
 }

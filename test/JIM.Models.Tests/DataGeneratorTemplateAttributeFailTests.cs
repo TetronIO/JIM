@@ -54,6 +54,47 @@ public class DataGeneratorTemplateAttributeFailTests
     }
 
     [Test]
+    public void TestIsValidExpressionOnNonTextAttributeFail()
+    {
+        // an expression can only be used with text attributes
+        var subject = new ExampleDataTemplateAttribute
+        {
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Number },
+            PopulatedValuesPercentage = 100,
+            Expression = "mv[\"Employee Id\"] + 1"
+        };
+        Assert.Catch<ExampleDataTemplateAttributeException>(subject.Validate);
+    }
+
+    [Test]
+    public void TestIsValidExpressionWithPatternFail()
+    {
+        // an expression fully determines the value, so it cannot be combined with a pattern
+        var subject = new ExampleDataTemplateAttribute
+        {
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
+            PopulatedValuesPercentage = 100,
+            Pattern = "{First Name}",
+            Expression = "Lower(mv[\"First Name\"])"
+        };
+        Assert.Catch<ExampleDataTemplateAttributeException>(subject.Validate);
+    }
+
+    [Test]
+    public void TestIsValidExpressionWithExampleDataSetsFail()
+    {
+        // an expression fully determines the value, so it cannot be combined with Example Data Sets
+        var subject = new ExampleDataTemplateAttribute
+        {
+            MetaverseAttribute = new MetaverseAttribute { Type = AttributeDataType.Text },
+            PopulatedValuesPercentage = 100,
+            ExampleDataSetInstances = new List<ExampleDataSetInstance> { new() },
+            Expression = "Lower(mv[\"First Name\"])"
+        };
+        Assert.Catch<ExampleDataTemplateAttributeException>(subject.Validate);
+    }
+
+    [Test]
     public void TestIsValidNumberTypeFail()
     {
         var subject1 = new ExampleDataTemplateAttribute

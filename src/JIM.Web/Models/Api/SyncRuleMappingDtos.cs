@@ -32,6 +32,19 @@ public class SyncRuleMappingDto
     /// </summary>
     public InboundCaseNormalisation CaseNormalisation { get; set; }
 
+    /// <summary>
+    /// Attribute priority for this import contribution (#91). Lower numbers win (1 is highest); int.MaxValue is
+    /// the safe-addition sentinel meaning "not yet ordered, never wins". Only meaningful for import mappings.
+    /// </summary>
+    public int Priority { get; set; }
+
+    /// <summary>
+    /// When true, a connected, in-scope contribution of null/absent for this attribute asserts "no value" and
+    /// stops resolution falling through to lower-priority contributions ("Null is a value", #91). Only meaningful
+    /// for import mappings.
+    /// </summary>
+    public bool NullIsValue { get; set; }
+
     public List<SyncRuleMappingSourceDto> Sources { get; set; } = new();
 
     public static SyncRuleMappingDto FromEntity(SyncRuleMapping entity)
@@ -47,6 +60,8 @@ public class SyncRuleMappingDto
             SourceType = entity.GetSourceType().ToString(),
             InboundValueProcessing = entity.InboundValueProcessing,
             CaseNormalisation = entity.CaseNormalisation,
+            Priority = entity.Priority,
+            NullIsValue = entity.NullIsValue,
             Sources = entity.Sources.Select(SyncRuleMappingSourceDto.FromEntity).ToList()
         };
     }
@@ -112,6 +127,15 @@ public class CreateSyncRuleMappingRequest
     /// Title). When omitted, defaults to None. Ignored for export rules.
     /// </summary>
     public InboundCaseNormalisation? CaseNormalisation { get; set; }
+
+    /// <summary>
+    /// For import rules only: when true, a connected, in-scope contribution of null/absent asserts "no value" and
+    /// stops attribute priority resolution falling through to lower-priority contributions ("Null is a value", #91).
+    /// When omitted, defaults to false. Ignored for export rules. Priority itself is not set at creation: a new
+    /// import mapping lands at the safe-addition default (lowest priority) and is ordered later via the
+    /// attribute-priority-order endpoint.
+    /// </summary>
+    public bool? NullIsValue { get; set; }
 
     /// <summary>
     /// The sources for this mapping (attribute mappings or expressions).

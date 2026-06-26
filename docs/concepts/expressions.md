@@ -17,6 +17,8 @@ Within a Synchronisation Rule, expressions are used in:
 
 To add or edit these mappings in the admin UI, see [Synchronisation Rules](../configuration/synchronisation-rules.md). The rest of this guide focuses on the expressions themselves: the syntax, the built-in functions, and worked examples you can adapt.
 
+Expressions are also used by **example data generation templates** to construct a generated attribute's value from other attributes on the same object, for example building an email address whose domain is derived from a generated company name. Only the `mv` accessor applies in that context (generation builds Metaverse Objects directly, so there is no Connected System Object), but the same syntax and functions described below apply.
+
 ## Quick Examples
 
 Before diving into the details, here are a few examples to give you a feel for how expressions work:
