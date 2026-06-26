@@ -1,13 +1,11 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.Security.Claims;
 using Asp.Versioning;
 using JIM.Application;
 using JIM.Application.Servers;
 using JIM.Models.Activities;
 using JIM.Models.Core;
-using JIM.Models.Security;
 using JIM.Utilities;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Authorization;
@@ -27,7 +25,7 @@ namespace JIM.Web.Controllers.Api;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrator")]
 [Produces("application/json")]
-public class HistoryController(ILogger<HistoryController> logger, JimApplication application) : ControllerBase
+public class HistoryController(ILogger<HistoryController> logger, JimApplication application) : ApiControllerBase(application, logger)
 {
     private readonly ILogger<HistoryController> _logger = logger;
     private readonly JimApplication _application = application;
@@ -282,30 +280,6 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
             ActivityInitiatorType.ApiKey => "ApiKey",
             _ => "Unknown"
         };
-    }
-
-    /// <summary>
-    /// Checks if the current authentication is via API key.
-    /// </summary>
-    private bool IsApiKeyAuthenticated()
-    {
-        return User.HasClaim("auth_method", "api_key");
-    }
-
-    /// <summary>
-    /// Gets the current API key entity if authenticated via API key.
-    /// </summary>
-    private async Task<ApiKey?> GetCurrentApiKeyAsync()
-    {
-        if (!IsApiKeyAuthenticated())
-            return null;
-
-        // The API key ID is stored in the NameIdentifier claim
-        var apiKeyIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(apiKeyIdClaim) || !Guid.TryParse(apiKeyIdClaim, out var apiKeyId))
-            return null;
-
-        return await _application.Repository.ApiKeys.GetByIdAsync(apiKeyId);
     }
 
     #endregion

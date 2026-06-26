@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260624174100_AddAttributePriorityAndProvenance")]
+    partial class AddAttributePriorityAndProvenance
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1068,9 +1071,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("ExampleDataObjectTypeId")
                         .HasColumnType("integer");
-
-                    b.Property<string>("Expression")
-                        .HasColumnType("text");
 
                     b.Property<int?>("ManagerDepthPercentage")
                         .HasColumnType("integer");
