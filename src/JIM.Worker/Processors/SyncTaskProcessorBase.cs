@@ -2621,6 +2621,13 @@ public abstract class SyncTaskProcessorBase
     /// <param name="valueChangeType">The type of change (Add or Remove).</param>
     private static void AddMvoChangeAttributeValueObject(MetaverseObjectChange metaverseObjectChange, MetaverseObjectAttributeValue metaverseObjectAttributeValue, ValueChangeType valueChangeType)
     {
+        // Asserted-null markers (#91) carry no value; their addition/removal is an internal representation of
+        // "asserted null", not a tracked value. The meaningful change (the real value being cleared) is recorded via
+        // the removal of the real value, so skip the marker itself here. Richer asserted-null history is the
+        // SyncOutcome surface (#363), not the attribute value-change log.
+        if (metaverseObjectAttributeValue.NullValue)
+            return;
+
         var attributeChange = metaverseObjectChange.AttributeChanges.SingleOrDefault(ac => ac.Attribute!.Id == metaverseObjectAttributeValue.Attribute.Id);
         if (attributeChange == null)
         {
@@ -3273,9 +3280,9 @@ public abstract class SyncTaskProcessorBase
 
         // Build the attribute priority context (#91) from the same all-systems rule set: contributors per
         // (Metaverse Object Type, Metaverse Attribute), backing the inline incumbent-comparison gate. Null assertions
-        // are disabled until the NullValue read-query filter lands, so priority resolution among value contributors is
-        // live but no asserted-null marker rows are written yet.
-        _attributePriorityContext = new AttributePriorityContext(allSyncRules, honourNullAssertions: false);
+        // are honoured now the NullValue read-query filter is in place (markers are excluded from export/drift/scoping
+        // value sourcing, so an asserted null clears downstream targets and cannot resurrect a lower-priority value).
+        _attributePriorityContext = new AttributePriorityContext(allSyncRules, honourNullAssertions: true);
 
         // Cache export rules with EnforceState = true for THIS Connected System only
         _driftDetectionExportRules = currentSystemSyncRules

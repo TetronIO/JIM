@@ -55,13 +55,55 @@ public class AttributePriorityWorkflowTests : WorkflowTestBase
             "the lower-priority HR contribution must not overwrite the higher-priority Directory value");
     }
 
+    [Test]
+    public async Task FullSync_HigherPriorityAssertsNull_ClearsLowerPriorityValueAndBlocksResurrectionAsync()
+    {
+        // HR (priority 1, "Null is a value") contributes no DisplayName: it asserts null over Directory's (priority 2)
+        // value, and the persisted asserted-null marker blocks the lower-priority Directory value from resurrecting on
+        // a later sync (the "clears must propagate" guarantee).
+        var ctx = await SetUpTwoSourcesAsync(
+            directoryDisplayNamePriority: 2,
+            hrDisplayNamePriority: 1,
+            hrNullIsValue: true,
+            hrContributesDisplayName: false);
+
+        await RunFullSyncAsync(ctx.Directory); // projects MVO, DisplayName = Directory Display
+        await RunFullSyncAsync(ctx.Hr);         // HR (higher priority) asserts null
+
+        Assert.That(ResolvedDisplayName(ctx), Is.Null, "the higher-priority null assertion clears the Directory value");
+        AssertAssertedNullMarker(ctx);
+
+        // Directory syncs again: it must still lose to the asserted-null marker (no resurrection).
+        await RunFullSyncAsync(ctx.Directory);
+
+        Assert.That(ResolvedDisplayName(ctx), Is.Null, "the lower-priority Directory value must not resurrect over the asserted null");
+        AssertAssertedNullMarker(ctx);
+    }
+
+    /// <summary>
+    /// Asserts the one Person MVO holds exactly one asserted-null DisplayName marker (carrying HR's provenance) and no
+    /// real DisplayName value.
+    /// </summary>
+    private void AssertAssertedNullMarker(TwoSourceContext ctx)
+    {
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        var displayNameRows = mvo.AttributeValues.Where(av => av.AttributeId == ctx.MvDisplayNameAttributeId).ToList();
+
+        Assert.That(displayNameRows.Any(av => !av.NullValue), Is.False, "no real DisplayName value should remain");
+        var markers = displayNameRows.Where(av => av.NullValue).ToList();
+        Assert.That(markers, Has.Count.EqualTo(1), "exactly one asserted-null marker should be persisted");
+        Assert.That(markers[0].ContributedBySyncRuleId, Is.EqualTo(ctx.HrImportRuleId),
+            "the marker must carry the asserting HR rule's provenance");
+    }
+
     /// <summary>
     /// Holds the entities a priority workflow test needs to run the syncs and read the resolved MVO value.
     /// </summary>
     private sealed record TwoSourceContext(
         ConnectedSystem Directory,
         ConnectedSystem Hr,
-        int MvDisplayNameAttributeId);
+        int MvDisplayNameAttributeId,
+        int HrImportRuleId);
 
     /// <summary>
     /// Builds the two-source topology: a Directory source that projects the Person MVO and contributes DisplayName
@@ -69,7 +111,11 @@ public class AttributePriorityWorkflowTests : WorkflowTestBase
     /// joins on EmployeeId and contributes DisplayName at <paramref name="hrDisplayNamePriority"/>. Both source CSOs
     /// share an EmployeeId so the HR CSO joins the Directory-projected MVO.
     /// </summary>
-    private async Task<TwoSourceContext> SetUpTwoSourcesAsync(int directoryDisplayNamePriority, int hrDisplayNamePriority)
+    private async Task<TwoSourceContext> SetUpTwoSourcesAsync(
+        int directoryDisplayNamePriority,
+        int hrDisplayNamePriority,
+        bool hrNullIsValue = false,
+        bool hrContributesDisplayName = true)
     {
         var mvType = await CreateMvObjectTypeAsync("Person");
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
@@ -123,6 +169,7 @@ public class AttributePriorityWorkflowTests : WorkflowTestBase
             SyncRule = hrImportRule,
             SyncRuleId = hrImportRule.Id,
             Priority = hrDisplayNamePriority,
+            NullIsValue = hrNullIsValue,
             TargetMetaverseAttribute = mvDisplayNameAttr,
             TargetMetaverseAttributeId = mvDisplayNameAttr.Id,
             Sources = { new SyncRuleMappingSource
@@ -155,9 +202,17 @@ public class AttributePriorityWorkflowTests : WorkflowTestBase
 
         // Both source CSOs share an EmployeeId so the HR CSO joins the Directory-projected MVO.
         await CreateCsoAsync(directorySystem.Id, directoryType, DirectoryDisplayName, SharedEmployeeId);
-        await CreateCsoAsync(hrSystem.Id, hrType, HrDisplayName, SharedEmployeeId);
+        var hrCso = await CreateCsoAsync(hrSystem.Id, hrType, HrDisplayName, SharedEmployeeId);
 
-        return new TwoSourceContext(directorySystem, hrSystem, mvDisplayNameAttr.Id);
+        if (!hrContributesDisplayName)
+        {
+            // Remove HR's DisplayName value so HR contributes ConnectedNoValue for DisplayName (asserting null when
+            // NullIsValue is set), while still joining on EmployeeId.
+            var hrDisplayNameValue = hrCso.AttributeValues.Single(av => av.AttributeId == hrDisplayNameAttr.Id);
+            hrCso.AttributeValues.Remove(hrDisplayNameValue);
+        }
+
+        return new TwoSourceContext(directorySystem, hrSystem, mvDisplayNameAttr.Id, hrImportRule.Id);
     }
 
     /// <summary>
