@@ -12,7 +12,7 @@ This is the *how*. The *what and why*, scope decisions, scenarios, and acceptanc
 
 ## Business Value
 
-Configuration changes are the highest-leverage actions in JIM (one Synchronisation Rule edit can reshape thousands of identities) yet are currently the least auditable: JIM records that a configuration object changed and who changed it, but not *what* changed. This plan closes that gap, delivering self-service investigation ("what did this rule look like last week, and who changed it"), compliance-grade audit for high-trust deployments, and the foundation for configuration rollback.
+Configuration changes are the highest-leverage actions in JIM (one Synchronisation Rule edit can reshape thousands of identities) yet are currently the least traceable: JIM records that a configuration object changed and who changed it, but not *what* changed. This plan closes that gap, delivering self-service investigation ("what did this rule look like last week, and who changed it"), compliance-grade change history for high-trust deployments, and the foundation for configuration rollback.
 
 ## Current State Analysis
 
@@ -65,10 +65,10 @@ No DbContext configuration is needed beyond the migration; `Activity` is a simpl
 
 A `ConfigurationSnapshotService` (JIM.Application) produces a **purpose-built, deliberately-scoped projection** per configuration type, serialised with `System.Text.Json`. It is **not** a naive serialisation of the EF graph (which would pull cycles, huge operational collections, and secrets). Per type:
 
-- **Synchronisation Rule**: scalars + audit + FK ids/names; child collections `AttributeFlowRules`, `ObjectMatchingRules`, `ObjectScopingCriteriaGroups`. Exclude the `Activities` backlink and the parent `ConnectedSystem` navigation (cycles).
-- **Connected System**: scalars + audit + FK ids/names; child collections `RunProfiles`, `ObjectTypes`, `Partitions`, `SettingValues`. Exclude `Objects` and `PendingExports` (large operational data, not configuration) and `Activities` (cycle).
+- **Synchronisation Rule**: scalars + `IAuditable` stamp fields + FK ids/names; child collections `AttributeFlowRules`, `ObjectMatchingRules`, `ObjectScopingCriteriaGroups`. Exclude the `Activities` backlink and the parent `ConnectedSystem` navigation (cycles).
+- **Connected System**: scalars + `IAuditable` stamp fields + FK ids/names; child collections `RunProfiles`, `ObjectTypes`, `Partitions`, `SettingValues`. Exclude `Objects` and `PendingExports` (large operational data, not configuration) and `Activities` (cycle).
 
-**Redaction (hard requirement):** for any `ConnectedSystemSettingValue` whose `Setting.Type == StringEncrypted`, the snapshot never stores the encrypted or plaintext value. To still detect and show "secret changed" without disclosing it, the snapshot stores a **keyed hash** (HMAC-SHA-256 with a server-held key) of the transiently-decrypted plaintext. The keyed hash prevents the audit log from being an offline brute-force oracle for weak secrets, while letting the diff engine report that a credential was rotated. `PersistedConnectorData` is treated as opaque and excluded. (Alternative if decrypt-at-snapshot is undesirable: store only a "secret (value not tracked)" sentinel and never report secret changes; recommended default is the keyed hash.)
+**Redaction (hard requirement):** for any `ConnectedSystemSettingValue` whose `Setting.Type == StringEncrypted`, the snapshot never stores the encrypted or plaintext value. To still detect and show "secret changed" without disclosing it, the snapshot stores a **keyed hash** (HMAC-SHA-256 with a server-held key) of the transiently-decrypted plaintext. The keyed hash prevents the stored history from being an offline brute-force oracle for weak secrets, while letting the diff engine report that a credential was rotated. `PersistedConnectorData` is treated as opaque and excluded. (Alternative if decrypt-at-snapshot is undesirable: store only a "secret (value not tracked)" sentinel and never report secret changes; recommended default is the keyed hash.)
 
 ### Diff engine
 
@@ -118,7 +118,7 @@ Reuse the `ChangeHistoryTimeline` shell (lazy load, badge, load-more, version li
 
 ### Retention (type-aware Activity retention)
 
-Because the payload lives on the Activity, "keep configuration history longer than identity data" becomes target-type-aware Activity retention. Add a configuration-change Activity retention Service Setting (default notably longer than the identity default; see Open Questions), and make `PerformChangeHistoryCleanupAsync` retain configuration-change Activities for their own period while continuing to flush sync/identity Activities on the existing schedule. Cleanup remains audited via an Activity.
+Because the payload lives on the Activity, "keep configuration history longer than identity data" becomes target-type-aware Activity retention. Add a configuration-change Activity retention Service Setting (default notably longer than the identity default; see Open Questions), and make `PerformChangeHistoryCleanupAsync` retain configuration-change Activities for their own period while continuing to flush sync/identity Activities on the existing schedule. Cleanup remains recorded via an Activity.
 
 ## UI Mockups
 
@@ -208,7 +208,7 @@ Shown on saving a configuration change in the UI; skippable. Becomes the version
 │  ┌──────────────────────────────────────────────────────────────┐ │
 │  │ Tighten scope to exclude contractors (CHG0098)               │ │
 │  └──────────────────────────────────────────────────────────────┘ │
-│  Shown in the change history and the audit log.                    │
+│  Shown in the change history and Activities.                       │
 │                                                                    │
 │                                      [ Cancel ]   [ Save changes ] │
 └────────────────────────────────────────────────────────────────────┘
@@ -341,7 +341,7 @@ In `-AsDiff`, `+` lines render green and `-` lines red via `$PSStyle` (git-style
 
 ### Phase 7: Retention (type-aware Activity retention)
 1. Configuration-change Activity retention Service Setting (separate, longer).
-2. Make `PerformChangeHistoryCleanupAsync` target-type-aware for Activity cleanup; keep cleanup audited.
+2. Make `PerformChangeHistoryCleanupAsync` target-type-aware for Activity cleanup; keep cleanup recorded.
 3. Settings UI for the new retention period and the enable toggle.
 
 **Files:** `JIM.Worker/Worker.cs`; `ChangeHistoryServer.cs` / repository; `ServiceSettingsServer.cs`; `JIM.Web/Pages/Admin/Settings.razor`.
