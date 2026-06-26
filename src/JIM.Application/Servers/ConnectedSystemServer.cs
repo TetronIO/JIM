@@ -94,6 +94,33 @@ public class ConnectedSystemServer
         }
     }
 
+    /// <summary>
+    /// Captures a tombstone snapshot of a Synchronisation Rule onto its delete Activity, before the rule is removed.
+    /// Unlike create/update capture this does not set <see cref="Activity.SyncRuleId"/> or a version: the rule is
+    /// deleted before the Activity completes, so (matching the existing delete path) the Activity is left unlinked and
+    /// the snapshot is surfaced via the Activity itself rather than the object's history.
+    /// </summary>
+    private async Task CaptureConfigurationDeletionAsync(Activity activity, SyncRule syncRule, string? changeReason)
+    {
+        if (!string.IsNullOrWhiteSpace(changeReason))
+            activity.ChangeReason = changeReason.Trim();
+
+        try
+        {
+            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+                return;
+
+            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
+            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey);
+            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        {
+            // Best-effort: a capture failure must never fail the deletion that is about to proceed; the miss is logged.
+            Log.Warning(ex, "CaptureConfigurationDeletionAsync: failed to capture deletion snapshot for Synchronisation Rule {SyncRuleId}; the deletion proceeded but its history snapshot was not recorded.", syncRule.Id);
+        }
+    }
+
     #region Connector Definitions
     public async Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync()
     {
@@ -4733,7 +4760,7 @@ public class ConnectedSystemServer
         return true;
     }
 
-    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy)
+    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, string? changeReason = null)
     {
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = syncRule.ConnectedSystem ??
@@ -4748,6 +4775,7 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Delete
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        await CaptureConfigurationDeletionAsync(activity, syncRule, changeReason);
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -4755,7 +4783,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Deletes a Synchronisation Rule (initiated by API key).
     /// </summary>
-    public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey)
+    public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, string? changeReason = null)
     {
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = syncRule.ConnectedSystem ??
@@ -4769,6 +4797,7 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Delete
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+        await CaptureConfigurationDeletionAsync(activity, syncRule, changeReason);
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
         await Application.Activities.CompleteActivityAsync(activity);
     }

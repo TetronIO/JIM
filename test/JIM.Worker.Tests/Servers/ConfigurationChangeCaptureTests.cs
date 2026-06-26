@@ -93,6 +93,22 @@ public class ConfigurationChangeCaptureTests
     }
 
     [Test]
+    public async Task DeleteSyncRuleAsync_WhenTrackingEnabled_CapturesTombstoneSnapshotWithoutVersionOrLinkAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupHashKeySetting();
+        _csRepo.Setup(r => r.DeleteSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+
+        await _jim.ConnectedSystems.DeleteSyncRuleAsync(BuildExportRule(), NewApiKey(), changeReason: "decommissioned");
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"SynchronisationRule\""), "the deletion records a tombstone snapshot");
+        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("decommissioned"));
+        Assert.That(_completedActivity.SyncRuleId, Is.Null, "a delete activity is left unlinked so it can complete after the rule is removed");
+        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.Null, "deletions record a tombstone, not a versioned entry");
+    }
+
+    [Test]
     public async Task GetNextConfigurationChangeVersionAsync_ReturnsExistingMaximumPlusOneAsync()
     {
         _activityRepo.Setup(r => r.GetMaxConfigurationChangeVersionAsync(ActivityTargetType.ConnectedSystem, 9)).ReturnsAsync(3);
