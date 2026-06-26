@@ -91,6 +91,14 @@ public interface IActivityRepository
     /// </summary>
     public Task<DateTime?> GetLastHistoryCleanupTimeAsync();
 
+    /// <summary>
+    /// Gets the highest configuration-change version recorded for a configuration object, identified by its activity
+    /// target type (<see cref="ActivityTargetType.ConnectedSystem"/> or <see cref="ActivityTargetType.SyncRule"/>) and
+    /// database id, or 0 if none exist yet. Used to assign the next per-object version when capturing a configuration
+    /// snapshot; version numbers never renumber, so retention removing older entries does not affect this.
+    /// </summary>
+    public Task<int> GetMaxConfigurationChangeVersionAsync(ActivityTargetType targetType, int targetObjectId);
+
 
     /// <summary>
     /// Queries the database for RPEI error counts for an activity, returning the total number of

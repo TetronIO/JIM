@@ -832,6 +832,17 @@ internal class SeedingServer
 
         await SeedSettingAsync(new ServiceSetting
         {
+            Key = Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled,
+            DisplayName = "Track configuration changes",
+            Description = "When enabled, a redacted, versioned configuration snapshot is recorded on the Activity for every configuration create/update/delete (Synchronisation Rules, Connected Systems). Disable to stop capturing configuration change history.",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.Boolean,
+            DefaultValue = "true",
+            IsReadOnly = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
             Key = Constants.SettingKeys.ChangeTrackingSyncOutcomesLevel,
             DisplayName = "Sync outcome tracking level",
             Description = "Controls how much detail is recorded for sync outcome graphs on each Run Profile execution item. " +

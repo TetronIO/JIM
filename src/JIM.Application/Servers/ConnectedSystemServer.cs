@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Data.Common;
+using System.Text.Json;
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Models.Activities;
@@ -17,6 +19,7 @@ using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using JIM.Application.Diagnostics;
+using JIM.Application.Services;
 using JIM.Application.Utilities;
 using Microsoft.Extensions.Caching.Memory;
 using Serilog;
@@ -30,6 +33,65 @@ public class ConnectedSystemServer
     internal ConnectedSystemServer(JimApplication application)
     {
         Application = application;
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Configuration change capture
+    // Captures a redacted, versioned configuration snapshot onto a configuration-change Activity. Called after the
+    // entity has been persisted (so its id and graph are current) and before the Activity is completed, so the snapshot
+    // fields are saved as part of the existing CompleteActivityAsync update. Honours the ChangeTracking setting; the
+    // optional change reason is recorded independently of the snapshot toggle.
+    // -----------------------------------------------------------------------------------------------------------------
+
+    private async Task CaptureConfigurationChangeAsync(Activity activity, ConnectedSystem connectedSystem, string? changeReason)
+    {
+        // The reason is recorded independently of the snapshot toggle and has no external dependencies, so it is set
+        // outside the best-effort block below.
+        if (!string.IsNullOrWhiteSpace(changeReason))
+            activity.ChangeReason = changeReason.Trim();
+
+        try
+        {
+            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+                return;
+
+            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
+            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey);
+            activity.ConnectedSystemId ??= connectedSystem.Id;
+            activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.ConnectedSystem, connectedSystem.Id);
+            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        {
+            // Configuration change capture is best-effort secondary metadata recorded after the entity has already been
+            // persisted; it must never fail or roll back the configuration operation that succeeded. On failure the
+            // change history simply misses this snapshot. The failure is logged (never silent) so the gap is diagnosable.
+            Log.Warning(ex, "CaptureConfigurationChangeAsync: failed to capture configuration snapshot for Connected System {ConnectedSystemId}; the change was saved but its history snapshot was not recorded.", connectedSystem.Id);
+        }
+    }
+
+    private async Task CaptureConfigurationChangeAsync(Activity activity, SyncRule syncRule, string? changeReason)
+    {
+        if (!string.IsNullOrWhiteSpace(changeReason))
+            activity.ChangeReason = changeReason.Trim();
+
+        try
+        {
+            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+                return;
+
+            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
+            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey);
+            activity.SyncRuleId ??= syncRule.Id;
+            activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.SyncRule, syncRule.Id);
+            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        {
+            // Best-effort: see the Connected System overload above. A capture failure must never fail the configuration
+            // operation that already succeeded; the miss is logged rather than surfaced to the caller.
+            Log.Warning(ex, "CaptureConfigurationChangeAsync: failed to capture configuration snapshot for Synchronisation Rule {SyncRuleId}; the change was saved but its history snapshot was not recorded.", syncRule.Id);
+        }
     }
 
     #region Connector Definitions
@@ -112,7 +174,7 @@ public class ConnectedSystemServer
         return Application.Repository.ConnectedSystems.GetConnectedSystemCount();
     }
         
-    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
+    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy, string? changeReason = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -167,13 +229,14 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetCreated(connectedSystem, initiatedBy);
         await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
     /// <summary>
     /// Creates a new Connected System (initiated by API key).
     /// </summary>
-    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
+    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey, string? changeReason = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -228,10 +291,11 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         AuditHelper.SetCreated(connectedSystem, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
+    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy, string? changeReason = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -259,13 +323,14 @@ public class ConnectedSystemServer
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
     /// <summary>
     /// Updates an existing Connected System (initiated by API key).
     /// </summary>
-    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
+    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey, string? changeReason = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -293,6 +358,7 @@ public class ConnectedSystemServer
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4509,7 +4575,7 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetSyncRuleAsync(id);
     }
 
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null)
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null)
     {
         // validate the Synchronisation Rule
         if (syncRule == null)
@@ -4587,6 +4653,7 @@ public class ConnectedSystemServer
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
         }
 
+        await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }
@@ -4594,7 +4661,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Creates or updates a Synchronisation Rule (initiated by API key).
     /// </summary>
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null)
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null)
     {
         if (syncRule == null)
             throw new NullReferenceException(nameof(syncRule));
@@ -4661,6 +4728,7 @@ public class ConnectedSystemServer
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
         }
 
+        await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }

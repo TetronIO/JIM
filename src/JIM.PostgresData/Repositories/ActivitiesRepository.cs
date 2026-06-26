@@ -443,6 +443,23 @@ public class ActivityRepository : IActivityRepository
             .FirstOrDefaultAsync();
     }
 
+    public async Task<int> GetMaxConfigurationChangeVersionAsync(ActivityTargetType targetType, int targetObjectId)
+    {
+        var query = Repository.Database.Activities
+            .Where(a => a.TargetType == targetType && a.ConfigurationChangeVersion != null);
+
+        query = targetType switch
+        {
+            ActivityTargetType.ConnectedSystem => query.Where(a => a.ConnectedSystemId == targetObjectId),
+            ActivityTargetType.SyncRule => query.Where(a => a.SyncRuleId == targetObjectId),
+            _ => throw new ArgumentOutOfRangeException(nameof(targetType), targetType,
+                "Unsupported configuration target type for change versioning.")
+        };
+
+        var max = await query.MaxAsync(a => (int?)a.ConfigurationChangeVersion);
+        return max ?? 0;
+    }
+
     #region synchronisation related
     public async Task<PagedResultSet<ActivityRunProfileExecutionItemHeader>> GetActivityRunProfileExecutionItemHeadersAsync(
         Guid activityId,

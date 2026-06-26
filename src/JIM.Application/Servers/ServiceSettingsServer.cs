@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Security.Cryptography;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Security;
@@ -133,6 +134,56 @@ namespace JIM.Application.Servers
         public async Task<bool> GetMvoChangeTrackingEnabledAsync()
         {
             return await GetSettingValueAsync(Constants.SettingKeys.ChangeTrackingMvoChangesEnabled, true);
+        }
+
+        /// <summary>
+        /// Gets whether configuration change tracking is enabled.
+        /// When enabled, a redacted, versioned configuration snapshot is captured on the Activity for each
+        /// configuration create/update/delete (Synchronisation Rules, Connected Systems).
+        /// </summary>
+        public async Task<bool> GetConfigurationChangeTrackingEnabledAsync()
+        {
+            return await GetSettingValueAsync(Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled, true);
+        }
+
+        /// <summary>
+        /// Returns the server-held key used to compute keyed hashes of secret configuration values in change snapshots,
+        /// generating and persisting it (encrypted at rest) on first use. The key never leaves the server; it lets a
+        /// secret change be detected without the change history becoming an offline brute-force oracle for weak secrets.
+        /// </summary>
+        public async Task<byte[]> GetOrCreateConfigurationChangeHashKeyAsync()
+        {
+            var existing = await GetSettingValueAsync<string>(Constants.SettingKeys.ConfigurationChangeHashKey);
+            if (!string.IsNullOrEmpty(existing))
+                return Convert.FromBase64String(existing);
+
+            // Generate a 256-bit key and persist it encrypted at rest. GetOrCreateSettingAsync is race-safe, so a
+            // concurrent first use returns the persisted winner rather than throwing.
+            var keyBase64 = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+            var protectedValue = Application.CredentialProtection?.Protect(keyBase64) ?? keyBase64;
+
+            var setting = new ServiceSetting
+            {
+                Key = Constants.SettingKeys.ConfigurationChangeHashKey,
+                DisplayName = "Configuration change hash key",
+                Description = "Server-held key used to detect changes to secret configuration values in change history without storing the values. Generated automatically; never displayed or edited.",
+                Category = ServiceSettingCategory.Security,
+                ValueType = ServiceSettingValueType.StringEncrypted,
+                Value = protectedValue,
+                IsReadOnly = true
+            };
+
+            var persisted = await Application.Repository.ServiceSettings.GetOrCreateSettingAsync(setting);
+
+            // Decode the persisted winner, which may be ours or another instance's if we lost the first-use race.
+            var effectiveValue = persisted.GetEffectiveValue();
+            if (persisted.ValueType == ServiceSettingValueType.StringEncrypted && Application.CredentialProtection != null)
+                effectiveValue = Application.CredentialProtection.Unprotect(effectiveValue);
+
+            if (string.IsNullOrEmpty(effectiveValue))
+                throw new InvalidOperationException("Failed to generate or retrieve the configuration change hash key.");
+
+            return Convert.FromBase64String(effectiveValue);
         }
 
         /// <summary>

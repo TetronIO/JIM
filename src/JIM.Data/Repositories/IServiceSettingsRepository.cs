@@ -20,4 +20,12 @@ public interface IServiceSettingsRepository
     public Task CreateSettingAsync(ServiceSetting setting);
     public Task UpdateSettingAsync(ServiceSetting setting);
     public Task<bool> SettingExistsAsync(string key);
+
+    /// <summary>
+    /// Returns the existing setting for the given key, or atomically creates it from <paramref name="setting"/> and
+    /// returns it. Safe against a concurrent first-use race: if another caller inserts the same key first, the
+    /// persisted winner is returned rather than throwing. Used for lazily-generated singletons such as the
+    /// configuration-change hash key.
+    /// </summary>
+    public Task<ServiceSetting> GetOrCreateSettingAsync(ServiceSetting setting);
 }
