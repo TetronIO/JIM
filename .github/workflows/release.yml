@@ -76,7 +76,7 @@ jobs:
         run: |
           Install-Module -Name Pester -MinimumVersion 5.0 -Force -Scope CurrentUser
           $config = New-PesterConfiguration
-          $config.Run.Path = './src/JIM.PowerShell/Tests'
+          $config.Run.Path = @('./src/JIM.PowerShell/Tests', './scripts/Tests')
           $config.Run.Exit = $true
           $config.Output.Verbosity = 'Detailed'
           Invoke-Pester -Configuration $config
