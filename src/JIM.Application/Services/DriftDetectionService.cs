@@ -379,9 +379,10 @@ public class DriftDetectionService
 
         if (isMultiValued)
         {
-            // Get ALL values for this attribute
+            // Get ALL values for this attribute (excluding asserted-null markers, #91, which carry no value:
+            // the expected state of a target attribute must be derived from real values only)
             var mvoAttrValues = mvo.AttributeValues
-                .Where(av => av.AttributeId == source.MetaverseAttribute.Id)
+                .Where(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue)
                 .ToList();
 
             if (mvoAttrValues.Count == 0)
@@ -420,9 +421,9 @@ public class DriftDetectionService
         }
         else
         {
-            // Single-valued attribute - use FirstOrDefault
+            // Single-valued attribute - use FirstOrDefault (excluding asserted-null markers, #91)
             var mvoAttrValue = mvo.AttributeValues
-                .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id);
+                .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue);
 
             if (mvoAttrValue == null)
                 return null;
@@ -466,7 +467,8 @@ public class DriftDetectionService
             return attributes;
         }
 
-        foreach (var attributeValue in mvo.AttributeValues)
+        // Exclude asserted-null markers (#91): drift expressions must evaluate against real values only.
+        foreach (var attributeValue in mvo.AttributeValues.Where(av => !av.NullValue))
         {
             if (attributeValue.Attribute == null)
             {
