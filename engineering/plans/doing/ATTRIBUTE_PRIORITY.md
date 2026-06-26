@@ -738,7 +738,9 @@ Not a sub-issue: **#846** (holistic Guardrails) is deliberately *out of scope* (
 
 - [x] Decided (Jun 2026): place in the **Schema** concept now; **"Both"** navigation model; three surfaces (mapping editor, MVO object type detail page management home, Schema "Data Flow" discovery page). Reorder owned by Surface 2 ("one management home"). **Policy** recorded as the future home for cross-cutting governance (RBAC, lifecycle workflows); not stood up for this one feature, with only Surface 3 a candidate to migrate later. See UI section 1a and Open Question 6.
 
-#### Phase 1: Schema and Model Changes
+#### Phase 1: Schema and Model Changes ✅
+
+> Landed Jun 2026 via PR #868 (squash-merged to `main`). The one item not fully ticked below (`ContributedBySyncRuleId` threading through attribute creation) is deliberately Phase 2 engine work, not a Phase 1 gap.
 
 - [x] Add `ContributedBySystemId` scalar FK to `MetaverseObjectAttributeValue` (prerequisite; Feb 2026, commit `41116255`)
 - [x] Thread `contributingSystemId` through all 14 attribute creation paths in `SyncEngine.AttributeFlow.cs` (then `SyncRuleMappingProcessor`)
@@ -756,8 +758,12 @@ Not a sub-issue: **#846** (holistic Guardrails) is deliberately *out of scope* (
 
 #### Phase 2: Attribute Priority Logic
 
-- [ ] Create `AttributePriorityService` in `src/JIM.Application/Services/`
-- [ ] Implement the tri-state contribution evaluation (`RuleNotApplicable` / `ConnectedNoValue` / `ConnectedWithValue`), respecting rule enabled state and scoping criteria
+> **Engine integration design proposed (Jun 2026); awaiting approval before further implementation.** See "Engine Integration and Pipeline Placement (Phase 2)" in the Design section above: linear inline resolution at the attribute-write step, with an O(1) incumbent-comparison fast path (using the Phase 1 `ContributedBySyncRuleId` provenance) and a rare next-contributor fallback.
+>
+> **Phase 2a started** on branch `claude/github-issue-91-phase2`: the deterministic resolution core is built and unit-tested (9 tests), isolated from the sync engine. Engine wiring is gated on design approval.
+
+- [~] Create `AttributePriorityService` in `src/JIM.Application/Services/` (created; hosts the side-effect-free `Resolve` core. Contribution *gathering* and engine wiring pending)
+- [~] Implement the tri-state contribution evaluation (`RuleNotApplicable` / `ConnectedNoValue` / `ConnectedWithValue`), respecting rule enabled state and scoping criteria (the tri-state *resolution* over evaluated contributions is done and unit-tested via `ContributionState` / `AttributeContribution` / `AttributeResolution`; *evaluating* a mapping's state from the joined CSO + scoping is the pending engine-integration half)
 - [ ] Implement winner-takes-all-values MVA resolution (winning rule replaces the full value set; per-row `ContributedBySystemId` makes the diff computable)
 - [ ] Integrate into inbound sync processing (`SyncEngine.AttributeFlow.cs`)
 - [ ] Auto-assign priority on new import mapping creation (max existing + 1); deterministic tie-break in resolution
