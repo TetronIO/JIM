@@ -50,6 +50,10 @@ public partial class SyncEngine
         var csoType = objectTypes.Single(t => t.Id == cso.TypeId);
         var mvo = cso.MetaverseObject;
 
+        // Provenance: stamp the winning sync rule alongside the contributing system on every value this mapping
+        // writes (#91), so the Metaverse Object value records which rule contributed it, not just which system.
+        var contributingSyncRuleId = syncRuleMapping.SyncRuleId;
+
         foreach (var source in syncRuleMapping.Sources.OrderBy(q => q.Order))
         {
             if (source.ConnectedSystemAttributeId.HasValue)
@@ -110,26 +114,26 @@ public partial class SyncEngine
                                 // dropping any that collapse to no value, before diffing against the MVO.
                                 ProcessTextAttribute(mvo, syncRuleMapping,
                                     ProcessInboundTextValues(csoAttributeValues.Select(av => av.StringValue), syncRuleMapping),
-                                    contributingSystemId);
+                                    contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.Number:
-                                ProcessNumberAttribute(mvo, syncRuleMapping, sourceAttributeId, cso, csoAttributeValues, contributingSystemId);
+                                ProcessNumberAttribute(mvo, syncRuleMapping, sourceAttributeId, cso, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.DateTime:
-                                ProcessDateTimeAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId);
+                                ProcessDateTimeAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.Binary:
-                                ProcessBinaryAttribute(mvo, syncRuleMapping, sourceAttributeId, cso, csoAttributeValues, contributingSystemId);
+                                ProcessBinaryAttribute(mvo, syncRuleMapping, sourceAttributeId, cso, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.Reference:
                                 if (!skipReferenceAttributes)
-                                    ProcessReferenceAttribute(mvo, syncRuleMapping, source, cso, csoAttributeValues, isFinalReferencePass, contributingSystemId);
+                                    ProcessReferenceAttribute(mvo, syncRuleMapping, source, cso, csoAttributeValues, isFinalReferencePass, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.Guid:
-                                ProcessGuidAttribute(mvo, syncRuleMapping, sourceAttributeId, cso, csoAttributeValues, contributingSystemId);
+                                ProcessGuidAttribute(mvo, syncRuleMapping, sourceAttributeId, cso, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.Boolean:
-                                ProcessBooleanAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId);
+                                ProcessBooleanAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.NotSet:
                             default:
@@ -145,7 +149,7 @@ public partial class SyncEngine
             }
             else if (!string.IsNullOrWhiteSpace(source.Expression))
             {
-                ProcessExpressionMapping(cso, mvo, syncRuleMapping, source, csoType, expressionEvaluator, contributingSystemId);
+                ProcessExpressionMapping(cso, mvo, syncRuleMapping, source, csoType, expressionEvaluator, contributingSystemId, contributingSyncRuleId);
             }
             else if (source.MetaverseAttribute != null)
                 throw new InvalidDataException("SyncRuleMappingSource.MetaverseAttribute being populated is not supported for synchronisation operations. " +
@@ -165,7 +169,8 @@ public partial class SyncEngine
         SyncRuleMappingSource source,
         ConnectedSystemObjectType csoType,
         IExpressionEvaluator? expressionEvaluator,
-        int? contributingSystemId)
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
     {
         if (expressionEvaluator == null)
         {
@@ -214,12 +219,12 @@ public partial class SyncEngine
         if (result is string[] stringArrayResult)
         {
             ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute!,
-                ProcessInboundTextValues(stringArrayResult, syncRuleMapping).ToArray(), contributingSystemId);
+                ProcessInboundTextValues(stringArrayResult, syncRuleMapping).ToArray(), contributingSystemId, contributingSyncRuleId);
         }
         else if (result is IEnumerable<string> stringEnumerableResult && result is not string)
         {
             ProcessExpressionArrayResult(mvo, syncRuleMapping.TargetMetaverseAttribute!,
-                ProcessInboundTextValues(stringEnumerableResult, syncRuleMapping).ToArray(), contributingSystemId);
+                ProcessInboundTextValues(stringEnumerableResult, syncRuleMapping).ToArray(), contributingSystemId, contributingSyncRuleId);
         }
         else
         {
@@ -259,10 +264,11 @@ public partial class SyncEngine
                         Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                         AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
                         StringValue = resultString,
-                        ContributedBySystemId = contributingSystemId
+                        ContributedBySystemId = contributingSystemId,
+                        ContributedBySyncRuleId = contributingSyncRuleId
                     }
                     : CreateMvoAttributeValueFromExpressionResult(
-                        mvo, syncRuleMapping.TargetMetaverseAttribute!, result, contributingSystemId);
+                        mvo, syncRuleMapping.TargetMetaverseAttribute!, result, contributingSystemId, contributingSyncRuleId);
 
                 if (newMvoValue != null)
                 {
@@ -348,7 +354,8 @@ public partial class SyncEngine
         MetaverseObject mvo,
         SyncRuleMapping syncRuleMapping,
         List<string> effectiveValues,
-        int? contributingSystemId)
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
     {
         var targetAttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id;
 
@@ -372,7 +379,8 @@ public partial class SyncEngine
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = targetAttributeId,
                 StringValue = value,
-                ContributedBySystemId = contributingSystemId
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
     }
@@ -383,7 +391,8 @@ public partial class SyncEngine
         int sourceAttributeId,
         ConnectedSystemObject cso,
         List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
-        int? contributingSystemId)
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
     {
         var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
             mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
@@ -405,7 +414,8 @@ public partial class SyncEngine
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
                 IntValue = newCsoNewAttributeValue.IntValue,
-                ContributedBySystemId = contributingSystemId
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
     }
@@ -414,7 +424,8 @@ public partial class SyncEngine
         MetaverseObject mvo,
         SyncRuleMapping syncRuleMapping,
         List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
-        int? contributingSystemId)
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
     {
         var csoValue = csoAttributeValues.FirstOrDefault();
         var mvoValue = mvo.AttributeValues.SingleOrDefault(mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id);
@@ -431,7 +442,8 @@ public partial class SyncEngine
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
                 DateTimeValue = csoValue.DateTimeValue,
-                ContributedBySystemId = contributingSystemId
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
         else if (csoValue != null && mvoValue != null && mvoValue.DateTimeValue != csoValue.DateTimeValue)
@@ -443,7 +455,8 @@ public partial class SyncEngine
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
                 DateTimeValue = csoValue.DateTimeValue,
-                ContributedBySystemId = contributingSystemId
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
     }
@@ -454,7 +467,8 @@ public partial class SyncEngine
         int sourceAttributeId,
         ConnectedSystemObject cso,
         List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
-        int? contributingSystemId)
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
     {
         var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
             mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
@@ -477,7 +491,8 @@ public partial class SyncEngine
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
                 ByteValue = newCsoNewAttributeValue.ByteValue,
-                ContributedBySystemId = contributingSystemId
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
     }
@@ -489,7 +504,8 @@ public partial class SyncEngine
         ConnectedSystemObject cso,
         List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
         bool isFinalReferencePass,
-        int? contributingSystemId)
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
     {
         // Use ResolvedReferenceMetaverseObjectId (populated via direct SQL) as the primary
         // source, falling back to navigation properties for compatibility with in-memory tests.
@@ -582,7 +598,8 @@ public partial class SyncEngine
                 MetaverseObject = mvo,
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
-                ContributedBySystemId = contributingSystemId
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId
             };
 
             // When the referenced MVO is available as a tracked navigation (same-page reference),
@@ -604,7 +621,8 @@ public partial class SyncEngine
         int sourceAttributeId,
         ConnectedSystemObject cso,
         List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
-        int? contributingSystemId)
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
     {
         var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
             mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
@@ -626,7 +644,8 @@ public partial class SyncEngine
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
                 GuidValue = newCsoNewAttributeValue.GuidValue,
-                ContributedBySystemId = contributingSystemId
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
     }
@@ -635,7 +654,8 @@ public partial class SyncEngine
         MetaverseObject mvo,
         SyncRuleMapping syncRuleMapping,
         List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
-        int? contributingSystemId)
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
     {
         var csoValue = csoAttributeValues.FirstOrDefault();
         var mvoValue = mvo.AttributeValues.SingleOrDefault(mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id);
@@ -652,7 +672,8 @@ public partial class SyncEngine
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
                 BoolValue = csoValue.BoolValue,
-                ContributedBySystemId = contributingSystemId
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
         else if (csoValue != null && mvoValue != null && mvoValue.BoolValue != csoValue.BoolValue)
@@ -664,7 +685,8 @@ public partial class SyncEngine
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
                 BoolValue = csoValue.BoolValue,
-                ContributedBySystemId = contributingSystemId
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId
             });
         }
     }
@@ -713,7 +735,8 @@ public partial class SyncEngine
         MetaverseObject mvo,
         MetaverseAttribute targetAttribute,
         string[] values,
-        int? contributingSystemId)
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
     {
         if (values.Length == 0)
         {
@@ -746,7 +769,8 @@ public partial class SyncEngine
                 Attribute = targetAttribute,
                 AttributeId = targetAttribute.Id,
                 StringValue = value,
-                ContributedBySystemId = contributingSystemId
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId
             };
             mvo.PendingAttributeValueAdditions.Add(newMvoValue);
         }
@@ -762,14 +786,16 @@ public partial class SyncEngine
         MetaverseObject mvo,
         MetaverseAttribute targetAttribute,
         object result,
-        int? contributingSystemId)
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
     {
         var newMvoValue = new MetaverseObjectAttributeValue
         {
             MetaverseObject = mvo,
             Attribute = targetAttribute,
             AttributeId = targetAttribute.Id,
-            ContributedBySystemId = contributingSystemId
+            ContributedBySystemId = contributingSystemId,
+            ContributedBySyncRuleId = contributingSyncRuleId
         };
 
         switch (targetAttribute.Type)
