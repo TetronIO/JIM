@@ -41,15 +41,13 @@ Never retrofit a test after the fix; never commit new functionality without test
 
 **Plan before building:** For any task with 3+ steps or architectural decisions, use plan mode. If you have spent more than 2-3 attempts on the same problem without progress, stop, re-plan, and consider asking the user - they can often see what you are missing.
 
-**Demand quality:** Simplicity first; find root causes, not band-aids; for non-trivial changes pause and ask "is there a more elegant way?"; would a staff engineer approve this? (Skip the introspection for simple obvious fixes.) Prefer durable, belt-and-braces fixes over minimal one-off patches; if you offer a smaller fix, call out the tradeoff explicitly so the user can choose.
+**Demand quality:** Simplicity first; find root causes, not band-aids; for non-trivial changes pause and ask "is there a more elegant way?"; would a staff engineer approve this? (Skip the introspection for simple obvious fixes.) Prefer durable, belt-and-braces fixes over minimal one-off patches; if you offer a smaller fix, call out the trade-off explicitly so the user can choose.
 
 **Debugging:** Lead with the diagnosis in one or two sentences; offer detail on request. Never reach for a hardcoded path or env-specific patch to make a symptom go away; investigate the underlying cause first. Sub-agent summaries describe intent, not observed behaviour: verify any subtle claim against the source before acting on it.
 
 **Bulk edits:** Avoid `sed`-based bulk rewrites on files that may have been partially modified by hand or by earlier tool calls; prefer targeted `Edit` calls, or dry-run the diff first. After any bulk edit, grep the touched files for unintended duplicates (e.g. repeated `ValidateSet` entries, duplicated `using` lines).
 
-**Pushback & honesty:**
-
-Default to stress-testing, not validating. When I present an idea, plan, or opinion, your first move is to find the weakest point - unexamined assumptions, missed edge cases, the counter-argument I would lose to. Agreement comes after pressure-testing, not as a starting position. When you do agree, add something I did not already say.
+**Pushback & honesty:** Default to stress-testing, not validating. When I present an idea, plan, or opinion, your first move is to find the weakest point - unexamined assumptions, missed edge cases, the counter-argument I would lose to. Agreement comes after pressure-testing, not as a starting position. When you do agree, add something I did not already say.
 
 No glazing. Do not call an idea "great", "brilliant", or "smart" without concrete reasons, and even then lead with what is wrong or missing. Compliments without substance are noise. Do not echo my framing back ("X is definitely the move", "that makes a lot of sense"); start with the most useful sentence you can write instead.
 
@@ -112,7 +110,7 @@ Use PowerShell (`.ps1`) for ALL automation, integration tests, and utility scrip
 
 **Self-contained and air-gap deployable:** No internet connectivity required. No cloud-service dependencies (Azure Key Vault, AWS KMS, etc.). All features must work on-premises only.
 
-**No third-party product references:** Never name competing identity products (MIM, FIM, Entra ID, Okta, SailPoint, etc.) in code, comments, or docs. Use generic terms ("traditional ILM solutions", "SQL Server-based ILM systems"). Industry standards (SCIM, LDAP, OIDC) are fine.
+**No third-party product references:** Never name competing identity products in code, comments, or docs. Use generic terms ("traditional ILM solutions", "SQL Server-based ILM systems"). Industry standards (SCIM, LDAP, OIDC) are fine.
 
 ## Security
 
