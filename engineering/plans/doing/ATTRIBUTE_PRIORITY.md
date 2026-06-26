@@ -501,23 +501,26 @@ Resolution is step D, inline. Inbound never writes to a Connected System Object 
 
 ```mermaid
 flowchart TD
-    S["Rule R wants to set attribute A on this MVO"] --> M{"Does A have more than one contributing rule? (cached)"}
-    M -- "No, single contributor" --> W["Write directly, stamp provenance R (today's fast path)"]
-    M -- "Yes" --> I{"Is there a current winner row for A?"}
-    I -- "No row" --> RC{"R's contribution state"}
-    I -- "Yes, incumbent rule X" --> CMP{"Compare R to X"}
-    CMP -- "R is X: winner updating itself" --> RU{"Does R still have a value?"}
-    CMP -- "R higher priority than X" --> RWIN["R wins: write value, provenance R"]
-    CMP -- "R lower priority than X" --> RLOSE["R loses: skip write; export EnforceState corrects the source"]
-    RU -- "Yes" --> RWIN
-    RU -- "No, R cleared" --> FB["Next-contributor fallback"]
-    RC -- "Connected with value" --> RWIN
-    RC -- "Connected, no value, Null is a value" --> AN["Assert null: write NullValue row, provenance R"]
-    RC -- "Connected, no value, not Null is a value" --> NOOP["No contribution"]
-    FB --> RES["Evaluate remaining contributors via Resolve, loading other joined CSOs + scoping; rare"]
+    S["Rule R flows attribute A to this MVO"] --> M{"A multi-contributor?<br/>(cached schema-level count)"}
+    M -- "No (sole contributor)" --> ACT
+    M -- "Yes" --> I{"Current winner row for A?"}
+    I -- "No row" --> ACT
+    I -- "Incumbent rule X" --> CMP{"R vs X<br/>(current priorities)"}
+    CMP -- "R is X" --> RU{"R still has a<br/>definite opinion?"}
+    CMP -- "R outranks X" --> ACT
+    CMP -- "R ranks below X" --> LOSE["Skip write; EnforceState export corrects R's source if configured"]
+    RU -- "Yes (value, or asserts null)" --> ACT
+    RU -- "No (cleared / disconnected / out of scope)" --> FB["Next-contributor fallback (rare)"]
+    FB --> RES["Resolve over remaining contributors:<br/>load other joined CSOs + scoping"]
+    ACT{"Act on R's<br/>contribution state"} -- "ConnectedWithValue" --> WV["Write value; stamp provenance R"]
+    ACT -- "ConnectedNoValue + NullIsValue" --> WN["Write NullValue row; stamp provenance R"]
+    ACT -- "ConnectedNoValue, no NullIsValue" --> AB["R abstains: clear if R was the sole/incumbent contributor; else leave incumbent"]
+    ACT -- "RuleNotApplicable" --> NC["No contribution from R (clear-on-disconnect is the recall path)"]
 ```
 
-**Next-contributor fallback (the only expensive path).** When the current winner stops contributing (its rule clears the value without `NullIsValue`, or its CSO disconnects or falls out of scope), the engine evaluates the remaining contributors for that attribute to find the new winner, calling the `AttributePriorityService.Resolve` core over the freshly evaluated contributions. This is where the Metaverse Object's other joined CSOs and their scoping are read. It is bounded by the join count (usually a handful) and only fires on retraction/disconnect, not on every sync. This same path replaces the interim grace-period recall freeze (Phase 2c).
+**Two separable concerns (why the fast path equals `Resolve`).** The decision tree factors into (1) *does R win?*, decided purely by priority comparison against the stored incumbent (single contributor and "no row yet" are degenerate wins; equal priority cannot occur within one attribute because validation forbids it, but ties still break by mapping id for safety); and (2) *what does winning write?*, decided purely by R's tri-state at the `ACT` node. Keeping these separate is the correctness crux: a higher-priority arrival is **not** automatically "write a value". If R outranks the incumbent but is a `ConnectedNoValue`+`NullIsValue` assertion, winning means writing a `NullValue` row over the incumbent's value (the headline "clears must propagate" case); if R is a `ConnectedNoValue` abstention it is not a win at all (leave the incumbent); if R is `RuleNotApplicable` it contributes nothing. The `ACT` node is the single place both the inline fast path and the `Resolve` fallback apply outcome semantics, which is what makes them equivalent by construction and is the target of the proposed fast-path-equals-`Resolve` property test.
+
+**Next-contributor fallback (the only expensive path).** When the current winner stops contributing (its rule clears the value without `NullIsValue`, its CSO disconnects or falls out of scope, or its rule/mapping is deleted so the stored `ContributedBySyncRuleId` no longer resolves to a live contributor), the engine evaluates the remaining contributors for that attribute to find the new winner, calling the `AttributePriorityService.Resolve` core over the freshly evaluated contributions. This is where the Metaverse Object's other joined CSOs and their scoping are read. It is bounded by the join count (usually a handful) and only fires on retraction/disconnect, not on every sync. This same path replaces the interim grace-period recall freeze (Phase 2c). A subtlety to test: a sibling CSO not yet processed this run is read at its pre-run state, so the fallback may elect an interim winner that a later contributor overwrites within the same run; the end state still converges to the highest-priority contributor, but it means resolution is eventually-consistent within a run, not single-pass final.
 
 **Options considered.**
 
@@ -541,9 +544,9 @@ flowchart LR
 
 **Performance analysis (the headline).**
 
-- **Single-contributor attributes (the vast majority) cost nothing extra.** A per-run cache lookup says an attribute has one contributor, and the engine uses today's write path unchanged; the priority machinery never engages.
+- **Single-contributor attributes (the vast majority) cost effectively nothing extra.** A per-run cache lookup (a schema-level count of import mappings targeting the attribute, not a runtime join count) says an attribute has one contributor, and the engine uses today's write path unchanged apart from stamping `ContributedBySyncRuleId` alongside the existing `ContributedBySystemId`; the incumbent-comparison machinery never engages.
 - **Multi-contributor attributes add one dictionary lookup per contribution** (the incumbent rule's priority), with no extra database round-trips in the steady state: the incumbent's identity is already on the Metaverse Object attribute value row, and the priority list is cached per run.
-- **It can reduce work.** Today every CSO contributing to a shared attribute writes to the Metaverse Object (last-writer-wins overwrites). Under Option A a losing contribution is detected by an O(1) comparison and **skips the write and its change record entirely**, so multi-contributor attributes generate fewer Metaverse Object writes and less change history.
+- **It usually reduces work.** Today every CSO contributing to a shared attribute writes to the Metaverse Object (last-writer-wins overwrites). Under Option A a losing contribution is detected by an O(1) comparison and **skips the write and its change record entirely**, so in the steady state multi-contributor attributes generate fewer Metaverse Object writes and less change history. The exception is the rare retraction path: electing a next-contributor can add a transient write that a later sibling overwrites within the same run (see the fallback note above); net effect remains fewer writes overall.
 - **The expensive path is rare and bounded.** Loading other joined CSOs only happens on winner retraction/disconnect, bounded by the Metaverse Object's join count.
 - **Caches:** the per-(Metaverse Object Type, attribute) priority list and the per-(system, attribute) contributor lookup are built once per run, mirroring (and ideally sharing) the existing `DriftDetectionService` import-mapping cache. No per-object query.
 
