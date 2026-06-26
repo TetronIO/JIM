@@ -1,6 +1,6 @@
 # Attribute Priority Design Document
 
-- **Status:** Doing (Phase 1 schema/model/API landed; Phase 2 engine design proposed, awaiting approval; UI deferred)
+- **Status:** Doing (Phase 1 schema/model/API landed; Phase 2 engine core + auto-assign landed; drift/recall/observability increments and UI open)
 - **Issue:** [#91](https://github.com/TetronIO/JIM/issues/91)
 - **Last Updated**: 2026-06-26
 
