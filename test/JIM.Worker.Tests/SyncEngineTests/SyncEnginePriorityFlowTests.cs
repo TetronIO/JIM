@@ -367,4 +367,25 @@ public class SyncEnginePriorityFlowTests
         Assert.That(mvo.PendingAttributeValueRemovals.Select(v => v.StringValue), Does.Contain("X"));
         Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty, "no asserted-null marker is written without a priority context");
     }
+
+    [Test]
+    public void FlowInboundAttributes_NullIsValueWithAssertionsDisabled_FallsThroughWithoutMarker()
+    {
+        // The gate-only rollout (HonourNullAssertions=false): priority resolution is live, but a no-value contribution
+        // falls through regardless of "Null is a value", and no marker is written (the read-query filter isn't in yet).
+        var dept = DeptAttr();
+        var highRule = PriorityRule(syncRuleId: 1, priority: 1, dept, nullIsValue: true);
+        var lowRule = PriorityRule(syncRuleId: 2, priority: 2, dept);
+        var context = new AttributePriorityContext(new[] { highRule, lowRule }, honourNullAssertions: false);
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        SeedIncumbent(mvo, dept, "IT", syncRuleId: 2, systemId: 9);
+        var cso = CsoJoinedNoValue(mvo, connectedSystemId: 5);
+
+        _engine.FlowInboundAttributes(cso, highRule, ObjectTypes(), priorityContext: context);
+
+        Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty, "abstains, leaving the lower-priority incumbent");
+        Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty, "no marker is written when assertions are disabled");
+        Assert.That(mvo.AttributeValues.Single().StringValue, Is.EqualTo("IT"));
+    }
 }

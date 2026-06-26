@@ -237,7 +237,9 @@ public partial class SyncEngine
             return;
         }
 
-        if (syncRuleMapping.NullIsValue)
+        // Assert null only when the context honours it (gated on the NullValue read-query filter being in place).
+        // Otherwise a no-value contribution falls through to the abstain/clear logic regardless of "Null is a value".
+        if (syncRuleMapping.NullIsValue && priorityContext.HonourNullAssertions)
         {
             // Assert null: remove any real values, then ensure exactly one NullValue marker stamped with this rule.
             mvo.PendingAttributeValueRemovals.AddRange(existingValues.Where(av => !av.NullValue));

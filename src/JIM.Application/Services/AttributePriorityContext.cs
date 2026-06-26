@@ -25,12 +25,26 @@ public sealed class AttributePriorityContext
     private readonly Dictionary<(int ObjectTypeId, int AttributeId, int SyncRuleId), SyncRuleMapping> _contributorBySyncRule = new();
 
     /// <summary>
+    /// Whether "Null is a value" assertions are honoured (asserted-null <c>NullValue</c> marker rows are written and
+    /// block lower-priority fall-through). This is gated on the <c>NullValue</c> read-query filter being in place,
+    /// because a marker must be invisible to export/drift/enumeration reads to avoid a silent downstream divergence.
+    /// Until that filter lands the worker builds the context with this false: priority resolution among value
+    /// contributors is live, but a no-value contribution falls through (abstains) regardless of "Null is a value",
+    /// and no marker rows are written.
+    /// </summary>
+    public bool HonourNullAssertions { get; }
+
+    /// <summary>
     /// Builds the contributor cache from all Synchronisation Rules across every Connected System. Only enabled
     /// import rules with a target Metaverse Attribute and a persisted sync rule id contribute.
     /// </summary>
-    public AttributePriorityContext(IEnumerable<SyncRule> allSyncRules)
+    /// <param name="allSyncRules">Every Synchronisation Rule across all Connected Systems.</param>
+    /// <param name="honourNullAssertions">See <see cref="HonourNullAssertions"/>. Defaults to true for the resolution
+    /// semantics; the worker passes false until the <c>NullValue</c> read-query filter is in place.</param>
+    public AttributePriorityContext(IEnumerable<SyncRule> allSyncRules, bool honourNullAssertions = true)
     {
         ArgumentNullException.ThrowIfNull(allSyncRules);
+        HonourNullAssertions = honourNullAssertions;
 
         foreach (var rule in allSyncRules)
         {
