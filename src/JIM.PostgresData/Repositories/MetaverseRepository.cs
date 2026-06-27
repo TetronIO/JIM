@@ -957,7 +957,7 @@ public class MetaverseRepository : IMetaverseRepository
                 // More err...
             }
 
-            // todo: handle group nesting as well
+            // todo (#850): handle group nesting as well
         }
 
         // Apply search filter - searches across all attribute values

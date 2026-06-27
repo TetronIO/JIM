@@ -390,7 +390,6 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, List<ConnectedSystemPaginationToken> paginationTokens, string? persistedConnectorData, ILogger logger, CancellationToken cancellationToken)
     {
         logger.Verbose("ImportAsync() called");
-        // todo: wrap this in a task to eliminate the compiler warning. still needs to propagate exceptions and return values.
 
         if (_connection == null)
             throw new InvalidOperationException("Must call OpenImportConnection() before ImportAsync()!");

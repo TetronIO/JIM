@@ -671,7 +671,6 @@ public class ExampleDataServer
         Random random,
         ExampleDataValueTrackerStore trackerStore)
     {
-        // todo: make use of data gen value trackers to get next highest value
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
@@ -689,7 +688,6 @@ public class ExampleDataServer
         Random random,
         ExampleDataValueTrackerStore trackerStore)
     {
-        // todo: make use of data gen value trackers to get next highest value
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
