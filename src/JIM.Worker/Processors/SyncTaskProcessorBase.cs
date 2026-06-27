@@ -2688,8 +2688,22 @@ public abstract class SyncTaskProcessorBase
             case AttributeDataType.Reference:
                 // Reference attribute with no resolved or unresolved value — nothing to track
                 break;
+            case AttributeDataType.NotSet:
+                // The attribute has no data type configured; we cannot record a typed value change for it.
+                throw new InvalidOperationException(
+                    $"Attribute '{metaverseObjectAttributeValue.Attribute.Name}' (id {metaverseObjectAttributeValue.Attribute.Id}) has no data type configured (NotSet); cannot record a Metaverse Object change for it.");
             default:
-                throw new NotImplementedException($"Attribute data type {metaverseObjectAttributeValue.Attribute.Type} is not yet supported for MVO change tracking.");
+                // Reached only when a *known*, switch-handled data type's value holder was unexpectedly null on a
+                // row that is not an asserted-null marker (data corruption; the NullValue guard above already
+                // returned for legitimate asserted nulls), or when the AttributeDataType enum has gained a member
+                // this switch does not yet handle. Distinguish the two so the failure is honest.
+                throw Enum.IsDefined(metaverseObjectAttributeValue.Attribute.Type)
+                    ? new InvalidOperationException(
+                        $"Attribute '{metaverseObjectAttributeValue.Attribute.Name}' (id {metaverseObjectAttributeValue.Attribute.Id}) of type {metaverseObjectAttributeValue.Attribute.Type} has no value but is not an asserted-null marker; the Metaverse Object Attribute Value is corrupt.")
+                    : new ArgumentOutOfRangeException(
+                        nameof(metaverseObjectAttributeValue),
+                        metaverseObjectAttributeValue.Attribute.Type,
+                        "Unhandled attribute data type for Metaverse Object change tracking.");
         }
     }
 
