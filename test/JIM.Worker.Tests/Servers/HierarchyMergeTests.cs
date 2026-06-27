@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Servers;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 using NUnit.Framework;
@@ -15,6 +16,67 @@ namespace JIM.Worker.Tests.Servers;
 [TestFixture]
 public class HierarchyMergeTests
 {
+    #region MergeHierarchy data-safety (#876)
+
+    [Test]
+    public void MergeHierarchy_WithZeroDiscoveredPartitions_LeavesExistingHierarchyIntact()
+    {
+        // Arrange - a Connected System with existing partitions (one selected). A connector returning zero
+        // partitions almost always means a retrieval failure (connection/authentication/scope), not a directory
+        // that genuinely has no partitions. Treating it as "all partitions removed" would destroy the configured
+        // hierarchy and the user's selections (#876), so the merge must leave the existing hierarchy untouched.
+        var connectedSystem = new ConnectedSystem
+        {
+            Partitions = new List<ConnectedSystemPartition>
+            {
+                new() { Name = "Partition One", ExternalId = "DC=one,DC=local", Selected = true },
+                new() { Name = "Partition Two", ExternalId = "DC=two,DC=local", Selected = false }
+            }
+        };
+
+        // Act
+        var result = ConnectedSystemServer.MergeHierarchy(connectedSystem, new List<ConnectorPartition>());
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(connectedSystem.Partitions, Has.Count.EqualTo(2), "existing partitions must survive an empty discovery");
+            Assert.That(result.RemovedPartitions, Is.Empty, "nothing should be reported as removed");
+            Assert.That(result.HasChanges, Is.False);
+            Assert.That(result.HasSelectedItemsRemoved, Is.False);
+        });
+    }
+
+    [Test]
+    public void MergeHierarchy_WithDiscoveredPartitions_StillRemovesGenuinelyAbsentOnes()
+    {
+        // Arrange - a non-empty discovery that omits an existing partition is a genuine removal and must still
+        // be honoured (guards against the data-safety fix over-reaching and disabling legitimate removals).
+        var connectedSystem = new ConnectedSystem
+        {
+            Partitions = new List<ConnectedSystemPartition>
+            {
+                new() { Name = "Keep", ExternalId = "DC=keep,DC=local", Selected = false },
+                new() { Name = "Gone", ExternalId = "DC=gone,DC=local", Selected = false }
+            }
+        };
+
+        // Act - discovery contains only "Keep"
+        var result = ConnectedSystemServer.MergeHierarchy(
+            connectedSystem,
+            new List<ConnectorPartition> { new() { Id = "DC=keep,DC=local", Name = "Keep" } });
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(connectedSystem.Partitions.Select(p => p.ExternalId), Is.EquivalentTo(new[] { "DC=keep,DC=local" }));
+            Assert.That(result.RemovedPartitions, Has.Count.EqualTo(1));
+            Assert.That(result.RemovedPartitions[0].ExternalId, Is.EqualTo("DC=gone,DC=local"));
+        });
+    }
+
+    #endregion
+
     #region HierarchyChangeItem Tests
 
     [Test]

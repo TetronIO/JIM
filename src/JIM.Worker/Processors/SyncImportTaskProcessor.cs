@@ -348,7 +348,6 @@ public class SyncImportTaskProcessor
 
                 // Progress is now initialised inside ProcessImportObjectsAsync
 
-                // todo (#879): simplify externalIdsImported. objects are unnecessarily complex
                 // add the external ids from the results to our external id collection for later deletion calculation
                 AddExternalIdsToCollection(result, externalIdsImported);
 
@@ -814,7 +813,7 @@ public class SyncImportTaskProcessor
 
                     // get the int import object external ids for this object type
                     var connectedSystemIntExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
+                        .Where(q => q.ConnectedSystemObjectTypeId == selectedObjectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.IntValues);
 
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
@@ -832,7 +831,7 @@ public class SyncImportTaskProcessor
 
                     // get the string import object external ids for this object type
                     var connectedSystemStringExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
+                        .Where(q => q.ConnectedSystemObjectTypeId == selectedObjectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.StringValues);
 
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
@@ -850,7 +849,7 @@ public class SyncImportTaskProcessor
 
                     // get the guid import object external ids for this object type
                     var connectedSystemGuidExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
+                        .Where(q => q.ConnectedSystemObjectTypeId == selectedObjectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.GuidValues);
 
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
@@ -868,7 +867,7 @@ public class SyncImportTaskProcessor
 
                     // get the long import object external ids for this object type
                     var connectedSystemLongExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
+                        .Where(q => q.ConnectedSystemObjectTypeId == selectedObjectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.LongValues);
 
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
@@ -1076,7 +1075,7 @@ public class SyncImportTaskProcessor
             var externalIdAttributeName = connectedSystemObjectType.Attributes.Single(q => q.IsExternalId).Name;
             externalIdsImported.Add(new ExternalIdPair
             {
-                ConnectedSystemObjectType = connectedSystemObjectType,
+                ConnectedSystemObjectTypeId = connectedSystemObjectType.Id,
                 ConnectedSystemImportObjectAttribute = importedObject.Attributes.Single(q => q.Name.Equals(externalIdAttributeName, StringComparison.OrdinalIgnoreCase))
             });
         }

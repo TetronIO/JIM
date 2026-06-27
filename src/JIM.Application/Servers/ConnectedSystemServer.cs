@@ -1447,7 +1447,10 @@ public class ConnectedSystemServer
             partitions = await CreateConfiguredLdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
             if (partitions.Count == 0)
             {
-                // todo (#876): report to the user we attempted to retrieve partitions, but got none back
+                // Zero partitions almost always means the connector could not enumerate them (connection,
+                // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
+                // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
+                activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
             }
         }
         else
@@ -1508,7 +1511,10 @@ public class ConnectedSystemServer
             partitions = await CreateConfiguredLdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
             if (partitions.Count == 0)
             {
-                // todo (#876): report to the user we attempted to retrieve partitions, but got none back
+                // Zero partitions almost always means the connector could not enumerate them (connection,
+                // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
+                // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
+                activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
             }
         }
         else
@@ -1838,8 +1844,18 @@ public class ConnectedSystemServer
     /// <param name="connectedSystem">The Connected System to merge hierarchy into.</param>
     /// <param name="discoveredPartitions">The partitions discovered from the connector.</param>
     /// <returns>A result object describing what changed during the merge.</returns>
-    private static HierarchyRefreshResult MergeHierarchy(ConnectedSystem connectedSystem, List<ConnectorPartition> discoveredPartitions)
+    internal static HierarchyRefreshResult MergeHierarchy(ConnectedSystem connectedSystem, List<ConnectorPartition> discoveredPartitions)
     {
+        // A connector returning zero partitions almost always indicates a retrieval failure (connection,
+        // authentication, or scope problem) rather than a directory that genuinely has no partitions. Treating
+        // it as "every partition was removed" would destroy the configured hierarchy and the user's container
+        // selections, so leave the existing hierarchy untouched and report no changes. Callers surface a warning
+        // on the Activity so the admin knows the refresh returned nothing (#876).
+        if (discoveredPartitions.Count == 0)
+            return HierarchyRefreshResult.NoChanges(
+                connectedSystem.Partitions?.Count ?? 0,
+                CountAllContainers(connectedSystem.Partitions));
+
         var result = new HierarchyRefreshResult { Success = true };
 
         // Build lookup of existing items by ExternalId for efficient matching
