@@ -60,11 +60,41 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
             "the re-elected value must carry the surviving Training rule's provenance");
     }
 
+    [Test]
+    public async Task Recall_HigherPriorityObsoletedUnderGracePeriod_ReElectsSurvivorButFreezesSingleSourceAttributesAsync()
+    {
+        // A deletion grace period is configured. Today the grace period freezes all recall, so a multi-source
+        // attribute would be left stale at the departed source's value. With per-attribute re-election: the
+        // multi-source Description is handed to the surviving Training source, while single-source HR attributes
+        // (no survivor) are still frozen (preserved) for the grace window rather than cleared.
+        var ctx = await SetUpTwoContributorsToDescriptionAsync(
+            hrDescriptionPriority: 1, trainingDescriptionPriority: 2, deletionGracePeriod: TimeSpan.FromDays(7));
+
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training);
+
+        await MarkCsoObsoleteAsync(ctx.HrCso);
+        var deltaActivity = await RunDeltaSyncReturningActivityAsync(ctx.Hr);
+        Assert.That(deltaActivity.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
+            Is.False, "re-election under a grace period must complete without unhandled errors");
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+
+        var description = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDescriptionAttributeId && !av.NullValue);
+        Assert.That(description?.StringValue, Is.EqualTo(TrainingDescription),
+            "the multi-source Description must be re-elected to the surviving Training source even under a grace period");
+
+        var displayName = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDisplayNameAttributeId && !av.NullValue);
+        Assert.That(displayName, Is.Not.Null,
+            "single-source HR DisplayName has no surviving contributor, so it is frozen (preserved) for the grace window, not cleared");
+    }
+
     private sealed record TwoContributorContext(
         ConnectedSystem Hr,
         ConnectedSystem Training,
         ConnectedSystemObject HrCso,
         int MvDescriptionAttributeId,
+        int MvDisplayNameAttributeId,
         int TrainingImportRuleId);
 
     /// <summary>
@@ -72,7 +102,7 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
     /// <paramref name="hrDescriptionPriority"/>, recall enabled) and Training (joins on EmployeeId, contributes
     /// Description at <paramref name="trainingDescriptionPriority"/>). Both source CSOs share an EmployeeId.
     /// </summary>
-    private async Task<TwoContributorContext> SetUpTwoContributorsToDescriptionAsync(int hrDescriptionPriority, int trainingDescriptionPriority)
+    private async Task<TwoContributorContext> SetUpTwoContributorsToDescriptionAsync(int hrDescriptionPriority, int trainingDescriptionPriority, TimeSpan? deletionGracePeriod = null)
     {
         // --- HR source: primary, recall enabled ---
         var hrSystem = await CreateConnectedSystemAsync("HR Source");
@@ -94,8 +124,10 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
             new List<ConnectedSystemObjectTypeAttribute> { trainingExternalIdAttr, trainingEmployeeIdAttr, trainingDescriptionAttr });
         trainingType.RemoveContributedAttributesOnObsoletion = true;
 
-        // --- MV type with Description ---
+        // --- MV type with Description (and an optional deletion grace period) ---
         var mvType = await CreateMvObjectTypeAsync("Person");
+        if (deletionGracePeriod.HasValue)
+            mvType.DeletionGracePeriod = deletionGracePeriod.Value;
         var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
         var mvEmployeeIdAttr = mvType.Attributes.First(a => a.Name == "EmployeeId");
         var mvDescriptionAttr = new MetaverseAttribute
@@ -148,7 +180,7 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
             AttributeId = trainingDescriptionAttr.Id, Attribute = trainingDescriptionAttr, StringValue = TrainingDescription, ConnectedSystemObject = trainingCso
         });
 
-        return new TwoContributorContext(hrSystem, trainingSystem, hrCso, mvDescriptionAttr.Id, trainingImportRule.Id);
+        return new TwoContributorContext(hrSystem, trainingSystem, hrCso, mvDescriptionAttr.Id, mvDisplayNameAttr.Id, trainingImportRule.Id);
     }
 
     private static SyncRuleMapping BuildDirectImportMapping(SyncRule rule, MetaverseAttribute target, ConnectedSystemObjectTypeAttribute source, int priority = int.MaxValue)

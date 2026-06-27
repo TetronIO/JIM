@@ -719,17 +719,16 @@ public abstract class SyncTaskProcessorBase
         // when the MVO is deleted moments later in FlushPendingMvoDeletionsAsync.
         var mvoDeletionFate = await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingCsoCount);
 
-        // Check if we should remove contributed attributes based on the object type setting.
-        // When a grace period is configured, skip attribute recall to preserve identity-critical
-        // attribute values (e.g., display name, department) that feed expression-based exports
-        // (e.g., LDAP Distinguished Name). Recalling these attributes during the grace period
-        // would produce invalid export values. The attributes will be cleaned up when the MVO
-        // is deleted after the grace period expires, or preserved if the object reappears.
-        // Also skip recall when the MVO will be deleted immediately — the recall work (MVO update,
-        // export evaluation queueing) would be discarded when the MVO is deleted (#390).
+        // Recall the obsoleting system's contributed attributes (where the object type opts in), re-electing a
+        // surviving contributor where one exists. A configured deletion grace period no longer skips recall wholesale:
+        // an attribute with another contributor is handed to the survivor (a safe change-of-value, not a clear), while
+        // an attribute with no other contributor is frozen (preserved) for the grace window, so identity-critical
+        // single-source values that feed expression-based exports (e.g. an LDAP Distinguished Name) are not cleared
+        // mid-grace. Recall is still skipped entirely when the MVO will be deleted immediately, since the work would be
+        // discarded when the MVO is deleted moments later (#390).
         var hasGracePeriod = mvo.Type?.DeletionGracePeriod is { } gp && gp > TimeSpan.Zero;
         var skipRecallForImmediateDeletion = mvoDeletionFate == MvoDeletionFate.DeletedImmediately;
-        if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod && !skipRecallForImmediateDeletion)
+        if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !skipRecallForImmediateDeletion)
         {
             // Find all MVO attribute values contributed by this Connected System and mark them for removal
             var contributedAttributes = mvo.AttributeValues
@@ -748,6 +747,16 @@ public abstract class SyncTaskProcessorBase
             // surviving CSOs through the normal attribute-flow gate elects the highest-priority survivor; survivors
             // for attributes with no other contributor add nothing, so those attributes are still cleared.
             await ReElectSurvivingContributorsAsync(mvo, contributedAttributes, connectedSystemObject);
+
+            if (hasGracePeriod)
+            {
+                // A deletion grace period is active: an attribute with no surviving contributor must be frozen
+                // (preserved) until the grace window resolves, not cleared. Re-elected attributes are still replaced
+                // (their leaver value stays marked for removal); only the leaver's non-re-elected values are unmarked.
+                var reElectedDuringGrace = mvo.PendingAttributeValueAdditions.Select(a => a.AttributeId).ToHashSet();
+                foreach (var frozen in contributedAttributes.Where(av => !reElectedDuringGrace.Contains(av.AttributeId)))
+                    mvo.PendingAttributeValueRemovals.Remove(frozen);
+            }
 
             // Apply attribute changes and queue the MVO for export evaluation and persistence.
             // ProcessMetaverseObjectChangesAsync is skipped for obsolete CSOs (it's guarded by
@@ -790,12 +799,6 @@ public abstract class SyncTaskProcessorBase
             Log.Debug("ProcessObsoleteConnectedSystemObjectAsync: Skipping attribute recall for CSO {CsoId} " +
                 "because MVO {MvoId} will be deleted immediately (#390 optimisation).",
                 connectedSystemObject.Id, mvo.Id);
-        }
-        else if (hasGracePeriod)
-        {
-            Log.Debug("ProcessObsoleteConnectedSystemObjectAsync: Skipping attribute recall for CSO {CsoId} " +
-                "because MVO {MvoId} has a grace period of {GracePeriod}. Attributes will be preserved until " +
-                "grace period expires.", connectedSystemObject.Id, mvo.Id, mvo.Type!.DeletionGracePeriod);
         }
 
         // Break the CSO-MVO join
