@@ -672,7 +672,7 @@ public class MetaverseServerChangeTrackingTests
         };
 
         // Act
-        JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Add);
+        change.AddAttributeValueChange(attrValue, ValueChangeType.Add);
 
         // Assert
         var attrChange = change.AttributeChanges.Single();
@@ -698,7 +698,7 @@ public class MetaverseServerChangeTrackingTests
         };
 
         // Act
-        JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Remove);
+        change.AddAttributeValueChange(attrValue, ValueChangeType.Remove);
 
         // Assert — FK recorded on the change record so the ReferenceValue navigation can be
         // loaded later via .Include; rendered as a linked MVO chip in the activity UI.
@@ -726,7 +726,7 @@ public class MetaverseServerChangeTrackingTests
 
         // Act & Assert — should not throw
         Assert.DoesNotThrow(() =>
-            JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Remove));
+            change.AddAttributeValueChange(attrValue, ValueChangeType.Remove));
 
         // No value change recorded (nothing to track)
         Assert.That(change.AttributeChanges.Single().ValueChanges, Is.Empty);
@@ -752,7 +752,7 @@ public class MetaverseServerChangeTrackingTests
 
         // Act & Assert — skipped without throwing, and no value change recorded
         Assert.DoesNotThrow(() =>
-            JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Add));
+            change.AddAttributeValueChange(attrValue, ValueChangeType.Add));
         Assert.That(change.AttributeChanges, Is.Empty);
     }
 
@@ -767,7 +767,7 @@ public class MetaverseServerChangeTrackingTests
 
         // Act & Assert
         Assert.Throws<InvalidOperationException>(() =>
-            JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Add));
+            change.AddAttributeValueChange(attrValue, ValueChangeType.Add));
     }
 
     [Test]
@@ -787,7 +787,7 @@ public class MetaverseServerChangeTrackingTests
 
         // Act & Assert
         Assert.Throws<InvalidOperationException>(() =>
-            JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Add));
+            change.AddAttributeValueChange(attrValue, ValueChangeType.Add));
     }
 
     #endregion
