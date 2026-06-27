@@ -1042,7 +1042,7 @@ public class ConnectedSystemServer
         else if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
             results.AddRange(new FileConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
         else
-            throw new NotImplementedException("Support for that connector definition has not been implemented yet."); // todo: support custom connectors.
+            throw new NotImplementedException("Support for that connector definition has not been implemented yet."); // todo (#875): centralise connector dispatch / support additional connector definitions.
 
         return results;
     }
@@ -1447,7 +1447,7 @@ public class ConnectedSystemServer
             partitions = await CreateConfiguredLdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
             if (partitions.Count == 0)
             {
-                // todo: report to the user we attempted to retrieve partitions, but got none back
+                // todo (#876): report to the user we attempted to retrieve partitions, but got none back
             }
         }
         else
@@ -1508,7 +1508,7 @@ public class ConnectedSystemServer
             partitions = await CreateConfiguredLdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
             if (partitions.Count == 0)
             {
-                // todo: report to the user we attempted to retrieve partitions, but got none back
+                // todo (#876): report to the user we attempted to retrieve partitions, but got none back
             }
         }
         else
@@ -3572,8 +3572,20 @@ public class ConnectedSystemServer
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.UnresolvedReferenceValue));
                 break;
             case AttributeDataType.NotSet:
+                // The attribute has no data type configured; we cannot record a typed value change for it.
+                throw new InvalidDataException(
+                    $"AddChangeAttributeValueObject: attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' has no data type configured (NotSet); cannot record a Connected System Object change for it.");
             default:
-                throw new InvalidDataException($"AddChangeAttributeValueObject:  Invalid removal attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' of type '{connectedSystemObjectAttributeValue.Attribute.Type}' or null attribute value.");
+                // Reached when a *known*, switch-handled data type's value holder was unexpectedly null (a corrupt
+                // attribute value), or when the AttributeDataType enum has gained a member this switch does not yet
+                // handle. The message distinguishes the two; the exception type is deliberately kept uniform
+                // (InvalidDataException) because the deletion path's CaptureDeletedCsoAttributeValues catch filters
+                // on InvalidOperationException/InvalidDataException to degrade gracefully.
+                throw Enum.IsDefined(connectedSystemObjectAttributeValue.Attribute.Type)
+                    ? new InvalidDataException(
+                        $"AddChangeAttributeValueObject: attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' of type '{connectedSystemObjectAttributeValue.Attribute.Type}' has no value; the Connected System Object attribute value is corrupt.")
+                    : new InvalidDataException(
+                        $"AddChangeAttributeValueObject: attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' has an unhandled data type '{connectedSystemObjectAttributeValue.Attribute.Type}' for Connected System Object change tracking.");
         }
     }
 

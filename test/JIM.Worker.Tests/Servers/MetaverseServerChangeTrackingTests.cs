@@ -672,7 +672,7 @@ public class MetaverseServerChangeTrackingTests
         };
 
         // Act
-        JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Add);
+        change.AddAttributeValueChange(attrValue, ValueChangeType.Add);
 
         // Assert
         var attrChange = change.AttributeChanges.Single();
@@ -698,7 +698,7 @@ public class MetaverseServerChangeTrackingTests
         };
 
         // Act
-        JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Remove);
+        change.AddAttributeValueChange(attrValue, ValueChangeType.Remove);
 
         // Assert — FK recorded on the change record so the ReferenceValue navigation can be
         // loaded later via .Include; rendered as a linked MVO chip in the activity UI.
@@ -726,10 +726,68 @@ public class MetaverseServerChangeTrackingTests
 
         // Act & Assert — should not throw
         Assert.DoesNotThrow(() =>
-            JIM.Application.Servers.MetaverseServer.AddMvoChangeAttributeValueObject(change, attrValue, ValueChangeType.Remove));
+            change.AddAttributeValueChange(attrValue, ValueChangeType.Remove));
 
         // No value change recorded (nothing to track)
         Assert.That(change.AttributeChanges.Single().ValueChanges, Is.Empty);
+    }
+
+    #endregion
+
+    #region Asserted-null and unsupported-type handling
+
+    [Test]
+    public void AddMvoChangeAttributeValueObject_AssertedNullMarker_IsSkipped()
+    {
+        // Arrange — an asserted-null marker (#91): every value holder is null but the row carries
+        // provenance via NullValue. This is legitimate data, not corruption, and must be skipped
+        // (mirroring SyncTaskProcessorBase) rather than falling through to the default case.
+        var change = new MetaverseObjectChange();
+        var attrValue = new MetaverseObjectAttributeValue
+        {
+            Attribute = _displayNameAttr,
+            StringValue = null,
+            NullValue = true
+        };
+
+        // Act & Assert — skipped without throwing, and no value change recorded
+        Assert.DoesNotThrow(() =>
+            change.AddAttributeValueChange(attrValue, ValueChangeType.Add));
+        Assert.That(change.AttributeChanges, Is.Empty);
+    }
+
+    [Test]
+    public void AddMvoChangeAttributeValueObject_NotSetType_ThrowsInvalidOperation()
+    {
+        // Arrange — an attribute with no data type configured (NotSet). This is a misconfiguration,
+        // not an unimplemented code path, so it must surface as InvalidOperationException.
+        var change = new MetaverseObjectChange();
+        var notSetAttr = new MetaverseAttribute { Id = 99, Name = "Misconfigured", Type = AttributeDataType.NotSet };
+        var attrValue = new MetaverseObjectAttributeValue { Attribute = notSetAttr, StringValue = "value" };
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() =>
+            change.AddAttributeValueChange(attrValue, ValueChangeType.Add));
+    }
+
+    [Test]
+    public void AddMvoChangeAttributeValueObject_KnownTypeWithNullValueHolder_ThrowsForCorruption()
+    {
+        // Arrange — a Text attribute whose StringValue is null but which is NOT an asserted-null marker.
+        // A real value row always populates its holder, so this is a corrupt Metaverse Object Attribute
+        // Value. It must hard-fail (synchronisation integrity) with an honest corruption error, not a
+        // misleading "Text is not yet supported".
+        var change = new MetaverseObjectChange();
+        var attrValue = new MetaverseObjectAttributeValue
+        {
+            Attribute = _displayNameAttr,
+            StringValue = null,
+            NullValue = false
+        };
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() =>
+            change.AddAttributeValueChange(attrValue, ValueChangeType.Add));
     }
 
     #endregion

@@ -129,7 +129,7 @@ internal class LdapConnectorSchema
         foreach (var objectClassEntry in objectClassEntries)
             GetObjectClassAttributesRecursively(objectClassEntry, objectType);
 
-        // todo: it's possible there's some duplication of attributes going on due to attributes being specified on structural and auxiliary classes, so de-dupe before we return
+        // todo (#492): it's possible there's some duplication of attributes going on due to attributes being specified on structural and auxiliary classes, so de-dupe before we return
         objectType.Attributes = objectType.Attributes.OrderBy(q => q.Name).ToList();
 
         return true;
