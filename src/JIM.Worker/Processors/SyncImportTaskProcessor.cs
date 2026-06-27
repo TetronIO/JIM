@@ -348,7 +348,7 @@ public class SyncImportTaskProcessor
 
                 // Progress is now initialised inside ProcessImportObjectsAsync
 
-                // todo: simplify externalIdsImported. objects are unnecessarily complex
+                // todo (#879): simplify externalIdsImported. objects are unnecessarily complex
                 // add the external ids from the results to our external id collection for later deletion calculation
                 AddExternalIdsToCollection(result, externalIdsImported);
 
@@ -1129,7 +1129,7 @@ public class SyncImportTaskProcessor
                     activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
                     activityRunProfileExecutionItem.ErrorMessage = $"The imported object has one or more duplicate attributes: {string.Join(", ", duplicateAttributeNames)}. Please de-duplicate and try again.";
 
-                    // todo: include a serialised snapshot of the imported object that is also presented to sync admin when viewing sync errors
+                    // todo (#874): include a serialised snapshot of the imported object that is also presented to sync admin when viewing sync errors
                     continue;
                 }
 
@@ -2027,7 +2027,7 @@ public class SyncImportTaskProcessor
                         // there will be only a single value for a bool. is it the same or different?
                         // if different, remove the old value, add the new one
                         // observation: removing and adding SVA values is costlier than just updating a row. it also results in increased primary key usage, i.e. constantly generating new values
-                        // todo: consider having the ability to update values instead of replacing.
+                        // todo (#872): consider having the ability to update values instead of replacing.
                         var csoBooleanAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id);
                         if (csoBooleanAttributeValue == null)
                         {
@@ -2339,7 +2339,7 @@ public class SyncImportTaskProcessor
                 else
                 {
                     // reference not found. referenced object probably out of container scope!
-                    // todo: make it a per-Connected System setting whether to raise an error, or ignore. sometimes this is desirable.
+                    // todo (#873): make it a per-Connected System setting whether to raise an error, or ignore. sometimes this is desirable.
                     rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
                     if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
                     {

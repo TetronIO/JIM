@@ -850,7 +850,7 @@ public class MetaverseRepository : IMetaverseRepository
                 objects = objects.OrderByDescending(q => q.Created);
                 break;
 
-            // todo: support more ways of sorting, i.e. by attribute value
+            // todo (#813): support more ways of sorting, i.e. by attribute value
         }
 
         // now just retrieve a page's worth of images from the results

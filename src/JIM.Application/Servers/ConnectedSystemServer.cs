@@ -1042,7 +1042,7 @@ public class ConnectedSystemServer
         else if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
             results.AddRange(new FileConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
         else
-            throw new NotImplementedException("Support for that connector definition has not been implemented yet."); // todo: support custom connectors.
+            throw new NotImplementedException("Support for that connector definition has not been implemented yet."); // todo (#875): centralise connector dispatch / support additional connector definitions.
 
         return results;
     }
@@ -1447,7 +1447,7 @@ public class ConnectedSystemServer
             partitions = await CreateConfiguredLdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
             if (partitions.Count == 0)
             {
-                // todo: report to the user we attempted to retrieve partitions, but got none back
+                // todo (#876): report to the user we attempted to retrieve partitions, but got none back
             }
         }
         else
@@ -1508,7 +1508,7 @@ public class ConnectedSystemServer
             partitions = await CreateConfiguredLdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
             if (partitions.Count == 0)
             {
-                // todo: report to the user we attempted to retrieve partitions, but got none back
+                // todo (#876): report to the user we attempted to retrieve partitions, but got none back
             }
         }
         else

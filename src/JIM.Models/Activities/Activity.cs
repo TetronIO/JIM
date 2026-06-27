@@ -308,14 +308,6 @@ public class Activity
     /// </summary>
     public List<ActivityRunProfileExecutionItem> RunProfileExecutionItems { get; init; } = new();
 
-    // -----------------------------------------------------------------------------------------------------------------
-    // object changes (created/update/delete)
-    // this would apply to all object types, i.e. Metaverse Object, Synchronisation Rules, Connected Systems, etc.
-    // todo:
-    // - json blob that contains object changes (might regret this later, but it seems quicker to get going this way)
-    // - some kind of access control for sensitive attribute values being logged, i.e. should someone reviewing the
-    //   audit log be able to see sensitive attribute values?
-
     public ActivityRunProfileExecutionItem AddRunProfileExecutionItem()
     {
         var activityRunProfileExecutionItem = PrepareRunProfileExecutionItem();

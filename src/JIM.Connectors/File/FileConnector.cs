@@ -474,7 +474,6 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     {
         logger.Verbose("ImportAsync() called");
 
-        // todo: see about changing this so it returns a ConnectedSystemImportResult with an error on it
         if (string.IsNullOrEmpty(runProfile.FilePath))
             throw new InvalidDataException($"ImportAsync: FilePath is missing or empty!");
 
