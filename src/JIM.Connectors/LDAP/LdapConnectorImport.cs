@@ -1538,7 +1538,7 @@ internal class LdapConnectorImport
 
         var importObjects = new List<ConnectedSystemImportObject>();
 
-        // todo: experiment with parallel foreach to see if we can speed up processing
+        // todo (#497): experiment with parallel foreach to see if we can speed up processing
         foreach (SearchResultEntry searchResult in searchResults)
         {
             if (_cancellationToken.IsCancellationRequested)

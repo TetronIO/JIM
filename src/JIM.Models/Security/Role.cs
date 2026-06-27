@@ -73,7 +73,7 @@ public class Role : IAuditable
     /// </summary>
     public List<MetaverseObject> StaticMembers { get; set; } = new();
 
-    // todo: resource scope
-    // todo: permissions
-    // todo: dynamic membership
+    // todo (#622): resource scope
+    // todo (#622): permissions
+    // todo (#622): dynamic membership
 }
