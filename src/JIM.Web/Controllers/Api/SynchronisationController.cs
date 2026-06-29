@@ -1805,20 +1805,20 @@ public class SynchronisationController(
     /// Get a single version of a Synchronisation Rule's change history, with its snapshot and the diff against the previous version.
     /// </summary>
     /// <param name="id">The unique identifier of the Synchronisation Rule.</param>
-    /// <param name="version">The per-object change version to retrieve.</param>
+    /// <param name="changeVersion">The per-object change version to retrieve.</param>
     /// <returns>The change detail: metadata, the redacted snapshot, and the diff against the previous version.</returns>
     /// <response code="200">The change detail.</response>
     /// <response code="404">No change with that version was found for the rule.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
-    [HttpGet("sync-rules/{id:int}/change-history/{version:int}", Name = "GetSyncRuleChange")]
+    [HttpGet("sync-rules/{id:int}/change-history/{changeVersion:int}", Name = "GetSyncRuleChange")]
     [ProducesResponseType(typeof(ConfigurationChangeDetail), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetSyncRuleChangeAsync(int id, int version)
+    public async Task<IActionResult> GetSyncRuleChangeAsync(int id, int changeVersion)
     {
-        var detail = await _application.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.SyncRule, id, version);
+        var detail = await _application.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.SyncRule, id, changeVersion);
         if (detail == null)
-            return NotFound(ApiErrorResponse.NotFound($"No change history found for Synchronisation Rule {id} version {version}."));
+            return NotFound(ApiErrorResponse.NotFound($"No change history found for Synchronisation Rule {id} version {changeVersion}."));
         return Ok(detail);
     }
 
@@ -1865,20 +1865,20 @@ public class SynchronisationController(
     /// Get a single version of a Connected System's change history, with its snapshot and the diff against the previous version.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
-    /// <param name="version">The per-object change version to retrieve.</param>
+    /// <param name="changeVersion">The per-object change version to retrieve.</param>
     /// <returns>The change detail: metadata, the redacted snapshot, and the diff against the previous version.</returns>
     /// <response code="200">The change detail.</response>
     /// <response code="404">No change with that version was found for the Connected System.</response>
     /// <response code="401">User could not be identified from authentication token.</response>
-    [HttpGet("connected-systems/{connectedSystemId:int}/change-history/{version:int}", Name = "GetConnectedSystemChange")]
+    [HttpGet("connected-systems/{connectedSystemId:int}/change-history/{changeVersion:int}", Name = "GetConnectedSystemChange")]
     [ProducesResponseType(typeof(ConfigurationChangeDetail), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetConnectedSystemChangeAsync(int connectedSystemId, int version)
+    public async Task<IActionResult> GetConnectedSystemChangeAsync(int connectedSystemId, int changeVersion)
     {
-        var detail = await _application.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ConnectedSystem, connectedSystemId, version);
+        var detail = await _application.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ConnectedSystem, connectedSystemId, changeVersion);
         if (detail == null)
-            return NotFound(ApiErrorResponse.NotFound($"No change history found for Connected System {connectedSystemId} version {version}."));
+            return NotFound(ApiErrorResponse.NotFound($"No change history found for Connected System {connectedSystemId} version {changeVersion}."));
         return Ok(detail);
     }
 
