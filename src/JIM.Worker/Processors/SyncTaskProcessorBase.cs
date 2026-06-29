@@ -3460,7 +3460,8 @@ public abstract class SyncTaskProcessorBase
             cso,
             targetMvo,
             _driftDetectionExportRules,
-            _importMappingCache);
+            _importMappingCache,
+            _attributePriorityContext);
 
         if (result.HasDrift)
         {

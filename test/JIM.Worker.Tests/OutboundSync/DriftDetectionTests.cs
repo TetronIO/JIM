@@ -475,6 +475,127 @@ public class DriftDetectionTests
     }
 
     [Test]
+    public void EvaluateDrift_MultiContributor_LosingSystemDivergence_IsFlaggedAsDrift()
+    {
+        // Two systems import DisplayName: a higher-priority source (winner, system 99) and the target system (loser).
+        // The MVO value was contributed by the winner. The target system has an import rule, but it LOST resolution,
+        // so its diverged local value is not a legitimate contribution; it must be flagged as drift (#91).
+        const int winningSystemId = 99;
+
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = DisplayNameMvAttr,
+            AttributeId = DisplayNameMvAttr.Id,
+            StringValue = "John Doe",
+            ContributedBySystemId = winningSystemId // the winner contributed the MVO value
+        });
+
+        var cso = CreateTestCso(mvo); // belongs to TargetSystem (the loser)
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            Attribute = DisplayNameCsoAttr,
+            AttributeId = DisplayNameCsoAttr.Id,
+            StringValue = "Jane Doe" // diverged locally
+        });
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        var exportRule = CreateExportRule(enforceState: true);
+        var importRule = CreateImportRule(); // TargetSystem's import rule (the loser)
+
+        var priorityContext = BuildTwoContributorContext(targetRule: importRule, targetPriority: 2, winningSystemId: winningSystemId, winningPriority: 1);
+        Assert.That(priorityContext.GetContributorCount(MvoUserType.Id, DisplayNameMvAttr.Id), Is.EqualTo(2), "precondition: two contributors");
+
+        // Act
+        var result = Jim.DriftDetection.EvaluateDrift(
+            cso, mvo, new List<SyncRule> { exportRule },
+            DriftDetectionService.BuildImportMappingCache(SyncRulesData), priorityContext);
+
+        // Assert: the target lost resolution, so its diverged local value is drift to be corrected by EnforceState.
+        Assert.That(result.HasDrift, Is.True, "a losing contributor's diverged local value must be flagged as drift");
+    }
+
+    [Test]
+    public void EvaluateDrift_MultiContributor_WinningSystemDivergence_IsNotDrift()
+    {
+        // Same two-contributor topology, but this time the TARGET system won resolution (its provenance is on the MVO
+        // value). A subsequent local divergence is the authoritative source updating its own value, not drift, so it
+        // must still be exempt even though the attribute is multi-contributor.
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = DisplayNameMvAttr,
+            AttributeId = DisplayNameMvAttr.Id,
+            StringValue = "John Doe",
+            ContributedBySystemId = TargetSystem.Id // the target system won
+        });
+
+        var cso = CreateTestCso(mvo); // TargetSystem (the winner)
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            Attribute = DisplayNameCsoAttr,
+            AttributeId = DisplayNameCsoAttr.Id,
+            StringValue = "Jane Doe"
+        });
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        var exportRule = CreateExportRule(enforceState: true);
+        var importRule = CreateImportRule();
+
+        var priorityContext = BuildTwoContributorContext(targetRule: importRule, targetPriority: 1, winningSystemId: 99, winningPriority: 2);
+
+        // Act
+        var result = Jim.DriftDetection.EvaluateDrift(
+            cso, mvo, new List<SyncRule> { exportRule },
+            DriftDetectionService.BuildImportMappingCache(SyncRulesData), priorityContext);
+
+        // Assert: the target won resolution, so it remains a legitimate contributor and is exempt from drift.
+        Assert.That(result.HasDrift, Is.False, "the winning contributor's own value must not be flagged as drift");
+    }
+
+    /// <summary>
+    /// Builds an <see cref="AttributePriorityContext"/> with two contributors to DisplayName: the target system's
+    /// import rule (at <paramref name="targetPriority"/>) and a second import rule on <paramref name="winningSystemId"/>
+    /// (at <paramref name="winningPriority"/>), so the drift contributor check can be exercised as priority-aware.
+    /// </summary>
+    private AttributePriorityContext BuildTwoContributorContext(SyncRule targetRule, int targetPriority, int winningSystemId, int winningPriority)
+    {
+        var targetMapping = targetRule.AttributeFlowRules.Single();
+        targetMapping.SyncRuleId = targetRule.Id;
+        targetMapping.Priority = targetPriority;
+
+        var winningRule = new SyncRule
+        {
+            Id = 300,
+            Name = "Winning Import Rule",
+            Direction = SyncRuleDirection.Import,
+            Enabled = true,
+            ConnectedSystemId = winningSystemId,
+            ConnectedSystemObjectTypeId = TargetUserType.Id,
+            MetaverseObjectTypeId = MvoUserType.Id,
+            AttributeFlowRules = new List<SyncRuleMapping>
+            {
+                new()
+                {
+                    Id = 3000,
+                    SyncRuleId = 300,
+                    Priority = winningPriority,
+                    TargetMetaverseAttribute = DisplayNameMvAttr,
+                    TargetMetaverseAttributeId = DisplayNameMvAttr.Id
+                }
+            }
+        };
+
+        return new AttributePriorityContext(new List<SyncRule> { targetRule, winningRule });
+    }
+
+    [Test]
     public void EvaluateDrift_WhenCsoNotJoined_ReturnsEmptyResult()
     {
         // Arrange
