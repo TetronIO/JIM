@@ -470,6 +470,7 @@ public class ActivityRepository : IActivityRepository
         Version = a.ConfigurationChangeVersion ?? 0,
         Operation = a.TargetOperationType,
         InitiatedByType = a.InitiatedByType,
+        InitiatedById = a.InitiatedById,
         InitiatedByName = a.InitiatedByName,
         When = a.Created,
         Reason = a.ChangeReason,

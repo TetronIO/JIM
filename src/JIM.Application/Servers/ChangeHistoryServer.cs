@@ -95,12 +95,20 @@ public class ChangeHistoryServer
         {
             var current = rows[i];
             var predecessor = i + 1 < rows.Count ? rows[i + 1] : null;
+
+            // The operation shown in an object's configuration history describes what happened to the object as a whole,
+            // not to whichever sub-entity carried the change. A granular endpoint (e.g. adding an Attribute Flow mapping)
+            // records its own Create/Delete operation on its Activity, but at the object level that is an Update. The only
+            // version that is genuinely a creation is the object's first; every later version is an update of an existing
+            // object. The extra older row fetched above guarantees predecessor is null only for that genuine first version.
+            var isFirstVersion = predecessor == null;
             items.Add(new ConfigurationChangeHistoryItem
             {
                 ActivityId = current.ActivityId,
                 Version = current.Version,
-                Operation = current.Operation,
+                Operation = isFirstVersion ? ActivityTargetOperationType.Create : ActivityTargetOperationType.Update,
                 InitiatedByType = current.InitiatedByType,
+                InitiatedById = current.InitiatedById,
                 InitiatedByName = current.InitiatedByName,
                 When = current.When,
                 Reason = current.Reason,
@@ -163,7 +171,9 @@ public class ChangeHistoryServer
 
     private string BuildChangeSummary(ConfigurationChangeActivityData current, ConfigurationChangeActivityData? predecessor)
     {
-        if (current.Operation == ActivityTargetOperationType.Create)
+        // No predecessor means this is the object's first version: a creation, regardless of the recording activity's
+        // own operation (which may be a sub-entity Create).
+        if (predecessor == null)
             return "Created";
 
         var currentSnapshot = ConfigurationSnapshotService.Deserialise(current.SnapshotJson);

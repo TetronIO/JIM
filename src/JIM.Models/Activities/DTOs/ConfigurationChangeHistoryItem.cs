@@ -17,6 +17,9 @@ public class ConfigurationChangeHistoryItem
 
     public ActivityInitiatorType InitiatedByType { get; set; }
 
+    /// <summary>The security principal's id, where one applies (User / API key); null for System or unattributed changes.</summary>
+    public Guid? InitiatedById { get; set; }
+
     public string? InitiatedByName { get; set; }
 
     public DateTime When { get; set; }

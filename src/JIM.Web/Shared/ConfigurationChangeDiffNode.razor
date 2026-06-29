@@ -5,9 +5,9 @@
 
 @* Recursively renders one node of a configuration diff tree, git-style: additions green, removals red,
    a modified scalar shows its old value (red) then its new value (green), and a changed secret is shown
-   amber with its value hidden. Unchanged scalars are omitted; an unchanged container is shown (as a muted
-   "no changes" line) only at the top level, for orientation. Deeper unchanged branches are hidden so the
-   diff stays focused on what actually changed. *@
+   amber with its value hidden. Unchanged nodes (scalars and containers alike) render nothing, so the diff
+   shows only what actually changed. A changed container renders a muted context header with just its
+   changed descendants beneath it. *@
 
 @if (Node.NodeType == ConfigurationSnapshotNodeType.Scalar)
 {
@@ -29,17 +29,8 @@
 }
 else
 {
-    @* Object or Collection node. *@
-    @if (Node.ChangeType == ConfigurationDiffChangeType.Unchanged)
-    {
-        @if (Depth == 0)
-        {
-            <div style="@_indent">
-                <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="@MonospaceStyle">@_label  (no changes)</MudText>
-            </div>
-        }
-    }
-    else
+    @* Object or Collection node. Unchanged containers render nothing; only changed branches are shown. *@
+    @if (Node.ChangeType != ConfigurationDiffChangeType.Unchanged)
     {
         <div style="@_indent">
             <MudText Typo="Typo.body2" Color="@_containerColour" Class="@_containerClass" Style="@MonospaceStyle">@_containerHeader</MudText>

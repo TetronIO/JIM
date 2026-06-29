@@ -71,7 +71,18 @@ else
                                     <MudText Typo="Typo.subtitle2">v@(item.Version)</MudText>
                                     <MudChip T="string" Variant="Variant.Text" Color="@OperationColour(item.Operation)">@OperationLabel(item.Operation)</MudChip>
                                     <MudIcon Icon="@InitiatorIcon(item.InitiatedByType)" Size="Size.Small" Class="mud-text-secondary" />
-                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@(string.IsNullOrEmpty(item.InitiatedByName) ? "System" : item.InitiatedByName)</MudText>
+                                    @{
+                                        var initiatorName = string.IsNullOrEmpty(item.InitiatedByName) ? "System" : item.InitiatedByName;
+                                        var initiatorHref = Helpers.GetInitiatorHref(item.InitiatedByType, item.InitiatedById);
+                                    }
+                                    @if (initiatorHref != null)
+                                    {
+                                        <MudLink Typo="Typo.body2" Href="@initiatorHref">@initiatorName</MudLink>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@initiatorName</MudText>
+                                    }
                                     <MudText Typo="Typo.body2" Class="mud-text-disabled">·</MudText>
                                     <MudTooltip Text="@item.When.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                                         <MudText Typo="Typo.body2" Class="mud-text-secondary">@item.When.ToLocalTime().ToRelativeTime()</MudText>
@@ -83,7 +94,12 @@ else
                                     <MudText Typo="Typo.body2" Class="mt-1" Style="font-style: italic;">&ldquo;@item.Reason&rdquo;</MudText>
                                 }
 
-                                <MudText Typo="Typo.body2" Class="mt-1">@item.Summary</MudText>
+                                @* Summary lists the changed sections for an update; for a creation the operation chip already
+                                   says "Created", so the summary would only echo it. Show it only when it adds information. *@
+                                @if (item.Operation != ActivityTargetOperationType.Create && !string.IsNullOrWhiteSpace(item.Summary))
+                                {
+                                    <MudText Typo="Typo.body2" Class="mt-1">@item.Summary</MudText>
+                                }
 
                                 <div class="mt-2">
                                     <MudButton Variant="Variant.Text" DropShadow="false"
