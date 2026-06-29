@@ -1,0 +1,59 @@
+@using JIM.Models.Activities
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Renders a configuration diff as a git-style tree: a counts header, an optional created/deleted note, then
+   only the changed branches (via the recursive ConfigurationChangeDiffNode). Secret values are never shown. *@
+
+@if (Diff != null)
+{
+    <div class="d-flex flex-wrap align-center gap-2 mb-3">
+        @if (Diff.OldVersion.HasValue && Diff.NewVersion.HasValue)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">v@Diff.OldVersion → v@Diff.NewVersion</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-disabled">·</MudText>
+        }
+        @if (Diff.AddedCount > 0)
+        {
+            <MudChip T="string" Variant="Variant.Text" Color="Color.Success" Icon="@Icons.Material.Filled.Add">@Diff.AddedCount added</MudChip>
+        }
+        @if (Diff.RemovedCount > 0)
+        {
+            <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Icon="@Icons.Material.Filled.Remove">@Diff.RemovedCount removed</MudChip>
+        }
+        @if (Diff.ModifiedCount > 0)
+        {
+            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.Edit">@Diff.ModifiedCount changed</MudChip>
+        }
+    </div>
+
+    @if (Diff.Root.ChangeType == ConfigurationDiffChangeType.Added)
+    {
+        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true" Class="mb-3">This object was created at this version.</MudAlert>
+    }
+    else if (Diff.Root.ChangeType == ConfigurationDiffChangeType.Removed)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" Class="mb-3">This object was deleted at this version.</MudAlert>
+    }
+
+    @if (!Diff.HasChanges)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">No differences between these versions.</MudText>
+    }
+    else
+    {
+        <div>
+            @foreach (var child in Diff.Root.Children ?? new List<ConfigurationDiffNode>())
+            {
+                <ConfigurationChangeDiffNode Node="child" Depth="0" />
+            }
+        </div>
+    }
+}
+
+@code {
+    /// <summary>The structured configuration diff to render.</summary>
+    [Parameter, EditorRequired]
+    public ConfigurationDiff Diff { get; set; } = null!;
+}

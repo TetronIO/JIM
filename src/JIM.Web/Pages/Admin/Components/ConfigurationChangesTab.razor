@@ -1,0 +1,225 @@
+@using JIM.Models.Activities
+@using JIM.Models.Activities.DTOs
+@inject IJimApplicationFactory JimFactory
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The "Changes" tab for a configuration object (Synchronisation Rule or Connected System): a version-ordered
+   list of configuration changes, each expandable to a git-style tree diff, plus a compare-any-two-versions
+   control. Read-only; reads run on their own short-lived context. *@
+
+@if (_loading)
+{
+    <div class="d-flex justify-center my-8">
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+    </div>
+}
+else if (_items.Count == 0)
+{
+    <MudText Class="mud-text-secondary">No configuration changes have been recorded for this @ObjectTypeLabel yet.</MudText>
+}
+else
+{
+    @* Compare any two versions. *@
+    <MudPaper Outlined="true" Class="pa-4">
+        <div class="d-flex flex-wrap align-center gap-3">
+            <MudText Typo="Typo.subtitle2">Compare versions</MudText>
+            <MudSelect T="int?" @bind-Value="_compareFrom" Label="From" Dense="true" Style="min-width: 110px;">
+                @foreach (var v in _versions)
+                {
+                    <MudSelectItem T="int?" Value="@v">v@v</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="int?" @bind-Value="_compareTo" Label="To" Dense="true" Style="min-width: 110px;">
+                @foreach (var v in _versions)
+                {
+                    <MudSelectItem T="int?" Value="@v">v@v</MudSelectItem>
+                }
+            </MudSelect>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false" OnClick="CompareAsync"
+                       Disabled="@(_compareFrom == null || _compareTo == null || _compareFrom == _compareTo)">Compare</MudButton>
+            @if (_compareDiff != null)
+            {
+                <MudButton Variant="Variant.Text" OnClick="@(() => _compareDiff = null)">Clear</MudButton>
+            }
+        </div>
+        @if (_compareLoading)
+        {
+            <div class="d-flex justify-center my-4"><MudProgressCircular Indeterminate="true" Color="Color.Primary" /></div>
+        }
+        else if (_compareDiff != null)
+        {
+            <div class="mt-4">
+                <ConfigurationChangeDiff Diff="_compareDiff" />
+            </div>
+        }
+    </MudPaper>
+
+    @* Version-ordered change list (newest first). *@
+    <div class="d-flex flex-column gap-3 mt-4">
+        @foreach (var item in _items)
+        {
+            <MudPaper Outlined="true" Class="pa-3">
+                <div class="d-flex flex-wrap align-center gap-2">
+                    <MudText Typo="Typo.subtitle2">v@item.Version</MudText>
+                    <MudChip T="string" Variant="Variant.Text" Color="@OperationColour(item.Operation)">@OperationLabel(item.Operation)</MudChip>
+                    <MudIcon Icon="@InitiatorIcon(item.InitiatedByType)" Class="mud-text-secondary" />
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@(string.IsNullOrEmpty(item.InitiatedByName) ? "System" : item.InitiatedByName)</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-disabled">·</MudText>
+                    <MudTooltip Text="@item.When.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@item.When.ToLocalTime().ToRelativeTime()</MudText>
+                    </MudTooltip>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(item.Reason))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-1" Style="font-style: italic;">&ldquo;@item.Reason&rdquo;</MudText>
+                }
+
+                <MudText Typo="Typo.body2" Class="mt-1">@item.Summary</MudText>
+
+                <div class="mt-2">
+                    <MudButton Variant="Variant.Text" DropShadow="false"
+                               StartIcon="@(_expandedVersion == item.Version ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                               OnClick="@(() => ToggleDiffAsync(item.Version))">
+                        @(_expandedVersion == item.Version ? "Hide diff" : "View diff")
+                    </MudButton>
+                </div>
+
+                @if (_expandedVersion == item.Version)
+                {
+                    <div class="mt-3">
+                        @if (_detailLoading)
+                        {
+                            <div class="d-flex justify-center my-4"><MudProgressCircular Indeterminate="true" Color="Color.Primary" /></div>
+                        }
+                        else if (_detail != null)
+                        {
+                            <ConfigurationChangeDiff Diff="_detail.Diff" />
+                        }
+                    </div>
+                }
+            </MudPaper>
+        }
+    </div>
+
+    @if (_items.Count < _totalResults)
+    {
+        <div class="d-flex justify-center mt-3">
+            <MudButton Variant="Variant.Outlined" OnClick="LoadMoreAsync" Disabled="_loadingMore">Load more (@(_totalResults - _items.Count) remaining)</MudButton>
+        </div>
+    }
+}
+
+@code {
+    /// <summary>The kind of configuration object: ActivityTargetType.SyncRule or ActivityTargetType.ConnectedSystem.</summary>
+    [Parameter, EditorRequired]
+    public ActivityTargetType TargetType { get; set; }
+
+    /// <summary>The id of the configuration object whose change history is shown.</summary>
+    [Parameter, EditorRequired]
+    public int ObjectId { get; set; }
+
+    /// <summary>A human-readable label for the object kind, used in the empty-state message.</summary>
+    [Parameter]
+    public string ObjectTypeLabel { get; set; } = "object";
+
+    private bool _loading = true;
+    private bool _loadingMore;
+    private readonly List<ConfigurationChangeHistoryItem> _items = new();
+    private int _totalResults;
+    private int _page = 1;
+    private const int PageSizeConst = 20;
+
+    private List<int> _versions = new();
+
+    private int? _expandedVersion;
+    private bool _detailLoading;
+    private ConfigurationChangeDetail? _detail;
+
+    private int? _compareFrom;
+    private int? _compareTo;
+    private bool _compareLoading;
+    private ConfigurationDiff? _compareDiff;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPageAsync();
+        _loading = false;
+    }
+
+    private async Task LoadPageAsync()
+    {
+        using var jim = JimFactory.Create();
+        var result = await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(TargetType, ObjectId, _page, PageSizeConst);
+        _items.AddRange(result.Results);
+        _totalResults = result.TotalResults;
+        _versions = _items.Select(i => i.Version).Distinct().OrderByDescending(v => v).ToList();
+    }
+
+    private async Task LoadMoreAsync()
+    {
+        _loadingMore = true;
+        _page++;
+        await LoadPageAsync();
+        _loadingMore = false;
+    }
+
+    private async Task ToggleDiffAsync(int version)
+    {
+        if (_expandedVersion == version)
+        {
+            _expandedVersion = null;
+            _detail = null;
+            return;
+        }
+
+        _expandedVersion = version;
+        _detail = null;
+        _detailLoading = true;
+        StateHasChanged(); // show the spinner while the diff is fetched
+        using var jim = JimFactory.Create();
+        _detail = await jim.ChangeHistory.GetConfigurationChangeAsync(TargetType, ObjectId, version);
+        _detailLoading = false;
+    }
+
+    private async Task CompareAsync()
+    {
+        if (_compareFrom == null || _compareTo == null)
+            return;
+
+        _compareLoading = true;
+        _compareDiff = null;
+        StateHasChanged(); // show the spinner while the comparison is fetched
+        using var jim = JimFactory.Create();
+        _compareDiff = await jim.ChangeHistory.CompareConfigurationChangesAsync(TargetType, ObjectId, _compareFrom.Value, _compareTo.Value);
+        _compareLoading = false;
+    }
+
+    private static Color OperationColour(ActivityTargetOperationType operation) => operation switch
+    {
+        ActivityTargetOperationType.Create => Color.Success,
+        ActivityTargetOperationType.Update => Color.Info,
+        ActivityTargetOperationType.Delete => Color.Error,
+        ActivityTargetOperationType.Revert => Color.Warning,
+        _ => Color.Default
+    };
+
+    private static string OperationLabel(ActivityTargetOperationType operation) => operation switch
+    {
+        ActivityTargetOperationType.Create => "Created",
+        ActivityTargetOperationType.Update => "Updated",
+        ActivityTargetOperationType.Delete => "Deleted",
+        ActivityTargetOperationType.Revert => "Reverted",
+        _ => operation.ToString()
+    };
+
+    private static string InitiatorIcon(ActivityInitiatorType initiatorType) => initiatorType switch
+    {
+        ActivityInitiatorType.User => Icons.Material.Filled.Person,
+        ActivityInitiatorType.ApiKey => Icons.Material.Filled.Key,
+        ActivityInitiatorType.System => Icons.Material.Filled.Settings,
+        _ => Icons.Material.Filled.HelpOutline
+    };
+}
