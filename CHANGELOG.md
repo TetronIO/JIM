@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### Configuration Change History (#14)
+
+- ✨ JIM now tracks a versioned history of changes to your Synchronisation Rules and Connected Systems: who changed what, and when. Retrieve it as a git-style diff with `Get-JIMConfigurationChangeHistory` or the REST API; secrets are flagged as changed but never stored or revealed.
+- ✨ You can now record a reason when changing configuration from automation: `-ChangeReason` on the Synchronisation Rule and Connected System write cmdlets, or an optional field on the REST write requests. The reason shows with the change and on its Activity.
+
 ## [0.12.0] - 2026-06-23
 
 ### Added

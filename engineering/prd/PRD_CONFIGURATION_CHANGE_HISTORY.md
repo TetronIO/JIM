@@ -176,24 +176,26 @@ The equivalent capability for business and identity data (Connected System Objec
 
 ## Acceptance Criteria
 
-- [ ] Creating, updating, or deleting a supported configuration object records a change entry with initiator, UTC timestamp, version number, and a complete post-change snapshot, carried with its Activity.
+> **Implementation status (2026-06-29):** ticks below reflect the delivered backend (capture, redaction, diff engine, retrieval), REST API, and PowerShell surfaces. The per-object Changes tab and Activities-list filters (UI) and type-aware retention remain; see the [implementation plan](../plans/CONFIGURATION_CHANGE_HISTORY.md) for phase status.
+
+- [x] Creating, updating, or deleting a supported configuration object records a change entry with initiator, UTC timestamp, version number, and a complete post-change snapshot, carried with its Activity. *(Create and update for both types, plus Synchronisation Rule delete, are captured; Connected System hard-delete capture is deferred to a follow-up.)*
 - [ ] Synchronisation Rule and Connected System detail pages each have a "Changes" tab showing version history with version number, initiator, time, optional reason, and a summary.
 - [ ] Selecting a version renders a structured tree diff (additions, removals, modifications with old-to-new values, friendly labels, unchanged branches collapsed).
-- [ ] Any two versions of a supported object can be compared.
-- [ ] Sensitive configuration values are never stored in, or rendered from, the change history in any surface.
+- [x] Any two versions of a supported object can be compared. *(Diff engine plus compare endpoint and cmdlet; in-portal compare ships with the Changes tab.)*
+- [x] Sensitive configuration values are never stored in, or rendered from, the change history in any surface.
 - [ ] An optional reason can be entered on save (UI) and is shown in the history.
 - [ ] The Activities list view has a Configuration category quick-filter, initiator-type and date-range filters, and URL-persisted filter state.
 - [ ] A configuration-change activity links through to the relevant object and version diff.
 - [ ] Configuration change history is retained independently of identity-data history (target-type-aware Activity retention).
-- [ ] Configuration change tracking can be disabled via a Service Setting (default enabled); disabling retains existing history.
+- [x] Configuration change tracking can be disabled via a Service Setting (default enabled); disabling retains existing history.
 - [ ] Expired configuration change history is cleaned up by worker housekeeping and recorded via an Activity.
-- [ ] The REST API and PowerShell module have full parity for: recording an optional reason on configuration create/update/delete; retrieving change history (summary and single-change detail); and (when delivered) rollback.
-- [ ] A write cmdlet (for example `Set-JIMSyncRule`) accepts `-ChangeReason`, and the reason is persisted and attributed to the calling principal.
-- [ ] `Get-JIMConfigurationChangeHistory` returns a capped / paged summary for an object, and for a single change returns either raw data (`-Raw`) or a git-style colour-coded diff (`-AsDiff`).
-- [ ] The full Activity record, including its change payload, is retrievable via `Get-JIMActivity` and the Activities API.
-- [ ] No API or cmdlet permits updating or deleting individual change-history entries.
-- [ ] Pester tests cover the new and modified cmdlets.
-- [ ] Rollback / restore is explicitly not delivered in this release (captured as a fast-follow, with UI, API, and PowerShell coverage when it lands).
+- [x] The REST API and PowerShell module have full parity for: recording an optional reason on configuration create/update/delete; retrieving change history (summary and single-change detail); and (when delivered) rollback.
+- [x] A write cmdlet (for example `Set-JIMSyncRule`) accepts `-ChangeReason`, and the reason is persisted and attributed to the calling principal.
+- [x] `Get-JIMConfigurationChangeHistory` returns a capped / paged summary for an object, and for a single change returns either raw data (`-Raw`) or a git-style colour-coded diff (`-AsDiff`).
+- [x] The full Activity record, including its change payload, is retrievable via `Get-JIMActivity` and the Activities API.
+- [x] No API or cmdlet permits updating or deleting individual change-history entries.
+- [x] Pester tests cover the new and modified cmdlets.
+- [x] Rollback / restore is explicitly not delivered in this release (captured as a fast-follow, with UI, API, and PowerShell coverage when it lands).
 
 ## Additional Context
 

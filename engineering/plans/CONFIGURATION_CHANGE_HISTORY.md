@@ -1,8 +1,9 @@
 # Configuration Change History - Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phases 1, 2, 5, 6 complete)
 - **Issue:** [#14](https://github.com/TetronIO/JIM/issues/14)
 - **PRD:** [`engineering/prd/PRD_CONFIGURATION_CHANGE_HISTORY.md`](../prd/PRD_CONFIGURATION_CHANGE_HISTORY.md)
+- **Note:** The backend (capture, redaction, diff engine, retrieval), REST API, and PowerShell module are delivered. Remaining: Phase 3 (Changes tab UI), Phase 4 (Activities-list filters), Phase 7 (type-aware retention), and Phase 8 (rollback, future). Connected System hard-delete capture is deferred as its own slice (pair with Phase 8 rollback); Synchronisation Rule delete is captured. The keyed-HMAC redaction approach (Open Question 3) is confirmed.
 
 ## Overview
 
@@ -295,7 +296,7 @@ In `-AsDiff`, `+` lines render green and `-` lines red via `$PSStyle` (git-style
 
 ## Implementation Phases
 
-### Phase 1: Capture foundation, storage, and redaction (generic; SyncRule + Connected System enabled)
+### Phase 1: Capture foundation, storage, and redaction (generic; SyncRule + Connected System enabled) ✅
 1. Migration: add `ConfigurationChangeSnapshot` (jsonb), `ChangeReason` (text), `ConfigurationChangeVersion` (int) to `Activity`.
 2. `ConfigurationSnapshotService`: scoped, redacted snapshot per type (SyncRule, Connected System first; generic interface for later types). Keyed-hash redaction for `StringEncrypted` settings.
 3. `ChangeTracking.ConfigurationChanges.Enabled` Service Setting (default true) + `ServiceSettingsServer` getter.
@@ -304,7 +305,7 @@ In `-AsDiff`, `+` lines render green and `-` lines red via `$PSStyle` (git-style
 
 **Files:** `JimDbContext` migration; `JIM.Application/Servers/ConfigurationSnapshotService.cs` (new); `ConnectedSystemServer.cs`; `MetaverseServer.cs` (later types); `ServiceSettingsServer.cs`; `JIM.Models/Activities/Activity.cs`; `JIM.Models/Core/Constants.cs`.
 
-### Phase 2: Retrieval and diff engine (shared backend)
+### Phase 2: Retrieval and diff engine (shared backend) ✅
 1. `ConfigurationDiffService`: structured diff between two snapshots (stable child-id matching).
 2. `ChangeHistoryServer` / `ChangeHistoryRepository`: `GetConfigurationChangeHistoryAsync(targetType, objectId, page, pageSize)` (summary) and single-change/compare detail returning snapshot + diff.
 3. Unit tests for the diff engine (add/remove/modify, nested collections, redacted-field change shown without value).
@@ -325,14 +326,14 @@ In `-AsDiff`, `+` lines render green and `-` lines red via `$PSStyle` (git-style
 
 **Files:** `JIM.Web/Pages/ActivityList.razor`; `ActivityDetail.razor`; application-layer Activity query filters.
 
-### Phase 5: REST API
+### Phase 5: REST API ✅
 1. Optional reason on the write request DTOs + delete `?changeReason=`; pass through to the CRUD methods.
 2. `GET .../sync-rules/{id}/change-history` and `.../{version}`; same for `connected-systems/{id}`; `PaginatedResponse<ConfigurationChangeHistoryDto>`.
 3. Surface snapshot/reason/version on `ActivityDetailDto`. OpenAPI docs.
 
 **Files:** `JIM.Web/Controllers/Api/SynchronisationController.cs`; `JIM.Web/Models/Api/*` DTOs; `ActivityDtos.cs`; API tests under `test/JIM.Web.Api.Tests/`.
 
-### Phase 6: PowerShell
+### Phase 6: PowerShell ✅
 1. `-ChangeReason` on the write cmdlets.
 2. `Get-JIMConfigurationChangeHistory` (summary + `-Raw`/`-AsDiff` git-style coloured diff via `$PSStyle`).
 3. Pester tests (parameter sets, connection requirement, help, summary vs detail behaviour).
