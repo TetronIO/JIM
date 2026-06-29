@@ -3075,12 +3075,13 @@ public abstract class SyncTaskProcessorBase
 
         foreach (var attributeId in recalledAttributeIds.Where(id => priorityContext.GetContributorCount(objectTypeId, id) > 1))
         {
-            foreach (var contributor in priorityContext.GetContributors(objectTypeId, attributeId))
+            // Contributing rules other than the leaver's own (whose contribution is gone). Project to the rule and
+            // filter in one pipeline so the leaver's rule and any rule-less mapping are excluded before the body.
+            foreach (var rule in priorityContext.GetContributors(objectTypeId, attributeId)
+                         .Select(c => c.SyncRule)
+                         .Where(r => r != null && r.ConnectedSystemId != leaver.ConnectedSystemId)
+                         .Select(r => r!))
             {
-                var rule = contributor.SyncRule;
-                if (rule == null || rule.ConnectedSystemId == leaver.ConnectedSystemId)
-                    continue; // the leaver's own rule contributes nothing now
-
                 foreach (var survivor in mvo.ConnectedSystemObjects.Where(c =>
                              c.ConnectedSystemId == rule.ConnectedSystemId &&
                              c.Id != leaver.Id &&
