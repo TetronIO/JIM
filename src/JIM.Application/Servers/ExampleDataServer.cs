@@ -671,7 +671,6 @@ public class ExampleDataServer
         Random random,
         ExampleDataValueTrackerStore trackerStore)
     {
-        // todo: make use of data gen value trackers to get next highest value
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
@@ -689,7 +688,6 @@ public class ExampleDataServer
         Random random,
         ExampleDataValueTrackerStore trackerStore)
     {
-        // todo: make use of data gen value trackers to get next highest value
         if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
             throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
 
@@ -746,7 +744,7 @@ public class ExampleDataServer
         //if (dataGenerationTemplateAttribute.BoolTrueDistribution.HasValue)
         //{
         // a certain number of true values are required over the total number of objects created
-        // TODO: implement true value distribution logic
+        // TODO (#877): implement true value distribution logic
         //}
         //else
         //{

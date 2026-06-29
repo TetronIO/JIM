@@ -6,6 +6,8 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
+using Serilog;
 
 namespace JIM.Application.Utilities;
 
@@ -224,8 +226,13 @@ public static class ExportChangeHistoryBuilder
                 // RemoveAll changes may have null values — record the attribute change without a value
                 break;
             default:
-                // Skip unrecognised types rather than throwing — export change history
-                // is an audit feature, not a sync-critical path
+                // Skip unrecognised types rather than throwing — export change history is an audit feature, not a
+                // sync-critical path. Log it though: every real data type is handled above, so reaching here means an
+                // unconfigured (NotSet) attribute or a new AttributeDataType that this builder has not been taught.
+                Log.Warning(
+                    "ExportChangeHistoryBuilder.AddValueChange: skipped attribute '{AttributeName}' with unhandled data type {AttributeType}; no export change value recorded.",
+                    LogSanitiser.Sanitise(peChange.Attribute.Name),
+                    attrType);
                 break;
         }
     }

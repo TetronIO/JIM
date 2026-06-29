@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Data.Common;
+using System.Text.Json;
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Models.Activities;
@@ -17,6 +19,7 @@ using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using JIM.Application.Diagnostics;
+using JIM.Application.Services;
 using JIM.Application.Utilities;
 using Microsoft.Extensions.Caching.Memory;
 using Serilog;
@@ -30,6 +33,92 @@ public class ConnectedSystemServer
     internal ConnectedSystemServer(JimApplication application)
     {
         Application = application;
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Configuration change capture
+    // Captures a redacted, versioned configuration snapshot onto a configuration-change Activity. Called after the
+    // entity has been persisted (so its id and graph are current) and before the Activity is completed, so the snapshot
+    // fields are saved as part of the existing CompleteActivityAsync update. Honours the ChangeTracking setting; the
+    // optional change reason is recorded independently of the snapshot toggle.
+    // -----------------------------------------------------------------------------------------------------------------
+
+    private async Task CaptureConfigurationChangeAsync(Activity activity, ConnectedSystem connectedSystem, string? changeReason)
+    {
+        // The reason is recorded independently of the snapshot toggle and has no external dependencies, so it is set
+        // outside the best-effort block below.
+        if (!string.IsNullOrWhiteSpace(changeReason))
+            activity.ChangeReason = changeReason.Trim();
+
+        try
+        {
+            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+                return;
+
+            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
+            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey);
+            activity.ConnectedSystemId ??= connectedSystem.Id;
+            activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.ConnectedSystem, connectedSystem.Id);
+            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        {
+            // Configuration change capture is best-effort secondary metadata recorded after the entity has already been
+            // persisted; it must never fail or roll back the configuration operation that succeeded. On failure the
+            // change history simply misses this snapshot. The failure is logged (never silent) so the gap is diagnosable.
+            Log.Warning(ex, "CaptureConfigurationChangeAsync: failed to capture configuration snapshot for Connected System {ConnectedSystemId}; the change was saved but its history snapshot was not recorded.", connectedSystem.Id);
+        }
+    }
+
+    private async Task CaptureConfigurationChangeAsync(Activity activity, SyncRule syncRule, string? changeReason)
+    {
+        if (!string.IsNullOrWhiteSpace(changeReason))
+            activity.ChangeReason = changeReason.Trim();
+
+        try
+        {
+            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+                return;
+
+            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
+            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey);
+            activity.SyncRuleId ??= syncRule.Id;
+            activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.SyncRule, syncRule.Id);
+            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        {
+            // Best-effort: see the Connected System overload above. A capture failure must never fail the configuration
+            // operation that already succeeded; the miss is logged rather than surfaced to the caller.
+            Log.Warning(ex, "CaptureConfigurationChangeAsync: failed to capture configuration snapshot for Synchronisation Rule {SyncRuleId}; the change was saved but its history snapshot was not recorded.", syncRule.Id);
+        }
+    }
+
+    /// <summary>
+    /// Captures a tombstone snapshot of a Synchronisation Rule onto its delete Activity, before the rule is removed.
+    /// Unlike create/update capture this does not set <see cref="Activity.SyncRuleId"/> or a version: the rule is
+    /// deleted before the Activity completes, so (matching the existing delete path) the Activity is left unlinked and
+    /// the snapshot is surfaced via the Activity itself rather than the object's history.
+    /// </summary>
+    private async Task CaptureConfigurationDeletionAsync(Activity activity, SyncRule syncRule, string? changeReason)
+    {
+        if (!string.IsNullOrWhiteSpace(changeReason))
+            activity.ChangeReason = changeReason.Trim();
+
+        try
+        {
+            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+                return;
+
+            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
+            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey);
+            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        {
+            // Best-effort: a capture failure must never fail the deletion that is about to proceed; the miss is logged.
+            Log.Warning(ex, "CaptureConfigurationDeletionAsync: failed to capture deletion snapshot for Synchronisation Rule {SyncRuleId}; the deletion proceeded but its history snapshot was not recorded.", syncRule.Id);
+        }
     }
 
     #region Connector Definitions
@@ -112,7 +201,7 @@ public class ConnectedSystemServer
         return Application.Repository.ConnectedSystems.GetConnectedSystemCount();
     }
         
-    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
+    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy, string? changeReason = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -167,13 +256,14 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetCreated(connectedSystem, initiatedBy);
         await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
     /// <summary>
     /// Creates a new Connected System (initiated by API key).
     /// </summary>
-    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
+    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey, string? changeReason = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -228,10 +318,11 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         AuditHelper.SetCreated(connectedSystem, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
+    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy, string? changeReason = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -259,13 +350,14 @@ public class ConnectedSystemServer
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
     /// <summary>
     /// Updates an existing Connected System (initiated by API key).
     /// </summary>
-    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
+    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey, string? changeReason = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -293,6 +385,7 @@ public class ConnectedSystemServer
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -1042,7 +1135,7 @@ public class ConnectedSystemServer
         else if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
             results.AddRange(new FileConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
         else
-            throw new NotImplementedException("Support for that connector definition has not been implemented yet."); // todo: support custom connectors.
+            throw new NotImplementedException("Support for that connector definition has not been implemented yet."); // todo (#875): centralise connector dispatch / support additional connector definitions.
 
         return results;
     }
@@ -1447,7 +1540,10 @@ public class ConnectedSystemServer
             partitions = await CreateConfiguredLdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
             if (partitions.Count == 0)
             {
-                // todo: report to the user we attempted to retrieve partitions, but got none back
+                // Zero partitions almost always means the connector could not enumerate them (connection,
+                // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
+                // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
+                activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
             }
         }
         else
@@ -1508,7 +1604,10 @@ public class ConnectedSystemServer
             partitions = await CreateConfiguredLdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
             if (partitions.Count == 0)
             {
-                // todo: report to the user we attempted to retrieve partitions, but got none back
+                // Zero partitions almost always means the connector could not enumerate them (connection,
+                // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
+                // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
+                activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
             }
         }
         else
@@ -1838,8 +1937,18 @@ public class ConnectedSystemServer
     /// <param name="connectedSystem">The Connected System to merge hierarchy into.</param>
     /// <param name="discoveredPartitions">The partitions discovered from the connector.</param>
     /// <returns>A result object describing what changed during the merge.</returns>
-    private static HierarchyRefreshResult MergeHierarchy(ConnectedSystem connectedSystem, List<ConnectorPartition> discoveredPartitions)
+    internal static HierarchyRefreshResult MergeHierarchy(ConnectedSystem connectedSystem, List<ConnectorPartition> discoveredPartitions)
     {
+        // A connector returning zero partitions almost always indicates a retrieval failure (connection,
+        // authentication, or scope problem) rather than a directory that genuinely has no partitions. Treating
+        // it as "every partition was removed" would destroy the configured hierarchy and the user's container
+        // selections, so leave the existing hierarchy untouched and report no changes. Callers surface a warning
+        // on the Activity so the admin knows the refresh returned nothing (#876).
+        if (discoveredPartitions.Count == 0)
+            return HierarchyRefreshResult.NoChanges(
+                connectedSystem.Partitions?.Count ?? 0,
+                CountAllContainers(connectedSystem.Partitions));
+
         var result = new HierarchyRefreshResult { Success = true };
 
         // Build lookup of existing items by ExternalId for efficient matching
@@ -3572,8 +3681,20 @@ public class ConnectedSystemServer
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.UnresolvedReferenceValue));
                 break;
             case AttributeDataType.NotSet:
+                // The attribute has no data type configured; we cannot record a typed value change for it.
+                throw new InvalidDataException(
+                    $"AddChangeAttributeValueObject: attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' has no data type configured (NotSet); cannot record a Connected System Object change for it.");
             default:
-                throw new InvalidDataException($"AddChangeAttributeValueObject:  Invalid removal attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' of type '{connectedSystemObjectAttributeValue.Attribute.Type}' or null attribute value.");
+                // Reached when a *known*, switch-handled data type's value holder was unexpectedly null (a corrupt
+                // attribute value), or when the AttributeDataType enum has gained a member this switch does not yet
+                // handle. The message distinguishes the two; the exception type is deliberately kept uniform
+                // (InvalidDataException) because the deletion path's CaptureDeletedCsoAttributeValues catch filters
+                // on InvalidOperationException/InvalidDataException to degrade gracefully.
+                throw Enum.IsDefined(connectedSystemObjectAttributeValue.Attribute.Type)
+                    ? new InvalidDataException(
+                        $"AddChangeAttributeValueObject: attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' of type '{connectedSystemObjectAttributeValue.Attribute.Type}' has no value; the Connected System Object attribute value is corrupt.")
+                    : new InvalidDataException(
+                        $"AddChangeAttributeValueObject: attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' has an unhandled data type '{connectedSystemObjectAttributeValue.Attribute.Type}' for Connected System Object change tracking.");
         }
     }
 
@@ -4837,7 +4958,7 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetSyncRuleAsync(id);
     }
 
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null)
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null)
     {
         // validate the Synchronisation Rule
         if (syncRule == null)
@@ -4915,6 +5036,7 @@ public class ConnectedSystemServer
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
         }
 
+        await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }
@@ -4922,7 +5044,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Creates or updates a Synchronisation Rule (initiated by API key).
     /// </summary>
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null)
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null)
     {
         if (syncRule == null)
             throw new NullReferenceException(nameof(syncRule));
@@ -4989,11 +5111,12 @@ public class ConnectedSystemServer
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
         }
 
+        await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }
 
-    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy)
+    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, string? changeReason = null)
     {
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = syncRule.ConnectedSystem ??
@@ -5012,6 +5135,7 @@ public class ConnectedSystemServer
         // Capture the attributes this import rule contributes to before deletion, so each can be re-densified after.
         var affectedAttributeIds = GetContributingImportAttributeIds(syncRule);
 
+        await CaptureConfigurationDeletionAsync(activity, syncRule, changeReason);
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
 
         foreach (var attributeId in affectedAttributeIds)
@@ -5023,7 +5147,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Deletes a Synchronisation Rule (initiated by API key).
     /// </summary>
-    public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey)
+    public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, string? changeReason = null)
     {
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = syncRule.ConnectedSystem ??
@@ -5041,6 +5165,7 @@ public class ConnectedSystemServer
         // Capture the attributes this import rule contributes to before deletion, so each can be re-densified after.
         var affectedAttributeIds = GetContributingImportAttributeIds(syncRule);
 
+        await CaptureConfigurationDeletionAsync(activity, syncRule, changeReason);
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
 
         foreach (var attributeId in affectedAttributeIds)

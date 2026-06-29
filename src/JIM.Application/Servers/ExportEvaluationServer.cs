@@ -1462,7 +1462,7 @@ public class ExportEvaluationServer
                     // For Update operations with expressions, we need to check if any source attributes changed
                     // For simplicity, always include expression results for Create, but for Update we include them
                     // because expression results may depend on the changed attributes
-                    // TODO: Consider optimising by tracking which MVO attributes the expression depends on
+                    // TODO (#880): Consider optimising by tracking which MVO attributes the expression depends on
 
                     // Build expression context with MVO attributes (lazy initialization - only build once)
                     mvAttributeDictionary ??= BuildAttributeDictionary(mvo);

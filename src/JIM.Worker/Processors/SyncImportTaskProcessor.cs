@@ -348,7 +348,6 @@ public class SyncImportTaskProcessor
 
                 // Progress is now initialised inside ProcessImportObjectsAsync
 
-                // todo: simplify externalIdsImported. objects are unnecessarily complex
                 // add the external ids from the results to our external id collection for later deletion calculation
                 AddExternalIdsToCollection(result, externalIdsImported);
 
@@ -814,7 +813,7 @@ public class SyncImportTaskProcessor
 
                     // get the int import object external ids for this object type
                     var connectedSystemIntExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
+                        .Where(q => q.ConnectedSystemObjectTypeId == selectedObjectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.IntValues);
 
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
@@ -832,7 +831,7 @@ public class SyncImportTaskProcessor
 
                     // get the string import object external ids for this object type
                     var connectedSystemStringExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
+                        .Where(q => q.ConnectedSystemObjectTypeId == selectedObjectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.StringValues);
 
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
@@ -850,7 +849,7 @@ public class SyncImportTaskProcessor
 
                     // get the guid import object external ids for this object type
                     var connectedSystemGuidExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
+                        .Where(q => q.ConnectedSystemObjectTypeId == selectedObjectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.GuidValues);
 
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
@@ -868,7 +867,7 @@ public class SyncImportTaskProcessor
 
                     // get the long import object external ids for this object type
                     var connectedSystemLongExternalIdValues = externalIdsImported
-                        .Where(q => q.ConnectedSystemObjectType.Id == selectedObjectType.Id)
+                        .Where(q => q.ConnectedSystemObjectTypeId == selectedObjectType.Id)
                         .SelectMany(externalId => externalId.ConnectedSystemImportObjectAttribute.LongValues);
 
                     // create a collection with the Connected System Objects no longer in the Connected System for this object type
@@ -1076,7 +1075,7 @@ public class SyncImportTaskProcessor
             var externalIdAttributeName = connectedSystemObjectType.Attributes.Single(q => q.IsExternalId).Name;
             externalIdsImported.Add(new ExternalIdPair
             {
-                ConnectedSystemObjectType = connectedSystemObjectType,
+                ConnectedSystemObjectTypeId = connectedSystemObjectType.Id,
                 ConnectedSystemImportObjectAttribute = importedObject.Attributes.Single(q => q.Name.Equals(externalIdAttributeName, StringComparison.OrdinalIgnoreCase))
             });
         }
@@ -1129,7 +1128,7 @@ public class SyncImportTaskProcessor
                     activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes;
                     activityRunProfileExecutionItem.ErrorMessage = $"The imported object has one or more duplicate attributes: {string.Join(", ", duplicateAttributeNames)}. Please de-duplicate and try again.";
 
-                    // todo: include a serialised snapshot of the imported object that is also presented to sync admin when viewing sync errors
+                    // todo (#874): include a serialised snapshot of the imported object that is also presented to sync admin when viewing sync errors
                     continue;
                 }
 
@@ -2027,7 +2026,7 @@ public class SyncImportTaskProcessor
                         // there will be only a single value for a bool. is it the same or different?
                         // if different, remove the old value, add the new one
                         // observation: removing and adding SVA values is costlier than just updating a row. it also results in increased primary key usage, i.e. constantly generating new values
-                        // todo: consider having the ability to update values instead of replacing.
+                        // todo (#872): consider having the ability to update values instead of replacing.
                         var csoBooleanAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id);
                         if (csoBooleanAttributeValue == null)
                         {
@@ -2339,7 +2338,7 @@ public class SyncImportTaskProcessor
                 else
                 {
                     // reference not found. referenced object probably out of container scope!
-                    // todo: make it a per-Connected System setting whether to raise an error, or ignore. sometimes this is desirable.
+                    // todo (#873): make it a per-Connected System setting whether to raise an error, or ignore. sometimes this is desirable.
                     rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
                     if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
                     {
