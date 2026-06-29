@@ -4331,6 +4331,35 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         Repository.Database.SyncRuleMappings.Remove(mapping);
         await Repository.Database.SaveChangesAsync();
     }
+
+    /// <summary>
+    /// Gets the import mappings contributing to a given Metaverse attribute for a given Metaverse Object Type,
+    /// ordered by attribute priority (#91). Disabled Synchronisation Rules are included so they hold position.
+    /// </summary>
+    public async Task<List<SyncRuleMapping>> GetImportSyncRuleMappingsForMetaverseAttributeAsync(int metaverseObjectTypeId, int metaverseAttributeId)
+    {
+        return await Repository.Database.SyncRuleMappings
+            .AsSplitQuery()
+            .Include(m => m.SyncRule)
+                .ThenInclude(sr => sr!.ConnectedSystem)
+            .Include(m => m.TargetMetaverseAttribute)
+            .Where(m =>
+                m.TargetMetaverseAttributeId == metaverseAttributeId &&
+                m.SyncRule!.Direction == SyncRuleDirection.Import &&
+                m.SyncRule.MetaverseObjectTypeId == metaverseObjectTypeId)
+            .OrderBy(m => m.Priority)
+            .ThenBy(m => m.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Persists priority/null-handling changes across a set of mappings in a single transaction (#91).
+    /// </summary>
+    public async Task UpdateSyncRuleMappingsAsync(IReadOnlyCollection<SyncRuleMapping> mappings)
+    {
+        Repository.Database.SyncRuleMappings.UpdateRange(mappings);
+        await Repository.Database.SaveChangesAsync();
+    }
     #endregion
 
     #region Connected System Deletion

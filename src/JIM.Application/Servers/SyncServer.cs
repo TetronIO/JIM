@@ -151,7 +151,7 @@ public class SyncServer : ISyncServer
             };
 
             foreach (var attributeValue in attributesToCapture)
-                MetaverseServer.AddMvoChangeAttributeValueObject(change, attributeValue, ValueChangeType.Remove);
+                change.AddAttributeValueChange(attributeValue, ValueChangeType.Remove);
 
             await _syncRepo.DeleteMetaverseObjectAsync(metaverseObject);
             await _syncRepo.CreateMetaverseObjectChangeDirectAsync(change);

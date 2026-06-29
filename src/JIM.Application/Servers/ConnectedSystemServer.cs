@@ -1135,7 +1135,7 @@ public class ConnectedSystemServer
         else if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
             results.AddRange(new FileConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
         else
-            throw new NotImplementedException("Support for that connector definition has not been implemented yet."); // todo: support custom connectors.
+            throw new NotImplementedException("Support for that connector definition has not been implemented yet."); // todo (#875): centralise connector dispatch / support additional connector definitions.
 
         return results;
     }
@@ -1540,7 +1540,10 @@ public class ConnectedSystemServer
             partitions = await CreateConfiguredLdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
             if (partitions.Count == 0)
             {
-                // todo: report to the user we attempted to retrieve partitions, but got none back
+                // Zero partitions almost always means the connector could not enumerate them (connection,
+                // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
+                // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
+                activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
             }
         }
         else
@@ -1601,7 +1604,10 @@ public class ConnectedSystemServer
             partitions = await CreateConfiguredLdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
             if (partitions.Count == 0)
             {
-                // todo: report to the user we attempted to retrieve partitions, but got none back
+                // Zero partitions almost always means the connector could not enumerate them (connection,
+                // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
+                // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
+                activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
             }
         }
         else
@@ -1931,8 +1937,18 @@ public class ConnectedSystemServer
     /// <param name="connectedSystem">The Connected System to merge hierarchy into.</param>
     /// <param name="discoveredPartitions">The partitions discovered from the connector.</param>
     /// <returns>A result object describing what changed during the merge.</returns>
-    private static HierarchyRefreshResult MergeHierarchy(ConnectedSystem connectedSystem, List<ConnectorPartition> discoveredPartitions)
+    internal static HierarchyRefreshResult MergeHierarchy(ConnectedSystem connectedSystem, List<ConnectorPartition> discoveredPartitions)
     {
+        // A connector returning zero partitions almost always indicates a retrieval failure (connection,
+        // authentication, or scope problem) rather than a directory that genuinely has no partitions. Treating
+        // it as "every partition was removed" would destroy the configured hierarchy and the user's container
+        // selections, so leave the existing hierarchy untouched and report no changes. Callers surface a warning
+        // on the Activity so the admin knows the refresh returned nothing (#876).
+        if (discoveredPartitions.Count == 0)
+            return HierarchyRefreshResult.NoChanges(
+                connectedSystem.Partitions?.Count ?? 0,
+                CountAllContainers(connectedSystem.Partitions));
+
         var result = new HierarchyRefreshResult { Success = true };
 
         // Build lookup of existing items by ExternalId for efficient matching
@@ -3665,8 +3681,20 @@ public class ConnectedSystemServer
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.UnresolvedReferenceValue));
                 break;
             case AttributeDataType.NotSet:
+                // The attribute has no data type configured; we cannot record a typed value change for it.
+                throw new InvalidDataException(
+                    $"AddChangeAttributeValueObject: attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' has no data type configured (NotSet); cannot record a Connected System Object change for it.");
             default:
-                throw new InvalidDataException($"AddChangeAttributeValueObject:  Invalid removal attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' of type '{connectedSystemObjectAttributeValue.Attribute.Type}' or null attribute value.");
+                // Reached when a *known*, switch-handled data type's value holder was unexpectedly null (a corrupt
+                // attribute value), or when the AttributeDataType enum has gained a member this switch does not yet
+                // handle. The message distinguishes the two; the exception type is deliberately kept uniform
+                // (InvalidDataException) because the deletion path's CaptureDeletedCsoAttributeValues catch filters
+                // on InvalidOperationException/InvalidDataException to degrade gracefully.
+                throw Enum.IsDefined(connectedSystemObjectAttributeValue.Attribute.Type)
+                    ? new InvalidDataException(
+                        $"AddChangeAttributeValueObject: attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' of type '{connectedSystemObjectAttributeValue.Attribute.Type}' has no value; the Connected System Object attribute value is corrupt.")
+                    : new InvalidDataException(
+                        $"AddChangeAttributeValueObject: attribute '{connectedSystemObjectAttributeValue.Attribute.Name}' has an unhandled data type '{connectedSystemObjectAttributeValue.Attribute.Type}' for Connected System Object change tracking.");
         }
     }
 
@@ -4036,6 +4064,235 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping);
 
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Gets the attribute priority list for a (Metaverse Object Type, Metaverse attribute) pair: the import
+    /// mappings contributing to that attribute, ordered by priority (#91). Disabled Synchronisation Rules are
+    /// included (they hold position). Returns an empty list when the attribute has no import contributors.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the priority list.</param>
+    /// <param name="metaverseAttributeId">The target Metaverse attribute.</param>
+    public async Task<List<SyncRuleMapping>> GetAttributePriorityOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
+    }
+
+    /// <summary>
+    /// Snapshots the current priority/null-handling of a set of mappings, keyed by mapping id, so a subsequent
+    /// renumber can determine which rows actually changed (and avoid auditing/persisting no-op rows).
+    /// </summary>
+    private static Dictionary<int, (int Priority, bool NullIsValue)> SnapshotPriorityState(IEnumerable<SyncRuleMapping> mappings)
+    {
+        return mappings.ToDictionary(m => m.Id, m => (m.Priority, m.NullIsValue));
+    }
+
+    /// <summary>
+    /// Renumbers an ordered list of mappings to a deterministic 1..N (1 = highest priority) and returns the subset
+    /// whose <see cref="SyncRuleMapping.Priority"/> or <see cref="SyncRuleMapping.NullIsValue"/> differs from the
+    /// supplied pre-change snapshot. Reordering one mapping inherently renumbers its siblings, so the changed set
+    /// may be larger than the single mapping an admin moved; rows whose number did not actually change are left
+    /// untouched (no audit churn, no redundant write).
+    /// </summary>
+    private static List<SyncRuleMapping> RenumberAndCollectChanges(List<SyncRuleMapping> ordered, IReadOnlyDictionary<int, (int Priority, bool NullIsValue)> snapshot)
+    {
+        var changed = new List<SyncRuleMapping>();
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var mapping = ordered[i];
+            mapping.Priority = i + 1; // 1 = highest priority
+            var before = snapshot[mapping.Id];
+            if (before.Priority != mapping.Priority || before.NullIsValue != mapping.NullIsValue)
+                changed.Add(mapping);
+        }
+        return changed;
+    }
+
+    /// <summary>
+    /// Builds the renumbered ordered list from a complete-order request: the request must list every current
+    /// contributor for the attribute exactly once and no others, so renumbering produces no gaps or duplicate
+    /// priorities. Used by the "replace the whole order" surface (drag-reorder-then-save).
+    /// </summary>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="orderedContributors"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when the attribute has no contributors, or the requested order
+    /// does not match the attribute's current contributor set exactly.</exception>
+    private async Task<(List<SyncRuleMapping> Ordered, List<SyncRuleMapping> Changed)> BuildAttributePriorityFromFullOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors)
+    {
+        if (orderedContributors == null)
+            throw new ArgumentNullException(nameof(orderedContributors));
+
+        var existing = await Application.Repository.ConnectedSystems.GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
+        if (existing.Count == 0)
+            throw new ArgumentException($"No import attribute contributions exist for Metaverse attribute {metaverseAttributeId} on Metaverse Object Type {metaverseObjectTypeId}.");
+
+        var requestedIds = orderedContributors.Select(c => c.MappingId).ToList();
+        var requestedDistinct = new HashSet<int>(requestedIds);
+        if (requestedDistinct.Count != requestedIds.Count)
+            throw new ArgumentException("The attribute priority order contains duplicate mapping identifiers.");
+
+        var existingIds = existing.Select(m => m.Id).ToHashSet();
+        if (!requestedDistinct.SetEquals(existingIds))
+            throw new ArgumentException("The attribute priority order must list every contributing mapping for the attribute exactly once, and no others.");
+
+        var snapshot = SnapshotPriorityState(existing);
+        var byId = existing.ToDictionary(m => m.Id);
+        var ordered = new List<SyncRuleMapping>(orderedContributors.Count);
+        foreach (var contributor in orderedContributors)
+        {
+            var mapping = byId[contributor.MappingId];
+            mapping.NullIsValue = contributor.NullIsValue;
+            ordered.Add(mapping);
+        }
+
+        var changed = RenumberAndCollectChanges(ordered, snapshot);
+        return (ordered, changed);
+    }
+
+    /// <summary>
+    /// Builds the renumbered ordered list from a single-mapping move: the named mapping is repositioned to the
+    /// 1-based <paramref name="targetPosition"/> and every other contributor shuffles to accommodate it. This is
+    /// the ergonomic, footgun-free reorder: the caller states only "put this mapping at position N" and the engine
+    /// keeps the rest of the list contiguous and duplicate-free. The target position is clamped to the valid range.
+    /// </summary>
+    /// <exception cref="ArgumentException">Thrown when the attribute has no contributors, or the named mapping is
+    /// not one of them.</exception>
+    private async Task<(List<SyncRuleMapping> Ordered, List<SyncRuleMapping> Changed)> BuildAttributePriorityFromMoveAsync(int metaverseObjectTypeId, int metaverseAttributeId, int mappingId, int targetPosition, bool? nullIsValue)
+    {
+        var existing = await Application.Repository.ConnectedSystems.GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
+        if (existing.Count == 0)
+            throw new ArgumentException($"No import attribute contributions exist for Metaverse attribute {metaverseAttributeId} on Metaverse Object Type {metaverseObjectTypeId}.");
+
+        var moving = existing.SingleOrDefault(m => m.Id == mappingId);
+        if (moving == null)
+            throw new ArgumentException($"Mapping {mappingId} is not a contributor to Metaverse attribute {metaverseAttributeId} on Metaverse Object Type {metaverseObjectTypeId}.");
+
+        var snapshot = SnapshotPriorityState(existing);
+
+        if (nullIsValue.HasValue)
+            moving.NullIsValue = nullIsValue.Value;
+
+        // existing is already ordered by Priority then Id. Remove the moving mapping and re-insert it at the
+        // requested position, clamped to [1, N], so the rest of the list shuffles around it.
+        var targetIndex = Math.Clamp(targetPosition, 1, existing.Count) - 1;
+        var ordered = new List<SyncRuleMapping>(existing);
+        ordered.Remove(moving);
+        ordered.Insert(targetIndex, moving);
+
+        var changed = RenumberAndCollectChanges(ordered, snapshot);
+        return (ordered, changed);
+    }
+
+    /// <summary>
+    /// Builds an Activity describing an attribute priority order change, for audit attribution.
+    /// </summary>
+    private static Activity BuildAttributePriorityActivity(int metaverseAttributeId, List<SyncRuleMapping> ordered)
+    {
+        var attributeName = ordered.Count > 0 ? ordered[0].TargetMetaverseAttribute?.Name ?? $"#{metaverseAttributeId}" : $"#{metaverseAttributeId}";
+        return new Activity
+        {
+            TargetName = $"Attribute priority order for {attributeName}",
+            TargetType = ActivityTargetType.SyncRule,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+    }
+
+    /// <summary>
+    /// Audits and persists the changed mappings of an attribute priority change in a single transaction
+    /// (user-initiated). A no-op change (nothing actually moved) writes nothing and records no Activity.
+    /// </summary>
+    private async Task PersistAttributePriorityChangesAsync(int metaverseAttributeId, List<SyncRuleMapping> ordered, List<SyncRuleMapping> changed, MetaverseObject? initiatedBy)
+    {
+        if (changed.Count == 0)
+            return;
+
+        var activity = BuildAttributePriorityActivity(metaverseAttributeId, ordered);
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        foreach (var mapping in changed)
+            AuditHelper.SetUpdated(mapping, initiatedBy);
+
+        await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Audits and persists the changed mappings of an attribute priority change in a single transaction
+    /// (API key initiated). A no-op change writes nothing and records no Activity.
+    /// </summary>
+    private async Task PersistAttributePriorityChangesAsync(int metaverseAttributeId, List<SyncRuleMapping> ordered, List<SyncRuleMapping> changed, ApiKey initiatedByApiKey)
+    {
+        if (changed.Count == 0)
+            return;
+
+        var activity = BuildAttributePriorityActivity(metaverseAttributeId, ordered);
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        foreach (var mapping in changed)
+            AuditHelper.SetUpdated(mapping, initiatedByApiKey);
+
+        await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
+
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Replaces the entire attribute priority order for a (Metaverse Object Type, Metaverse attribute) pair (#91),
+    /// transactionally renumbering all contributing mappings' priorities and applying their "Null is a value" flags.
+    /// The request must list every current contributor exactly once. Use <see cref="MoveAttributePriorityAsync(int, int, int, int, bool?, MetaverseObject?)"/>
+    /// for the simpler "move one mapping to position N" gesture. Returns the resulting order (highest priority first).
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the priority list.</param>
+    /// <param name="metaverseAttributeId">The target Metaverse attribute.</param>
+    /// <param name="orderedContributors">The contributors in the desired priority order (highest first), each with its "Null is a value" flag.</param>
+    /// <param name="initiatedBy">The user who initiated the change.</param>
+    public async Task<List<SyncRuleMapping>> SetAttributePriorityOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors, MetaverseObject? initiatedBy)
+    {
+        var (ordered, changed) = await BuildAttributePriorityFromFullOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors);
+        await PersistAttributePriorityChangesAsync(metaverseAttributeId, ordered, changed, initiatedBy);
+        return ordered;
+    }
+
+    /// <summary>
+    /// Replaces the entire attribute priority order for a (Metaverse Object Type, Metaverse attribute) pair (#91, API key initiated).
+    /// Returns the resulting order (highest priority first).
+    /// </summary>
+    public async Task<List<SyncRuleMapping>> SetAttributePriorityOrderAsync(int metaverseObjectTypeId, int metaverseAttributeId, IReadOnlyList<(int MappingId, bool NullIsValue)> orderedContributors, ApiKey initiatedByApiKey)
+    {
+        var (ordered, changed) = await BuildAttributePriorityFromFullOrderAsync(metaverseObjectTypeId, metaverseAttributeId, orderedContributors);
+        await PersistAttributePriorityChangesAsync(metaverseAttributeId, ordered, changed, initiatedByApiKey);
+        return ordered;
+    }
+
+    /// <summary>
+    /// Moves a single contributing mapping to the given 1-based priority position for a (Metaverse Object Type,
+    /// Metaverse attribute) pair (#91), shuffling the other contributors to keep the list contiguous, then
+    /// transactionally renumbering all affected rows. Optionally updates the moved mapping's "Null is a value"
+    /// flag. This is the deterministic, single-request reorder: the admin states only the new position and the
+    /// engine maintains a gap-free, duplicate-free order. Returns the resulting order (highest priority first).
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the priority list.</param>
+    /// <param name="metaverseAttributeId">The target Metaverse attribute.</param>
+    /// <param name="mappingId">The contributing mapping to move.</param>
+    /// <param name="targetPosition">The desired 1-based priority position (1 = highest). Clamped to the valid range.</param>
+    /// <param name="nullIsValue">When supplied, also sets the moved mapping's "Null is a value" flag.</param>
+    /// <param name="initiatedBy">The user who initiated the change.</param>
+    public async Task<List<SyncRuleMapping>> MoveAttributePriorityAsync(int metaverseObjectTypeId, int metaverseAttributeId, int mappingId, int targetPosition, bool? nullIsValue, MetaverseObject? initiatedBy)
+    {
+        var (ordered, changed) = await BuildAttributePriorityFromMoveAsync(metaverseObjectTypeId, metaverseAttributeId, mappingId, targetPosition, nullIsValue);
+        await PersistAttributePriorityChangesAsync(metaverseAttributeId, ordered, changed, initiatedBy);
+        return ordered;
+    }
+
+    /// <summary>
+    /// Moves a single contributing mapping to the given 1-based priority position (#91, API key initiated).
+    /// Returns the resulting order (highest priority first).
+    /// </summary>
+    public async Task<List<SyncRuleMapping>> MoveAttributePriorityAsync(int metaverseObjectTypeId, int metaverseAttributeId, int mappingId, int targetPosition, bool? nullIsValue, ApiKey initiatedByApiKey)
+    {
+        var (ordered, changed) = await BuildAttributePriorityFromMoveAsync(metaverseObjectTypeId, metaverseAttributeId, mappingId, targetPosition, nullIsValue);
+        await PersistAttributePriorityChangesAsync(metaverseAttributeId, ordered, changed, initiatedByApiKey);
+        return ordered;
     }
     #endregion
 

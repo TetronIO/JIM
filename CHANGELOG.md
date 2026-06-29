@@ -13,6 +13,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ JIM now tracks a versioned history of changes to your Synchronisation Rules and Connected Systems: who changed what, and when. Retrieve it as a git-style diff with `Get-JIMConfigurationChangeHistory` or the REST API; secrets are flagged as changed but never stored or revealed.
 - ✨ You can now record a reason when changing configuration from automation: `-ChangeReason` on the Synchronisation Rule and Connected System write cmdlets, or an optional field on the REST write requests. The reason shows with the change and on its Activity.
+- ✨ Example data generation templates can now construct a text attribute from an expression, using the same `mv["Attribute Name"]` syntax and function library as Synchronisation Rule Attribute Flows, so a generated value can be transformed from other attributes on the same object (for example an email domain derived from the assigned company). Referenced attributes are generated first, and circular references are detected up front.
+- ✨ Metaverse attributes contributed by more than one Connected System now resolve to a single winner by a configurable per-attribute priority order, so a higher-priority source is never overwritten by a lower-priority one. An advanced "Null is a value" option lets an authoritative source positively assert "no value", clearing the attribute downstream instead of falling through to a lower-priority source.
+
+### Changed
+
+- 🔄 When more than one Connected System contributes to the same Metaverse attribute, JIM now resolves the value by attribute priority instead of by synchronisation timing (last-writer-wins). Single-source attributes are unaffected; existing multi-source attributes resolve deterministically until you set an explicit priority order.
+
+### Performance
+
+- ⚡ Generating example data is dramatically faster: the built-in "Users & Groups" template (10,000 users) now completes generation in seconds rather than minutes. Live progress updates were being written to the database from inside the parallel generation loop in a way that blocked it (a generation thread held the lock other threads needed while waiting on the database write), stalling generation to roughly one object per second; progress is now reported from a background task that never blocks generation.
+- ⚡ Example data value uniqueness (the `[UniqueInt]` suffix, single-use values, and sequential numbering) is now tracked with constant-time lookups instead of rescanning an ever-growing list under a global lock, removing a cost that grew with the square of the object count at larger template sizes.
+
+### Fixed
+
+- 🐛 A Connected System hierarchy refresh that retrieves no partitions no longer wipes the configured hierarchy. Previously, if the connector returned zero partitions (typically a transient connection, authentication, or scope problem rather than a genuinely empty directory), every existing partition and container, including selected ones, was treated as removed and deleted. JIM now leaves the existing hierarchy untouched in that case and records a warning on the Activity so the cause can be investigated.
+- 🐛 A completed example data generation Activity no longer shows a stale "Persisting to database..." progress line; the transient progress message is cleared when the Activity completes.
+- 🐛 Recording a Metaverse Object change for an asserted-null attribute value (a positively-asserted "no value" from a priority source) no longer crashes. The portal-driven change-tracking path was missing the asserted-null guard the synchronisation engine already had, so such markers fell through to an error; they are now correctly skipped, and genuinely corrupt or unconfigured attribute values now fail with an accurate error instead of a misleading "not yet supported" one.
+- 🐛 A factory reset no longer strips the built-in "Users & Groups" example data template of its attributes. The reset's bulk wipe removed them as a side effect (they share a foreign-key graph with Connected System schema), so generating example data after a reset produced objects with no attribute values. The built-in template is now restored as part of the reset, and repaired on startup if a previous reset left it incomplete, keeping the out-of-box configuration intact.
 
 ## [0.12.0] - 2026-06-23
 

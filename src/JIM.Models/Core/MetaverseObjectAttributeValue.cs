@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using Microsoft.EntityFrameworkCore;
 namespace JIM.Models.Core;
@@ -45,9 +46,31 @@ public class MetaverseObjectAttributeValue
     /// <summary>
     /// If this attribute value was contributed to the Metaverse by a Connected System, then this identifies that system.
     /// Null when the attribute value is managed internally (not contributed by any Connected System).
+    /// Retained alongside <see cref="ContributedBySyncRuleId"/>: denormalised so it survives deletion of the
+    /// contributing Synchronisation Rule, and keeps winner-share analytics a single-column aggregate.
     /// </summary>
     public ConnectedSystem? ContributedBySystem { get; set; }
     public int? ContributedBySystemId { get; set; }
+
+    /// <summary>
+    /// The Synchronisation Rule whose mapping won attribute priority resolution and contributed this value.
+    /// Together with <see cref="AttributeId"/> this identifies the winning mapping. Null when the value is managed
+    /// internally (not contributed by a Synchronisation Rule), or when the contributing rule has since been deleted
+    /// (the FK is set null on rule deletion; <see cref="ContributedBySystemId"/> is retained as the denormalised record).
+    /// </summary>
+    public SyncRule? ContributedBySyncRule { get; set; }
+    public int? ContributedBySyncRuleId { get; set; }
+
+    /// <summary>
+    /// When true, this row is an asserted null: a connected, in-scope contributor positively asserted "no value"
+    /// for this attribute ("Null is a value" set on the winning mapping, or an import expression evaluating to null).
+    /// All value columns are null and the row carries provenance. Distinct from the absence of any row, which means
+    /// "no contributor". Carries no value: engine-side read queries filter these rows out so the synchronisation hot
+    /// path treats them exactly as an absent row, while observability and Metaverse Object views include them so an
+    /// admin can see a positively-asserted blank and its contributing rule/system. For a multivalued attribute under
+    /// winner-takes-all-values, a single asserted-null marker row represents the asserted empty set.
+    /// </summary>
+    public bool NullValue { get; set; }
 
     public override string ToString()
     {

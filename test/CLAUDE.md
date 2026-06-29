@@ -68,6 +68,7 @@ docker compose exec jim.worker bash -c 'cat /app/JIM.PostgresData.dll | tr -d "\
 - When modifying repository queries, ALWAYS run integration tests to verify `.Include()` chains are correct
 - Add defensive null checks with logging for navigation properties to catch missing `.Include()` at runtime
 - See `docs/TESTING_STRATEGY.md` for full details and real-world example (Drift Detection bug January 2026)
+- **Asserting on a navigation property? First confirm the *specific* retrieval overload eager-loads it.** Retrieval methods of the same entity differ in their `.Include()` chains (per the entity-retrieval taxonomy in `src/CLAUDE.md`); for example `GetTemplateAsync(string name)` and `GetTemplateAsync(int id)` load different navigations. A real-PostgreSQL test that asserts on a navigation the chosen overload does not include will read an empty/null collection and fail (or trip a CS8602 warning), even though the data is correct in the database. Either load via the overload that includes it, or assert against the source-of-truth table directly (e.g. count the M2M join table) so the assertion does not depend on a query's include chain.
 
 ## Resource Usage Diagnostics
 

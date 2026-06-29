@@ -1462,7 +1462,7 @@ public class ExportEvaluationServer
                     // For Update operations with expressions, we need to check if any source attributes changed
                     // For simplicity, always include expression results for Create, but for Update we include them
                     // because expression results may depend on the changed attributes
-                    // TODO: Consider optimising by tracking which MVO attributes the expression depends on
+                    // TODO (#880): Consider optimising by tracking which MVO attributes the expression depends on
 
                     // Build expression context with MVO attributes (lazy initialization - only build once)
                     mvAttributeDictionary ??= BuildAttributeDictionary(mvo);
@@ -1569,8 +1569,10 @@ public class ExportEvaluationServer
                     // For multi-valued attributes, get ALL values
                     if (isCreateOperation)
                     {
+                        // Exclude asserted-null markers (#91): a NullValue row carries no value and must be
+                        // invisible to export sourcing exactly as an absent row (the attribute reads as cleared).
                         var changedValues = changedAttributes
-                            .Where(av => av.AttributeId == source.MetaverseAttribute.Id)
+                            .Where(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue)
                             .ToList();
 
                         if (changedValues.Count > 0)
@@ -1579,16 +1581,17 @@ public class ExportEvaluationServer
                         }
                         else
                         {
-                            // Fall back to MVO's current attribute values
+                            // Fall back to MVO's current attribute values (excluding asserted-null markers, #91)
                             mvoValues = mvo.AttributeValues
-                                .Where(av => av.AttributeId == source.MetaverseAttribute.Id);
+                                .Where(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue);
                         }
                     }
                     else
                     {
-                        // For Update operations, only include attributes that actually changed
+                        // For Update operations, only include attributes that actually changed (excluding
+                        // asserted-null markers, #91, which carry no value to export)
                         var matchingChangedValues = changedAttributes
-                            .Where(av => av.AttributeId == source.MetaverseAttribute.Id)
+                            .Where(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue)
                             .ToList();
 
                         Log.Debug("CreateAttributeValueChanges: Multi-valued Update for attr {AttrName} (Id={AttrId}): " +
@@ -1603,16 +1606,16 @@ public class ExportEvaluationServer
                 }
                 else
                 {
-                    // For single-valued attributes, only get the first value
+                    // For single-valued attributes, only get the first value (excluding asserted-null markers, #91)
                     var changedValue = changedAttributes
-                        .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id);
+                        .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue);
 
                     MetaverseObjectAttributeValue? mvoValue;
                     if (isCreateOperation)
                     {
                         // For Create operations, include all mapped attributes (not just changed ones)
                         mvoValue = changedValue ?? mvo.AttributeValues
-                            .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id);
+                            .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue);
                     }
                     else
                     {
@@ -1978,7 +1981,9 @@ public class ExportEvaluationServer
             return attributes;
         }
 
-        foreach (var attributeValue in mvo.AttributeValues)
+        // Exclude asserted-null markers (#91): they carry no value, so the expression context must treat the
+        // attribute as absent (mv["x"] resolves to null) rather than seeing a phantom value.
+        foreach (var attributeValue in mvo.AttributeValues.Where(av => !av.NullValue))
         {
             if (attributeValue.Attribute == null)
             {
