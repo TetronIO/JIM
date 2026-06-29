@@ -80,6 +80,33 @@ public class AttributePriorityWorkflowTests : WorkflowTestBase
         AssertAssertedNullMarker(ctx);
     }
 
+    [Test]
+    public async Task FullSync_AssertsNull_EmitsAssertedNullSyncOutcomeAsync()
+    {
+        // HR (priority 1, "Null is a value") asserts null over Directory's (priority 2) DisplayName. The assertion
+        // must surface in the RPEI outcome graph as an AssertedNull outcome, so an admin can see the blank was
+        // positively asserted, not merely "no contributor".
+        var ctx = await SetUpTwoSourcesAsync(
+            directoryDisplayNamePriority: 2,
+            hrDisplayNamePriority: 1,
+            hrNullIsValue: true,
+            hrContributesDisplayName: false);
+
+        await RunFullSyncAsync(ctx.Directory);                            // projects MVO, DisplayName = Directory Display
+        var hrActivity = await RunFullSyncReturningActivityAsync(ctx.Hr);  // HR (higher priority) asserts null
+
+        Assert.That(ResolvedDisplayName(ctx), Is.Null, "precondition: HR's assertion clears the Directory value");
+
+        var assertedNullOutcomes = hrActivity.RunProfileExecutionItems
+            .SelectMany(r => r.SyncOutcomes)
+            .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull)
+            .ToList();
+        Assert.That(assertedNullOutcomes, Is.Not.Empty,
+            "an asserted-null contribution should emit an AssertedNull sync outcome in the RPEI graph");
+        Assert.That(assertedNullOutcomes.Sum(o => o.DetailCount ?? 0), Is.GreaterThanOrEqualTo(1),
+            "the AssertedNull outcome should count the asserted attribute(s)");
+    }
+
     /// <summary>
     /// Asserts the one Person MVO holds exactly one asserted-null DisplayName marker (carrying HR's provenance) and no
     /// real DisplayName value.
@@ -220,11 +247,21 @@ public class AttributePriorityWorkflowTests : WorkflowTestBase
     /// </summary>
     private async Task RunFullSyncAsync(ConnectedSystem connectedSystem)
     {
+        await RunFullSyncReturningActivityAsync(connectedSystem);
+    }
+
+    /// <summary>
+    /// Runs a Full Sync for the given Connected System through the real processor, returning the Activity so the
+    /// caller can inspect its Run Profile Execution Items and sync outcomes.
+    /// </summary>
+    private async Task<Activity> RunFullSyncReturningActivityAsync(ConnectedSystem connectedSystem)
+    {
         var reloaded = await ReloadEntityAsync(connectedSystem);
         var profile = await CreateRunProfileAsync(reloaded.Id, $"{reloaded.Name} Full Sync", ConnectedSystemRunType.FullSynchronisation);
         var activity = await CreateActivityAsync(reloaded.Id, profile, ConnectedSystemRunType.FullSynchronisation);
         await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, reloaded, profile, activity, new CancellationTokenSource())
             .PerformFullSyncAsync();
+        return activity;
     }
 
     /// <summary>

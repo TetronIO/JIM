@@ -1157,6 +1157,19 @@ public abstract class SyncTaskProcessorBase
                             detailCount: attributesAdded + attributesRemoved);
                     }
 
+                    // In Detailed mode, surface asserted-null contributions (#91) as a distinct outcome so an admin can
+                    // see which blanks were positively asserted by a "Null is a value" contributor, rather than merely
+                    // uncontributed. Asserted nulls are the NullValue marker rows written into the additions this run.
+                    if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed)
+                    {
+                        var assertedNullCount = additions.Count(av => av.NullValue);
+                        if (assertedNullCount > 0)
+                            SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull,
+                                targetEntityDescription: mvoDescription,
+                                detailCount: assertedNullCount);
+                    }
+
                     // Register MVO→RPEI mapping for export evaluation outcome linking.
                     // Newly projected MVOs have Guid.Empty as their ID until PersistPendingMetaverseObjectsAsync
                     // assigns real IDs. Defer these mappings and re-key after persistence.
