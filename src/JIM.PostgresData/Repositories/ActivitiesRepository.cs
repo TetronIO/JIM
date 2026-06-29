@@ -446,8 +446,14 @@ public class ActivityRepository : IActivityRepository
 
     private IQueryable<Activity> ConfigurationChangeQuery(ActivityTargetType targetType, int targetObjectId)
     {
+        // Membership of an object's configuration history is determined by "carries a captured snapshot version AND
+        // belongs to this object (by FK)", NOT by the activity's own TargetType. A configuration object is changed both
+        // by whole-object saves (TargetType SyncRule / ConnectedSystem) and by granular sub-entity endpoints whose
+        // activities are typed for the child (ConnectedSystemRunProfile, ObjectMatchingRule, etc.). Keying on the FK +
+        // version surfaces every versioned change regardless of which endpoint recorded it; only capture sets a version,
+        // so non-configuration activities (which never carry one) are naturally excluded.
         var query = Repository.Database.Activities
-            .Where(a => a.TargetType == targetType && a.ConfigurationChangeVersion != null);
+            .Where(a => a.ConfigurationChangeVersion != null);
 
         return targetType switch
         {

@@ -25,16 +25,16 @@ else
     <MudPaper Outlined="true" Class="pa-4">
         <div class="d-flex flex-wrap align-center gap-3">
             <MudText Typo="Typo.subtitle2">Compare versions</MudText>
-            <MudSelect T="int?" @bind-Value="_compareFrom" Label="From" Dense="true" Style="min-width: 110px;">
+            <MudSelect T="int?" @bind-Value="_compareFrom" Label="From" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Style="min-width: 110px;">
                 @foreach (var v in _versions)
                 {
-                    <MudSelectItem T="int?" Value="@v">v@v</MudSelectItem>
+                    <MudSelectItem T="int?" Value="@v">v@(v)</MudSelectItem>
                 }
             </MudSelect>
-            <MudSelect T="int?" @bind-Value="_compareTo" Label="To" Dense="true" Style="min-width: 110px;">
+            <MudSelect T="int?" @bind-Value="_compareTo" Label="To" Variant="Variant.Outlined" Margin="Margin.Dense" Dense="true" Style="min-width: 110px;">
                 @foreach (var v in _versions)
                 {
-                    <MudSelectItem T="int?" Value="@v">v@v</MudSelectItem>
+                    <MudSelectItem T="int?" Value="@v">v@(v)</MudSelectItem>
                 }
             </MudSelect>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false" OnClick="CompareAsync"
@@ -56,52 +56,62 @@ else
         }
     </MudPaper>
 
-    @* Version-ordered change list (newest first). *@
-    <div class="d-flex flex-column gap-3 mt-4">
-        @foreach (var item in _items)
-        {
-            <MudPaper Outlined="true" Class="pa-3">
-                <div class="d-flex flex-wrap align-center gap-2">
-                    <MudText Typo="Typo.subtitle2">v@item.Version</MudText>
-                    <MudChip T="string" Variant="Variant.Text" Color="@OperationColour(item.Operation)">@OperationLabel(item.Operation)</MudChip>
-                    <MudIcon Icon="@InitiatorIcon(item.InitiatedByType)" Class="mud-text-secondary" />
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@(string.IsNullOrEmpty(item.InitiatedByName) ? "System" : item.InitiatedByName)</MudText>
-                    <MudText Typo="Typo.body2" Class="mud-text-disabled">·</MudText>
-                    <MudTooltip Text="@item.When.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@item.When.ToLocalTime().ToRelativeTime()</MudText>
-                    </MudTooltip>
-                </div>
+    @* Version-ordered change list (newest first), shown as a timeline to match the CSO / Metaverse Object change history. *@
+    <div class="mt-6">
+        <MudTimeline TimelinePosition="TimelinePosition.Start" TimelineOrientation="TimelineOrientation.Vertical">
+            @foreach (var item in _items)
+            {
+                <MudTimelineItem Color="@OperationColour(item.Operation)" Elevation="0">
+                    <ItemContent>
+                        <MudCard Outlined="true">
+                            <MudCardContent>
+                                @* Version header: {icon} v{N}  {operation}    {initiator}    {relative date} *@
+                                <div class="d-flex flex-wrap align-center gap-2">
+                                    <MudIcon Icon="@OperationIcon(item.Operation)" Color="@OperationColour(item.Operation)" />
+                                    <MudText Typo="Typo.subtitle2">v@(item.Version)</MudText>
+                                    <MudChip T="string" Variant="Variant.Text" Color="@OperationColour(item.Operation)">@OperationLabel(item.Operation)</MudChip>
+                                    <MudIcon Icon="@InitiatorIcon(item.InitiatedByType)" Size="Size.Small" Class="mud-text-secondary" />
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@(string.IsNullOrEmpty(item.InitiatedByName) ? "System" : item.InitiatedByName)</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-disabled">·</MudText>
+                                    <MudTooltip Text="@item.When.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@item.When.ToLocalTime().ToRelativeTime()</MudText>
+                                    </MudTooltip>
+                                </div>
 
-                @if (!string.IsNullOrWhiteSpace(item.Reason))
-                {
-                    <MudText Typo="Typo.body2" Class="mt-1" Style="font-style: italic;">&ldquo;@item.Reason&rdquo;</MudText>
-                }
+                                @if (!string.IsNullOrWhiteSpace(item.Reason))
+                                {
+                                    <MudText Typo="Typo.body2" Class="mt-1" Style="font-style: italic;">&ldquo;@item.Reason&rdquo;</MudText>
+                                }
 
-                <MudText Typo="Typo.body2" Class="mt-1">@item.Summary</MudText>
+                                <MudText Typo="Typo.body2" Class="mt-1">@item.Summary</MudText>
 
-                <div class="mt-2">
-                    <MudButton Variant="Variant.Text" DropShadow="false"
-                               StartIcon="@(_expandedVersion == item.Version ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
-                               OnClick="@(() => ToggleDiffAsync(item.Version))">
-                        @(_expandedVersion == item.Version ? "Hide diff" : "View diff")
-                    </MudButton>
-                </div>
+                                <div class="mt-2">
+                                    <MudButton Variant="Variant.Text" DropShadow="false"
+                                               StartIcon="@(_expandedVersion == item.Version ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                               OnClick="@(() => ToggleDiffAsync(item.Version))">
+                                        @(_expandedVersion == item.Version ? "Hide diff" : "View diff")
+                                    </MudButton>
+                                </div>
 
-                @if (_expandedVersion == item.Version)
-                {
-                    <div class="mt-3">
-                        @if (_detailLoading)
-                        {
-                            <div class="d-flex justify-center my-4"><MudProgressCircular Indeterminate="true" Color="Color.Primary" /></div>
-                        }
-                        else if (_detail != null)
-                        {
-                            <ConfigurationChangeDiff Diff="_detail.Diff" />
-                        }
-                    </div>
-                }
-            </MudPaper>
-        }
+                                @if (_expandedVersion == item.Version)
+                                {
+                                    <div class="mt-3">
+                                        @if (_detailLoading)
+                                        {
+                                            <div class="d-flex justify-center my-4"><MudProgressCircular Indeterminate="true" Color="Color.Primary" /></div>
+                                        }
+                                        else if (_detail != null)
+                                        {
+                                            <ConfigurationChangeDiff Diff="_detail.Diff" />
+                                        }
+                                    </div>
+                                }
+                            </MudCardContent>
+                        </MudCard>
+                    </ItemContent>
+                </MudTimelineItem>
+            }
+        </MudTimeline>
     </div>
 
     @if (_items.Count < _totalResults)
@@ -204,6 +214,15 @@ else
         ActivityTargetOperationType.Delete => Color.Error,
         ActivityTargetOperationType.Revert => Color.Warning,
         _ => Color.Default
+    };
+
+    private static string OperationIcon(ActivityTargetOperationType operation) => operation switch
+    {
+        ActivityTargetOperationType.Create => Icons.Material.Filled.AddCircle,
+        ActivityTargetOperationType.Update => Icons.Material.Filled.Edit,
+        ActivityTargetOperationType.Delete => Icons.Material.Filled.DeleteForever,
+        ActivityTargetOperationType.Revert => Icons.Material.Filled.Undo,
+        _ => Icons.Material.Filled.HelpOutline
     };
 
     private static string OperationLabel(ActivityTargetOperationType operation) => operation switch
