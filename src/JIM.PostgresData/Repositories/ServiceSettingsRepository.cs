@@ -124,5 +124,28 @@ public class ServiceSettingsRepository : IServiceSettingsRepository
         return await Repository.Database.ServiceSettingItems.AnyAsync(s => s.Key == key);
     }
 
+    public async Task<ServiceSetting> GetOrCreateSettingAsync(ServiceSetting setting)
+    {
+        var existing = await Repository.Database.ServiceSettingItems.FindAsync(setting.Key);
+        if (existing != null)
+            return existing;
+
+        Repository.Database.ServiceSettingItems.Add(setting);
+        try
+        {
+            await Repository.Database.SaveChangesAsync();
+            return setting;
+        }
+        catch (DbUpdateException)
+        {
+            // A concurrent caller inserted the same key first; detach our attempt and return the persisted winner.
+            Repository.Database.Entry(setting).State = EntityState.Detached;
+            var winner = await Repository.Database.ServiceSettingItems.FindAsync(setting.Key);
+            if (winner != null)
+                return winner;
+            throw;
+        }
+    }
+
     #endregion
 }

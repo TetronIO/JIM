@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Linq.Expressions;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
@@ -440,6 +441,70 @@ public class ActivityRepository : IActivityRepository
             .Where(a => a.TargetType == ActivityTargetType.HistoryRetentionCleanup)
             .OrderByDescending(a => a.Created)
             .Select(a => (DateTime?)a.Created)
+            .FirstOrDefaultAsync();
+    }
+
+    private IQueryable<Activity> ConfigurationChangeQuery(ActivityTargetType targetType, int targetObjectId)
+    {
+        var query = Repository.Database.Activities
+            .Where(a => a.TargetType == targetType && a.ConfigurationChangeVersion != null);
+
+        return targetType switch
+        {
+            ActivityTargetType.ConnectedSystem => query.Where(a => a.ConnectedSystemId == targetObjectId),
+            ActivityTargetType.SyncRule => query.Where(a => a.SyncRuleId == targetObjectId),
+            _ => throw new ArgumentOutOfRangeException(nameof(targetType), targetType,
+                "Unsupported configuration target type for change history.")
+        };
+    }
+
+    private static readonly Expression<Func<Activity, ConfigurationChangeActivityData>> ToConfigurationChangeData = a => new ConfigurationChangeActivityData
+    {
+        ActivityId = a.Id,
+        Version = a.ConfigurationChangeVersion ?? 0,
+        Operation = a.TargetOperationType,
+        InitiatedByType = a.InitiatedByType,
+        InitiatedByName = a.InitiatedByName,
+        When = a.Created,
+        Reason = a.ChangeReason,
+        SnapshotJson = a.ConfigurationChangeSnapshot
+    };
+
+    public async Task<int> GetMaxConfigurationChangeVersionAsync(ActivityTargetType targetType, int targetObjectId)
+    {
+        var max = await ConfigurationChangeQuery(targetType, targetObjectId).MaxAsync(a => (int?)a.ConfigurationChangeVersion);
+        return max ?? 0;
+    }
+
+    public async Task<int> GetConfigurationChangeCountAsync(ActivityTargetType targetType, int targetObjectId)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectId).CountAsync();
+    }
+
+    public async Task<List<ConfigurationChangeActivityData>> GetConfigurationChangeActivitiesAsync(ActivityTargetType targetType, int targetObjectId, int skip, int take)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectId)
+            .OrderByDescending(a => a.ConfigurationChangeVersion)
+            .Skip(skip)
+            .Take(take)
+            .Select(ToConfigurationChangeData)
+            .ToListAsync();
+    }
+
+    public async Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityByVersionAsync(ActivityTargetType targetType, int targetObjectId, int version)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectId)
+            .Where(a => a.ConfigurationChangeVersion == version)
+            .Select(ToConfigurationChangeData)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityBeforeVersionAsync(ActivityTargetType targetType, int targetObjectId, int version)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectId)
+            .Where(a => a.ConfigurationChangeVersion < version)
+            .OrderByDescending(a => a.ConfigurationChangeVersion)
+            .Select(ToConfigurationChangeData)
             .FirstOrDefaultAsync();
     }
 
