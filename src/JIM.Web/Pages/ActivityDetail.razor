@@ -204,6 +204,18 @@
         </MudAlert>
     }
 
+    @if (_configChangeDetail != null)
+    {
+        <MudText Typo="Typo.h5" Class="mt-5">Configuration Change</MudText>
+        @if (!string.IsNullOrWhiteSpace(_activity.ChangeReason))
+        {
+            <MudText Typo="Typo.body1" Class="mt-2" Style="font-style: italic;">&ldquo;@_activity.ChangeReason&rdquo;</MudText>
+        }
+        <MudPaper Class="pa-4 mt-3" Outlined="true">
+            <ConfigurationChangeDiff Diff="_configChangeDetail.Diff" />
+        </MudPaper>
+    }
+
     @if (_activity.TargetType == ActivityTargetType.HistoryRetentionCleanup)
     {
         var csoCount = _activity.DeletedCsoChangeCount ?? 0;
@@ -703,9 +715,14 @@
     [Parameter]
     public Guid Id { get; set; }
 
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
     private Guid _loadedId;
     private MudTable<ActivityRunProfileExecutionItemHeader>? _table;
     private Activity? _activity;
+    private ConfigurationChangeDetail? _configChangeDetail;
+    private bool _isAdministrator;
     private List<Activity> _childActivities = new();
     private ConnectedSystemHeader? _connectedSystemHeader;
     private MetaverseObjectHeader? _metaverseObjectHeader;
@@ -747,6 +764,7 @@
         _metaverseObjectHeader = null;
         _initiatorMetaverseObjectHeader = null;
         _activityRunProfileExecutionStats = null;
+        _configChangeDetail = null;
         _childActivities = new();
         _searchString = "";
         _selectedObjectTypes = new List<string>();
@@ -795,6 +813,20 @@
             _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
 
         _childActivities = await jim.Activities.GetChildActivitiesAsync(_activity.Id);
+
+        // Configuration-change activities carry a versioned snapshot; for administrators, load the diff against the
+        // previous version so it renders inline with the shared renderer. Gated to Administrators to match the
+        // admin-only Changes tab on the object's own page; the diff is redaction-aware but is still configuration detail.
+        if (AuthenticationStateTask != null)
+            _isAdministrator = (await AuthenticationStateTask).User.IsInRole("Administrator");
+
+        if (_isAdministrator && _activity.ConfigurationChangeVersion.HasValue)
+        {
+            if (_activity.TargetType == ActivityTargetType.SyncRule && _activity.SyncRuleId.HasValue)
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.SyncRule, _activity.SyncRuleId.Value, _activity.ConfigurationChangeVersion.Value);
+            else if (_activity.TargetType == ActivityTargetType.ConnectedSystem && _activity.ConnectedSystemId.HasValue)
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ConnectedSystem, _activity.ConnectedSystemId.Value, _activity.ConfigurationChangeVersion.Value);
+        }
 
         _loadedId = Id;
         _initialisationComplete = true;
