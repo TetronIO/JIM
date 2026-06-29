@@ -65,11 +65,10 @@ else
                     <ItemContent>
                         <MudCard Outlined="true">
                             <MudCardContent>
-                                @* Version header: {icon} v{N}  {operation}    {initiator}    {relative date} *@
+                                @* Version header: {operation chip with icon} v{N}    {initiator}    {relative date} *@
                                 <div class="d-flex flex-wrap align-center gap-2">
-                                    <MudIcon Icon="@OperationIcon(item.Operation)" Color="@OperationColour(item.Operation)" />
+                                    <MudChip T="string" Variant="Variant.Text" Color="@OperationColour(item.Operation)" Icon="@OperationIcon(item.Operation)">@OperationLabel(item.Operation)</MudChip>
                                     <MudText Typo="Typo.subtitle2">v@(item.Version)</MudText>
-                                    <MudChip T="string" Variant="Variant.Text" Color="@OperationColour(item.Operation)">@OperationLabel(item.Operation)</MudChip>
                                     <MudIcon Icon="@InitiatorIcon(item.InitiatedByType)" Size="Size.Small" Class="mud-text-secondary" />
                                     @{
                                         var initiatorName = string.IsNullOrEmpty(item.InitiatedByName) ? "System" : item.InitiatedByName;
@@ -103,22 +102,22 @@ else
 
                                 <div class="mt-2">
                                     <MudButton Variant="Variant.Text" DropShadow="false"
-                                               StartIcon="@(_expandedVersion == item.Version ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                               StartIcon="@(_expandedVersions.Contains(item.Version) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
                                                OnClick="@(() => ToggleDiffAsync(item.Version))">
-                                        @(_expandedVersion == item.Version ? "Hide diff" : "View diff")
+                                        @(_expandedVersions.Contains(item.Version) ? "Hide diff" : "View diff")
                                     </MudButton>
                                 </div>
 
-                                @if (_expandedVersion == item.Version)
+                                @if (_expandedVersions.Contains(item.Version))
                                 {
                                     <div class="mt-3">
-                                        @if (_detailLoading)
+                                        @if (_detailLoadingVersions.Contains(item.Version))
                                         {
                                             <div class="d-flex justify-center my-4"><MudProgressCircular Indeterminate="true" Color="Color.Primary" /></div>
                                         }
-                                        else if (_detail != null)
+                                        else if (_details.GetValueOrDefault(item.Version) is { } detail)
                                         {
-                                            <ConfigurationChangeDiff Diff="_detail.Diff" />
+                                            <ConfigurationChangeDiff Diff="detail.Diff" />
                                         }
                                     </div>
                                 }
@@ -160,9 +159,11 @@ else
 
     private List<int> _versions = new();
 
-    private int? _expandedVersion;
-    private bool _detailLoading;
-    private ConfigurationChangeDetail? _detail;
+    // Expansion is fully manual and independent per version: several diffs can be open at once. Loaded details are
+    // cached per version so re-expanding does not re-fetch.
+    private readonly HashSet<int> _expandedVersions = new();
+    private readonly HashSet<int> _detailLoadingVersions = new();
+    private readonly Dictionary<int, ConfigurationChangeDetail?> _details = new();
 
     private int? _compareFrom;
     private int? _compareTo;
@@ -194,20 +195,21 @@ else
 
     private async Task ToggleDiffAsync(int version)
     {
-        if (_expandedVersion == version)
-        {
-            _expandedVersion = null;
-            _detail = null;
+        // Collapse if already open; expansion is independent per version so other open diffs are left untouched.
+        if (_expandedVersions.Remove(version))
             return;
-        }
 
-        _expandedVersion = version;
-        _detail = null;
-        _detailLoading = true;
+        _expandedVersions.Add(version);
+
+        // Fetch the diff only once per version; a cached entry (even a null result) means it is already loaded.
+        if (_details.ContainsKey(version))
+            return;
+
+        _detailLoadingVersions.Add(version);
         StateHasChanged(); // show the spinner while the diff is fetched
         using var jim = JimFactory.Create();
-        _detail = await jim.ChangeHistory.GetConfigurationChangeAsync(TargetType, ObjectId, version);
-        _detailLoading = false;
+        _details[version] = await jim.ChangeHistory.GetConfigurationChangeAsync(TargetType, ObjectId, version);
+        _detailLoadingVersions.Remove(version);
     }
 
     private async Task CompareAsync()
