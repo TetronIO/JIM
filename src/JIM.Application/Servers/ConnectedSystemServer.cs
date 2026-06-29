@@ -3925,7 +3925,14 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
+        // Capture the import mapping's attribute scope before deletion so the remaining contributors can be re-densified.
+        var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
+        var targetMetaverseAttributeId = mapping.TargetMetaverseAttributeId;
+
         await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping);
+
+        if (metaverseObjectTypeId.HasValue && targetMetaverseAttributeId.HasValue)
+            await RedensifyAttributePriorityAfterRemovalAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
 
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -3952,7 +3959,14 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
+        // Capture the import mapping's attribute scope before deletion so the remaining contributors can be re-densified.
+        var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
+        var targetMetaverseAttributeId = mapping.TargetMetaverseAttributeId;
+
         await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping);
+
+        if (metaverseObjectTypeId.HasValue && targetMetaverseAttributeId.HasValue)
+            await RedensifyAttributePriorityAfterRemovalAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
 
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -4026,6 +4040,45 @@ public class ConnectedSystemServer
         // Sole contributor: priority is meaningless, so leave the safe-addition sentinel untouched.
         if (contributors.Count <= 1)
             return;
+
+        var snapshot = SnapshotPriorityState(contributors);
+        var changed = RenumberAndCollectChanges(contributors, snapshot);
+        if (changed.Count > 0)
+            await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
+    }
+
+    /// <summary>
+    /// After an import mapping (or its rule) is removed, re-densifies the target Metaverse attribute's remaining
+    /// contributor list to a dense 1..N (#91), so deleting a contributor never leaves a gap in the priority numbers.
+    /// Mirrors the safe-addition densify on creation, keeping the contributor list dense across add, reorder, and
+    /// delete. A sole remaining contributor is reset to the int.MaxValue sentinel (priority is meaningless with one
+    /// source, matching the invariant that explicit priorities exist only when an attribute has more than one
+    /// contributor); zero remaining contributors is a no-op. Order-preserving, so no resolution outcome changes.
+    /// Must be called after the removal is persisted, so the query returns only the surviving contributors.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The object type that scopes the attribute's priority list.</param>
+    /// <param name="metaverseAttributeId">The target Metaverse attribute whose contributor list was reduced.</param>
+    private async Task RedensifyAttributePriorityAfterRemovalAsync(int metaverseObjectTypeId, int metaverseAttributeId)
+    {
+        var contributors = await Application.Repository.ConnectedSystems
+            .GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
+
+        if (contributors.Count == 0)
+            return;
+
+        if (contributors.Count == 1)
+        {
+            // Sole remaining contributor: reset to the safe-addition sentinel (explicit priorities exist only when an
+            // attribute has more than one contributor).
+            var sole = contributors[0];
+            if (sole.Priority != int.MaxValue)
+            {
+                sole.Priority = int.MaxValue;
+                await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync([sole]);
+            }
+
+            return;
+        }
 
         var snapshot = SnapshotPriorityState(contributors);
         var changed = RenumberAndCollectChanges(contributors, snapshot);
@@ -4955,7 +5008,15 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Delete
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        // Capture the attributes this import rule contributes to before deletion, so each can be re-densified after.
+        var affectedAttributeIds = GetContributingImportAttributeIds(syncRule);
+
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
+
+        foreach (var attributeId in affectedAttributeIds)
+            await RedensifyAttributePriorityAfterRemovalAsync(syncRule.MetaverseObjectTypeId, attributeId);
+
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4976,9 +5037,31 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Delete
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        // Capture the attributes this import rule contributes to before deletion, so each can be re-densified after.
+        var affectedAttributeIds = GetContributingImportAttributeIds(syncRule);
+
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
+
+        foreach (var attributeId in affectedAttributeIds)
+            await RedensifyAttributePriorityAfterRemovalAsync(syncRule.MetaverseObjectTypeId, attributeId);
+
         await Application.Activities.CompleteActivityAsync(activity);
     }
+
+    /// <summary>
+    /// The distinct target Metaverse attribute ids that an import Synchronisation Rule contributes to (#91), used to
+    /// re-densify each affected attribute's priority list after the rule (and its mappings) are deleted. Empty for
+    /// export rules, which do not participate in attribute priority.
+    /// </summary>
+    private static List<int> GetContributingImportAttributeIds(SyncRule syncRule) =>
+        syncRule.Direction == SyncRuleDirection.Import
+            ? syncRule.AttributeFlowRules
+                .Where(m => m.TargetMetaverseAttributeId.HasValue)
+                .Select(m => m.TargetMetaverseAttributeId!.Value)
+                .Distinct()
+                .ToList()
+            : [];
     #endregion
 
     #region Object Matching Rules

@@ -399,4 +399,111 @@ public class AttributePriorityOrderTests
         _mockCsRepo.Verify(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
         _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()), Times.Never);
     }
+
+    // ─── Re-densify on deletion (#91): closing the gap a removed contributor leaves ───
+
+    /// <summary>
+    /// Builds an import mapping to delete, carrying the SyncRule (with object type + Import direction) and target
+    /// attribute the re-densify needs to scope the attribute's priority list.
+    /// </summary>
+    private static SyncRuleMapping BuildImportMappingForDeletion(int id) => new()
+    {
+        Id = id,
+        TargetMetaverseAttributeId = AttributeId,
+        TargetMetaverseAttribute = new MetaverseAttribute { Id = AttributeId, Name = "department" },
+        SyncRule = new SyncRule
+        {
+            Id = id * 100,
+            Name = $"Rule {id}",
+            Direction = SyncRuleDirection.Import,
+            MetaverseObjectTypeId = ObjectTypeId
+        }
+    };
+
+    [Test]
+    public async Task DeleteSyncRuleMappingAsync_RemovesContributor_DensifiesRemainingAsync()
+    {
+        // After the priority-2 contributor is deleted, the survivors (1 and 3) must re-densify to 1 and 2, closing the
+        // gap so the priority numbers stay sequential.
+        var m10 = BuildMapping(10, priority: 1, nullIsValue: false);
+        var m30 = BuildMapping(30, priority: 3, nullIsValue: false);
+        SetupContributors(m10, m30); // the survivors the post-delete query returns
+        _mockCsRepo.Setup(r => r.DeleteSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
+
+        await _jim.ConnectedSystems.DeleteSyncRuleMappingAsync(BuildImportMappingForDeletion(20), _user);
+
+        Assert.That(m10.Priority, Is.EqualTo(1));
+        Assert.That(m30.Priority, Is.EqualTo(2), "the gap left by the deleted contributor must be closed");
+        _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(
+            It.Is<IReadOnlyCollection<SyncRuleMapping>>(c => c.Count == 1 && c.Single().Id == 30)), Times.Once);
+    }
+
+    [Test]
+    public async Task DeleteSyncRuleMappingAsync_LeavesSingleContributor_ResetsToSentinelAsync()
+    {
+        // Deleting down to a single remaining contributor: priority is meaningless again, so it resets to the
+        // safe-addition sentinel (explicit priorities exist only when an attribute has more than one contributor).
+        var m10 = BuildMapping(10, priority: 1, nullIsValue: false);
+        SetupContributors(m10);
+        _mockCsRepo.Setup(r => r.DeleteSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
+
+        await _jim.ConnectedSystems.DeleteSyncRuleMappingAsync(BuildImportMappingForDeletion(20), _user);
+
+        Assert.That(m10.Priority, Is.EqualTo(int.MaxValue), "a sole remaining contributor resets to the safe-addition sentinel");
+        _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(
+            It.Is<IReadOnlyCollection<SyncRuleMapping>>(c => c.Count == 1 && c.Single().Id == 10)), Times.Once);
+    }
+
+    [Test]
+    public async Task DeleteSyncRuleMappingAsync_ExportMapping_DoesNotTouchPriorityAsync()
+    {
+        _mockCsRepo.Setup(r => r.DeleteSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>())).Returns(Task.CompletedTask);
+        var export = new SyncRuleMapping
+        {
+            Id = 30,
+            TargetConnectedSystemAttributeId = 5,
+            TargetConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Id = 5, Name = "displayName" },
+            SyncRule = new SyncRule { Id = 3000, Name = "Export Rule", Direction = SyncRuleDirection.Export, MetaverseObjectTypeId = ObjectTypeId }
+        };
+
+        await _jim.ConnectedSystems.DeleteSyncRuleMappingAsync(export, _user);
+
+        _mockCsRepo.Verify(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+        _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()), Times.Never);
+    }
+
+    [Test]
+    public async Task DeleteSyncRuleAsync_ImportRule_DensifiesEachAffectedAttributeAsync()
+    {
+        // Deleting a whole contributing rule must close the gap for each attribute it contributed to.
+        var m10 = BuildMapping(10, priority: 1, nullIsValue: false);
+        var m30 = BuildMapping(30, priority: 3, nullIsValue: false);
+        SetupContributors(m10, m30);
+        _mockCsRepo.Setup(r => r.DeleteSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+
+        var ruleToDelete = new SyncRule
+        {
+            Id = 500,
+            Name = "Rule To Delete",
+            Direction = SyncRuleDirection.Import,
+            MetaverseObjectTypeId = ObjectTypeId,
+            ConnectedSystem = new ConnectedSystem { Id = 5, Name = "System 5" }, // avoids a Connected System lookup for the activity
+            AttributeFlowRules = new List<SyncRuleMapping>
+            {
+                new()
+                {
+                    Id = 50,
+                    TargetMetaverseAttributeId = AttributeId,
+                    TargetMetaverseAttribute = new MetaverseAttribute { Id = AttributeId, Name = "department" }
+                }
+            }
+        };
+
+        await _jim.ConnectedSystems.DeleteSyncRuleAsync(ruleToDelete, _user);
+
+        Assert.That(m10.Priority, Is.EqualTo(1));
+        Assert.That(m30.Priority, Is.EqualTo(2), "deleting a contributing rule must close the gap for the affected attribute");
+        _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(
+            It.Is<IReadOnlyCollection<SyncRuleMapping>>(c => c.Count == 1 && c.Single().Id == 30)), Times.Once);
+    }
 }
