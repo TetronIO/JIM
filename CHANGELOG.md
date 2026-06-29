@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 🔄 When more than one Connected System contributes to the same Metaverse attribute, JIM now resolves the value by attribute priority instead of by synchronisation timing (last-writer-wins). Single-source attributes are unaffected; existing multi-source attributes resolve deterministically until you set an explicit priority order.
+- 🔄 When the source currently providing a multi-source attribute disconnects, JIM now hands the attribute to the next-priority Connected System still contributing it, rather than clearing the value. The attribute is only cleared when no other source contributes.
 
 ### Performance
 
