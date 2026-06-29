@@ -90,6 +90,8 @@ public class ConfigurationDiffService
             {
                 node.OldValue = oldNode.Value;
                 node.NewValue = newNode.Value;
+                node.OldDisplayValue = oldNode.DisplayValue;
+                node.NewDisplayValue = newNode.DisplayValue;
             }
             return node;
         }
@@ -166,9 +168,15 @@ public class ConfigurationDiffService
         if (source.NodeType == ConfigurationSnapshotNodeType.Scalar && !source.IsSecret)
         {
             if (changeType == ConfigurationDiffChangeType.Added)
+            {
                 node.NewValue = source.Value;
+                node.NewDisplayValue = source.DisplayValue;
+            }
             else
+            {
                 node.OldValue = source.Value;
+                node.OldDisplayValue = source.DisplayValue;
+            }
         }
 
         if (source.Children is { Count: > 0 })

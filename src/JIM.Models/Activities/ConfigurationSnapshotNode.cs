@@ -33,6 +33,14 @@ public class ConfigurationSnapshotNode
     public string? Value { get; set; }
 
     /// <summary>
+    /// An optional human-friendly rendering of <see cref="Value"/> for display, captured at snapshot time so it reflects
+    /// the value as it was at that version: a foreign-key reference reads as "Name (id)" and an enum is spaced into words.
+    /// Null when the raw <see cref="Value"/> is already display-ready (plain text, numbers, booleans) or could not be
+    /// resolved. Diffing always compares the raw <see cref="Value"/>, never this; this is presentation only.
+    /// </summary>
+    public string? DisplayValue { get; set; }
+
+    /// <summary>
     /// True when this scalar represents a secret (e.g. an encrypted Connected System setting). <see cref="Value"/> then
     /// holds a keyed hash so a change can be detected and shown without disclosing the secret.
     /// </summary>
@@ -49,9 +57,9 @@ public class ConfigurationSnapshotNode
     /// </summary>
     public List<ConfigurationSnapshotNode>? Children { get; set; }
 
-    /// <summary>Creates a scalar node.</summary>
-    public static ConfigurationSnapshotNode Scalar(string key, string? value, string? label = null) =>
-        new() { Key = key, Label = label, NodeType = ConfigurationSnapshotNodeType.Scalar, Value = value };
+    /// <summary>Creates a scalar node, optionally with a human-friendly <paramref name="displayValue"/> for presentation.</summary>
+    public static ConfigurationSnapshotNode Scalar(string key, string? value, string? label = null, string? displayValue = null) =>
+        new() { Key = key, Label = label, NodeType = ConfigurationSnapshotNodeType.Scalar, Value = value, DisplayValue = displayValue };
 
     /// <summary>Creates a redacted secret scalar node whose value is a keyed hash, never the secret itself.</summary>
     public static ConfigurationSnapshotNode Secret(string key, string? valueHash, string? label = null) =>

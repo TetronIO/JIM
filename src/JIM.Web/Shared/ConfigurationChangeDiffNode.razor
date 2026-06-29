@@ -14,10 +14,10 @@
     @if (Node.ChangeType == ConfigurationDiffChangeType.Modified && !Node.IsSecret)
     {
         <div style="@_indent">
-            <MudText Typo="Typo.body2" Color="Color.Error" Style="@MonospaceStyle">- @_label: @Node.OldValue</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Error" Style="@MonospaceStyle">- @_label: @_oldDisplay</MudText>
         </div>
         <div style="@_indent">
-            <MudText Typo="Typo.body2" Color="Color.Success" Style="@MonospaceStyle">+ @_label: @Node.NewValue</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Success" Style="@MonospaceStyle">+ @_label: @_newDisplay</MudText>
         </div>
     }
     else if (_scalarLine != null)
@@ -59,6 +59,11 @@ else
     private string _label = string.Empty;
     private string _indent = string.Empty;
 
+    // Display strings prefer the captured human-friendly DisplayValue (FK "Name (id)", spaced enum), falling back to the
+    // raw value when none was captured (older snapshots, plain text/number/boolean fields).
+    private string? _oldDisplay;
+    private string? _newDisplay;
+
     // Pre-computed presentation for the single-line cases (added/removed scalar, or a changed secret).
     private string? _scalarLine;
     private Color _scalarColour = Color.Default;
@@ -74,17 +79,19 @@ else
         _indent = $"padding-left: {Depth * 24}px;";
         _scalarLine = null;
         _containerClass = null;
+        _oldDisplay = Node.OldDisplayValue ?? Node.OldValue;
+        _newDisplay = Node.NewDisplayValue ?? Node.NewValue;
 
         if (Node.NodeType == ConfigurationSnapshotNodeType.Scalar)
         {
             switch (Node.ChangeType)
             {
                 case ConfigurationDiffChangeType.Added:
-                    _scalarLine = Node.IsSecret ? $"+ {_label}  (secret set)" : $"+ {_label}: {Node.NewValue}";
+                    _scalarLine = Node.IsSecret ? $"+ {_label}  (secret set)" : $"+ {_label}: {_newDisplay}";
                     _scalarColour = Color.Success;
                     break;
                 case ConfigurationDiffChangeType.Removed:
-                    _scalarLine = Node.IsSecret ? $"- {_label}  (secret removed)" : $"- {_label}: {Node.OldValue}";
+                    _scalarLine = Node.IsSecret ? $"- {_label}  (secret removed)" : $"- {_label}: {_oldDisplay}";
                     _scalarColour = Color.Error;
                     break;
                 case ConfigurationDiffChangeType.Modified when Node.IsSecret:

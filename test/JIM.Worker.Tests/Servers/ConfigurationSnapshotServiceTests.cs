@@ -8,6 +8,7 @@ using JIM.Application.Interfaces;
 using JIM.Application.Services;
 using JIM.Data;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using Moq;
@@ -83,6 +84,52 @@ public class ConfigurationSnapshotServiceTests
         Assert.That(sources.Children, Has.Count.EqualTo(1));
         Assert.That(sources.Children![0].ItemId, Is.EqualTo(200));
         Assert.That(Child(sources.Children[0], "connectedSystemAttributeId")!.Value, Is.EqualTo("9"));
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_EnrichesForeignKeysAndEnumsWithDisplayValues()
+    {
+        var mapping = new SyncRuleMapping
+        {
+            Id = 100,
+            TargetMetaverseAttributeId = 5,
+            TargetMetaverseAttribute = new MetaverseAttribute { Id = 5, Name = "Display Name" },
+            InboundValueProcessing = InboundValueProcessing.TreatWhitespaceAsNoValue
+        };
+
+        var rule = new SyncRule
+        {
+            Id = 42,
+            Name = "HR Inbound",
+            Direction = SyncRuleDirection.Import,
+            ConnectedSystemId = 3,
+            ConnectedSystem = new ConnectedSystem { Id = 3, Name = "AD" },
+            ConnectedSystemObjectTypeId = 7,
+            MetaverseObjectTypeId = 1
+        };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        // Foreign keys keep the raw id for stable diffing, with a human-friendly "Name (id)" display value.
+        var connectedSystem = Child(snapshot.Root, "connectedSystemId")!;
+        Assert.That(connectedSystem.Value, Is.EqualTo("3"), "the raw FK id is kept for diffing");
+        Assert.That(connectedSystem.DisplayValue, Is.EqualTo("AD (3)"));
+
+        var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
+        var targetAttribute = Child(flow, "targetMetaverseAttributeId")!;
+        Assert.That(targetAttribute.Value, Is.EqualTo("5"));
+        Assert.That(targetAttribute.DisplayValue, Is.EqualTo("Display Name (5)"));
+
+        // Enums keep the raw name for diffing, with the name spaced into words for display.
+        var processing = Child(flow, "inboundValueProcessing")!;
+        Assert.That(processing.Value, Is.EqualTo("TreatWhitespaceAsNoValue"));
+        Assert.That(processing.DisplayValue, Is.EqualTo("Treat Whitespace As No Value"));
+
+        // A reference with no loaded navigation falls back to id-only (no display value), never crashes.
+        var objectType = Child(snapshot.Root, "connectedSystemObjectTypeId")!;
+        Assert.That(objectType.Value, Is.EqualTo("7"));
+        Assert.That(objectType.DisplayValue, Is.Null);
     }
 
     [Test]
