@@ -39,6 +39,9 @@ function New-JIMSyncRule {
     .PARAMETER Enabled
         Whether the sync rule is enabled. Defaults to $true.
 
+    .PARAMETER ChangeReason
+        An optional reason for the change, recorded against this Synchronisation Rule's change history.
+
     .PARAMETER PassThru
         If specified, returns the created Sync Rule object.
 
@@ -94,6 +97,10 @@ function New-JIMSyncRule {
 
         [bool]$Enabled = $true,
 
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -134,6 +141,10 @@ function New-JIMSyncRule {
 
             if ($ProvisionToConnectedSystem) {
                 $body.provisionToConnectedSystem = $true
+            }
+
+            if ($PSBoundParameters.ContainsKey('ChangeReason')) {
+                $body.changeReason = $ChangeReason
             }
 
             try {
