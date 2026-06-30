@@ -58,6 +58,9 @@
         'Set-JIMSyncRule',
         'Remove-JIMSyncRule',
 
+        # Configuration Change History
+        'Get-JIMConfigurationChangeHistory',
+
         # Sync Rule Mappings
         'Get-JIMSyncRuleMapping',
         'New-JIMSyncRuleMapping',

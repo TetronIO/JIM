@@ -9,12 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Configuration Change History (#14)
+
+- ✨ JIM now tracks a versioned history of changes to your Synchronisation Rules and Connected Systems: who changed what, and when. Retrieve it as a git-style diff with `Get-JIMConfigurationChangeHistory` or the REST API; secrets are flagged as changed but never stored or revealed.
+- ✨ You can now record a reason when changing configuration from automation: `-ChangeReason` on the Synchronisation Rule and Connected System write cmdlets, or an optional field on the REST write requests. The reason shows with the change and on its Activity.
 - ✨ Example data generation templates can now construct a text attribute from an expression, using the same `mv["Attribute Name"]` syntax and function library as Synchronisation Rule Attribute Flows, so a generated value can be transformed from other attributes on the same object (for example an email domain derived from the assigned company). Referenced attributes are generated first, and circular references are detected up front.
 - ✨ Metaverse attributes contributed by more than one Connected System now resolve to a single winner by a configurable per-attribute priority order, so a higher-priority source is never overwritten by a lower-priority one. An advanced "Null is a value" option lets an authoritative source positively assert "no value", clearing the attribute downstream instead of falling through to a lower-priority source.
 
 ### Changed
 
 - 🔄 When more than one Connected System contributes to the same Metaverse attribute, JIM now resolves the value by attribute priority instead of by synchronisation timing (last-writer-wins). Single-source attributes are unaffected; existing multi-source attributes resolve deterministically until you set an explicit priority order.
+- 🔄 When the source currently providing a multi-source attribute disconnects, JIM now hands the attribute to the next-priority Connected System still contributing it, rather than clearing the value. The attribute is only cleared when no other source contributes.
 
 ### Performance
 

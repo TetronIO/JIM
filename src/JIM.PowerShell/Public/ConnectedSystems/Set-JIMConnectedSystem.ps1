@@ -31,6 +31,9 @@ function Set-JIMConnectedSystem {
         Only applicable when the connector supports parallel export.
         Default is 1 (sequential processing).
 
+    .PARAMETER ChangeReason
+        An optional reason for the change, recorded against this Connected System's change history.
+
     .PARAMETER PassThru
         If specified, returns the updated Connected System object.
 
@@ -53,9 +56,9 @@ function Set-JIMConnectedSystem {
             2 = @{ intValue = 389 }
             3 = @{ checkboxValue = $true }
         }
-        Set-JIMConnectedSystem -Id 1 -SettingValues $settings
+        Set-JIMConnectedSystem -Id 1 -SettingValues $settings -ChangeReason "Point at new DC (CHG0099)"
 
-        Updates multiple setting values for the Connected System.
+        Updates multiple setting values for the Connected System and records a reason against its change history.
 
     .EXAMPLE
         Get-JIMConnectedSystem -Id 1 | Set-JIMConnectedSystem -Name "Renamed"
@@ -95,6 +98,10 @@ function Set-JIMConnectedSystem {
         [ValidateRange(1, 16)]
         [int]$MaxExportParallelism,
 
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -132,9 +139,14 @@ function Set-JIMConnectedSystem {
             $body.maxExportParallelism = $MaxExportParallelism
         }
 
+        # A change reason alone is not an update; require at least one actual property change first.
         if ($body.Count -eq 0) {
             Write-Warning "No updates specified."
             return
+        }
+
+        if ($PSBoundParameters.ContainsKey('ChangeReason')) {
+            $body.changeReason = $ChangeReason
         }
 
         $displayName = $Name ?? $systemId

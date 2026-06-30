@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Staging;
 
@@ -403,6 +404,21 @@ public class ActivityDetailDto
     public ActivityRunProfileExecutionStatsDto? ExecutionStats { get; set; }
 
     /// <summary>
+    /// For a configuration-change activity, the optional reason supplied for the change.
+    /// </summary>
+    public string? ChangeReason { get; set; }
+
+    /// <summary>
+    /// For a configuration-change activity, the per-object version number this change produced.
+    /// </summary>
+    public int? ConfigurationChangeVersion { get; set; }
+
+    /// <summary>
+    /// For a configuration-change activity, the redacted snapshot of the object's state at this change; null otherwise.
+    /// </summary>
+    public ConfigurationSnapshot? ConfigurationChangeSnapshot { get; set; }
+
+    /// <summary>
     /// Creates a detail DTO from an Activity entity.
     /// </summary>
     public static ActivityDetailDto FromEntity(Activity activity, ActivityRunProfileExecutionStats? stats = null)
@@ -435,7 +451,10 @@ public class ActivityDetailDto
             SyncRuleId = activity.SyncRuleId,
             MetaverseObjectId = activity.MetaverseObjectId,
             ExampleDataTemplateId = activity.ExampleDataTemplateId,
-            ExecutionStats = stats != null ? ActivityRunProfileExecutionStatsDto.FromEntity(stats) : null
+            ExecutionStats = stats != null ? ActivityRunProfileExecutionStatsDto.FromEntity(stats) : null,
+            ChangeReason = activity.ChangeReason,
+            ConfigurationChangeVersion = activity.ConfigurationChangeVersion,
+            ConfigurationChangeSnapshot = ConfigurationSnapshotService.Deserialise(activity.ConfigurationChangeSnapshot)
         };
     }
 }

@@ -46,6 +46,14 @@ public class ConnectedSystemServerMappingValidationTests
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
+
+        // Auto-assign priority (#91) reads the target attribute's contributor list on every import-mapping create.
+        // These tests exercise mapping validation, not priority, so default the list to empty: the new mapping is the
+        // sole contributor, auto-assign no-ops, and the safe-addition sentinel is left untouched.
+        _mockConnectedSystemRepo
+            .Setup(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(new List<SyncRuleMapping>());
+
         _application = new JimApplication(_mockRepository.Object);
 
         _testApiKey = new ApiKey
