@@ -59,7 +59,14 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     Deprovisioned,
 
     // Added after initial release — appended to preserve existing database ordinals
-    MvoDeletionScheduled
+    MvoDeletionScheduled,
+
+    /// <summary>
+    /// Attribute priority (#91): a connected, in-scope contributor with "Null is a value" set positively asserted
+    /// "no value" for an attribute, persisting an asserted-null marker that clears the attribute downstream. Emitted
+    /// during inbound attribute flow so an admin can see a blank was deliberately asserted, not merely uncontributed.
+    /// </summary>
+    AssertedNull
 }
 
 /// <summary>

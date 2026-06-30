@@ -59,10 +59,19 @@ namespace JIM.PostgresData.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("ChangeReason")
+                        .HasColumnType("text");
+
                     b.Property<int?>("ClearedConnectedSystemObjectCount")
                         .HasColumnType("integer");
 
                     b.Property<int?>("ClearedPendingExportCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ConfigurationChangeSnapshot")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int?>("ConfigurationChangeVersion")
                         .HasColumnType("integer");
 
                     b.Property<int?>("ConnectedSystemId")

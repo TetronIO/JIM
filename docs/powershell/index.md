@@ -81,7 +81,7 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Certificates](certificates.md) | 6 | Manage trusted certificates for connector authentication |
 | [Service Settings](service-settings.md) | 3 | View and modify runtime configuration |
 | [Security](security.md) | 5 | Manage security roles and their memberships, including listing the roles a Metaverse Object is in |
-| [History](history.md) | 3 | Query deleted objects and manage change history retention |
+| [History](history.md) | 4 | Query configuration change history, query deleted objects, and manage change history retention |
 | [Example Data](example-data.md) | 3 | Generate sample data for testing and evaluation |
 | [Expressions](expressions.md) | 1 | Test Synchronisation Rule expressions before deployment |
 

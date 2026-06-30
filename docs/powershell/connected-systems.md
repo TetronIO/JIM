@@ -75,7 +75,7 @@ Creates a new Connected System.
 
 ```powershell
 New-JIMConnectedSystem [-Name] <string> -ConnectorDefinitionId <int>
-    [-Description <string>] [-PassThru]
+    [-Description <string>] [-ChangeReason <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -85,6 +85,7 @@ New-JIMConnectedSystem [-Name] <string> -ConnectorDefinitionId <int>
 | `Name` | `string` | Yes (Position 0) | | Display name for the Connected System |
 | `ConnectorDefinitionId` | `int` | Yes | | Identifier of the connector definition to use |
 | `Description` | `string` | No | | Optional description |
+| `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the created Connected System Object |
 
 ### Output
@@ -121,7 +122,7 @@ Set-JIMConnectedSystem -Id <int> [-Name <string>] [-Description <string>]
 # ByInputObject
 Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
     [-Description <string>] [-SettingValues <hashtable>]
-    [-MaxExportParallelism <int>] [-PassThru]
+    [-MaxExportParallelism <int>] [-ChangeReason <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -134,6 +135,7 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
 | `Description` | `string` | No | | New description |
 | `SettingValues` | `hashtable` | No | | Connector-specific settings. Keys are setting IDs; values are hashtables with `stringValue`, `intValue`, or `checkboxValue`. |
 | `MaxExportParallelism` | `int` | No | | Maximum number of parallel export threads (1 to 16) |
+| `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Connected System Object |
 
 ### Output
@@ -156,6 +158,10 @@ Set-JIMConnectedSystem -Id 3 -SettingValues @{
 
 ```powershell title="Pipeline input from Get-JIMConnectedSystem"
 Get-JIMConnectedSystem -Id 3 | Set-JIMConnectedSystem -MaxExportParallelism 8 -PassThru
+```
+
+```powershell title="Update a setting and record why (shown in the change history)"
+Set-JIMConnectedSystem -Id 3 -Description "Point at DR domain controller" -ChangeReason "Failover for DC maintenance (CHG0101)"
 ```
 
 ### Notes
