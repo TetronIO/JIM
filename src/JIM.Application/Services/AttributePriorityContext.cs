@@ -90,6 +90,14 @@ public sealed class AttributePriorityContext
         _contributorBySyncRule.TryGetValue((objectTypeId, attributeId, syncRuleId), out var mapping) ? mapping : null;
 
     /// <summary>
+    /// The import mappings contributing to a Metaverse Object attribute, ordered canonically (highest priority first),
+    /// or an empty list when the attribute has no contributors. Used by the next-contributor recall fallback to find
+    /// the surviving contributors to re-elect when the winning contributor's Connected System Object disconnects.
+    /// </summary>
+    public IReadOnlyList<SyncRuleMapping> GetContributors(int objectTypeId, int attributeId) =>
+        _contributorsByAttribute.TryGetValue((objectTypeId, attributeId), out var list) ? list : [];
+
+    /// <summary>
     /// Decides whether an incoming contribution should be applied to a Metaverse Object attribute, given the rule
     /// that currently owns the attribute's value (the incumbent, by <c>ContributedBySyncRuleId</c>). Returns true
     /// when the incoming mapping wins or is the same rule updating itself, or when there is no comparable incumbent

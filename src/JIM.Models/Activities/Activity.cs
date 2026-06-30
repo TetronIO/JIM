@@ -308,6 +308,35 @@ public class Activity
     /// </summary>
     public List<ActivityRunProfileExecutionItem> RunProfileExecutionItems { get; init; } = new();
 
+    // -----------------------------------------------------------------------------------------------------------------
+    // configuration object changes (create/update/delete)
+    // Applies to configuration objects such as Synchronisation Rules and Connected Systems. For a configuration-change
+    // activity, a complete, redaction-aware, versioned snapshot of the object's state is captured here as a JSON (jsonb)
+    // document. These columns are null for the high-volume sync/identity activities, so the common path is unaffected.
+    // Sensitive values (e.g. encrypted Connected System settings) are never stored; a keyed hash is recorded instead so
+    // a credential change can be shown without disclosing the value. See ConfigurationSnapshotService.
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The scoped, redacted configuration snapshot for this activity, stored as a JSON (jsonb) document.
+    /// Null for non-configuration activities. Deserialises to <see cref="ConfigurationSnapshot"/>.
+    /// </summary>
+    [Column(TypeName = "jsonb")]
+    public string? ConfigurationChangeSnapshot { get; set; }
+
+    /// <summary>
+    /// An optional, free-text reason supplied by the initiator describing why the change was made (the change's
+    /// "commit message"). Kept general: any activity may carry a reason. Null when not supplied.
+    /// </summary>
+    public string? ChangeReason { get; set; }
+
+    /// <summary>
+    /// The per-object configuration-change version number (v1, v2, ...). Assigned as (max existing version for the
+    /// object) + 1 at capture time, so it does not renumber when older entries are removed by retention.
+    /// Null for non-configuration activities.
+    /// </summary>
+    public int? ConfigurationChangeVersion { get; set; }
+
     public ActivityRunProfileExecutionItem AddRunProfileExecutionItem()
     {
         var activityRunProfileExecutionItem = PrepareRunProfileExecutionItem();

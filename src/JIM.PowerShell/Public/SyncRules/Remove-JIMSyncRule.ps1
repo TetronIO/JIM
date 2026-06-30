@@ -15,6 +15,9 @@ function Remove-JIMSyncRule {
     .PARAMETER InputObject
         Sync Rule object to delete (from pipeline).
 
+    .PARAMETER ChangeReason
+        An optional reason for the deletion, recorded against the change history.
+
     .PARAMETER Force
         Suppresses confirmation prompts.
 
@@ -30,9 +33,9 @@ function Remove-JIMSyncRule {
         Removes the Sync Rule with ID 1 (prompts for confirmation).
 
     .EXAMPLE
-        Remove-JIMSyncRule -Id 1 -Force
+        Remove-JIMSyncRule -Id 1 -Force -ChangeReason "Decommissioned (CHG0123)"
 
-        Removes the Sync Rule without confirmation.
+        Removes the Sync Rule without confirmation and records a reason against the change history.
 
     .EXAMPLE
         Get-JIMSyncRule | Where-Object { $_.name -like "Test*" } | Remove-JIMSyncRule -Force
@@ -52,6 +55,10 @@ function Remove-JIMSyncRule {
 
         [Parameter(Mandatory, ParameterSetName = 'ByInputObject', ValueFromPipeline)]
         [PSCustomObject]$InputObject,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
 
         [switch]$Force,
 
@@ -80,8 +87,14 @@ function Remove-JIMSyncRule {
         if ($Force -or $PSCmdlet.ShouldProcess($existing.name, "Delete Sync Rule")) {
             Write-Verbose "Deleting Sync Rule: $ruleId"
 
+            # The reason is supplied as a query parameter because HTTP DELETE bodies are awkward for clients.
+            $deleteEndpoint = "/api/v1/synchronisation/sync-rules/$ruleId"
+            if ($PSBoundParameters.ContainsKey('ChangeReason')) {
+                $deleteEndpoint += "?changeReason=$([System.Uri]::EscapeDataString($ChangeReason))"
+            }
+
             try {
-                Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$ruleId" -Method 'DELETE'
+                Invoke-JIMApi -Endpoint $deleteEndpoint -Method 'DELETE'
 
                 Write-Verbose "Deleted Sync Rule: $ruleId"
 

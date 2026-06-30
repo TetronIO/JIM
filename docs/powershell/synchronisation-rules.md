@@ -83,13 +83,13 @@ Creates a new Synchronisation Rule for a Connected System. The rule defines how 
 New-JIMSyncRule -Name <string> -ConnectedSystemId <int>
     -ConnectedSystemObjectTypeId <int> -MetaverseObjectTypeId <int>
     -Direction <string> [-ProjectToMetaverse] [-ProvisionToConnectedSystem]
-    [-Enabled <bool>] [-PassThru]
+    [-Enabled <bool>] [-ChangeReason <string>] [-PassThru]
 
 # By Connected System name
 New-JIMSyncRule -Name <string> -ConnectedSystemName <string>
     -ConnectedSystemObjectTypeId <int> -MetaverseObjectTypeId <int>
     -Direction <string> [-ProjectToMetaverse] [-ProvisionToConnectedSystem]
-    [-Enabled <bool>] [-PassThru]
+    [-Enabled <bool>] [-ChangeReason <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -105,6 +105,7 @@ New-JIMSyncRule -Name <string> -ConnectedSystemName <string>
 | `ProjectToMetaverse` | `switch` | No | `$false` | When set, import rules will project new Metaverse Objects. Only applicable when Direction is `Import`. |
 | `ProvisionToConnectedSystem` | `switch` | No | `$false` | When set, export rules will provision new Connected System Objects. Only applicable when Direction is `Export`. |
 | `Enabled` | `bool` | No | `$true` | Whether the Synchronisation Rule is active |
+| `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the created Synchronisation Rule object |
 
 ### Output
@@ -155,19 +156,19 @@ Modifies an existing Synchronisation Rule. Supports renaming, toggling enabled s
 # By ID (default)
 Set-JIMSyncRule -Id <int> [-Name <string>] [-ProjectToMetaverse <bool>]
     [-ProvisionToConnectedSystem <bool>] [-InboundOutOfScopeAction <string>]
-    [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-PassThru]
+    [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-ChangeReason <string>] [-PassThru]
 
 # Enable shortcut
-Set-JIMSyncRule -Id <int> -Enable [-PassThru]
+Set-JIMSyncRule -Id <int> -Enable [-ChangeReason <string>] [-PassThru]
 
 # Disable shortcut
-Set-JIMSyncRule -Id <int> -Disable [-PassThru]
+Set-JIMSyncRule -Id <int> -Disable [-ChangeReason <string>] [-PassThru]
 
 # By input object
 Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>]
     [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>]
     [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>]
-    [-EnforceState <bool>] [-PassThru]
+    [-EnforceState <bool>] [-ChangeReason <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -184,6 +185,7 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>]
 | `InboundOutOfScopeAction` | `string` | No | | Import rules: action when a CSO falls out of the rule's scope. `Disconnect` breaks the CSO to MVO join; `RemainJoined` keeps the join and stops further Attribute Flow |
 | `OutboundDeprovisionAction` | `string` | No | | Export rules: action when an MVO falls out of the rule's scope. `Disconnect` leaves the CSO untouched in the target system; `Delete` queues a delete so the CSO is removed from the target |
 | `EnforceState` | `bool` | No | | Enables drift detection: re-asserts the rule's expected attribute values when the target system has drifted from them |
+| `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Synchronisation Rule object |
 
 ### Output
@@ -218,6 +220,10 @@ Set-JIMSyncRule -Id 5 -ProjectToMetaverse $true -PassThru
 Set-JIMSyncRule -Id 5 -OutboundDeprovisionAction Delete -EnforceState $true
 ```
 
+```powershell title="Disable a rule and record why (shown in the change history)"
+Set-JIMSyncRule -Id 12 -Disable -ChangeReason "Pausing during HR cutover (CHG0098)"
+```
+
 ---
 
 ## Remove-JIMSyncRule
@@ -228,10 +234,10 @@ Deletes a Synchronisation Rule and all associated configuration, including attri
 
 ```powershell
 # By ID (default)
-Remove-JIMSyncRule -Id <int> [-Force] [-PassThru]
+Remove-JIMSyncRule -Id <int> [-Force] [-ChangeReason <string>] [-PassThru]
 
 # By input object
-Remove-JIMSyncRule -InputObject <PSCustomObject> [-Force] [-PassThru]
+Remove-JIMSyncRule -InputObject <PSCustomObject> [-Force] [-ChangeReason <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -241,6 +247,7 @@ Remove-JIMSyncRule -InputObject <PSCustomObject> [-Force] [-PassThru]
 | `Id` | `int` | Yes (ById set) | | The ID of the Synchronisation Rule to delete. Accepts pipeline input. |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A Synchronisation Rule object from `Get-JIMSyncRule`. Accepts pipeline input. |
 | `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
+| `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with the deletion and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the deleted Synchronisation Rule object before removal |
 
 ### Output

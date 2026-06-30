@@ -239,6 +239,10 @@ var schedule = await Jim.Scheduler.GetScheduleAsync(id);
 3. Add XML comments for OpenAPI documentation
 4. Test via the Scalar API reference at `/api/reference`
 
+**Route templates are validated at runtime, not by the compiler (boot the app to catch route bugs):**
+- Route parameter names must be unique across the *combined* template (the controller-level `[Route]` plus the action's `[HttpGet]`/`[HttpPost]` template). Every controller route is `api/v{version:apiVersion}/[controller]`, so **`version` is already a route parameter on every action** - never reuse it. An action template like `change-history/{version:int}` yields two `version` parameters in the merged route, which ASP.NET rejects at **startup** with an `ArgumentException` ("An item with the same key has already been added"), crashing the app (and the `openapi-gen` Docker build stage) before the route table is built. Use a distinct name such as `{changeVersion:int}`. Likewise avoid colliding with `[controller]` or other ambient tokens.
+- This whole class of bug (duplicate route params, ambiguous templates, bad constraints) is a **runtime route-binding failure, not a compile error**: `dotnet build` stays clean, and unit tests that call controller action methods directly bypass routing, so they pass too. It only surfaces when the app actually boots. **After adding or renaming any API route, validate by starting the app** (`jim-build-light` / `jim-stack`) or running an integration test or the OpenAPI generation; do not rely on `dotnet build` + method-level unit tests alone.
+
 **API Endpoint Identifier Rules (MUST follow):**
 
 These rules apply across the REST API (`JIM.Web/Controllers/Api/`), the application and repository layers that back it, and any PowerShell cmdlet that wraps an endpoint.

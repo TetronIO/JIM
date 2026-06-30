@@ -20,6 +20,9 @@ function New-JIMConnectedSystem {
     .PARAMETER ConnectorDefinitionId
         The ID of the ConnectorDefinition to use for this Connected System.
 
+    .PARAMETER ChangeReason
+        An optional reason for the change, recorded against this Connected System's change history.
+
     .PARAMETER PassThru
         If specified, returns the created Connected System object.
 
@@ -61,6 +64,10 @@ function New-JIMConnectedSystem {
         [Parameter(Mandatory)]
         [int]$ConnectorDefinitionId,
 
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -81,6 +88,10 @@ function New-JIMConnectedSystem {
 
             if ($Description) {
                 $body.description = $Description
+            }
+
+            if ($PSBoundParameters.ContainsKey('ChangeReason')) {
+                $body.changeReason = $ChangeReason
             }
 
             try {
