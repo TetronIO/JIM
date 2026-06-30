@@ -46,6 +46,13 @@ function Set-JIMSyncRule {
         Valid values: Disconnect (break the join, leave the CSO untouched in the target system),
         Delete (queue a delete PendingExport so the CSO is removed from the target system).
 
+    .PARAMETER EnforceState
+        For Export rules: whether inbound changes from the target system trigger re-evaluation
+        of this rule to detect and remediate drift.
+
+    .PARAMETER ChangeReason
+        An optional reason for the change, recorded against this Synchronisation Rule's change history.
+
     .PARAMETER PassThru
         If specified, returns the updated Sync Rule object.
 
@@ -63,9 +70,9 @@ function Set-JIMSyncRule {
         Disables the Sync Rule with ID 1.
 
     .EXAMPLE
-        Set-JIMSyncRule -Id 1 -Enable -PassThru
+        Set-JIMSyncRule -Id 1 -Enable -ChangeReason "Re-enabled after maintenance (CHG0042)" -PassThru
 
-        Enables the Sync Rule and returns the updated object.
+        Enables the Sync Rule, records a reason against its change history, and returns the updated object.
 
     .EXAMPLE
         Get-JIMSyncRule -Id 1 | Set-JIMSyncRule -ProjectToMetaverse $true
@@ -115,6 +122,10 @@ function Set-JIMSyncRule {
         [Parameter()]
         [bool]$EnforceState,
 
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -161,9 +172,14 @@ function Set-JIMSyncRule {
             $body.enforceState = $EnforceState
         }
 
+        # A change reason alone is not an update; require at least one actual property change first.
         if ($body.Count -eq 0) {
             Write-Warning "No updates specified."
             return
+        }
+
+        if ($PSBoundParameters.ContainsKey('ChangeReason')) {
+            $body.changeReason = $ChangeReason
         }
 
         $displayName = $Name ?? $ruleId

@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Data.Common;
+using System.Text.Json;
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Models.Activities;
@@ -17,6 +19,7 @@ using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using JIM.Application.Diagnostics;
+using JIM.Application.Services;
 using JIM.Application.Utilities;
 using Microsoft.Extensions.Caching.Memory;
 using Serilog;
@@ -30,6 +33,92 @@ public class ConnectedSystemServer
     internal ConnectedSystemServer(JimApplication application)
     {
         Application = application;
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Configuration change capture
+    // Captures a redacted, versioned configuration snapshot onto a configuration-change Activity. Called after the
+    // entity has been persisted (so its id and graph are current) and before the Activity is completed, so the snapshot
+    // fields are saved as part of the existing CompleteActivityAsync update. Honours the ChangeTracking setting; the
+    // optional change reason is recorded independently of the snapshot toggle.
+    // -----------------------------------------------------------------------------------------------------------------
+
+    private async Task CaptureConfigurationChangeAsync(Activity activity, ConnectedSystem connectedSystem, string? changeReason)
+    {
+        // The reason is recorded independently of the snapshot toggle and has no external dependencies, so it is set
+        // outside the best-effort block below.
+        if (!string.IsNullOrWhiteSpace(changeReason))
+            activity.ChangeReason = changeReason.Trim();
+
+        try
+        {
+            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+                return;
+
+            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
+            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey);
+            activity.ConnectedSystemId ??= connectedSystem.Id;
+            activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.ConnectedSystem, connectedSystem.Id);
+            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        {
+            // Configuration change capture is best-effort secondary metadata recorded after the entity has already been
+            // persisted; it must never fail or roll back the configuration operation that succeeded. On failure the
+            // change history simply misses this snapshot. The failure is logged (never silent) so the gap is diagnosable.
+            Log.Warning(ex, "CaptureConfigurationChangeAsync: failed to capture configuration snapshot for Connected System {ConnectedSystemId}; the change was saved but its history snapshot was not recorded.", connectedSystem.Id);
+        }
+    }
+
+    private async Task CaptureConfigurationChangeAsync(Activity activity, SyncRule syncRule, string? changeReason)
+    {
+        if (!string.IsNullOrWhiteSpace(changeReason))
+            activity.ChangeReason = changeReason.Trim();
+
+        try
+        {
+            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+                return;
+
+            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
+            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey);
+            activity.SyncRuleId ??= syncRule.Id;
+            activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.SyncRule, syncRule.Id);
+            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        {
+            // Best-effort: see the Connected System overload above. A capture failure must never fail the configuration
+            // operation that already succeeded; the miss is logged rather than surfaced to the caller.
+            Log.Warning(ex, "CaptureConfigurationChangeAsync: failed to capture configuration snapshot for Synchronisation Rule {SyncRuleId}; the change was saved but its history snapshot was not recorded.", syncRule.Id);
+        }
+    }
+
+    /// <summary>
+    /// Captures a tombstone snapshot of a Synchronisation Rule onto its delete Activity, before the rule is removed.
+    /// Unlike create/update capture this does not set <see cref="Activity.SyncRuleId"/> or a version: the rule is
+    /// deleted before the Activity completes, so (matching the existing delete path) the Activity is left unlinked and
+    /// the snapshot is surfaced via the Activity itself rather than the object's history.
+    /// </summary>
+    private async Task CaptureConfigurationDeletionAsync(Activity activity, SyncRule syncRule, string? changeReason)
+    {
+        if (!string.IsNullOrWhiteSpace(changeReason))
+            activity.ChangeReason = changeReason.Trim();
+
+        try
+        {
+            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+                return;
+
+            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
+            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey);
+            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        {
+            // Best-effort: a capture failure must never fail the deletion that is about to proceed; the miss is logged.
+            Log.Warning(ex, "CaptureConfigurationDeletionAsync: failed to capture deletion snapshot for Synchronisation Rule {SyncRuleId}; the deletion proceeded but its history snapshot was not recorded.", syncRule.Id);
+        }
     }
 
     #region Connector Definitions
@@ -112,7 +201,7 @@ public class ConnectedSystemServer
         return Application.Repository.ConnectedSystems.GetConnectedSystemCount();
     }
         
-    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
+    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy, string? changeReason = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -167,13 +256,14 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetCreated(connectedSystem, initiatedBy);
         await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
     /// <summary>
     /// Creates a new Connected System (initiated by API key).
     /// </summary>
-    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
+    public async Task CreateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey, string? changeReason = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -228,10 +318,11 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         AuditHelper.SetCreated(connectedSystem, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem);
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy)
+    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, MetaverseObject? initiatedBy, string? changeReason = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -259,13 +350,14 @@ public class ConnectedSystemServer
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
     /// <summary>
     /// Updates an existing Connected System (initiated by API key).
     /// </summary>
-    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
+    public async Task UpdateConnectedSystemAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey, string? changeReason = null)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
@@ -293,6 +385,7 @@ public class ConnectedSystemServer
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -3851,9 +3944,15 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
+        // Capture the object type before ClearMappingNavigationProperties detaches the SyncRule nav; auto-assign
+        // needs it to scope the attribute's priority list.
+        var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
+
         AuditHelper.SetCreated(mapping, initiatedBy);
         ClearMappingNavigationProperties(mapping);
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
+
+        await AutoAssignImportMappingPriorityAsync(mapping, metaverseObjectTypeId);
 
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -3881,9 +3980,15 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
+        // Capture the object type before ClearMappingNavigationProperties detaches the SyncRule nav; auto-assign
+        // needs it to scope the attribute's priority list.
+        var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
+
         AuditHelper.SetCreated(mapping, initiatedByApiKey);
         ClearMappingNavigationProperties(mapping);
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
+
+        await AutoAssignImportMappingPriorityAsync(mapping, metaverseObjectTypeId);
 
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -3941,7 +4046,14 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
+        // Capture the import mapping's attribute scope before deletion so the remaining contributors can be re-densified.
+        var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
+        var targetMetaverseAttributeId = mapping.TargetMetaverseAttributeId;
+
         await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping);
+
+        if (metaverseObjectTypeId.HasValue && targetMetaverseAttributeId.HasValue)
+            await RedensifyAttributePriorityAfterRemovalAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
 
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -3968,7 +4080,14 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
+        // Capture the import mapping's attribute scope before deletion so the remaining contributors can be re-densified.
+        var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
+        var targetMetaverseAttributeId = mapping.TargetMetaverseAttributeId;
+
         await Application.Repository.ConnectedSystems.DeleteSyncRuleMappingAsync(mapping);
+
+        if (metaverseObjectTypeId.HasValue && targetMetaverseAttributeId.HasValue)
+            await RedensifyAttributePriorityAfterRemovalAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
 
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -4013,6 +4132,79 @@ public class ConnectedSystemServer
                 changed.Add(mapping);
         }
         return changed;
+    }
+
+    /// <summary>
+    /// Gives a newly-created import mapping an explicit priority when its target Metaverse attribute already has
+    /// other contributors for the object type (#91, "safe addition"). The whole contributor list is densified to a
+    /// dense 1..N in its existing precedence order ((Priority asc, Id asc), as the query returns it) with the new
+    /// mapping last, so the new flow never wins resolution until an admin reorders it. This both makes the priorities
+    /// explicit (replacing the int.MaxValue sentinels) and avoids the overflow of a literal "max + 1" while every
+    /// existing contributor is still at the sentinel. A no-op for export mappings (priority is an inbound concern)
+    /// and when the attribute has a single contributor (priority is meaningless, so the new mapping keeps the
+    /// sentinel). Order-preserving: the densified ranks match the precedence the id tie-break already produced, so no
+    /// resolution outcome changes; only the stored numbers become explicit.
+    /// </summary>
+    /// <param name="mapping">The just-persisted mapping.</param>
+    /// <param name="metaverseObjectTypeId">The object type that scopes the priority list (from the mapping's
+    /// Synchronisation Rule). When null the attribute's priority list cannot be scoped, so the mapping is left at the
+    /// safe-addition sentinel.</param>
+    private async Task AutoAssignImportMappingPriorityAsync(SyncRuleMapping mapping, int? metaverseObjectTypeId)
+    {
+        // Export mappings do not participate in attribute priority; only import mappings target a Metaverse attribute.
+        if (!mapping.TargetMetaverseAttributeId.HasValue || !metaverseObjectTypeId.HasValue)
+            return;
+
+        var contributors = await Application.Repository.ConnectedSystems
+            .GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId.Value, mapping.TargetMetaverseAttributeId.Value);
+
+        // Sole contributor: priority is meaningless, so leave the safe-addition sentinel untouched.
+        if (contributors.Count <= 1)
+            return;
+
+        var snapshot = SnapshotPriorityState(contributors);
+        var changed = RenumberAndCollectChanges(contributors, snapshot);
+        if (changed.Count > 0)
+            await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
+    }
+
+    /// <summary>
+    /// After an import mapping (or its rule) is removed, re-densifies the target Metaverse attribute's remaining
+    /// contributor list to a dense 1..N (#91), so deleting a contributor never leaves a gap in the priority numbers.
+    /// Mirrors the safe-addition densify on creation, keeping the contributor list dense across add, reorder, and
+    /// delete. A sole remaining contributor is reset to the int.MaxValue sentinel (priority is meaningless with one
+    /// source, matching the invariant that explicit priorities exist only when an attribute has more than one
+    /// contributor); zero remaining contributors is a no-op. Order-preserving, so no resolution outcome changes.
+    /// Must be called after the removal is persisted, so the query returns only the surviving contributors.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The object type that scopes the attribute's priority list.</param>
+    /// <param name="metaverseAttributeId">The target Metaverse attribute whose contributor list was reduced.</param>
+    private async Task RedensifyAttributePriorityAfterRemovalAsync(int metaverseObjectTypeId, int metaverseAttributeId)
+    {
+        var contributors = await Application.Repository.ConnectedSystems
+            .GetImportSyncRuleMappingsForMetaverseAttributeAsync(metaverseObjectTypeId, metaverseAttributeId);
+
+        if (contributors.Count == 0)
+            return;
+
+        if (contributors.Count == 1)
+        {
+            // Sole remaining contributor: reset to the safe-addition sentinel (explicit priorities exist only when an
+            // attribute has more than one contributor).
+            var sole = contributors[0];
+            if (sole.Priority != int.MaxValue)
+            {
+                sole.Priority = int.MaxValue;
+                await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync([sole]);
+            }
+
+            return;
+        }
+
+        var snapshot = SnapshotPriorityState(contributors);
+        var changed = RenumberAndCollectChanges(contributors, snapshot);
+        if (changed.Count > 0)
+            await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
     }
 
     /// <summary>
@@ -4766,7 +4958,7 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetSyncRuleAsync(id);
     }
 
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null)
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, Activity? parentActivity = null, string? changeReason = null)
     {
         // validate the Synchronisation Rule
         if (syncRule == null)
@@ -4844,6 +5036,7 @@ public class ConnectedSystemServer
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
         }
 
+        await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }
@@ -4851,7 +5044,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Creates or updates a Synchronisation Rule (initiated by API key).
     /// </summary>
-    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null)
+    public async Task<bool> CreateOrUpdateSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, Activity? parentActivity = null, string? changeReason = null)
     {
         if (syncRule == null)
             throw new NullReferenceException(nameof(syncRule));
@@ -4918,11 +5111,12 @@ public class ConnectedSystemServer
             await Application.Repository.ConnectedSystems.UpdateSyncRuleAsync(syncRule);
         }
 
+        await CaptureConfigurationChangeAsync(activity, syncRule, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
         return true;
     }
 
-    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy)
+    public async Task DeleteSyncRuleAsync(SyncRule syncRule, MetaverseObject? initiatedBy, string? changeReason = null)
     {
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = syncRule.ConnectedSystem ??
@@ -4937,14 +5131,23 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Delete
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        // Capture the attributes this import rule contributes to before deletion, so each can be re-densified after.
+        var affectedAttributeIds = GetContributingImportAttributeIds(syncRule);
+
+        await CaptureConfigurationDeletionAsync(activity, syncRule, changeReason);
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
+
+        foreach (var attributeId in affectedAttributeIds)
+            await RedensifyAttributePriorityAfterRemovalAsync(syncRule.MetaverseObjectTypeId, attributeId);
+
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
     /// <summary>
     /// Deletes a Synchronisation Rule (initiated by API key).
     /// </summary>
-    public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey)
+    public async Task DeleteSyncRuleAsync(SyncRule syncRule, ApiKey initiatedByApiKey, string? changeReason = null)
     {
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = syncRule.ConnectedSystem ??
@@ -4958,9 +5161,32 @@ public class ConnectedSystemServer
             TargetOperationType = ActivityTargetOperationType.Delete
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        // Capture the attributes this import rule contributes to before deletion, so each can be re-densified after.
+        var affectedAttributeIds = GetContributingImportAttributeIds(syncRule);
+
+        await CaptureConfigurationDeletionAsync(activity, syncRule, changeReason);
         await Application.Repository.ConnectedSystems.DeleteSyncRuleAsync(syncRule);
+
+        foreach (var attributeId in affectedAttributeIds)
+            await RedensifyAttributePriorityAfterRemovalAsync(syncRule.MetaverseObjectTypeId, attributeId);
+
         await Application.Activities.CompleteActivityAsync(activity);
     }
+
+    /// <summary>
+    /// The distinct target Metaverse attribute ids that an import Synchronisation Rule contributes to (#91), used to
+    /// re-densify each affected attribute's priority list after the rule (and its mappings) are deleted. Empty for
+    /// export rules, which do not participate in attribute priority.
+    /// </summary>
+    private static List<int> GetContributingImportAttributeIds(SyncRule syncRule) =>
+        syncRule.Direction == SyncRuleDirection.Import
+            ? syncRule.AttributeFlowRules
+                .Where(m => m.TargetMetaverseAttributeId.HasValue)
+                .Select(m => m.TargetMetaverseAttributeId!.Value)
+                .Distinct()
+                .ToList()
+            : [];
     #endregion
 
     #region Object Matching Rules

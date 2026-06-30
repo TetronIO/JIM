@@ -4,7 +4,76 @@ title: History
 
 # History
 
-Cmdlets for querying deleted objects and managing change history retention. These cmdlets provide access to the audit trail for deleted objects and allow you to control how long change history records are kept.
+Cmdlets for querying configuration change history, querying deleted objects, and managing change history retention. These cmdlets provide access to the configuration audit trail, the audit trail for deleted objects, and let you control how long change history records are kept.
+
+---
+
+## Get-JIMConfigurationChangeHistory
+
+Retrieves the recorded configuration changes for a Synchronisation Rule or Connected System. Every create, update, and delete is captured as a complete, versioned snapshot carried on its Activity, so you can see exactly what changed, when, and who changed it. Three retrieval modes are supported: a paged summary list (default), a single version with its diff against the previous version (`-Version`), and a comparison of any two versions (`-CompareFrom` / `-CompareTo`). Sensitive values (for example encrypted Connected System settings) are never returned; a changed secret is reported only as changed, never by value.
+
+### Syntax
+
+```powershell
+# Paged summary list (default)
+Get-JIMConfigurationChangeHistory -Type <string> -Id <int>
+    [-Page <int>] [-PageSize <int>]
+
+# Stream every version
+Get-JIMConfigurationChangeHistory -Type <string> -Id <int> -All [-PageSize <int>]
+
+# A single version, with its diff against the previous version
+Get-JIMConfigurationChangeHistory -Type <string> -Id <int> -Version <int> [-AsDiff] [-Raw]
+
+# Compare any two versions
+Get-JIMConfigurationChangeHistory -Type <string> -Id <int>
+    -CompareFrom <int> -CompareTo <int> [-AsDiff] [-Raw]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Parameter Set | Description |
+|------|------|----------|---------|---------------|-------------|
+| `Type` | `string` | Yes | | All | The configuration object kind. Valid values: `SynchronisationRule`, `ConnectedSystem`. |
+| `Id` | `int` | Yes | | All | The ID of the configuration object. Accepts the `id` property from the pipeline, so a piped Synchronisation Rule or Connected System binds automatically. |
+| `Page` | `int` | No | `1` | Page | Page number for the summary list. |
+| `PageSize` | `int` | No | `50` | Page, All | Items per page. Maximum: `100`. |
+| `All` | `switch` | No | | All | Automatically paginate through, and return, every change-history entry. |
+| `Version` | `int` | Yes | | Version | Retrieve a single change by its per-object version number, returning the snapshot and the diff against the previous version. |
+| `CompareFrom` | `int` | Yes | | Compare | The earlier version to compare from. |
+| `CompareTo` | `int` | Yes | | Compare | The later version to compare to. |
+| `AsDiff` | `switch` | No | | Version, Compare | Render the change as a git-style coloured diff (using `$PSStyle`) instead of returning the structured object. |
+| `Raw` | `switch` | No | | Version, Compare | Return the underlying structured change object. This is the default; the switch is provided for explicitness. |
+
+### Output
+
+In the summary modes, returns one `PSCustomObject` per change with `version`, `operation`, `initiatedBy`, `when`, `reason`, and a one-line `summary`. With `-Version`, returns the change detail (metadata, the redacted snapshot, and the diff against the previous version). With `-CompareFrom` / `-CompareTo`, returns the structured diff. With `-AsDiff`, returns the rendered diff as coloured strings.
+
+### Examples
+
+```powershell title="List the most recent changes for a Synchronisation Rule"
+Get-JIMConfigurationChangeHistory -Type SynchronisationRule -Id 5
+```
+
+```powershell title="Return every recorded change for a Connected System"
+Get-JIMConfigurationChangeHistory -Type ConnectedSystem -Id 9 -All
+```
+
+```powershell title="Show one version as a git-style coloured diff"
+Get-JIMConfigurationChangeHistory -Type ConnectedSystem -Id 9 -Version 7 -AsDiff
+```
+
+```powershell title="Pipe a Synchronisation Rule in and show its latest change"
+Get-JIMSyncRule -Name "HR Inbound" |
+    Get-JIMConfigurationChangeHistory -Type SynchronisationRule -Version 7 -AsDiff
+```
+
+```powershell title="Compare two versions"
+Get-JIMConfigurationChangeHistory -Type SynchronisationRule -Id 5 -CompareFrom 6 -CompareTo 8 -AsDiff
+```
+
+!!! note "Recording a reason"
+    To attach a reason to a change so it appears in this history, pass `-ChangeReason` to the write cmdlets: `New-JIMSyncRule`, `Set-JIMSyncRule`, `Remove-JIMSyncRule`, `New-JIMConnectedSystem`, and `Set-JIMConnectedSystem`.
 
 ---
 
@@ -183,3 +252,4 @@ do {
 
 - [API reference](../api/index.md): the Scalar API reference (linked from the API index) covers the history endpoints
 - [Activities](activities.md): cmdlets for querying activity logs and execution history
+- [Activities concept](../configuration/activities.md): how configuration changes are carried on Activities, including the redaction model

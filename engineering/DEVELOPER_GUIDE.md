@@ -757,6 +757,19 @@ finally
 }
 ```
 
+#### Configuration change history (snapshot on the Activity)
+
+Configuration changes (Synchronisation Rule and Connected System create/update/delete) carry their change payload **on the Activity**, not in a relational change table. Three nullable columns on `Activity` hold it: `ConfigurationChangeSnapshot` (jsonb), `ChangeReason` (text), and `ConfigurationChangeVersion` (int). All are null for the high-volume sync and identity activities, so the common path is unaffected.
+
+This is a deliberate divergence from the Connected System Object and Metaverse Object change history (#269), which uses relational per-attribute tables. The two are split by volume profile: CSO/MVO data is flat, homogeneous, and high-volume (relational wins); configuration objects are nested, heterogeneous aggregates at low volume (a document snapshot renders as a natural tree diff and makes version-compare and later restore straightforward).
+
+Key services in `JIM.Application`:
+
+- `ConfigurationSnapshotService` builds a purpose-built, redacted projection per type (not a naive EF graph serialisation). Secret settings (`ConnectedSystemSettingValue.StringEncryptedValue`) are never stored; an HMAC-SHA-256 keyed hash of the transiently-decrypted plaintext is stored instead, so a rotation is detectable without the value being recoverable from the history.
+- `ConfigurationDiffService` produces a structured diff between two snapshots, matching child collections by stable DB id so diffs are stable rather than order-sensitive.
+
+Capture is best-effort and runs after the entity is committed, so it never fails the save. Retrieval is via `ChangeHistoryServer`, and the same diff data feeds the REST API and the PowerShell `Get-JIMConfigurationChangeHistory` cmdlet. Retention will become target-type-aware Activity retention (configuration-change Activities kept longer than sync and identity activities).
+
 ## Development Environment
 
 JIM uses GitHub Codespaces to provide a fully configured development environment with all dependencies pre-installed.

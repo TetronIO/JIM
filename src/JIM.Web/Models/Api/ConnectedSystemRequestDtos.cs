@@ -28,6 +28,12 @@ public class CreateConnectedSystemRequest
     /// </summary>
     [Required]
     public int ConnectorDefinitionId { get; set; }
+
+    /// <summary>
+    /// An optional reason for the change, recorded against this Connected System's change history.
+    /// </summary>
+    [StringLength(2000)]
+    public string? ChangeReason { get; set; }
 }
 
 /// <summary>
@@ -58,6 +64,12 @@ public class UpdateConnectedSystemRequest
     /// </summary>
     [Range(1, 16)]
     public int? MaxExportParallelism { get; set; }
+
+    /// <summary>
+    /// An optional reason for the change, recorded against this Connected System's change history.
+    /// </summary>
+    [StringLength(2000)]
+    public string? ChangeReason { get; set; }
 }
 
 /// <summary>

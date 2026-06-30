@@ -1,8 +1,11 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Services;
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Security;
+using JIM.Models.Utility;
 using Serilog;
 
 namespace JIM.Application.Servers;
@@ -64,6 +67,112 @@ public class ChangeHistoryServer
     public async Task<DateTime?> GetLastCleanupTimeAsync()
     {
         return await _application.Repository.Activity.GetLastHistoryCleanupTimeAsync();
+    }
+
+    // -----------------------------------------------------------------------------------------------------------------
+    // Configuration change history retrieval
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Returns a page of a configuration object's change history, newest version first, each row carrying a one-line
+    /// summary of what changed versus the previous version.
+    /// </summary>
+    public async Task<PagedResultSet<ConfigurationChangeHistoryItem>> GetConfigurationChangeHistoryAsync(ActivityTargetType targetType, int objectId, int page = 1, int pageSize = 20)
+    {
+        if (page < 1)
+            page = 1;
+        if (pageSize < 1)
+            pageSize = 20;
+
+        var total = await _application.Repository.Activity.GetConfigurationChangeCountAsync(targetType, objectId);
+        var skip = (page - 1) * pageSize;
+
+        // Fetch one extra older row so the oldest row on the page can be diffed against its predecessor.
+        var rows = await _application.Repository.Activity.GetConfigurationChangeActivitiesAsync(targetType, objectId, skip, pageSize + 1);
+
+        var items = new List<ConfigurationChangeHistoryItem>();
+        for (var i = 0; i < rows.Count && i < pageSize; i++)
+        {
+            var current = rows[i];
+            var predecessor = i + 1 < rows.Count ? rows[i + 1] : null;
+            items.Add(new ConfigurationChangeHistoryItem
+            {
+                ActivityId = current.ActivityId,
+                Version = current.Version,
+                Operation = current.Operation,
+                InitiatedByType = current.InitiatedByType,
+                InitiatedByName = current.InitiatedByName,
+                When = current.When,
+                Reason = current.Reason,
+                Summary = BuildChangeSummary(current, predecessor)
+            });
+        }
+
+        return new PagedResultSet<ConfigurationChangeHistoryItem>
+        {
+            Results = items,
+            TotalResults = total,
+            CurrentPage = page,
+            PageSize = pageSize
+        };
+    }
+
+    /// <summary>
+    /// Returns a single configuration change in full: its snapshot and the structured diff against the previous version,
+    /// or null if the version does not exist or carries no snapshot.
+    /// </summary>
+    public async Task<ConfigurationChangeDetail?> GetConfigurationChangeAsync(ActivityTargetType targetType, int objectId, int version)
+    {
+        var current = await _application.Repository.Activity.GetConfigurationChangeActivityByVersionAsync(targetType, objectId, version);
+        var currentSnapshot = ConfigurationSnapshotService.Deserialise(current?.SnapshotJson);
+        if (current == null || currentSnapshot == null)
+            return null;
+
+        var predecessor = await _application.Repository.Activity.GetConfigurationChangeActivityBeforeVersionAsync(targetType, objectId, version);
+        var predecessorSnapshot = ConfigurationSnapshotService.Deserialise(predecessor?.SnapshotJson);
+
+        return new ConfigurationChangeDetail
+        {
+            ActivityId = current.ActivityId,
+            Version = current.Version,
+            Operation = current.Operation,
+            InitiatedByType = current.InitiatedByType,
+            InitiatedByName = current.InitiatedByName,
+            When = current.When,
+            Reason = current.Reason,
+            Snapshot = currentSnapshot,
+            Diff = _application.ConfigurationDiffs.Diff(predecessorSnapshot, currentSnapshot, predecessor?.Version, current.Version)
+        };
+    }
+
+    /// <summary>
+    /// Compares any two versions of a configuration object, returning the structured diff of the later against the
+    /// earlier, or null if the later version does not exist or carries no snapshot.
+    /// </summary>
+    public async Task<ConfigurationDiff?> CompareConfigurationChangesAsync(ActivityTargetType targetType, int objectId, int fromVersion, int toVersion)
+    {
+        var from = await _application.Repository.Activity.GetConfigurationChangeActivityByVersionAsync(targetType, objectId, fromVersion);
+        var to = await _application.Repository.Activity.GetConfigurationChangeActivityByVersionAsync(targetType, objectId, toVersion);
+        var fromSnapshot = ConfigurationSnapshotService.Deserialise(from?.SnapshotJson);
+        var toSnapshot = ConfigurationSnapshotService.Deserialise(to?.SnapshotJson);
+        if (toSnapshot == null)
+            return null;
+
+        return _application.ConfigurationDiffs.Diff(fromSnapshot, toSnapshot, from?.Version, toVersion);
+    }
+
+    private string BuildChangeSummary(ConfigurationChangeActivityData current, ConfigurationChangeActivityData? predecessor)
+    {
+        if (current.Operation == ActivityTargetOperationType.Create)
+            return "Created";
+
+        var currentSnapshot = ConfigurationSnapshotService.Deserialise(current.SnapshotJson);
+        var predecessorSnapshot = ConfigurationSnapshotService.Deserialise(predecessor?.SnapshotJson);
+        if (currentSnapshot == null || predecessorSnapshot == null)
+            return "Updated";
+
+        var diff = _application.ConfigurationDiffs.Diff(predecessorSnapshot, currentSnapshot, predecessor!.Version, current.Version);
+        return ConfigurationDiffService.Summarise(diff);
     }
 
     private static Activity CreateCleanupActivity()

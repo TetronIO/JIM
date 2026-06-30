@@ -64,6 +64,12 @@ public class CreateSyncRuleRequest
     /// Only applicable when Direction = Export.
     /// </summary>
     public bool EnforceState { get; set; } = true;
+
+    /// <summary>
+    /// An optional reason for the change, recorded against this Synchronisation Rule's change history.
+    /// </summary>
+    [StringLength(2000)]
+    public string? ChangeReason { get; set; }
 }
 
 /// <summary>
@@ -116,4 +122,10 @@ public class UpdateSyncRuleRequest
     /// Delete queues a delete PendingExport). Only applicable when Direction = Export.
     /// </summary>
     public OutboundDeprovisionAction? OutboundDeprovisionAction { get; set; }
+
+    /// <summary>
+    /// An optional reason for the change, recorded against this Synchronisation Rule's change history.
+    /// </summary>
+    [StringLength(2000)]
+    public string? ChangeReason { get; set; }
 }

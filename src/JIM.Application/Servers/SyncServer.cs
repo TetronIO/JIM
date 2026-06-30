@@ -257,8 +257,9 @@ public class SyncServer : ISyncServer
         ConnectedSystemObject cso,
         MetaverseObject? mvo,
         List<SyncRule> exportRules,
-        Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null)
-        => _drift.EvaluateDrift(cso, mvo, exportRules, importMappingsByAttribute);
+        Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null,
+        AttributePriorityContext? priorityContext = null)
+        => _drift.EvaluateDrift(cso, mvo, exportRules, importMappingsByAttribute, priorityContext);
 
     #endregion
 
