@@ -907,5 +907,18 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The Connected System ID to check.</param>
     /// <returns>The running task, or null if no task is running.</returns>
     Task<SynchronisationWorkerTask?> GetRunningSyncTaskAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Returns the IDs of Connected System Objects whose value for the given date attribute falls within the
+    /// (afterUtc, throughUtc] window. Backs the inbound lane of the Temporal Scope Reconciler's candidate
+    /// pre-filter (#892): the caller shifts this window by a relative-date criterion's offset so the result is a
+    /// superset of the CSOs whose truth-value for that criterion flipped since the last reconciliation. The final
+    /// scope decision is made by the reconciler's in-memory full evaluation, so a generous window is safe. Served
+    /// by the composite (AttributeId, DateTimeValue) partial index.
+    /// </summary>
+    /// <param name="attributeId">The Connected System Object Type Attribute the criterion filters on.</param>
+    /// <param name="afterUtc">Exclusive lower bound on the date value, or null to omit the lower bound (bootstrap / open window).</param>
+    /// <param name="throughUtc">Inclusive upper bound on the date value.</param>
+    Task<List<Guid>> GetConnectedSystemObjectIdsByDateAttributeRangeAsync(int attributeId, DateTime? afterUtc, DateTime throughUtc);
     #endregion
 }

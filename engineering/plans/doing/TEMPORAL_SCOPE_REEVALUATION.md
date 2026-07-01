@@ -1,6 +1,6 @@
 # Temporal Scope Re-evaluation: Implementation Plan
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Doing (Phases 1-2 complete)
 - **Issue:** [#892](https://github.com/TetronIO/JIM/issues/892) (sub-task of [#85](https://github.com/TetronIO/JIM/issues/85))
 - **PRD:** [`engineering/prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md`](../../prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md) (#85)
 - **Builds on:** [`RELATIVE_DATE_SEARCH_CRITERIA.md`](../RELATIVE_DATE_SEARCH_CRITERIA.md) (the relative-date criteria, evaluator, API, UI)
@@ -104,10 +104,12 @@ Both lanes (inbound and outbound) are delivered in the first implementation, per
 - Added a `BuiltIn` bool to `Schedule` (following the established `BuiltIn` convention on `ConnectorDefinition`, `MetaverseAttribute`, `Role`, etc.). Guards (block rename/delete) land in Phase 5.
 - EF migration `AddTemporalScopeReconcilerFields` (append-only). Solution builds 0/0; full suite green (1738 passed).
 
-### Phase 2: Candidate queries (repository)
-- Inbound: `GetInboundTemporalScopeCandidatesAsync(rule, sinceUtc, nowUtc)` over CSO date attribute values ∪ currently-joined CSOs of the object type.
-- Outbound: the MVO equivalent over Metaverse Object date attribute values ∪ currently in-export-scope MVOs.
-- Raw Npgsql on the worker path, per the worker hot-path SQL convention.
+### Phase 2: Candidate queries (repository) ✅
+- Inbound: `IConnectedSystemRepository.GetConnectedSystemObjectIdsByDateAttributeRangeAsync(attributeId, afterUtc, throughUtc)` returns the IDs of CSOs whose date attribute value is in `(afterUtc, throughUtc]`.
+- Outbound: `IMetaverseRepository.GetMetaverseObjectIdsByDateAttributeRangeAsync(metaverseObjectTypeId, attributeId, afterUtc, throughUtc)` (the object-type filter is required because a Metaverse Attribute is shared across types).
+- Raw Npgsql (`SqlQueryRaw<Guid>`), per the worker hot-path SQL convention, served by the Phase 1 composite `(AttributeId, DateTimeValue)` partial index (`DateTimeValue IS NOT NULL` also excludes asserted-null markers). Both build 0/0; full suite green.
+- **Deviation from the drafted signature.** The drafted `GetInboundTemporalScopeCandidatesAsync(rule, sinceUtc, nowUtc)` pushed relative-date criterion semantics (offset resolution, direction) into the repository, breaking layering. The shipped methods are thin, watermark-agnostic date-range selectors that return IDs; the reconciler (Phase 3) owns the boundary math (shifting the window by each criterion's offset via `RelativeDateResolver`), the multi-criterion union, loading the objects, and the in-memory decision. This keeps the testable temporal logic in the application layer and the repository a pure indexed query.
+- **The `∪ currently-in-scope set` is not a separate query.** See the resolved candidate-set-precision decision below: the transition window mathematically contains every object whose truth-value for a criterion flipped in `(afterUtc, throughUtc]`, so a separate "rescan all in-scope objects" union is unnecessary. Bootstrap (null `afterUtc`) opens the lower bound so the first sweep catches all already-transitioned objects.
 
 ### Phase 3: Reconciler (ScopingEvaluationServer, partial class)
 - New `ScopingEvaluationServer.Reconciliation.cs` partial: load rules with a relative criterion, fetch candidates, evaluate full scope (reuse `IsCsoInScopeForImportRule` / `IsMvoInScopeForExportRule`), flag mismatches, update `LastScopeEvaluatedAt`.
@@ -136,10 +138,11 @@ Both lanes (inbound and outbound) are delivered in the first implementation, per
 
 ## Open Decisions (resolve during implementation)
 
-- **Staging mechanism:** an explicit `ScopeReviewPending` flag (auditable, recommended) versus reusing the existing unchanged-skip by bumping `LastUpdated` / clearing `IsUnchangedSinceLastSync`.
-- **Apply step:** a dedicated targeted "scope re-sync" mode that iterates only flagged objects, versus enqueuing a normal sync/export of the flagged subset.
-- **Candidate-set precision:** exact date-range delta since last tick (optimal) versus the simpler "all currently in-scope ∪ today's boundary" baseline first, optimised later.
-- **Interval configuration surface:** Schedule interval only, or also a Service Setting for the seeded default / floor.
+- **Staging mechanism (RESOLVED, Phase 1):** explicit `ScopeReviewPending` flag on CSO/MVO (auditable), over reusing the unchanged-skip by bumping `LastUpdated`. Shipped.
+- **Candidate-set precision (RESOLVED, Phase 2):** the **transition-window range query**. A relative criterion resolves its boundary as `B(t) = now(t) + signedOffset`; the comparison's truth-value flips for an object exactly when `now` crosses `value − signedOffset`, so every object whose value flips in `(afterUtc, throughUtc]` has its date value in `(afterUtc + signedOffset, throughUtc + signedOffset]`. The reconciler shifts the window by each criterion's `signedOffset` and issues one indexed range query per relative-date criterion, unioning the IDs. This is the "exact date-range delta" option (O(transitions) via the composite index), not the "rescan all in-scope" baseline. Over-inclusion is harmless because the in-memory full evaluation is the final gate; under-inclusion is prevented by the window identity above. Bootstrap uses a null lower bound (open window) so the first sweep catches all already-transitioned objects.
+- **Apply step (open):** a dedicated targeted "scope re-sync" mode that iterates only flagged objects, versus enqueuing a normal sync/export of the flagged subset. Resolve in Phase 4.
+- **Watermark placement (open):** per-rule/per-schedule watermark for the window lower bound versus the per-object `LastScopeEvaluatedAt` column shipped in Phase 1. Resolve in Phase 3.
+- **Interval configuration surface (open):** Schedule interval only, or also a Service Setting for the seeded default / floor. Resolve in Phase 4/5.
 
 ## Risks and Mitigations
 

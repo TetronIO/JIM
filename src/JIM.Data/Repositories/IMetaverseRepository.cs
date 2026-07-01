@@ -346,5 +346,18 @@ public interface IMetaverseRepository
     /// <param name="attributeId">The unique identifier of the attribute.</param>
     /// <returns>A list of Synchronisation Rule references (ID and Name) that use this attribute.</returns>
     public Task<List<SyncRuleReference>> GetSyncRulesReferencingAttributeAsync(int attributeId);
+
+    /// <summary>
+    /// Returns the IDs of Metaverse Objects of the given type whose value for the given date attribute falls
+    /// within the (afterUtc, throughUtc] window. Backs the outbound (export) lane of the Temporal Scope
+    /// Reconciler's candidate pre-filter (#892); the caller shifts the window by a relative-date criterion's
+    /// offset. Filters by object type because a Metaverse Attribute is shared across types. Served by the
+    /// composite (AttributeId, DateTimeValue) partial index, which also excludes asserted-null marker rows.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type the export rule targets.</param>
+    /// <param name="attributeId">The Metaverse Attribute the criterion filters on.</param>
+    /// <param name="afterUtc">Exclusive lower bound on the date value, or null to omit the lower bound (bootstrap / open window).</param>
+    /// <param name="throughUtc">Inclusive upper bound on the date value.</param>
+    public Task<List<Guid>> GetMetaverseObjectIdsByDateAttributeRangeAsync(int metaverseObjectTypeId, int attributeId, DateTime? afterUtc, DateTime throughUtc);
     #endregion
 }

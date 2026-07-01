@@ -1968,6 +1968,33 @@ public class MetaverseRepository : IMetaverseRepository
         };
     }
 
+    public async Task<List<Guid>> GetMetaverseObjectIdsByDateAttributeRangeAsync(int metaverseObjectTypeId, int attributeId, DateTime? afterUtc, DateTime throughUtc)
+    {
+        // Superset candidate selection for the outbound (export) lane of the Temporal Scope Reconciler (#892).
+        // The composite (AttributeId, DateTimeValue) partial index serves the equality-then-range predicate;
+        // "DateTimeValue" IS NOT NULL also excludes asserted-null marker rows. Filtering by object type is
+        // required because a Metaverse Attribute is shared across types. The final in/out-of-scope decision is
+        // the reconciler's in-memory full evaluation, so a generous window here is safe.
+        var sql = @"SELECT DISTINCT av.""MetaverseObjectId"" AS ""Value""
+                    FROM ""MetaverseObjectAttributeValues"" av
+                    INNER JOIN ""MetaverseObjects"" mvo ON mvo.""Id"" = av.""MetaverseObjectId""
+                    WHERE av.""AttributeId"" = {0}
+                      AND mvo.""TypeId"" = {1}
+                      AND av.""DateTimeValue"" IS NOT NULL
+                      AND av.""DateTimeValue"" <= {2}";
+        var parameters = new List<object> { attributeId, metaverseObjectTypeId, throughUtc };
+        if (afterUtc.HasValue)
+        {
+            sql += @"
+                      AND av.""DateTimeValue"" > {3}";
+            parameters.Add(afterUtc.Value);
+        }
+
+        return await Repository.Database.Database
+            .SqlQueryRaw<Guid>(sql, parameters.ToArray())
+            .ToListAsync();
+    }
+
     #endregion
 
 }

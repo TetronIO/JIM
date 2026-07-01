@@ -4961,5 +4961,30 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
     }
 
+    public async Task<List<Guid>> GetConnectedSystemObjectIdsByDateAttributeRangeAsync(int attributeId, DateTime? afterUtc, DateTime throughUtc)
+    {
+        // Superset candidate selection for the Temporal Scope Reconciler (#892). The composite
+        // (AttributeId, DateTimeValue) partial index serves this equality-then-range predicate.
+        // "DateTimeValue" IS NOT NULL also excludes any asserted-null marker rows. Correctness of the
+        // final in/out-of-scope decision is the reconciler's in-memory full evaluation, so a generous
+        // window here is safe; this query only narrows the set the evaluator has to consider.
+        var sql = @"SELECT DISTINCT av.""ConnectedSystemObjectId"" AS ""Value""
+                    FROM ""ConnectedSystemObjectAttributeValues"" av
+                    WHERE av.""AttributeId"" = {0}
+                      AND av.""DateTimeValue"" IS NOT NULL
+                      AND av.""DateTimeValue"" <= {1}";
+        var parameters = new List<object> { attributeId, throughUtc };
+        if (afterUtc.HasValue)
+        {
+            sql += @"
+                      AND av.""DateTimeValue"" > {2}";
+            parameters.Add(afterUtc.Value);
+        }
+
+        return await Repository.Database.Database
+            .SqlQueryRaw<Guid>(sql, parameters.ToArray())
+            .ToListAsync();
+    }
+
     #endregion
 }
