@@ -10,6 +10,8 @@ using JIM.Models.Core;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
 using JIM.Application.Services;
+using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Logic;
 using JIM.Models.Logic.DTOs;
 using JIM.Models.Search;
@@ -41,7 +43,7 @@ public class SynchronisationController(
     ILogger<SynchronisationController> logger,
     JimApplication application,
     IExpressionEvaluator expressionEvaluator,
-    ICredentialProtectionService credentialProtection) : ControllerBase
+    ICredentialProtectionService credentialProtection) : ApiControllerBase(application, logger)
 {
     private readonly ILogger<SynchronisationController> _logger = logger;
     private readonly JimApplication _application = application;
@@ -826,9 +828,9 @@ public class SynchronisationController(
             // Get the current API key for Activity attribution if authenticated via API key
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, apiKey);
+                await _application.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, apiKey, changeReason: request.ChangeReason);
             else
-                await _application.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, initiatedBy);
+                await _application.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, initiatedBy, changeReason: request.ChangeReason);
 
             _logger.LogInformation("Created Connected System: {Id} ({Name})", connectedSystem.Id, LogSanitiser.Sanitise(connectedSystem.Name));
 
@@ -927,9 +929,9 @@ public class SynchronisationController(
             // Get the current API key for Activity attribution if authenticated via API key
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, apiKey);
+                await _application.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, apiKey, changeReason: request.ChangeReason);
             else
-                await _application.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, initiatedBy);
+                await _application.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, initiatedBy, changeReason: request.ChangeReason);
 
             _logger.LogInformation("Updated Connected System: {Id} ({Name})", connectedSystem.Id, LogSanitiser.Sanitise(connectedSystem.Name));
 
@@ -1647,9 +1649,9 @@ public class SynchronisationController(
         var apiKey = await GetCurrentApiKeyAsync();
         bool success;
         if (apiKey != null)
-            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason);
         else
-            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason);
         if (!success)
         {
             var validationErrors = syncRule.Validate();
@@ -1721,9 +1723,9 @@ public class SynchronisationController(
         var apiKey = await GetCurrentApiKeyAsync();
         bool success;
         if (apiKey != null)
-            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey);
+            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, apiKey, changeReason: request.ChangeReason);
         else
-            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy);
+            success = await _application.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, initiatedBy, changeReason: request.ChangeReason);
         if (!success)
         {
             var validationErrors = syncRule.Validate();
@@ -1742,6 +1744,7 @@ public class SynchronisationController(
     /// Delete a Synchronisation Rule
     /// </summary>
     /// <param name="id">The unique identifier of the Synchronisation Rule to delete.</param>
+    /// <param name="changeReason">An optional reason for the deletion, recorded against the change history.</param>
     /// <returns>No content on success.</returns>
     /// <response code="204">Synchronisation Rule deleted successfully.</response>
     /// <response code="404">Synchronisation Rule not found.</response>
@@ -1750,7 +1753,7 @@ public class SynchronisationController(
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> DeleteSyncRuleAsync(int id)
+    public async Task<IActionResult> DeleteSyncRuleAsync(int id, [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Deleting Synchronisation Rule: {Id}", id);
 
@@ -1769,13 +1772,137 @@ public class SynchronisationController(
 
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
-            await _application.ConnectedSystems.DeleteSyncRuleAsync(syncRule, apiKey);
+            await _application.ConnectedSystems.DeleteSyncRuleAsync(syncRule, apiKey, changeReason);
         else
-            await _application.ConnectedSystems.DeleteSyncRuleAsync(syncRule, initiatedBy);
+            await _application.ConnectedSystems.DeleteSyncRuleAsync(syncRule, initiatedBy, changeReason);
 
         _logger.LogInformation("Deleted Synchronisation Rule: {Id}", id);
 
         return NoContent();
+    }
+
+    #endregion
+
+    #region Configuration Change History
+
+    /// <summary>
+    /// List the change history for a Synchronisation Rule.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="pagination">Pagination parameters.</param>
+    /// <returns>A paged list of change-history entries, newest version first, each with a one-line summary.</returns>
+    /// <response code="200">Change history returned (empty if the rule has no recorded configuration changes).</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("sync-rules/{id:int}/change-history", Name = "GetSyncRuleChangeHistory")]
+    [ProducesResponseType(typeof(PaginatedResponse<ConfigurationChangeHistoryItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetSyncRuleChangeHistoryAsync(int id, [FromQuery] PaginationRequest pagination)
+    {
+        var result = await _application.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.SyncRule, id, pagination.Page, pagination.PageSize);
+        return Ok(PaginatedResponse<ConfigurationChangeHistoryItem>.Create(result.Results, result.TotalResults, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
+    /// Get a single version of a Synchronisation Rule's change history, with its snapshot and the diff against the previous version.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="changeVersion">The per-object change version to retrieve.</param>
+    /// <returns>The change detail: metadata, the redacted snapshot, and the diff against the previous version.</returns>
+    /// <response code="200">The change detail.</response>
+    /// <response code="404">No change with that version was found for the rule.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("sync-rules/{id:int}/change-history/{changeVersion:int}", Name = "GetSyncRuleChange")]
+    [ProducesResponseType(typeof(ConfigurationChangeDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetSyncRuleChangeAsync(int id, int changeVersion)
+    {
+        var detail = await _application.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.SyncRule, id, changeVersion);
+        if (detail == null)
+            return NotFound(ApiErrorResponse.NotFound($"No change history found for Synchronisation Rule {id} version {changeVersion}."));
+        return Ok(detail);
+    }
+
+    /// <summary>
+    /// Compare two versions of a Synchronisation Rule's configuration.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Synchronisation Rule.</param>
+    /// <param name="fromVersion">The earlier version to compare from.</param>
+    /// <param name="toVersion">The later version to compare to.</param>
+    /// <returns>The structured diff of the later version against the earlier.</returns>
+    /// <response code="200">The diff.</response>
+    /// <response code="404">One of the requested versions was not found for the rule.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("sync-rules/{id:int}/change-history/compare", Name = "CompareSyncRuleChanges")]
+    [ProducesResponseType(typeof(ConfigurationDiff), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CompareSyncRuleChangesAsync(int id, [FromQuery] int fromVersion, [FromQuery] int toVersion)
+    {
+        var diff = await _application.ChangeHistory.CompareConfigurationChangesAsync(ActivityTargetType.SyncRule, id, fromVersion, toVersion);
+        if (diff == null)
+            return NotFound(ApiErrorResponse.NotFound($"Could not compare versions {fromVersion} and {toVersion} for Synchronisation Rule {id}."));
+        return Ok(diff);
+    }
+
+    /// <summary>
+    /// List the change history for a Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="pagination">Pagination parameters.</param>
+    /// <returns>A paged list of change-history entries, newest version first, each with a one-line summary.</returns>
+    /// <response code="200">Change history returned (empty if the Connected System has no recorded configuration changes).</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/change-history", Name = "GetConnectedSystemChangeHistory")]
+    [ProducesResponseType(typeof(PaginatedResponse<ConfigurationChangeHistoryItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemChangeHistoryAsync(int connectedSystemId, [FromQuery] PaginationRequest pagination)
+    {
+        var result = await _application.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ConnectedSystem, connectedSystemId, pagination.Page, pagination.PageSize);
+        return Ok(PaginatedResponse<ConfigurationChangeHistoryItem>.Create(result.Results, result.TotalResults, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
+    /// Get a single version of a Connected System's change history, with its snapshot and the diff against the previous version.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="changeVersion">The per-object change version to retrieve.</param>
+    /// <returns>The change detail: metadata, the redacted snapshot, and the diff against the previous version.</returns>
+    /// <response code="200">The change detail.</response>
+    /// <response code="404">No change with that version was found for the Connected System.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/change-history/{changeVersion:int}", Name = "GetConnectedSystemChange")]
+    [ProducesResponseType(typeof(ConfigurationChangeDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemChangeAsync(int connectedSystemId, int changeVersion)
+    {
+        var detail = await _application.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ConnectedSystem, connectedSystemId, changeVersion);
+        if (detail == null)
+            return NotFound(ApiErrorResponse.NotFound($"No change history found for Connected System {connectedSystemId} version {changeVersion}."));
+        return Ok(detail);
+    }
+
+    /// <summary>
+    /// Compare two versions of a Connected System's configuration.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="fromVersion">The earlier version to compare from.</param>
+    /// <param name="toVersion">The later version to compare to.</param>
+    /// <returns>The structured diff of the later version against the earlier.</returns>
+    /// <response code="200">The diff.</response>
+    /// <response code="404">One of the requested versions was not found for the Connected System.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/change-history/compare", Name = "CompareConnectedSystemChanges")]
+    [ProducesResponseType(typeof(ConfigurationDiff), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CompareConnectedSystemChangesAsync(int connectedSystemId, [FromQuery] int fromVersion, [FromQuery] int toVersion)
+    {
+        var diff = await _application.ChangeHistory.CompareConfigurationChangesAsync(ActivityTargetType.ConnectedSystem, connectedSystemId, fromVersion, toVersion);
+        if (diff == null)
+            return NotFound(ApiErrorResponse.NotFound($"Could not compare versions {fromVersion} and {toVersion} for Connected System {connectedSystemId}."));
+        return Ok(diff);
     }
 
     #endregion
@@ -1889,6 +2016,12 @@ public class SynchronisationController(
                 mapping.InboundValueProcessing = request.InboundValueProcessing.Value;
             if (request.CaseNormalisation.HasValue)
                 mapping.CaseNormalisation = request.CaseNormalisation.Value;
+
+            // "Null is a value" is a property of this mapping (#91), set at creation. Priority is left at its
+            // safe-addition default (int.MaxValue) so the new contribution never wins until ordered via the
+            // attribute-priority-order endpoint.
+            if (request.NullIsValue.HasValue)
+                mapping.NullIsValue = request.NullIsValue.Value;
         }
         else // Export
         {
@@ -3357,96 +3490,6 @@ public class SynchronisationController(
     #endregion
 
     #region Private Helpers
-
-    /// <summary>
-    /// Checks if the current authentication is via API key.
-    /// </summary>
-    private bool IsApiKeyAuthenticated()
-    {
-        return User.HasClaim("auth_method", "api_key");
-    }
-
-    /// <summary>
-    /// Gets the API key name if authenticated via API key.
-    /// </summary>
-    private string? GetApiKeyName()
-    {
-        if (!IsApiKeyAuthenticated())
-            return null;
-
-        return User.Identity?.Name;
-    }
-
-    /// <summary>
-    /// Gets the current API key entity if authenticated via API key.
-    /// </summary>
-    private async Task<JIM.Models.Security.ApiKey?> GetCurrentApiKeyAsync()
-    {
-        if (!IsApiKeyAuthenticated())
-            return null;
-
-        // The API key ID is stored in the NameIdentifier claim
-        var apiKeyIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(apiKeyIdClaim) || !Guid.TryParse(apiKeyIdClaim, out var apiKeyId))
-            return null;
-
-        return await _application.Repository.ApiKeys.GetByIdAsync(apiKeyId);
-    }
-
-    /// <summary>
-    /// Resolves the current user from JWT claims by looking up their SSO identifier in the Metaverse.
-    /// Returns null for API key authentication (which is valid - use IsApiKeyAuthenticated() to check).
-    /// </summary>
-    private async Task<JIM.Models.Core.MetaverseObject?> GetCurrentUserAsync()
-    {
-        if (User.Identity?.IsAuthenticated != true)
-            return null;
-
-        // API key authentication doesn't map to a Metaverse user object
-        // This is valid - the caller should check IsApiKeyAuthenticated() separately
-        if (IsApiKeyAuthenticated())
-        {
-            _logger.LogDebug("API key authentication detected - no Metaverse user lookup needed");
-            return null;
-        }
-
-        // Get the service settings to know which claim type contains the unique identifier
-        var serviceSettings = await _application.ServiceSettings.GetServiceSettingsAsync();
-        if (serviceSettings?.SSOUniqueIdentifierClaimType == null ||
-            serviceSettings.SSOUniqueIdentifierMetaverseAttribute == null)
-        {
-            _logger.LogError("Service settings are not configured for SSO claim mapping");
-            return null;
-        }
-
-        // Get the unique identifier from the JWT claims
-        var uniqueIdClaimValue = IdentityUtilities.GetSsoUniqueIdentifier(
-            User,
-            serviceSettings.SSOUniqueIdentifierClaimType);
-
-        if (string.IsNullOrEmpty(uniqueIdClaimValue))
-        {
-            _logger.LogWarning("JWT does not contain the expected claim: {ClaimType}",
-                serviceSettings.SSOUniqueIdentifierClaimType);
-            return null;
-        }
-
-        // Look up the user in the Metaverse
-        var userType = await _application.Metaverse.GetMetaverseObjectTypeAsync(
-            JIM.Models.Core.Constants.BuiltInObjectTypes.User,
-            false);
-
-        if (userType == null)
-        {
-            _logger.LogError("Could not find User object type in Metaverse");
-            return null;
-        }
-
-        return await _application.Metaverse.GetMetaverseObjectByTypeAndAttributeAsync(
-            userType,
-            serviceSettings.SSOUniqueIdentifierMetaverseAttribute,
-            uniqueIdClaimValue);
-    }
 
     /// <summary>
     /// Checks if a Container belongs to a Connected System, traversing the parent Container chain if necessary.

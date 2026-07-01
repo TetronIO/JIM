@@ -265,6 +265,7 @@ $repoRoot = (Get-Item $scriptRoot).Parent.Parent.FullName
 
 # Import helpers early so Get-DirectoryConfig is available
 . "$scriptRoot/utils/Test-Helpers.ps1"
+. "$scriptRoot/utils/Initialize-WorkerLogDirectories.ps1"
 
 # Hydrate JIM_BENCH_* from .env when not already set in the process environment.
 # .env is the canonical config surface for the project, but Docker Compose only
@@ -1464,12 +1465,9 @@ function Reset-JIMForNextScenario {
     $keyFilePath = Join-Path $ScriptRoot ".api-key"
     $newApiKey | Out-File -FilePath $keyFilePath -NoNewline -Encoding UTF8
 
-    # 5. Pre-create bind-mount directories so Docker doesn't create them as root
-    # (see docker-compose.override.yml worker log volume mount)
-    $workerLogMount = Join-Path $ScriptRoot "results" "logs" "worker"
-    if (-not (Test-Path $workerLogMount)) {
-        New-Item -ItemType Directory -Path $workerLogMount -Force | Out-Null
-    }
+    # 5. Pre-create the worker log bind-mount directory so Docker doesn't create it as root
+    # (see utils/Initialize-WorkerLogDirectories.ps1 and docker-compose.override.yml).
+    Initialize-WorkerLogDirectories -LogDirectory (Join-Path $ScriptRoot "results" "logs")
 
     # 6. Restart JIM containers
     Write-Host "${GRAY}  Starting JIM containers...${NC}"
@@ -2166,24 +2164,12 @@ Write-Success "Saved API key to .api-key"
 $step3Start = Get-Date
 Write-Section "Step 3: Starting Services"
 
-# Pre-create bind-mount directories so Docker doesn't create them as root.
-# docker-compose.override.yml mounts ./test/integration/results/logs/worker:/var/log/jim
-# and the test runner later writes scenario logs into results/logs/. If Docker creates
-# these directories first they end up root-owned, which blocks Start-Transcript (runs as
-# the current user) on Linux hosts.
-$workerLogMount = Join-Path $scriptRoot "results" "logs" "worker"
-if (-not (Test-Path $workerLogMount)) {
-    New-Item -ItemType Directory -Path $workerLogMount -Force | Out-Null
-}
-# Make the bind-mount writable by the worker container's non-root user (UID 1654,
-# baked into JIM.Worker/Dockerfile). Host bind mounts inherit the host directory's
-# permissions, and the host dir is owned by UID 1000 mode 0755 — UID 1654 has no
-# write access, so Serilog's file sink fails silently and no jim.worker.<date>.log
-# is ever created. Without this chmod, Stream-WorkerLogs.ps1 spins until its 120s
-# timeout and metrics streaming produces only the summary, not per-span data.
-if ($IsLinux -or $IsMacOS) {
-    & chmod 0777 $workerLogMount 2>$null
-}
+# Pre-create the worker log bind-mount directory (owned by the current user) so the Docker
+# daemon does not auto-create it as root, and make it writable for the non-root worker UID
+# (1654, baked into JIM.Worker/Dockerfile). Fails fast with a remediation if a prior
+# non-runner stack-up (jim-stack/jim-reset) already created it as root and we cannot repair
+# it. See utils/Initialize-WorkerLogDirectories.ps1 for the full rationale.
+Initialize-WorkerLogDirectories -LogDirectory (Join-Path $scriptRoot "results" "logs")
 
 Write-Step "Starting JIM stack..."
 $jimResult = docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d 2>&1

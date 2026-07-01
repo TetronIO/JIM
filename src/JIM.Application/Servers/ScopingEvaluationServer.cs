@@ -94,9 +94,10 @@ public class ScopingEvaluationServer
         // carries one, evaluating it would silently drop objects from scope; hard-fail so it is reported instead.
         EnsureOperatorValidForType(criterion, criterion.MetaverseAttribute.Type, criterion.MetaverseAttribute.Name);
 
-        // Get the MVO attribute value
+        // Get the MVO attribute value (excluding asserted-null markers, #91: scoping must evaluate against a real
+        // value or genuine absence, so an asserted null is treated as "no value present" like an absent row)
         var mvoAttributeValue = mvo.AttributeValues
-            .FirstOrDefault(av => av.AttributeId == criterion.MetaverseAttribute.Id);
+            .FirstOrDefault(av => av.AttributeId == criterion.MetaverseAttribute.Id && !av.NullValue);
 
         // Handle null/missing attribute values
         if (mvoAttributeValue == null)

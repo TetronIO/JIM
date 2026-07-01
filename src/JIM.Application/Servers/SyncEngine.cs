@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Interfaces;
+using JIM.Application.Services;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
@@ -42,7 +43,8 @@ public partial class SyncEngine : ISyncEngine
         IExpressionEvaluator? expressionEvaluator = null,
         bool skipReferenceAttributes = false,
         bool onlyReferenceAttributes = false,
-        bool isFinalReferencePass = false)
+        bool isFinalReferencePass = false,
+        AttributePriorityContext? priorityContext = null)
     {
         var warnings = new List<AttributeFlowWarning>();
 
@@ -59,7 +61,7 @@ public partial class SyncEngine : ISyncEngine
 
             ProcessMapping(cso, syncRuleMapping, objectTypes, expressionEvaluator,
                 skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass,
-                cso.ConnectedSystemId, warnings);
+                cso.ConnectedSystemId, warnings, syncRule.MetaverseObjectTypeId, priorityContext);
         }
 
         return warnings;

@@ -266,6 +266,21 @@ public class JimDbContext : DbContext
             .HasOne(moav => moav.MetaverseObject)
             .WithMany(mo => mo.AttributeValues);
 
+        // Attribute priority provenance (#91): the Synchronisation Rule whose mapping won resolution and
+        // contributed this value. SetNull on rule deletion so the denormalised ContributedBySystemId record
+        // survives; ContributedBySyncRuleId then reads null (provenance no longer resolvable to a live rule).
+        modelBuilder.Entity<MetaverseObjectAttributeValue>()
+            .HasOne(moav => moav.ContributedBySyncRule)
+            .WithMany()
+            .HasForeignKey(moav => moav.ContributedBySyncRuleId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Asserted-null marker (#91): false by default. The store-level default backfills existing rows so they
+        // remain ordinary value rows, never asserted nulls.
+        modelBuilder.Entity<MetaverseObjectAttributeValue>()
+            .Property(moav => moav.NullValue)
+            .HasDefaultValue(false);
+
         modelBuilder.Entity<MetaverseObjectAttributeValue>()
             .HasOne(moav => moav.ReferenceValue)
             .WithMany();
@@ -287,6 +302,18 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<SyncRuleMapping>()
             .Property(srm => srm.InboundValueProcessing)
             .HasDefaultValue(InboundValueProcessing.TreatWhitespaceAsNoValue);
+
+        // Attribute priority (#91). Priority defaults to int.MaxValue (the safe-addition sentinel) so existing
+        // import mappings, and any newly added one, never win resolution until an admin explicitly orders the
+        // attribute's priority list. NullIsValue defaults to false (fallback behaviour). The store-level defaults
+        // backfill existing rows on migration.
+        modelBuilder.Entity<SyncRuleMapping>()
+            .Property(srm => srm.Priority)
+            .HasDefaultValue(int.MaxValue);
+
+        modelBuilder.Entity<SyncRuleMapping>()
+            .Property(srm => srm.NullIsValue)
+            .HasDefaultValue(false);
 
         // ObjectMatchingRule can belong to either SyncRule or ConnectedSystemObjectType (mutually exclusive)
         modelBuilder.Entity<SyncRule>()

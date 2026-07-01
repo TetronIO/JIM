@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Application.Services;
 using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Logic;
@@ -49,6 +50,11 @@ public interface ISyncEngine
     /// <param name="skipReferenceAttributes">If true, skip reference attributes (deferred to second pass).</param>
     /// <param name="onlyReferenceAttributes">If true, process only reference attributes.</param>
     /// <param name="isFinalReferencePass">If true, this is the final cross-page resolution pass.</param>
+    /// <param name="priorityContext">
+    /// Optional per-run attribute priority cache (#91). When supplied, multi-contributor attributes are resolved by
+    /// the inline incumbent-comparison gate so a lower-priority contribution does not overwrite a higher-priority
+    /// one; when null (the default), every mapping flows as before (last-writer-wins).
+    /// </param>
     /// <returns>A list of warnings generated during Attribute Flow, empty if none.</returns>
     List<AttributeFlowWarning> FlowInboundAttributes(
         ConnectedSystemObject cso,
@@ -57,7 +63,8 @@ public interface ISyncEngine
         IExpressionEvaluator? expressionEvaluator = null,
         bool skipReferenceAttributes = false,
         bool onlyReferenceAttributes = false,
-        bool isFinalReferencePass = false);
+        bool isFinalReferencePass = false,
+        AttributePriorityContext? priorityContext = null);
 
     /// <summary>
     /// Evaluates whether Pending Exports have been confirmed by a CSO's current attribute state.

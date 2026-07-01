@@ -151,7 +151,7 @@ public class SyncServer : ISyncServer
             };
 
             foreach (var attributeValue in attributesToCapture)
-                MetaverseServer.AddMvoChangeAttributeValueObject(change, attributeValue, ValueChangeType.Remove);
+                change.AddAttributeValueChange(attributeValue, ValueChangeType.Remove);
 
             await _syncRepo.DeleteMetaverseObjectAsync(metaverseObject);
             await _syncRepo.CreateMetaverseObjectChangeDirectAsync(change);
@@ -257,8 +257,9 @@ public class SyncServer : ISyncServer
         ConnectedSystemObject cso,
         MetaverseObject? mvo,
         List<SyncRule> exportRules,
-        Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null)
-        => _drift.EvaluateDrift(cso, mvo, exportRules, importMappingsByAttribute);
+        Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null,
+        AttributePriorityContext? priorityContext = null)
+        => _drift.EvaluateDrift(cso, mvo, exportRules, importMappingsByAttribute, priorityContext);
 
     #endregion
 

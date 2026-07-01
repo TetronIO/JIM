@@ -1,8 +1,8 @@
 # Attribute Priority Design Document
 
-- **Status:** Doing (design approved; implementation deferred)
+- **Status:** Doing (Phase 1 schema/model/API landed; Phase 2 engine core + auto-assign landed; drift/recall/observability increments and UI open)
 - **Issue:** [#91](https://github.com/TetronIO/JIM/issues/91)
-- **Last Updated**: 2026-06-19
+- **Last Updated**: 2026-06-26
 
 ## Overview
 
@@ -476,6 +476,82 @@ AttributeResolution ResolveAttributeValue(MetaverseObject mvo, MetaverseAttribut
 
 > **Implementation notes:** the MVO stores only the *winning* contribution (`MetaverseObjectAttributeValue` stamped with `ContributedBySyncRuleId` and `ContributedBySystemId`); it does not retain the losing contributions. `EvaluateContribution` therefore implies reading the MVO's other joined CSOs, and evaluating scoping criteria against them, at resolution time whenever fallback is needed. `AssertedNull` persists a row with `NullValue=true` and provenance, whereas `NoContributor` persists no row; the two are distinct at rest (see "Asserted-null observability" in the decision section).
 
+#### Engine Integration and Pipeline Placement (Phase 2)
+
+> **Status:** design proposed Jun 2026; awaiting approval before implementation. The `ResolveAttributeValue` pseudo-code above defines the *semantics*; this section pins down *where* resolution runs in the engine and *how* it stays fast.
+
+**Requirement: the inbound pipeline stays linear.** Resolution happens at the point the Metaverse Object attribute is written, as part of attribute flow; it is **not** a separate re-evaluation pass run after attribute flow has already mutated the Metaverse Object. The per-object inbound pipeline is:
+
+```mermaid
+flowchart LR
+    A["Import: staged CSO data"] --> B["CSO create / update"]
+    B --> C["Join / project to MVO"]
+    C --> D{"Per mapped MVO attribute:<br/>priority resolution"}
+    D --> E["Write winning MVO attribute value<br/>+ provenance (winning rule + system)"]
+    E --> F["Export evaluation"]
+```
+
+Resolution is step D, inline. Inbound never writes to a Connected System Object or a Connected System; a losing contribution simply never reaches the Metaverse Object.
+
+**Current state (to be replaced).** Today attribute flow is applied per Connected System Object independently: each CSO's mapping diffs its own value into the Metaverse Object and, for a single-valued attribute, the last CSO processed wins (`SyncEngine.AttributeFlow.cs`). No point in the flow sees all contributors to one attribute together, so the result depends on sync order.
+
+**The performance lever: the winner's provenance is already on the row.** Phase 1 stamps every contributed Metaverse Object attribute value with `ContributedBySyncRuleId` (the rule that won). So when a contribution arrives, the engine does not re-evaluate every contributor; it compares the incoming rule's priority against the *stored incumbent's* priority. That is an O(1) decision in the common case, with a full re-evaluation only in the rare case where the current winner retracts.
+
+**Per-contribution decision (step D):**
+
+```mermaid
+flowchart TD
+    S["Rule R flows attribute A to this MVO"] --> M{"A multi-contributor?<br/>(cached schema-level count)"}
+    M -- "No (sole contributor)" --> ACT
+    M -- "Yes" --> I{"Current winner row for A?"}
+    I -- "No row" --> ACT
+    I -- "Incumbent rule X" --> CMP{"R vs X<br/>(current priorities)"}
+    CMP -- "R is X" --> RU{"R still has a<br/>definite opinion?"}
+    CMP -- "R outranks X" --> ACT
+    CMP -- "R ranks below X" --> LOSE["Skip write; EnforceState export corrects R's source if configured"]
+    RU -- "Yes (value, or asserts null)" --> ACT
+    RU -- "No (cleared / disconnected / out of scope)" --> FB["Next-contributor fallback (rare)"]
+    FB --> RES["Resolve over remaining contributors:<br/>load other joined CSOs + scoping"]
+    ACT{"Act on R's<br/>contribution state"} -- "ConnectedWithValue" --> WV["Write value; stamp provenance R"]
+    ACT -- "ConnectedNoValue + NullIsValue" --> WN["Write NullValue row; stamp provenance R"]
+    ACT -- "ConnectedNoValue, no NullIsValue" --> AB["R abstains: clear if R was the sole/incumbent contributor; else leave incumbent"]
+    ACT -- "RuleNotApplicable" --> NC["No contribution from R (clear-on-disconnect is the recall path)"]
+```
+
+**Two separable concerns (why the fast path equals `Resolve`).** The decision tree factors into (1) *does R win?*, decided purely by priority comparison against the stored incumbent (single contributor and "no row yet" are degenerate wins; equal priority cannot occur within one attribute because validation forbids it, but ties still break by mapping id for safety); and (2) *what does winning write?*, decided purely by R's tri-state at the `ACT` node. Keeping these separate is the correctness crux: a higher-priority arrival is **not** automatically "write a value". If R outranks the incumbent but is a `ConnectedNoValue`+`NullIsValue` assertion, winning means writing a `NullValue` row over the incumbent's value (the headline "clears must propagate" case); if R is a `ConnectedNoValue` abstention it is not a win at all (leave the incumbent); if R is `RuleNotApplicable` it contributes nothing. The `ACT` node is the single place both the inline fast path and the `Resolve` fallback apply outcome semantics, which is what makes them equivalent by construction and is the target of the proposed fast-path-equals-`Resolve` property test.
+
+**Next-contributor fallback (the only expensive path).** When the current winner stops contributing (its rule clears the value without `NullIsValue`, its CSO disconnects or falls out of scope, or its rule/mapping is deleted so the stored `ContributedBySyncRuleId` no longer resolves to a live contributor), the engine evaluates the remaining contributors for that attribute to find the new winner, calling the `AttributePriorityService.Resolve` core over the freshly evaluated contributions. This is where the Metaverse Object's other joined CSOs and their scoping are read. It is bounded by the join count (usually a handful) and only fires on retraction/disconnect, not on every sync. This same path replaces the interim grace-period recall freeze (Phase 2c). A subtlety to test: a sibling CSO not yet processed this run is read at its pre-run state, so the fallback may elect an interim winner that a later contributor overwrites within the same run; the end state still converges to the highest-priority contributor, but it means resolution is eventually-consistent within a run, not single-pass final.
+
+**Options considered.**
+
+| Option | Where resolution runs | Cost model | Verdict |
+|--------|-----------------------|------------|---------|
+| **A. Inline at attribute write, incumbent-comparison** | Step D of the linear pipeline; compare the incoming rule's priority to the stored winner's | Single-contributor attributes unchanged. Multi-contributor: +1 cached lookup per contribution; losers skip the write. Full re-evaluation only on winner retraction. | **Recommended.** Linear, elegant, common path O(1); can *reduce* writes for multi-contributor attributes. |
+| **B. Post-flow re-evaluation pass** | A second pass after attribute flow, before export | Re-evaluates all contributors for every touched attribute, every run | Rejected: non-linear (the "update then re-evaluate" shape), and re-reads contributors even when nothing changed. |
+| **C. Collect-all-then-resolve per MVO** | Gather every contributor's value for the Metaverse Object, then resolve per attribute in one place | Loads all joined CSOs and evaluates all their mappings up front, per Metaverse Object, every run | Rejected: breaks per-CSO streaming, higher memory and CPU at scale, larger hot-path rewrite. |
+
+```mermaid
+flowchart LR
+    subgraph OptA["Option A: inline (recommended)"]
+      direction LR
+      a1["CSO syncs"] --> a2["compare to stored winner"] --> a3["write or skip"]
+    end
+    subgraph OptB["Option B: post-flow pass"]
+      direction LR
+      b1["all CSOs sync, last-writer-wins"] --> b2["re-evaluate every touched attribute"] --> b3["rewrite winners"]
+    end
+```
+
+**Performance analysis (the headline).**
+
+- **Single-contributor attributes (the vast majority) cost effectively nothing extra.** A per-run cache lookup (a schema-level count of import mappings targeting the attribute, not a runtime join count) says an attribute has one contributor, and the engine uses today's write path unchanged apart from stamping `ContributedBySyncRuleId` alongside the existing `ContributedBySystemId`; the incumbent-comparison machinery never engages.
+- **Multi-contributor attributes add one dictionary lookup per contribution** (the incumbent rule's priority), with no extra database round-trips in the steady state: the incumbent's identity is already on the Metaverse Object attribute value row, and the priority list is cached per run.
+- **It usually reduces work.** Today every CSO contributing to a shared attribute writes to the Metaverse Object (last-writer-wins overwrites). Under Option A a losing contribution is detected by an O(1) comparison and **skips the write and its change record entirely**, so in the steady state multi-contributor attributes generate fewer Metaverse Object writes and less change history. The exception is the rare retraction path: electing a next-contributor can add a transient write that a later sibling overwrites within the same run (see the fallback note above); net effect remains fewer writes overall.
+- **The expensive path is rare and bounded.** Loading other joined CSOs only happens on winner retraction/disconnect, bounded by the Metaverse Object's join count.
+- **Caches:** the per-(Metaverse Object Type, attribute) priority list and the per-(system, attribute) contributor lookup are built once per run, mirroring (and ideally sharing) the existing `DriftDetectionService` import-mapping cache. No per-object query.
+
+**Relationship to the resolver core.** The pure `AttributePriorityService.Resolve(contributions)` (built and unit-tested in Phase 2a) defines the canonical semantics. The inline incumbent-comparison is an O(1) specialisation that yields the identical outcome for the common single-incoming-contribution case; the fallback path calls `Resolve` directly over the gathered contributions. The two are consistent by construction and can be cross-checked with a property test (fast-path result equals `Resolve` result).
+
 #### Interaction with Drift Detection (priority-aware contributor check)
 
 The shipped drift detection treats any system with an import mapping for an attribute as a legitimate contributor (`DriftDetectionService.HasImportRuleForAttribute`; see [DRIFT_DETECTION.md](../done/DRIFT_DETECTION.md)) and skips drift evaluation for it. Once attribute priority lands, **contributor legitimacy must become priority-aware**:
@@ -595,7 +671,11 @@ Schema > Data Flow
 
 **One management home (architecture principle).** The reorder + "Null is a value" management gesture is owned by **Surface 2**. Surface 1 shows a read-only view and links to Surface 2; Surface 3 links to Surface 2. This avoids multiple authoritative places to change precedence, removing both inconsistency risk and "which surface wins?" confusion.
 
-**Shared component and shared write path.** The ordered contributor-list control (priority, sync rule, connected system, enabled/disabled greyed state, "Null is a value", drag handle) is a reusable Blazor component used by **Surface 2** (Surface 1 renders the same list read-only). Reorder saves go through one "get/set attribute priority order" API for a (MVO object type, MVO attribute) pair, which renumbers all affected `SyncRuleMapping.Priority` rows transactionally: reordering inherently renumbers siblings across *other* sync rules, so a per-surface ad-hoc write would risk duplicate priorities. New mappings created on Surface 1 simply persist at the safe-addition default and are reordered later on Surface 2; this also sidesteps the awkwardness of renumbering persisted sibling priorities from inside an unsaved mapping form.
+**Shared component and shared write path.** The ordered contributor-list control (priority, sync rule, connected system, enabled/disabled greyed state, "Null is a value", drag handle) is a reusable Blazor component used by **Surface 2** (Surface 1 renders the same list read-only). Reorder saves go through the attribute-priority-order API for a (MVO object type, MVO attribute) pair, which **always renumbers all affected `SyncRuleMapping.Priority` rows server-side in one transaction**: reordering inherently renumbers siblings across *other* sync rules, so the renumbering must never be the caller's responsibility (a per-surface ad-hoc write would risk duplicate priorities and an indeterminate engine selection). Two write shapes are offered, both server-renumbered and both returning the resulting order so the caller never re-fetches:
+> - **Move one mapping to a position** (the primary primitive): the caller states only "put mapping X at position N"; the engine shuffles the others and renumbers. A single drag-drop gesture maps to exactly one move call. This is the safe default; an admin cannot leave the list in a two-at-position-2 state, and cannot forget to renumber the others.
+> - **Replace the whole order**: the caller submits the complete ordered list (validated as exactly the current contributor set). For surfaces that batch several pending reorders behind a single "Save".
+>
+> New mappings created on Surface 1 simply persist at the safe-addition default and are reordered later on Surface 2; this also sidesteps the awkwardness of renumbering persisted sibling priorities from inside an unsaved mapping form.
 
 **Bulk-prioritise a connected system (later-phase feature).** "Make connected system X authoritative for everything it contributes" = move X's import flows to priority 1 for every attribute it contributes to. High blast radius (mass authority shift across many attributes and objects), so it is a prime consumer of the configuration-change preview framework (#827) and must offer impact analysis before applying. Deferred to a later phase; would live most naturally on the Data Flow page.
 
@@ -661,35 +741,53 @@ Not a sub-issue: **#846** (holistic Guardrails) is deliberately *out of scope* (
 
 - [x] Decided (Jun 2026): place in the **Schema** concept now; **"Both"** navigation model; three surfaces (mapping editor, MVO object type detail page management home, Schema "Data Flow" discovery page). Reorder owned by Surface 2 ("one management home"). **Policy** recorded as the future home for cross-cutting governance (RBAC, lifecycle workflows); not stood up for this one feature, with only Surface 3 a candidate to migrate later. See UI section 1a and Open Question 6.
 
-#### Phase 1: Schema and Model Changes
+#### Phase 1: Schema and Model Changes ✅
+
+> Landed Jun 2026 via PR #868 (squash-merged to `main`). The one item not fully ticked below (`ContributedBySyncRuleId` threading through attribute creation) is deliberately Phase 2 engine work, not a Phase 1 gap.
 
 - [x] Add `ContributedBySystemId` scalar FK to `MetaverseObjectAttributeValue` (prerequisite; Feb 2026, commit `41116255`)
 - [x] Thread `contributingSystemId` through all 14 attribute creation paths in `SyncEngine.AttributeFlow.cs` (then `SyncRuleMappingProcessor`)
-- [ ] Add `Priority` property to `SyncRuleMapping` model (default: int.MaxValue)
-- [ ] Add `NullIsValue` property to `SyncRuleMapping` model (default: false)
-- [ ] Add `ContributedBySyncRuleId` FK to `MetaverseObjectAttributeValue` (winning rule provenance); thread it through the same attribute creation paths that set `ContributedBySystemId`
-- [ ] Add `NullValue` boolean to `MetaverseObjectAttributeValue` (default: false; asserted-null marker)
-- [ ] Create database migration
-- [ ] Update API DTOs
-- [ ] Add API endpoint to get/set attribute priority order
+- [x] Add `Priority` property to `SyncRuleMapping` model (default: int.MaxValue)
+- [x] Add `NullIsValue` property to `SyncRuleMapping` model (default: false)
+- [~] Add `ContributedBySyncRuleId` FK to `MetaverseObjectAttributeValue` (winning rule provenance): model property, nav, `OnDelete(SetNull)` config and migration **done**; threading it through the attribute creation paths that set `ContributedBySystemId` remains Phase 2 engine work
+- [x] Add `NullValue` boolean to `MetaverseObjectAttributeValue` (default: false; asserted-null marker)
+- [x] Create database migration (`20260624174100_AddAttributePriorityAndProvenance`)
+- [x] Update API DTOs (`SyncRuleMappingDto.Priority`/`NullIsValue`; `CreateSyncRuleMappingRequest.NullIsValue`)
+- [x] Add API endpoints to get/set/move attribute priority order, all keyed by (Metaverse Object Type, Metaverse attribute) and homed under the Metaverse Attribute resource (priority is a Metaverse Attribute concern, so the endpoints live on `MetaverseController`, not `SynchronisationController`), all transactional and returning the resulting order; unit-tested:
+  - `GET /metaverse/attributes/{metaverseAttributeId}/priorities/{metaverseObjectTypeId}` reads the ordered contributor list.
+  - `PUT /metaverse/attributes/{metaverseAttributeId}/priorities/{metaverseObjectTypeId}` replaces the **whole** order (complete-set validation; for drag-reorder-then-save surfaces).
+  - `PUT /metaverse/attributes/{metaverseAttributeId}/priorities/{metaverseObjectTypeId}/mappings/{mappingId}` **moves a single mapping** to a 1-based position (body: `position`, optional `nullIsValue`); the engine shuffles the other contributors and renumbers, so a caller never restates the whole list or renumbers siblings itself. This is the footgun-free reorder primitive the drag-drop UI and PowerShell will use. Position is clamped to range; only rows that actually changed are persisted/audited; a no-op move writes nothing.
+  - Routing note: nesting `priorities` under `attributes/{id:int}` does not clash with `GET /metaverse/attributes/{id:int}`; the int route constraint and ASP.NET Core's literal-over-parameter precedence keep them distinct. The application-layer logic stays on `ConnectedSystemServer` (it operates on `SyncRuleMapping` rows alongside the other mapping methods); only the HTTP surface moved.
 
 #### Phase 2: Attribute Priority Logic
 
-- [ ] Create `AttributePriorityService` in `src/JIM.Application/Services/`
-- [ ] Implement the tri-state contribution evaluation (`RuleNotApplicable` / `ConnectedNoValue` / `ConnectedWithValue`), respecting rule enabled state and scoping criteria
-- [ ] Implement winner-takes-all-values MVA resolution (winning rule replaces the full value set; per-row `ContributedBySystemId` makes the diff computable)
-- [ ] Integrate into inbound sync processing (`SyncEngine.AttributeFlow.cs`)
-- [ ] Auto-assign priority on new import mapping creation (max existing + 1); deterministic tie-break in resolution
-- [ ] Make the drift detection contributor check priority-aware: legitimate only when the contribution wins resolution (replaces the has-import-rule check in `DriftDetectionService`)
-- [ ] Replace the interim grace period recall freeze with proper next-contributor fallback
+> **Engine integration design approved (Jun 2026); linear inline resolution (Option A).** See "Engine Integration and Pipeline Placement (Phase 2)" in the Design section above: linear inline resolution at the attribute-write step, with an O(1) incumbent-comparison fast path (using the Phase 1 `ContributedBySyncRuleId` provenance) and a rare next-contributor fallback.
+>
+> **Phase 2a + 2b landed on branch `claude/github-issue-91-phase2`** (live in the worker, end-to-end tested):
+> - **Resolution core + gate:** `AttributePriorityService.Resolve`; the per-run contributor cache and inline incumbent-comparison gate (`AttributePriorityContext`, built once per run from `allSyncRules` in `BuildDriftDetectionCache`, threaded through `ProcessInboundAttributeFlow` → `FlowInboundAttributes` → `ProcessMapping`); `ContributedBySyncRuleId` provenance on every flowed value; the no-value ACT node (`ApplyNoValueOutcome`: assert-null marker / abstain-leave-incumbent / clear), with expression-null and direct-absent unified into one `ConnectedNoValue` signal.
+> - **Asserted null (2b):** `NullValue` markers honoured (`HonourNullAssertions`), with the read-filter excluding markers from export/drift/scoping value sourcing while inbound resolution and observability keep them; MVO change-tracking skips markers. Verified end-to-end by `AttributePriorityWorkflowTests`.
+> - **Auto-assign priority on new import mapping creation (landed):** `ConnectedSystemServer.CreateSyncRuleMappingAsync` now densifies the target attribute's contributor list to a dense `1..N` (newcomer last) when the attribute already has contributors, so a newly added import flow never wins resolution until reordered; a sole contributor stays at the `int.MaxValue` sentinel. Densify (not a literal "max + 1") avoids the sentinel-overflow that would otherwise promote the newcomer to the top, and is order-preserving (no resolution outcome changes; only the stored numbers become explicit).
+> - **Next-contributor recall fallback (Phase 2c) landed:** when a winning contributor's CSO is obsoleted and its values recalled (`SyncTaskProcessorBase.ProcessObsoleteConnectedSystemObjectAsync` → `ReElectSurvivingContributorsAsync`), still-joined lower-priority survivors are re-flowed through the normal attribute-flow gate so the highest-priority survivor is re-elected instead of the attribute being blanked; re-elected values feed change-tracking and export evaluation. The interim grace-period recall *freeze* is replaced by per-attribute behaviour: an attribute with a surviving contributor is re-elected even during the grace window (a change-of-value, not a clear), while an attribute with no other contributor is frozen (preserved) until the grace window resolves, exactly as for a single-source object. **Still open within 2c:** reference-attribute re-election (recalled reference attributes are re-elected on a subsequent sync, not in the recall pass).
+> - **`SyncOutcome` AssertedNull node landed (Phase 2d):** a new `ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull` is emitted (Detailed tracking) as a child of the inbound flow outcome when a "Null is a value" contributor asserts null (a `NullValue` marker written this run), with a count of the asserted attributes; surfaced in the RPEI outcome graph (colour/label/icon added). The companion **NoContributor** node is deliberately deferred: an abstain writes nothing and a blank is the default state, so it needs an explicit engine→worker tally and a non-noisy "when is this a notable event" definition before it earns its complexity.
+> - **Priority-aware drift contributor check landed:** `DriftDetectionService.EvaluateDrift` now treats a system as a drift-exempt contributor only when it *won* resolution for the attribute (the MVO value's `ContributedBySystemId`, denormalised from the winning rule), not merely because it has an import rule; a losing contributor's diverged local value is corrected as drift via the EnforceState export. Gated on multi-contributor attributes (single-contributor unchanged) and an optional priority context threaded into `EvaluateDrift`. Keyed on the winning *system* (drift correction re-aligns a system's object); coincides with rule-level for one-CSO-per-system topologies including the dual-forest worked example. **Open:** the rule-granular refinement for the exotic case of one MVO joined to multiple objects of the *same* system contributing one attribute via different-priority rules (needs a scope evaluation at drift time).
+> - **Still open (separate increments):** the `SyncOutcome` **NoContributor** node, and reference-attribute re-election. UI is Phase 3.
+
+- [x] Create `AttributePriorityService` in `src/JIM.Application/Services/` (hosts the side-effect-free `Resolve` core); plus `AttributePriorityContext` hosting the per-run contributor cache and the O(1) `ShouldApply` gate decision
+- [~] Implement the tri-state contribution evaluation (`RuleNotApplicable` / `ConnectedNoValue` / `ConnectedWithValue`): the engine evaluates the incoming contribution's value/no-value state and compares it against the incumbent inline; rule enabled state and scoping resolve to `RuleNotApplicable` worker-side (the worker only flows enabled, in-scope rules), so a disabled/out-of-scope rule simply never reaches `ProcessMapping`
+- [x] Implement winner-takes-all-values MVA resolution (the winning rule's existing per-type diff replaces the full value set; a losing contribution skips the write entirely)
+- [x] Integrate into inbound sync processing (`SyncEngine.AttributeFlow.cs`): inline gate + no-value ACT node wired into `ProcessMapping`/`ProcessExpressionMapping` (worker context-passing pending, see blockquote)
+- [x] Auto-assign priority on new import mapping creation: densify the attribute's contributor list to a dense 1..N with the newcomer last when it already has contributors (a sole contributor keeps the int.MaxValue sentinel). Densify rather than a literal "max + 1" so the all-sentinel transitional state cannot overflow and promote the newcomer; order-preserving, so resolution outcomes are unchanged. The existing (Priority asc, Id asc) resolution tie-break is the safety net for any residual ties
+- [x] Keep the contributor list dense on **removal** too: deleting an import mapping (`DeleteSyncRuleMappingAsync`) or a whole contributing rule (`DeleteSyncRuleAsync`, re-densifying each attribute the rule contributed to) re-densifies the remaining contributors to 1..N, closing the gap a removed contributor would otherwise leave; a sole remaining contributor resets to the int.MaxValue sentinel. Add, reorder, and delete now all maintain the dense-list invariant. Order-preserving (resolution already tolerates gaps); the consistency matters for the UI and data model
+- [~] Make the drift detection contributor check priority-aware: legitimate only when the contribution wins resolution (refines the has-import-rule check in `DriftDetectionService.EvaluateDrift`, gated on multi-contributor attributes via an optional priority context; a losing contributor's diverged value is corrected as drift). Keyed on the winning rule's system (`ContributedBySystemId`); exact for one-CSO-per-system topologies (incl. the dual-forest worked example). **Open:** rule-granular refinement (scope evaluation) for the exotic multiple-objects-of-one-system-on-one-MVO case
+- [~] Next-contributor fallback on recall: landed (`ReElectSurvivingContributorsAsync` re-elects a still-joined lower-priority survivor through the attribute-flow gate when a winning contributor's CSO is obsoleted, instead of blanking the attribute). The interim grace-period recall freeze is replaced by per-attribute behaviour (re-elect where a survivor exists, even under grace; freeze only single-source attributes with no survivor). Still open: reference-attribute re-election (recalled references re-elect on a subsequent sync, not in the recall pass)
 - [ ] (Out of attribute-priority scope; deferred to a holistic **Guardrails** capability) Mass-change protection for `NullIsValue`-driven clears is one special case of a broader concern (mass clears, updates, deletes, exports). Do **not** build a one-off fence inside attribute priority; tracked as #846
 - [ ] (Deferred beyond first release) Track "configuration changed since last full synchronisation" per affected object type (apply-only propagation mode); the apply-only save-time acknowledgement still ships in the first release
-- [ ] Persist asserted nulls as `MetaverseObjectAttributeValue` rows with `NullValue=true` and `ContributedBySyncRuleId`/`ContributedBySystemId` provenance; the resolution write path manages row lifecycle (value to asserted-null to absent transitions, no duplicate markers)
-- [ ] Filter `NullValue=true` rows out of engine-side MVOAV read queries (inbound `removedAttributes`/`changedAttributes` diff, drift / full-sync expected-state, export value sourcing, MVA enumeration/counts) so asserted nulls are invisible to the hot path exactly as absent rows are; include them only in observability/UI reads and the write path. This is both the integrity invariant and the query optimisation; evaluate a partial index excluding `NullValue=true`. Test the inbound-diff case explicitly (stale value must clear when resolution flips to asserted null)
-- [ ] Stamp `ContributedBySyncRuleId` on every winning contribution (alongside the existing `ContributedBySystemId`) so the MVO attribute view can show the contributing rule, not just the system
-- [ ] Emit "asserted null" and "no contributor" as `SyncOutcome` node types in the RPEI outcome graph (#363) for observability (first release)
+- [x] Persist asserted nulls as `MetaverseObjectAttributeValue` rows with `NullValue=true` and `ContributedBySyncRuleId`/`ContributedBySystemId` provenance; the resolution write path (`ApplyNoValueOutcome`) manages row lifecycle (value to asserted-null to absent transitions, idempotent markers, no churn on re-assertion)
+- [x] Filter `NullValue=true` rows out of engine-side MVOAV value-consuming reads (export value sourcing + export expression dictionary in `ExportEvaluationServer`; drift expected-state + drift expression dictionary in `DriftDetectionService`; export-rule scoping in `ScopingEvaluationServer`) so asserted nulls are invisible to those reads exactly as absent rows are; inbound resolution, the write/reconcile path, and observability/UI reads deliberately keep them. Object matching needed no change (its predicates already require a non-null value column). `HonourNullAssertions` was flipped on once the filters landed so a marker is never written before the read paths exclude it. Also fixed: MVO change-tracking threw on marker rows (type switch only matches non-null value columns); markers are now skipped there, with the real value's removal carrying the observable change. A partial index excluding `NullValue=true` remains an optimisation to evaluate at scale. **Verified end-to-end** by `AttributePriorityWorkflowTests` (assert-null clears the lower-priority value, the marker persists with provenance, and a later sync does not resurrect)
+- [x] Stamp `ContributedBySyncRuleId` on every winning contribution (alongside the existing `ContributedBySystemId`) so the MVO attribute view can show the contributing rule, not just the system
+- [~] Emit "asserted null" and "no contributor" as `SyncOutcome` node types in the RPEI outcome graph (#363) for observability (first release). **AssertedNull landed** (`ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull`, emitted in Detailed tracking as a child of the inbound flow outcome with an asserted-attribute count; UI colour/label/icon added). **NoContributor deferred**: needs an explicit engine→worker tally and a non-noisy definition of when a blank is a notable event (a blank is the default state)
 - [ ] (Deferred beyond first release; gated on #288) Expose a single-object resolution trace ("explain this attribute") via the #288 Sync Preview engine
-- [ ] Unify expression-null and direct-absent into a single `ConnectedNoValue` signal feeding the resolver (replace the current unconditional clear at `SyncEngine.AttributeFlow.cs:204`). Related spin-off issues: expression evaluation failures surfacing as RPEI errors are prerequisite bug #842 (shipped); whitespace handling is per-mapping value processing #843 (shipped)
+- [x] Unify expression-null and direct-absent into a single `ConnectedNoValue` signal feeding the resolver (replaced the former unconditional clear at `SyncEngine.AttributeFlow.cs:204`; expression null/processed-empty/array-empty and direct source-absent all route through `ApplyNoValueOutcome`). Related spin-off issues: expression evaluation failures surfacing as RPEI errors are prerequisite bug #842 (shipped); whitespace handling is per-mapping value processing #843 (shipped)
 
 #### Phase 3: UI Updates
 

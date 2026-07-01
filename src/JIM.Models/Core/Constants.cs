@@ -259,12 +259,27 @@ public static class Constants
         /// </summary>
         public const string ChangeTrackingMvoChangesEnabled = "ChangeTracking.MvoChanges.Enabled";
 
+        /// <summary>
+        /// Enables or disables change tracking for configuration objects (Synchronisation Rules, Connected Systems).
+        /// When enabled, a redacted, versioned configuration snapshot is captured on the Activity for each
+        /// configuration create/update/delete. When disabled, no configuration change history is recorded.
+        /// Default: true.
+        /// </summary>
+        public const string ChangeTrackingConfigurationChangesEnabled = "ChangeTracking.ConfigurationChanges.Enabled";
+
         // Maintenance Settings
         public const string MaintenanceMode = "Maintenance.IsEnabled";
 
         // Security Settings
         public const string CredentialEncryptionEnabled = "Security.CredentialEncryptionEnabled";
         public const string EncryptionKeyPath = "Security.EncryptionKeyPath";
+
+        /// <summary>
+        /// A server-held key (256-bit, base64, encrypted at rest) used to compute keyed hashes of secret configuration
+        /// values in change snapshots, so a credential change can be detected without storing the value and without the
+        /// history becoming an offline brute-force oracle. Generated automatically on first use; never displayed or edited.
+        /// </summary>
+        public const string ConfigurationChangeHashKey = "Security.ConfigurationChangeHashKey";
 
         // Worker Settings
         /// <summary>

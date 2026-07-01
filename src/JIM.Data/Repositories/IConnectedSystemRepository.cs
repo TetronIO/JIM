@@ -572,6 +572,25 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="mapping">The mapping to delete.</param>
     Task DeleteSyncRuleMappingAsync(SyncRuleMapping mapping);
+
+    /// <summary>
+    /// Gets the import mappings contributing to a given Metaverse attribute for a given Metaverse Object Type,
+    /// ordered by attribute priority (lowest Priority number first; mapping Id as the deterministic tie-break).
+    /// This is the priority list for the (Metaverse Object Type, Metaverse attribute) pair (#91). Disabled
+    /// Synchronisation Rules are included (they hold position in the list). The owning <see cref="SyncRule"/> and
+    /// its <see cref="ConnectedSystem"/> are eagerly loaded for display and provenance.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the priority list.</param>
+    /// <param name="metaverseAttributeId">The target Metaverse attribute.</param>
+    Task<List<SyncRuleMapping>> GetImportSyncRuleMappingsForMetaverseAttributeAsync(int metaverseObjectTypeId, int metaverseAttributeId);
+
+    /// <summary>
+    /// Persists priority/null-handling changes across a set of mappings in a single transaction (one
+    /// SaveChanges). Used when reordering an attribute's priority list, which inherently renumbers sibling
+    /// <see cref="SyncRuleMapping.Priority"/> rows across other Synchronisation Rules (#91).
+    /// </summary>
+    /// <param name="mappings">The mappings to persist.</param>
+    Task UpdateSyncRuleMappingsAsync(IReadOnlyCollection<SyncRuleMapping> mappings);
     #endregion
 
     public Task<List<ConnectedSystem>> GetConnectedSystemsAsync();

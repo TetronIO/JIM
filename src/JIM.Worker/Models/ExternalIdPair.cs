@@ -6,10 +6,13 @@ using JIM.Models.Staging;
 namespace JIM.Worker.Models;
 
 /// <summary>
-/// Used by the worker to keep track of cs import objects and their types.
+/// Tracks an imported object's external ID for deletion detection: the Connected System Object Type it belongs
+/// to (by ID) and the import attribute carrying the external ID value(s). Deletion detection only needs the type
+/// ID to group by and the typed value lists to compare, so this deliberately does not hold the full
+/// <see cref="ConnectedSystemObjectType"/> graph.
 /// </summary>
 public struct ExternalIdPair
 {
-    public ConnectedSystemObjectType ConnectedSystemObjectType { get; init; }
+    public int ConnectedSystemObjectTypeId { get; init; }
     public ConnectedSystemImportObjectAttribute ConnectedSystemImportObjectAttribute { get; init; }
 }

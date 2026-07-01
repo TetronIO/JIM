@@ -50,7 +50,8 @@ public class DriftDetectionService
         ConnectedSystemObject cso,
         MetaverseObject? mvo,
         List<SyncRule> exportRules,
-        Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null)
+        Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? importMappingsByAttribute = null,
+        AttributePriorityContext? priorityContext = null)
     {
         var result = new DriftDetectionResult();
 
@@ -147,6 +148,19 @@ public class DriftDetectionService
                             importMappingsByAttribute);
                     }
 
+                    // Priority-aware refinement (#91): for a multi-contributor attribute, having an import rule is not
+                    // enough to be drift-exempt. The system is a legitimate contributor only if its contribution WON
+                    // resolution, i.e. the Metaverse Object's current value for the attribute was contributed by this
+                    // system. A losing contributor's diverged local value is drift, to be corrected by the EnforceState
+                    // export. Single-contributor attributes (and runs without a priority context) keep the existing
+                    // has-import-rule behaviour. (Expression sources, mvoAttributeId == 0, are unaffected here.)
+                    if (isContributor && priorityContext != null && mvoAttributeId > 0
+                        && priorityContext.GetContributorCount(targetMvo.Type.Id, mvoAttributeId) > 1
+                        && !AttributeWonByConnectedSystem(targetMvo, mvoAttributeId, cso.ConnectedSystemId))
+                    {
+                        isContributor = false;
+                    }
+
                     Log.Debug("EvaluateDrift: Contributor check for CSO {CsoId}, attribute {AttrName}: " +
                         "mvoAttributeId={MvoAttrId}, csoConnectedSystemId={CsoSystemId}, isContributor={IsContributor}, " +
                         "hasExpression={HasExpression}, cacheKeys=[{CacheKeys}]",
@@ -206,6 +220,24 @@ public class DriftDetectionService
 
         return result;
     }
+
+    /// <summary>
+    /// Whether the given Connected System contributed the Metaverse Object attribute's current value(s) (#91). Under
+    /// winner-takes-all resolution every value row (and any asserted-null marker) for an attribute carries the winning
+    /// system's provenance (<see cref="MetaverseObjectAttributeValue.ContributedBySystemId"/>, denormalised from the
+    /// winning rule), so the system "won" resolution iff it stamped the current value. Used to make the drift
+    /// contributor check priority-aware: a system with an import rule that nonetheless lost resolution is not a
+    /// legitimate contributor, and its diverged value is drift to be corrected.
+    ///
+    /// Granularity note: priority is per Synchronisation Rule, but this check is keyed on the winning rule's *system*
+    /// because drift correction re-aligns a system's object, and JIM's standard topology is one Connected System Object
+    /// per system per Metaverse Object, where "winning system" and "winning rule" coincide. The two diverge only when a
+    /// single Metaverse Object is joined to multiple objects of the *same* system contributing the same attribute via
+    /// different-priority rules (e.g. two accounts in one directory); resolving that precisely would need a scope
+    /// evaluation here to identify the specific rule each object contributes through. Deferred as an exotic case.
+    /// </summary>
+    private static bool AttributeWonByConnectedSystem(MetaverseObject mvo, int mvoAttributeId, int connectedSystemId) =>
+        mvo.AttributeValues.Any(av => av.AttributeId == mvoAttributeId && av.ContributedBySystemId == connectedSystemId);
 
     /// <summary>
     /// Checks if a Connected System has import rules that flow to the specified MVO attribute.
@@ -379,9 +411,10 @@ public class DriftDetectionService
 
         if (isMultiValued)
         {
-            // Get ALL values for this attribute
+            // Get ALL values for this attribute (excluding asserted-null markers, #91, which carry no value:
+            // the expected state of a target attribute must be derived from real values only)
             var mvoAttrValues = mvo.AttributeValues
-                .Where(av => av.AttributeId == source.MetaverseAttribute.Id)
+                .Where(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue)
                 .ToList();
 
             if (mvoAttrValues.Count == 0)
@@ -420,9 +453,9 @@ public class DriftDetectionService
         }
         else
         {
-            // Single-valued attribute - use FirstOrDefault
+            // Single-valued attribute - use FirstOrDefault (excluding asserted-null markers, #91)
             var mvoAttrValue = mvo.AttributeValues
-                .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id);
+                .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue);
 
             if (mvoAttrValue == null)
                 return null;
@@ -466,7 +499,8 @@ public class DriftDetectionService
             return attributes;
         }
 
-        foreach (var attributeValue in mvo.AttributeValues)
+        // Exclude asserted-null markers (#91): drift expressions must evaluate against real values only.
+        foreach (var attributeValue in mvo.AttributeValues.Where(av => !av.NullValue))
         {
             if (attributeValue.Attribute == null)
             {

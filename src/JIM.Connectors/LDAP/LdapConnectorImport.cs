@@ -499,8 +499,8 @@ internal class LdapConnectorImport
     /// </summary>
     private int? QueryDirectoryForLastChangeNumber(int lastChangeNumber)
     {
-        // TODO: this needs optimising. If we pass in zero, do we really want to have to enumerate all changes to get the last change number?
-        // TODO: make sure this works with a range of directory implementations.
+        // TODO (#878): this needs optimising. If we pass in zero, do we really want to have to enumerate all changes to get the last change number?
+        // TODO (#878): make sure this works with a range of directory implementations.
 
         var ldapFilter = $"(&(!(cn=changelog))(changeNumber>={lastChangeNumber}))";
         var ldapRequest = new SearchRequest("cn=changelog", ldapFilter, SearchScope.Subtree);
@@ -804,7 +804,7 @@ internal class LdapConnectorImport
         }
 
         var stopwatch = Stopwatch.StartNew();
-        var ldapFilter = $"(objectClass={connectedSystemObjectType.Name})"; // todo: add in implicit support for returning containers/organisational units?
+        var ldapFilter = $"(objectClass={connectedSystemObjectType.Name})";
 
         // add user selected attributes
         var attributes = connectedSystemObjectType.Attributes.Where(a => a.Selected).Select(a => a.Name).ToList();
@@ -1538,7 +1538,7 @@ internal class LdapConnectorImport
 
         var importObjects = new List<ConnectedSystemImportObject>();
 
-        // todo: experiment with parallel foreach to see if we can speed up processing
+        // todo (#497): experiment with parallel foreach to see if we can speed up processing
         foreach (SearchResultEntry searchResult in searchResults)
         {
             if (_cancellationToken.IsCancellationRequested)
