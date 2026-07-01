@@ -37,6 +37,21 @@ public interface IMetaverseRepository
     #region objects
     public Task<MetaverseObject?> GetMetaverseObjectAsync(Guid id);
 
+    /// <summary>
+    /// Batch-loads Metaverse Objects by ID with their attribute values, using <c>AsNoTracking</c>. Used by the
+    /// Temporal Scope Reconciler (issue #892) to evaluate export scope in memory for outbound candidates.
+    /// </summary>
+    public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids);
+
+    /// <summary>
+    /// Bulk-updates the Temporal Scope Reconciler bookkeeping on a set of Metaverse Objects (issue #892):
+    /// advances <c>LastScopeEvaluatedAt</c> to <paramref name="nowUtc"/> for every evaluated object, and sets
+    /// <c>ScopeReviewPending</c> true for those in <paramref name="flaggedIds"/> and false for the rest (so a
+    /// prior flag self-clears once the object is back in agreement). No-op when <paramref name="evaluatedIds"/>
+    /// is empty.
+    /// </summary>
+    public Task MarkMetaverseObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc);
+
     public Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id);
 
     /// <summary>

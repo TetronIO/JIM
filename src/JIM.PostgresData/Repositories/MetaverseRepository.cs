@@ -329,6 +329,36 @@ public class MetaverseRepository : IMetaverseRepository
     #endregion
 
     #region Metaverse Objects
+    public async Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids)
+    {
+        var idList = ids as IReadOnlyCollection<Guid> ?? ids.ToList();
+        if (idList.Count == 0)
+            return new List<MetaverseObject>();
+
+        return await Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Include(mvo => mvo.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Where(mvo => idList.Contains(mvo.Id))
+            .ToListAsync();
+    }
+
+    public async Task MarkMetaverseObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc)
+    {
+        if (evaluatedIds.Count == 0)
+            return;
+
+        // Single bulk UPDATE over O(transitions) rows on the reconciler schedule (#892). ScopeReviewPending is
+        // set to true for flagged ids and false for the rest of the evaluated set, so a stale flag self-clears
+        // once the object is back in agreement; LastScopeEvaluatedAt advances for every evaluated object.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjects""
+              SET ""LastScopeEvaluatedAt"" = {2},
+                  ""ScopeReviewPending"" = (""Id"" = ANY({1}))
+              WHERE ""Id"" = ANY({0})",
+            evaluatedIds.ToArray(), flaggedIds.ToArray(), nowUtc);
+    }
+
     public async Task<MetaverseObject?> GetMetaverseObjectAsync(Guid id)
     {
         return await Repository.Database.MetaverseObjects.

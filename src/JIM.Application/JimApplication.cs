@@ -49,6 +49,7 @@ public class JimApplication : IDisposable
     public ExportEvaluationServer ExportEvaluation { get; }
     public ExportExecutionServer ExportExecution { get; }
     public ScopingEvaluationServer ScopingEvaluation { get; }
+    public ScopeReconciliationServer ScopeReconciliation { get; }
     public FileSystemServer FileSystem { get; }
     public MetaverseServer Metaverse { get; }
     public ObjectMatchingServer ObjectMatching { get; }
@@ -75,6 +76,7 @@ public class JimApplication : IDisposable
         ExportEvaluation = new ExportEvaluationServer(this, SyncRepo);
         ExportExecution = new ExportExecutionServer(this, SyncRepo);
         ScopingEvaluation = new ScopingEvaluationServer();
+        ScopeReconciliation = new ScopeReconciliationServer(this);
         FileSystem = new FileSystemServer(this);
         Metaverse = new MetaverseServer(this);
         ObjectMatching = new ObjectMatchingServer(this);

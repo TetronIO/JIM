@@ -95,6 +95,15 @@ public interface IConnectedSystemRepository
     public Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
 
     /// <summary>
+    /// Bulk-updates the Temporal Scope Reconciler bookkeeping on a set of Connected System Objects (issue #892):
+    /// advances <c>LastScopeEvaluatedAt</c> to <paramref name="nowUtc"/> for every evaluated object, and sets
+    /// <c>ScopeReviewPending</c> true for those in <paramref name="flaggedIds"/> and false for the rest (so a
+    /// prior flag self-clears once the object is back in agreement). No-op when <paramref name="evaluatedIds"/>
+    /// is empty.
+    /// </summary>
+    public Task MarkConnectedSystemObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc);
+
+    /// <summary>
     /// Bulk-loads all CSO external ID mappings for a Connected System.
     /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
     /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.

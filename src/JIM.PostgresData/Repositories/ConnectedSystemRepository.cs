@@ -1444,6 +1444,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue == attributeValue)).Select(cso => cso.Id).SingleOrDefaultAsync();
     }
 
+    public async Task MarkConnectedSystemObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc)
+    {
+        if (evaluatedIds.Count == 0)
+            return;
+
+        // Single bulk UPDATE over O(transitions) rows on the reconciler schedule (#892). ScopeReviewPending is
+        // set to true for flagged ids and false for the rest of the evaluated set, so a stale flag self-clears
+        // once the object is back in agreement; LastScopeEvaluatedAt advances for every evaluated object.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects""
+              SET ""LastScopeEvaluatedAt"" = {2},
+                  ""ScopeReviewPending"" = (""Id"" = ANY({1}))
+              WHERE ""Id"" = ANY({0})",
+            evaluatedIds.ToArray(), flaggedIds.ToArray(), nowUtc);
+    }
+
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
     {
         // AsTracking required: Include path CSO -> AttributeValues -> ReferenceValue(CSO) creates a
@@ -3890,9 +3906,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(g => g.Criteria)
             .ThenInclude(c => c.MetaverseAttribute)
             .Include(sr => sr.ObjectScopingCriteriaGroups)
+            .ThenInclude(g => g.Criteria)
+            .ThenInclude(c => c.ConnectedSystemAttribute)
+            .Include(sr => sr.ObjectScopingCriteriaGroups)
             .ThenInclude(g => g.ChildGroups)
             .ThenInclude(cg => cg.Criteria)
             .ThenInclude(c => c.MetaverseAttribute)
+            .Include(sr => sr.ObjectScopingCriteriaGroups)
+            .ThenInclude(g => g.ChildGroups)
+            .ThenInclude(cg => cg.Criteria)
+            .ThenInclude(c => c.ConnectedSystemAttribute)
             .OrderBy(x => x.Name);
 
         if (withChangeTracking)
