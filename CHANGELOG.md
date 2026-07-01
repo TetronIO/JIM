@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Updated the bundled Microsoft.OpenApi library to a patched release (2.7.5), clearing a high-severity advisory (GHSA-v5pm-xwqc-g5wc: circular schema references could terminate OpenAPI document parsing) present in JIM's API documentation generation.
 - 🐛 A Connected System hierarchy refresh that retrieves no partitions no longer wipes the configured hierarchy. Previously, if the connector returned zero partitions (typically a transient connection, authentication, or scope problem rather than a genuinely empty directory), every existing partition and container, including selected ones, was treated as removed and deleted. JIM now leaves the existing hierarchy untouched in that case and records a warning on the Activity so the cause can be investigated.
 - 🐛 A completed example data generation Activity no longer shows a stale "Persisting to database..." progress line; the transient progress message is cleared when the Activity completes.
 - 🐛 Recording a Metaverse Object change for an asserted-null attribute value (a positively-asserted "no value" from a priority source) no longer crashes. The portal-driven change-tracking path was missing the asserted-null guard the synchronisation engine already had, so such markers fell through to an error; they are now correctly skipped, and genuinely corrupt or unconfigured attribute values now fail with an accurate error instead of a misleading "not yet supported" one.
