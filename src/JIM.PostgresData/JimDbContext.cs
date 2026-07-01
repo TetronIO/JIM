@@ -446,6 +446,23 @@ public class JimDbContext : DbContext
             .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_StringValue")
             .HasFilter("\"StringValue\" IS NOT NULL");
 
+        // Composite index on (AttributeId, DateTimeValue) — the Temporal Scope Reconciler's candidate
+        // pre-filter (issue #892) selects CSOs whose date attribute value falls in a boundary-crossing
+        // range for a known AttributeId, e.g. WHERE AttributeId = @dateAttr AND DateTimeValue >= @lo
+        // AND DateTimeValue < @hi. Partial (DateTimeValue IS NOT NULL) to keep it small.
+        modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
+            .HasIndex(av => new { av.AttributeId, av.DateTimeValue })
+            .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_DateTimeValue")
+            .HasFilter("\"DateTimeValue\" IS NOT NULL");
+
+        // Composite index on (AttributeId, DateTimeValue) for the outbound (MVO export) lane of the
+        // Temporal Scope Reconciler (issue #892); mirrors the CSO index above. Supersedes the bare
+        // [Index(DateTimeValue)] on the entity for this equality-then-range access pattern.
+        modelBuilder.Entity<MetaverseObjectAttributeValue>()
+            .HasIndex(mav => new { mav.AttributeId, mav.DateTimeValue })
+            .HasDatabaseName("IX_MetaverseObjectAttributeValues_AttributeId_DateTimeValue")
+            .HasFilter("\"DateTimeValue\" IS NOT NULL");
+
         // Delta sync performance: composite index for timestamp-based queries
         // These enable efficient filtering by ConnectedSystemId + LastUpdated/Created
         // which is used in GetConnectedSystemObjectsModifiedSinceAsync

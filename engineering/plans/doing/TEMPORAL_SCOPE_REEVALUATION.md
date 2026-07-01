@@ -1,9 +1,9 @@
 # Temporal Scope Re-evaluation: Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 complete)
 - **Issue:** [#892](https://github.com/TetronIO/JIM/issues/892) (sub-task of [#85](https://github.com/TetronIO/JIM/issues/85))
-- **PRD:** [`engineering/prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md`](../prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md) (#85)
-- **Builds on:** [`RELATIVE_DATE_SEARCH_CRITERIA.md`](RELATIVE_DATE_SEARCH_CRITERIA.md) (the relative-date criteria, evaluator, API, UI)
+- **PRD:** [`engineering/prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md`](../../prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md) (#85)
+- **Builds on:** [`RELATIVE_DATE_SEARCH_CRITERIA.md`](../RELATIVE_DATE_SEARCH_CRITERIA.md) (the relative-date criteria, evaluator, API, UI)
 - **Related:** [#891](https://github.com/TetronIO/JIM/issues/891) (Full Synchronisation watermark-skip review; independent, see Interaction below)
 
 ## Overview
@@ -24,9 +24,9 @@ This is the mechanism MIM and similar engines provide as periodic temporal set /
 
 ## Current State (verified)
 
-- **Inbound skip.** `ProcessActiveConnectedSystemObjectAsync` returns early when `connectedSystemObject.IsUnchangedSinceLastSync` is true, before scoping is evaluated: [`SyncTaskProcessorBase.cs:425-426`](../../src/JIM.Worker/Processors/SyncTaskProcessorBase.cs#L425). The flag is set from a last-sync watermark: [`ConnectedSystemRepository.cs:1026-1033`](../../src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs#L1026). A **full** sync passes that watermark too ([`SyncFullSyncTaskProcessor.cs:137-139`](../../src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs#L137)), so a full sync does **not** rescue the static-object case.
-- **Outbound skip.** Export evaluation is driven by changed Metaverse Objects only; `EvaluateExportRulesWithNoNetChangeDetectionAsync` takes the changed MVO plus its changed attributes and checks `IsMvoInScopeForExportRule` per rule: [`ExportEvaluationServer.cs:311-318, 358`](../../src/JIM.Application/Servers/ExportEvaluationServer.cs#L311). An unchanged MVO is never handed to export evaluation, so a temporal export criterion never re-fires from time alone.
-- **The evaluator itself is correct.** `IsCsoInScopeForImportRule` (and the MVO equivalent) resolve "now" live on every call: [`ScopingEvaluationServer.cs:150`](../../src/JIM.Application/Servers/ScopingEvaluationServer.cs#L150). The problem is purely that the evaluator is never reached for a static object.
+- **Inbound skip.** `ProcessActiveConnectedSystemObjectAsync` returns early when `connectedSystemObject.IsUnchangedSinceLastSync` is true, before scoping is evaluated: [`SyncTaskProcessorBase.cs:425-426`](../../../src/JIM.Worker/Processors/SyncTaskProcessorBase.cs#L425). The flag is set from a last-sync watermark: [`ConnectedSystemRepository.cs:1026-1033`](../../../src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs#L1026). A **full** sync passes that watermark too ([`SyncFullSyncTaskProcessor.cs:137-139`](../../../src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs#L137)), so a full sync does **not** rescue the static-object case.
+- **Outbound skip.** Export evaluation is driven by changed Metaverse Objects only; `EvaluateExportRulesWithNoNetChangeDetectionAsync` takes the changed MVO plus its changed attributes and checks `IsMvoInScopeForExportRule` per rule: [`ExportEvaluationServer.cs:311-318, 358`](../../../src/JIM.Application/Servers/ExportEvaluationServer.cs#L311). An unchanged MVO is never handed to export evaluation, so a temporal export criterion never re-fires from time alone.
+- **The evaluator itself is correct.** `IsCsoInScopeForImportRule` (and the MVO equivalent) resolve "now" live on every call: [`ScopingEvaluationServer.cs:150`](../../../src/JIM.Application/Servers/ScopingEvaluationServer.cs#L150). The problem is purely that the evaluator is never reached for a static object.
 - **Empirical proof.** Integration test Scenario 12, step `ReEvaluatedEachRun` ("T4"): identical source data, clock advanced past the boundary, full import + full sync, zero scope changes.
 
 ## Design Principles
@@ -59,7 +59,7 @@ flowchart TB
         q["NEW candidate queries (inbound CSO / outbound MVO)<br/>indexed range over DateTimeValue + currently-in-scope set"]
     end
 
-    db[("PostgreSQL<br/>NEW: ScopeReviewPending flag, LastScopeEvaluatedAt,<br/>index on DateTimeValue")]
+    db[("PostgreSQL<br/>NEW: ScopeReviewPending flag, LastScopeEvaluatedAt,<br/>composite (AttributeId, DateTimeValue) index")]
 
     sched -->|enqueue task| hk
     hk --> rec
@@ -98,11 +98,11 @@ The date attribute values live in typed columns on the attribute-value tables (`
 
 Both lanes (inbound and outbound) are delivered in the first implementation, per decision below. Each phase builds and tests green before the next.
 
-### Phase 1: Model and schema
-- Add the staging flag and watermark (`ScopeReviewPending`, `LastScopeEvaluatedAt`) to CSO and MVO (final shape per "Open decisions").
-- Add the `DateTimeValue` index on both attribute-value tables (none exists today).
-- Add a `BuiltIn` flag to `Schedule` if not already present, plus the guards (see Phase 5).
-- EF migration (append-only).
+### Phase 1: Model and schema ✅
+- Added the staging flag and watermark (`ScopeReviewPending`, `LastScopeEvaluatedAt`) to CSO and MVO. Chosen shape: an explicit, auditable `ScopeReviewPending` bool (the recommended option over reusing the unchanged-skip) plus a per-object `LastScopeEvaluatedAt` UTC watermark. Both default to unset (`false` / null); the bool columns are metadata-only adds in PostgreSQL (no table rewrite).
+- Added a composite `(AttributeId, DateTimeValue)` partial index (`DateTimeValue IS NOT NULL`) on **both** attribute-value tables, sized for the reconciler's equality-then-range candidate pre-filter. Note: the MVO table already carried a bare `[Index(DateTimeValue)]`; the plan's "none exists today" was inaccurate for MVO. The new composite is the correct shape for `AttributeId = @x AND DateTimeValue IN [lo,hi)` and supersedes the bare index for that access pattern.
+- Added a `BuiltIn` bool to `Schedule` (following the established `BuiltIn` convention on `ConnectorDefinition`, `MetaverseAttribute`, `Role`, etc.). Guards (block rename/delete) land in Phase 5.
+- EF migration `AddTemporalScopeReconcilerFields` (append-only). Solution builds 0/0; full suite green (1738 passed).
 
 ### Phase 2: Candidate queries (repository)
 - Inbound: `GetInboundTemporalScopeCandidatesAsync(rule, sinceUtc, nowUtc)` over CSO date attribute values ∪ currently-joined CSOs of the object type.
@@ -132,7 +132,7 @@ Both lanes (inbound and outbound) are delivered in the first implementation, per
 - **Both lanes in the first implementation** (inbound CSO import scope and outbound MVO export scope).
 - **Cadence configurable** via the built-in Schedule interval; default conservative (hourly), can be lowered to single-digit minutes for parity with traditional temporal-recalculation engines. **Hours-granularity criteria are retained** (the staged-provisioning use case needs sub-day precision).
 - **Built-in Schedule:** admins may enable/disable and change interval, but not rename or delete.
-- **Candidate pre-filter + new `DateTimeValue` index** to keep cost O(transitions).
+- **Candidate pre-filter + new composite `(AttributeId, DateTimeValue)` partial index** (on both attribute-value tables) to keep cost O(transitions).
 
 ## Open Decisions (resolve during implementation)
 
