@@ -616,7 +616,16 @@ Retrieves connector space objects (CSOs) from a Connected System, with support f
 ### Syntax
 
 ```powershell
-# ById (default)
+# List (default)
+Get-JIMConnectedSystemObject -ConnectedSystemId <int> [-Search <string>] [-Status <string>]
+    [-ObjectTypeId <int>] [-JoinType <string>] [-SortBy <string>] [-Ascending]
+    [-Page <int>] [-PageSize <int>]
+
+# ListAll
+Get-JIMConnectedSystemObject -ConnectedSystemId <int> -All [-Search <string>] [-Status <string>]
+    [-ObjectTypeId <int>] [-JoinType <string>] [-SortBy <string>] [-Ascending] [-PageSize <int>]
+
+# ById
 Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
 
 # AttributeValues
@@ -633,19 +642,37 @@ Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | Yes | | Connected System identifier |
-| `Id` | `guid` | Yes | | Connector space object identifier |
+| `Id` | `guid` | Yes (ById/AttributeValues sets) | | Connector space object identifier |
 | `AttributeName` | `string` | No | | Name of a multi-valued attribute to page through |
-| `Search` | `string` | No | | Filter attribute values by search term |
-| `Page` | `int` | No | `1` | Page number for attribute value results |
-| `PageSize` | `int` | No | `50` | Number of attribute values per page (maximum 100) |
-| `All` | `switch` | No | `$false` | Returns all attribute values without paging |
+| `Search` | `string` | No | | Filter attribute values, or filter the object list by display name/external ID |
+| `Status` | `string` | No | | Filter the object list by status: `Normal`, `Obsolete`, `PendingProvisioning` |
+| `ObjectTypeId` | `int` | No | | Filter the object list by Connected System Object Type |
+| `JoinType` | `string` | No | | Filter the object list by join type: `NotJoined`, `Projected`, `Provisioned`, `Joined` |
+| `SortBy` | `string` | No | | Property name to sort the object list by |
+| `Ascending` | `switch` | No | `$false` | Sort the object list ascending instead of the default descending |
+| `Page` | `int` | No | `1` | Page number for paginated results |
+| `PageSize` | `int` | No | `50` | Number of results per page (maximum 100) |
+| `All` | `switch` | No | `$false` | Returns all objects, or all attribute values, without paging |
 
 ### Output
 
+- **List / ListAll**: Lightweight headers for each Connected System Object matching the filters.
 - **ById**: A connector space object with its attributes and current values.
 - **AttributeValues / AttributeValuesAll**: Paged or complete list of values for the specified multi-valued attribute.
 
 ### Examples
+
+```powershell title="List objects in a Connected System"
+Get-JIMConnectedSystemObject -ConnectedSystemId 3
+```
+
+```powershell title="Find Obsolete objects matching a search term"
+Get-JIMConnectedSystemObject -ConnectedSystemId 3 -Search "smith" -Status Obsolete
+```
+
+```powershell title="Get every object in a Connected System"
+Get-JIMConnectedSystemObject -ConnectedSystemId 3 -All
+```
 
 ```powershell title="Get a specific connector space object"
 Get-JIMConnectedSystemObject -ConnectedSystemId 3 -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
