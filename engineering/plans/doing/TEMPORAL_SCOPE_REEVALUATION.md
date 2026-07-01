@@ -52,7 +52,7 @@ flowchart TB
     end
 
     subgraph app["JIM.Application"]
-        rec["ScopingEvaluationServer (partial: Reconciliation)<br/>NEW<br/>1 load rules with a relative criterion<br/>2 fetch candidates (repo)<br/>3 evaluate (reuse existing methods)<br/>4 flag mismatches"]
+        rec["ScopeReconciliationServer (NEW)<br/>calls the pure ScopingEvaluationServer<br/>1 load rules with a relative criterion<br/>2 fetch candidates (repo)<br/>3 evaluate (reuse existing methods)<br/>4 flag mismatches"]
     end
 
     subgraph data["JIM.PostgresData"]
@@ -73,7 +73,7 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     participant S as Scheduler
-    participant R as Reconciler (ScopingEvaluationServer)
+    participant R as Reconciler (ScopeReconciliationServer)
     participant DB as Repository / DB
     participant E as Existing sync/export engine
 
@@ -111,9 +111,13 @@ Both lanes (inbound and outbound) are delivered in the first implementation, per
 - **Deviation from the drafted signature.** The drafted `GetInboundTemporalScopeCandidatesAsync(rule, sinceUtc, nowUtc)` pushed relative-date criterion semantics (offset resolution, direction) into the repository, breaking layering. The shipped methods are thin, watermark-agnostic date-range selectors that return IDs; the reconciler (Phase 3) owns the boundary math (shifting the window by each criterion's offset via `RelativeDateResolver`), the multi-criterion union, loading the objects, and the in-memory decision. This keeps the testable temporal logic in the application layer and the repository a pure indexed query.
 - **The `∪ currently-in-scope set` is not a separate query.** See the resolved candidate-set-precision decision below: the transition window mathematically contains every object whose truth-value for a criterion flipped in `(afterUtc, throughUtc]`, so a separate "rescan all in-scope objects" union is unnecessary. Bootstrap (null `afterUtc`) opens the lower bound so the first sweep catches all already-transitioned objects.
 
-### Phase 3: Reconciler (ScopingEvaluationServer, partial class)
-- New `ScopingEvaluationServer.Reconciliation.cs` partial: load rules with a relative criterion, fetch candidates, evaluate full scope (reuse `IsCsoInScopeForImportRule` / `IsMvoInScopeForExportRule`), flag mismatches, update `LastScopeEvaluatedAt`.
-- Pure selection and flagging; no mutation of join state or exports.
+### Phase 3: Reconciler (new `ScopeReconciliationServer`)
+- **Home revised (supersedes the earlier "ScopingEvaluationServer partial" decision).** Discovery during implementation: `ScopingEvaluationServer` is a deliberately pure, dependency-free evaluator (parameterless constructor, no repository) that is cheaply `new`-ed inside the sync and export hot paths (`SyncServer`, `ExportEvaluationServer`). The reconciler needs the opposite (repository access to fetch candidates, load objects, write the `ScopeReviewPending` flag), so bolting persistence onto the pure evaluator would harm it. Resolution (user-approved): a new `ScopeReconciliationServer(JimApplication)` that **calls** the pure evaluator's public `IsCsoInScopeForImportRule` / `IsMvoInScopeForExportRule`, keeping the evaluator stateless. Exposed as `JimApplication.ScopeReconciliation`.
+- Load enabled Synchronisation Rules carrying a relative-date scoping criterion (both directions). `GetSyncRulesAsync` currently `.Include`s only `MetaverseAttribute` on criteria; add the `ConnectedSystemAttribute` `ThenInclude` so inbound criteria hydrate.
+- For each such rule and each relative-date criterion, compute the shifted candidate window and call the Phase 2 range query; union the candidate IDs.
+- Load the candidates and evaluate full scope in memory (reuse the evaluator). Flag a mismatch when fresh scope disagrees with the stored connection signal: inbound `cso.MetaverseObjectId != null`; outbound `GetConnectedSystemObjectByMetaverseObjectIdAsync(mvo.Id, rule.ConnectedSystemId) != null` (the export evaluator's own deprovision check). Set `ScopeReviewPending = true` and advance `LastScopeEvaluatedAt` on evaluated objects.
+- Pure selection and flagging; no mutation of join state or exports (flag-and-delegate).
+- Reconciler methods take `afterUtc`/`nowUtc` parameters for testability; the watermark source (a global "last reconciled at" that survives downtime) is wired in Phase 4.
 
 ### Phase 4: Trigger and apply
 - Seed the built-in "Temporal Scope Reconciliation" Schedule (BuiltIn, default hourly).
@@ -129,7 +133,7 @@ Both lanes (inbound and outbound) are delivered in the first implementation, per
 ## Decisions (resolved)
 
 - **A full sync does not save us (Q1).** Both inbound and outbound skip unchanged objects before scoping; a scheduled reconciler is required regardless of run-profile type. The separate "should full sync reprocess everything as a fail-safe" question is tracked in #891 and does not block this work.
-- **Home:** `ScopingEvaluationServer` (partial class), which already houses both the CSO and MVO scope evaluators.
+- **Home:** a new `ScopeReconciliationServer` that calls the pure `ScopingEvaluationServer` (revised from the earlier "ScopingEvaluationServer partial" plan; see the Phase 3 note for why the pure evaluator is kept dependency-free).
 - **Flag-and-delegate**, not a bespoke provision/deprovision action: required so matching-rule joins to pre-existing objects and bidirectional Attribute Flow cascades are handled by the proven engine.
 - **Both lanes in the first implementation** (inbound CSO import scope and outbound MVO export scope).
 - **Cadence configurable** via the built-in Schedule interval; default conservative (hourly), can be lowered to single-digit minutes for parity with traditional temporal-recalculation engines. **Hours-granularity criteria are retained** (the staged-provisioning use case needs sub-day precision).
