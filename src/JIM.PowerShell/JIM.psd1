@@ -159,6 +159,10 @@
         'Get-JIMHistoryCount',
         'Invoke-JIMHistoryCleanup',
 
+        # Worker Tasks
+        'Get-JIMWorkerTask',
+        'Stop-JIMWorkerTask',
+
         # Service Settings
         'Get-JIMServiceSetting',
         'Set-JIMServiceSetting',
