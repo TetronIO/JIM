@@ -527,9 +527,55 @@ public class SynchronisationController(
     {
         _logger.LogDebug("Getting connector space count for Connected System {ConnectedSystemId} (TypeId: {TypeId}, PartitionId: {PartitionId})",
             connectedSystemId, objectTypeId, partitionId);
-        var count = await _application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(
+        var count = await _application.ConnectedSystems.GetConnectedSystemObjectCountAsync(
             connectedSystemId, objectTypeId, partitionId);
         return Ok(count);
+    }
+
+    /// <summary>
+    /// List Connected System Objects
+    /// </summary>
+    /// <remarks>
+    /// Returns lightweight header objects. Use the detail endpoint to retrieve full Attribute values for a specific Connected System Object.
+    /// </remarks>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="page">Page number (1-based). Default: 1.</param>
+    /// <param name="pageSize">Number of items per page (1-100). Default: 50.</param>
+    /// <param name="search">Optional search text to filter by display name or external ID.</param>
+    /// <param name="sortBy">Optional property name to sort by.</param>
+    /// <param name="sortDescending">Whether to sort descending. Default: true.</param>
+    /// <param name="status">Optional Connected System Object status values to filter by. Repeat the parameter for multiple values.</param>
+    /// <param name="objectTypeId">Optional Object Type IDs to filter by. Repeat the parameter for multiple values.</param>
+    /// <param name="joinType">Optional join type values to filter by. Repeat the parameter for multiple values.</param>
+    /// <returns>A paginated set of Connected System Object headers.</returns>
+    [HttpGet("connected-systems/{connectedSystemId:int}/connector-space", Name = "GetConnectedSystemObjects")]
+    [ProducesResponseType(typeof(PaginatedResponse<ConnectedSystemObjectHeader>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemObjectsAsync(
+        int connectedSystemId,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] string? search = null,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] bool sortDescending = true,
+        [FromQuery] List<ConnectedSystemObjectStatus>? status = null,
+        [FromQuery] List<int>? objectTypeId = null,
+        [FromQuery] List<ConnectedSystemObjectJoinType>? joinType = null)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 50;
+        if (pageSize > 100) pageSize = 100;
+
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        var result = await _application.ConnectedSystems.GetConnectedSystemObjectHeadersAsync(
+            connectedSystemId, page, pageSize, search, sortBy, sortDescending, status, objectTypeId, joinType);
+
+        return Ok(PaginatedResponse<ConnectedSystemObjectHeader>.Create(
+            result.Results, result.TotalResults, result.CurrentPage, result.PageSize));
     }
 
     #region Pending Exports
