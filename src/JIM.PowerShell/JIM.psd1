@@ -147,6 +147,9 @@
         'Get-JIMExampleDataSet',
         'Get-JIMExampleDataTemplate',
         'Invoke-JIMExampleDataTemplate',
+        'New-JIMExampleDataSet',
+        'Remove-JIMExampleDataSet',
+        'Set-JIMExampleDataSet',
 
         # Expressions
         'Test-JIMExpression',

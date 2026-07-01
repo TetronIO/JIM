@@ -7,6 +7,7 @@ using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Models.ExampleData;
 using JIM.Models.ExampleData.DTOs;
+using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -50,6 +51,121 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
             .ToPaginatedResponse(pagination);
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Get an Example Data Set
+    /// </summary>
+    /// <param name="id">The unique identifier of the Example Data Set.</param>
+    /// <returns>The full Example Data Set, including its values.</returns>
+    [HttpGet("example-data-sets/{id:int}", Name = "GetExampleDataSet")]
+    [ProducesResponseType(typeof(ExampleDataSet), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetExampleDataSetAsync(int id)
+    {
+        _logger.LogTrace("Requested example data set: {Id}", id);
+        var dataSet = await _application.ExampleData.GetExampleDataSetAsync(id);
+        if (dataSet == null)
+            return NotFound(ApiErrorResponse.NotFound($"Example Data Set with ID {id} not found."));
+
+        return Ok(dataSet);
+    }
+
+    /// <summary>
+    /// Create an Example Data Set
+    /// </summary>
+    /// <param name="request">The Example Data Set to create.</param>
+    /// <returns>The created Example Data Set.</returns>
+    [HttpPost("example-data-sets", Name = "CreateExampleDataSet")]
+    [ProducesResponseType(typeof(ExampleDataSet), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CreateExampleDataSetAsync([FromBody] CreateExampleDataSetRequest request)
+    {
+        _logger.LogInformation("Creating Example Data Set: {Name}", LogSanitiser.Sanitise(request.Name));
+
+        var dataSet = new ExampleDataSet
+        {
+            Name = request.Name,
+            Culture = request.Culture,
+            BuiltIn = false,
+            Created = DateTime.UtcNow,
+            Values = (request.Values ?? []).Select(v => new ExampleDataSetValue { StringValue = v }).ToList()
+        };
+
+        await _application.ExampleData.CreateExampleDataSetAsync(dataSet);
+        _logger.LogInformation("Created Example Data Set {Id} ({Name})", dataSet.Id, LogSanitiser.Sanitise(dataSet.Name));
+
+        var created = await _application.ExampleData.GetExampleDataSetAsync(dataSet.Id);
+        return CreatedAtRoute("GetExampleDataSet", new { id = dataSet.Id }, created);
+    }
+
+    /// <summary>
+    /// Update an Example Data Set
+    /// </summary>
+    /// <param name="id">The unique identifier of the Example Data Set to update.</param>
+    /// <param name="request">The properties to update.</param>
+    /// <returns>The updated Example Data Set.</returns>
+    [HttpPut("example-data-sets/{id:int}", Name = "UpdateExampleDataSet")]
+    [ProducesResponseType(typeof(ExampleDataSet), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UpdateExampleDataSetAsync(int id, [FromBody] UpdateExampleDataSetRequest request)
+    {
+        _logger.LogInformation("Updating Example Data Set: {Id}", id);
+
+        var dataSet = await _application.ExampleData.GetExampleDataSetAsync(id);
+        if (dataSet == null)
+            return NotFound(ApiErrorResponse.NotFound($"Example Data Set with ID {id} not found."));
+
+        if (dataSet.BuiltIn)
+            return BadRequest(ApiErrorResponse.BadRequest("Built-in Example Data Sets cannot be updated."));
+
+        if (!string.IsNullOrWhiteSpace(request.Name))
+            dataSet.Name = request.Name;
+
+        if (!string.IsNullOrWhiteSpace(request.Culture))
+            dataSet.Culture = request.Culture;
+
+        if (request.Values != null)
+        {
+            dataSet.Values.Clear();
+            dataSet.Values.AddRange(request.Values.Select(v => new ExampleDataSetValue { StringValue = v }));
+        }
+
+        await _application.ExampleData.UpdateExampleDataSetAsync(dataSet);
+        _logger.LogInformation("Updated Example Data Set {Id}", id);
+
+        return Ok(dataSet);
+    }
+
+    /// <summary>
+    /// Delete an Example Data Set
+    /// </summary>
+    /// <param name="id">The unique identifier of the Example Data Set to delete.</param>
+    /// <returns>204 No Content on success.</returns>
+    [HttpDelete("example-data-sets/{id:int}", Name = "DeleteExampleDataSet")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeleteExampleDataSetAsync(int id)
+    {
+        _logger.LogInformation("Deleting Example Data Set: {Id}", id);
+
+        var dataSet = await _application.ExampleData.GetExampleDataSetAsync(id);
+        if (dataSet == null)
+            return NotFound(ApiErrorResponse.NotFound($"Example Data Set with ID {id} not found."));
+
+        if (dataSet.BuiltIn)
+            return BadRequest(ApiErrorResponse.BadRequest("Built-in Example Data Sets cannot be deleted."));
+
+        await _application.ExampleData.DeleteExampleDataSetAsync(id);
+        _logger.LogInformation("Deleted Example Data Set {Id}", id);
+
+        return NoContent();
     }
 
     /// <summary>
