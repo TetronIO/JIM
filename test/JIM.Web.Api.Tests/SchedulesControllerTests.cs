@@ -625,6 +625,130 @@ public class SchedulesControllerTests
         _mockSchedulingRepository.Verify(r => r.UpdateScheduleAsync(It.IsAny<Schedule>()), Times.Once);
     }
 
+    [Test]
+    public async Task UpdateAsync_BuiltInScheduleAddStep_ReturnsBadRequestAsync()
+    {
+        // Injecting an extra step into a built-in schedule (for example a rogue RunProfile step) must be rejected.
+        var id = Guid.NewGuid();
+        var existingStepId = Guid.NewGuid();
+        var existingSchedule = new Schedule { Id = id, Name = "Temporal Scope Reconciliation", BuiltIn = true, Steps = new List<ScheduleStep>() };
+        var existingStep = new ScheduleStep { Id = existingStepId, ScheduleId = id, StepIndex = 0, StepType = ScheduleStepType.TemporalScopeReconciliation, Name = "Reconcile Temporal Scope" };
+        var request = new UpdateScheduleRequest
+        {
+            Name = "Temporal Scope Reconciliation",
+            TriggerType = ScheduleTriggerType.Cron,
+            CronExpression = "0 * * * *",
+            Steps = new List<ScheduleStepRequest>
+            {
+                new() { Id = existingStepId, StepIndex = 0, StepType = ScheduleStepType.TemporalScopeReconciliation, Name = "Reconcile Temporal Scope" },
+                new() { StepIndex = 1, StepType = ScheduleStepType.RunProfile, ConnectedSystemId = 1, RunProfileId = 1 }
+            }
+        };
+
+        _mockSchedulingRepository.Setup(r => r.GetScheduleAsync(id)).ReturnsAsync(existingSchedule);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleStepsAsync(id)).ReturnsAsync(new List<ScheduleStep> { existingStep });
+
+        var result = await _controller.UpdateAsync(id, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockSchedulingRepository.Verify(r => r.UpdateScheduleAsync(It.IsAny<Schedule>()), Times.Never);
+        _mockSchedulingRepository.Verify(r => r.CreateScheduleStepAsync(It.IsAny<ScheduleStep>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateAsync_BuiltInScheduleRemoveStep_ReturnsBadRequestAsync()
+    {
+        // Removing the reconciler step from a built-in schedule must be rejected.
+        var id = Guid.NewGuid();
+        var existingStepId = Guid.NewGuid();
+        var existingSchedule = new Schedule { Id = id, Name = "Temporal Scope Reconciliation", BuiltIn = true, Steps = new List<ScheduleStep>() };
+        var existingStep = new ScheduleStep { Id = existingStepId, ScheduleId = id, StepIndex = 0, StepType = ScheduleStepType.TemporalScopeReconciliation, Name = "Reconcile Temporal Scope" };
+        var request = new UpdateScheduleRequest
+        {
+            Name = "Temporal Scope Reconciliation",
+            TriggerType = ScheduleTriggerType.Cron,
+            CronExpression = "0 * * * *",
+            Steps = new List<ScheduleStepRequest>()
+        };
+
+        _mockSchedulingRepository.Setup(r => r.GetScheduleAsync(id)).ReturnsAsync(existingSchedule);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleStepsAsync(id)).ReturnsAsync(new List<ScheduleStep> { existingStep });
+
+        var result = await _controller.UpdateAsync(id, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockSchedulingRepository.Verify(r => r.DeleteScheduleStepAsync(It.IsAny<ScheduleStep>()), Times.Never);
+        _mockSchedulingRepository.Verify(r => r.UpdateScheduleAsync(It.IsAny<Schedule>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateAsync_BuiltInScheduleReplaceStep_ReturnsBadRequestAsync()
+    {
+        // Swapping the reconciler step for a different step (different Id) must be rejected.
+        var id = Guid.NewGuid();
+        var existingStepId = Guid.NewGuid();
+        var replacementStepId = Guid.NewGuid();
+        var existingSchedule = new Schedule { Id = id, Name = "Temporal Scope Reconciliation", BuiltIn = true, Steps = new List<ScheduleStep>() };
+        var existingStep = new ScheduleStep { Id = existingStepId, ScheduleId = id, StepIndex = 0, StepType = ScheduleStepType.TemporalScopeReconciliation, Name = "Reconcile Temporal Scope" };
+        var request = new UpdateScheduleRequest
+        {
+            Name = "Temporal Scope Reconciliation",
+            TriggerType = ScheduleTriggerType.Cron,
+            CronExpression = "0 * * * *",
+            Steps = new List<ScheduleStepRequest>
+            {
+                new() { Id = replacementStepId, StepIndex = 0, StepType = ScheduleStepType.RunProfile, ConnectedSystemId = 1, RunProfileId = 1 }
+            }
+        };
+
+        _mockSchedulingRepository.Setup(r => r.GetScheduleAsync(id)).ReturnsAsync(existingSchedule);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleStepsAsync(id)).ReturnsAsync(new List<ScheduleStep> { existingStep });
+
+        var result = await _controller.UpdateAsync(id, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockSchedulingRepository.Verify(r => r.UpdateScheduleAsync(It.IsAny<Schedule>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateAsync_BuiltInScheduleRetimedWithUnchangedSteps_ReturnsOkAndLeavesStepsUntouchedAsync()
+    {
+        // Re-timing a built-in schedule is allowed; its steps come back unchanged (same Id) and must not be
+        // rewritten. This is the exact request the portal sends when only the interval or enabled state changes.
+        var id = Guid.NewGuid();
+        var existingStepId = Guid.NewGuid();
+        var existingSchedule = new Schedule { Id = id, Name = "Temporal Scope Reconciliation", BuiltIn = true, Steps = new List<ScheduleStep>() };
+        var existingStep = new ScheduleStep { Id = existingStepId, ScheduleId = id, StepIndex = 0, StepType = ScheduleStepType.TemporalScopeReconciliation, Name = "Reconcile Temporal Scope" };
+        var request = new UpdateScheduleRequest
+        {
+            Name = "Temporal Scope Reconciliation",
+            TriggerType = ScheduleTriggerType.Cron,
+            CronExpression = "*/15 * * * *",
+            IsEnabled = true,
+            Steps = new List<ScheduleStepRequest>
+            {
+                new() { Id = existingStepId, StepIndex = 0, StepType = ScheduleStepType.TemporalScopeReconciliation, Name = "Reconcile Temporal Scope" }
+            }
+        };
+
+        _mockSchedulingRepository.Setup(r => r.GetScheduleAsync(id)).ReturnsAsync(existingSchedule);
+        _mockSchedulingRepository.Setup(r => r.UpdateScheduleAsync(It.IsAny<Schedule>())).Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleStepsAsync(id)).ReturnsAsync(new List<ScheduleStep> { existingStep });
+        // Mocked so that, without the built-in skip, the reconciliation loop would rewrite this step
+        // (proving the lock actually prevents field-level step edits, not just add/remove).
+        _mockSchedulingRepository.Setup(r => r.GetScheduleStepAsync(existingStepId)).ReturnsAsync(existingStep);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(id))
+            .ReturnsAsync(new Schedule { Id = id, Name = "Temporal Scope Reconciliation", BuiltIn = true, Steps = new List<ScheduleStep> { existingStep } });
+
+        var result = await _controller.UpdateAsync(id, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockSchedulingRepository.Verify(r => r.UpdateScheduleAsync(It.IsAny<Schedule>()), Times.Once);
+        _mockSchedulingRepository.Verify(r => r.UpdateScheduleStepAsync(It.IsAny<ScheduleStep>()), Times.Never);
+        _mockSchedulingRepository.Verify(r => r.DeleteScheduleStepAsync(It.IsAny<ScheduleStep>()), Times.Never);
+        _mockSchedulingRepository.Verify(r => r.CreateScheduleStepAsync(It.IsAny<ScheduleStep>()), Times.Never);
+    }
+
     #endregion
 
     #region DeleteAsync tests

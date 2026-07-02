@@ -93,17 +93,33 @@ public class SchedulerServer
 
     public async Task CreateScheduleStepAsync(ScheduleStep step)
     {
+        await GuardStepScheduleNotBuiltInAsync(step, "added to");
         await Application.Repository.Scheduling.CreateScheduleStepAsync(step);
     }
 
     public async Task UpdateScheduleStepAsync(ScheduleStep step)
     {
+        await GuardStepScheduleNotBuiltInAsync(step, "changed on");
         await Application.Repository.Scheduling.UpdateScheduleStepAsync(step);
     }
 
     public async Task DeleteScheduleStepAsync(ScheduleStep step)
     {
+        await GuardStepScheduleNotBuiltInAsync(step, "removed from");
         await Application.Repository.Scheduling.DeleteScheduleStepAsync(step);
+    }
+
+    /// <summary>
+    /// Authoritative backstop that prevents any caller from adding, changing or removing the steps of a built-in
+    /// schedule (for example the seeded Temporal Scope Reconciliation schedule); its steps are defined and
+    /// maintained by JIM. The portal and REST API also enforce this, returning a friendly error before reaching
+    /// here. A no-op when the parent schedule is a normal user schedule or cannot be found.
+    /// </summary>
+    private async Task GuardStepScheduleNotBuiltInAsync(ScheduleStep step, string verb)
+    {
+        var schedule = await Application.Repository.Scheduling.GetScheduleAsync(step.ScheduleId);
+        if (schedule?.BuiltIn == true)
+            throw new InvalidOperationException($"Steps cannot be {verb} the built-in schedule '{schedule.Name}'.");
     }
 
     // -----------------------------------------------------------------------------------------------------------------

@@ -911,6 +911,11 @@
 
                 await jim.Scheduler.UpdateScheduleAsync(dbSchedule);
 
+                // A built-in schedule's steps are defined and maintained by JIM and cannot be changed here (the
+                // Steps tab is read-only); only user schedules reconcile their steps. Attempting to reconcile a
+                // built-in schedule's steps would hit the authoritative guard in the application layer.
+                if (!_schedule.BuiltIn)
+                {
                 // Now handle steps separately
                 var existingSteps = await jim.Scheduler.GetScheduleStepsAsync(_schedule.Id);
                 var existingStepIds = existingSteps.Select(s => s.Id).ToHashSet();
@@ -972,6 +977,7 @@
                         inMemoryStep.CreatedByName = user.DisplayName;
                         await jim.Scheduler.CreateScheduleStepAsync(inMemoryStep);
                     }
+                }
                 }
 
                 Snackbar.Add("Schedule updated successfully.", Severity.Success);
