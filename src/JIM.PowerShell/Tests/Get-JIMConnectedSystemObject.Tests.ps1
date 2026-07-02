@@ -26,8 +26,12 @@ Describe 'Get-JIMConnectedSystemObject' {
             $command = Get-Command Get-JIMConnectedSystemObject
         }
 
-        It 'Should have a ById parameter set as default' {
-            $command.DefaultParameterSet | Should -Be 'ById'
+        It 'Should have a List parameter set as default' {
+            $command.DefaultParameterSet | Should -Be 'List'
+        }
+
+        It 'Should have a ById parameter set' {
+            $command.ParameterSets.Name | Should -Contain 'ById'
         }
 
         It 'Should have an AttributeValues parameter set' {
@@ -40,6 +44,10 @@ Describe 'Get-JIMConnectedSystemObject' {
 
         It 'Should have a Count parameter set' {
             $command.ParameterSets.Name | Should -Contain 'Count'
+        }
+
+        It 'Should have a ListAll parameter set' {
+            $command.ParameterSets.Name | Should -Contain 'ListAll'
         }
     }
 
@@ -102,6 +110,28 @@ Describe 'Get-JIMConnectedSystemObject' {
         It 'Should have PartitionId as an optional int parameter' {
             $command.Parameters['PartitionId'].ParameterType.Name | Should -Be 'Int32'
         }
+
+        It 'Should have Status parameter with a ValidateSet' {
+            $param = $command.Parameters['Status']
+            $validateSet = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $validateSet | Should -Not -BeNullOrEmpty
+            $validateSet.ValidValues | Should -Contain 'Obsolete'
+        }
+
+        It 'Should have JoinType parameter with a ValidateSet' {
+            $param = $command.Parameters['JoinType']
+            $validateSet = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $validateSet | Should -Not -BeNullOrEmpty
+            $validateSet.ValidValues | Should -Contain 'NotJoined'
+        }
+
+        It 'Should have SortBy as an optional string parameter' {
+            $command.Parameters['SortBy'].ParameterType.Name | Should -Be 'String'
+        }
+
+        It 'Should have Ascending as a switch parameter' {
+            $command.Parameters['Ascending'].SwitchParameter | Should -BeTrue
+        }
     }
 
     Context 'Requires Connection' {
@@ -116,6 +146,14 @@ Describe 'Get-JIMConnectedSystemObject' {
 
         It 'Should throw when not connected with Count' {
             { Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Count -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+
+        It 'Should throw when not connected with only ConnectedSystemId (List)' {
+            { Get-JIMConnectedSystemObject -ConnectedSystemId 1 -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+
+        It 'Should throw when not connected with All (ListAll)' {
+            { Get-JIMConnectedSystemObject -ConnectedSystemId 1 -All -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
     }
 
