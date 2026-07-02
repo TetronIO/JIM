@@ -1,6 +1,6 @@
 # Temporal Scope Re-evaluation: Implementation Plan
 
-- **Status:** Doing (Phases 1-3 complete; Phase 4a trigger complete)
+- **Status:** Doing (Phases 1-3 complete; Phase 4a trigger complete; Phase 4c inbound complete, outbound deferred to a Docker session)
 - **Issue:** [#892](https://github.com/TetronIO/JIM/issues/892) (sub-task of [#85](https://github.com/TetronIO/JIM/issues/85))
 - **PRD:** [`engineering/prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md`](../../prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md) (#85)
 - **Builds on:** [`RELATIVE_DATE_SEARCH_CRITERIA.md`](../RELATIVE_DATE_SEARCH_CRITERIA.md) (the relative-date criteria, evaluator, API, UI)
@@ -129,7 +129,15 @@ Both lanes (inbound and outbound) are delivered in the first implementation, per
 - **Watermark: failure-safe (resolved).** `afterUtc` is the `StartedAt` of the previous **successfully completed** execution of the built-in schedule (`GetLastCompletedScheduleExecutionAsync`), not `Schedule.LastRunTime`. `LastRunTime` advances at trigger time regardless of outcome, so reusing it would let a failed sweep advance the watermark and silently skip that window for objects with static source data (the exact case this feature exists to catch). A failed sweep never reaches `Completed`, so its window is re-covered by the next sweep. Null (bootstrap) before any prior completion.
 
 ### Phase 4c: Apply (honour the flag in the engine)
-- **Decision: flag now, honour flag in engine.** The reconciler only sets `ScopeReviewPending`; the existing engine applies the real outcome (flag-and-delegate). Teach the hot-path skips to let flagged objects through: inbound `IsUnchangedSinceLastSync` skip in `SyncTaskProcessorBase`, and the outbound changed-MVO export path in `ExportEvaluationServer`. Clear `ScopeReviewPending` once the object is processed. Sync-integrity-critical; its own commit.
+- **Decision: flag now, honour flag in engine.** The reconciler only sets `ScopeReviewPending`; the existing engine applies the real outcome (flag-and-delegate).
+
+**Inbound ✅ (committed).** The CSO page loader (`ConnectedSystemRepository.GetConnectedSystemObjectsAsync`) treats a `ScopeReviewPending` CSO as changed so its attribute/reference values load (without this, Pass 2 Attribute Flow runs on an empty attribute set); Pass 2 (`SyncTaskProcessorBase.ProcessActiveConnectedSystemObjectAsync`) no longer skips a flagged-but-unchanged CSO; the flag is cleared in a batched UPDATE at page flush, only after the page's substantive writes persist and only for CSOs re-evaluated without error (fail-safe). New `ClearConnectedSystemObjectScopeReviewPendingAsync` on the CSO repo, exposed via `ISyncRepository`.
+
+**Outbound (design resolved; implementation deferred).** Driver decision: **fold into the shared sync base** (both Full and Delta), honoured on the next sync of a system. After the CSO page loop, load `ScopeReviewPending` MVOs, feed each to the existing export path via `_pendingExportEvaluations` (with **empty `changedAttributes`**, which is correct: `CreateAttributeValueChanges` falls back to the MVO's current values for a Create/provision, Update-with-no-change yields no Pending Export, and out-of-scope deprovision is scope-driven), then clear the MVO flag. Whichever system's sync runs first handles its own export rules; a still-mismatched MVO is re-flagged by the next reconciler sweep (eventually consistent; single-system case has no ping-pong).
+  - **Why deferred:** the pass must replicate the per-page export flush sequence (`EvaluatePendingExportsAsync` → `FlushPendingExportOperationsAsync` → `ResolvePendingExportReferenceSnapshotsAsync` → `FlushRpeisAsync` → `ClearChangeTracker`) for a non-CSO-driven MVO set and feed MVOs into provisioning-CSO creation and the change tracker. The failure modes (orphaned provisioning CSOs, lost Pending Exports, AsNoTracking/tracker conflicts) are only exercised by the Scenario 12 integration test (Docker), so this lands in a Docker-enabled session with the outbound integration case (Phase 6).
+  - **Remaining work:** `GetMetaverseObjectIdsWithScopeReviewPendingAsync` + `ClearMetaverseObjectScopeReviewPendingAsync` (Metaverse repo, exposed via `ISyncRepository`); a partial index `WHERE "ScopeReviewPending"` on `MetaverseObjects` (and consider the CSO table) to keep the flagged-MVO query O(transitions); the shared `SyncTaskProcessorBase` pass called after the CSO loop in both processors; ensure flagged MVOs load with `Type` + `AttributeValues`.
+
+**Verification note:** inbound is build-clean and unit-green but its end-to-end proof is Scenario 12 (Docker), not runnable in the current environment; run it before the PR leaves draft.
 
 ### Phase 5: API / UI (built-in protection)
 - Allow enable/disable and interval change on the built-in Schedule; block rename and delete (BuiltIn guard in the application layer and UI).
