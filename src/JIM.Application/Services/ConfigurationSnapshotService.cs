@@ -206,7 +206,8 @@ public class ConfigurationSnapshotService
         AddEnum(children, "status", connectedSystem.Status, "Status");
         AddReference(children, "connectorDefinitionId", connectedSystem.ConnectorDefinitionId, connectedSystem.ConnectorDefinition?.Name, "Connector");
         AddEnum(children, "objectMatchingRuleMode", connectedSystem.ObjectMatchingRuleMode, "Object matching rule mode");
-        Add(children, "settingValuesValid", Render(connectedSystem.SettingValuesValid), "Setting values valid");
+        // SettingValuesValid is deliberately excluded: it is internal UI-flow state (whether the connector has validated
+        // the settings), not configuration, so it does not belong in a configuration change history.
         Add(children, "maxExportParallelism", Render(connectedSystem.MaxExportParallelism), "Max export parallelism");
         children.Add(BuildSettingValues(connectedSystem.SettingValues, hashKey));
         children.Add(BuildRunProfiles(connectedSystem.RunProfiles));
@@ -224,13 +225,18 @@ public class ConfigurationSnapshotService
 
     private ConfigurationSnapshotNode BuildSettingValues(List<ConnectedSystemSettingValue> settingValues, byte[] hashKey)
     {
-        var items = new List<ConfigurationSnapshotNode>();
-        foreach (var settingValue in settingValues.OrderBy(sv => sv.Setting?.Id ?? sv.Id))
-            items.Add(BuildSettingValueNode(settingValue, hashKey));
+        // Unset settings (BuildSettingValueNode returns null) are skipped, so the snapshot records only configured
+        // settings and does not litter creation history with empty "+ File Path:" lines.
+        var items = settingValues
+            .OrderBy(sv => sv.Setting?.Id ?? sv.Id)
+            .Select(sv => BuildSettingValueNode(sv, hashKey))
+            .Where(node => node != null)
+            .Select(node => node!)
+            .ToList();
         return ConfigurationSnapshotNode.CollectionNode("settingValues", items, "Settings");
     }
 
-    private ConfigurationSnapshotNode BuildSettingValueNode(ConnectedSystemSettingValue settingValue, byte[] hashKey)
+    private ConfigurationSnapshotNode? BuildSettingValueNode(ConnectedSystemSettingValue settingValue, byte[] hashKey)
     {
         var label = settingValue.Setting?.Name ?? $"Setting {settingValue.Id}";
         var nodeKey = !string.IsNullOrEmpty(settingValue.Setting?.Name) ? settingValue.Setting!.Name! : $"setting-{settingValue.Id}";
@@ -243,6 +249,10 @@ public class ConfigurationSnapshotService
                        settingValue.Setting?.Type == ConnectedSystemSettingType.StringEncrypted;
         if (isSecret)
         {
+            // An unset secret (no encrypted value) is not configuration; skip it rather than record an empty hash.
+            if (string.IsNullOrEmpty(settingValue.StringEncryptedValue))
+                return null;
+
             var node = ConfigurationSnapshotNode.Secret(nodeKey, ComputeSecretHash(settingValue.StringEncryptedValue, hashKey), label);
             node.ItemId = itemId;
             return node;
@@ -253,6 +263,10 @@ public class ConfigurationSnapshotService
             value = Render(settingValue.IntValue.Value);
         if (string.IsNullOrEmpty(value) && settingValue.Setting?.Type == ConnectedSystemSettingType.CheckBox)
             value = Render(settingValue.CheckboxValue);
+
+        // An unset setting is not configuration; skip it, matching how the top-level scalar Add() helper skips empties.
+        if (string.IsNullOrEmpty(value))
+            return null;
 
         var scalar = ConfigurationSnapshotNode.Scalar(nodeKey, value, label);
         scalar.ItemId = itemId;

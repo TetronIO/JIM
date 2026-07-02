@@ -220,6 +220,34 @@ public class ConfigurationSnapshotServiceTests
         Assert.That(json, Does.Not.Contain("\"pendingExports\""));
     }
 
+    [Test]
+    public void CreateSnapshot_ConnectedSystem_ExcludesInternalSettingValuesValidFlag()
+    {
+        // SettingValuesValid is internal UI-flow state (whether the connector has validated the settings), not
+        // configuration, so it must never appear in a configuration change history.
+        var cs = new ConnectedSystem { Id = 9, Name = "AD", ConnectorDefinitionId = 4, SettingValuesValid = true };
+
+        var snapshot = _service.CreateSnapshot(cs, HashKey);
+
+        Assert.That(Child(snapshot.Root, "settingValuesValid"), Is.Null, "internal validation state is not configuration");
+    }
+
+    [Test]
+    public void CreateSnapshot_ConnectedSystem_SkipsUnconfiguredSettingValues()
+    {
+        // An unset setting (no value) is not configuration; capturing it produces empty "+ File Path:" noise at creation
+        // and misleading empty-to-value modifications later. Only populated settings are captured, matching how the
+        // top-level scalars skip empties.
+        var cs = new ConnectedSystem { Id = 9, Name = "AD", ConnectorDefinitionId = 4 };
+        cs.SettingValues.Add(new ConnectedSystemSettingValue { Id = 1, Setting = new ConnectorDefinitionSetting { Id = 1, Name = "File Path", Type = ConnectedSystemSettingType.String } });
+        cs.SettingValues.Add(new ConnectedSystemSettingValue { Id = 2, Setting = new ConnectorDefinitionSetting { Id = 2, Name = "Delimiter", Type = ConnectedSystemSettingType.String }, StringValue = "," });
+
+        var settings = Child(_service.CreateSnapshot(cs, HashKey).Root, "settingValues")!;
+
+        Assert.That(settings.Children, Has.Count.EqualTo(1), "the empty File Path setting must be skipped");
+        Assert.That(settings.Children!.Single().Label, Is.EqualTo("Delimiter"));
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private static ConfigurationSnapshotNode? Child(ConfigurationSnapshotNode node, string key) =>
