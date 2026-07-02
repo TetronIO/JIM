@@ -11,13 +11,21 @@
 
 @if (Node.NodeType == ConfigurationSnapshotNodeType.Scalar)
 {
+    @* The label is rendered neutral (grey) and only the value carries the add/remove colour, so a value is easy to
+       pick out from its field name. The +/- sigil keeps the add/remove signal. *@
     @if (Node.ChangeType == ConfigurationDiffChangeType.Modified && !Node.IsSecret)
     {
         <div style="@_indent">
-            <MudText Typo="Typo.body2" Color="Color.Error" Style="@MonospaceStyle">- @_label: @_oldDisplay</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Error" Style="@MonospaceStyle">- <span class="mud-text-secondary">@(_label):</span> @_oldDisplay</MudText>
         </div>
         <div style="@_indent">
-            <MudText Typo="Typo.body2" Color="Color.Success" Style="@MonospaceStyle">+ @_label: @_newDisplay</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Success" Style="@MonospaceStyle">+ <span class="mud-text-secondary">@(_label):</span> @_newDisplay</MudText>
+        </div>
+    }
+    else if (_scalarSigil != null)
+    {
+        <div style="@_indent">
+            <MudText Typo="Typo.body2" Color="@_scalarColour" Style="@MonospaceStyle">@_scalarSigil <span class="mud-text-secondary">@(_label):</span> @_scalarValue</MudText>
         </div>
     }
     else if (_scalarLine != null)
@@ -70,7 +78,12 @@ else
     private string? _oldDisplay;
     private string? _newDisplay;
 
-    // Pre-computed presentation for the single-line cases (added/removed scalar, or a changed secret).
+    // Pre-computed presentation for an added/removed non-secret scalar, split so the label renders neutral and the value
+    // renders in the add/remove colour.
+    private string? _scalarSigil;
+    private string? _scalarValue;
+
+    // Pre-computed presentation for the plain single-line cases (a changed/added/removed secret note).
     private string? _scalarLine;
     private Color _scalarColour = Color.Default;
 
@@ -88,6 +101,8 @@ else
         _label = string.IsNullOrEmpty(Node.Label) ? Node.Key : Node.Label;
         _indent = $"padding-left: {Depth * 24}px;";
         _scalarLine = null;
+        _scalarSigil = null;
+        _scalarValue = null;
         _containerClass = null;
         _oldDisplay = Node.OldDisplayValue ?? Node.OldValue;
         _newDisplay = Node.NewDisplayValue ?? Node.NewValue;
@@ -101,12 +116,22 @@ else
         {
             switch (Node.ChangeType)
             {
-                case ConfigurationDiffChangeType.Added:
-                    _scalarLine = Node.IsSecret ? $"+ {_label}  (secret set)" : $"+ {_label}: {_newDisplay}";
+                case ConfigurationDiffChangeType.Added when Node.IsSecret:
+                    _scalarLine = $"+ {_label}  (secret set)";
                     _scalarColour = Color.Success;
                     break;
+                case ConfigurationDiffChangeType.Added:
+                    _scalarSigil = "+";
+                    _scalarValue = _newDisplay;
+                    _scalarColour = Color.Success;
+                    break;
+                case ConfigurationDiffChangeType.Removed when Node.IsSecret:
+                    _scalarLine = $"- {_label}  (secret removed)";
+                    _scalarColour = Color.Error;
+                    break;
                 case ConfigurationDiffChangeType.Removed:
-                    _scalarLine = Node.IsSecret ? $"- {_label}  (secret removed)" : $"- {_label}: {_oldDisplay}";
+                    _scalarSigil = "-";
+                    _scalarValue = _oldDisplay;
                     _scalarColour = Color.Error;
                     break;
                 case ConfigurationDiffChangeType.Modified when Node.IsSecret:
