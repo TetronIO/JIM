@@ -106,7 +106,7 @@ else
                                     @if (canClamp)
                                     {
                                         <div class="mt-1">
-                                            <MudButton Variant="Variant.Text" DropShadow="false"
+                                            <MudButton Variant="Variant.Text" DropShadow="false" Size="Size.Small"
                                                        StartIcon="@(clamped ? Icons.Material.Filled.UnfoldMore : Icons.Material.Filled.UnfoldLess)"
                                                        OnClick="@(() => ToggleShowFull(item.Version))">
                                                 @(clamped ? "Show all changes" : "Show less")
