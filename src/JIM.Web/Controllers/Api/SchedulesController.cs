@@ -164,6 +164,13 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             return NotFound(new ApiErrorResponse { Message = $"Schedule not found: {id}" });
         }
 
+        // A built-in schedule (for example the seeded Temporal Scope Reconciliation schedule) may be
+        // re-timed and enabled/disabled, but its name is part of the product and cannot be changed.
+        if (existingSchedule.BuiltIn && existingSchedule.Name != request.Name)
+        {
+            return BadRequest(new ApiErrorResponse { Message = $"The built-in schedule '{existingSchedule.Name}' cannot be renamed." });
+        }
+
         // Validate request
         var validationError = ValidateScheduleRequest(request.TriggerType, request.CronExpression, request.Steps);
         if (validationError != null)
@@ -259,6 +266,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     /// <returns>No content on success.</returns>
     [HttpDelete("{id:guid}", Name = "DeleteSchedule")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -270,6 +278,12 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         if (existingSchedule == null)
         {
             return NotFound(new ApiErrorResponse { Message = $"Schedule not found: {id}" });
+        }
+
+        // Built-in schedules are part of the product and cannot be deleted (only enabled/disabled/re-timed).
+        if (existingSchedule.BuiltIn)
+        {
+            return BadRequest(new ApiErrorResponse { Message = $"The built-in schedule '{existingSchedule.Name}' cannot be deleted." });
         }
 
         await _application.Scheduler.DeleteScheduleAsync(existingSchedule);

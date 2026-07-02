@@ -1,0 +1,66 @@
+// Copyright (c) Tetron Limited. All rights reserved.
+// Licensed under the Tetron Commercial License. See LICENSE file in the project root.
+
+using System;
+using System.Threading.Tasks;
+using JIM.Application;
+using JIM.Data;
+using JIM.Data.Repositories;
+using JIM.Models.Scheduling;
+using Moq;
+using NUnit.Framework;
+
+namespace JIM.Web.Api.Tests;
+
+/// <summary>
+/// Tests the built-in Schedule protection (issue #892, Phase 5): a built-in Schedule (such as the
+/// seeded Temporal Scope Reconciliation schedule) may be enabled, disabled and re-timed, but must not
+/// be deleted. Delete is guarded authoritatively in the application layer because the Schedule entity
+/// carries the BuiltIn flag; the rename guard lives at the API controller (the sole rename write-path),
+/// covered by SchedulesControllerTests.
+/// </summary>
+[TestFixture]
+public class SchedulerServerBuiltInGuardTests
+{
+    private Mock<IRepository> _mockRepository = null!;
+    private Mock<ISchedulingRepository> _mockSchedulingRepository = null!;
+    private JimApplication _application = null!;
+
+    [SetUp]
+    public void SetUp()
+    {
+        _mockRepository = new Mock<IRepository>();
+        _mockSchedulingRepository = new Mock<ISchedulingRepository>();
+        _mockRepository.Setup(r => r.Scheduling).Returns(_mockSchedulingRepository.Object);
+        _application = new JimApplication(_mockRepository.Object);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        _application?.Dispose();
+    }
+
+    [Test]
+    public void DeleteScheduleAsync_BuiltInSchedule_ThrowsInvalidOperation()
+    {
+        var schedule = new Schedule { Id = Guid.NewGuid(), Name = "Temporal Scope Reconciliation", BuiltIn = true };
+
+        Assert.ThatAsync(async () => await _application.Scheduler.DeleteScheduleAsync(schedule),
+            Throws.InstanceOf<InvalidOperationException>());
+
+        _mockSchedulingRepository.Verify(r => r.DeleteScheduleAsync(It.IsAny<Schedule>()), Times.Never);
+    }
+
+    [Test]
+    public async Task DeleteScheduleAsync_NonBuiltInSchedule_DeletesViaRepositoryAsync()
+    {
+        var schedule = new Schedule { Id = Guid.NewGuid(), Name = "Nightly Full Sync", BuiltIn = false };
+        _mockSchedulingRepository.Setup(r => r.DeleteScheduleAsync(It.IsAny<Schedule>()))
+            .Returns(Task.CompletedTask);
+
+        await _application.Scheduler.DeleteScheduleAsync(schedule);
+
+        _mockSchedulingRepository.Verify(r => r.DeleteScheduleAsync(schedule), Times.Once);
+    }
+}

@@ -27,9 +27,16 @@
             <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pt-4" @bind-ActivePanelIndex="_activeTab">
                 <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Settings">
                     <MudStack Spacing="3">
+                        @if (_schedule.BuiltIn)
+                        {
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                                This is a built-in schedule. You can change when it runs and enable or disable it, but its name cannot be changed and it cannot be deleted.
+                            </MudAlert>
+                        }
                         <MudTextField @bind-Value="_schedule.Name" Immediate="true" Label="Name" Variant="Variant.Outlined"
                                       Required="true" RequiredError="Name is required"
-                                      HelperText="A descriptive name for this schedule" />
+                                      ReadOnly="@_schedule.BuiltIn"
+                                      HelperText="@(_schedule.BuiltIn ? "This is a built-in schedule; its name cannot be changed." : "A descriptive name for this schedule")" />
 
                         <MudTextField @bind-Value="_schedule.Description" Label="Description" Variant="Variant.Outlined"
                                       Lines="2" HelperText="Optional description of what this schedule does" />

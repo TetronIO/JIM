@@ -68,6 +68,12 @@ public class SchedulerServer
 
     public async Task DeleteScheduleAsync(Schedule schedule)
     {
+        // Built-in schedules (for example the seeded Temporal Scope Reconciliation schedule) are part of
+        // the product and must not be deleted; they may be enabled, disabled and re-timed, but not removed.
+        // This is the authoritative backstop for any caller; the API also rejects the request with a 400.
+        if (schedule.BuiltIn)
+            throw new InvalidOperationException($"The built-in schedule '{schedule.Name}' cannot be deleted.");
+
         await Application.Repository.Scheduling.DeleteScheduleAsync(schedule);
     }
 

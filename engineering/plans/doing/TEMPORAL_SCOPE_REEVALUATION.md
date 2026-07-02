@@ -1,6 +1,6 @@
 # Temporal Scope Re-evaluation: Implementation Plan
 
-- **Status:** Doing (Phases 1-3 complete; Phase 4a trigger complete + integration-verified; Phase 4c inbound + outbound complete + integration-verified; Phase 5 not started)
+- **Status:** Doing (Phases 1-6 complete; Phase 4a + 4c inbound/outbound integration-verified; Phase 5 built-in-schedule protection complete + unit-tested. Functionally complete; one deferred limitation: reference-attribute export flow for reconciler-driven MVOs, see Phase 4c. Ready to promote to Done on merge.)
 - **Issue:** [#892](https://github.com/TetronIO/JIM/issues/892) (sub-task of [#85](https://github.com/TetronIO/JIM/issues/85))
 - **PRD:** [`engineering/prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md`](../../prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md) (#85)
 - **Builds on:** [`RELATIVE_DATE_SEARCH_CRITERIA.md`](../RELATIVE_DATE_SEARCH_CRITERIA.md) (the relative-date criteria, evaluator, API, UI)
@@ -138,8 +138,9 @@ Both lanes (inbound and outbound) are delivered in the first implementation, per
 
 **Verification status:** Phase 4a + inbound 4c are integration-verified by Scenario 12 T4 (real stack, clean reset + rebuild): the reconciler schedule runs to Completed and a subsequent sync disconnects a now-out-of-scope object with no data change. Outbound 4c is integration-verified by Scenario 13 (real stack, clean reset + rebuild): an export rule scoped on a Metaverse relative date holds a joiner's downstream provisioning, a plain sync after the boundary provisions nothing (the hot path misses the static-data transition), and after the reconciler flags the Metaverse Object the next sync provisions it downstream, all with no Metaverse Object data change. The control object is untouched throughout.
 
-### Phase 5: API / UI (built-in protection)
-- Allow enable/disable and interval change on the built-in Schedule; block rename and delete (BuiltIn guard in the application layer and UI).
+### Phase 5: API / UI (built-in protection) ✅
+- Enable/disable and interval/pattern change on the built-in Schedule are allowed; rename and delete are blocked. Delete is guarded authoritatively in the application layer (`SchedulerServer.DeleteScheduleAsync` throws on `BuiltIn`), covering every caller including the portal (which calls the application layer directly). Rename is guarded at the API controller (the sole rename write-path, where the pre-mutation name is in hand): `UpdateAsync`/`DeleteAsync` return 400 for a built-in rename/delete. The portal mirrors both: the schedule editor makes a built-in schedule's name read-only (with an explanatory alert), and the list replaces its delete action with a lock; `HandleDeleteAsync` also guards defensively so the application-layer throw never reaches the circuit. Unit-tested (`SchedulerServerBuiltInGuardTests` for the application-layer delete throw; `SchedulesControllerTests` for the rename/delete 400s and the allowed re-time/enable case).
+- **Layering note:** the rename guard lives at the controller rather than the application layer because detecting a rename needs the pre-mutation name, and `GetScheduleAsync` is tracking (a re-read inside the application layer would return the already-mutated entity). The controller holds both the old and new names cleanly; PowerShell reaches the same guard through the API, and the portal cannot rename because the field is read-only.
 
 ### Phase 6: Tests
 - Unit: candidate selection (range + currently-in-scope union), mismatch detection, watermark advance, compound-group correctness, flag-and-delegate (assert the engine, not the reconciler, produces project/join/update/disconnect/delete).

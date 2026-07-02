@@ -145,10 +145,19 @@
                                        OnClick="@(() => HandleRunNowAsync(context))"
                                        Disabled="@(context.Steps.Count == 0)" />
                     </MudTooltip>
-                    <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                       OnClick="@(() => HandleDeleteAsync(context))" />
-                    </MudTooltip>
+                    @if (context.BuiltIn)
+                    {
+                        <MudTooltip Text="Built-in schedule; cannot be deleted" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Disabled="true" />
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                           OnClick="@(() => HandleDeleteAsync(context))" />
+                        </MudTooltip>
+                    }
                 </MudStack>
             </MudTd>
         </RowTemplate>
@@ -347,6 +356,14 @@
 
     private async Task HandleDeleteAsync(Schedule schedule)
     {
+        // Built-in schedules cannot be deleted (the delete affordance is already locked for them; this is the
+        // defence-in-depth guard so the application layer never throws into the circuit).
+        if (schedule.BuiltIn)
+        {
+            Snackbar.Add($"The built-in schedule '{schedule.Name}' cannot be deleted.", Severity.Warning);
+            return;
+        }
+
         var confirmed = await DialogService.ShowMessageBoxAsync(
             "Delete Schedule",
             $"Are you sure you want to delete '{schedule.Name}'? This action cannot be undone.",

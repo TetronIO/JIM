@@ -57,6 +57,21 @@ A schedule execution typically appears as a parent activity with one child activ
 
 Disabled schedules don't fire on their cron trigger and don't appear as eligible for manual run. This is useful for temporarily pausing a schedule during maintenance without losing its definition.
 
+## Built-in schedules
+
+JIM ships with a small number of **built-in schedules** that are part of the product rather than something you create. They behave like any other schedule with one difference: their name is fixed and they cannot be deleted. You can still change **when** they run and enable or disable them.
+
+- **Temporal Scope Reconciliation**<br /> Keeps [relative-date scope filters](synchronisation-rules.md) live for objects whose source data isn't changing. Both the import and export hot paths skip an object that hasn't changed since the last run, so a leaver whose end date has just passed, or a joiner whose start date has just arrived, would otherwise never be re-evaluated until something else about them changed. This schedule periodically re-checks those time-driven scope transitions and routes the affected objects back through the normal synchronisation engine, so date-driven deprovisioning and staged provisioning happen on their own. It runs hourly by default; lower the interval for tighter timing, or raise it to reduce background work.
+
+What you can and can't do with a built-in schedule:
+
+- ✅ **Re-time it**<br /> Change the trigger pattern or interval (for example, run the reconciler every 15 minutes instead of hourly).
+- ✅ **Enable or disable it**<br /> Pause it during a maintenance window and re-enable it afterwards.
+- ❌ **Rename it**<br /> The name is fixed so the schedule stays recognisable and JIM can keep it maintained across upgrades.
+- ❌ **Delete it**<br /> Built-in schedules are part of the product; disable one instead if you don't want it to run.
+
+The portal reflects this: a built-in schedule's name is read-only in the editor, and its delete action is replaced with a lock. The PowerShell module and REST API enforce the same rules.
+
 ## Common workflows
 
 **Setting up an automated nightly sync:**
