@@ -29,17 +29,23 @@
 }
 else
 {
-    @* Object or Collection node. Unchanged containers render nothing; only changed branches are shown. *@
+    @* Object or Collection node. Unchanged containers render nothing; only changed branches are shown. A collection whose
+       own label merely repeats its items' label (e.g. an "Attribute Flow" collection of "Attribute Flow" items) is
+       rendered transparently: no grouping header, and its items appear at the collection's own depth, so there is no
+       redundant grey line above identically-named items. *@
     @if (Node.ChangeType != ConfigurationDiffChangeType.Unchanged)
     {
-        <div style="@_indent">
-            <MudText Typo="Typo.body2" Color="@_containerColour" Class="@_containerClass" Style="@MonospaceStyle">@_containerHeader</MudText>
-        </div>
+        @if (!_transparentCollection)
+        {
+            <div style="@_indent">
+                <MudText Typo="Typo.body2" Color="@_containerColour" Class="@_containerClass" Style="@MonospaceStyle">@_containerHeader</MudText>
+            </div>
+        }
         @if (Node.Children != null)
         {
             @foreach (var child in Node.Children)
             {
-                <ConfigurationChangeDiffNode Node="child" Depth="Depth + 1" />
+                <ConfigurationChangeDiffNode Node="child" Depth="@(_transparentCollection ? Depth : Depth + 1)" />
             }
         }
     }
@@ -73,6 +79,10 @@ else
     private Color _containerColour = Color.Default;
     private string? _containerClass;
 
+    // True when this collection's own label merely repeats its items' label, so its grouping header is redundant and it
+    // is rendered transparently (items pulled up to its own depth).
+    private bool _transparentCollection;
+
     protected override void OnParametersSet()
     {
         _label = string.IsNullOrEmpty(Node.Label) ? Node.Key : Node.Label;
@@ -81,6 +91,11 @@ else
         _containerClass = null;
         _oldDisplay = Node.OldDisplayValue ?? Node.OldValue;
         _newDisplay = Node.NewDisplayValue ?? Node.NewValue;
+
+        _transparentCollection = Node.NodeType == ConfigurationSnapshotNodeType.Collection
+            && Node.ChangeType != ConfigurationDiffChangeType.Unchanged
+            && Node.Children is { Count: > 0 }
+            && Node.Children.All(c => EffectiveLabel(c) == _label);
 
         if (Node.NodeType == ConfigurationSnapshotNodeType.Scalar)
         {
@@ -122,4 +137,6 @@ else
             }
         }
     }
+
+    private static string EffectiveLabel(ConfigurationDiffNode node) => string.IsNullOrEmpty(node.Label) ? node.Key : node.Label;
 }
