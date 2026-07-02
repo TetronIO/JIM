@@ -151,7 +151,7 @@ Sync engine: #435 → #873/#872 (D1); Preview: #288 engine build; #242 implement
 Batched so they can be answered in one sitting. Wave 1 cannot fully start without the first group.
 
 **Blocking Wave 1:**
-1. **Scope cut:** ratify (or amend) the P3 demotions in Section 3.
+1. **Scope cut:** ratify (or amend) the P3 demotions in Section 3. **RATIFIED 2026-07-02:** #307, #359, #464, #498, #880, #582 and #877 moved to the v1.x-CONNECTORS milestone. The v1.0-ILM-COMPLETE milestone now holds 50 open issues.
 2. **#655:** per-Synchronisation-Rule `DeprovisionScope` setting vs honouring `OutboundDeprovisionAction` unconditionally; is a confirmation/dry-run safety net required for v1.0?
 3. **#242:** expression function vs dedicated generator; uniqueness scope (Metaverse vs Connected System vs live target query); collision suffix strategy; intra-batch collision handling.
 4. **#827:** where preview computation runs (worker job vs synchronous); how unsaved proposed config is represented; do preview results persist as Activities; which preview tiers are v1.0-mandatory.
