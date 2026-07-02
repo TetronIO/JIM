@@ -518,6 +518,10 @@ public class SchedulerServer
                 await QueueRunProfileStepAsync(execution, step, isParallelGroup, initialStatus, initiatorType, initiatorId, initiatorName);
                 break;
 
+            case ScheduleStepType.TemporalScopeReconciliation:
+                await QueueTemporalScopeReconciliationStepAsync(execution, step, isParallelGroup, initialStatus, initiatorType, initiatorId, initiatorName);
+                break;
+
             case ScheduleStepType.PowerShell:
             case ScheduleStepType.Executable:
             case ScheduleStepType.SqlScript:
@@ -574,5 +578,64 @@ public class SchedulerServer
 
         Log.Debug("QueueRunProfileStepAsync: Created worker task {TaskId} for step {StepId} with status {Status}",
             result.WorkerTaskId, step.Id, initialStatus);
+    }
+
+    /// <summary>
+    /// Queues a Temporal Scope Reconciliation step (issue #892) by creating a TemporalScopeReconciliationWorkerTask.
+    /// The task carries no per-step configuration; the worker derives its watermark from the schedule's execution
+    /// history at run time.
+    /// </summary>
+    private async Task QueueTemporalScopeReconciliationStepAsync(
+        ScheduleExecution execution,
+        ScheduleStep step,
+        bool isParallelGroup,
+        WorkerTaskStatus initialStatus,
+        ActivityInitiatorType initiatorType,
+        Guid? initiatorId,
+        string? initiatorName)
+    {
+        var workerTask = new TemporalScopeReconciliationWorkerTask
+        {
+            Status = initialStatus,
+            InitiatedByType = initiatorType,
+            InitiatedById = initiatorId,
+            InitiatedByName = initiatorName,
+            ScheduleExecutionId = execution.Id,
+            ScheduleStepIndex = step.StepIndex,
+            ContinueOnFailure = step.ContinueOnFailure,
+            ExecutionMode = isParallelGroup ? WorkerTaskExecutionMode.Parallel : WorkerTaskExecutionMode.Sequential
+        };
+
+        var result = await Application.Tasking.CreateWorkerTaskAsync(workerTask);
+        if (!result.Success)
+        {
+            throw new InvalidOperationException($"Failed to create worker task for step {step.Id}: {result.ErrorMessage}");
+        }
+
+        Log.Debug("QueueTemporalScopeReconciliationStepAsync: Created worker task {TaskId} for step {StepId} with status {Status}",
+            result.WorkerTaskId, step.Id, initialStatus);
+    }
+
+    /// <summary>
+    /// Derives the failure-safe watermark for a Temporal Scope Reconciliation sweep (issue #892): the start time
+    /// of the previous successfully completed execution of the same schedule. Because a failed sweep never reaches
+    /// Completed status, its window is re-covered by the next sweep rather than silently skipped. Returns null when
+    /// there is no prior completed execution (the first, bootstrap sweep, which considers every transitioned object
+    /// once).
+    /// </summary>
+    /// <param name="currentExecutionId">The in-progress execution running the sweep.</param>
+    public async Task<DateTime?> GetTemporalScopeReconciliationWatermarkAsync(Guid currentExecutionId)
+    {
+        var current = await Application.Repository.Scheduling.GetScheduleExecutionAsync(currentExecutionId);
+        if (current == null)
+        {
+            Log.Warning("GetTemporalScopeReconciliationWatermarkAsync: Execution {ExecutionId} not found; using bootstrap (null) watermark.", currentExecutionId);
+            return null;
+        }
+
+        // StartedAt is populated the moment an execution begins; fall back to QueuedAt defensively.
+        var currentStartedAt = current.StartedAt ?? current.QueuedAt;
+        var previous = await Application.Repository.Scheduling.GetLastCompletedScheduleExecutionAsync(current.ScheduleId, currentStartedAt);
+        return previous?.StartedAt;
     }
 }

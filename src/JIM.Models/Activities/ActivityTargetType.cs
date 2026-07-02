@@ -20,5 +20,11 @@ public enum ActivityTargetType
     /// <summary>
     /// A system-wide operation that is not scoped to a single entity, such as a factory reset.
     /// </summary>
-    System = 12
+    System = 12,
+
+    /// <summary>
+    /// The Temporal Scope Reconciler sweep (issue #892), which re-evaluates relative-date scoping across all
+    /// enabled Synchronisation Rules that carry a relative-date criterion.
+    /// </summary>
+    TemporalScopeReconciliation = 13
 }

@@ -1,6 +1,6 @@
 # Temporal Scope Re-evaluation: Implementation Plan
 
-- **Status:** Doing (Phases 1-3 complete)
+- **Status:** Doing (Phases 1-3 complete; Phase 4a trigger complete)
 - **Issue:** [#892](https://github.com/TetronIO/JIM/issues/892) (sub-task of [#85](https://github.com/TetronIO/JIM/issues/85))
 - **PRD:** [`engineering/prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md`](../../prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md) (#85)
 - **Builds on:** [`RELATIVE_DATE_SEARCH_CRITERIA.md`](../RELATIVE_DATE_SEARCH_CRITERIA.md) (the relative-date criteria, evaluator, API, UI)
@@ -122,9 +122,14 @@ Both lanes (inbound and outbound) are delivered in the first implementation, per
 - Pure selection and flagging; no mutation of join state or exports (flag-and-delegate).
 - Reconciler methods take `afterUtc`/`nowUtc` parameters for testability; the watermark source (a global "last reconciled at" that survives downtime) is wired in Phase 4.
 
-### Phase 4: Trigger and apply
-- Seed the built-in "Temporal Scope Reconciliation" Schedule (BuiltIn, default hourly).
-- Worker execution: run the reconciler, then enqueue the targeted re-sync (inbound) / re-export-evaluation (outbound) of flagged objects through the existing engine.
+### Phase 4a: Trigger (schedule + worker plumbing) ✅
+- New `ScheduleStepType.TemporalScopeReconciliation` and a `TemporalScopeReconciliationWorkerTask` (WorkerTask TPH subclass, no per-instance columns; the migration is an empty schema change that just registers the discriminator value). `TaskingRepository`/`TaskingServer` create the task with a system-targeted Activity (`ActivityTargetType.TemporalScopeReconciliation`).
+- `SchedulerServer.QueueStepAsync` queues the task for a reconciliation step; `Worker.cs` dispatches it to `ScopeReconciliation.ReconcileAsync(afterUtc, nowUtc)` and completes/fails the Activity.
+- Built-in "Temporal Scope Reconciliation" Schedule seeded (`BuiltIn`, enabled, hourly cron `0 * * * *`) via `SeedingServer.SeedBuiltInSchedulesAsync`, called from `InitialiseDatabaseAsync`; idempotent (keyed on a built-in schedule owning a reconciliation step).
+- **Watermark: failure-safe (resolved).** `afterUtc` is the `StartedAt` of the previous **successfully completed** execution of the built-in schedule (`GetLastCompletedScheduleExecutionAsync`), not `Schedule.LastRunTime`. `LastRunTime` advances at trigger time regardless of outcome, so reusing it would let a failed sweep advance the watermark and silently skip that window for objects with static source data (the exact case this feature exists to catch). A failed sweep never reaches `Completed`, so its window is re-covered by the next sweep. Null (bootstrap) before any prior completion.
+
+### Phase 4c: Apply (honour the flag in the engine)
+- **Decision: flag now, honour flag in engine.** The reconciler only sets `ScopeReviewPending`; the existing engine applies the real outcome (flag-and-delegate). Teach the hot-path skips to let flagged objects through: inbound `IsUnchangedSinceLastSync` skip in `SyncTaskProcessorBase`, and the outbound changed-MVO export path in `ExportEvaluationServer`. Clear `ScopeReviewPending` once the object is processed. Sync-integrity-critical; its own commit.
 
 ### Phase 5: API / UI (built-in protection)
 - Allow enable/disable and interval change on the built-in Schedule; block rename and delete (BuiltIn guard in the application layer and UI).
@@ -147,9 +152,9 @@ Both lanes (inbound and outbound) are delivered in the first implementation, per
 
 - **Staging mechanism (RESOLVED, Phase 1):** explicit `ScopeReviewPending` flag on CSO/MVO (auditable), over reusing the unchanged-skip by bumping `LastUpdated`. Shipped.
 - **Candidate-set precision (RESOLVED, Phase 2):** the **transition-window range query**. A relative criterion resolves its boundary as `B(t) = now(t) + signedOffset`; the comparison's truth-value flips for an object exactly when `now` crosses `value − signedOffset`, so every object whose value flips in `(afterUtc, throughUtc]` has its date value in `(afterUtc + signedOffset, throughUtc + signedOffset]`. The reconciler shifts the window by each criterion's `signedOffset` and issues one indexed range query per relative-date criterion, unioning the IDs. This is the "exact date-range delta" option (O(transitions) via the composite index), not the "rescan all in-scope" baseline. Over-inclusion is harmless because the in-memory full evaluation is the final gate; under-inclusion is prevented by the window identity above. Bootstrap uses a null lower bound (open window) so the first sweep catches all already-transitioned objects.
-- **Apply step (open):** a dedicated targeted "scope re-sync" mode that iterates only flagged objects, versus enqueuing a normal sync/export of the flagged subset. Resolve in Phase 4.
-- **Watermark placement (open):** per-rule/per-schedule watermark for the window lower bound versus the per-object `LastScopeEvaluatedAt` column shipped in Phase 1. Resolve in Phase 3.
-- **Interval configuration surface (open):** Schedule interval only, or also a Service Setting for the seeded default / floor. Resolve in Phase 4/5.
+- **Apply step (RESOLVED, Phase 4a; implemented Phase 4c):** flag-and-delegate. The reconciler only sets `ScopeReviewPending`; the engine's existing hot-path skips are taught to let flagged objects through on the next scheduled sync/export, rather than the reconciler enqueuing a bespoke targeted re-sync. Keeps all project/join/Attribute Flow/deprovision behaviour in the proven engine.
+- **Watermark placement (RESOLVED, Phase 4a):** a per-schedule watermark derived from execution history: the previous **successfully completed** execution's `StartedAt`. Chosen over reusing `Schedule.LastRunTime` (which advances on every trigger regardless of outcome and would skip a failed sweep's window) and over a dedicated watermark column (no new column or scheduler threading needed). The per-object `LastScopeEvaluatedAt` column remains for observability.
+- **Interval configuration surface (RESOLVED, Phase 4a):** Schedule interval only (seeded hourly, admin-adjustable). No separate Service Setting for a default/floor; the Schedule is the single source of cadence.
 
 ## Risks and Mitigations
 

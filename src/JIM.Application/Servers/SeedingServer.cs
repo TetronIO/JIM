@@ -7,6 +7,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
 using JIM.Models.Interfaces;
+using JIM.Models.Scheduling;
 using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
@@ -577,6 +578,59 @@ internal class SeedingServer
             connectorDefinitions);
         stopwatch.Stop();
         Log.Verbose($"SeedAsync: Completed in: {stopwatch.Elapsed}");
+    }
+
+    /// <summary>
+    /// Seeds the built-in schedules that JIM provides and maintains itself. Currently this is the Temporal Scope
+    /// Reconciliation schedule (issue #892), which periodically re-evaluates relative-date scoping for objects
+    /// whose scope membership drifts with the clock but whose source data has not changed. Idempotent: it does
+    /// nothing if the built-in schedule already exists. Administrators may enable/disable it and change its
+    /// interval, but may not rename or delete it (enforced at the API/UI layer).
+    /// </summary>
+    internal async Task SeedBuiltInSchedulesAsync()
+    {
+        var schedules = await Application.Repository.Scheduling.GetAllSchedulesAsync();
+        var reconciliationScheduleExists = schedules.Any(s => s.BuiltIn &&
+            s.Steps.Any(st => st.StepType == ScheduleStepType.TemporalScopeReconciliation));
+        if (reconciliationScheduleExists)
+        {
+            Log.Verbose("SeedBuiltInSchedulesAsync: Temporal Scope Reconciliation schedule already present; skipping.");
+            return;
+        }
+
+        var schedule = new Schedule
+        {
+            Name = "Temporal Scope Reconciliation",
+            Description = "Built-in schedule that re-evaluates relative-date scoping for objects whose scope membership " +
+                          "changes as time passes (for example a leaver whose end date passes) but whose source data has " +
+                          "not changed, so the synchronisation and export hot paths would otherwise skip them.",
+            BuiltIn = true,
+            IsEnabled = true,
+            TriggerType = ScheduleTriggerType.Cron,
+            PatternType = SchedulePatternType.Interval,
+            IntervalValue = 1,
+            IntervalUnit = ScheduleIntervalUnit.Hours,
+            DaysOfWeek = "0,1,2,3,4,5,6",
+            CronExpression = "0 * * * *",
+            CreatedByType = ActivityInitiatorType.System,
+            CreatedByName = "System",
+            Steps = new List<ScheduleStep>
+            {
+                new()
+                {
+                    StepIndex = 0,
+                    Name = "Reconcile Temporal Scope",
+                    StepType = ScheduleStepType.TemporalScopeReconciliation,
+                    ExecutionMode = StepExecutionMode.Sequential,
+                    ContinueOnFailure = false,
+                    CreatedByType = ActivityInitiatorType.System,
+                    CreatedByName = "System"
+                }
+            }
+        };
+
+        await Application.Repository.Scheduling.CreateScheduleAsync(schedule);
+        Log.Information("SeedBuiltInSchedulesAsync: Created built-in Temporal Scope Reconciliation schedule {ScheduleId} (hourly).", schedule.Id);
     }
 
     /// <summary>

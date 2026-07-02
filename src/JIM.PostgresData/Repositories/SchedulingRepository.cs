@@ -298,4 +298,14 @@ public class SchedulingRepository : ISchedulingRepository
                         (s.NextRunTime == null || s.NextRunTime <= DateTime.UtcNow))
             .ToListAsync();
     }
+
+    public async Task<ScheduleExecution?> GetLastCompletedScheduleExecutionAsync(Guid scheduleId, DateTime beforeStartedAt)
+    {
+        return await Repository.Database.ScheduleExecutions
+            .Where(e => e.ScheduleId == scheduleId &&
+                        e.Status == ScheduleExecutionStatus.Completed &&
+                        e.StartedAt < beforeStartedAt)
+            .OrderByDescending(e => e.StartedAt)
+            .FirstOrDefaultAsync();
+    }
 }

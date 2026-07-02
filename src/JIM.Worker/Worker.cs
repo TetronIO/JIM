@@ -474,6 +474,35 @@ public class Worker : BackgroundService
 
                                     break;
                                 }
+                                case TemporalScopeReconciliationWorkerTask:
+                                {
+                                    Log.Information("ExecuteAsync: TemporalScopeReconciliationWorkerTask received, initiated by: {InitiatedBy}",
+                                        newWorkerTask.InitiatedByName ?? "Unknown");
+
+                                    try
+                                    {
+                                        // Failure-safe watermark: the previous successfully completed sweep's start time,
+                                        // so a failed sweep never advances the watermark and no window is skipped (issue #892).
+                                        // Null (bootstrap) when triggered outside a schedule or before any prior completion.
+                                        DateTime? afterUtc = null;
+                                        if (newWorkerTask.ScheduleExecutionId.HasValue)
+                                            afterUtc = await taskJim.Scheduler.GetTemporalScopeReconciliationWatermarkAsync(newWorkerTask.ScheduleExecutionId.Value);
+
+                                        var reconciliationResult = await taskJim.ScopeReconciliation.ReconcileAsync(afterUtc, DateTime.UtcNow);
+                                        newWorkerTask.Activity.Message = null;
+                                        await taskJim.Activities.CompleteActivityAsync(newWorkerTask.Activity);
+
+                                        Log.Information("ExecuteAsync: Temporal Scope Reconciliation completed in {ExecutionTime}: {RulesEvaluated} rule(s), {InboundFlagged} inbound + {OutboundFlagged} outbound object(s) flagged for scope review.",
+                                            newWorkerTask.Activity.ExecutionTime, reconciliationResult.RulesEvaluated, reconciliationResult.InboundFlagged, reconciliationResult.OutboundFlagged);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        await taskJim.Activities.FailActivityWithErrorAsync(newWorkerTask.Activity, ex);
+                                        Log.Error(ex, "ExecuteAsync: Unhandled exception whilst executing Temporal Scope Reconciliation.");
+                                    }
+
+                                    break;
+                                }
                             }
                         
                             // Mark the task as complete — unless it was already cancelled by the main loop's

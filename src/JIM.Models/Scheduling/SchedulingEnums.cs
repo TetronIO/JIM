@@ -59,7 +59,14 @@ public enum ScheduleStepType
     /// <summary>
     /// Execute a SQL script.
     /// </summary>
-    SqlScript = 3
+    SqlScript = 3,
+
+    /// <summary>
+    /// Run the Temporal Scope Reconciler sweep (issue #892): re-evaluate relative-date scoping for objects
+    /// whose scope membership drifts with the clock but whose source data has not changed. Used only by the
+    /// built-in Temporal Scope Reconciliation schedule.
+    /// </summary>
+    TemporalScopeReconciliation = 4
 }
 
 /// <summary>
