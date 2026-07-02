@@ -11,21 +11,21 @@
 
 @if (Node.NodeType == ConfigurationSnapshotNodeType.Scalar)
 {
-    @* The label is rendered neutral (grey) and only the value carries the add/remove colour, so a value is easy to
-       pick out from its field name. The +/- sigil keeps the add/remove signal. *@
+    @* The whole line takes the add/remove colour, but the label (and its colon) is dimmed to the same hue so the value
+       is the brightest token and easy to pick out. The +/- sigil keeps the add/remove signal. *@
     @if (Node.ChangeType == ConfigurationDiffChangeType.Modified && !Node.IsSecret)
     {
         <div style="@_indent">
-            <MudText Typo="Typo.body2" Color="Color.Error" Style="@MonospaceStyle">- <span class="mud-text-secondary">@(_label):</span> @_oldDisplay</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Error" Style="@MonospaceStyle">- <span style="@LabelStyle">@(_label):</span> @_oldDisplay</MudText>
         </div>
         <div style="@_indent">
-            <MudText Typo="Typo.body2" Color="Color.Success" Style="@MonospaceStyle">+ <span class="mud-text-secondary">@(_label):</span> @_newDisplay</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Success" Style="@MonospaceStyle">+ <span style="@LabelStyle">@(_label):</span> @_newDisplay</MudText>
         </div>
     }
     else if (_scalarSigil != null)
     {
         <div style="@_indent">
-            <MudText Typo="Typo.body2" Color="@_scalarColour" Style="@MonospaceStyle">@_scalarSigil <span class="mud-text-secondary">@(_label):</span> @_scalarValue</MudText>
+            <MudText Typo="Typo.body2" Color="@_scalarColour" Style="@MonospaceStyle">@_scalarSigil <span style="@LabelStyle">@(_label):</span> @_scalarValue</MudText>
         </div>
     }
     else if (_scalarLine != null)
@@ -69,6 +69,9 @@ else
     public int Depth { get; set; }
 
     private const string MonospaceStyle = "font-family: monospace; white-space: pre-wrap;";
+
+    // Dims a field label to the same hue as its line, so the value (rendered at full strength) is the brightest token.
+    private const string LabelStyle = "opacity: 0.6;";
 
     private string _label = string.Empty;
     private string _indent = string.Empty;
