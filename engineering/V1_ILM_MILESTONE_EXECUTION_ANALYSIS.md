@@ -1,14 +1,14 @@
 # v1.0-ILM-COMPLETE Milestone: Execution Analysis
 
 - **Date:** 2026-07-02
-- **Scope:** All 57 open issues on the `v1.0-ILM-COMPLETE` milestone
+- **Scope:** All 57 open issues on the `v1.0-ILM-COMPLETE` milestone at time of analysis. **Update (same day):** the P3 scope cut was ratified and executed; the seven P3 issues now sit on `v1.x-CONNECTORS` and the milestone holds 50 open issues.
 - **Purpose:** Categorise the milestone by theme, prioritise for fastest route to a polished, production-safe v1.0, and define an execution plan (parallel lanes, serialisation constraints, design decisions needed) suitable for multi-agent delivery.
 
 ---
 
 ## 1. Headline Findings
 
-1. **The milestone is over-scoped for a "fastest to market" goal.** 57 open issues include seven XL items (each needing a PRD and phased plan). Recommendation: demote roughly 7-10 issues to v1.x explicitly (see Section 3, tier P3). Cutting scope is the single biggest velocity lever available.
+1. **The milestone is over-scoped for a "fastest to market" goal.** 57 open issues include seven XL items (each needing a PRD and phased plan). Recommendation: demote roughly 7-10 issues to v1.x explicitly (see Section 3, tier P3). Cutting scope is the single biggest velocity lever available. **Done:** the seven P3 issues were moved to `v1.x-CONNECTORS` on 2026-07-02.
 2. **Several issues are already done or nearly done.** #154 (API coverage) is complete on branch `claude/gh-154-powershell-coverage-a67jff` awaiting merge; #467 (role membership API) appears implemented in the codebase; #14 (change history) is largely delivered and needs a gap audit; #466 is partially superseded by the #154 branch; #126 duplicates #655; #294 double-tracks work owned by #861/#636/#518/#841. A hygiene pass closing these is nearly-free throughput.
 3. **The scarce resource is not agents; it is the sync engine.** Three of the largest clusters (import processor, attribute flow, deprovisioning) all modify the same handful of files (`SyncImportTaskProcessor.cs`, `SyncEngine.AttributeFlow.cs`, `SyncTaskProcessorBase.cs`, `ExportEvaluationServer.cs`). Parallelising across those clusters guarantees merge conflicts and re-validation churn. Treat "sync engine" as one work lane with an ordered queue; everything else genuinely parallelises.
 4. **Two launch-blocking capability gaps stand out:** #242 (unique value generation; without it a greenfield customer cannot provision accounts unless HR supplies IT identifiers) and #655 (leaver deprovisioning silently fails for Joined/Projected CSOs, i.e. the extremely common join-existing-accounts deployment). Both undermine the "ILM complete" claim directly.
@@ -66,7 +66,7 @@ Priority is judged against one question: *what does an ILM customer in a high-tr
 
 #116, #119 (deletion rule refinements), #207 (matching rule operators), #204 (scope-change warnings; fold into #827), #872 (SVA update in place), #497 (import parallelism), #399 (causality tracking; #91 already shipped the highest-value piece), #453, #454 (Activity detail visualisations), #466 (remainder: `Watch-JIMLog` only), #519 (continuous SBOMs), #841 (preview releases), #636 Phases 1-3 (parallel integration tests), #231 (surface LDAP capabilities), #437, #438 (partition scoping **evaluations**; cheap design docs, and "won't do" is a valid outcome that deletes future scope; do the write-up early).
 
-### P3 - Recommend demoting to v1.x (7)
+### P3 - Demoted to v1.x (7) - **executed 2026-07-02, all seven moved to the v1.x-CONNECTORS milestone**
 
 | Issue | Rationale |
 |---|---|
@@ -142,7 +142,7 @@ Sync engine: #435 → #873/#872 (D1); Preview: #288 engine build; #242 implement
 
 ### Explicitly not scheduled (v1.x)
 
-#307, #359, #464, #497/#498 (unless benchmarks force it), #880, #582, #877 (unless done in Wave 0), #438 implementation.
+#307, #359, #464, #498, #880, #582 and #877 are now on the v1.x-CONNECTORS milestone (moved 2026-07-02). #497 stays on the milestone as P2 but should slip unless benchmarks force it; #438's implementation half is also unscheduled (the evaluation may close it).
 
 ---
 
@@ -191,6 +191,8 @@ Batched so they can be answered in one sitting. Wave 1 cannot fully start withou
 
 ## 8. Full Issue Index
 
+Rows marked **P3 → v1.x** were moved to the v1.x-CONNECTORS milestone on 2026-07-02 and are no longer on v1.0-ILM-COMPLETE; they are retained here for the record.
+
 | # | Title (abbreviated) | Theme | Tier | Effort | Domain/Lane | Key dependency notes |
 |---|---|---|---|---|---|---|
 | 9 | Synchronisation Readers role | Security/RBAC | P0 | M | D7 | Before #881; collides with #154/#467 controllers - after D5 merge |
@@ -213,10 +215,10 @@ Batched so they can be answered in one sitting. Wave 1 cannot fully start withou
 | 242 | Unique value generation | Provisioning | P0 | XL | D2 | PRD first; last in D2 queue |
 | 288 | Sync Preview Mode | Preview | P0 | XL | D6 | Engine for #827; PRD first; coordinate with sync-engine lanes |
 | 294 | Integration testing deferred tasks | Testing | P1 | M (rescoped) | D8 | Rescope to GALSYNC scenario; rest superseded |
-| 307 | Real-time notifications | Platform | **P3** | XL | - | Defer to v1.x |
+| 307 | Real-time notifications | Platform | **P3 → v1.x** | XL | - | Defer to v1.x |
 | 348 | MVO detail metadata/connectors | Observability | P1 | L | D5 tail | Share scope-evaluation with #288; after #813 |
 | 351 | Container/OU selection | LDAP | P1 | L | LDAP | Phase 1 only; parallel-safe vs D10 |
-| 359 | Configuration migration | Config mgmt | **P3** | XL | - | Defer; design after #376/#377 stabilise |
+| 359 | Configuration migration | Config mgmt | **P3 → v1.x** | XL | - | Defer; design after #376/#377 stabilise |
 | 376 | CRUD custom MV Object Types | Schema | P0 | L | D5 tail | After #377 |
 | 377 | CRUD custom MV Attributes | Schema | P0 | M | D5 tail | API/cmdlets largely exist; UI + safeguards |
 | 399 | Sync rule causality tracking | Observability | P2 | M | D2 | De-duplicate plan vs #91 provenance first |
@@ -226,16 +228,16 @@ Batched so they can be answered in one sitting. Wave 1 cannot fully start withou
 | 438 | Evaluate export partition scoping | Design | P2 | S | Doc | Cross-partition reference risk; likely defer impl |
 | 453 | Live throughput graph | Monitoring UI | P2 | S | D9 | Raw SVG, no new dependency |
 | 454 | Phase stepper | Monitoring UI | P2 | M | D9 | Worker phase field; coordinate with #497/#498 owners |
-| 464 | External task step types | Scheduler | **P3** | XL | - | Defer on security-hardening grounds |
+| 464 | External task step types | Scheduler | **P3 → v1.x** | XL | - | Defer on security-hardening grounds |
 | 466 | PS Log cmdlets | API/PS | P2 | S | D5 | Rescope to Watch-JIMLog; reconcile naming with #154 |
 | 467 | Role membership API | API/PS | P0 | S | D5 | Verify then close |
 | 487 | Pagination safety hardening | API/PS | P1 | M | D5 | After #154; feeds #500 |
 | 497 | Import parallelism | Perf | P2 | M-L | D1 | Last in D1; candidate to defer |
-| 498 | Sync phase parallelism | Perf | **P3** | XL | - | Design spike only if benchmarks demand |
+| 498 | Sync phase parallelism | Perf | **P3 → v1.x** | XL | - | Design spike only if benchmarks demand |
 | 500 | OWASP remediation | Security | P0 | L | D7 + misc | Splittable; audit trail unified with #14 |
 | 518 | Release gate: integration suite | Release eng | P1 | XL (auto) / S (manual) | D8 | Manual checklist for GA; automated gate v1.x |
 | 519 | Continuous SBOMs | Compliance | P2 | S | D8 | Parallel-safe |
-| 582 | Screenshot automation | Docs tooling | **P3** | M | - | Manual refresh for v1.0 |
+| 582 | Screenshot automation | Docs tooling | **P3 → v1.x** | M | - | Manual refresh for v1.0 |
 | 636 | Parallel integration tests | Testing | P2 | XL | D8 | Phases 1-3 only; Phase 4 blocked on runners |
 | 655 | Deletion cascade Provisioned-only | Deprovisioning | P0 | M | D3 | Merge #126 in; first D3 decision |
 | 809 | CS deletion sync deprovisioning | Deprovisioning | P1 | XL (design) | D3 | Co-design with #134; execute post-GA if needed |
@@ -247,8 +249,8 @@ Batched so they can be answered in one sitting. Wave 1 cannot fully start withou
 | 872 | SVA update in place | Perf | P2 | M | D1 | First in D1 (stable persistence before parallelism) |
 | 873 | Tolerate unresolved references | Robustness | P1 | S-M | D1 | Warn semantics decision |
 | 874 | Sync error object snapshots | Supportability | P1 | M | D1 | Interlocks with #881 on sensitive data |
-| 877 | BoolTrueDistribution | Demo data | **P3** | S | - | Opportunistic |
-| 880 | Export re-evaluation optimisation | Perf | **P3** | M | - | Only if profiling justifies |
+| 877 | BoolTrueDistribution | Demo data | **P3 → v1.x** | S | - | Opportunistic |
+| 880 | Export re-evaluation optimisation | Perf | **P3 → v1.x** | M | - | Only if profiling justifies |
 | 881 | Sensitive value access control | Audit/security | P1 | M | D7 | After #14 and #9 |
 
 ---
