@@ -88,6 +88,31 @@ public class ConfigurationChangeHistoryRetrievalTests
     }
 
     [Test]
+    public async Task GetConfigurationChangeHistoryAsync_AttachesDiffToEachItemAsync()
+    {
+        // The list carries the full diff per row so the UI renders it inline without a second round-trip; the diff is
+        // already computed to build the summary, so attaching it is free.
+        var rows = new List<ConfigurationChangeActivityData>
+        {
+            Data(version: 2, ActivityTargetOperationType.Update, SnapJson(Cs("v2"))),
+            Data(version: 1, ActivityTargetOperationType.Create, SnapJson(Cs("v1")))
+        };
+        _activityRepo.Setup(r => r.GetConfigurationChangeCountAsync(ActivityTargetType.ConnectedSystem, 9)).ReturnsAsync(2);
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivitiesAsync(ActivityTargetType.ConnectedSystem, 9, 0, 21)).ReturnsAsync(rows);
+
+        var result = await _jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ConnectedSystem, 9);
+
+        Assert.That(result.Results[0].Diff, Is.Not.Null, "v2 must carry its diff against v1");
+        Assert.That(result.Results[0].Diff!.ModifiedCount, Is.EqualTo(1), "the description changed between v1 and v2");
+        Assert.That(result.Results[0].Diff.OldVersion, Is.EqualTo(1));
+        Assert.That(result.Results[0].Diff.NewVersion, Is.EqualTo(2));
+
+        // The first version has no predecessor, so its diff shows the whole object as created (root Added).
+        Assert.That(result.Results[1].Diff, Is.Not.Null, "the creation row must carry a diff too");
+        Assert.That(result.Results[1].Diff!.Root.ChangeType, Is.EqualTo(ConfigurationDiffChangeType.Added));
+    }
+
+    [Test]
     public async Task GetConfigurationChangeAsync_ReturnsSnapshotAndDiffAgainstPredecessorAsync()
     {
         _activityRepo.Setup(r => r.GetConfigurationChangeActivityByVersionAsync(ActivityTargetType.ConnectedSystem, 9, 2))

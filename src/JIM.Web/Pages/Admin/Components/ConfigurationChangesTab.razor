@@ -93,26 +93,26 @@ else
                                     <MudText Typo="Typo.body2" Class="mt-1" Style="font-style: italic;">&ldquo;@item.Reason&rdquo;</MudText>
                                 }
 
-                                <div class="mt-2">
-                                    <MudButton Variant="Variant.Text" DropShadow="false"
-                                               StartIcon="@(_expandedVersions.Contains(item.Version) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
-                                               OnClick="@(() => ToggleDiffAsync(item.Version))">
-                                        @(_expandedVersions.Contains(item.Version) ? "Hide diff" : "View diff")
-                                    </MudButton>
-                                </div>
-
-                                @if (_expandedVersions.Contains(item.Version))
+                                @* The diff is shown inline by default. A large diff is clamped to a comfortable height so it
+                                   does not dominate the timeline, with a toggle to expand it to full length. *@
+                                @if (item.Diff != null)
                                 {
-                                    <div class="mt-3">
-                                        @if (_detailLoadingVersions.Contains(item.Version))
-                                        {
-                                            <div class="d-flex justify-center my-4"><MudProgressCircular Indeterminate="true" Color="Color.Primary" /></div>
-                                        }
-                                        else if (_details.GetValueOrDefault(item.Version) is { } detail)
-                                        {
-                                            <ConfigurationChangeDiff Diff="detail.Diff" />
-                                        }
+                                    var diffLines = CountDiffLines(item.Diff);
+                                    var canClamp = diffLines > MaxVisibleLines;
+                                    var clamped = canClamp && !_showFullVersions.Contains(item.Version);
+                                    <div class="mt-3 @(clamped ? "config-diff-clamp" : null)">
+                                        <ConfigurationChangeDiff Diff="item.Diff" />
                                     </div>
+                                    @if (canClamp)
+                                    {
+                                        <div class="mt-1">
+                                            <MudButton Variant="Variant.Text" DropShadow="false"
+                                                       StartIcon="@(clamped ? Icons.Material.Filled.UnfoldMore : Icons.Material.Filled.UnfoldLess)"
+                                                       OnClick="@(() => ToggleShowFull(item.Version))">
+                                                @(clamped ? "Show all changes" : "Show less")
+                                            </MudButton>
+                                        </div>
+                                    }
                                 }
                             </MudCardContent>
                         </MudCard>
@@ -152,11 +152,12 @@ else
 
     private List<int> _versions = new();
 
-    // Expansion is fully manual and independent per version: several diffs can be open at once. Loaded details are
-    // cached per version so re-expanding does not re-fetch.
-    private readonly HashSet<int> _expandedVersions = new();
-    private readonly HashSet<int> _detailLoadingVersions = new();
-    private readonly Dictionary<int, ConfigurationChangeDetail?> _details = new();
+    // A diff longer than this many rendered lines is clamped to a fixed height, with a per-version toggle to expand it
+    // to full length. Kept in sync with the max-height in the scoped stylesheet.
+    private const int MaxVisibleLines = 12;
+
+    // Versions the user has chosen to show in full (overriding the clamp). Empty by default: large diffs start clamped.
+    private readonly HashSet<int> _showFullVersions = new();
 
     private int? _compareFrom;
     private int? _compareTo;
@@ -186,23 +187,43 @@ else
         _loadingMore = false;
     }
 
-    private async Task ToggleDiffAsync(int version)
+    // Toggle a clamped diff between its clamped height and full length. Independent per version, so several can be
+    // expanded at once and expanding one leaves the others untouched.
+    private void ToggleShowFull(int version)
     {
-        // Collapse if already open; expansion is independent per version so other open diffs are left untouched.
-        if (_expandedVersions.Remove(version))
-            return;
+        if (!_showFullVersions.Remove(version))
+            _showFullVersions.Add(version);
+    }
 
-        _expandedVersions.Add(version);
+    // Estimates how many lines a diff renders, matching ConfigurationChangeDiff/ConfigurationChangeDiffNode: a modified
+    // non-secret scalar is two lines, any other changed scalar one line, and a changed container one line for its header
+    // plus its changed descendants. Used only to decide whether a diff is large enough to clamp.
+    private static int CountDiffLines(ConfigurationDiff diff)
+    {
+        var lines = diff.Root.ChangeType is ConfigurationDiffChangeType.Added or ConfigurationDiffChangeType.Removed ? 1 : 0;
+        if (diff.Root.Children != null)
+            foreach (var child in diff.Root.Children)
+                lines += CountNodeLines(child);
+        return lines;
+    }
 
-        // Fetch the diff only once per version; a cached entry (even a null result) means it is already loaded.
-        if (_details.ContainsKey(version))
-            return;
+    private static int CountNodeLines(ConfigurationDiffNode node)
+    {
+        if (node.NodeType == ConfigurationSnapshotNodeType.Scalar)
+        {
+            if (node.ChangeType == ConfigurationDiffChangeType.Unchanged)
+                return 0;
+            return node.ChangeType == ConfigurationDiffChangeType.Modified && !node.IsSecret ? 2 : 1;
+        }
 
-        _detailLoadingVersions.Add(version);
-        StateHasChanged(); // show the spinner while the diff is fetched
-        using var jim = JimFactory.Create();
-        _details[version] = await jim.ChangeHistory.GetConfigurationChangeAsync(TargetType, ObjectId, version);
-        _detailLoadingVersions.Remove(version);
+        if (node.ChangeType == ConfigurationDiffChangeType.Unchanged)
+            return 0;
+
+        var lines = 1; // container context header
+        if (node.Children != null)
+            foreach (var child in node.Children)
+                lines += CountNodeLines(child);
+        return lines;
     }
 
     private async Task CompareAsync()
