@@ -69,8 +69,9 @@ What you can and can't do with a built-in schedule:
 - ✅ **Enable or disable it**<br /> Pause it during a maintenance window and re-enable it afterwards.
 - ❌ **Rename it**<br /> The name is fixed so the schedule stays recognisable and JIM can keep it maintained across upgrades.
 - ❌ **Delete it**<br /> Built-in schedules are part of the product; disable one instead if you don't want it to run.
+- ❌ **Change its steps**<br /> The step composition is defined and maintained by JIM; the Steps tab is read-only for a built-in schedule.
 
-The portal reflects this: a built-in schedule's name is read-only in the editor, and its delete action is replaced with a lock. The PowerShell module and REST API enforce the same rules.
+The portal reflects this: a built-in schedule's name and steps are read-only in the editor, and its delete action is replaced with a lock. The PowerShell module and REST API enforce the rename and delete rules.
 
 ## Common workflows
 

@@ -254,12 +254,21 @@
                     {
                         @* Step List *@
                         <MudStack Spacing="4">
-                            <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="2">
-                                <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
-                                           StartIcon="@Icons.Material.Filled.Add" OnClick="HandleAddStepAsync">
-                                    Add Step
-                                </MudButton>
-                            </MudStack>
+                            @if (_schedule.BuiltIn)
+                            {
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                                    This is a built-in schedule; its steps are managed by JIM and cannot be added, edited, reordered or removed.
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
+                                               StartIcon="@Icons.Material.Filled.Add" OnClick="HandleAddStepAsync">
+                                        Add Step
+                                    </MudButton>
+                                </MudStack>
+                            }
 
                             @if (_schedule.Steps.Count == 0)
                             {
@@ -282,6 +291,8 @@
                                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                                         <MudText Typo="Typo.subtitle2">Step @(block.BlockIndex + 1)</MudText>
                                                     </MudStack>
+                                                    @if (!_schedule.BuiltIn)
+                                                    {
                                                     <MudStack Row="true" Spacing="0">
                                                         <MudTooltip Text="Run in parallel with this step" Arrow="true" Placement="Placement.Top">
                                                             <MudIconButton Icon="@Icons.Material.Filled.CallSplit" Size="Size.Small"
@@ -307,6 +318,7 @@
                                                                            OnClick="@(() => HandleRemoveStep(step))" />
                                                         </MudTooltip>
                                                     </MudStack>
+                                                    }
                                                 </MudStack>
                                             </div>
                                             <div class="jim-step-block-content">
@@ -336,6 +348,8 @@
                                                                 @block.Steps.Count steps run together
                                                             </MudChip>
                                                         </MudStack>
+                                                        @if (!_schedule.BuiltIn)
+                                                        {
                                                         <MudStack Row="true" Spacing="0">
                                                             <MudTooltip Text="Add parallel step" Arrow="true" Placement="Placement.Top">
                                                                 <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small"
@@ -356,6 +370,7 @@
                                                                                OnClick="@(() => HandleRemoveBlock(block.BlockIndex))" />
                                                             </MudTooltip>
                                                         </MudStack>
+                                                        }
                                                     </MudStack>
                                                 </div>
                                                 @* Steps in Block *@
@@ -369,6 +384,8 @@
                                                                 <MudText Typo="Typo.body2" Style="flex: 1;">
                                                                     <span class="jim-text-emphasis">@connectedSystem</span> <span class="mud-text-secondary">/</span> <span class="jim-step-run-profile">@runProfile</span>
                                                                 </MudText>
+                                                                @if (!_schedule.BuiltIn)
+                                                                {
                                                                 <MudStack Row="true" Spacing="0">
                                                                     <MudTooltip Text="Edit step" Arrow="true" Placement="Placement.Top">
                                                                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
@@ -379,6 +396,7 @@
                                                                                        OnClick="@(() => HandleRemoveStep(step))" />
                                                                     </MudTooltip>
                                                                 </MudStack>
+                                                                }
                                                             </MudStack>
                                                         </div>
                                                     }
@@ -1021,8 +1039,13 @@
         return _schedule.Steps.Max(s => s.StepIndex);
     }
 
+    private bool StepsLocked => _schedule?.BuiltIn == true;
+
     private Task HandleAddStepAsync()
     {
+        if (StepsLocked)
+            return Task.CompletedTask; // built-in schedule steps are managed by JIM and are not editable
+
         // Add a new sequential step (new StepIndex)
         var newStepIndex = _schedule?.Steps.Count > 0
             ? _schedule.Steps.Max(s => s.StepIndex) + 1
@@ -1046,6 +1069,9 @@
 
     private Task HandleAddParallelStepAsync(int blockIndex)
     {
+        if (StepsLocked)
+            return Task.CompletedTask; // built-in schedule steps are managed by JIM and are not editable
+
         // Add a step to run in parallel with an existing step (same StepIndex)
         _isNewStep = true;
         _editingBlockIndex = blockIndex;
@@ -1073,6 +1099,9 @@
 
     private async Task HandleEditStepAsync(ScheduleStep step)
     {
+        if (StepsLocked)
+            return; // built-in schedule steps are managed by JIM and are not editable
+
         _isNewStep = false;
         _editingBlockIndex = step.StepIndex;
         _editingStep = new ScheduleStep
@@ -1112,7 +1141,7 @@
 
     private void HandleRemoveStep(ScheduleStep step)
     {
-        if (_schedule == null) return;
+        if (_schedule == null || StepsLocked) return;
 
         var stepIndex = step.StepIndex;
         _schedule.Steps.Remove(step);
@@ -1131,7 +1160,7 @@
 
     private void HandleRemoveBlock(int blockIndex)
     {
-        if (_schedule == null) return;
+        if (_schedule == null || StepsLocked) return;
 
         // Get the actual StepIndex for this display block
         var blocks = GetStepBlocks();
@@ -1151,7 +1180,7 @@
 
     private void MoveBlockUp(int blockIndex)
     {
-        if (_schedule == null || blockIndex <= 0) return;
+        if (_schedule == null || StepsLocked || blockIndex <= 0) return;
 
         var blocks = GetStepBlocks();
         if (blockIndex >= blocks.Count) return;
@@ -1175,7 +1204,7 @@
 
     private void MoveBlockDown(int blockIndex)
     {
-        if (_schedule == null) return;
+        if (_schedule == null || StepsLocked) return;
 
         var blocks = GetStepBlocks();
         if (blockIndex >= blocks.Count - 1) return;
@@ -1346,6 +1375,7 @@
             ScheduleStepType.PowerShell => "PowerShell Script",
             ScheduleStepType.Executable => "Executable",
             ScheduleStepType.SqlScript => "SQL Script",
+            ScheduleStepType.TemporalScopeReconciliation => "Temporal Scope Reconciliation",
             _ => "Unknown"
         };
     }
