@@ -464,6 +464,14 @@ public class JimDbContext : DbContext
             .HasDatabaseName("IX_MetaverseObjectAttributeValues_AttributeId_DateTimeValue")
             .HasFilter("\"DateTimeValue\" IS NOT NULL");
 
+        // Partial index on the Temporal Scope Reconciler flag (issue #892). The sync engine drains flagged
+        // Metaverse Objects into export re-evaluation each run (WHERE "ScopeReviewPending" = true); flags are
+        // rare (O(transitions)), so a partial index keeps that scan O(flagged) rather than O(all MVOs).
+        modelBuilder.Entity<MetaverseObject>()
+            .HasIndex(mvo => mvo.ScopeReviewPending)
+            .HasDatabaseName("IX_MetaverseObjects_ScopeReviewPending")
+            .HasFilter("\"ScopeReviewPending\"");
+
         // Delta sync performance: composite index for timestamp-based queries
         // These enable efficient filtering by ConnectedSystemId + LastUpdated/Created
         // which is used in GetConnectedSystemObjectsModifiedSinceAsync

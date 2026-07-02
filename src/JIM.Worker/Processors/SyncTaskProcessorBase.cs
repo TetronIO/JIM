@@ -2390,6 +2390,75 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
+    /// Outbound Temporal Scope Reconciler apply step (issue #892). Re-evaluates export scope for Metaverse
+    /// Objects the reconciler flagged (<c>ScopeReviewPending</c>): their export-rule scope drifted with the clock
+    /// (a Metaverse Attribute relative-date criterion crossed) while their data stayed static, so the
+    /// change-driven export path never revisits them. Runs once after the CSO page loop, draining flagged
+    /// Metaverse Objects in batches through the same export evaluation the per-page flow uses: provision when
+    /// newly in scope, deprovision when out. Only meaningful in a sync run (the export evaluation cache is
+    /// present); a no-op otherwise.
+    ///
+    /// Empty <c>changedAttributes</c> is intentional: <c>CreateAttributeValueChanges</c> falls back to the MVO's
+    /// current values for a provision (Create) and produces no Pending Export for an unchanged in-scope object,
+    /// and deprovision is scope-driven. Whichever system's sync runs first handles its own export rules; a
+    /// still-mismatched object is re-flagged by the next reconciler sweep (eventually consistent).
+    /// </summary>
+    protected async Task ProcessScopeReviewPendingMetaverseObjectsAsync()
+    {
+        // Export evaluation only happens in sync runs, where the cache is built at sync start.
+        if (_exportEvaluationCache == null)
+            return;
+
+        const int batchSize = 500;
+        var totalProcessed = 0;
+
+        while (!_cancellationTokenSource.IsCancellationRequested)
+        {
+            var flaggedIds = await _syncRepo.GetMetaverseObjectIdsWithScopeReviewPendingAsync(batchSize);
+            if (flaggedIds.Count == 0)
+                break;
+
+            var mvos = await _syncRepo.GetMetaverseObjectsByIdsNoTrackingAsync(flaggedIds);
+            foreach (var mvo in mvos)
+            {
+                // Give each flagged MVO an RPEI so the reconciler-driven exports are recorded on the sync
+                // Activity. The RPEI is linked to the MVO through _mvoIdToRpei (the same mechanism the per-page
+                // flow uses); provisioning-CSO change records and export outcomes resolve the originating RPEI
+                // via that map. The MVO is loaded no-tracking; provisioning CSOs reference it by FK scalar only.
+                var rpei = _activity.PrepareRunProfileExecutionItem();
+                _activity.RunProfileExecutionItems.Add(rpei);
+                _mvoIdToRpei[mvo.Id] = rpei;
+
+                _pendingExportEvaluations.Add((mvo, [], null));
+            }
+
+            // Reuse the per-page export flush sequence. EvaluatePendingExportsAsync refreshes the export cache for
+            // these MVOs, evaluates in/out-of-scope, and clears _pendingExportEvaluations; the flush methods
+            // persist provisioning CSOs, Pending Exports, reference snapshots and RPEIs (FlushRpeisAsync also
+            // clears _mvoIdToRpei and the RPEI collection).
+            await EvaluatePendingExportsAsync();
+            await FlushPendingExportOperationsAsync();
+            await ResolvePendingExportReferenceSnapshotsAsync();
+            await FlushRpeisAsync();
+
+            // Clear the flag for every MVO evaluated this batch (whether or not it produced an export), only after
+            // the batch's writes have persisted; if a write throws, the flag stays set and the object is
+            // reconsidered next sweep (fail-safe).
+            await _syncRepo.ClearMetaverseObjectScopeReviewPendingAsync(flaggedIds);
+
+            _syncRepo.ClearChangeTracker();
+            totalProcessed += mvos.Count;
+
+            // Fewer than a full batch means the flagged set is drained.
+            if (flaggedIds.Count < batchSize)
+                break;
+        }
+
+        if (totalProcessed > 0)
+            Log.Information("ProcessScopeReviewPendingMetaverseObjectsAsync: re-evaluated export scope for {Count} reconciler-flagged Metaverse Object(s) (#892)", totalProcessed);
+    }
+
+    /// <summary>
     /// Checks deferred CREATE/UPDATE Pending Exports (in-memory) against DELETE Pending Exports
     /// already persisted to the DB during this page. Removes contradictory pairs:
     /// - CREATE(Pending) + DELETE(Pending) → cancel both (no net change)

@@ -44,6 +44,20 @@ public interface IMetaverseRepository
     public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids);
 
     /// <summary>
+    /// Returns up to <paramref name="maxResults"/> Metaverse Object ids currently flagged
+    /// <c>ScopeReviewPending</c> by the Temporal Scope Reconciler (issue #892), ordered by id. Backed by a
+    /// partial index so the query stays O(flagged). Used by the sync engine to drain flagged Metaverse Objects
+    /// into export re-evaluation.
+    /// </summary>
+    public Task<List<Guid>> GetMetaverseObjectIdsWithScopeReviewPendingAsync(int maxResults);
+
+    /// <summary>
+    /// Clears the <c>ScopeReviewPending</c> flag on Metaverse Objects the sync engine has re-evaluated for export
+    /// scope (issue #892). No-op when <paramref name="ids"/> is empty.
+    /// </summary>
+    public Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
+
+    /// <summary>
     /// Bulk-updates the Temporal Scope Reconciler bookkeeping on a set of Metaverse Objects (issue #892):
     /// advances <c>LastScopeEvaluatedAt</c> to <paramref name="nowUtc"/> for every evaluated object, and sets
     /// <c>ScopeReviewPending</c> true for those in <paramref name="flaggedIds"/> and false for the rest (so a

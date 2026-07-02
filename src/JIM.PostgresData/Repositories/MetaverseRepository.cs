@@ -337,10 +337,36 @@ public class MetaverseRepository : IMetaverseRepository
 
         return await Repository.Database.MetaverseObjects
             .AsNoTracking()
+            .Include(mvo => mvo.Type)
             .Include(mvo => mvo.AttributeValues)
             .ThenInclude(av => av.Attribute)
             .Where(mvo => idList.Contains(mvo.Id))
             .ToListAsync();
+    }
+
+    public async Task<List<Guid>> GetMetaverseObjectIdsWithScopeReviewPendingAsync(int maxResults)
+    {
+        // O(transitions) via the partial index on ScopeReviewPending. Ordered by Id for stable paging across
+        // successive sync runs that each drain a batch of flagged Metaverse Objects (#892).
+        return await Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Where(mvo => mvo.ScopeReviewPending)
+            .OrderBy(mvo => mvo.Id)
+            .Select(mvo => mvo.Id)
+            .Take(maxResults)
+            .ToListAsync();
+    }
+
+    public async Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
+    {
+        if (ids.Count == 0)
+            return;
+
+        // Clear the reconciler flag once the sync engine has re-evaluated these Metaverse Objects' export scope
+        // (#892). A single bulk UPDATE over the O(flagged) rows processed keeps this off the per-object write path.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjects"" SET ""ScopeReviewPending"" = false WHERE ""Id"" = ANY({0})",
+            ids.ToArray());
     }
 
     public async Task MarkMetaverseObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc)

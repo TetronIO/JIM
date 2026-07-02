@@ -828,6 +828,37 @@ public class SyncRepository : ISyncRepository
 
     #region Metaverse Object — Writes
 
+    public Task<List<Guid>> GetMetaverseObjectIdsWithScopeReviewPendingAsync(int maxResults)
+    {
+        var ids = _mvos.Values
+            .Where(mvo => mvo.ScopeReviewPending)
+            .OrderBy(mvo => mvo.Id)
+            .Select(mvo => mvo.Id)
+            .Take(maxResults)
+            .ToList();
+        return Task.FromResult(ids);
+    }
+
+    public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids)
+    {
+        var result = ids
+            .Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null)
+            .Where(mvo => mvo != null)
+            .Select(mvo => mvo!)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
+    {
+        foreach (var id in ids)
+        {
+            if (_mvos.TryGetValue(id, out var stored))
+                stored.ScopeReviewPending = false;
+        }
+        return Task.CompletedTask;
+    }
+
     public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
     {
         foreach (var mvo in metaverseObjects)
