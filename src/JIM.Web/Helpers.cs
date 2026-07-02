@@ -667,6 +667,9 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.Exported => Color.Info,
             ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => Color.Error,
 
+            // Attribute priority (#91): a deliberate clear worth drawing the eye to.
+            ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull => Color.Warning,
+
             _ => Color.Default,
         };
     }
@@ -696,6 +699,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated => "CSO Pending Export",
             ActivityRunProfileExecutionItemSyncOutcomeType.Exported => "CSO Exported",
             ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => "CSO Deprovisioned",
+            ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull => "MVO Null Asserted",
             _ => outcomeType.ToString()
         };
     }
@@ -738,6 +742,9 @@ public static class Helpers
             // Export outcomes — delegate to GetOperationIcon for consistency
             ActivityRunProfileExecutionItemSyncOutcomeType.Exported => GetOperationIcon(ObjectChangeType.Exported),
             ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => GetOperationIcon(ObjectChangeType.Deprovisioned),
+
+            // Attribute priority (#91): an explicit "no value" assertion.
+            ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull => Icons.Material.Filled.DoNotDisturbOn,
 
             _ => Icons.Material.Filled.Circle,
         };
