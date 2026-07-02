@@ -93,13 +93,6 @@ else
                                     <MudText Typo="Typo.body2" Class="mt-1" Style="font-style: italic;">&ldquo;@item.Reason&rdquo;</MudText>
                                 }
 
-                                @* Summary lists the changed sections for an update; for a creation the operation chip already
-                                   says "Created", so the summary would only echo it. Show it only when it adds information. *@
-                                @if (item.Operation != ActivityTargetOperationType.Create && !string.IsNullOrWhiteSpace(item.Summary))
-                                {
-                                    <MudText Typo="Typo.body2" Class="mt-1">@item.Summary</MudText>
-                                }
-
                                 <div class="mt-2">
                                     <MudButton Variant="Variant.Text" DropShadow="false"
                                                StartIcon="@(_expandedVersions.Contains(item.Version) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
