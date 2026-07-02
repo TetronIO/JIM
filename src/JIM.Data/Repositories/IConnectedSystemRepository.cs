@@ -104,6 +104,13 @@ public interface IConnectedSystemRepository
     public Task MarkConnectedSystemObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc);
 
     /// <summary>
+    /// Clears the <c>ScopeReviewPending</c> flag on a set of Connected System Objects (issue #892) once the sync
+    /// engine has re-evaluated them past the unchanged-skip. Called at page flush during synchronisation. No-op when
+    /// <paramref name="ids"/> is empty.
+    /// </summary>
+    public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
+
+    /// <summary>
     /// Bulk-loads all CSO external ID mappings for a Connected System.
     /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
     /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.

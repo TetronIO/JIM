@@ -1026,6 +1026,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 var isUnchanged =
                     cso.Status == ConnectedSystemObjectStatus.Normal &&
                     cso.MetaverseObjectId.HasValue &&
+                    // A CSO flagged by the Temporal Scope Reconciler (#892) has drifted in or out of scope with the
+                    // clock even though its source data is static. It MUST be treated as changed so its attribute and
+                    // reference values are loaded; otherwise Pass 2 Attribute Flow would run against an empty attribute
+                    // set. The flag is cleared once the object has been re-evaluated.
+                    !cso.ScopeReviewPending &&
                     (cso.LastUpdated == null ? cso.Created <= watermark : cso.LastUpdated.Value <= watermark);
 
                 if (isUnchanged)
@@ -1458,6 +1463,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                   ""ScopeReviewPending"" = (""Id"" = ANY({1}))
               WHERE ""Id"" = ANY({0})",
             evaluatedIds.ToArray(), flaggedIds.ToArray(), nowUtc);
+    }
+
+    public async Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
+    {
+        if (ids.Count == 0)
+            return;
+
+        // Clear the reconciler flag once the sync engine has re-evaluated these objects (#892). A single bulk UPDATE
+        // over the O(flagged) rows processed in the page keeps this off the per-object write path.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects"" SET ""ScopeReviewPending"" = false WHERE ""Id"" = ANY({0})",
+            ids.ToArray());
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)

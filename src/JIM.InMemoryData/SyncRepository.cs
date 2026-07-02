@@ -546,6 +546,16 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
+    {
+        foreach (var id in ids)
+        {
+            if (_csos.TryGetValue(id, out var stored))
+                stored.ScopeReviewPending = false;
+        }
+        return Task.CompletedTask;
+    }
+
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(
         List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
     {

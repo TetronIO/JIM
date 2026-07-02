@@ -218,6 +218,12 @@ public interface ISyncRepository
     Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects);
 
     /// <summary>
+    /// Clears the <c>ScopeReviewPending</c> flag on CSOs the sync engine has re-evaluated past the unchanged-skip
+    /// (issue #892). Called at page flush. No-op when <paramref name="ids"/> is empty.
+    /// </summary>
+    Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
+
+    /// <summary>
     /// Updates CSOs that have new attribute values added (e.g., secondary external ID during export).
     /// </summary>
     Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates);

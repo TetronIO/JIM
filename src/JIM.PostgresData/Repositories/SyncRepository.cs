@@ -152,6 +152,9 @@ public partial class SyncRepository : ISyncRepository
     public Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects)
         => _repo.ConnectedSystems.UpdateConnectedSystemObjectJoinStatesAsync(connectedSystemObjects);
 
+    public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
+        => _repo.ConnectedSystems.ClearConnectedSystemObjectScopeReviewPendingAsync(ids);
+
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(
         List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
         => _repo.ConnectedSystems.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(updates);

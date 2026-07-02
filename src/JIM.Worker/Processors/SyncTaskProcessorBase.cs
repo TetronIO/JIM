@@ -83,6 +83,11 @@ public abstract class SyncTaskProcessorBase
     // and DateJoined stays null in the database after projection or join.
     protected readonly List<ConnectedSystemObject> _pendingCsoJoinUpdates = [];
 
+    // Batch collection of CSO ids that carried the Temporal Scope Reconciler flag (ScopeReviewPending, #892) and
+    // have now been re-evaluated in Pass 2. The flag is cleared for these at page flush so the reconciler does not
+    // keep re-flagging an object that is back in agreement.
+    protected readonly List<Guid> _pendingScopeReviewClears = [];
+
     // Batch collection for deferred provisioning CSO creation (avoid per-CSO database calls)
     protected readonly List<ConnectedSystemObject> _provisioningCsosToCreate = [];
 
@@ -428,7 +433,10 @@ public abstract class SyncTaskProcessorBase
         // Skip unchanged CSOs — their attributes haven't changed since the last completed sync,
         // so Attribute Flow would produce zero changes. This avoids the overhead of loading and
         // comparing attribute values for the majority of CSOs in large-scale repeat syncs.
-        if (connectedSystemObject.IsUnchangedSinceLastSync)
+        // Exception: a CSO flagged by the Temporal Scope Reconciler (ScopeReviewPending, #892) has drifted in or
+        // out of scope with the clock despite static source data; it must be re-evaluated even though unchanged.
+        // (The loader already forces a full attribute load for such CSOs so Attribute Flow has real values.)
+        if (connectedSystemObject.IsUnchangedSinceLastSync && !connectedSystemObject.ScopeReviewPending)
             return;
 
         // Skip if no Synchronisation Rules defined AND not in simple mode — nothing to join/project/flow.
@@ -543,6 +551,12 @@ public abstract class SyncTaskProcessorBase
                     _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
                 }
             }
+
+            // Pass 2 completed without error, so the object has been re-evaluated: clear any Temporal Scope
+            // Reconciler flag at page flush. Recorded here (not before the try) so a failed re-evaluation leaves
+            // the flag set and the reconciler re-flags it next sweep (fail-safe).
+            if (connectedSystemObject.ScopeReviewPending)
+                _pendingScopeReviewClears.Add(connectedSystemObject.Id);
         }
         catch (SyncJoinException joinEx)
         {
@@ -1462,7 +1476,7 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     protected async Task PersistPendingMetaverseObjectsAsync()
     {
-        if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0 && _pendingCsoJoinUpdates.Count == 0)
+        if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0 && _pendingCsoJoinUpdates.Count == 0 && _pendingScopeReviewClears.Count == 0)
             return;
 
         using var span = Diagnostics.Sync.StartSpan("PersistPendingMetaverseObjects");
@@ -1525,6 +1539,16 @@ public abstract class SyncTaskProcessorBase
             await _syncRepo.UpdateConnectedSystemObjectJoinStatesAsync(_pendingCsoJoinUpdates);
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} CSO join states in batch", _pendingCsoJoinUpdates.Count);
             _pendingCsoJoinUpdates.Clear();
+        }
+
+        // Clear the Temporal Scope Reconciler flag for CSOs re-evaluated this page (#892). Done last, after the
+        // page's substantive MVO/CSO writes have persisted, so a flag is only cleared once its object's outcome
+        // is safely stored; if an earlier write throws, the flag stays set and the object is reconsidered next sweep.
+        if (_pendingScopeReviewClears.Count > 0)
+        {
+            await _syncRepo.ClearConnectedSystemObjectScopeReviewPendingAsync(_pendingScopeReviewClears);
+            Log.Verbose("PersistPendingMetaverseObjectsAsync: Cleared ScopeReviewPending on {Count} CSO(s) in batch", _pendingScopeReviewClears.Count);
+            _pendingScopeReviewClears.Clear();
         }
 
         // Re-key deferred MVO→RPEI mappings now that newly projected MVOs have real IDs.
