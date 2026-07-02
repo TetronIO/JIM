@@ -41,7 +41,7 @@ else
        own label merely repeats its items' label (e.g. an "Attribute Flow" collection of "Attribute Flow" items) is
        rendered transparently: no grouping header, and its items appear at the collection's own depth, so there is no
        redundant grey line above identically-named items. *@
-    @if (Node.ChangeType != ConfigurationDiffChangeType.Unchanged)
+    @if (Node.ChangeType != ConfigurationDiffChangeType.Unchanged && !_emptyCollection)
     {
         @if (!_transparentCollection)
         {
@@ -96,6 +96,10 @@ else
     // is rendered transparently (items pulled up to its own depth).
     private bool _transparentCollection;
 
+    // True when this is a collection with no items (e.g. an added object type whose attributes are not yet configured).
+    // An empty collection is not worth a "+ Attributes" line with nothing under it, so it renders nothing.
+    private bool _emptyCollection;
+
     protected override void OnParametersSet()
     {
         _label = string.IsNullOrEmpty(Node.Label) ? Node.Key : Node.Label;
@@ -106,6 +110,9 @@ else
         _containerClass = null;
         _oldDisplay = Node.OldDisplayValue ?? Node.OldValue;
         _newDisplay = Node.NewDisplayValue ?? Node.NewValue;
+
+        _emptyCollection = Node.NodeType == ConfigurationSnapshotNodeType.Collection
+            && (Node.Children == null || Node.Children.Count == 0);
 
         _transparentCollection = Node.NodeType == ConfigurationSnapshotNodeType.Collection
             && Node.ChangeType != ConfigurationDiffChangeType.Unchanged
