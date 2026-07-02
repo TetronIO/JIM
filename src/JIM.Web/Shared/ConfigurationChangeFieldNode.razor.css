@@ -1,0 +1,92 @@
+/* Copyright (c) Tetron Limited. All rights reserved. */
+/* Licensed under the Tetron Commercial License. See LICENSE file in the project root. */
+
+/* Field-history diff rendering. Colour marks the value (green = now / added, red = previous / removed); the label is a
+   quiet neutral so a value is easy to pick out. Semantic colours come from the MudBlazor theme so light and dark both
+   work. */
+
+.fh-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.15rem 0.5rem;
+    padding: 0.28rem 0;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.fh-label {
+    color: var(--mud-palette-text-secondary);
+    min-width: 12rem;
+    flex: 0 0 auto;
+}
+
+.fh-old, .fh-new {
+    font-family: var(--mud-typography-caption-family, inherit);
+    padding: 0.02rem 0.4rem;
+    border-radius: 5px;
+    word-break: break-word;
+}
+
+.fh-new {
+    color: var(--mud-palette-success);
+    background: color-mix(in srgb, var(--mud-palette-success) 12%, transparent);
+}
+
+.fh-old {
+    color: var(--mud-palette-error);
+    background: color-mix(in srgb, var(--mud-palette-error) 12%, transparent);
+    text-decoration: line-through;
+    text-decoration-color: color-mix(in srgb, var(--mud-palette-error) 55%, transparent);
+}
+
+.fh-none {
+    color: var(--mud-palette-text-disabled);
+    font-style: italic;
+}
+
+.fh-arrow {
+    color: var(--mud-palette-text-disabled);
+}
+
+.fh-secret {
+    color: var(--mud-palette-warning);
+}
+
+/* A quiet context header for a modified item or a collection. */
+.fh-group {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    padding: 0.35rem 0 0.15rem;
+}
+
+/* A wholly added / removed item, drawn as a small tinted card of its values. */
+.fh-card {
+    border-radius: 8px;
+    padding: 0.55rem 0.75rem;
+    margin: 0.4rem 0;
+}
+
+.fh-card-added {
+    border: 1px solid color-mix(in srgb, var(--mud-palette-success) 32%, transparent);
+    background: color-mix(in srgb, var(--mud-palette-success) 7%, transparent);
+}
+
+.fh-card-removed {
+    border: 1px solid color-mix(in srgb, var(--mud-palette-error) 32%, transparent);
+    background: color-mix(in srgb, var(--mud-palette-error) 7%, transparent);
+}
+
+.fh-card-head {
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 0.15rem;
+}
+
+.fh-card-added .fh-card-head {
+    color: var(--mud-palette-success);
+}
+
+.fh-card-removed .fh-card-head {
+    color: var(--mud-palette-error);
+}

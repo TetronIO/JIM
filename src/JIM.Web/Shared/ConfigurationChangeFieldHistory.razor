@@ -1,10 +1,12 @@
 @using JIM.Models.Activities
+@using JIM.Web.Models
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* Renders a configuration diff as a git-style tree: a counts header, an optional created/deleted note, then
-   only the changed branches (via the recursive ConfigurationChangeDiffNode). Secret values are never shown. *@
+@* Field-history rendering of a configuration diff: an audit-style "before → after" per changed field, with a whole
+   added / removed item shown as a small card rather than a green / red subtree. The readable alternative to the
+   git-style ConfigurationChangeDiff; both render the same ConfigurationDiff. *@
 
 @if (Diff != null)
 {
@@ -28,14 +30,28 @@
         <div>
             @foreach (var child in Diff.Root.Children ?? new List<ConfigurationDiffNode>())
             {
-                <ConfigurationChangeDiffNode Node="child" Depth="0" />
+                <ConfigurationChangeFieldNode Node="child" Depth="0" Context="_rootContext" />
             }
         </div>
     }
 }
 
 @code {
-    /// <summary>The structured configuration diff to render.</summary>
+    /// <summary>The structured configuration diff to render in the field-history style.</summary>
     [Parameter, EditorRequired]
     public ConfigurationDiff Diff { get; set; } = null!;
+
+    // A wholly created (or deleted) object renders every field as a plain "label: value" rather than "before → after",
+    // since there is no previous (or next) state to compare against.
+    private DiffRenderContext _rootContext;
+
+    protected override void OnParametersSet()
+    {
+        _rootContext = Diff?.Root.ChangeType switch
+        {
+            ConfigurationDiffChangeType.Added => DiffRenderContext.Added,
+            ConfigurationDiffChangeType.Removed => DiffRenderContext.Removed,
+            _ => DiffRenderContext.Normal
+        };
+    }
 }
