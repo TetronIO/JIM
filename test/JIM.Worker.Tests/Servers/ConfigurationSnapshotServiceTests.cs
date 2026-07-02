@@ -111,15 +111,15 @@ public class ConfigurationSnapshotServiceTests
 
         var snapshot = _service.CreateSnapshot(rule, HashKey);
 
-        // Foreign keys keep the raw id for stable diffing, with a human-friendly "Name (id)" display value.
+        // Foreign keys keep the raw id for stable diffing, with the resolved name as the human-friendly display value.
         var connectedSystem = Child(snapshot.Root, "connectedSystemId")!;
         Assert.That(connectedSystem.Value, Is.EqualTo("3"), "the raw FK id is kept for diffing");
-        Assert.That(connectedSystem.DisplayValue, Is.EqualTo("AD (3)"));
+        Assert.That(connectedSystem.DisplayValue, Is.EqualTo("AD"));
 
         var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
         var targetAttribute = Child(flow, "targetMetaverseAttributeId")!;
         Assert.That(targetAttribute.Value, Is.EqualTo("5"));
-        Assert.That(targetAttribute.DisplayValue, Is.EqualTo("Display Name (5)"));
+        Assert.That(targetAttribute.DisplayValue, Is.EqualTo("Display Name"));
 
         // Enums keep the raw name for diffing, with the name spaced into words for display.
         var processing = Child(flow, "inboundValueProcessing")!;

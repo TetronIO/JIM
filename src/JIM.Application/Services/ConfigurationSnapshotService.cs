@@ -386,16 +386,17 @@ public class ConfigurationSnapshotService
         nodes.Add(ConfigurationSnapshotNode.Scalar(key, raw, label, raw.SplitOnCapitalLetters()));
     }
 
-    // Records a foreign-key reference: the id is stored for stable diffing, with a "Name (id)" display form when the
-    // referenced entity's name is available on the loaded graph (otherwise just the id is shown). A null id records
-    // nothing, matching Add()'s skip-empty behaviour.
+    // Records a foreign-key reference: the raw id is stored for stable diffing (so a re-point to a different entity is
+    // detected even when the two share a name), with the resolved name as the human-friendly display value when the
+    // referenced entity is available on the loaded graph (otherwise the id is shown). A null id records nothing,
+    // matching Add()'s skip-empty behaviour.
     private static void AddReference(List<ConfigurationSnapshotNode> nodes, string key, int? id, string? name, string label)
     {
         if (!id.HasValue)
             return;
 
         var raw = id.Value.ToString(CultureInfo.InvariantCulture);
-        var display = string.IsNullOrEmpty(name) ? null : $"{name} ({raw})";
+        var display = string.IsNullOrEmpty(name) ? null : name;
         nodes.Add(ConfigurationSnapshotNode.Scalar(key, raw, label, display));
     }
 
