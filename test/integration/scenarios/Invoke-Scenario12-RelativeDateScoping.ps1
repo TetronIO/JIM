@@ -362,18 +362,8 @@ try {
     # (in scope), wait past that instant, then sync again with NO data change.
     # ─────────────────────────────────────────────────────────────────────────
     if (Test-StepEnabled "ReEvaluatedEachRun") {
-        Write-TestSection "Test 4: Re-evaluated On Each Run (wall-clock)"
+        Write-TestSection "Test 4: Re-evaluated On Each Run (Temporal Scope Reconciler, #892)"
 
-        # KNOWN GAP (#892): the temporal scope reconciler is not built yet, so a scope transition driven
-        # purely by the passage of time (static source data) is not detected by sync. This step asserts
-        # that behaviour and fails until #892 lands; it is skipped in a full run and runnable explicitly
-        # (-Step ReEvaluatedEachRun) to verify the fix once built.
-        # See engineering/plans/TEMPORAL_SCOPE_REEVALUATION.md.
-        if ($Step -eq "All") {
-            Write-Host "  SKIP Pending #892 (temporal scope reconciler). Run -Step ReEvaluatedEachRun to verify once built." -ForegroundColor Yellow
-            Add-StepResult -Name "ReEvaluatedEachRun" -Skipped -Note "Skipped pending #892 (temporal scope reconciler)"
-        }
-        else {
         try {
             $clockEndInstant = (Get-Date).ToUniversalTime().AddSeconds($WindowSeconds)
             $clockUser = [PSCustomObject]@{
@@ -392,7 +382,7 @@ try {
             Write-HRCsv
 
             # First run: end date is still in the future -> in scope -> projected.
-            $r1 = Invoke-FullImportAndSync -SystemId $hrSystem.id -Label "T4 (before boundary)"
+            $null = Invoke-FullImportAndSync -SystemId $hrSystem.id -Label "T4 (before boundary)"
             if (-not (Test-MvoExists -EmployeeId $empClock)) {
                 throw "T4 precondition failed: $empClock was not in scope on the first sync. The import + sync likely took longer than WindowSeconds=$WindowSeconds; re-run with a larger -WindowSeconds."
             }
@@ -405,20 +395,51 @@ try {
                 Start-Sleep -Seconds ([int][Math]::Ceiling($remaining))
             }
 
-            # Second run: NO data change. Same criterion, advanced clock -> out of scope.
-            $r2 = Invoke-FullImportAndSync -SystemId $hrSystem.id -Label "T4 (after boundary)"
-            Assert-ActivityHasChanges -ActivityId $r2.Sync.activityId -Name "T4 Sync (after boundary)" -ExpectedChangeType "DisconnectedOutOfScope" -MinCount 1
+            # The source data is now static but the clock has advanced past the end date, so the sync and
+            # export hot paths would skip $empClock (unchanged since last sync). The Temporal Scope Reconciler
+            # (#892) is the mechanism that detects this: trigger its built-in schedule to flag the object, then
+            # run a sync. The flag lets the flagged CSO past the unchanged-skip so scope is re-evaluated and the
+            # now-out-of-scope object is disconnected (flag-and-delegate).
+            $reconSchedule = @(Get-JIMSchedule | Where-Object { $_.name -eq "Temporal Scope Reconciliation" })
+            if ($reconSchedule.Count -ne 1) {
+                throw "T4 expected exactly one built-in 'Temporal Scope Reconciliation' schedule; found $($reconSchedule.Count)"
+            }
+            Write-Host "  Triggering the Temporal Scope Reconciler (schedule $($reconSchedule[0].id))..." -ForegroundColor Gray
+            $reconExec = Start-JIMSchedule -Id $reconSchedule[0].id -PassThru
+            if (-not $reconExec) { throw "T4 failed to start the Temporal Scope Reconciler schedule" }
+
+            # Poll to a terminal state. Status is serialised as a string enum, so match on the string (with an
+            # int fallback) rather than relying on Start-JIMSchedule -Wait's numeric comparison.
+            $maxWait = 120; $elapsed = 0
+            while ($elapsed -lt $maxWait) {
+                $sv = (Get-JIMScheduleExecution -Id $reconExec.id).status
+                $isTerminal = $sv -eq "Completed" -or $sv -eq "Failed" -or $sv -eq "Cancelled"
+                if (($sv -is [int] -or $sv -is [long]) -and $sv -ge 2) { $isTerminal = $true }
+                if ($isTerminal) { break }
+                Start-Sleep -Seconds 3; $elapsed += 3
+            }
+            Assert-ScheduleExecutionSuccess -ExecutionId $reconExec.id -Name "Temporal Scope Reconciler"
+            Write-Host "  OK Reconciler sweep completed" -ForegroundColor Green
+
+            # Second run: NO data change. The reconciler flagged $empClock; sync now re-evaluates it out of scope.
+            $syncProfile = @(Get-JIMRunProfile -ConnectedSystemId $hrSystem.id | Where-Object { $_.name -eq "Full Synchronisation" })
+            if ($syncProfile.Count -ne 1) { throw "T4 could not resolve the Full Synchronisation run profile" }
+            $sync = Start-JIMRunProfile -ConnectedSystemId $hrSystem.id -RunProfileId $syncProfile[0].id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $sync.activityId -Name "T4 Full Synchronisation (after boundary)"
+            Assert-ActivityHasChanges -ActivityId $sync.activityId -Name "T4 Sync (after boundary)" -ExpectedChangeType "DisconnectedOutOfScope" -MinCount 1
 
             if (Test-MvoExists -EmployeeId $empClock) {
-                throw "T4 $empClock should have fallen out of scope after the clock advanced past its fixed end date, but its Metaverse Object still exists. The relative criterion may not be re-evaluated each run."
+                throw "T4 $empClock should have fallen out of scope after the clock advanced past its fixed end date, but its Metaverse Object still exists. The reconciler flag may not be honoured by the sync hot path."
+            }
+            if (-not (Test-MvoExists -EmployeeId $empActive)) {
+                throw "T4 control ($empActive) must remain IN scope and untouched, but its Metaverse Object is gone"
             }
 
-            Add-StepResult -Name "ReEvaluatedEachRun" -Success $true -Note "Identical data; scope flipped because 'now' advanced past the fixed end date -> criterion re-evaluated each run"
+            Add-StepResult -Name "ReEvaluatedEachRun" -Success $true -Note "Identical data; the Temporal Scope Reconciler flagged the object as 'now' advanced past its fixed end date, and sync disconnected it (flag-and-delegate)"
         }
         catch {
             Add-StepResult -Name "ReEvaluatedEachRun" -Success $false -ErrorMsg $_.Exception.Message
             Write-Host "  FAIL $_" -ForegroundColor Red
-        }
         }
     }
 
