@@ -535,6 +535,7 @@ function Show-ScenarioMenu {
                 "*Scenario10*" { "Sync rule scoping behaviour" }
                 "*Scenario11*" { "Sync rule scoping criteria evaluation matrix" }
                 "*Scenario12*" { "Relative-date inbound scoping (joiner / leaver)" }
+                "*Scenario13*" { "Relative-date outbound scoping (staged provisioning)" }
                 default { "Integration test scenario" }
             }
         }
@@ -1156,7 +1157,8 @@ $templateIrrelevantScenarios = @(
     "*Scenario6*",   # Scheduler Service - tests scheduler functionality, no data template needed
     "*Scenario10*",  # Sync Rule Scoping - template-independent, only a handful of explicit test users
     "*Scenario11*",  # Scoping Criteria Matrix - bespoke deterministic seed, template informational
-    "*Scenario12*"   # Relative-Date Scoping - fixed test users positioned relative to "now"
+    "*Scenario12*",  # Relative-Date Scoping - fixed test users positioned relative to "now"
+    "*Scenario13*"   # Relative-Date Outbound Scoping - fixed test users positioned relative to "now"
 )
 
 function Test-TemplateRelevant {
