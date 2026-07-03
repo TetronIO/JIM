@@ -3207,6 +3207,17 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Returns the count of Connected System Objects for a particular Connected System, optionally filtered by Object Type and/or Partition.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the object count for.</param>
+    /// <param name="objectTypeId">Optional Object Type ID to filter by.</param>
+    /// <param name="partitionId">Optional Partition ID to filter by.</param>
+    public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? objectTypeId, int? partitionId)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId, objectTypeId, partitionId);
+    }
+
+    /// <summary>
     /// Returns the count of Connected System Objects joined to a specific Metaverse Object.
     /// Used to determine if an MVO has any remaining connectors before deletion.
     /// </summary>

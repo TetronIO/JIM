@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Example data generation templates can now construct a text attribute from an expression, using the same `mv["Attribute Name"]` syntax and function library as Synchronisation Rule Attribute Flows, so a generated value can be transformed from other attributes on the same object (for example an email domain derived from the assigned company). Referenced attributes are generated first, and circular references are detected up front.
 - ✨ Metaverse attributes contributed by more than one Connected System now resolve to a single winner by a configurable per-attribute priority order, so a higher-priority source is never overwritten by a lower-priority one. An advanced "Null is a value" option lets an authoritative source positively assert "no value", clearing the attribute downstream instead of falling through to a lower-priority source.
 
+#### API & PowerShell Coverage (#154)
+
+- ✨ Connected System Objects can now be listed and filtered via a paginated REST endpoint and the extended `Get-JIMConnectedSystemObject` cmdlet, rather than needing to be looked up one at a time.
+- ✨ Example Data Sets now support full create, update, and delete via the REST API and the new `New-`, `Set-`, and `Remove-JIMExampleDataSet` cmdlets, in addition to the existing read access.
+- ✨ Queued and in-progress background operations can now be listed, inspected, and cancelled remotely via a new Worker Tasks REST endpoint and the `Get-JIMWorkerTask` / `Stop-JIMWorkerTask` cmdlets.
+- ✨ File system browsing, log viewing, and Metaverse Attribute priority management (previously UI-only) are now available as PowerShell cmdlets, giving the module full parity with the REST API.
+
 ### Changed
 
 - 🔄 When more than one Connected System contributes to the same Metaverse attribute, JIM now resolves the value by attribute priority instead of by synchronisation timing (last-writer-wins). Single-source attributes are unaffected; existing multi-source attributes resolve deterministically until you set an explicit priority order.

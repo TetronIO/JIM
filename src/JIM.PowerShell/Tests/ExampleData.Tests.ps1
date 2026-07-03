@@ -20,6 +20,21 @@ AfterAll {
 
 Describe 'Get-JIMExampleDataSet' {
 
+    Context 'Parameter Sets' {
+
+        BeforeAll {
+            $command = Get-Command Get-JIMExampleDataSet
+        }
+
+        It 'Should have a List parameter set as default' {
+            $command.DefaultParameterSet | Should -Be 'List'
+        }
+
+        It 'Should have a ById parameter set' {
+            $command.ParameterSets.Name | Should -Contain 'ById'
+        }
+    }
+
     Context 'Parameter Validation' {
 
         BeforeAll {
@@ -35,6 +50,12 @@ Describe 'Get-JIMExampleDataSet' {
             $param = $command.Parameters['PageSize']
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateRangeAttribute] } | Should -Not -BeNullOrEmpty
         }
+
+        It 'Should have Id as a mandatory int parameter in the ById set' {
+            $param = $command.Parameters['Id']
+            $param.ParameterType.Name | Should -Be 'Int32'
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
     }
 
     Context 'Requires Connection' {
@@ -46,12 +67,192 @@ Describe 'Get-JIMExampleDataSet' {
         It 'Should throw when not connected' {
             { Get-JIMExampleDataSet -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
+
+        It 'Should throw when not connected with Id' {
+            { Get-JIMExampleDataSet -Id 5 -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
     }
 
     Context 'Help Documentation' {
 
         BeforeAll {
             $help = Get-Help Get-JIMExampleDataSet -Full
+        }
+
+        It 'Should have a synopsis' {
+            $help.Synopsis | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have examples' {
+            $help.Examples.Example.Count | Should -BeGreaterThan 0
+        }
+
+        It 'Should have related links' {
+            $help.RelatedLinks | Should -Not -BeNullOrEmpty
+        }
+    }
+}
+
+Describe 'New-JIMExampleDataSet' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command New-JIMExampleDataSet
+        }
+
+        It 'Should have a mandatory Name parameter' {
+            $param = $command.Parameters['Name']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have a mandatory Culture parameter' {
+            $param = $command.Parameters['Culture']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have Values as a string array parameter' {
+            $command.Parameters['Values'].ParameterType.Name | Should -Be 'String[]'
+        }
+
+        It 'Should have PassThru switch parameter' {
+            $command.Parameters['PassThru'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Should support ShouldProcess' {
+            $command.Parameters['WhatIf'] | Should -Not -BeNullOrEmpty
+            $command.Parameters['Confirm'] | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Requires Connection' {
+
+        BeforeEach {
+            Disconnect-JIM
+        }
+
+        It 'Should throw when not connected' {
+            { New-JIMExampleDataSet -Name "Test" -Culture "en-GB" -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll {
+            $help = Get-Help New-JIMExampleDataSet -Full
+        }
+
+        It 'Should have a synopsis' {
+            $help.Synopsis | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have examples' {
+            $help.Examples.Example.Count | Should -BeGreaterThan 0
+        }
+
+        It 'Should have related links' {
+            $help.RelatedLinks | Should -Not -BeNullOrEmpty
+        }
+    }
+}
+
+Describe 'Set-JIMExampleDataSet' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Set-JIMExampleDataSet
+        }
+
+        It 'Should have a mandatory Id parameter' {
+            $param = $command.Parameters['Id']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have Id parameter that accepts pipeline by property name' {
+            $param = $command.Parameters['Id']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipelineByPropertyName } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have PassThru switch parameter' {
+            $command.Parameters['PassThru'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Should support ShouldProcess' {
+            $command.Parameters['WhatIf'] | Should -Not -BeNullOrEmpty
+            $command.Parameters['Confirm'] | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Requires Connection' {
+
+        BeforeEach {
+            Disconnect-JIM
+        }
+
+        It 'Should throw when not connected' {
+            { Set-JIMExampleDataSet -Id 5 -Name "New Name" -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll {
+            $help = Get-Help Set-JIMExampleDataSet -Full
+        }
+
+        It 'Should have a synopsis' {
+            $help.Synopsis | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have examples' {
+            $help.Examples.Example.Count | Should -BeGreaterThan 0
+        }
+
+        It 'Should have related links' {
+            $help.RelatedLinks | Should -Not -BeNullOrEmpty
+        }
+    }
+}
+
+Describe 'Remove-JIMExampleDataSet' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Remove-JIMExampleDataSet
+        }
+
+        It 'Should have a mandatory Id parameter' {
+            $param = $command.Parameters['Id']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have a Force switch parameter' {
+            $command.Parameters['Force'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Should support ShouldProcess' {
+            $command.Parameters['WhatIf'] | Should -Not -BeNullOrEmpty
+            $command.Parameters['Confirm'] | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Requires Connection' {
+
+        BeforeEach {
+            Disconnect-JIM
+        }
+
+        It 'Should throw when not connected' {
+            { Remove-JIMExampleDataSet -Id 5 -Force -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll {
+            $help = Get-Help Remove-JIMExampleDataSet -Full
         }
 
         It 'Should have a synopsis' {
