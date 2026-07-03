@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Queued and in-progress background operations can now be listed, inspected, and cancelled remotely via a new Worker Tasks REST endpoint and the `Get-JIMWorkerTask` / `Stop-JIMWorkerTask` cmdlets.
 - ✨ File system browsing, log viewing, and Metaverse Attribute priority management (previously UI-only) are now available as PowerShell cmdlets, giving the module full parity with the REST API.
 
+#### PowerShell Log Streaming (#466)
+
+- ✨ Service logs can now be streamed live from PowerShell with the new `Watch-JIMLog` cmdlet: it polls the Logs API, displays only new entries colour-coded by level, supports the same service, level, and search filters as `Get-JIMLogEntry`, and keeps polling through transient API failures until you stop it with Ctrl+C.
+
 ### Changed
 
 - 🔄 When more than one Connected System contributes to the same Metaverse attribute, JIM now resolves the value by attribute priority instead of by synchronisation timing (last-writer-wins). Single-source attributes are unaffected; existing multi-source attributes resolve deterministically until you set an explicit priority order.

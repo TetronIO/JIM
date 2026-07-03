@@ -173,6 +173,7 @@
         # Logs
         'Get-JIMLogEntry',
         'Get-JIMLogFile',
+        'Watch-JIMLog',
 
         # Service Settings
         'Get-JIMServiceSetting',
