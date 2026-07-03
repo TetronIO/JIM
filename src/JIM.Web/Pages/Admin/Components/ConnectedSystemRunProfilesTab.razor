@@ -164,7 +164,7 @@
                 @if (IsImportRunType(_newRunProfile.RunType) && ConnectedSystem.ConnectorDefinition.SupportsPaging)
                 {
                     <MudNumericField @bind-Value="_newRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined"
-                                     Class="mt-3" Min="0" Step="100" Required="true"
+                                     Class="mt-3" Min="0" Step="100" Required="true" Immediate="true"
                                      RequiredError="How many items to process in one go when importing" />
                 }
             </MudForm>
@@ -219,7 +219,7 @@
                 @if (IsImportRunType(_editRunProfile.RunType) && ConnectedSystem.ConnectorDefinition.SupportsPaging)
                 {
                     <MudNumericField @bind-Value="_editRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined"
-                                     Class="mt-3" Min="0" Step="100" Required="true"
+                                     Class="mt-3" Min="0" Step="100" Required="true" Immediate="true"
                                      RequiredError="How many items to process in one go when importing" />
                 }
             </MudForm>

@@ -75,6 +75,7 @@
                         <ConnectedSystemSettingField SettingValue="@settingValue"
                                                      CssClass="@(j == categorySettings.Count - 1 ? "" : "mb-5")"
                                                      IsRequired="@ConnectorSettingValidator.IsSettingRequired(ConnectedSystem.SettingValues, settingValue.Setting)"
+                                                     Immediate="true"
                                                      IsExportOnlyMode="@ConnectedSystem.IsExportOnlyMode()"
                                                      ValueChanged="OnSettingValueChanged"
                                                      FileSelected="OnFileSelectedAsync" />
