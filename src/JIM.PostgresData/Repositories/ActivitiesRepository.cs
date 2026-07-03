@@ -72,7 +72,10 @@ public class ActivityRepository : IActivityRepository
         IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
         IEnumerable<ActivityTargetType>? typeFilter = null,
         IEnumerable<ActivityStatus>? statusFilter = null,
-        bool? hasChildActivities = null)
+        bool? hasChildActivities = null,
+        IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
+        DateTime? createdFrom = null,
+        DateTime? createdTo = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -117,6 +120,27 @@ public class ActivityRepository : IActivityRepository
             var statuses = statusFilter.ToList();
             if (statuses.Count > 0)
                 query = query.Where(a => statuses.Contains(a.Status));
+        }
+
+        // Apply initiator-type filter (user / API key / system)
+        if (initiatorTypeFilter != null)
+        {
+            var initiatorTypes = initiatorTypeFilter.ToList();
+            if (initiatorTypes.Count > 0)
+                query = query.Where(a => initiatorTypes.Contains(a.InitiatedByType));
+        }
+
+        // Apply date-range filter (either bound may be open). Captured into non-nullable locals so the query
+        // expressions carry plain DateTime values.
+        if (createdFrom.HasValue)
+        {
+            var from = createdFrom.Value;
+            query = query.Where(a => a.Created >= from);
+        }
+        if (createdTo.HasValue)
+        {
+            var to = createdTo.Value;
+            query = query.Where(a => a.Created <= to);
         }
 
         // Apply outcome filter (activities that have > 0 for any of the selected outcome stat types)
