@@ -12,6 +12,7 @@
 </MudText>
 
 <MudForm @ref="_settingsForm" @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors">
+    <PrefilledFormValidator />
     @if (SettingCategories != null)
     {
         @for (var i = 0; i < SettingCategories.Count; i++)
@@ -74,6 +75,7 @@
                         <ConnectedSystemSettingField SettingValue="@settingValue"
                                                      CssClass="@(j == categorySettings.Count - 1 ? "" : "mb-5")"
                                                      IsRequired="@ConnectorSettingValidator.IsSettingRequired(ConnectedSystem.SettingValues, settingValue.Setting)"
+                                                     Immediate="true"
                                                      IsExportOnlyMode="@ConnectedSystem.IsExportOnlyMode()"
                                                      ValueChanged="OnSettingValueChanged"
                                                      FileSelected="OnFileSelectedAsync" />

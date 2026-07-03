@@ -61,16 +61,16 @@
             </MudItem>
             <MudItem xs="4" sm="2" md="2">
                 <MudNumericField T="int" Label="Days" @bind-Value="_gracePeriodDays"
-                    Variant="Variant.Outlined" Min="0" Max="3650"
+                    Variant="Variant.Outlined" Min="0" Max="3650" Immediate="true"
                     HelperText="Grace period" />
             </MudItem>
             <MudItem xs="4" sm="2" md="2">
                 <MudNumericField T="int" Label="Hours" @bind-Value="_gracePeriodHours"
-                    Variant="Variant.Outlined" Min="0" Max="23" />
+                    Variant="Variant.Outlined" Min="0" Max="23" Immediate="true" />
             </MudItem>
             <MudItem xs="4" sm="2" md="2">
                 <MudNumericField T="int" Label="Minutes" @bind-Value="_gracePeriodMinutes"
-                    Variant="Variant.Outlined" Min="0" Max="59" />
+                    Variant="Variant.Outlined" Min="0" Max="59" Immediate="true" />
             </MudItem>
         </MudGrid>
 

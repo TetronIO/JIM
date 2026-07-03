@@ -136,6 +136,17 @@ public class SchedulerServer
             var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
             var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(schedule, hashKey);
             activity.ScheduleId ??= schedule.Id;
+
+            // Idempotent capture guard, compared semantically: see ConnectedSystemServer.CaptureConfigurationChangeAsync.
+            // A no-change save must not consume a version or drown real changes in noise.
+            var latest = ConfigurationSnapshotService.Deserialise(
+                await Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.Schedule, schedule.Id));
+            if (latest != null && !Application.ConfigurationDiffs.Diff(latest, snapshot).HasChanges)
+            {
+                Log.Debug("CaptureConfigurationChangeAsync: configuration of Schedule {ScheduleId} is unchanged from its latest snapshot; no new version recorded.", schedule.Id);
+                return;
+            }
+
             activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.Schedule, schedule.Id);
             activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
         }
