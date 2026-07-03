@@ -17,6 +17,8 @@ public class ConfigurationChangeActivityData
 
     public ActivityInitiatorType InitiatedByType { get; set; }
 
+    public Guid? InitiatedById { get; set; }
+
     public string? InitiatedByName { get; set; }
 
     public DateTime When { get; set; }

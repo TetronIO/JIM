@@ -129,6 +129,9 @@
         'New-JIMMetaverseAttribute',
         'Set-JIMMetaverseAttribute',
         'Remove-JIMMetaverseAttribute',
+        'Get-JIMMetaverseAttributePriority',
+        'Set-JIMMetaverseAttributePriority',
+        'Move-JIMMetaverseAttributePriority',
 
         # API Keys
         'Get-JIMApiKey',
@@ -155,6 +158,9 @@
         'Get-JIMExampleDataSet',
         'Get-JIMExampleDataTemplate',
         'Invoke-JIMExampleDataTemplate',
+        'New-JIMExampleDataSet',
+        'Remove-JIMExampleDataSet',
+        'Set-JIMExampleDataSet',
 
         # Expressions
         'Test-JIMExpression',
@@ -163,6 +169,18 @@
         'Get-JIMDeletedObject',
         'Get-JIMHistoryCount',
         'Invoke-JIMHistoryCleanup',
+
+        # Worker Tasks
+        'Get-JIMWorkerTask',
+        'Stop-JIMWorkerTask',
+
+        # File System
+        'Get-JIMFileSystemItem',
+        'Test-JIMFileSystemPath',
+
+        # Logs
+        'Get-JIMLogEntry',
+        'Get-JIMLogFile',
 
         # Service Settings
         'Get-JIMServiceSetting',

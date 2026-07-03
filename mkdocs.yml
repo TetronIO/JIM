@@ -146,6 +146,9 @@ nav:
       - History: powershell/history.md
       - Example Data: powershell/example-data.md
       - Expressions: powershell/expressions.md
+      - Worker Tasks: powershell/worker-tasks.md
+      - File System: powershell/file-system.md
+      - Logs: powershell/logs.md
   - Developer Guide:
       - developer/index.md
       - Development Environment: developer/dev-environment.md

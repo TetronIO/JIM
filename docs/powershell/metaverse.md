@@ -360,6 +360,116 @@ Get-JIMMetaverseAttribute -Name "Legacy Code" | Remove-JIMMetaverseAttribute -Fo
 
 ---
 
+### Get-JIMMetaverseAttributePriority
+
+Gets a metaverse attribute's import priority order: the ordered list of import contributions to the attribute for a given Metaverse Object Type, highest priority first. When more than one Connected System contributes to the same attribute, the highest-priority contributor still connected wins.
+
+#### Syntax
+
+```powershell
+Get-JIMMetaverseAttributePriority -AttributeId <int> -ObjectTypeId <int>
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `AttributeId` | `int` | Yes | | The ID of the Metaverse Attribute |
+| `ObjectTypeId` | `int` | Yes | | The ID of the Metaverse Object Type that scopes the priority list |
+
+#### Output
+
+The attribute's priority order, including each contributing mapping's Synchronisation Rule, Connected System, and "Null is a value" flag.
+
+#### Examples
+
+```powershell title="Get the priority order for an attribute"
+Get-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1
+```
+
+```powershell title="List just the contributing mappings, in priority order"
+(Get-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1).Contributors
+```
+
+---
+
+### Set-JIMMetaverseAttributePriority
+
+Replaces a metaverse attribute's entire import priority order in one call. Every current contributing mapping must be listed exactly once, in the desired priority order.
+
+#### Syntax
+
+```powershell
+Set-JIMMetaverseAttributePriority -AttributeId <int> -ObjectTypeId <int> -MappingId <int[]>
+    [-NullIsValueMappingId <int[]>] [-PassThru]
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `AttributeId` | `int` | Yes | | The ID of the Metaverse Attribute |
+| `ObjectTypeId` | `int` | Yes | | The ID of the Metaverse Object Type that scopes the priority list |
+| `MappingId` | `int[]` | Yes | | Every current contributing mapping ID, in the desired priority order (highest first) |
+| `NullIsValueMappingId` | `int[]` | No | | Mapping IDs (from `-MappingId`) that should have "Null is a value" enabled |
+| `PassThru` | `switch` | No | `$false` | Returns the resulting priority order |
+
+!!! info "ShouldProcess"
+    This cmdlet supports `ShouldProcess` with a **Medium** impact level. Use `-WhatIf` to preview changes or `-Confirm` to require confirmation.
+
+#### Output
+
+If `-PassThru` is specified, returns the resulting priority order.
+
+#### Examples
+
+```powershell title="Set the full priority order"
+Set-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 45, 12, 78
+```
+
+```powershell title="Set the order and flag a source as authoritative for 'no value'"
+Set-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 45, 12 -NullIsValueMappingId 45 -PassThru
+```
+
+---
+
+### Move-JIMMetaverseAttributePriority
+
+Repositions a single contributor within a metaverse attribute's priority order, without needing to restate the whole list.
+
+#### Syntax
+
+```powershell
+Move-JIMMetaverseAttributePriority -AttributeId <int> -ObjectTypeId <int> -MappingId <int>
+    -Position <int> [-NullIsValue] [-PassThru]
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `AttributeId` | `int` | Yes | | The ID of the Metaverse Attribute |
+| `ObjectTypeId` | `int` | Yes | | The ID of the Metaverse Object Type that scopes the priority list |
+| `MappingId` | `int` | Yes | | The contributing mapping to move. Accepts pipeline input. |
+| `Position` | `int` | Yes | | The desired 1-based priority position (1 = highest priority) |
+| `NullIsValue` | `switch` | No | | When specified, also enables the moved mapping's "Null is a value" flag |
+| `PassThru` | `switch` | No | `$false` | Returns the resulting priority order |
+
+!!! info "ShouldProcess"
+    This cmdlet supports `ShouldProcess` with a **Medium** impact level. Use `-WhatIf` to preview changes or `-Confirm` to require confirmation.
+
+#### Output
+
+If `-PassThru` is specified, returns the resulting priority order.
+
+#### Examples
+
+```powershell title="Move a mapping to the highest priority"
+Move-JIMMetaverseAttributePriority -AttributeId 12 -ObjectTypeId 1 -MappingId 78 -Position 1
+```
+
+---
+
 ## Objects
 
 ### Search-JIMMetaverseObject

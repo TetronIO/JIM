@@ -15,10 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Predefined Search criteria can now be combined with AND/OR logic and nested groups, not just a flat list: each group matches All (AND) or Any (OR) of its criteria, top-level groups are OR-ed together, and a group can contain a nested group to express mixed logic such as "(Department is Finance or Sales) and active". Build these in the Predefined Search editor, the PowerShell module, or the REST API.
 #### Configuration Change History (#14)
 
-- ✨ JIM now tracks a versioned history of changes to your Synchronisation Rules and Connected Systems: who changed what, and when. Retrieve it as a git-style diff with `Get-JIMConfigurationChangeHistory` or the REST API; secrets are flagged as changed but never stored or revealed.
+- ✨ JIM now tracks a versioned history of changes to your Synchronisation Rules and Connected Systems: who changed what, and when. The admin portal presents each change as an audit-style field history, showing each field's value before and after the change, and you can retrieve the same change via `Get-JIMConfigurationChangeHistory` or the REST API; secrets are flagged as changed but never stored or revealed.
 - ✨ You can now record a reason when changing configuration from automation: `-ChangeReason` on the Synchronisation Rule and Connected System write cmdlets, or an optional field on the REST write requests. The reason shows with the change and on its Activity.
 - ✨ Example data generation templates can now construct a text attribute from an expression, using the same `mv["Attribute Name"]` syntax and function library as Synchronisation Rule Attribute Flows, so a generated value can be transformed from other attributes on the same object (for example an email domain derived from the assigned company). Referenced attributes are generated first, and circular references are detected up front.
 - ✨ Metaverse attributes contributed by more than one Connected System now resolve to a single winner by a configurable per-attribute priority order, so a higher-priority source is never overwritten by a lower-priority one. An advanced "Null is a value" option lets an authoritative source positively assert "no value", clearing the attribute downstream instead of falling through to a lower-priority source.
+
+#### API & PowerShell Coverage (#154)
+
+- ✨ Connected System Objects can now be listed and filtered via a paginated REST endpoint and the extended `Get-JIMConnectedSystemObject` cmdlet, rather than needing to be looked up one at a time.
+- ✨ Example Data Sets now support full create, update, and delete via the REST API and the new `New-`, `Set-`, and `Remove-JIMExampleDataSet` cmdlets, in addition to the existing read access.
+- ✨ Queued and in-progress background operations can now be listed, inspected, and cancelled remotely via a new Worker Tasks REST endpoint and the `Get-JIMWorkerTask` / `Stop-JIMWorkerTask` cmdlets.
+- ✨ File system browsing, log viewing, and Metaverse Attribute priority management (previously UI-only) are now available as PowerShell cmdlets, giving the module full parity with the REST API.
 
 ### Changed
 

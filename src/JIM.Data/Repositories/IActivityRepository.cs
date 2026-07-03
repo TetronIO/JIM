@@ -100,6 +100,13 @@ public interface IActivityRepository
     public Task<int> GetMaxConfigurationChangeVersionAsync(ActivityTargetType targetType, int targetObjectId);
 
     /// <summary>
+    /// Gets the highest configuration-change version recorded for a Guid-keyed configuration object (e.g. a
+    /// <see cref="ActivityTargetType.Schedule"/>), identified by its activity target type and Guid database id, or 0 if
+    /// none exist yet. The Guid-keyed counterpart of <see cref="GetMaxConfigurationChangeVersionAsync(ActivityTargetType,int)"/>.
+    /// </summary>
+    public Task<int> GetMaxConfigurationChangeVersionAsync(ActivityTargetType targetType, Guid targetObjectId);
+
+    /// <summary>
     /// Counts the versioned configuration-change activities recorded for a configuration object.
     /// </summary>
     public Task<int> GetConfigurationChangeCountAsync(ActivityTargetType targetType, int targetObjectId);
