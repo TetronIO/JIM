@@ -99,13 +99,10 @@ public interface ISyncServer
         Activity? parentActivity = null);
 
     /// <summary>
-    /// Updates a Connected System with the latest triad data from the connector.
+    /// Persists the connector's import watermark (PersistedConnectorData) as runtime state: no Activity, no
+    /// configuration snapshot.
     /// </summary>
-    Task UpdateConnectedSystemWithTriadAsync(
-        ConnectedSystem connectedSystem,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName);
+    Task UpdateConnectedSystemPersistedConnectorDataAsync(ConnectedSystem connectedSystem, string? persistedConnectorData);
 
     #endregion
 

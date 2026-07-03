@@ -573,42 +573,20 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Updates an existing Connected System using initiator triad (for use from worker processors).
+    /// Persists the connector's watermark (<see cref="ConnectedSystem.PersistedConnectorData"/>, e.g. an LDAP sync
+    /// cookie or USN) after an import, without creating an Activity or capturing a configuration snapshot. The
+    /// watermark is machine-generated runtime state that changes on virtually every import; it is not a decision a
+    /// security principal made, and the import itself is already audited by its Run Profile Execution Activity.
+    /// Routing it through an Activity-creating update path would record a spurious Connected System Update on every
+    /// import cycle.
     /// </summary>
-    public async Task UpdateConnectedSystemWithTriadAsync(
-        ConnectedSystem connectedSystem,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName)
+    public async Task UpdateConnectedSystemPersistedConnectorDataAsync(ConnectedSystem connectedSystem, string? persistedConnectorData)
     {
         if (connectedSystem == null)
             throw new ArgumentNullException(nameof(connectedSystem));
 
-        if (!AreRunProfilesValid(connectedSystem))
-            throw new ArgumentException("connectedSystem.RunProfiles has some of a run type that is not supported by the Connector.");
-
-        Log.Verbose($"UpdateConnectedSystemWithTriadAsync() called for {connectedSystem}");
-
-        var validationResults = ValidateConnectedSystemSettings(connectedSystem);
-        connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
-
-        AuditHelper.SetUpdated(connectedSystem, initiatorType, initiatorId, initiatorName);
-
-        // every CRUD operation requires tracking with an activity...
-        var activity = new Activity
-        {
-            TargetName = connectedSystem.Name,
-            TargetType = ActivityTargetType.ConnectedSystem,
-            TargetOperationType = ActivityTargetOperationType.Update,
-            ConnectedSystemId = connectedSystem.Id
-        };
-        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
-
-        SanitiseConnectedSystemUserInput(connectedSystem);
+        connectedSystem.PersistedConnectorData = persistedConnectorData;
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
-
-        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
-        await Application.Activities.CompleteActivityAsync(activity);
     }
 
     /// <summary>

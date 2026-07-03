@@ -1259,16 +1259,6 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task UpdateConnectedSystemWithTriadAsync(
-        ConnectedSystem connectedSystem,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName)
-    {
-        // No-op — tests seed their own object types and containers
-        return Task.CompletedTask;
-    }
-
     #endregion
 
     #region MVO Change History
