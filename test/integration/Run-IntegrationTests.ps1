@@ -408,17 +408,16 @@ function Test-SnapshotAvailable {
     if ($LASTEXITCODE -ne 0) { return $false }
     if ("$inspect" -ne $ExpectedHash) { return $false }
 
-    # Also verify the base image the snapshot was built from is current. A snapshot built
-    # from a stale base bakes in the old base's provisioned state (e.g. an expired
-    # Administrator password or missing password policy) even when the snapshot hash
-    # matches, because that hash covers populate scripts on disk, not the base contents.
-    $role = ($ImageTag -replace '^jim-samba-ad:', '') -replace '-.*$', ''
-    $baseImage = "ghcr.io/tetronio/jim-samba-ad:$role"
-    $baseBuildHash = docker image inspect $baseImage --format '{{index .Config.Labels "jim.samba.build-hash"}}' 2>&1
+    # Also verify the snapshot was baked from the current base image build. Snapshots
+    # capture the base's provisioned state (e.g. password policy, TLS, OUs), so checking
+    # the base image on disk is not enough: a snapshot built from an older base stays
+    # stale even after the base itself is rebuilt. Snapshots without the base-hash label
+    # predate this check and are treated as stale.
+    $snapshotBaseHash = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.samba.base-hash"}}' 2>&1
     if ($LASTEXITCODE -ne 0) { return $false }
     $expectedBuildHash = Get-SambaBaseBuildHash
-    if ("$baseBuildHash" -ne $expectedBuildHash) {
-        Write-Host "  ${YELLOW}Samba AD base image '$baseImage' is stale (build hash $baseBuildHash != $expectedBuildHash) — snapshot needs rebuild${NC}"
+    if ("$snapshotBaseHash" -ne $expectedBuildHash) {
+        Write-Host "  ${YELLOW}Snapshot '$ImageTag' was built from a stale base image (base hash '$snapshotBaseHash' != $expectedBuildHash) — snapshot needs rebuild${NC}"
         return $false
     }
 
@@ -483,15 +482,16 @@ function Test-OpenLDAPSnapshotAvailable {
     if ($LASTEXITCODE -ne 0) { return $false }
     if ("$inspect" -ne $ExpectedHash) { return $false }
 
-    # Also verify the base image is current. A snapshot built from a stale base image
-    # contains outdated init scripts (e.g. wrong MDB map sizes) even if the snapshot
-    # hash matches, because the hash is computed from files on disk, not the image contents.
-    $baseImage = "ghcr.io/tetronio/jim-openldap:primary"
-    $baseBuildHash = docker image inspect $baseImage --format '{{index .Config.Labels "jim.openldap.build-hash"}}' 2>&1
+    # Also verify the snapshot was baked from the current base image build. Snapshots
+    # capture the base's init state (schema, suffixes, accesslog config), so checking
+    # the base image on disk is not enough: a snapshot built from an older base stays
+    # stale even after the base itself is rebuilt. Snapshots without the base-hash label
+    # predate this check and are treated as stale.
+    $snapshotBaseHash = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.openldap.base-hash"}}' 2>&1
     if ($LASTEXITCODE -ne 0) { return $false }
     $expectedBuildHash = Get-OpenLDAPBaseBuildHash
-    if ("$baseBuildHash" -ne $expectedBuildHash) {
-        Write-Host "  ${YELLOW}OpenLDAP base image is stale (build hash $baseBuildHash != $expectedBuildHash) — snapshot needs rebuild${NC}"
+    if ("$snapshotBaseHash" -ne $expectedBuildHash) {
+        Write-Host "  ${YELLOW}Snapshot '$ImageTag' was built from a stale base image (base hash '$snapshotBaseHash' != $expectedBuildHash) — snapshot needs rebuild${NC}"
         return $false
     }
 
