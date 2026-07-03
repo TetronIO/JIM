@@ -229,8 +229,8 @@ public class ConfigurationChangeCaptureCoverageTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null, "an unchanged configuration must not consume a version");
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Is.Null, "an unchanged configuration must not store a duplicate snapshot");
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("no-op save"), "the reason is still recorded independently of the dedupe guard");
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Null, "an unchanged configuration must not store a duplicate snapshot");
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("no-op save"), "the reason is still recorded independently of the dedupe guard");
     }
 
     [Test]
@@ -253,7 +253,7 @@ public class ConfigurationChangeCaptureCoverageTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null, "an unchanged Synchronisation Rule must not consume a version");
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Is.Null);
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Null);
     }
 
     // -- helpers -------------------------------------------------------------------------------------------------------
