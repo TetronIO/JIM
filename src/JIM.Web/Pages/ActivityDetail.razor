@@ -61,6 +61,10 @@
                             <MudIcon Icon="@Icons.Material.Filled.CleaningServices" Class="mr-1" Style="vertical-align: middle;" />
                             @(_activity.TargetName ?? "History Retention Cleanup")
                             break;
+                        case ActivityTargetType.ObjectMatchingRule when Helpers.GetObjectMatchingRuleHref(_activity.SyncRuleId, _activity.ConnectedSystemId) is { } matchingRuleHref:
+                            @* A rule has no page of its own; link to the owning object's Matching tab. *@
+                            <MudLink Href="@matchingRuleHref">@_activity.TargetName</MudLink>
+                            break;
                         case ActivityTargetType.ObjectMatchingRule:
                         case ActivityTargetType.NotSet:
                         default:
@@ -835,13 +839,18 @@
         if (AuthenticationStateTask != null)
             _isAdministrator = (await AuthenticationStateTask).User.IsInRole("Administrator");
 
+        // The diff is loaded by whichever configuration-object FK the capture linked, not by the activity's own
+        // TargetType: granular endpoints record activities typed for the child (an Object Matching Rule, a Run
+        // Profile) whose versioned snapshot belongs to the owning Synchronisation Rule or Connected System. The
+        // Synchronisation Rule FK is checked first: a rule-scoped capture may sit on an activity that also carries a
+        // Connected System id for context, but its version was assigned against the rule.
         if (_isAdministrator && _activity.ConfigurationChangeVersion.HasValue)
         {
-            if (_activity.TargetType == ActivityTargetType.SyncRule && _activity.SyncRuleId.HasValue)
+            if (_activity.SyncRuleId.HasValue)
                 _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.SyncRule, _activity.SyncRuleId.Value, _activity.ConfigurationChangeVersion.Value);
-            else if (_activity.TargetType == ActivityTargetType.ConnectedSystem && _activity.ConnectedSystemId.HasValue)
+            else if (_activity.ConnectedSystemId.HasValue)
                 _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ConnectedSystem, _activity.ConnectedSystemId.Value, _activity.ConfigurationChangeVersion.Value);
-            else if (_activity.TargetType == ActivityTargetType.Schedule && _activity.ScheduleId.HasValue)
+            else if (_activity.ScheduleId.HasValue)
                 _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.Schedule, _activity.ScheduleId.Value, _activity.ConfigurationChangeVersion.Value);
         }
 
@@ -853,14 +862,15 @@
     }
 
     // Whether to show the "no configuration snapshot was captured" notice: an administrator is viewing a completed,
-    // configuration-changing activity (create/update/import of a Connected System, Synchronisation Rule or Schedule)
-    // that carries no snapshot. Deletes are excluded: they record unversioned tombstones surfaced elsewhere, and an
-    // in-progress activity may simply not have captured yet.
+    // configuration-changing activity (create/update/import of a Connected System, Synchronisation Rule or Schedule,
+    // or one of their granular sub-entities) that carries no snapshot. Deletes are excluded: they record unversioned
+    // tombstones surfaced elsewhere, and an in-progress activity may simply not have captured yet.
     private bool ShowNoSnapshotNotice =>
         _isAdministrator
         && _activity != null
         && !_activity.ConfigurationChangeVersion.HasValue
         && _activity.TargetType is ActivityTargetType.ConnectedSystem or ActivityTargetType.SyncRule or ActivityTargetType.Schedule
+            or ActivityTargetType.ObjectMatchingRule or ActivityTargetType.ConnectedSystemRunProfile
         && _activity.TargetOperationType is ActivityTargetOperationType.Create or ActivityTargetOperationType.Update
             or ActivityTargetOperationType.ImportSchema or ActivityTargetOperationType.ImportHierarchy
         && _activity.Status is ActivityStatus.Complete or ActivityStatus.CompleteWithWarning;

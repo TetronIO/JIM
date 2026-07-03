@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using Serilog;
 
 namespace JIM.Application.Services;
 
@@ -115,10 +116,18 @@ public class ConfigurationDiffService
         {
             // Match items by stable database id (integer or Guid) so the diff is stable across reordering. A Guid item
             // id is used where no unique integer key exists (e.g. a Schedule Step, whose StepIndex is not unique).
-            var oldById = oldChildren
+            var oldGroups = oldChildren
                 .Where(c => ItemKey(c) != null)
                 .GroupBy(c => ItemKey(c)!)
-                .ToDictionary(g => g.Key, g => g.First());
+                .ToList();
+
+            // Item keys are expected to be unique within a collection (they are database ids). If a snapshot ever
+            // carries duplicates, matching degrades to first-wins and can pair the wrong items; surface that rather
+            // than failing silently.
+            foreach (var duplicate in oldGroups.Where(g => g.Count() > 1))
+                Log.Warning("ConfigurationDiffService: duplicate item key {ItemKey} in collection {CollectionKey}; diff matching may pair the wrong items.", duplicate.Key, oldNode.Key);
+
+            var oldById = oldGroups.ToDictionary(g => g.Key, g => g.First());
             var matchedIds = new HashSet<object>();
 
             foreach (var newChild in newChildren)
