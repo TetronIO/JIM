@@ -47,10 +47,19 @@ public class ConfigurationSnapshotNode
     public bool IsSecret { get; set; }
 
     /// <summary>
-    /// For an item within a collection, the stable database identifier of the underlying entity, so the diff engine can
-    /// match items across versions even when reordered. Null for nodes that are not collection items.
+    /// For an item within an integer-keyed collection, the stable integer database identifier of the underlying entity,
+    /// so the diff engine can match items across versions even when reordered. Null for nodes that are not collection
+    /// items, and for Guid-keyed collection items (which use <see cref="ItemGuidId"/>).
     /// </summary>
     public int? ItemId { get; set; }
+
+    /// <summary>
+    /// For an item within a Guid-keyed collection (e.g. a Schedule Step), the stable Guid database identifier of the
+    /// underlying entity, so the diff engine can match items across versions even when reordered. Null for integer-keyed
+    /// items and for nodes that are not collection items. A Guid item id is essential where the item has no unique
+    /// integer key: a Schedule Step's StepIndex is not unique (parallel steps share one), so only the Guid identifies it.
+    /// </summary>
+    public Guid? ItemGuidId { get; set; }
 
     /// <summary>
     /// Child nodes for Object and Collection nodes. Null for scalars.
@@ -65,9 +74,13 @@ public class ConfigurationSnapshotNode
     public static ConfigurationSnapshotNode Secret(string key, string? valueHash, string? label = null) =>
         new() { Key = key, Label = label, NodeType = ConfigurationSnapshotNodeType.Scalar, Value = valueHash, IsSecret = true };
 
-    /// <summary>Creates a nested object node.</summary>
+    /// <summary>Creates a nested object node, optionally an integer-keyed collection item (<paramref name="itemId"/>).</summary>
     public static ConfigurationSnapshotNode ObjectNode(string key, List<ConfigurationSnapshotNode> children, string? label = null, int? itemId = null) =>
         new() { Key = key, Label = label, NodeType = ConfigurationSnapshotNodeType.Object, ItemId = itemId, Children = children };
+
+    /// <summary>Creates a nested object node that is a Guid-keyed collection item (e.g. a Schedule Step).</summary>
+    public static ConfigurationSnapshotNode ObjectNode(string key, List<ConfigurationSnapshotNode> children, string? label, Guid itemGuidId) =>
+        new() { Key = key, Label = label, NodeType = ConfigurationSnapshotNodeType.Object, ItemGuidId = itemGuidId, Children = children };
 
     /// <summary>Creates a collection node whose children are the collection's item nodes.</summary>
     public static ConfigurationSnapshotNode CollectionNode(string key, List<ConfigurationSnapshotNode> items, string? label = null) =>

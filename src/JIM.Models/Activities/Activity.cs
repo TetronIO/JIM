@@ -221,6 +221,13 @@ public class Activity
 
     public int? SyncRuleId { get; set; }
 
+    /// <summary>
+    /// If this activity records a configuration change to a Schedule, the Schedule's id is recorded here. Schedules are
+    /// Guid-keyed (unlike the integer-keyed Connected System and Synchronisation Rule), so the configuration-change
+    /// version query keys off this column for Schedule history. Null for all other activities.
+    /// </summary>
+    public Guid? ScheduleId { get; set; }
+
     public Guid? MetaverseObjectId { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------

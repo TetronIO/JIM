@@ -68,7 +68,7 @@
             case ConfigurationDiffChangeType.Removed:
                 // A collection item or a scalar is named once; a structural container that appeared/vanished is described
                 // by its contained items instead. Mirrors the tally so a kind is listed for every counted change.
-                if (node.ItemId.HasValue || node.NodeType == ConfigurationSnapshotNodeType.Scalar)
+                if (node.ItemId.HasValue || node.ItemGuidId.HasValue || node.NodeType == ConfigurationSnapshotNodeType.Scalar)
                     (node.ChangeType == ConfigurationDiffChangeType.Added ? added : removed).Add(Kind(node));
                 else
                     CollectChildren(node, added, removed, modified);

@@ -10,6 +10,7 @@ using JIM.Data;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Scheduling;
 using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
@@ -246,6 +247,105 @@ public class ConfigurationSnapshotServiceTests
 
         Assert.That(settings.Children, Has.Count.EqualTo(1), "the empty File Path setting must be skipped");
         Assert.That(settings.Children!.Single().Label, Is.EqualTo("Delimiter"));
+    }
+
+    // -- Schedule (Guid-keyed configuration object) --------------------------------------------------------------------
+
+    [Test]
+    public void CreateSnapshot_Schedule_CapturesConfigFieldsAndStepsWithGuidItemIds()
+    {
+        var stepAId = Guid.NewGuid();
+        var stepBId = Guid.NewGuid();
+        var schedule = new Schedule
+        {
+            Id = Guid.NewGuid(),
+            Name = "Nightly Sync",
+            Description = "runs overnight",
+            IsEnabled = true,
+            TriggerType = ScheduleTriggerType.Cron,
+            PatternType = SchedulePatternType.Interval,
+            IntervalValue = 2,
+            IntervalUnit = ScheduleIntervalUnit.Hours,
+            IntervalWindowStart = "06:00",
+            IntervalWindowEnd = "18:00",
+            DaysOfWeek = "1,2,3,4,5",
+            RunTimes = "09:00,12:00",
+            CronExpression = "0 6 * * 1-5"
+        };
+        // Added out of StepIndex order to prove the snapshot orders by StepIndex.
+        schedule.Steps.Add(new ScheduleStep { Id = stepBId, StepIndex = 1, StepType = ScheduleStepType.PowerShell, ScriptPath = "/x.ps1", ExecutionMode = StepExecutionMode.ParallelWithPrevious });
+        schedule.Steps.Add(new ScheduleStep { Id = stepAId, StepIndex = 0, StepType = ScheduleStepType.RunProfile, ConnectedSystemId = 3, RunProfileId = 7 });
+
+        var snapshot = _service.CreateSnapshot(schedule, HashKey);
+
+        Assert.That(snapshot.ObjectType, Is.EqualTo(ConfigurationSnapshotService.ScheduleObjectType));
+        Assert.That(snapshot.ObjectGuidId, Is.EqualTo(schedule.Id), "a Guid-keyed object carries its id in ObjectGuidId");
+        Assert.That(snapshot.ObjectId, Is.EqualTo(0), "a Guid-keyed object does not use the integer ObjectId");
+        Assert.That(snapshot.ObjectName, Is.EqualTo("Nightly Sync"));
+
+        Assert.That(Child(snapshot.Root, "name")!.Value, Is.EqualTo("Nightly Sync"));
+        Assert.That(Child(snapshot.Root, "enabled")!.Value, Is.EqualTo("true"));
+        Assert.That(Child(snapshot.Root, "triggerType")!.Value, Is.EqualTo("Cron"));
+        Assert.That(Child(snapshot.Root, "intervalUnit")!.Value, Is.EqualTo("Hours"), "a nullable enum is captured when set");
+        Assert.That(Child(snapshot.Root, "cronExpression")!.Value, Is.EqualTo("0 6 * * 1-5"));
+
+        var steps = Child(snapshot.Root, "steps")!;
+        Assert.That(steps.NodeType, Is.EqualTo(ConfigurationSnapshotNodeType.Collection));
+        Assert.That(steps.Children, Has.Count.EqualTo(2));
+
+        var firstStep = steps.Children![0];
+        Assert.That(firstStep.ItemGuidId, Is.EqualTo(stepAId), "steps are ordered by StepIndex and carry their Guid id for diff matching");
+        Assert.That(firstStep.ItemId, Is.Null, "a Guid-keyed item does not use the integer ItemId");
+        Assert.That(Child(firstStep, "connectedSystemId")!.Value, Is.EqualTo("3"));
+        Assert.That(steps.Children![1].ItemGuidId, Is.EqualTo(stepBId));
+    }
+
+    [Test]
+    public void CreateSnapshot_Schedule_RedactsSqlConnectionStringSecret()
+    {
+        const string connectionString = "Server=db;Database=jim;User Id=sa;Password=super-secret-pw;";
+        var schedule = new Schedule { Id = Guid.NewGuid(), Name = "SQL Job" };
+        schedule.Steps.Add(new ScheduleStep { Id = Guid.NewGuid(), StepIndex = 0, StepType = ScheduleStepType.SqlScript, SqlScriptPath = "/job.sql", SqlConnectionString = connectionString });
+
+        var snapshot = _service.CreateSnapshot(schedule, HashKey);
+        var json = ConfigurationSnapshotService.Serialise(snapshot);
+
+        // Hard requirement: the connection string (which can contain a credential) must never be serialised.
+        Assert.That(json, Does.Not.Contain("super-secret-pw"), "the connection string secret must never be serialised");
+        Assert.That(json, Does.Not.Contain(connectionString));
+
+        var step = Child(snapshot.Root, "steps")!.Children!.Single();
+        var connection = Child(step, "sqlConnectionString")!;
+        Assert.That(connection.IsSecret, Is.True);
+        // SqlConnectionString is stored in plaintext, so the keyed hash is taken over the plaintext directly.
+        Assert.That(connection.Value, Is.EqualTo(ExpectedHash(connectionString)), "the connection string is represented by a keyed hash of its plaintext");
+
+        // A non-sensitive step field is captured in the clear.
+        Assert.That(Child(step, "sqlScriptPath")!.Value, Is.EqualTo("/job.sql"));
+    }
+
+    [Test]
+    public void CreateSnapshot_Schedule_ExcludesRuntimeAndAuditState()
+    {
+        var schedule = new Schedule
+        {
+            Id = Guid.NewGuid(),
+            Name = "Sched",
+            LastRunTime = DateTime.UtcNow,
+            NextRunTime = DateTime.UtcNow.AddHours(1),
+            CreatedByType = ActivityInitiatorType.User,
+            CreatedByName = "admin-user",
+            LastUpdatedByName = "editor-user"
+        };
+
+        var json = ConfigurationSnapshotService.Serialise(_service.CreateSnapshot(schedule, HashKey));
+
+        // Runtime and audit state is not configuration and must never appear in a configuration change history.
+        Assert.That(json, Does.Not.Contain("nextRunTime"));
+        Assert.That(json, Does.Not.Contain("lastRunTime"));
+        Assert.That(json, Does.Not.Contain("admin-user"));
+        Assert.That(json, Does.Not.Contain("editor-user"));
+        Assert.That(json, Does.Not.Contain("createdBy"));
     }
 
     // -- helpers -------------------------------------------------------------------------------------------------------

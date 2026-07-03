@@ -33,6 +33,7 @@ public class ConfigurationDiffService
         {
             ObjectType = newSnapshot.ObjectType,
             ObjectId = newSnapshot.ObjectId,
+            ObjectGuidId = newSnapshot.ObjectGuidId,
             ObjectName = newSnapshot.ObjectName,
             OldVersion = oldVersion,
             NewVersion = newVersion,
@@ -78,7 +79,8 @@ public class ConfigurationDiffService
             Label = newNode.Label,
             NodeType = newNode.NodeType,
             IsSecret = newNode.IsSecret,
-            ItemId = newNode.ItemId
+            ItemId = newNode.ItemId,
+            ItemGuidId = newNode.ItemGuidId
         };
 
         if (newNode.NodeType == ConfigurationSnapshotNodeType.Scalar)
@@ -111,18 +113,20 @@ public class ConfigurationDiffService
 
         if (newNode.NodeType == ConfigurationSnapshotNodeType.Collection)
         {
-            // Match items by stable database id so the diff is stable across reordering.
+            // Match items by stable database id (integer or Guid) so the diff is stable across reordering. A Guid item
+            // id is used where no unique integer key exists (e.g. a Schedule Step, whose StepIndex is not unique).
             var oldById = oldChildren
-                .Where(c => c.ItemId.HasValue)
-                .GroupBy(c => c.ItemId!.Value)
+                .Where(c => ItemKey(c) != null)
+                .GroupBy(c => ItemKey(c)!)
                 .ToDictionary(g => g.Key, g => g.First());
-            var matchedIds = new HashSet<int>();
+            var matchedIds = new HashSet<object>();
 
             foreach (var newChild in newChildren)
             {
-                if (newChild.ItemId.HasValue && oldById.TryGetValue(newChild.ItemId.Value, out var oldMatch))
+                var key = ItemKey(newChild);
+                if (key != null && oldById.TryGetValue(key, out var oldMatch))
                 {
-                    matchedIds.Add(newChild.ItemId.Value);
+                    matchedIds.Add(key);
                     result.Add(DiffNode(oldMatch, newChild));
                 }
                 else
@@ -131,7 +135,7 @@ public class ConfigurationDiffService
                 }
             }
 
-            foreach (var oldChild in oldChildren.Where(c => !c.ItemId.HasValue || !matchedIds.Contains(c.ItemId.Value)))
+            foreach (var oldChild in oldChildren.Where(c => ItemKey(c) is not { } k || !matchedIds.Contains(k)))
                 result.Add(DiffNode(oldChild, null));
         }
         else
@@ -153,6 +157,13 @@ public class ConfigurationDiffService
         return result;
     }
 
+    // The stable identity of a collection item: its Guid id where the collection is Guid-keyed, otherwise its integer
+    // id. Null when the node is not a collection item. Boxed so a single dictionary can key either kind (a given
+    // collection is uniformly one or the other, so there is no cross-type collision).
+    private static object? ItemKey(ConfigurationDiffNode node) => (object?)node.ItemGuidId ?? node.ItemId;
+
+    private static object? ItemKey(ConfigurationSnapshotNode node) => (object?)node.ItemGuidId ?? node.ItemId;
+
     private ConfigurationDiffNode MapSubtree(ConfigurationSnapshotNode source, ConfigurationDiffChangeType changeType)
     {
         var node = new ConfigurationDiffNode
@@ -162,6 +173,7 @@ public class ConfigurationDiffService
             NodeType = source.NodeType,
             IsSecret = source.IsSecret,
             ItemId = source.ItemId,
+            ItemGuidId = source.ItemGuidId,
             ChangeType = changeType
         };
 
@@ -199,7 +211,7 @@ public class ConfigurationDiffService
             case ConfigurationDiffChangeType.Removed:
                 // Count a collection item or a scalar once; do not recurse into the rest of the added/removed subtree.
                 // A structural container (no item id) that appeared/vanished is counted by its contained items instead.
-                if (node.ItemId.HasValue || node.NodeType == ConfigurationSnapshotNodeType.Scalar)
+                if (node.ItemId.HasValue || node.ItemGuidId.HasValue || node.NodeType == ConfigurationSnapshotNodeType.Scalar)
                 {
                     if (node.ChangeType == ConfigurationDiffChangeType.Added) counts.Added++; else counts.Removed++;
                 }

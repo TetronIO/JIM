@@ -88,6 +88,16 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// Returns the next per-object configuration-change version (current maximum + 1) for a Guid-keyed configuration
+    /// object (e.g. a Schedule), identified by its activity target type and Guid database id.
+    /// </summary>
+    public async Task<int> GetNextConfigurationChangeVersionAsync(ActivityTargetType targetType, Guid targetObjectId)
+    {
+        var max = await Application.Repository.Activity.GetMaxConfigurationChangeVersionAsync(targetType, targetObjectId);
+        return max + 1;
+    }
+
+    /// <summary>
     /// Creates and persists an Activity using an initiator triad (Type, Id, Name).
     /// Used when the full principal object is not available (e.g., from WorkerTask).
     /// </summary>

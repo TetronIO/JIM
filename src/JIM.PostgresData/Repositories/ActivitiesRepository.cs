@@ -464,6 +464,21 @@ public class ActivityRepository : IActivityRepository
         };
     }
 
+    // Guid-keyed counterpart of ConfigurationChangeQuery, for configuration objects (e.g. a Schedule) whose id is a Guid
+    // and which associate their change activities via a dedicated Guid foreign key rather than an integer one.
+    private IQueryable<Activity> ConfigurationChangeQuery(ActivityTargetType targetType, Guid targetObjectId)
+    {
+        var query = Repository.Database.Activities
+            .Where(a => a.ConfigurationChangeVersion != null);
+
+        return targetType switch
+        {
+            ActivityTargetType.Schedule => query.Where(a => a.ScheduleId == targetObjectId),
+            _ => throw new ArgumentOutOfRangeException(nameof(targetType), targetType,
+                "Unsupported Guid-keyed configuration target type for change history.")
+        };
+    }
+
     private static readonly Expression<Func<Activity, ConfigurationChangeActivityData>> ToConfigurationChangeData = a => new ConfigurationChangeActivityData
     {
         ActivityId = a.Id,
@@ -478,6 +493,12 @@ public class ActivityRepository : IActivityRepository
     };
 
     public async Task<int> GetMaxConfigurationChangeVersionAsync(ActivityTargetType targetType, int targetObjectId)
+    {
+        var max = await ConfigurationChangeQuery(targetType, targetObjectId).MaxAsync(a => (int?)a.ConfigurationChangeVersion);
+        return max ?? 0;
+    }
+
+    public async Task<int> GetMaxConfigurationChangeVersionAsync(ActivityTargetType targetType, Guid targetObjectId)
     {
         var max = await ConfigurationChangeQuery(targetType, targetObjectId).MaxAsync(a => (int?)a.ConfigurationChangeVersion);
         return max ?? 0;

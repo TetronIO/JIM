@@ -119,7 +119,7 @@
         // A whole item that appeared or vanished (against an existing object) is drawn as a card. Nested items inside an
         // already added / removed subtree render as quiet groups instead, to avoid cards within cards.
         _isCard = Node.NodeType == ConfigurationSnapshotNodeType.Object
-            && Node.ItemId.HasValue
+            && (Node.ItemId.HasValue || Node.ItemGuidId.HasValue)
             && Context == DiffRenderContext.Normal
             && Node.ChangeType is ConfigurationDiffChangeType.Added or ConfigurationDiffChangeType.Removed;
         _cardAdded = Node.ChangeType == ConfigurationDiffChangeType.Added;

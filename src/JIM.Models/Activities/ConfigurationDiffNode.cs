@@ -40,8 +40,11 @@ public class ConfigurationDiffNode
     /// </summary>
     public bool IsSecret { get; set; }
 
-    /// <summary>For a collection item, the stable database identifier of the underlying entity. Null otherwise.</summary>
+    /// <summary>For an integer-keyed collection item, the stable integer database identifier of the underlying entity. Null otherwise.</summary>
     public int? ItemId { get; set; }
+
+    /// <summary>For a Guid-keyed collection item (e.g. a Schedule Step), the stable Guid database identifier of the underlying entity. Null otherwise.</summary>
+    public Guid? ItemGuidId { get; set; }
 
     /// <summary>Child diff nodes for Object and Collection nodes. Null for scalars.</summary>
     public List<ConfigurationDiffNode>? Children { get; set; }

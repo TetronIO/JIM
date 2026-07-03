@@ -119,6 +119,17 @@ public class ConfigurationChangeCaptureTests
     }
 
     [Test]
+    public async Task GetNextConfigurationChangeVersionAsync_GuidKeyed_ReturnsExistingMaximumPlusOneAsync()
+    {
+        var scheduleId = Guid.NewGuid();
+        _activityRepo.Setup(r => r.GetMaxConfigurationChangeVersionAsync(ActivityTargetType.Schedule, scheduleId)).ReturnsAsync(3);
+
+        var next = await _jim.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.Schedule, scheduleId);
+
+        Assert.That(next, Is.EqualTo(4), "the Guid-keyed overload assigns max + 1 just like the integer-keyed one");
+    }
+
+    [Test]
     public async Task GetConfigurationChangeTrackingEnabledAsync_DefaultsToTrueWhenUnsetAsync()
     {
         _settingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled))

@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using JIM.Models.Activities;
 using JIM.Models.Logic;
+using JIM.Models.Scheduling;
 using JIM.Models.Staging;
 using JIM.Utilities;
 
@@ -27,6 +28,9 @@ public class ConfigurationSnapshotService
 
     /// <summary>The object-type discriminator stored on a Connected System snapshot.</summary>
     public const string ConnectedSystemObjectType = "ConnectedSystem";
+
+    /// <summary>The object-type discriminator stored on a Schedule snapshot.</summary>
+    public const string ScheduleObjectType = "Schedule";
 
     private JimApplication Application { get; }
 
@@ -285,6 +289,14 @@ public class ConfigurationSnapshotService
         if (string.IsNullOrEmpty(plaintext))
             return string.Empty;
 
+        return ComputePlaintextHash(plaintext, hashKey);
+    }
+
+    // Keyed hash (HMAC-SHA-256) of an already-plaintext secret. Used for values that are stored in plaintext (e.g. a
+    // Schedule step's SQL connection string) rather than encrypted; the deterministic keyed hash lets a change be
+    // detected across versions without ever storing the value.
+    private static string ComputePlaintextHash(string plaintext, byte[] hashKey)
+    {
         using var hmac = new HMACSHA256(hashKey);
         return Convert.ToBase64String(hmac.ComputeHash(Encoding.UTF8.GetBytes(plaintext)));
     }
@@ -370,6 +382,74 @@ public class ConfigurationSnapshotService
         return ConfigurationSnapshotNode.CollectionNode("containers", items, "Containers");
     }
 
+    // -- Schedule ------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a scoped, redacted snapshot of a Schedule (a Guid-keyed configuration object). Only configuration is
+    /// captured: runtime and audit state (NextRunTime, LastRunTime, Created, LastUpdated and every initiator/CreatedBy/
+    /// LastUpdatedBy field) is excluded. A step's SQL connection string can contain a secret, so it is redacted to a
+    /// keyed hash (using <paramref name="hashKey"/>) exactly like a Connected System setting value; its value is never
+    /// stored. Steps are captured as a collection keyed by their Guid id (their StepIndex is not unique).
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(Schedule schedule, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(schedule);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", schedule.Name, "Name");
+        Add(children, "description", schedule.Description, "Description");
+        Add(children, "enabled", Render(schedule.IsEnabled), "Enabled");
+        AddEnum(children, "triggerType", schedule.TriggerType, "Trigger type");
+        AddEnum(children, "patternType", schedule.PatternType, "Pattern type");
+        Add(children, "intervalValue", Render(schedule.IntervalValue), "Interval value");
+        AddEnum(children, "intervalUnit", schedule.IntervalUnit, "Interval unit");
+        Add(children, "intervalWindowStart", schedule.IntervalWindowStart, "Interval window start");
+        Add(children, "intervalWindowEnd", schedule.IntervalWindowEnd, "Interval window end");
+        Add(children, "daysOfWeek", schedule.DaysOfWeek, "Days of week");
+        Add(children, "runTimes", schedule.RunTimes, "Run times");
+        Add(children, "cronExpression", schedule.CronExpression, "Cron expression");
+        children.Add(BuildScheduleSteps(schedule.Steps, hashKey));
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = ScheduleObjectType,
+            ObjectGuidId = schedule.Id,
+            ObjectName = schedule.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("schedule", children, "Schedule")
+        };
+    }
+
+    private ConfigurationSnapshotNode BuildScheduleSteps(List<ScheduleStep> steps, byte[] hashKey)
+    {
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var step in steps.OrderBy(s => s.StepIndex).ThenBy(s => s.Id))
+        {
+            var children = new List<ConfigurationSnapshotNode>();
+            Add(children, "stepIndex", Render(step.StepIndex), "Step index");
+            Add(children, "name", step.Name, "Name");
+            AddEnum(children, "stepType", step.StepType, "Step type");
+            AddEnum(children, "executionMode", step.ExecutionMode, "Execution mode");
+            Add(children, "continueOnFailure", Render(step.ContinueOnFailure), "Continue on failure");
+            Add(children, "timeout", Render(step.Timeout), "Timeout");
+            AddReference(children, "connectedSystemId", step.ConnectedSystemId, null, "Connected System");
+            AddReference(children, "runProfileId", step.RunProfileId, null, "Run Profile");
+            Add(children, "scriptPath", step.ScriptPath, "Script path");
+            Add(children, "arguments", step.Arguments, "Arguments");
+            Add(children, "executablePath", step.ExecutablePath, "Executable path");
+            Add(children, "workingDirectory", step.WorkingDirectory, "Working directory");
+            Add(children, "sqlScriptPath", step.SqlScriptPath, "SQL script path");
+            // A SQL connection string can carry a credential; redact it to a keyed hash so a change is detectable but the
+            // value is never stored. Unlike a Connected System setting it is persisted as plaintext, so the hash is taken
+            // over the plaintext directly rather than after a decrypt. An empty value is not configuration; skip it.
+            if (!string.IsNullOrEmpty(step.SqlConnectionString))
+                children.Add(ConfigurationSnapshotNode.Secret("sqlConnectionString", ComputePlaintextHash(step.SqlConnectionString, hashKey), "SQL connection string"));
+
+            var label = !string.IsNullOrEmpty(step.Name) ? step.Name : $"Step {step.StepIndex}";
+            items.Add(ConfigurationSnapshotNode.ObjectNode("step", children, label, step.Id));
+        }
+        return ConfigurationSnapshotNode.CollectionNode("steps", items, "Steps");
+    }
+
     // -- value rendering -----------------------------------------------------------------------------------------------
 
     private static void Add(List<ConfigurationSnapshotNode> nodes, string key, string? value, string label)
@@ -384,6 +464,13 @@ public class ConfigurationSnapshotService
     {
         var raw = value.ToString();
         nodes.Add(ConfigurationSnapshotNode.Scalar(key, raw, label, raw.SplitOnCapitalLetters()));
+    }
+
+    // Records a nullable enum, skipping when unset (matching Add()'s skip-empty behaviour).
+    private static void AddEnum<TEnum>(List<ConfigurationSnapshotNode> nodes, string key, TEnum? value, string label) where TEnum : struct, Enum
+    {
+        if (value.HasValue)
+            AddEnum(nodes, key, value.Value, label);
     }
 
     // Records a foreign-key reference: the raw id is stored for stable diffing (so a re-point to a different entity is
@@ -413,6 +500,8 @@ public class ConfigurationSnapshotService
     private static string? Render(DateTime? value) => value?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 
     private static string? Render(Guid? value) => value?.ToString("D");
+
+    private static string? Render(TimeSpan? value) => value?.ToString("c", CultureInfo.InvariantCulture);
 
     private static string Render<TEnum>(TEnum value) where TEnum : struct, Enum => value.ToString();
 }
