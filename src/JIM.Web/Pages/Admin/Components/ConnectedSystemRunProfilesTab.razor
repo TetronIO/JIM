@@ -188,6 +188,7 @@
         </TitleContent>
         <DialogContent>
             <MudForm @bind-IsValid="@_isEditRunProfileFormValid">
+                <PrefilledFormValidator />
                 <MudTextField T="string" @bind-Value="_editRunProfile.Name" Label="Name" Variant="Variant.Outlined"
                               Class="mt-3" Required="true" RequiredError="A name for the Run Profile is required" />
 

@@ -1,0 +1,25 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@code {
+    // Drop inside a MudForm that renders prefilled with an existing entity to run the form's initial validation,
+    // so action buttons gated on the form's validity enable immediately instead of waiting for the user to click
+    // in and out of a field. MudForm's validity requires every Required control to have been Touched, and its own
+    // first-render callback forces IsValid to false whenever a Required control exists; forced validation marks
+    // the controls touched, but must land after that callback (the yield below) or it is overwritten. Living
+    // inside the form, this component's lifecycle runs whenever and wherever the form actually renders, including
+    // inside a dialog, whose content renders through the dialog provider in a later batch than the opening
+    // component. Do not use in create forms; they start empty, so starting invalid is correct there.
+
+    [CascadingParameter]
+    private MudForm? Form { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || Form == null)
+            return;
+
+        await Task.Yield();
+        await Form.ValidateAsync();
+    }
+}

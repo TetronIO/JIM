@@ -12,6 +12,7 @@
 </MudText>
 
 <MudForm @ref="_settingsForm" @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors">
+    <PrefilledFormValidator />
     @if (SettingCategories != null)
     {
         @for (var i = 0; i < SettingCategories.Count; i++)
