@@ -6,6 +6,32 @@
 
 ---
 
+## 0. Progress at a Glance
+
+> **Snapshot:** 2026-07-02 · **Live view:** [v1.0-ILM-COMPLETE milestone](https://github.com/TetronIO/JIM/milestone/4) shows real-time open/closed counts · Keep this section current: update the bars and wave statuses whenever an issue closes, moves milestone, or a wave starts or finishes.
+
+**Overall: 2 of 50 in-scope items done (4%)** - 57 analysed, minus 7 demoted to v1.x.
+
+`█░░░░░░░░░░░░░░░░░░░░░░░░` 2/50
+
+| Priority | Done | Open | Progress |
+|---|---|---|---|
+| Urgent | 2 ([#154](https://github.com/TetronIO/JIM/issues/154), [#467](https://github.com/TetronIO/JIM/issues/467)) | 12 | `████░░░░░░░░░░░░░░░░░░░░░` 2/14 |
+| High | 0 | 20 | `░░░░░░░░░░░░░░░░░░░░░░░░░` 0/20 |
+| Medium | 0 | 16 | `░░░░░░░░░░░░░░░░░░░░░░░░░` 0/16 |
+| **Total** | **2** | **48** | `█░░░░░░░░░░░░░░░░░░░░░░░░` **2/50** |
+
+The Urgent count includes [#126](https://github.com/TetronIO/JIM/issues/126), which will close as a duplicate of [#655](https://github.com/TetronIO/JIM/issues/655) rather than through implementation.
+
+| Wave | Focus | Status |
+|---|---|---|
+| Wave 0 | Hygiene and safety net | 🟡 In progress - done: [#154](https://github.com/TetronIO/JIM/issues/154) merge, [#467](https://github.com/TetronIO/JIM/issues/467) verify/close, scope-cut ratification; in flight: [#466](https://github.com/TetronIO/JIM/issues/466) rescope; remaining: [#14](https://github.com/TetronIO/JIM/issues/14) gap-audit, [#126](https://github.com/TetronIO/JIM/issues/126) merge into [#655](https://github.com/TetronIO/JIM/issues/655), [#294](https://github.com/TetronIO/JIM/issues/294) rescope, [#861](https://github.com/TetronIO/JIM/issues/861), [#437](https://github.com/TetronIO/JIM/issues/437)/[#438](https://github.com/TetronIO/JIM/issues/438) evaluation, [#864](https://github.com/TetronIO/JIM/issues/864) |
+| Wave 1 | Launch blockers | ⚪ Not started - blocked on the Wave-1 decisions in Section 6 |
+| Wave 2 | Core capability build-out | ⚪ Not started |
+| Wave 3 | Polish and completion | ⚪ Not started |
+
+---
+
 ## 1. Headline Findings
 
 1. **The milestone is over-scoped for a "fastest to market" goal.** 57 open issues include seven PRD-scale (Effort: High) items. Recommendation: demote roughly 7-10 issues to v1.x explicitly (see Section 3, Priority: Low). Cutting scope is the single biggest velocity lever available. **Done:** the seven Low-priority issues were moved to `v1.x-CONNECTORS` on 2026-07-02.
