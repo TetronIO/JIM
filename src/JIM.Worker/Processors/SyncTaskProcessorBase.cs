@@ -179,6 +179,13 @@ public abstract class SyncTaskProcessorBase
     // After PersistPendingMetaverseObjectsAsync assigns real IDs, these are re-keyed into _mvoIdToRpei.
     private readonly List<(MetaverseObject Mvo, ActivityRunProfileExecutionItem Rpei)> _deferredMvoRpeiMappings = [];
 
+    /// <summary>
+    /// Connected System Object / Metaverse Object pairs queued for drift evaluation at the page flush.
+    /// Drift evaluation must run after PersistPendingMetaverseObjectsAsync so that Metaverse Objects
+    /// projected on the page have persisted ids before corrective Pending Exports capture them.
+    /// </summary>
+    private readonly List<(ConnectedSystemObject Cso, MetaverseObject Mvo)> _pendingDriftEvaluations = [];
+
     // Expression evaluator for expression-based Synchronisation Rule mappings
     protected readonly IExpressionEvaluator _expressionEvaluator = new DynamicExpressoEvaluator();
 
@@ -1217,13 +1224,12 @@ public abstract class SyncTaskProcessorBase
                 MergeOrAddPendingExportEvaluation(connectedSystemObject.MetaverseObject, changedAttributes, removedAttributes);
             }
 
-            // Evaluate drift detection: check if the CSO has drifted from expected state
-            // This detects unauthorised changes made directly in the target system
-            // and stages corrective Pending Exports (added to _pendingExportsToCreate for batch save)
-            using (Diagnostics.Sync.StartSpan("EvaluateDrift"))
-            {
-                EvaluateDriftAndEnforceState(connectedSystemObject, connectedSystemObject.MetaverseObject);
-            }
+            // Queue drift detection for the page flush, AFTER Metaverse Objects are persisted.
+            // Corrective Pending Exports capture the Metaverse Object's id by value; a Metaverse Object
+            // projected on this page has no id until PersistPendingMetaverseObjectsAsync assigns one, so
+            // evaluating drift inline would stage a Pending Export with Guid.Empty in SourceMetaverseObjectId
+            // and violate the foreign key to MetaverseObjects at flush time.
+            _pendingDriftEvaluations.Add((connectedSystemObject, connectedSystemObject.MetaverseObject));
 
             // Return appropriate result based on what happened
             if (wasProjected)
@@ -2158,6 +2164,7 @@ public abstract class SyncTaskProcessorBase
                 // Flush this batch (same sequence as per-page processing)
                 await PersistPendingMetaverseObjectsAsync();
                 await CreatePendingMvoChangeObjectsAsync();
+                EvaluateQueuedDrift();
                 await EvaluatePendingExportsAsync();
                 await FlushPendingExportOperationsAsync();
 
@@ -3475,6 +3482,27 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     /// <param name="cso">The Connected System Object that was just processed.</param>
     /// <param name="mvo">The Metaverse Object the CSO is joined to.</param>
+    /// <summary>
+    /// Evaluates drift for every Connected System Object queued during page processing. Runs at the page
+    /// flush, after PersistPendingMetaverseObjectsAsync and before EvaluatePendingExportsAsync, so that
+    /// Metaverse Objects projected on the page have persisted ids before corrective Pending Exports
+    /// capture SourceMetaverseObjectId, and the corrective exports are staged in time for
+    /// FlushPendingExportOperationsAsync to persist them.
+    /// </summary>
+    protected void EvaluateQueuedDrift()
+    {
+        if (_pendingDriftEvaluations.Count == 0)
+            return;
+
+        using (Diagnostics.Sync.StartSpan("EvaluateDrift"))
+        {
+            foreach (var (cso, mvo) in _pendingDriftEvaluations)
+                EvaluateDriftAndEnforceState(cso, mvo);
+        }
+
+        _pendingDriftEvaluations.Clear();
+    }
+
     protected void EvaluateDriftAndEnforceState(ConnectedSystemObject cso, MetaverseObject? mvo)
     {
         // Skip if no drift detection export rules exist

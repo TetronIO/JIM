@@ -4437,10 +4437,27 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Persists priority/null-handling changes across a set of mappings in a single transaction (#91).
+    /// Updates the scalar columns via a tracked reload rather than UpdateRange: contributor lists are
+    /// materialised with the context's default no-tracking behaviour, so sibling mappings carry separate
+    /// TargetMetaverseAttribute instances with the same key, and attaching the second instance's graph
+    /// throws an EF identity conflict.
     /// </summary>
     public async Task UpdateSyncRuleMappingsAsync(IReadOnlyCollection<SyncRuleMapping> mappings)
     {
-        Repository.Database.SyncRuleMappings.UpdateRange(mappings);
+        var changesById = mappings.ToDictionary(m => m.Id);
+        var ids = changesById.Keys.ToList();
+        var tracked = await Repository.Database.SyncRuleMappings
+            .AsTracking()
+            .Where(m => ids.Contains(m.Id))
+            .ToListAsync();
+
+        foreach (var mapping in tracked)
+        {
+            var source = changesById[mapping.Id];
+            mapping.Priority = source.Priority;
+            mapping.NullIsValue = source.NullIsValue;
+        }
+
         await Repository.Database.SaveChangesAsync();
     }
     #endregion
