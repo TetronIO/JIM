@@ -105,7 +105,10 @@ else
                                     </div>
                                     @if (canClamp)
                                     {
-                                        <div class="mt-1">
+                                        @* mt-4 restores the gap the last diff card no longer provides (its bottom
+                                           margin is dropped so panel padding closes the layout), keeping the toggle
+                                           evenly spaced above and below. *@
+                                        <div class="mt-4">
                                             <MudButton Variant="Variant.Text" DropShadow="false" Size="Size.Small"
                                                        StartIcon="@(clamped ? Icons.Material.Filled.UnfoldMore : Icons.Material.Filled.UnfoldLess)"
                                                        OnClick="@(() => ToggleShowFull(item.Version))">
