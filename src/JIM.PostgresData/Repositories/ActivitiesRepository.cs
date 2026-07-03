@@ -130,11 +130,18 @@ public class ActivityRepository : IActivityRepository
                 query = query.Where(a => initiatorTypes.Contains(a.InitiatedByType));
         }
 
-        // Apply date-range filter (either bound may be open)
+        // Apply date-range filter (either bound may be open). Captured into non-nullable locals so the query
+        // expressions carry plain DateTime values.
         if (createdFrom.HasValue)
-            query = query.Where(a => a.Created >= createdFrom.Value);
+        {
+            var from = createdFrom.Value;
+            query = query.Where(a => a.Created >= from);
+        }
         if (createdTo.HasValue)
-            query = query.Where(a => a.Created <= createdTo.Value);
+        {
+            var to = createdTo.Value;
+            query = query.Where(a => a.Created <= to);
+        }
 
         // Apply outcome filter (activities that have > 0 for any of the selected outcome stat types)
         if (outcomeFilter != null)

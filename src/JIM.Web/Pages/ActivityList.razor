@@ -33,9 +33,8 @@
     <MudChip T="string" OnClick="() => OnCategorySelectedAsync(null)"
              Variant="@(IsAllCategorySelected ? Variant.Filled : Variant.Outlined)"
              Color="@(IsAllCategorySelected ? Color.Primary : Color.Default)">All</MudChip>
-    @foreach (var category in Enum.GetValues<ActivityTargetCategory>())
+    @foreach (var chipCategory in Enum.GetValues<ActivityTargetCategory>())
     {
-        var chipCategory = category;
         <MudChip T="string" OnClick="() => OnCategorySelectedAsync(chipCategory)"
                  Variant="@(_selectedCategory == chipCategory ? Variant.Filled : Variant.Outlined)"
                  Color="@(_selectedCategory == chipCategory ? Color.Primary : Color.Default)">@GetCategoryLabel(chipCategory)</MudChip>
@@ -929,7 +928,7 @@
     private void OnDateRangeChanged(DateRange? range)
     {
         // Treat a cleared or empty range as no date filter.
-        _filterDateRange = range?.Start == null && range?.End == null ? null : range;
+        _filterDateRange = range == null || (range.Start == null && range.End == null) ? null : range;
         _table?.ReloadServerData();
     }
 
