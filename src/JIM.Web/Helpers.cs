@@ -474,6 +474,38 @@ public static class Helpers
     }
 
     /// <summary>
+    /// Gets the in-app link for a Synchronisation Rule activity target, or null when the rule id is unknown.
+    /// Attribute Flow mapping activities carry the rule's target type (a mapping has no target type of its own) with
+    /// a "Mapping to ..." name; their target deep-links to the rule's Attribute Flow tab, where mappings are managed.
+    /// </summary>
+    public static string? GetSyncRuleActivityHref(int? syncRuleId, string? targetName)
+    {
+        if (!syncRuleId.HasValue)
+            return null;
+        return targetName?.StartsWith(Activity.SyncRuleMappingTargetNamePrefix, StringComparison.Ordinal) == true
+            ? $"/admin/sync-rules/{syncRuleId}?t=attribute-flow"
+            : $"/admin/sync-rules/{syncRuleId}";
+    }
+
+    /// <summary>
+    /// Gets the in-app link for a Connected System activity target, or null when the system id is unknown.
+    /// Operations whose subject lives on a specific tab deep-link there: schema imports to the Schema tab, hierarchy
+    /// imports to the Partitions &amp; Containers tab.
+    /// </summary>
+    public static string? GetConnectedSystemActivityHref(int? connectedSystemId, ActivityTargetOperationType operationType)
+    {
+        if (!connectedSystemId.HasValue)
+            return null;
+        var basePath = $"/admin/connected-systems/{connectedSystemId}/";
+        return operationType switch
+        {
+            ActivityTargetOperationType.ImportSchema => basePath + "?t=schema",
+            ActivityTargetOperationType.ImportHierarchy => basePath + "?t=partitions-containers",
+            _ => basePath
+        };
+    }
+
+    /// <summary>
     /// Gets the MudBlazor icon for an initiator type string.
     /// Accepts "User", "ApiKey", "Import", or other values.
     /// </summary>
