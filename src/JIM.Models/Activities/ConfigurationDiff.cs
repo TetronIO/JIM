@@ -5,8 +5,9 @@ namespace JIM.Models.Activities;
 
 /// <summary>
 /// The structured difference between two configuration snapshots of the same object, produced by
-/// <c>ConfigurationDiffService</c>. The same tree feeds every surface: the web UI renders it as a collapsible tree,
-/// PowerShell renders it as a git-style coloured diff, and the REST API returns it as data.
+/// <c>ConfigurationDiffService</c>. The same tree feeds every surface: the web UI renders it as an audit-style field
+/// history (each field's value before and after), PowerShell renders it as a git-style coloured diff, and the REST API
+/// returns it as data.
 /// </summary>
 public class ConfigurationDiff
 {
