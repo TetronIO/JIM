@@ -16,9 +16,17 @@ public interface IChangeHistoryRepository
     Task<int> DeleteExpiredMvoChangesAsync(DateTime olderThan, int maxRecords);
 
     /// <summary>
-    /// Deletes expired Activity records older than the specified date.
+    /// Deletes expired Activity records older than the specified date, sparing configuration-change Activities
+    /// (those carrying a versioned configuration snapshot), which are governed by their own retention period.
     /// </summary>
     Task<int> DeleteExpiredActivitiesAsync(DateTime olderThan, int maxRecords);
+
+    /// <summary>
+    /// Deletes expired configuration-change Activities (those carrying a versioned configuration snapshot) older
+    /// than the specified date. The general Activity cleanup never touches these; this is the only path that
+    /// removes configuration change history.
+    /// </summary>
+    Task<int> DeleteExpiredConfigurationChangeActivitiesAsync(DateTime olderThan, int maxRecords);
 
     /// <summary>
     /// Gets the count of CSO change records for a specific Connected System.

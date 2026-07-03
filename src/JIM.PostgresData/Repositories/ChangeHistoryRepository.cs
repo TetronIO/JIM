@@ -66,7 +66,9 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
     }
 
     /// <summary>
-    /// Deletes expired Activity records older than the specified date.
+    /// Deletes expired Activity records older than the specified date. Configuration-change Activities (those
+    /// carrying a versioned configuration snapshot) are spared: they ARE the configuration change history and are
+    /// governed by their own, longer retention period via <see cref="DeleteExpiredConfigurationChangeActivitiesAsync"/>.
     /// </summary>
     /// <param name="olderThan">Delete records with Created date older than this date</param>
     /// <param name="maxRecords">Maximum number of records to delete in this batch</param>
@@ -75,7 +77,32 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
     {
         var recordsToDelete = await _database.Activities
             .AsTracking()
-            .Where(a => a.Created < olderThan)
+            .Where(a => a.Created < olderThan && a.ConfigurationChangeVersion == null)
+            .OrderBy(a => a.Created)
+            .Take(maxRecords)
+            .ToListAsync();
+
+        if (recordsToDelete.Count == 0)
+            return 0;
+
+        _database.Activities.RemoveRange(recordsToDelete);
+        await _database.SaveChangesAsync();
+
+        return recordsToDelete.Count;
+    }
+
+    /// <summary>
+    /// Deletes expired configuration-change Activities (those carrying a versioned configuration snapshot) older
+    /// than the specified date. This is the only path that removes configuration change history.
+    /// </summary>
+    /// <param name="olderThan">Delete records with Created date older than this date</param>
+    /// <param name="maxRecords">Maximum number of records to delete in this batch</param>
+    /// <returns>Count of deleted records</returns>
+    public async Task<int> DeleteExpiredConfigurationChangeActivitiesAsync(DateTime olderThan, int maxRecords)
+    {
+        var recordsToDelete = await _database.Activities
+            .AsTracking()
+            .Where(a => a.Created < olderThan && a.ConfigurationChangeVersion != null)
             .OrderBy(a => a.Created)
             .Take(maxRecords)
             .ToListAsync();

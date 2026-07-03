@@ -217,6 +217,26 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
+        /// Gets the configuration change retention period (how long configuration-change Activities, which carry the
+        /// versioned configuration snapshots, are kept). Held separately from, and typically much longer than, the
+        /// general history retention period, because these Activities are the configuration change history.
+        /// Default: 3650 days (~10 years).
+        /// </summary>
+        public async Task<TimeSpan> GetConfigurationChangeRetentionPeriodAsync()
+        {
+            var retentionPeriod = await GetSettingValueAsync(Constants.SettingKeys.ConfigurationChangeRetentionPeriod, TimeSpan.FromDays(3650));
+
+            // Guard against zero or negative retention period which would delete all configuration history
+            if (retentionPeriod <= TimeSpan.Zero)
+            {
+                Log.Warning("Configuration change retention period is {RetentionPeriod}, which would delete all configuration change history. Using default of 3650 days", retentionPeriod);
+                return TimeSpan.FromDays(3650);
+            }
+
+            return retentionPeriod;
+        }
+
+        /// <summary>
         /// Gets the cleanup batch size (maximum records to delete per housekeeping cycle).
         /// Default: 100 records.
         /// </summary>
