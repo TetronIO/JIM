@@ -31,6 +31,8 @@
 
                     case ServiceSettingValueType.TimeSpan:
                         <MudTextField @bind-Value="_value" Label="Value (format: d.hh:mm:ss)" Variant="Variant.Outlined"
+                            Immediate="true" Error="@(!IsTimeSpanValueValid())"
+                            ErrorText="Enter a valid duration in the format d.hh:mm:ss"
                             HelperText="Example: 30.00:00:00 for 30 days" />
                         break;
 
@@ -57,7 +59,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit">Save</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Submit" Disabled="@(!CanSave())">Save</MudButton>
     </DialogActions>
 </MudDialog>
 
@@ -108,6 +110,23 @@
         if (Setting?.ValueType == ServiceSettingValueType.Boolean)
             return string.Equals(Setting.DefaultValue, "true", StringComparison.OrdinalIgnoreCase) ? "Enabled" : "Disabled";
         return Setting?.DefaultValue ?? string.Empty;
+    }
+
+    private bool IsTimeSpanValueValid() =>
+        TimeSpan.TryParse(_value, System.Globalization.CultureInfo.InvariantCulture, out _);
+
+    // Gates the Save button per the form action gating rules (src/JIM.Web/CLAUDE.md): a TimeSpan setting must
+    // hold a parseable duration or downstream consumers fall back to defaults with the garbage stored, and an
+    // Enum setting must have a selection. Booleans, integers (the numeric field enforces the type), and strings
+    // (legitimately emptied to fall back to the default value) are always saveable.
+    private bool CanSave()
+    {
+        return Setting?.ValueType switch
+        {
+            ServiceSettingValueType.TimeSpan => IsTimeSpanValueValid(),
+            ServiceSettingValueType.Enum => !string.IsNullOrWhiteSpace(_value),
+            _ => true
+        };
     }
 
     private void Cancel() => MudDialog.Cancel();
