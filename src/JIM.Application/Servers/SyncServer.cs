@@ -91,13 +91,8 @@ public class SyncServer : ISyncServer
             connectedSystem, connector, createdContainerExternalIds,
             initiatorType, initiatorId, initiatorName, parentActivity);
 
-    public Task UpdateConnectedSystemWithTriadAsync(
-        ConnectedSystem connectedSystem,
-        ActivityInitiatorType initiatorType,
-        Guid? initiatorId,
-        string? initiatorName)
-        => _jim.ConnectedSystems.UpdateConnectedSystemWithTriadAsync(
-            connectedSystem, initiatorType, initiatorId, initiatorName);
+    public Task UpdateConnectedSystemPersistedConnectorDataAsync(ConnectedSystem connectedSystem, string? persistedConnectorData)
+        => _jim.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem, persistedConnectorData);
 
     #endregion
 

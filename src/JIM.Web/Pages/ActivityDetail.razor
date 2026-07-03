@@ -39,23 +39,34 @@
                         case ActivityTargetType.ExampleDataTemplate:
                             <MudLink Href="@($"/admin/example-data/templates/{_activity.ExampleDataTemplateId}")">@_activity.TargetName</MudLink>
                             break;
-                        case ActivityTargetType.ConnectedSystem:
-                            <MudLink Href="@($"/admin/connected-systems/{_activity.ConnectedSystemId}/")">@_activity.TargetName</MudLink>
+                        case ActivityTargetType.ConnectedSystem when Helpers.GetConnectedSystemActivityHref(_activity.ConnectedSystemId, _activity.TargetOperationType) is { } connectedSystemHref:
+                            @* Schema and hierarchy imports deep-link to the tab that shows their subject. *@
+                            <MudLink Href="@connectedSystemHref">@_activity.TargetName</MudLink>
                             break;
                         case ActivityTargetType.ConnectedSystemRunProfile when _connectedSystemHeader != null:
-                            <MudLink Href="@($"/admin/connected-systems/{_activity.ConnectedSystemId}/")">@_connectedSystemHeader.Name</MudLink> @:/ @_activity.TargetName
+                            <MudLink Href="@($"/admin/connected-systems/{_activity.ConnectedSystemId}/?t=run-profiles")">@_connectedSystemHeader.Name</MudLink> @:/ @_activity.TargetName
                             break;
                         case ActivityTargetType.MetaverseObject when _metaverseObjectHeader != null:
                             <MudLink Href="@Utilities.GetMetaverseObjectHref(_metaverseObjectHeader)">@Utilities.GetMetaverseObjectHrefText(_metaverseObjectHeader)</MudLink>
                             break;
-                        case ActivityTargetType.SyncRule:
-                            <MudLink Href="@($"/admin/sync-rules/{_activity.SyncRuleId}")">@_activity.TargetName</MudLink>
+                        case ActivityTargetType.SyncRule when Helpers.GetSyncRuleActivityHref(_activity.SyncRuleId, _activity.TargetName) is { } syncRuleHref:
+                            @* Attribute Flow mapping activities deep-link to the rule's Attribute Flow tab. *@
+                            <MudLink Href="@syncRuleHref">@_activity.TargetName</MudLink>
                             break;
                         case ActivityTargetType.TrustedCertificate:
                             <MudLink Href="/admin/certificates">@_activity.TargetName</MudLink>
                             break;
                         case ActivityTargetType.MetaverseAttribute:
-                            <MudLink Href="/admin/schema/metaverse">@_activity.TargetName</MudLink>
+                            <MudLink Href="/admin/schema?t=attributes">@_activity.TargetName</MudLink>
+                            break;
+                        case ActivityTargetType.MetaverseObjectType:
+                            <MudLink Href="/admin/schema">@_activity.TargetName</MudLink>
+                            break;
+                        case ActivityTargetType.ServiceSetting:
+                            <MudLink Href="/admin/settings">@_activity.TargetName</MudLink>
+                            break;
+                        case ActivityTargetType.Schedule:
+                            <MudLink Href="/admin/operations?t=schedules">@_activity.TargetName</MudLink>
                             break;
                         case ActivityTargetType.HistoryRetentionCleanup:
                             <MudIcon Icon="@Icons.Material.Filled.CleaningServices" Class="mr-1" Style="vertical-align: middle;" />

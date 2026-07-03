@@ -684,20 +684,23 @@ public class Worker : BackgroundService
     {
         try
         {
-            // Get retention settings
+            // Get retention settings. Configuration-change Activities carry the versioned configuration snapshots,
+            // so they get their own (typically much longer) retention period than the general history.
             var retentionPeriod = await jim.ServiceSettings.GetHistoryRetentionPeriodAsync();
+            var configurationRetentionPeriod = await jim.ServiceSettings.GetConfigurationChangeRetentionPeriodAsync();
             var batchSize = await jim.ServiceSettings.GetHistoryCleanupBatchSizeAsync();
 
             var cutoffDate = DateTime.UtcNow - retentionPeriod;
+            var configurationCutoffDate = DateTime.UtcNow - configurationRetentionPeriod;
 
             // Perform cleanup (creates its own Activity for audit)
-            var result = await jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, batchSize);
+            var result = await jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, batchSize);
 
             // Log results if anything was deleted
-            if (result.CsoChangesDeleted > 0 || result.MvoChangesDeleted > 0 || result.ActivitiesDeleted > 0)
+            if (result.CsoChangesDeleted > 0 || result.MvoChangesDeleted > 0 || result.ActivitiesDeleted > 0 || result.ConfigurationChangeActivitiesDeleted > 0)
             {
-                Log.Information("PerformChangeHistoryCleanupAsync: Deleted {CsoCount} CSO changes, {MvoCount} MVO changes, {ActivityCount} activities",
-                    result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted);
+                Log.Information("PerformChangeHistoryCleanupAsync: Deleted {CsoCount} CSO changes, {MvoCount} MVO changes, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities",
+                    result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted);
             }
         }
         catch (Exception ex)

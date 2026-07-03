@@ -14,6 +14,13 @@ namespace JIM.Models.Activities;
 /// </summary>
 public class Activity
 {
+    /// <summary>
+    /// The <see cref="TargetName"/> prefix used by Attribute Flow mapping activities (which carry
+    /// <see cref="ActivityTargetType.SyncRule"/> as a mapping has no target type of its own). Shared so the UI can
+    /// recognise a mapping activity and deep-link its target to the rule's Attribute Flow tab.
+    /// </summary>
+    public const string SyncRuleMappingTargetNamePrefix = "Mapping to ";
+
     public Guid Id { get; set; }
 
     /// <summary>

@@ -312,8 +312,7 @@ public class SyncImportTaskProcessor
                 if (newPersistedData != null && newPersistedData != originalPersistedData)
                 {
                     Log.Debug($"ExecuteAsync: updating persisted connector data after all pages. old value: '{originalPersistedData}', new value: '{newPersistedData}'");
-                    _connectedSystem.PersistedConnectorData = newPersistedData;
-                    await UpdateConnectedSystemWithInitiatorAsync();
+                    await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, newPersistedData);
                 }
 
                 // Record connector-level warnings on the Activity itself (not as phantom RPEIs).
@@ -2995,17 +2994,5 @@ public class SyncImportTaskProcessor
             Log.Information("ReconcilePendingExportsAsync: Reconciliation complete. Confirmed: {Confirmed}, Retry: {Retry}, Failed: {Failed}, Exports deleted: {Deleted}",
                 totalConfirmed, totalRetry, totalFailed, exportsDeleted);
         }
-    }
-
-    /// <summary>
-    /// Updates the Connected System with the appropriate initiator using the initiator triad.
-    /// </summary>
-    private async Task UpdateConnectedSystemWithInitiatorAsync()
-    {
-        await _syncServer.UpdateConnectedSystemWithTriadAsync(
-            _connectedSystem,
-            _initiatedByType,
-            _initiatedById,
-            _initiatedByName);
     }
 }

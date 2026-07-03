@@ -97,12 +97,4 @@ public class SyncRepositorySettingsTests
             cs, null!, new List<string>(),
             JIM.Models.Activities.ActivityInitiatorType.System, null, null);
     }
-
-    [Test]
-    public async Task UpdateConnectedSystemWithTriadAsync_IsNoOpAsync()
-    {
-        var cs = new JIM.Models.Staging.ConnectedSystem { Id = 1, Name = "Test" };
-        await _repo.UpdateConnectedSystemWithTriadAsync(
-            cs, JIM.Models.Activities.ActivityInitiatorType.System, null, null);
-    }
 }

@@ -24,6 +24,17 @@ public class HistoryCleanupResponse
     public int ActivitiesDeleted { get; set; }
 
     /// <summary>
+    /// Number of configuration-change Activity records (versioned configuration snapshots) deleted, per the
+    /// configuration change retention period.
+    /// </summary>
+    public int ConfigurationChangeActivitiesDeleted { get; set; }
+
+    /// <summary>
+    /// Configured configuration change retention period in days.
+    /// </summary>
+    public int ConfigurationChangeRetentionPeriodDays { get; set; }
+
+    /// <summary>
     /// Oldest record timestamp that was deleted (if any records were deleted).
     /// </summary>
     public DateTime? OldestRecordDeleted { get; set; }
