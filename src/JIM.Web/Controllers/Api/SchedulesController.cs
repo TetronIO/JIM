@@ -130,7 +130,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             schedule.Steps.Add(step);
         }
 
-        await _application.Scheduler.CreateScheduleAsync(schedule);
+        await _application.Scheduler.CreateScheduleAsync(schedule, initiatorType, initiatorId, initiatorName);
 
         _logger.LogInformation("Created schedule {ScheduleId} with {StepCount} steps", schedule.Id, schedule.Steps.Count);
 
@@ -207,7 +207,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         existingSchedule.LastUpdatedById = initiatorId;
         existingSchedule.LastUpdatedByName = initiatorName;
 
-        await _application.Scheduler.UpdateScheduleAsync(existingSchedule);
+        await _application.Scheduler.UpdateScheduleAsync(existingSchedule, initiatorType, initiatorId, initiatorName);
 
         // A built-in schedule's steps are immutable (guarded above); reconcile steps only for user schedules.
         if (!existingSchedule.BuiltIn)
@@ -249,7 +249,8 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             return BadRequest(new ApiErrorResponse { Message = $"The built-in schedule '{existingSchedule.Name}' cannot be deleted." });
         }
 
-        await _application.Scheduler.DeleteScheduleAsync(existingSchedule);
+        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        await _application.Scheduler.DeleteScheduleAsync(existingSchedule, initiatorType, initiatorId, initiatorName);
 
         _logger.LogInformation("Deleted schedule {ScheduleId}", id);
         return NoContent();
@@ -283,7 +284,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         schedule.LastUpdatedById = initiatorId;
         schedule.LastUpdatedByName = initiatorName;
 
-        await _application.Scheduler.UpdateScheduleAsync(schedule);
+        await _application.Scheduler.UpdateScheduleAsync(schedule, initiatorType, initiatorId, initiatorName);
 
         _logger.LogInformation("Enabled schedule {ScheduleId}", id);
         return Ok(ScheduleDto.FromEntity(schedule));
@@ -317,7 +318,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         schedule.LastUpdatedById = initiatorId;
         schedule.LastUpdatedByName = initiatorName;
 
-        await _application.Scheduler.UpdateScheduleAsync(schedule);
+        await _application.Scheduler.UpdateScheduleAsync(schedule, initiatorType, initiatorId, initiatorName);
 
         _logger.LogInformation("Disabled schedule {ScheduleId}", id);
         return Ok(ScheduleDto.FromEntity(schedule));

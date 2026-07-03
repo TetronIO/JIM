@@ -26,5 +26,11 @@ public enum ActivityTargetType
     /// The Temporal Scope Reconciler sweep (issue #892), which re-evaluates relative-date scoping across all
     /// enabled Synchronisation Rules that carry a relative-date criterion.
     /// </summary>
-    TemporalScopeReconciliation = 13
+    TemporalScopeReconciliation = 13,
+
+    /// <summary>
+    /// A Schedule (issue #892): create, update (including enable, disable and re-time) and delete of a schedule
+    /// and its configuration. The built-in Temporal Scope Reconciliation schedule is one such Schedule.
+    /// </summary>
+    Schedule = 14
 }

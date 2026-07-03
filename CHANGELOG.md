@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Creating, editing, enabling, disabling or deleting a schedule is now recorded in the immutable audit log (Activities), attributed to whoever made the change, consistent with every other configuration change. Previously schedule changes left no audit trail.
 - 🐛 Updated the bundled Microsoft.OpenApi library to a patched release (2.7.5), clearing a high-severity advisory (GHSA-v5pm-xwqc-g5wc: circular schema references could terminate OpenAPI document parsing) present in JIM's API documentation generation.
 - 🐛 A Connected System hierarchy refresh that retrieves no partitions no longer wipes the configured hierarchy. Previously, if the connector returned zero partitions (typically a transient connection, authentication, or scope problem rather than a genuinely empty directory), every existing partition and container, including selected ones, was treated as removed and deleted. JIM now leaves the existing hierarchy untouched in that case and records a warning on the Activity so the cause can be investigated.
 - 🐛 A completed example data generation Activity no longer shows a stale "Persisting to database..." progress line; the transient progress message is cleared when the Activity completes.

@@ -26,6 +26,7 @@ public class SchedulesControllerTests
 {
     private Mock<IRepository> _mockRepository = null!;
     private Mock<ISchedulingRepository> _mockSchedulingRepository = null!;
+    private Mock<IActivityRepository> _mockActivityRepository = null!;
     private Mock<IApiKeyRepository> _mockApiKeyRepository = null!;
     private Mock<ILogger<SchedulesController>> _mockLogger = null!;
     private JimApplication _application = null!;
@@ -36,10 +37,13 @@ public class SchedulesControllerTests
     {
         _mockRepository = new Mock<IRepository>();
         _mockSchedulingRepository = new Mock<ISchedulingRepository>();
+        _mockActivityRepository = new Mock<IActivityRepository>();
         _mockApiKeyRepository = new Mock<IApiKeyRepository>();
         _mockLogger = new Mock<ILogger<SchedulesController>>();
 
         _mockRepository.Setup(r => r.Scheduling).Returns(_mockSchedulingRepository.Object);
+        // Schedule CRUD now writes an audit Activity through the application layer.
+        _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepository.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepository.Object);
 
         _application = new JimApplication(_mockRepository.Object);

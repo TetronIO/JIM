@@ -56,17 +56,41 @@ public class SchedulerServer
         return await Application.Repository.Scheduling.GetSchedulesAsync(page, pageSize, searchQuery, sortBy, sortDescending);
     }
 
-    public async Task CreateScheduleAsync(Schedule schedule)
+    public async Task CreateScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
     {
+        // Every configuration change is tracked with an immutable Activity, the same as Connected Systems and
+        // Synchronisation Rules. Internal run-time bookkeeping (NextRunTime / LastRunTime) bypasses this method
+        // and writes straight to the repository, so those ticks are correctly not audited here.
+        var activity = new Activity
+        {
+            TargetName = schedule.Name,
+            TargetType = ActivityTargetType.Schedule,
+            TargetOperationType = ActivityTargetOperationType.Create
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         await Application.Repository.Scheduling.CreateScheduleAsync(schedule);
+        // Configuration change-history snapshot capture belongs here (set activity.ScheduleId, obtain the next
+        // configuration-change version, serialise a snapshot, mirroring ConnectedSystemServer). Deferred: the
+        // change-history capability is int-keyed and has no Schedule mapper, whereas schedules are Guid-keyed
+        // (issue #892 follow-up). The audit Activity above is already correctly shaped for when that lands.
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateScheduleAsync(Schedule schedule)
+    public async Task UpdateScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
     {
+        var activity = new Activity
+        {
+            TargetName = schedule.Name,
+            TargetType = ActivityTargetType.Schedule,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         await Application.Repository.Scheduling.UpdateScheduleAsync(schedule);
+        // See CreateScheduleAsync: configuration change-history snapshot capture is deferred to the #892 follow-up.
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task DeleteScheduleAsync(Schedule schedule)
+    public async Task DeleteScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
     {
         // Built-in schedules (for example the seeded Temporal Scope Reconciliation schedule) are part of
         // the product and must not be deleted; they may be enabled, disabled and re-timed, but not removed.
@@ -74,7 +98,15 @@ public class SchedulerServer
         if (schedule.BuiltIn)
             throw new InvalidOperationException($"The built-in schedule '{schedule.Name}' cannot be deleted.");
 
+        var activity = new Activity
+        {
+            TargetName = schedule.Name,
+            TargetType = ActivityTargetType.Schedule,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         await Application.Repository.Scheduling.DeleteScheduleAsync(schedule);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
     // -----------------------------------------------------------------------------------------------------------------

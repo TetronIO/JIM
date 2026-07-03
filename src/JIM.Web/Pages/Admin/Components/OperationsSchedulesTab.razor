@@ -16,7 +16,7 @@
     <MudTable @ref="_table" T="Schedule" ServerData="ServerReload"
               RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged"
               Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
-              Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer"
+              Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer schedules-row"
               Loading="@_loading" LoadingProgressColor="Color.Primary">
         <ToolBarContent>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
@@ -175,6 +175,16 @@
             <MudTablePager />
         </PagerContent>
     </MudTable>
+
+    @* The table is dense, which tightens vertical cell padding; restore top/bottom breathing room so it
+       balances the horizontal padding. MudBlazor's dense rule (.mud-table-dense * .mud-table-row
+       .mud-table-cell) is three classes, so this selector adds the row+cell element names to outrank it. *@
+    <style>
+        tr.schedules-row.mud-table-row td.mud-table-cell {
+            padding-top: 12px;
+            padding-bottom: 12px;
+        }
+    </style>
 }
 
 @code {
@@ -300,7 +310,7 @@
         schedule.LastUpdatedById = user.Id;
         schedule.LastUpdatedByName = user.DisplayName;
 
-        await jim.Scheduler.UpdateScheduleAsync(schedule);
+        await jim.Scheduler.UpdateScheduleAsync(schedule, ActivityInitiatorType.User, user.Id, user.DisplayName);
 
         var action = schedule.IsEnabled ? "enabled" : "disabled";
         Snackbar.Add($"Schedule '{schedule.Name}' has been {action}.", Severity.Success);
@@ -374,7 +384,8 @@
             return;
 
         using var jim = JimFactory.Create();
-        await jim.Scheduler.DeleteScheduleAsync(schedule);
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        await jim.Scheduler.DeleteScheduleAsync(schedule, ActivityInitiatorType.User, user.Id, user.DisplayName);
         Snackbar.Add($"Schedule '{schedule.Name}' has been deleted.", Severity.Success);
         _table?.ReloadServerData();
     }

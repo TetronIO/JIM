@@ -73,6 +73,10 @@ What you can and can't do with a built-in schedule:
 
 The portal reflects this: a built-in schedule's name and steps are read-only in the editor, and its delete action is replaced with a lock. These rules are enforced everywhere, not just in the portal: the PowerShell module and REST API reject a rename, delete or step change, and the underlying application layer is the authoritative backstop.
 
+## Auditing
+
+Every configuration change to a schedule is recorded in the immutable audit log (Activities): creating, editing, enabling, disabling, re-timing and deleting are each captured as an Activity attributed to whoever made the change, the same audit trail JIM keeps for Connected Systems and Synchronisation Rules. Running a schedule is tracked separately, as a schedule execution and its per-step Activities.
+
 ## Common workflows
 
 **Setting up an automated nightly sync:**

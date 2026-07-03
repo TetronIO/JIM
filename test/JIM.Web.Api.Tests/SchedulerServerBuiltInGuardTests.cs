@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Scheduling;
 using Moq;
 using NUnit.Framework;
@@ -24,6 +25,7 @@ public class SchedulerServerBuiltInGuardTests
 {
     private Mock<IRepository> _mockRepository = null!;
     private Mock<ISchedulingRepository> _mockSchedulingRepository = null!;
+    private Mock<IActivityRepository> _mockActivityRepository = null!;
     private JimApplication _application = null!;
 
     [SetUp]
@@ -31,7 +33,10 @@ public class SchedulerServerBuiltInGuardTests
     {
         _mockRepository = new Mock<IRepository>();
         _mockSchedulingRepository = new Mock<ISchedulingRepository>();
+        _mockActivityRepository = new Mock<IActivityRepository>();
         _mockRepository.Setup(r => r.Scheduling).Returns(_mockSchedulingRepository.Object);
+        // CRUD now writes an audit Activity via the application layer, so the Activity repository must be present.
+        _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepository.Object);
         _application = new JimApplication(_mockRepository.Object);
     }
 
@@ -46,7 +51,7 @@ public class SchedulerServerBuiltInGuardTests
     {
         var schedule = new Schedule { Id = Guid.NewGuid(), Name = "Temporal Scope Reconciliation", BuiltIn = true };
 
-        Assert.ThatAsync(async () => await _application.Scheduler.DeleteScheduleAsync(schedule),
+        Assert.ThatAsync(async () => await _application.Scheduler.DeleteScheduleAsync(schedule, ActivityInitiatorType.User, Guid.NewGuid(), "Test User"),
             Throws.InstanceOf<InvalidOperationException>());
 
         _mockSchedulingRepository.Verify(r => r.DeleteScheduleAsync(It.IsAny<Schedule>()), Times.Never);
@@ -59,7 +64,7 @@ public class SchedulerServerBuiltInGuardTests
         _mockSchedulingRepository.Setup(r => r.DeleteScheduleAsync(It.IsAny<Schedule>()))
             .Returns(Task.CompletedTask);
 
-        await _application.Scheduler.DeleteScheduleAsync(schedule);
+        await _application.Scheduler.DeleteScheduleAsync(schedule, ActivityInitiatorType.User, Guid.NewGuid(), "Test User");
 
         _mockSchedulingRepository.Verify(r => r.DeleteScheduleAsync(schedule), Times.Once);
     }
