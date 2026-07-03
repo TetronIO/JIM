@@ -207,13 +207,15 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         existingSchedule.LastUpdatedById = initiatorId;
         existingSchedule.LastUpdatedByName = initiatorName;
 
-        await _application.Scheduler.UpdateScheduleAsync(existingSchedule, initiatorType, initiatorId, initiatorName);
-
-        // A built-in schedule's steps are immutable (guarded above); reconcile steps only for user schedules.
+        // Reconcile steps before the audited schedule update, so the configuration snapshot captured by
+        // UpdateScheduleAsync reflects this save's step changes too. A built-in schedule's steps are
+        // immutable (guarded above); steps are only reconciled for user schedules.
         if (!existingSchedule.BuiltIn)
         {
             await ReconcileScheduleStepsAsync(id, request.Steps, initiatorType, initiatorId, initiatorName);
         }
+
+        await _application.Scheduler.UpdateScheduleAsync(existingSchedule, initiatorType, initiatorId, initiatorName);
 
         _logger.LogInformation("Updated schedule {ScheduleId}", id);
 

@@ -909,8 +909,8 @@
                 dbSchedule.LastUpdatedById = user.Id;
                 dbSchedule.LastUpdatedByName = user.DisplayName;
 
-                await jim.Scheduler.UpdateScheduleAsync(dbSchedule, ActivityInitiatorType.User, user.Id, user.DisplayName);
-
+                // Steps are reconciled before the audited schedule update, so the configuration snapshot
+                // captured by UpdateScheduleAsync reflects this save's step changes too.
                 // A built-in schedule's steps are defined and maintained by JIM and cannot be changed here (the
                 // Steps tab is read-only); only user schedules reconcile their steps. Attempting to reconcile a
                 // built-in schedule's steps would hit the authoritative guard in the application layer.
@@ -979,6 +979,8 @@
                     }
                 }
                 }
+
+                await jim.Scheduler.UpdateScheduleAsync(dbSchedule, ActivityInitiatorType.User, user.Id, user.DisplayName);
 
                 Snackbar.Add("Schedule updated successfully.", Severity.Success);
             }

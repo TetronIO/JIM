@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Data.Common;
+using System.Text.Json;
+using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Scheduling;
 using JIM.Models.Tasking;
@@ -69,10 +72,7 @@ public class SchedulerServer
         };
         await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         await Application.Repository.Scheduling.CreateScheduleAsync(schedule);
-        // Configuration change-history snapshot capture belongs here (set activity.ScheduleId, obtain the next
-        // configuration-change version, serialise a snapshot, mirroring ConnectedSystemServer). Deferred: the
-        // change-history capability is int-keyed and has no Schedule mapper, whereas schedules are Guid-keyed
-        // (issue #892 follow-up). The audit Activity above is already correctly shaped for when that lands.
+        await CaptureConfigurationChangeAsync(activity, schedule.Id);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -86,7 +86,7 @@ public class SchedulerServer
         };
         await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         await Application.Repository.Scheduling.UpdateScheduleAsync(schedule);
-        // See CreateScheduleAsync: configuration change-history snapshot capture is deferred to the #892 follow-up.
+        await CaptureConfigurationChangeAsync(activity, schedule.Id);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -105,8 +105,67 @@ public class SchedulerServer
             TargetOperationType = ActivityTargetOperationType.Delete
         };
         await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
+        await CaptureConfigurationDeletionAsync(activity, schedule);
         await Application.Repository.Scheduling.DeleteScheduleAsync(schedule);
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Captures a redacted, versioned configuration snapshot of a Schedule onto its audit Activity, mirroring
+    /// ConnectedSystemServer.CaptureConfigurationChangeAsync. The schedule is reloaded with its steps so the
+    /// snapshot reflects persisted truth rather than the caller's partial in-memory graph; call it after the
+    /// change has been persisted and, at a call site that also reconciles steps, after the step changes too.
+    /// Best-effort: a capture failure is logged but never fails the configuration operation that succeeded.
+    /// </summary>
+    private async Task CaptureConfigurationChangeAsync(Activity activity, Guid scheduleId)
+    {
+        try
+        {
+            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+                return;
+
+            var schedule = await Application.Repository.Scheduling.GetScheduleWithStepsAsync(scheduleId);
+            if (schedule == null)
+                return;
+
+            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
+            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(schedule, hashKey);
+            activity.ScheduleId ??= schedule.Id;
+            activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.Schedule, schedule.Id);
+            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        {
+            // Best-effort secondary metadata recorded after the entity has already been persisted; it must never
+            // fail or roll back the configuration operation that succeeded. The miss is logged, never silent.
+            Log.Warning(ex, "CaptureConfigurationChangeAsync: failed to capture configuration snapshot for Schedule {ScheduleId}; the change was saved but its history snapshot was not recorded.", scheduleId);
+        }
+    }
+
+    /// <summary>
+    /// Captures a tombstone snapshot of a Schedule onto its delete Activity, before the schedule is removed.
+    /// Matching the Synchronisation Rule deletion behaviour, this does not set <see cref="Activity.ScheduleId"/>
+    /// or a version: the schedule is deleted before the Activity completes, so the Activity is left unlinked and
+    /// the snapshot is surfaced via the Activity itself rather than the object's history.
+    /// </summary>
+    private async Task CaptureConfigurationDeletionAsync(Activity activity, Schedule schedule)
+    {
+        try
+        {
+            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+                return;
+
+            // Reload with steps for a complete tombstone; fall back to the caller's entity if already gone.
+            var persisted = await Application.Repository.Scheduling.GetScheduleWithStepsAsync(schedule.Id) ?? schedule;
+            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
+            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
+            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        {
+            // Best-effort: a capture failure must never fail the deletion that is about to proceed; the miss is logged.
+            Log.Warning(ex, "CaptureConfigurationDeletionAsync: failed to capture deletion snapshot for Schedule {ScheduleId}; the deletion proceeded but its history snapshot was not recorded.", schedule.Id);
+        }
     }
 
     // -----------------------------------------------------------------------------------------------------------------
