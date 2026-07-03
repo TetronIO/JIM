@@ -2226,6 +2226,29 @@ if (-not $IgnoreSnapshots -and $Scenario -like "*Scenario1*") {
 }
 
 if ($DirectoryType -eq "OpenLDAP") {
+    # Ensure the base OpenLDAP image is current before any snapshot handling, so snapshot
+    # rebuilds use a fresh base image. Docker compose starts a stale base image as-is (the
+    # build: fallback only applies when the image is absent), so changes to the Dockerfile,
+    # init script or bootstrap LDIF would otherwise be silently ignored.
+    $expectedOlBuildHash = Get-OpenLDAPBaseBuildHash
+    $olBaseImage = "ghcr.io/tetronio/jim-openldap:primary"
+    $olBaseBuildHash = docker image inspect $olBaseImage --format '{{index .Config.Labels "jim.openldap.build-hash"}}' 2>&1
+    $olBaseImageMissing = $LASTEXITCODE -ne 0
+    if ($olBaseImageMissing -or "$olBaseBuildHash" -ne $expectedOlBuildHash) {
+        $olRebuildReason = if ($olBaseImageMissing) { "not found" } else { "stale (hash $olBaseBuildHash != $expectedOlBuildHash)" }
+        Write-Warning "OpenLDAP base image needs rebuilding: $olRebuildReason"
+        Write-Step "Building OpenLDAP base image..."
+        & "$scriptRoot/docker/openldap/Build-OpenLdapImage.ps1"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Failure "Failed to build OpenLDAP base image"
+            exit 1
+        }
+        Write-Success "OpenLDAP base image built successfully"
+    }
+    else {
+        Write-Success "OpenLDAP base image is current (hash $expectedOlBuildHash)"
+    }
+
     # Check for pre-populated OpenLDAP snapshot images
     # S1 does not need pre-populated data — the target directory starts empty
     if (-not $IgnoreSnapshots -and $Scenario -notlike "*Scenario1*") {

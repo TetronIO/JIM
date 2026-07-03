@@ -18,7 +18,13 @@
     4. Sync groups with membership preservation
 
 .PARAMETER Step
-    Which test step to execute (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, All)
+    Which test step to execute (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort, All)
+
+.PARAMETER LeaverWindowSeconds
+    LeaverCohort step only: how far in the future to place the cohort's end dates, i.e. the
+    margin the pre-boundary delta import + delta sync must complete within. Default 180;
+    raise it on a slow host or large template if the step reports the boundary was crossed
+    before the pre-boundary cycle finished.
 
 .PARAMETER Template
     Data scale template (Nano, Micro, Small, Medium, MediumLarge, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
@@ -41,7 +47,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("ImportToMV", "InitialSync", "ForwardSync", "DetectDrift", "ReassertState", "NewGroup", "DeleteGroup", "All")]
+    [ValidateSet("ImportToMV", "InitialSync", "ForwardSync", "DetectDrift", "ReassertState", "NewGroup", "DeleteGroup", "LeaverCohort", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -56,6 +62,9 @@ param(
 
     [Parameter(Mandatory=$false)]
     [int]$WaitSeconds = 0,
+
+    [Parameter(Mandatory=$false)]
+    [int]$LeaverWindowSeconds = 180,
 
     [Parameter(Mandatory=$false)]
     [int]$ExportConcurrency = 1,
@@ -1694,6 +1703,320 @@ try {
         }
 
         $testResults.Steps += "DeleteGroup"
+    }
+
+    # Test 7: LeaverCohort (Reconciler-driven, date-based deprovisioning with reference fan-out, #908)
+    if ($Step -eq "LeaverCohort" -or $Step -eq "All") {
+        Write-TestSection "Test 7: LeaverCohort (Temporal Scope Reconciler at scale)"
+
+        if (-not $isOpenLDAP) {
+            Write-Host "  SKIP LeaverCohort requires OpenLDAP (jimEmployeeEndDate is a Generalized Time attribute" -ForegroundColor Yellow
+            Write-Host "       in the OpenLDAP JIM schema extension; Samba AD has no equivalent writable DateTime" -ForegroundColor Yellow
+            Write-Host "       attribute). Re-run with -DirectoryType OpenLDAP to execute this step." -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "This test deprovisions a date-driven leaver cohort via the Temporal Scope Reconciler:" -ForegroundColor Gray
+            Write-Host "  - Cohort end dates cross a boundary with NO source data change" -ForegroundColor Gray
+            Write-Host "  - A plain sync must miss the transition (negative control)" -ForegroundColor Gray
+            Write-Host "  - The reconciler sweep must flag the whole cohort in one pass" -ForegroundColor Gray
+            Write-Host "  - Deprovisioning must fan membership removals out to the Target directory" -ForegroundColor Gray
+            Write-Host ""
+
+            # Members are DNs in OpenLDAP; comparisons are done on the uid RDN because Source and
+            # Target member DNs live under different suffixes.
+            function Get-UidFromMemberDn {
+                param([string]$MemberDn)
+                if ($MemberDn -match '^uid=([^,]+),') { return $matches[1].ToLowerInvariant() }
+                return $MemberDn.ToLowerInvariant()
+            }
+
+            function Get-GroupMemberUids {
+                param([string]$GroupName, [hashtable]$Config)
+                $memberDns = @(Get-LDAPGroupMembers -GroupName $GroupName -DirectoryConfig $Config)
+                $uids = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+                foreach ($memberDn in $memberDns) { [void]$uids.Add((Get-UidFromMemberDn -MemberDn $memberDn)) }
+                # Comma operator: stop PowerShell unrolling the set on return (a one-member set
+                # would otherwise come back as a bare string, breaking .Count under StrictMode).
+                return ,$uids
+            }
+
+            # Step 7.1: Discover the cohort (marked jimLeaverCohort=TRUE by the populate script).
+            Write-Host "  Discovering the leaver cohort in Source..." -ForegroundColor Gray
+            $cohortSearchResult = Invoke-LDAPSearch `
+                -ContainerName $sourceConfig.ContainerName `
+                -Server "localhost" `
+                -Port $sourceConfig.LdapSearchPort `
+                -Scheme $sourceConfig.LdapSearchScheme `
+                -BaseDN $sourceConfig.UserContainer `
+                -BindDN $sourceConfig.BindDN `
+                -BindPassword $sourceConfig.BindPassword `
+                -Filter "(jimLeaverCohort=TRUE)" `
+                -Attributes @("uid")
+
+            $cohortUids = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+            if ($cohortSearchResult) {
+                foreach ($line in ($cohortSearchResult -split "`n")) {
+                    if ($line -match '^uid:\s*(.+)$') { [void]$cohortUids.Add($matches[1].Trim()) }
+                }
+            }
+            if ($cohortUids.Count -eq 0) {
+                throw "LeaverCohort found no users marked jimLeaverCohort=TRUE in Source. Ensure the population script ran (not an old snapshot)."
+            }
+            # DNs are deterministic in this scenario (populate builds uid=<uid>,<PeopleOU>), which
+            # avoids parsing LDIF-wrapped dn: lines from ldapsearch output.
+            $cohortDns = @($cohortUids | ForEach-Object { "uid=$_,$($sourceConfig.UserContainer)" })
+            $sampleUids = @($cohortUids | Select-Object -First 3)
+            Write-Host "    Cohort: $($cohortUids.Count) users (e.g. $($sampleUids -join ', '))" -ForegroundColor Cyan
+
+            # Step 7.2: Choose the verification group set and record baselines.
+            # Small templates verify every group; long-tail templates verify a sample (groups
+            # containing cohort members, plus the first two others as no-op controls).
+            Write-Host "  Recording group membership baselines..." -ForegroundColor Gray
+            $allSourceGroups = @(Get-DirectoryGroupList -Config $sourceConfig | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+            $verifyAllGroups = ($allSourceGroups.Count -le 150)
+            $verificationGroups = @()
+            if ($verifyAllGroups) {
+                $verificationGroups = $allSourceGroups
+            }
+            else {
+                $sampleGroupNames = [System.Collections.Generic.List[string]]::new()
+                foreach ($uid in ($cohortUids | Select-Object -First 2)) {
+                    $memberOfResult = Invoke-LDAPSearch `
+                        -ContainerName $sourceConfig.ContainerName `
+                        -Server "localhost" `
+                        -Port $sourceConfig.LdapSearchPort `
+                        -Scheme $sourceConfig.LdapSearchScheme `
+                        -BaseDN $sourceConfig.GroupContainer `
+                        -BindDN $sourceConfig.BindDN `
+                        -BindPassword $sourceConfig.BindPassword `
+                        -Filter "(member=uid=$uid,$($sourceConfig.UserContainer))" `
+                        -Attributes @("cn")
+                    if ($memberOfResult) {
+                        foreach ($line in ($memberOfResult -split "`n")) {
+                            if ($line -match '^cn:\s*(.+)$' -and $sampleGroupNames.Count -lt 10 -and -not $sampleGroupNames.Contains($matches[1].Trim())) {
+                                $sampleGroupNames.Add($matches[1].Trim())
+                            }
+                        }
+                    }
+                }
+                foreach ($grpName in $allSourceGroups) {
+                    if ($sampleGroupNames.Count -ge 12) { break }
+                    if (-not $sampleGroupNames.Contains($grpName)) { $sampleGroupNames.Add($grpName) }
+                }
+                $verificationGroups = @($sampleGroupNames)
+                Write-Host "    Long-tail template: sampling $($verificationGroups.Count) of $($allSourceGroups.Count) groups" -ForegroundColor Gray
+            }
+
+            $groupBaselines = @{}
+            $expectedTotalRemovals = 0
+            foreach ($grpName in $verificationGroups) {
+                $sourceUids = Get-GroupMemberUids -GroupName $grpName -Config $sourceConfig
+                $targetUids = Get-GroupMemberUids -GroupName $grpName -Config $targetConfig
+                if ($sourceUids.Count -ne $targetUids.Count) {
+                    throw "LeaverCohort baseline failed: group '$grpName' has $($sourceUids.Count) members in Source but $($targetUids.Count) in Target before the step ran. Earlier steps did not leave a consistent state."
+                }
+                $cohortInGroup = @($sourceUids | Where-Object { $cohortUids.Contains($_) })
+                $expectedTotalRemovals += $cohortInGroup.Count
+                $groupBaselines[$grpName] = @{
+                    SourceUids       = $sourceUids
+                    CohortInGroup    = $cohortInGroup
+                }
+            }
+            Write-Host "    Baseline: $($verificationGroups.Count) groups consistent; expecting $expectedTotalRemovals membership removals across them" -ForegroundColor Cyan
+
+            # A non-cohort control user that must survive the whole step untouched.
+            $controlUid = $null
+            foreach ($grpName in $verificationGroups) {
+                $survivor = @($groupBaselines[$grpName].SourceUids | Where-Object { -not $cohortUids.Contains($_) }) | Select-Object -First 1
+                if ($survivor) { $controlUid = $survivor; break }
+            }
+            if (-not $controlUid) { throw "LeaverCohort could not find a non-cohort control user in the verification groups" }
+            Write-Host "    Control user (must survive): $controlUid" -ForegroundColor Cyan
+
+            # Step 7.3: Stamp the cohort's end dates to a fixed near-future instant. This is the
+            # ONLY data change; everything after the boundary crossing operates on static data.
+            $boundaryInstant = (Get-Date).ToUniversalTime().AddSeconds($LeaverWindowSeconds)
+            $boundaryGeneralizedTime = $boundaryInstant.ToString("yyyyMMddHHmmss") + "Z"
+            Write-Host "  Stamping cohort end dates to $boundaryGeneralizedTime (now + ${LeaverWindowSeconds}s)..." -ForegroundColor Gray
+
+            $stampLdifBuilder = [System.Text.StringBuilder]::new()
+            foreach ($cohortDn in $cohortDns) {
+                [void]$stampLdifBuilder.AppendLine("dn: $cohortDn")
+                [void]$stampLdifBuilder.AppendLine("changetype: modify")
+                [void]$stampLdifBuilder.AppendLine("replace: jimEmployeeEndDate")
+                [void]$stampLdifBuilder.AppendLine("jimEmployeeEndDate: $boundaryGeneralizedTime")
+                [void]$stampLdifBuilder.AppendLine("")
+            }
+            $stampLdifPath = [System.IO.Path]::GetTempFileName()
+            Set-Content -Path $stampLdifPath -Value $stampLdifBuilder.ToString() -NoNewline
+            try {
+                $stampResult = bash -c "cat '$stampLdifPath' | docker exec -i $($sourceConfig.ContainerName) ldapmodify -x -H 'ldap://localhost:$($sourceConfig.LdapSearchPort)' -D '$($sourceConfig.BindDN)' -w '$($sourceConfig.BindPassword)' -c" 2>&1
+                if ($LASTEXITCODE -ne 0) { throw "Failed to stamp cohort end dates (exit code $LASTEXITCODE): $stampResult" }
+            }
+            finally {
+                Remove-Item -Path $stampLdifPath -Force -ErrorAction SilentlyContinue
+            }
+            Write-Host "    Stamped $($cohortDns.Count) users" -ForegroundColor Green
+
+            # Step 7.4: Pre-boundary hot-path cycle. The delta import picks up the new end dates
+            # while they are still in the future, so the changed CSOs re-evaluate as IN scope and
+            # nothing may disconnect. After this cycle the cohort is unchanged data as far as the
+            # sync engine is concerned.
+            Write-Host "  Running pre-boundary delta import + delta sync on Source..." -ForegroundColor Gray
+            $preImport = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceDeltaImportProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $preImport.activityId -Name "LeaverCohort pre-boundary Delta Import" `
+                -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
+            $preSync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceDeltaSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $preSync.activityId -Name "LeaverCohort pre-boundary Delta Sync"
+            $preDisconnected = Get-ActivityChangeCount -ActivityId $preSync.activityId -ChangeType "DisconnectedOutOfScope"
+            if ($preDisconnected -ne 0) {
+                throw "LeaverCohort pre-boundary sync disconnected $preDisconnected object(s); the cohort must still be IN scope before the boundary. The end dates may already have passed; raise -LeaverWindowSeconds (currently $LeaverWindowSeconds)."
+            }
+            if ((Get-Date).ToUniversalTime() -ge $boundaryInstant) {
+                throw "LeaverCohort pre-boundary cycle finished after the boundary instant, so the in-scope precondition was not provable. Raise -LeaverWindowSeconds (currently $LeaverWindowSeconds)."
+            }
+            Write-Host "    OK Cohort still in scope after the hot-path cycle" -ForegroundColor Green
+
+            # Step 7.5: Wait for the wall clock to pass the boundary (+5s margin).
+            $remainingSeconds = ($boundaryInstant - (Get-Date).ToUniversalTime()).TotalSeconds + 5
+            if ($remainingSeconds -gt 0) {
+                Write-Host "  Waiting $([int][Math]::Ceiling($remainingSeconds))s for 'now' to advance past the cohort end dates..." -ForegroundColor Gray
+                Start-Sleep -Seconds ([int][Math]::Ceiling($remainingSeconds))
+            }
+
+            # Step 7.6: Negative control. NO data has changed since the pre-boundary cycle, so the
+            # hot path (which skips unchanged objects) must miss the scope transition entirely.
+            Write-Host "  Negative control: full sync with no data changes (must deprovision nothing)..." -ForegroundColor Gray
+            $controlSync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $controlSync.activityId -Name "LeaverCohort negative-control Full Sync"
+            $controlDisconnected = Get-ActivityChangeCount -ActivityId $controlSync.activityId -ChangeType "DisconnectedOutOfScope"
+            if ($controlDisconnected -ne 0) {
+                throw "LeaverCohort negative control failed: a plain full sync disconnected $controlDisconnected object(s) without the reconciler. Either the unchanged-skip is not working or something else changed the cohort."
+            }
+            Write-Host "    OK Hot path missed the static-data transition (0 disconnections)" -ForegroundColor Green
+
+            # Step 7.7: Reconciler sweep. The built-in schedule is disabled by setup; trigger it
+            # manually and wait for a terminal state (same pattern as Scenarios 12/13).
+            $reconSchedule = @(Get-JIMSchedule | Where-Object { $_.name -eq "Temporal Scope Reconciliation" })
+            if ($reconSchedule.Count -ne 1) {
+                throw "LeaverCohort expected exactly one built-in 'Temporal Scope Reconciliation' schedule; found $($reconSchedule.Count)"
+            }
+            Write-Host "  Triggering the Temporal Scope Reconciler (schedule $($reconSchedule[0].id))..." -ForegroundColor Gray
+            $reconExec = Start-JIMSchedule -Id $reconSchedule[0].id -PassThru
+            if (-not $reconExec) { throw "LeaverCohort failed to start the Temporal Scope Reconciler schedule" }
+
+            $reconMaxWaitSeconds = 600; $reconElapsed = 0
+            while ($reconElapsed -lt $reconMaxWaitSeconds) {
+                $reconStatus = (Get-JIMScheduleExecution -Id $reconExec.id).status
+                $isTerminal = $reconStatus -eq "Completed" -or $reconStatus -eq "Failed" -or $reconStatus -eq "Cancelled"
+                if (($reconStatus -is [int] -or $reconStatus -is [long]) -and $reconStatus -ge 2) { $isTerminal = $true }
+                if ($isTerminal) { break }
+                Start-Sleep -Seconds 3; $reconElapsed += 3
+            }
+            Assert-ScheduleExecutionSuccess -ExecutionId $reconExec.id -Name "Temporal Scope Reconciler"
+            Write-Host "    OK Reconciler sweep completed" -ForegroundColor Green
+
+            # Step 7.8: Apply. The sweep flagged the cohort's CSOs (ScopeReviewPending); this sync
+            # re-evaluates them past the unchanged-skip, disconnects them out of scope, and the
+            # User deletion rule (WhenAuthoritativeSourceDisconnected, zero grace) deletes their
+            # Metaverse Objects synchronously, staging Target deprovisioning.
+            Write-Host "  Running full sync to process the flagged cohort..." -ForegroundColor Gray
+            $applySync = Start-JIMRunProfile -ConnectedSystemId $sourceSystem.id -RunProfileId $sourceFullSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $applySync.activityId -Name "LeaverCohort apply Full Sync"
+            $applyDisconnected = Get-ActivityChangeCount -ActivityId $applySync.activityId -ChangeType "DisconnectedOutOfScope"
+            if ($applyDisconnected -ne $cohortUids.Count) {
+                throw "LeaverCohort apply sync disconnected $applyDisconnected object(s) but the cohort has $($cohortUids.Count). The reconciler must flag the whole cohort in one sweep and the sync must process every flagged object."
+            }
+            Write-Host "    OK Exactly the cohort ($applyDisconnected users) disconnected out of scope" -ForegroundColor Green
+
+            # Diagnostic breadcrumb: how much Target work was staged. Account deletes alone equal
+            # the cohort size; membership removals require additional Pending Exports for groups.
+            $targetSystemRefreshed = Get-JIMConnectedSystem | Where-Object { $_.name -eq $targetSystemName }
+            Write-Host "    Pending exports staged for Target: $($targetSystemRefreshed.pendingExportObjectsCount) (cohort accounts: $($cohortUids.Count); groups with cohort members also need membership-removal exports)" -ForegroundColor Cyan
+
+            # Step 7.9: Export to Target and confirm.
+            Write-Host "  Exporting deprovisioning to Target..." -ForegroundColor Gray
+            $exportResult = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetExportProfile.id -Wait -PassThru
+            Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "LeaverCohort Target Export"
+            Assert-ExportRpeisHaveCsoLink -ActivityId $exportResult.activityId -Name "LeaverCohort Target Export"
+
+            Write-Host "  Confirming import + sync on Target..." -ForegroundColor Gray
+            $confirmImport = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaImportProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $confirmImport.activityId -Name "LeaverCohort Target Confirming Import" `
+                -AllowWarnings -AllowedWarningTypes @('DeltaImportFallbackToFullImport')
+            Assert-NoUnresolvedReferences -ConnectedSystemId $targetSystem.id -Name "Target" -Context "after LeaverCohort Confirming Import"
+            $confirmSync = Start-JIMRunProfile -ConnectedSystemId $targetSystem.id -RunProfileId $targetDeltaSyncProfile.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $confirmSync.activityId -Name "LeaverCohort Target Confirming Sync"
+
+            # Step 7.10: Assert the Target directory end state.
+            Write-Host "  Validating Target directory end state..." -ForegroundColor Gray
+            $validationFailures = [System.Collections.Generic.List[string]]::new()
+
+            # Cohort accounts must be deprovisioned from Target (sample up to 20 to bound runtime
+            # at scale); the control user must survive.
+            foreach ($uid in ($cohortUids | Select-Object -First 20)) {
+                $targetUser = Get-LDAPUser -UserIdentifier $uid -DirectoryConfig $targetConfig
+                if ($targetUser) { $validationFailures.Add("cohort account '$uid' still exists in Target (expected deprovisioned)") }
+            }
+            $controlUser = Get-LDAPUser -UserIdentifier $controlUid -DirectoryConfig $targetConfig
+            if (-not $controlUser) { $validationFailures.Add("control account '$controlUid' is missing from Target (must survive)") }
+
+            # Membership end state, group by group: Target = Source-before minus cohort; Source
+            # untouched. OpenLDAP has no referential-integrity overlay in this stack, so any
+            # removal observed in a Target group can only have come from JIM's export path.
+            $actualTotalRemovals = 0
+            $groupsWithFailures = 0
+            foreach ($grpName in $verificationGroups) {
+                $baseline = $groupBaselines[$grpName]
+                $sourceUidsAfter = Get-GroupMemberUids -GroupName $grpName -Config $sourceConfig
+                $targetUidsAfter = Get-GroupMemberUids -GroupName $grpName -Config $targetConfig
+
+                $groupFailed = $false
+                if ($sourceUidsAfter.Count -ne $baseline.SourceUids.Count) {
+                    $validationFailures.Add("group '$grpName': Source membership changed from $($baseline.SourceUids.Count) to $($sourceUidsAfter.Count) members (JIM must not write back to Source)")
+                    $groupFailed = $true
+                }
+                foreach ($uid in $baseline.CohortInGroup) {
+                    if ($targetUidsAfter.Contains($uid)) {
+                        $validationFailures.Add("group '$grpName': leaver '$uid' is still a member in Target (membership removal was not exported)")
+                        $groupFailed = $true
+                    }
+                    else {
+                        $actualTotalRemovals++
+                    }
+                }
+                $expectedTargetCount = $baseline.SourceUids.Count - @($baseline.CohortInGroup).Count
+                if ($targetUidsAfter.Count -ne $expectedTargetCount) {
+                    $validationFailures.Add("group '$grpName': Target has $($targetUidsAfter.Count) members, expected $expectedTargetCount (Source $($baseline.SourceUids.Count) minus $(@($baseline.CohortInGroup).Count) leavers)")
+                    $groupFailed = $true
+                }
+                if ($groupFailed) { $groupsWithFailures++ }
+            }
+
+            Write-Host ""
+            Write-Host "  LeaverCohort summary:" -ForegroundColor Cyan
+            Write-Host "    Cohort size:               $($cohortUids.Count)" -ForegroundColor Gray
+            Write-Host "    Groups verified:           $($verificationGroups.Count) $(if (-not $verifyAllGroups) { '(sampled)' })" -ForegroundColor Gray
+            Write-Host "    Membership removals seen:  $actualTotalRemovals of $expectedTotalRemovals expected" -ForegroundColor Gray
+
+            if ($validationFailures.Count -gt 0) {
+                Write-Host ""
+                Write-Host "  ✗ LeaverCohort validation failures ($($validationFailures.Count)):" -ForegroundColor Red
+                foreach ($failure in ($validationFailures | Select-Object -First 25)) {
+                    Write-Host "    - $failure" -ForegroundColor Red
+                }
+                if ($validationFailures.Count -gt 25) {
+                    Write-Host "    ... and $($validationFailures.Count - 25) more" -ForegroundColor Red
+                }
+                throw "LeaverCohort failed: $($validationFailures.Count) validation failure(s) across $groupsWithFailures group(s). See details above."
+            }
+
+            Write-Host ""
+            Write-Host "✓ LeaverCohort test completed successfully" -ForegroundColor Green
+            Write-Host "  Reconciler-driven leaver deprovisioning fanned $actualTotalRemovals membership removals out to the Target directory" -ForegroundColor Gray
+
+            $testResults.Steps += "LeaverCohort"
+        }
     }
 
     Write-TestSection "Test Execution Summary"
