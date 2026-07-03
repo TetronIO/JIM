@@ -10,23 +10,23 @@ Cmdlets for querying configuration change history, querying deleted objects, and
 
 ## Get-JIMConfigurationChangeHistory
 
-Retrieves the recorded configuration changes for a Synchronisation Rule or Connected System. Every create, update, and delete is captured as a complete, versioned snapshot carried on its Activity, so you can see exactly what changed, when, and who changed it. Three retrieval modes are supported: a paged summary list (default), a single version with its diff against the previous version (`-Version`), and a comparison of any two versions (`-CompareFrom` / `-CompareTo`). Sensitive values (for example encrypted Connected System settings) are never returned; a changed secret is reported only as changed, never by value.
+Retrieves the recorded configuration changes for a Synchronisation Rule, Connected System, or Schedule. Every create, update, and delete is captured as a complete, versioned snapshot carried on its Activity, so you can see exactly what changed, when, and who changed it. Three retrieval modes are supported: a paged summary list (default), a single version with its diff against the previous version (`-Version`), and a comparison of any two versions (`-CompareFrom` / `-CompareTo`). Sensitive values (for example encrypted Connected System settings) are never returned; a changed secret is reported only as changed, never by value.
 
 ### Syntax
 
 ```powershell
 # Paged summary list (default)
-Get-JIMConfigurationChangeHistory -Type <string> -Id <int>
+Get-JIMConfigurationChangeHistory -Type <string> -Id <int|guid>
     [-Page <int>] [-PageSize <int>]
 
 # Stream every version
-Get-JIMConfigurationChangeHistory -Type <string> -Id <int> -All [-PageSize <int>]
+Get-JIMConfigurationChangeHistory -Type <string> -Id <int|guid> -All [-PageSize <int>]
 
 # A single version, with its diff against the previous version
-Get-JIMConfigurationChangeHistory -Type <string> -Id <int> -Version <int> [-AsDiff] [-Raw]
+Get-JIMConfigurationChangeHistory -Type <string> -Id <int|guid> -Version <int> [-AsDiff] [-Raw]
 
 # Compare any two versions
-Get-JIMConfigurationChangeHistory -Type <string> -Id <int>
+Get-JIMConfigurationChangeHistory -Type <string> -Id <int|guid>
     -CompareFrom <int> -CompareTo <int> [-AsDiff] [-Raw]
 ```
 
@@ -34,8 +34,8 @@ Get-JIMConfigurationChangeHistory -Type <string> -Id <int>
 
 | Name | Type | Required | Default | Parameter Set | Description |
 |------|------|----------|---------|---------------|-------------|
-| `Type` | `string` | Yes | | All | The configuration object kind. Valid values: `SynchronisationRule`, `ConnectedSystem`. |
-| `Id` | `int` | Yes | | All | The ID of the configuration object. Accepts the `id` property from the pipeline, so a piped Synchronisation Rule or Connected System binds automatically. |
+| `Type` | `string` | Yes | | All | The configuration object kind. Valid values: `SynchronisationRule`, `ConnectedSystem`, `Schedule`. |
+| `Id` | `int` or `guid` | Yes | | All | The ID of the configuration object: an integer for a Synchronisation Rule or Connected System, a GUID for a Schedule. Accepts the `id` property from the pipeline, so a piped Synchronisation Rule, Connected System, or Schedule binds automatically. |
 | `Page` | `int` | No | `1` | Page | Page number for the summary list. |
 | `PageSize` | `int` | No | `50` | Page, All | Items per page. Maximum: `100`. |
 | `All` | `switch` | No | | All | Automatically paginate through, and return, every change-history entry. |
@@ -57,6 +57,10 @@ Get-JIMConfigurationChangeHistory -Type SynchronisationRule -Id 5
 
 ```powershell title="Return every recorded change for a Connected System"
 Get-JIMConfigurationChangeHistory -Type ConnectedSystem -Id 9 -All
+```
+
+```powershell title="List the recorded changes for a Schedule (GUID-keyed)"
+Get-JIMSchedule -Name "Nightly Sync" | Get-JIMConfigurationChangeHistory -Type Schedule
 ```
 
 ```powershell title="Show one version as a git-style coloured diff"

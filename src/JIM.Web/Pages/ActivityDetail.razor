@@ -826,6 +826,8 @@
                 _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.SyncRule, _activity.SyncRuleId.Value, _activity.ConfigurationChangeVersion.Value);
             else if (_activity.TargetType == ActivityTargetType.ConnectedSystem && _activity.ConnectedSystemId.HasValue)
                 _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ConnectedSystem, _activity.ConnectedSystemId.Value, _activity.ConfigurationChangeVersion.Value);
+            else if (_activity.TargetType == ActivityTargetType.Schedule && _activity.ScheduleId.HasValue)
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.Schedule, _activity.ScheduleId.Value, _activity.ConfigurationChangeVersion.Value);
         }
 
         _loadedId = Id;
