@@ -215,6 +215,21 @@
             <ConfigurationChangeFieldHistory Diff="_configChangeDetail.Diff" />
         </MudPaper>
     }
+    else if (ShowNoSnapshotNotice)
+    {
+        @* A configuration-target activity without a captured snapshot would otherwise render header-only, which reads
+           as a broken page. Say explicitly that no snapshot exists and why that can happen. *@
+        <MudText Typo="Typo.h5" Class="mt-5">Configuration Change</MudText>
+        @if (!string.IsNullOrWhiteSpace(_activity.ChangeReason))
+        {
+            <MudText Typo="Typo.body1" Class="mt-2" Style="font-style: italic;">&ldquo;@_activity.ChangeReason&rdquo;</MudText>
+        }
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
+            No configuration snapshot was captured for this change, so what changed cannot be shown. This happens when
+            the change was made before configuration change tracking was introduced, while it was disabled, or when the
+            saved configuration was identical to the previous version.
+        </MudAlert>
+    }
 
     @if (_activity.TargetType == ActivityTargetType.HistoryRetentionCleanup)
     {
@@ -836,6 +851,19 @@
         // Start polling while the activity is in progress
         StartPollingIfInProgress();
     }
+
+    // Whether to show the "no configuration snapshot was captured" notice: an administrator is viewing a completed,
+    // configuration-changing activity (create/update/import of a Connected System, Synchronisation Rule or Schedule)
+    // that carries no snapshot. Deletes are excluded: they record unversioned tombstones surfaced elsewhere, and an
+    // in-progress activity may simply not have captured yet.
+    private bool ShowNoSnapshotNotice =>
+        _isAdministrator
+        && _activity != null
+        && !_activity.ConfigurationChangeVersion.HasValue
+        && _activity.TargetType is ActivityTargetType.ConnectedSystem or ActivityTargetType.SyncRule or ActivityTargetType.Schedule
+        && _activity.TargetOperationType is ActivityTargetOperationType.Create or ActivityTargetOperationType.Update
+            or ActivityTargetOperationType.ImportSchema or ActivityTargetOperationType.ImportHierarchy
+        && _activity.Status is ActivityStatus.Complete or ActivityStatus.CompleteWithWarning;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

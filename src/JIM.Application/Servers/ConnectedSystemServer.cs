@@ -4550,6 +4550,8 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
 
+        await CaptureAttributePriorityChangeOnAffectedRulesAsync(activity, changed,
+            child => Application.Activities.CreateActivityAsync(child, initiatedBy));
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4570,7 +4572,44 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
 
+        await CaptureAttributePriorityChangeOnAffectedRulesAsync(activity, changed,
+            child => Application.Activities.CreateActivityAsync(child, initiatedByApiKey));
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// An attribute priority change spans the Synchronisation Rules of every changed mapping, so one snapshot cannot
+    /// represent it. Each affected rule instead captures its own versioned snapshot onto a child Activity linked to
+    /// the parent reorder Activity, so every rule's configuration history shows the priority change. The rule is
+    /// reloaded in full so the snapshot reflects persisted truth.
+    /// </summary>
+    private async Task CaptureAttributePriorityChangeOnAffectedRulesAsync(Activity parentActivity, List<SyncRuleMapping> changed, Func<Activity, Task> createChildActivityAsync)
+    {
+        var affectedRuleIds = changed
+            .Select(m => m.SyncRuleId ?? m.SyncRule?.Id)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct();
+
+        foreach (var ruleId in affectedRuleIds)
+        {
+            var rule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(ruleId);
+            if (rule == null)
+                continue;
+
+            var childActivity = new Activity
+            {
+                TargetName = rule.Name,
+                TargetType = ActivityTargetType.SyncRule,
+                TargetOperationType = ActivityTargetOperationType.Update,
+                SyncRuleId = ruleId,
+                ParentActivityId = parentActivity.Id,
+                Message = parentActivity.TargetName
+            };
+            await createChildActivityAsync(childActivity);
+            await CaptureConfigurationChangeAsync(childActivity, rule, changeReason: null);
+            await Application.Activities.CompleteActivityAsync(childActivity);
+        }
     }
 
     /// <summary>

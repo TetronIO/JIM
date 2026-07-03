@@ -88,6 +88,38 @@ public class ConfigurationSnapshotServiceTests
     }
 
     [Test]
+    public void CreateSnapshot_SyncRule_CapturesMappingPriorityAndNullIsValue()
+    {
+        // Priority and "Null is a value" determine which contributor wins a multi-source Metaverse attribute, so they
+        // are configuration and must be snapshotted; without them a priority reorder diffs as "no change".
+        var mapping = new SyncRuleMapping { Id = 100, TargetMetaverseAttributeId = 5, Priority = 2, NullIsValue = true };
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
+        Assert.That(Child(flow, "priority")!.Value, Is.EqualTo("2"));
+        Assert.That(Child(flow, "nullIsValue")!.Value, Is.EqualTo("true"));
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_OmitsSentinelPriority()
+    {
+        // int.MaxValue is the "sole contributor / no explicit priority" sentinel, not a real priority; rendering it
+        // would show a meaningless 2147483647 in the field history.
+        var mapping = new SyncRuleMapping { Id = 100, TargetMetaverseAttributeId = 5 };
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
+        Assert.That(Child(flow, "priority"), Is.Null, "the sentinel priority must not be snapshotted");
+        Assert.That(Child(flow, "nullIsValue")!.Value, Is.EqualTo("false"));
+    }
+
+    [Test]
     public void CreateSnapshot_SyncRule_EnrichesForeignKeysAndEnumsWithDisplayValues()
     {
         var mapping = new SyncRuleMapping

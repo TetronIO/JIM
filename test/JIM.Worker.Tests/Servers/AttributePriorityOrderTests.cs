@@ -1,7 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Text;
 using JIM.Application;
+using JIM.Application.Interfaces;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Core;
@@ -124,6 +126,75 @@ public class AttributePriorityOrderTests
         // Persisted once, transactionally, with all three mappings.
         _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(
             It.Is<IReadOnlyCollection<SyncRuleMapping>>(c => c.Count == 3)), Times.Once);
+    }
+
+    [Test]
+    public async Task SetAttributePriorityOrderAsync_CapturesVersionedSnapshotPerAffectedRuleAsync()
+    {
+        // A reorder spans several Synchronisation Rules (one Activity records the gesture), so a single snapshot cannot
+        // represent it. Each affected rule must instead capture its own versioned snapshot onto a child Activity linked
+        // to the parent reorder Activity, so every rule's history shows the priority change.
+        var createdActivities = new List<JIM.Models.Activities.Activity>();
+        _mockActivityRepo
+            .Setup(r => r.CreateActivityAsync(It.IsAny<JIM.Models.Activities.Activity>()))
+            .Callback<JIM.Models.Activities.Activity>(a => createdActivities.Add(a))
+            .Returns(Task.CompletedTask);
+        _mockActivityRepo
+            .Setup(r => r.GetMaxConfigurationChangeVersionAsync(It.IsAny<JIM.Models.Activities.ActivityTargetType>(), It.IsAny<int>()))
+            .ReturnsAsync(0);
+        _mockActivityRepo
+            .Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(It.IsAny<JIM.Models.Activities.ActivityTargetType>(), It.IsAny<int>()))
+            .ReturnsAsync((string?)null);
+        SetupChangeTracking();
+
+        var m10 = BuildMapping(10, priority: 1, nullIsValue: false);
+        var m20 = BuildMapping(20, priority: 2, nullIsValue: false);
+        var m30 = BuildMapping(30, priority: 3, nullIsValue: false);
+        SetupContributors(m10, m20, m30);
+
+        // The per-rule capture reloads each affected rule in full so its snapshot reflects persisted truth.
+        foreach (var m in new[] { m10, m20, m30 })
+            _mockCsRepo.Setup(r => r.GetSyncRuleAsync(m.SyncRule!.Id)).ReturnsAsync(m.SyncRule);
+
+        // Reorder so all three mappings change: 20 first, 30 second, 10 last.
+        await _jim.ConnectedSystems.SetAttributePriorityOrderAsync(ObjectTypeId, AttributeId,
+            [(20, false), (30, false), (10, false)], _user);
+
+        var parent = createdActivities.Single(a => a.SyncRuleId == null);
+        var children = createdActivities.Where(a => a.SyncRuleId != null).ToList();
+        Assert.That(children, Has.Count.EqualTo(3), "each affected Synchronisation Rule must record its own change");
+        Assert.That(children.Select(c => c.SyncRuleId), Is.EquivalentTo(new int?[] { 1000, 2000, 3000 }));
+        foreach (var child in children)
+        {
+            Assert.That(child.ParentActivityId, Is.EqualTo(parent.Id), "the per-rule change must link to the reorder Activity");
+            Assert.That(child.ConfigurationChangeVersion, Is.EqualTo(1), "each affected rule must consume its own version");
+            Assert.That(child.ConfigurationChangeSnapshot, Is.Not.Null);
+        }
+    }
+
+    // Enables configuration-change tracking with a usable hash key, for the capture-path tests.
+    private void SetupChangeTracking()
+    {
+        var settingsRepo = new Mock<IServiceSettingsRepository>();
+        _mockRepository.Setup(r => r.ServiceSettings).Returns(settingsRepo.Object);
+        settingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled))
+            .ReturnsAsync(new ServiceSetting
+            {
+                Key = Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled,
+                DisplayName = "Track configuration changes",
+                ValueType = ServiceSettingValueType.Boolean,
+                Value = "true"
+            });
+        var protection = new RoundTripCredentialProtection();
+        _jim.CredentialProtection = protection;
+        settingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ConfigurationChangeHashKey))
+            .ReturnsAsync(new ServiceSetting
+            {
+                Key = Constants.SettingKeys.ConfigurationChangeHashKey,
+                DisplayName = "Configuration change hash key",
+                ValueType = ServiceSettingValueType.StringEncrypted,
+                Value = protection.Protect(Convert.ToBase64String(new byte[32]))
+            });
     }
 
     [Test]
@@ -470,6 +541,23 @@ public class AttributePriorityOrderTests
 
         _mockCsRepo.Verify(r => r.GetImportSyncRuleMappingsForMetaverseAttributeAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
         _mockCsRepo.Verify(r => r.UpdateSyncRuleMappingsAsync(It.IsAny<IReadOnlyCollection<SyncRuleMapping>>()), Times.Never);
+    }
+
+    /// <summary>A round-trip credential-protection test double using a recognisable encrypted-value prefix.</summary>
+    private sealed class RoundTripCredentialProtection : ICredentialProtectionService
+    {
+        private const string Prefix = "$JIM$v1$";
+
+        public string? Protect(string? plainText) =>
+            string.IsNullOrEmpty(plainText) ? plainText : Prefix + Convert.ToBase64String(Encoding.UTF8.GetBytes(plainText));
+
+        public string? Unprotect(string? protectedData) =>
+            string.IsNullOrEmpty(protectedData) || !IsProtected(protectedData)
+                ? protectedData
+                : Encoding.UTF8.GetString(Convert.FromBase64String(protectedData[Prefix.Length..]));
+
+        public bool IsProtected(string? value) =>
+            !string.IsNullOrEmpty(value) && value.StartsWith(Prefix, StringComparison.Ordinal);
     }
 
     [Test]
