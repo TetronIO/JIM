@@ -22,6 +22,7 @@ public static class ActivityTargetTypeCategories
         { ActivityTargetType.TrustedCertificate, ActivityTargetCategory.Configuration },
         { ActivityTargetType.MetaverseObject, ActivityTargetCategory.IdentityData },
         { ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetCategory.SyncRuns },
+        { ActivityTargetType.TemporalScopeReconciliation, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.HistoryRetentionCleanup, ActivityTargetCategory.System },
         { ActivityTargetType.System, ActivityTargetCategory.System },
         { ActivityTargetType.ExampleDataTemplate, ActivityTargetCategory.System },

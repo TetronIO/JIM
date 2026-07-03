@@ -49,6 +49,7 @@ public class ActivityTargetCategoryTests
         {
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.MetaverseObject), Is.EqualTo(ActivityTargetCategory.IdentityData));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ConnectedSystemRunProfile), Is.EqualTo(ActivityTargetCategory.SyncRuns));
+            Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.TemporalScopeReconciliation), Is.EqualTo(ActivityTargetCategory.SyncRuns));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.HistoryRetentionCleanup), Is.EqualTo(ActivityTargetCategory.System));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.System), Is.EqualTo(ActivityTargetCategory.System));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.NotSet), Is.EqualTo(ActivityTargetCategory.System));
