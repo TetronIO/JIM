@@ -1,7 +1,7 @@
 # v1.0-ILM-COMPLETE Milestone: Execution Analysis
 
 - **Date:** 2026-07-02
-- **Scope:** All 57 open issues on the `v1.0-ILM-COMPLETE` milestone at time of analysis. **Update (same day):** the P3 scope cut was ratified and executed; the seven P3 issues now sit on `v1.x-CONNECTORS` and the milestone holds 50 open issues.
+- **Scope:** All 57 open issues on the `v1.0-ILM-COMPLETE` milestone at time of analysis. **Update (same day):** the P3 scope cut was ratified and executed; the seven P3 issues now sit on `v1.x-CONNECTORS`, and #154 has since been closed by PR #897, leaving the milestone at 49 open issues.
 - **Purpose:** Categorise the milestone by theme, prioritise for fastest route to a polished, production-safe v1.0, and define an execution plan (parallel lanes, serialisation constraints, design decisions needed) suitable for multi-agent delivery.
 
 ---
@@ -9,7 +9,7 @@
 ## 1. Headline Findings
 
 1. **The milestone is over-scoped for a "fastest to market" goal.** 57 open issues include seven XL items (each needing a PRD and phased plan). Recommendation: demote roughly 7-10 issues to v1.x explicitly (see Section 3, tier P3). Cutting scope is the single biggest velocity lever available. **Done:** the seven P3 issues were moved to `v1.x-CONNECTORS` on 2026-07-02.
-2. **Several issues are already done or nearly done.** #154 (API coverage) is complete on branch `claude/gh-154-powershell-coverage-a67jff` awaiting merge; #467 (role membership API) appears implemented in the codebase; #14 (change history) is largely delivered and needs a gap audit; #466 is partially superseded by the #154 branch; #126 duplicates #655; #294 double-tracks work owned by #861/#636/#518/#841. A hygiene pass closing these is nearly-free throughput.
+2. **Several issues are already done or nearly done.** ~~#154 (API coverage) is complete on branch `claude/gh-154-powershell-coverage-a67jff` awaiting merge~~ (**done:** merged via PR #897 on 2026-07-02, issue closed); #467 (role membership API) appears implemented in the codebase; #14 (change history) is largely delivered and needs a gap audit; #466 is partially superseded by the #154 branch; #126 duplicates #655; #294 double-tracks work owned by #861/#636/#518/#841. A hygiene pass closing these is nearly-free throughput.
 3. **The scarce resource is not agents; it is the sync engine.** Three of the largest clusters (import processor, attribute flow, deprovisioning) all modify the same handful of files (`SyncImportTaskProcessor.cs`, `SyncEngine.AttributeFlow.cs`, `SyncTaskProcessorBase.cs`, `ExportEvaluationServer.cs`). Parallelising across those clusters guarantees merge conflicts and re-validation churn. Treat "sync engine" as one work lane with an ordered queue; everything else genuinely parallelises.
 4. **Two launch-blocking capability gaps stand out:** #242 (unique value generation; without it a greenfield customer cannot provision accounts unless HR supplies IT identifiers) and #655 (leaver deprovisioning silently fails for Joined/Projected CSOs, i.e. the extremely common join-existing-accounts deployment). Both undermine the "ILM complete" claim directly.
 5. **One data-loss landmine:** #421 (Refresh Schema applies destructive cascade deletes in one click). Highest-stakes safety item in the milestone.
@@ -51,7 +51,7 @@ Priority is judged against one question: *what does an ILM customer in a high-tr
 | #288 Sync Preview Mode (what-if) | Admins will not run a first sync against production AD blind; also the engine the whole preview family builds on. Needs PRD. | XL |
 | #377 CRUD custom Metaverse Attributes | No real customer fits built-in attributes only. API/cmdlets largely exist; Web UI + safeguards remain. | M |
 | #376 CRUD custom Metaverse Object Types | Modelling beyond User/Group requires it; unlocks per-type deletion rules. Depends on #377. | L |
-| #154 API Endpoint Coverage (merge branch) | Work is complete on a waiting branch; gates the whole API/PowerShell lane. | S |
+| ~~#154 API Endpoint Coverage (merge branch)~~ | **Done:** merged via PR #897 on 2026-07-02; the API/PowerShell lane is unblocked. | ~~S~~ |
 | #467 Role membership API (verify + close) | Appears already implemented; verify safety rules then close. Baseline operational requirement. | S |
 | #14 Change history (gap audit + close) | Audit history is table stakes; mostly delivered. Verify retention scheduling and the five stated requirements. | S-M |
 | #9 Synchronisation Readers role | "Give the helpdesk read-only access" is a first-week ask; everyone-as-Administrator is unacceptable. | M |
@@ -92,7 +92,7 @@ These are the hard "do not parallelise" rules. Each domain is a set of issues th
 | **D2: Attribute flow engine** | `SyncEngine.AttributeFlow.cs`, `SyncTaskProcessorBase.cs`, `ISyncEngine` | #91 (finish engine edges) → #435 → #223 → #242. #399 slots in any time after #91. #873 also brushes this surface; coordinate D1/D2 merges. |
 | **D3: Deprovisioning / export evaluation** | `ExportEvaluationServer.cs`, obsoletion processors | #655 (decision + implementation, with #126 merged in) → then #809 + #134 as one co-designed preview/execute pair. #223 and #880 also touch export evaluation; sequence around them. |
 | **D4: MVO Deletion Rule config** | `MetaverseObjectType` model, deletion evaluator, object type admin page | #116 → #118 → #119, or one combined "deletion rule enhancements" branch. Only #118 is P1; #116/#119 can slip. |
-| **D5: API controllers + PowerShell module** | `MetaverseController`, `SecurityController`, PS module | #154 merge → #467 verify/close → #466 rescope → #813 (normalise contract **before** new surfaces are added) → #487 → then #377/#376 API gap-fill |
+| **D5: API controllers + PowerShell module** | `MetaverseController`, `SecurityController`, PS module | ~~#154 merge~~ (done, PR #897) → #467 verify/close → #466 rescope → #813 (normalise contract **before** new surfaces are added) → #487 → then #377/#376 API gap-fill |
 | **D6: Preview family** | New preview framework + sync engine read paths | #827 design → #288 engine → adapters (#421, #204, #134, #91 mode 2). See tension note below. |
 | **D7: Audit / security** | `ChangeHistoryServer`, history UI, roles/policies | #14 gap-close → #9 → #881. #500's audit-trail item must be designed against #14 (one audit system, not two); its other items are independent. |
 | **D8: Integration runner + CI workflows** | `Run-IntegrationTests.ps1`, `ci.yml`, `release.yml` | #861 → #636 (P1-3) → #841 → #518. #294's scenario work serialises with #636. #519 anytime (trivial `ci.yml` merge overlap with #861/#500 lockfiles). |
@@ -111,7 +111,7 @@ Ten parallel lanes, one agent (or agent session) per lane, serialised within eac
 
 ### Wave 0 - Hygiene and safety net (days, mostly S items)
 
-- Merge the #154 branch; verify and close #467; gap-audit #14; reconcile #466 naming against the #154 branch.
+- ~~Merge the #154 branch~~ (**done:** PR #897 merged 2026-07-02); verify and close #467; gap-audit #14; reconcile #466 naming against the merged #154 cmdlets.
 - Merge #126 into #655 (one design thread); rescope #294 to the GALSYNC scenario and fold its CI/release bullets into #518/#841.
 - Land #861 (CI PostgreSQL tier) before any sync-engine work starts.
 - Write the #437 + #438 partition-scoping evaluation as one document (pure analysis; `PartitionId` already exists on `ConnectedSystemObject`); expected outcome may close both.
@@ -171,7 +171,7 @@ Batched so they can be answered in one sitting. Wave 1 cannot fully start withou
 16. **#518:** accept a documented manual "full integration suite green against the release commit" checklist step for the v1.0 release, automation in v1.x.
 
 **Personal actions only you can do:**
-17. **#154:** review and merge branch `claude/gh-154-powershell-coverage-a67jff`.
+17. ~~**#154:** review and merge branch `claude/gh-154-powershell-coverage-a67jff`.~~ **Done:** merged via PR #897 on 2026-07-02.
 18. **#186:** create the Tetron service account and PowerShell Gallery co-owner invite; provide the API key for CI secrets.
 
 ---
@@ -204,7 +204,7 @@ Rows marked **P3 → v1.x** were moved to the v1.x-CONNECTORS milestone on 2026-
 | 119 | Authoritative source hierarchy | Deletion rules | P2 | M | D4 | Threshold vocabulary decision if kept |
 | 126 | CSO deletion behaviour options | Deprovisioning | Merge | S | D3 | Merge into #655 |
 | 134 | CS deletion attribute impact analysis | Deprovisioning/preview | P1 | L | D3+D6 | Co-design with #809; ride #827 framework |
-| 154 | API endpoint coverage | API/PS | P0 | S | D5 | Merge waiting branch first; gates lane |
+| 154 | ~~API endpoint coverage~~ | API/PS | **Done** | ~~S~~ | D5 | Merged via PR #897 on 2026-07-02; issue closed |
 | 169 | Admin dashboard | Monitoring UI | P1 | L | UI | Health slice only for v1.0; share chart component with #453 |
 | 186 | PS Gallery ownership transfer | Release ops | P1 | S | Ops | User action; before #841 automation |
 | 204 | Scope management enhancements | Sync config safety | P2 | M | D6 | Fold into #827 as an adapter |
