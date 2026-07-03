@@ -388,11 +388,41 @@ function Get-SnapshotImageTag {
     return "jim-samba-ad:${Role}-$($Size.ToLower())"
 }
 
+function Get-SambaBaseBuildHash {
+    # Compute expected build hash for the base Samba AD images from the files that affect
+    # them. Must match the hash computed by Build-SambaImages.ps1 (same file list, same order).
+    $sambaScriptDir = Join-Path $scriptRoot "docker" "samba-ad-prebuilt"
+    $filesToHash = @(
+        (Join-Path $sambaScriptDir "post-provision.sh"),
+        (Join-Path $sambaScriptDir "start-samba.sh")
+    )
+    $combinedContent = ($filesToHash | ForEach-Object { Get-Content -Path $_ -Raw }) -join ""
+    return [System.BitConverter]::ToString(
+        [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($combinedContent))
+    ).Replace("-", "").Substring(0, 16).ToLower()
+}
+
 function Test-SnapshotAvailable {
     param([string]$ImageTag, [string]$ExpectedHash)
     $inspect = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.samba.snapshot-hash"}}' 2>&1
     if ($LASTEXITCODE -ne 0) { return $false }
-    return "$inspect" -eq $ExpectedHash
+    if ("$inspect" -ne $ExpectedHash) { return $false }
+
+    # Also verify the base image the snapshot was built from is current. A snapshot built
+    # from a stale base bakes in the old base's provisioned state (e.g. an expired
+    # Administrator password or missing password policy) even when the snapshot hash
+    # matches, because that hash covers populate scripts on disk, not the base contents.
+    $role = ($ImageTag -replace '^jim-samba-ad:', '') -replace '-.*$', ''
+    $baseImage = "ghcr.io/tetronio/jim-samba-ad:$role"
+    $baseBuildHash = docker image inspect $baseImage --format '{{index .Config.Labels "jim.samba.build-hash"}}' 2>&1
+    if ($LASTEXITCODE -ne 0) { return $false }
+    $expectedBuildHash = Get-SambaBaseBuildHash
+    if ("$baseBuildHash" -ne $expectedBuildHash) {
+        Write-Host "  ${YELLOW}Samba AD base image '$baseImage' is stale (build hash $baseBuildHash != $expectedBuildHash) — snapshot needs rebuild${NC}"
+        return $false
+    }
+
+    return $true
 }
 
 # Track whether snapshots are being used (set during container startup)
@@ -1916,14 +1946,8 @@ else {
 
 $buildScript = Join-Path $scriptRoot "docker" "samba-ad-prebuilt" "Build-SambaImages.ps1"
 
-# Compute current build content hash from source scripts
-$sambaScriptDir = Join-Path $scriptRoot "docker" "samba-ad-prebuilt"
-$postProvisionContent = Get-Content -Path (Join-Path $sambaScriptDir "post-provision.sh") -Raw
-$startSambaContent = Get-Content -Path (Join-Path $sambaScriptDir "start-samba.sh") -Raw
-$combinedContent = $postProvisionContent + $startSambaContent
-$currentBuildHash = [System.BitConverter]::ToString(
-    [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($combinedContent))
-).Replace("-", "").Substring(0, 16).ToLower()
+# Compute current build content hash from source scripts (shared with Test-SnapshotAvailable)
+$currentBuildHash = Get-SambaBaseBuildHash
 
 # Function to check if a Samba image needs rebuilding (missing or stale)
 function Test-SambaImageNeedsRebuild {
