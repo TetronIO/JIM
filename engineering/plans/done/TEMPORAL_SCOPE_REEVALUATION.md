@@ -1,9 +1,10 @@
 # Temporal Scope Re-evaluation: Implementation Plan
 
-- **Status:** Doing (Phases 1-6 complete; Phase 4a + 4c inbound/outbound integration-verified; Phase 5 built-in-schedule protection complete + unit-tested. Functionally complete; one deferred limitation: reference-attribute export flow for reconciler-driven MVOs, see Phase 4c. Ready to promote to Done on merge.)
+- **Status:** Done
+- **Note:** Scale coverage for reconciler-driven transitions on reference-heavy objects (leaver-cohort entitlement fan-out) is follow-up [#908](https://github.com/TetronIO/JIM/issues/908); the change-history read path for Schedules is a #898 follow-up.
 - **Issue:** [#892](https://github.com/TetronIO/JIM/issues/892) (sub-task of [#85](https://github.com/TetronIO/JIM/issues/85))
 - **PRD:** [`engineering/prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md`](../../prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md) (#85)
-- **Builds on:** [`RELATIVE_DATE_SEARCH_CRITERIA.md`](../RELATIVE_DATE_SEARCH_CRITERIA.md) (the relative-date criteria, evaluator, API, UI)
+- **Builds on:** [`RELATIVE_DATE_SEARCH_CRITERIA.md`](RELATIVE_DATE_SEARCH_CRITERIA.md) (the relative-date criteria, evaluator, API, UI)
 - **Related:** [#891](https://github.com/TetronIO/JIM/issues/891) (Full Synchronisation watermark-skip review; independent, see Interaction below)
 
 ## Overview
@@ -128,7 +129,7 @@ Both lanes (inbound and outbound) are delivered in the first implementation, per
 - Built-in "Temporal Scope Reconciliation" Schedule seeded (`BuiltIn`, enabled, hourly cron `0 * * * *`) via `SeedingServer.SeedBuiltInSchedulesAsync`, called from `InitialiseDatabaseAsync`; idempotent (keyed on a built-in schedule owning a reconciliation step).
 - **Watermark: failure-safe (resolved).** `afterUtc` is the `StartedAt` of the previous **successfully completed** execution of the built-in schedule (`GetLastCompletedScheduleExecutionAsync`), not `Schedule.LastRunTime`. `LastRunTime` advances at trigger time regardless of outcome, so reusing it would let a failed sweep advance the watermark and silently skip that window for objects with static source data (the exact case this feature exists to catch). A failed sweep never reaches `Completed`, so its window is re-covered by the next sweep. Null (bootstrap) before any prior completion.
 
-### Phase 4c: Apply (honour the flag in the engine)
+### Phase 4c: Apply (honour the flag in the engine) ✅
 - **Decision: flag now, honour flag in engine.** The reconciler only sets `ScopeReviewPending`; the existing engine applies the real outcome (flag-and-delegate).
 
 **Inbound ✅ (committed).** The CSO page loader (`ConnectedSystemRepository.GetConnectedSystemObjectsAsync`) treats a `ScopeReviewPending` CSO as changed so its attribute/reference values load (without this, Pass 2 Attribute Flow runs on an empty attribute set); Pass 2 (`SyncTaskProcessorBase.ProcessActiveConnectedSystemObjectAsync`) no longer skips a flagged-but-unchanged CSO; the flag is cleared in a batched UPDATE at page flush, only after the page's substantive writes persist and only for CSOs re-evaluated without error (fail-safe). New `ClearConnectedSystemObjectScopeReviewPendingAsync` on the CSO repo, exposed via `ISyncRepository`.
@@ -143,7 +144,7 @@ Both lanes (inbound and outbound) are delivered in the first implementation, per
 - **Layering note:** the rename guard lives at the controller rather than the application layer because detecting a rename needs the pre-mutation name, and `GetScheduleAsync` is tracking (a re-read inside the application layer would return the already-mutated entity). The controller holds both the old and new names cleanly; PowerShell reaches the same guards through the API, and the portal cannot rename or edit steps because those fields are read-only. Step immutability, unlike rename, *does* have an authoritative application-layer backstop because a `ScheduleStep` carries its parent `ScheduleId`, so the guard can look the parent up and check `BuiltIn` without needing pre-mutation state.
 - **Audit + change history:** Schedule create/update/delete through `SchedulerServer` record an attributed Activity (`ActivityTargetType.Schedule = 13`; enable/disable/re-time route through update), and, when configuration change tracking is enabled, a redacted versioned configuration snapshot keyed by `Activity.ScheduleId` (Guid); deletion records an unversioned tombstone, matching the Synchronisation Rule pattern. The snapshot is built from the persisted schedule reloaded with its steps, and both save paths (portal editor, API controller) reconcile steps *before* the audited schedule update so the snapshot includes the same save's step changes. Internal run-time bookkeeping (`NextRunTime`/`LastRunTime`) writes straight to the repository and is deliberately unaudited. Guid-keyed capture plumbing (`Activity.ScheduleId`, Guid version methods, `CreateSnapshot(Schedule)`) landed via #898; the change-history *read* path (list/detail/compare and the portal history tab) is still int-keyed, so a Schedule's history does not render yet; that read-path Guid support is a #898 follow-up.
 
-### Phase 6: Tests
+### Phase 6: Tests ✅
 - Unit: candidate selection (range + currently-in-scope union), mismatch detection, watermark advance, compound-group correctness, flag-and-delegate (assert the engine, not the reconciler, produces project/join/update/disconnect/delete).
 - Integration: Scenario 12 `ReEvaluatedEachRun` (T4) covers the inbound lane; Scenario 13 (`Relative-Date Outbound Scoping`) covers the outbound lane (temporal export criterion provisions on schedule with no MVO data change, with a negative control proving the hot path alone misses the transition, and a Manager reference flow proving reference attributes survive the reconciler-driven provision). Both use the cache-bypassed, now-relative test path.
 - Reconciler-shape export evaluation: `ReconcilerReferenceExportTests` (JIM.Worker.Tests) pins reference handling for the navigation-free Metaverse Object shape the reconciler loads: direct single-valued and multi-valued flows, an expression flow over a reference, and the tracked/navigation shape as a regression pin.
