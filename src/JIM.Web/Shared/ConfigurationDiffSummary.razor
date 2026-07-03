@@ -4,8 +4,7 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The summary line for a configuration diff: an optional "vA → vB" and the added / removed / changed count chips, each
-   naming the kind of thing counted. Shared by the git-style (ConfigurationChangeDiff) and field-history
-   (ConfigurationChangeFieldHistory) renderers so the header reads identically in both. *@
+   naming the kind of thing counted. Used by ConfigurationChangeFieldHistory as its header. *@
 
 @if (Diff != null && (Diff.HasChanges || (Diff.OldVersion.HasValue && Diff.NewVersion.HasValue)))
 {

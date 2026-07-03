@@ -6,9 +6,8 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The "Changes" tab for a configuration object (Synchronisation Rule or Connected System): a version-ordered
-   timeline of configuration changes, each shown as an audit-style field history ("before → after") by default, with a
-   toggle to the denser git-style diff, plus a compare-any-two-versions control. Read-only; reads run on their own
-   short-lived context. *@
+   timeline of configuration changes, each shown as an audit-style field history ("before → after"), plus a
+   compare-any-two-versions control. Read-only; reads run on their own short-lived context. *@
 
 @if (_loading)
 {
@@ -52,33 +51,13 @@ else
         else if (_compareDiff != null)
         {
             <div class="mt-4">
-                @if (_view == ChangeView.Fields)
-                {
-                    <ConfigurationChangeFieldHistory Diff="_compareDiff" />
-                }
-                else
-                {
-                    <ConfigurationChangeDiff Diff="_compareDiff" />
-                }
+                <ConfigurationChangeFieldHistory Diff="_compareDiff" />
             </div>
         }
     </MudPaper>
 
-    @* View toggle: the field-history (before → after) view by default, with the git-style diff available for comparison. *@
-    <div class="d-flex justify-end align-center gap-2 mt-6">
-        <MudText Typo="Typo.body2" Class="mud-text-secondary">View</MudText>
-        <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
-            <MudButton Color="Color.Primary" DropShadow="false"
-                       Variant="@(_view == ChangeView.Fields ? Variant.Filled : Variant.Outlined)"
-                       OnClick="@(() => _view = ChangeView.Fields)">Fields</MudButton>
-            <MudButton Color="Color.Primary" DropShadow="false"
-                       Variant="@(_view == ChangeView.Diff ? Variant.Filled : Variant.Outlined)"
-                       OnClick="@(() => _view = ChangeView.Diff)">Diff</MudButton>
-        </MudButtonGroup>
-    </div>
-
     @* Version-ordered change list (newest first), shown as a timeline to match the CSO / Metaverse Object change history. *@
-    <div class="mt-3">
+    <div class="mt-6">
         <MudTimeline TimelinePosition="TimelinePosition.Start" TimelineOrientation="TimelineOrientation.Vertical">
             @foreach (var item in _items)
             {
@@ -122,14 +101,7 @@ else
                                     var canClamp = diffLines > MaxVisibleLines;
                                     var clamped = canClamp && !_showFullVersions.Contains(item.Version);
                                     <div class="mt-3 @(clamped ? "config-diff-clamp" : null)">
-                                        @if (_view == ChangeView.Fields)
-                                        {
-                                            <ConfigurationChangeFieldHistory Diff="item.Diff" />
-                                        }
-                                        else
-                                        {
-                                            <ConfigurationChangeDiff Diff="item.Diff" />
-                                        }
+                                        <ConfigurationChangeFieldHistory Diff="item.Diff" />
                                     </div>
                                     @if (canClamp)
                                     {
@@ -180,11 +152,6 @@ else
 
     private List<int> _versions = new();
 
-    // Which rendering the change bodies use. Field history (audit-style "before → after") is the default; the git-style
-    // diff stays available for a denser, structural comparison.
-    private enum ChangeView { Fields, Diff }
-    private ChangeView _view = ChangeView.Fields;
-
     // A diff longer than this many rendered lines is clamped to a fixed height, with a per-version toggle to expand it
     // to full length. Kept in sync with the max-height in the scoped stylesheet.
     private const int MaxVisibleLines = 12;
@@ -228,9 +195,9 @@ else
             _showFullVersions.Add(version);
     }
 
-    // Estimates how many lines a diff renders, matching ConfigurationChangeDiff/ConfigurationChangeDiffNode: a modified
-    // non-secret scalar is two lines, any other changed scalar one line, and a changed container one line for its header
-    // plus its changed descendants. Used only to decide whether a diff is large enough to clamp.
+    // Estimates how many lines a diff renders: a modified non-secret scalar is two lines, any other changed scalar one
+    // line, and a changed container one line for its header plus its changed descendants. A rough proxy, used only to
+    // decide whether a diff is large enough to clamp.
     private static int CountDiffLines(ConfigurationDiff diff)
     {
         var lines = diff.Root.ChangeType is ConfigurationDiffChangeType.Added or ConfigurationDiffChangeType.Removed ? 1 : 0;
