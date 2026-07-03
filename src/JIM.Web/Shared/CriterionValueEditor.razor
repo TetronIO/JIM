@@ -1,0 +1,113 @@
+@using JIM.Models.Core
+@using JIM.Models.Search
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Shared value editor for a scoping or predefined-search criterion. Renders the value input that matches
+   the attribute's data type, including the Absolute/Relative value mode and relative sub-form for DateTime. *@
+
+@switch (AttributeType)
+{
+    case AttributeDataType.Text:
+        <MudTextField @bind-Value="Criterion.StringValue" @bind-Value:after="OnChangedAsync" Immediate="true" Required="true" Label="Text Value" Variant="Variant.Outlined" Class="mt-5" />
+        <MudCheckBox @bind-Value="Criterion.CaseSensitive" @bind-Value:after="OnChangedAsync" Label="Case-sensitive" Class="mt-2" />
+        break;
+    case AttributeDataType.Guid:
+        <MudTextField @bind-Value="Criterion.GuidValue" @bind-Value:after="OnChangedAsync" Immediate="true" Required="true" Label="Guid Value" Variant="Variant.Outlined" Class="mt-5" />
+        break;
+    case AttributeDataType.Number:
+        <MudNumericField @bind-Value="Criterion.IntValue" @bind-Value:after="OnChangedAsync" Immediate="true" Label="Number Value" Variant="Variant.Outlined" Class="mt-5" />
+        break;
+    case AttributeDataType.LongNumber:
+        <MudNumericField @bind-Value="Criterion.LongValue" @bind-Value:after="OnChangedAsync" Immediate="true" Label="Long Number Value" Variant="Variant.Outlined" Class="mt-5" />
+        break;
+    case AttributeDataType.DateTime:
+        <MudRadioGroup T="DateCriteriaValueMode" Value="Criterion.ValueMode" ValueChanged="HandleValueModeChanged" Class="mt-5">
+            <MudRadio T="DateCriteriaValueMode" Value="DateCriteriaValueMode.Absolute">Absolute date</MudRadio>
+            <MudRadio T="DateCriteriaValueMode" Value="DateCriteriaValueMode.Relative">Relative to now</MudRadio>
+        </MudRadioGroup>
+
+        @if (Criterion.ValueMode == DateCriteriaValueMode.Absolute)
+        {
+            <MudDatePicker @bind-Date="Criterion.DateTimeValue" @bind-Date:after="OnChangedAsync" Label="Date Value" Variant="Variant.Outlined" Class="mt-3" />
+        }
+        else
+        {
+            <div class="d-flex gap-4 mt-3">
+                <MudNumericField @bind-Value="Criterion.RelativeCount" @bind-Value:after="OnChangedAsync" Immediate="true" Label="Count" Min="0" Variant="Variant.Outlined" />
+                <MudSelect T="RelativeDateUnit?" @bind-Value="Criterion.RelativeUnit" @bind-Value:after="OnChangedAsync" Label="Unit" Variant="Variant.Outlined">
+                    @foreach (RelativeDateUnit unit in Enum.GetValues(typeof(RelativeDateUnit)))
+                    {
+                        <MudSelectItem T="RelativeDateUnit?" Value="@unit">@unit</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="RelativeDateDirection?" @bind-Value="Criterion.RelativeDirection" @bind-Value:after="OnChangedAsync" Label="Direction" Variant="Variant.Outlined">
+                    <MudSelectItem T="RelativeDateDirection?" Value="@RelativeDateDirection.Ago">Ago</MudSelectItem>
+                    <MudSelectItem T="RelativeDateDirection?" Value="@RelativeDateDirection.FromNow">From now</MudSelectItem>
+                </MudSelect>
+            </div>
+            @if (RelativePreview is { } preview)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">Matches against @preview, re-evaluated on each run. Days and coarser units are rounded to midnight UTC; Hours is exact.</MudText>
+            }
+        }
+        break;
+    case AttributeDataType.Boolean:
+        <MudCheckBox @bind-Value="Criterion.BoolValue" @bind-Value:after="OnChangedAsync" TriState="true" Class="mt-5" Label="Boolean Value">: @(!Criterion.BoolValue.HasValue ? "Null" : Criterion.BoolValue.ToString())</MudCheckBox>
+        break;
+    default:
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-5">This attribute type is not supported in search criteria.</MudAlert>
+        break;
+}
+
+@code {
+    /// <summary>
+    /// The criterion being edited. The component mutates its value carriers directly.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ICriterionValues Criterion { get; set; } = null!;
+
+    /// <summary>
+    /// The data type of the attribute the criterion targets; determines which value input is shown.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public AttributeDataType AttributeType { get; set; }
+
+    /// <summary>
+    /// Raised after any value the component mutates on <see cref="Criterion"/> changes. The host owns the criterion
+    /// by reference, so a @bind here re-renders only this child; without this notification the host's dependent UI
+    /// (for example an "Add Criteria" button gated on the criterion being valid) would not re-evaluate. Hosts wire
+    /// this to StateHasChanged (or their own change handler).
+    /// </summary>
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private async Task OnChangedAsync() => await OnChanged.InvokeAsync();
+
+    private string? RelativePreview =>
+        Criterion is { ValueMode: DateCriteriaValueMode.Relative, RelativeCount: { } count, RelativeUnit: { } unit, RelativeDirection: { } direction }
+            ? RelativeDateResolver.Describe(count, unit, direction)
+            : null;
+
+    private async Task HandleValueModeChanged(DateCriteriaValueMode mode)
+    {
+        Criterion.ValueMode = mode;
+        if (mode == DateCriteriaValueMode.Relative)
+        {
+            // Seed sensible defaults so the relative sub-form is immediately valid.
+            Criterion.RelativeCount ??= 0;
+            Criterion.RelativeUnit ??= RelativeDateUnit.Days;
+            Criterion.RelativeDirection ??= RelativeDateDirection.Ago;
+            Criterion.DateTimeValue = null;
+        }
+        else
+        {
+            Criterion.RelativeCount = null;
+            Criterion.RelativeUnit = null;
+            Criterion.RelativeDirection = null;
+        }
+
+        await OnChangedAsync();
+    }
+}

@@ -78,6 +78,7 @@
         'Set-JIMScopingCriteriaGroup',
         'Remove-JIMScopingCriteriaGroup',
         'New-JIMScopingCriterion',
+        'Set-JIMScopingCriterion',
         'Remove-JIMScopingCriterion',
 
         # Run Profiles
@@ -109,6 +110,13 @@
         # Predefined Searches
         'Get-JIMPredefinedSearch',
         'Set-JIMPredefinedSearch',
+        'Get-JIMPredefinedSearchCriteriaGroup',
+        'New-JIMPredefinedSearchCriteriaGroup',
+        'Set-JIMPredefinedSearchCriteriaGroup',
+        'Remove-JIMPredefinedSearchCriteriaGroup',
+        'New-JIMPredefinedSearchCriterion',
+        'Set-JIMPredefinedSearchCriterion',
+        'Remove-JIMPredefinedSearchCriterion',
 
         # Metaverse
         'Get-JIMMetaverseObject',

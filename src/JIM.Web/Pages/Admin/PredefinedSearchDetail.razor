@@ -1,6 +1,9 @@
 ﻿@page "/admin/predefined-searches/{Uri}"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Core
 @using JIM.Models.Search
+@using JIM.Utilities
+@using JIM.Web.Models
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
@@ -57,28 +60,117 @@
         </div>
     </MudPaper>
 
-    @if (_predefinedSearch.CriteriaGroups.Count > 0)
-    {
-        <MudPaper Class="pa-4 mt-6" Outlined="true">
-            <MudText Typo="Typo.h5">Criteria</MudText>
-            <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-3">This search has criteria to filter the results:</MudText>
+    <MudPaper Class="pa-4 mt-6" Outlined="true">
+        <div class="d-flex justify-space-between align-center mb-3">
+            <div>
+                <MudText Typo="Typo.h5">Criteria</MudText>
+                <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Criteria filter the objects this search returns. All criteria are combined with AND.</MudText>
+            </div>
+            <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
+                       OnClick="HandleOpenAddGroupDialog" DropShadow="false">Add Criteria Group</MudButton>
+        </div>
+
+        @if (_predefinedSearch.CriteriaGroups.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">This search has no criteria; it returns all @_predefinedSearch.MetaverseObjectType.Name objects. Add a Criteria Group to start filtering.</MudAlert>
+        }
+        else
+        {
             <MudStack>
-                @foreach (var criteriaGroup in _predefinedSearch.CriteriaGroups)
+                @foreach (var criteriaGroup in _predefinedSearch.CriteriaGroups.OrderBy(g => g.Position))
                 {
                     <MudPaper Class="pa-5" Outlined="true">
-                        <MudText Typo="Typo.subtitle1">Type: @criteriaGroup.Type</MudText>
-                        <br />
-                        @foreach (var criteria in criteriaGroup.Criteria)
+                        @RenderGroupHeader(criteriaGroup)
+                        @RenderCriteria(criteriaGroup)
+
+                        <div class="mt-4">
+                            <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Class="me-3"
+                                       OnClick="@(() => HandleOpenAddCriteriaDialog(criteriaGroup.Id))" DropShadow="false">Add Criteria</MudButton>
+                            <MudButton StartIcon="@Icons.Material.Filled.AccountTree" Variant="Variant.Filled"
+                                       OnClick="@(() => HandleOpenAddChildGroupDialog(criteriaGroup.Id))" DropShadow="false">Add Criteria Group</MudButton>
+                        </div>
+
+                        @foreach (var childGroup in criteriaGroup.ChildGroups.OrderBy(g => g.Position))
                         {
-                            <MudChip T="string" Color="Color.Default">@criteria.MetaverseAttribute.Name</MudChip>
-                            <MudChip T="string" Color="Color.Default">@criteria.ComparisonType</MudChip>
-                            <MudChip T="string" Color="Color.Default">@criteria.StringValue</MudChip>
+                            <MudPaper Class="pa-5 mt-4 ml-6" Outlined="true">
+                                @RenderGroupHeader(childGroup)
+                                @RenderCriteria(childGroup)
+                                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Class="mt-4"
+                                           OnClick="@(() => HandleOpenAddCriteriaDialog(childGroup.Id))" DropShadow="false">Add Criteria</MudButton>
+                            </MudPaper>
                         }
                     </MudPaper>
                 }
             </MudStack>
-        </MudPaper>
-    }
+        }
+    </MudPaper>
+
+    @* ─── Add Criteria Group dialog ─── *@
+    <MudDialog @bind-Visible="_addGroupDialogVisible" Options="_dialogOptions">
+        <TitleContent>
+            <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-3" /> Add Criteria Group</MudText>
+        </TitleContent>
+        <DialogContent>
+            <MudSelect T="string" Label="Logic type" Required="true" Variant="Variant.Outlined" @bind-Value="_newGroupType">
+                @foreach (var type in Enum.GetValues(typeof(SearchGroupType)))
+                {
+                    <MudSelectItem Value="@type.ToString()" />
+                }
+            </MudSelect>
+        </DialogContent>
+        <DialogActions>
+            <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default" OnClick="@(() => _addGroupDialogVisible = false)" Class="me-2">Cancel</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="string.IsNullOrEmpty(_newGroupType)" OnClick="HandleAddGroupAsync" DropShadow="false">Add Group</MudButton>
+        </DialogActions>
+    </MudDialog>
+
+    @* ─── Add/Edit Criteria dialog ─── *@
+    <MudDialog @bind-Visible="_addCriteriaDialogVisible" Options="_dialogOptions">
+        <TitleContent>
+            <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.Compare" Class="mr-3" /> @(_editingCriterionId.HasValue ? "Edit Criteria" : "Add Criteria")</MudText>
+        </TitleContent>
+        <DialogContent>
+            @if (_newCriterion != null)
+            {
+                <MudSelect T="MetaverseAttribute"
+                           Value="_newCriterionAttribute"
+                           ValueChanged="HandleAttributeSelection"
+                           Label="Metaverse Attribute"
+                           Placeholder="Please select a Metaverse attribute"
+                           Required="true"
+                           Class="mt-5"
+                           Variant="Variant.Outlined"
+                           ToStringFunc="@(a => a?.Name ?? string.Empty)">
+                    @foreach (var attr in _objectTypeAttributes.OrderBy(a => a.Name))
+                    {
+                        <MudSelectItem Value="@attr">@attr.Name</MudSelectItem>
+                    }
+                </MudSelect>
+
+                @if (_newCriterionAttribute != null)
+                {
+                    <MudSelect T="SearchComparisonType?"
+                               @bind-Value="NewCriterionComparisonType"
+                               Label="Comparison Type"
+                               Placeholder="Please select the type of comparison to make"
+                               Required="true"
+                               Class="mt-5"
+                               Variant="Variant.Outlined">
+                        @foreach (var op in CriterionOperatorOptions.ForType(_newCriterionAttribute.Type))
+                        {
+                            <MudSelectItem T="SearchComparisonType?" Value="@op.Operator">@op.Label</MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    <CriterionValueEditor Criterion="_newCriterion" AttributeType="_newCriterionAttribute.Type" OnChanged="StateHasChanged" />
+                }
+            }
+        </DialogContent>
+        <DialogActions>
+            <MudButton DropShadow="false" Variant="Variant.Filled" Color="Color.Default" OnClick="@(() => _addCriteriaDialogVisible = false)" Class="me-2">Cancel</MudButton>
+            <MudButton Disabled="DisableAddCriteriaButton()" Variant="Variant.Filled" DropShadow="false" Color="Color.Primary" OnClick="HandleSaveCriterionAsync">@(_editingCriterionId.HasValue ? "Save" : "Add Criteria")</MudButton>
+        </DialogActions>
+    </MudDialog>
 }
 
 @code {
@@ -87,6 +179,71 @@
 
     private PredefinedSearch? _predefinedSearch;
     private List<BreadcrumbItem> _breadcrumbs = null!;
+
+    // Attributes of the search's Metaverse Object Type, for the criterion attribute picker.
+    private List<MetaverseAttribute> _objectTypeAttributes = new();
+
+    private readonly DialogOptions _dialogOptions = new() { FullWidth = true };
+
+    // Add Criteria Group dialog state.
+    private bool _addGroupDialogVisible;
+    private string? _newGroupType;
+    private int? _addGroupParentId;
+
+    // Add/Edit Criteria dialog state.
+    private bool _addCriteriaDialogVisible;
+    private int _addCriteriaGroupId;
+    private int? _editingCriterionId;
+    private PredefinedSearchCriteria? _newCriterion;
+    private MetaverseAttribute? _newCriterionAttribute;
+
+    // Adapter that maps the model's NotSet sentinel to null at the binding boundary, so the
+    // Comparison Type select shows its placeholder (and enforces Required) until the user chooses.
+    private SearchComparisonType? NewCriterionComparisonType
+    {
+        get => _newCriterion is { ComparisonType: not SearchComparisonType.NotSet } c ? c.ComparisonType : null;
+        set { if (_newCriterion != null) _newCriterion.ComparisonType = value ?? SearchComparisonType.NotSet; }
+    }
+
+    // ─── Render helpers (shared by top-level and nested groups) ───
+
+    private RenderFragment RenderGroupHeader(PredefinedSearchCriteriaGroup group) =>@<div class="d-flex justify-space-between align-center">
+        <MudText Typo="Typo.overline"><span class="mud-text-secondary">CRITERIA GROUP. LOGIC TYPE:</span> @group.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>
+        <MudTooltip Text="Delete group" Arrow="true" Placement="Placement.Top">
+            <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" DropShadow="false"
+                           aria-label="delete group" OnClick="@(() => HandleDeleteGroupAsync(group.Id))" />
+        </MudTooltip>
+    </div>;
+
+    private RenderFragment RenderCriteria(PredefinedSearchCriteriaGroup group) =>@<text>
+        @if (group.Criteria.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">No criteria in this group yet.</MudAlert>
+        }
+        @foreach (var criteria in group.Criteria)
+        {
+            <div class="mt-3 d-flex align-center">
+                <MudChip T="string">
+                    <AvatarContent>
+                        <MudTooltip Text="Metaverse Attribute" Arrow="true" Placement="Placement.Top">
+                            <MudAvatar Color="Color.Primary">MV</MudAvatar>
+                        </MudTooltip>
+                    </AvatarContent>
+                    <ChildContent>@criteria.GetAttributeName()</ChildContent>
+                </MudChip>
+                <MudChip T="string">@FriendlyComparison(criteria)</MudChip>
+                <MudChip T="string">@criteria.ToString()</MudChip>
+                <MudTooltip Text="Edit criteria" Arrow="true" Placement="Placement.Top">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" DropShadow="false"
+                                   aria-label="edit criteria" OnClick="@(() => HandleOpenEditCriteriaDialog(criteria))" />
+                </MudTooltip>
+                <MudTooltip Text="Delete criteria" Arrow="true" Placement="Placement.Top">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" DropShadow="false"
+                                   aria-label="delete criteria" OnClick="@(() => HandleDeleteCriterionAsync(criteria.Id))" />
+                </MudTooltip>
+            </div>
+        }
+    </text>;
 
     protected override async Task OnInitializedAsync()
     {
@@ -106,6 +263,10 @@
             return;
         }
 
+        // Load the object type's attributes so the criterion editor can offer them.
+        var objectType = await jim.Metaverse.GetMetaverseObjectTypeAsync(_predefinedSearch.MetaverseObjectType.Id, includeChildObjects: true);
+        _objectTypeAttributes = objectType?.Attributes ?? new List<MetaverseAttribute>();
+
         _breadcrumbs = new List<BreadcrumbItem>
         {
             new("Home", href: "/", icon: Icons.Material.Filled.Home),
@@ -114,6 +275,215 @@
             new(_predefinedSearch.Name, href: null, disabled: true)
         };
     }
+
+    private async Task ReloadAsync()
+    {
+        if (string.IsNullOrEmpty(Uri))
+            return;
+
+        using var jim = JimFactory.Create();
+        _predefinedSearch = await jim.Search.GetPredefinedSearchAsync(Uri);
+    }
+
+    // ─── Criteria group operations ───
+
+    private void HandleOpenAddGroupDialog()
+    {
+        _addGroupParentId = null;
+        _newGroupType = SearchGroupType.All.ToString();
+        _addGroupDialogVisible = true;
+    }
+
+    private void HandleOpenAddChildGroupDialog(int parentGroupId)
+    {
+        _addGroupParentId = parentGroupId;
+        _newGroupType = SearchGroupType.Any.ToString();
+        _addGroupDialogVisible = true;
+    }
+
+    private async Task HandleAddGroupAsync()
+    {
+        if (_predefinedSearch == null || string.IsNullOrEmpty(_newGroupType))
+            return;
+
+        var type = (SearchGroupType)Enum.Parse(typeof(SearchGroupType), _newGroupType);
+
+        // Position among siblings: child groups order within their parent, top-level groups among themselves.
+        int position;
+        if (_addGroupParentId.HasValue)
+        {
+            var parent = FindGroup(_predefinedSearch.CriteriaGroups, _addGroupParentId.Value);
+            position = parent?.ChildGroups.Count ?? 0;
+        }
+        else
+        {
+            position = _predefinedSearch.CriteriaGroups.Count;
+        }
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            await jim.Search.CreatePredefinedSearchCriteriaGroupAsync(_predefinedSearch.Id, _addGroupParentId, type, position);
+            _addGroupDialogVisible = false;
+            await ReloadAsync();
+            Snackbar.Add("Criteria group added.", Severity.Success);
+        }
+        catch (ArgumentException ex)
+        {
+            Snackbar.Add($"Failed to add criteria group: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static PredefinedSearchCriteriaGroup? FindGroup(IEnumerable<PredefinedSearchCriteriaGroup> groups, int groupId)
+    {
+        foreach (var group in groups)
+        {
+            if (group.Id == groupId)
+                return group;
+            var match = FindGroup(group.ChildGroups, groupId);
+            if (match != null)
+                return match;
+        }
+        return null;
+    }
+
+    private async Task HandleDeleteGroupAsync(int groupId)
+    {
+        try
+        {
+            using var jim = JimFactory.Create();
+            await jim.Search.DeletePredefinedSearchCriteriaGroupAsync(groupId);
+            await ReloadAsync();
+            Snackbar.Add("Criteria group deleted.", Severity.Success);
+        }
+        catch (ArgumentException ex)
+        {
+            Snackbar.Add($"Failed to delete criteria group: {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ─── Criterion operations ───
+
+    private void HandleOpenAddCriteriaDialog(int groupId)
+    {
+        _addCriteriaGroupId = groupId;
+        _editingCriterionId = null;
+        _newCriterion = new PredefinedSearchCriteria();
+        _newCriterionAttribute = null;
+        _addCriteriaDialogVisible = true;
+    }
+
+    private void HandleOpenEditCriteriaDialog(PredefinedSearchCriteria criteria)
+    {
+        _editingCriterionId = criteria.Id;
+        // Work on a copy so cancelling the dialog leaves the displayed criterion untouched.
+        _newCriterion = new PredefinedSearchCriteria
+        {
+            Id = criteria.Id,
+            ComparisonType = criteria.ComparisonType,
+            MetaverseAttributeId = criteria.MetaverseAttribute?.Id ?? criteria.MetaverseAttributeId,
+            StringValue = criteria.StringValue,
+            IntValue = criteria.IntValue,
+            LongValue = criteria.LongValue,
+            DateTimeValue = criteria.DateTimeValue,
+            BoolValue = criteria.BoolValue,
+            GuidValue = criteria.GuidValue,
+            CaseSensitive = criteria.CaseSensitive,
+            ValueMode = criteria.ValueMode,
+            RelativeCount = criteria.RelativeCount,
+            RelativeUnit = criteria.RelativeUnit,
+            RelativeDirection = criteria.RelativeDirection
+        };
+        var attributeId = criteria.MetaverseAttribute?.Id ?? criteria.MetaverseAttributeId;
+        _newCriterionAttribute = _objectTypeAttributes.FirstOrDefault(a => a.Id == attributeId) ?? criteria.MetaverseAttribute;
+        _addCriteriaDialogVisible = true;
+    }
+
+    private void HandleAttributeSelection(MetaverseAttribute attribute)
+    {
+        _newCriterionAttribute = attribute;
+        if (_newCriterion != null)
+        {
+            // Reset operator/value when the attribute (and therefore its data type) changes.
+            _newCriterion.ComparisonType = SearchComparisonType.NotSet;
+            _newCriterion.StringValue = null;
+            _newCriterion.IntValue = null;
+            _newCriterion.LongValue = null;
+            _newCriterion.DateTimeValue = null;
+            _newCriterion.BoolValue = null;
+            _newCriterion.GuidValue = null;
+        }
+    }
+
+    private async Task HandleSaveCriterionAsync()
+    {
+        if (_predefinedSearch == null || _newCriterion == null || _newCriterionAttribute == null)
+            return;
+
+        _newCriterion.MetaverseAttributeId = _newCriterionAttribute.Id;
+        var editing = _editingCriterionId.HasValue;
+        try
+        {
+            using var jim = JimFactory.Create();
+            if (editing)
+                await jim.Search.UpdatePredefinedSearchCriterionAsync(_newCriterion);
+            else
+                await jim.Search.CreatePredefinedSearchCriterionAsync(_addCriteriaGroupId, _newCriterion);
+
+            _addCriteriaDialogVisible = false;
+            _newCriterion = null;
+            _newCriterionAttribute = null;
+            _editingCriterionId = null;
+            await ReloadAsync();
+            Snackbar.Add(editing ? "Criteria updated." : "Criteria added.", Severity.Success);
+        }
+        catch (ArgumentException ex)
+        {
+            Snackbar.Add($"Failed to save criteria: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task HandleDeleteCriterionAsync(int criterionId)
+    {
+        try
+        {
+            using var jim = JimFactory.Create();
+            await jim.Search.DeletePredefinedSearchCriterionAsync(criterionId);
+            await ReloadAsync();
+            Snackbar.Add("Criteria deleted.", Severity.Success);
+        }
+        catch (ArgumentException ex)
+        {
+            Snackbar.Add($"Failed to delete criteria: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private bool DisableAddCriteriaButton()
+    {
+        if (_newCriterion == null || _newCriterionAttribute == null)
+            return true;
+        if (_newCriterion.ComparisonType == SearchComparisonType.NotSet)
+            return true;
+
+        return _newCriterionAttribute.Type switch
+        {
+            AttributeDataType.Text => string.IsNullOrEmpty(_newCriterion.StringValue),
+            AttributeDataType.Guid => !_newCriterion.GuidValue.HasValue,
+            AttributeDataType.Number => !_newCriterion.IntValue.HasValue,
+            AttributeDataType.LongNumber => !_newCriterion.LongValue.HasValue,
+            AttributeDataType.DateTime => _newCriterion.ValueMode == DateCriteriaValueMode.Relative
+                ? !(_newCriterion.RelativeCount.HasValue && _newCriterion.RelativeUnit.HasValue && _newCriterion.RelativeDirection.HasValue)
+                : !_newCriterion.DateTimeValue.HasValue,
+            AttributeDataType.Boolean => !_newCriterion.BoolValue.HasValue,
+            _ => true
+        };
+    }
+
+    /// <summary>
+    /// Renders a criterion's comparison operator in friendly wording (DateTime uses the prior-art labels).
+    /// </summary>
+    private static string FriendlyComparison(PredefinedSearchCriteria criteria) =>
+        CriterionOperatorOptions.FriendlyComparison(criteria.ComparisonType, criteria.GetAttributeDataType());
 
     private async Task ToggleEnabledAsync(bool isEnabled)
     {

@@ -131,7 +131,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             schedule.Steps.Add(step);
         }
 
-        await _application.Scheduler.CreateScheduleAsync(schedule);
+        await _application.Scheduler.CreateScheduleAsync(schedule, initiatorType, initiatorId, initiatorName, changeReason: request.ChangeReason);
 
         _logger.LogInformation("Created schedule {ScheduleId} with {StepCount} steps", schedule.Id, schedule.Steps.Count);
 
@@ -165,8 +165,30 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             return NotFound(new ApiErrorResponse { Message = $"Schedule not found: {id}" });
         }
 
-        // Validate request
-        var validationError = ValidateScheduleRequest(request.TriggerType, request.CronExpression, request.Steps);
+        // A built-in schedule (for example the seeded Temporal Scope Reconciliation schedule) may be
+        // re-timed and enabled/disabled, but its name is part of the product and cannot be changed.
+        if (existingSchedule.BuiltIn && existingSchedule.Name != request.Name)
+        {
+            return BadRequest(new ApiErrorResponse { Message = $"The built-in schedule '{existingSchedule.Name}' cannot be renamed." });
+        }
+
+        // A built-in schedule's steps are defined and maintained by JIM. Re-timing and enable/disable are
+        // allowed, but steps cannot be added, removed or replaced. Enforced here as a clean 400 and, as an
+        // authoritative backstop for any caller, in the application layer's step methods.
+        if (existingSchedule.BuiltIn)
+        {
+            var builtInSteps = await _application.Scheduler.GetScheduleStepsAsync(id);
+            if (BuiltInStepsWouldChange(builtInSteps, request.Steps))
+            {
+                return BadRequest(new ApiErrorResponse { Message = $"The steps of the built-in schedule '{existingSchedule.Name}' cannot be changed." });
+            }
+        }
+
+        // Validate request. For a built-in schedule the steps are JIM-owned and immutable (guarded above), so
+        // only the trigger is validated; the step validator does not recognise built-in step types.
+        var validationError = existingSchedule.BuiltIn
+            ? ValidateTrigger(request.TriggerType, request.CronExpression)
+            : ValidateScheduleRequest(request.TriggerType, request.CronExpression, request.Steps);
         if (validationError != null)
         {
             return BadRequest(new ApiErrorResponse { Message = validationError });
@@ -186,65 +208,15 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         existingSchedule.LastUpdatedById = initiatorId;
         existingSchedule.LastUpdatedByName = initiatorName;
 
-        await _application.Scheduler.UpdateScheduleAsync(existingSchedule);
-
-        // Handle steps - get existing steps
-        var existingSteps = await _application.Scheduler.GetScheduleStepsAsync(id);
-        var existingStepIds = existingSteps.Select(s => s.Id).ToHashSet();
-        var requestStepIds = request.Steps
-            .Where(s => s.Id.HasValue && s.Id.Value != Guid.Empty)
-            .Select(s => s.Id!.Value)
-            .ToHashSet();
-
-        // Delete steps not in request
-        foreach (var stepToDelete in existingSteps.Where(s => !requestStepIds.Contains(s.Id)))
+        // Reconcile steps before the audited schedule update, so the configuration snapshot captured by
+        // UpdateScheduleAsync reflects this save's step changes too. A built-in schedule's steps are
+        // immutable (guarded above); steps are only reconciled for user schedules.
+        if (!existingSchedule.BuiltIn)
         {
-            await _application.Scheduler.DeleteScheduleStepAsync(stepToDelete);
+            await ReconcileScheduleStepsAsync(id, request.Steps, initiatorType, initiatorId, initiatorName);
         }
 
-        // Update or create steps
-        foreach (var stepRequest in request.Steps)
-        {
-            if (stepRequest.Id.HasValue && existingStepIds.Contains(stepRequest.Id.Value))
-            {
-                // Update existing step
-                var existingStep = await _application.Scheduler.GetScheduleStepAsync(stepRequest.Id.Value);
-                if (existingStep != null)
-                {
-                    existingStep.StepIndex = stepRequest.StepIndex;
-                    existingStep.Name = stepRequest.Name;
-                    existingStep.ExecutionMode = stepRequest.ExecutionMode;
-                    existingStep.StepType = stepRequest.StepType;
-                    existingStep.ContinueOnFailure = stepRequest.ContinueOnFailure;
-                    existingStep.Timeout = stepRequest.TimeoutSeconds.HasValue
-                        ? TimeSpan.FromSeconds(stepRequest.TimeoutSeconds.Value)
-                        : null;
-                    existingStep.ConnectedSystemId = stepRequest.ConnectedSystemId;
-                    existingStep.RunProfileId = stepRequest.RunProfileId;
-                    existingStep.ScriptPath = stepRequest.ScriptPath;
-                    existingStep.Arguments = stepRequest.Arguments;
-                    existingStep.ExecutablePath = stepRequest.ExecutablePath;
-                    existingStep.WorkingDirectory = stepRequest.WorkingDirectory;
-                    existingStep.SqlConnectionString = stepRequest.SqlConnectionString;
-                    existingStep.SqlScriptPath = stepRequest.SqlScriptPath;
-                    existingStep.LastUpdated = DateTime.UtcNow;
-                    existingStep.LastUpdatedByType = initiatorType;
-                    existingStep.LastUpdatedById = initiatorId;
-                    existingStep.LastUpdatedByName = initiatorName;
-                    await _application.Scheduler.UpdateScheduleStepAsync(existingStep);
-                }
-            }
-            else
-            {
-                // Create new step
-                var newStep = stepRequest.ToEntity(id);
-                newStep.Created = DateTime.UtcNow;
-                newStep.CreatedByType = initiatorType;
-                newStep.CreatedById = initiatorId;
-                newStep.CreatedByName = initiatorName;
-                await _application.Scheduler.CreateScheduleStepAsync(newStep);
-            }
-        }
+        await _application.Scheduler.UpdateScheduleAsync(existingSchedule, initiatorType, initiatorId, initiatorName, changeReason: request.ChangeReason);
 
         _logger.LogInformation("Updated schedule {ScheduleId}", id);
 
@@ -257,13 +229,15 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     /// Delete a schedule
     /// </summary>
     /// <param name="id">The unique identifier of the schedule to delete.</param>
+    /// <param name="changeReason">An optional reason for the deletion, recorded against the change history.</param>
     /// <returns>No content on success.</returns>
     [HttpDelete("{id:guid}", Name = "DeleteSchedule")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteAsync(Guid id)
+    public async Task<IActionResult> DeleteAsync(Guid id, [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Deleting schedule {ScheduleId}", id);
 
@@ -273,7 +247,14 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             return NotFound(new ApiErrorResponse { Message = $"Schedule not found: {id}" });
         }
 
-        await _application.Scheduler.DeleteScheduleAsync(existingSchedule);
+        // Built-in schedules are part of the product and cannot be deleted (only enabled/disabled/re-timed).
+        if (existingSchedule.BuiltIn)
+        {
+            return BadRequest(new ApiErrorResponse { Message = $"The built-in schedule '{existingSchedule.Name}' cannot be deleted." });
+        }
+
+        var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
+        await _application.Scheduler.DeleteScheduleAsync(existingSchedule, initiatorType, initiatorId, initiatorName, changeReason);
 
         _logger.LogInformation("Deleted schedule {ScheduleId}", id);
         return NoContent();
@@ -283,13 +264,14 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     /// Enable a schedule
     /// </summary>
     /// <param name="id">The unique identifier of the schedule.</param>
+    /// <param name="changeReason">An optional reason for the change, recorded against the change history.</param>
     /// <returns>The updated schedule.</returns>
     [HttpPost("{id:guid}/enable", Name = "EnableSchedule")]
     [ProducesResponseType(typeof(ScheduleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> EnableAsync(Guid id)
+    public async Task<IActionResult> EnableAsync(Guid id, [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Enabling schedule {ScheduleId}", id);
 
@@ -307,7 +289,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         schedule.LastUpdatedById = initiatorId;
         schedule.LastUpdatedByName = initiatorName;
 
-        await _application.Scheduler.UpdateScheduleAsync(schedule);
+        await _application.Scheduler.UpdateScheduleAsync(schedule, initiatorType, initiatorId, initiatorName, changeReason);
 
         _logger.LogInformation("Enabled schedule {ScheduleId}", id);
         return Ok(ScheduleDto.FromEntity(schedule));
@@ -317,13 +299,14 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     /// Disable a schedule
     /// </summary>
     /// <param name="id">The unique identifier of the schedule.</param>
+    /// <param name="changeReason">An optional reason for the change, recorded against the change history.</param>
     /// <returns>The updated schedule.</returns>
     [HttpPost("{id:guid}/disable", Name = "DisableSchedule")]
     [ProducesResponseType(typeof(ScheduleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DisableAsync(Guid id)
+    public async Task<IActionResult> DisableAsync(Guid id, [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Disabling schedule {ScheduleId}", id);
 
@@ -341,7 +324,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         schedule.LastUpdatedById = initiatorId;
         schedule.LastUpdatedByName = initiatorName;
 
-        await _application.Scheduler.UpdateScheduleAsync(schedule);
+        await _application.Scheduler.UpdateScheduleAsync(schedule, initiatorType, initiatorId, initiatorName, changeReason);
 
         _logger.LogInformation("Disabled schedule {ScheduleId}", id);
         return Ok(ScheduleDto.FromEntity(schedule));
@@ -460,16 +443,17 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     #endregion
 
     /// <summary>
-    /// Validates the schedule request.
+    /// Validates the schedule request (trigger and steps).
     /// </summary>
     private static string? ValidateScheduleRequest(
         ScheduleTriggerType triggerType,
         string? cronExpression,
         List<ScheduleStepRequest> steps)
     {
-        if (triggerType == ScheduleTriggerType.Cron && string.IsNullOrWhiteSpace(cronExpression))
+        var triggerError = ValidateTrigger(triggerType, cronExpression);
+        if (triggerError != null)
         {
-            return "Cron expression is required for scheduled triggers";
+            return triggerError;
         }
 
         // Validate steps
@@ -483,6 +467,110 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Validates only the trigger configuration, independent of steps. Used for built-in schedules, whose steps
+    /// are JIM-owned and not user-validated.
+    /// </summary>
+    private static string? ValidateTrigger(ScheduleTriggerType triggerType, string? cronExpression)
+    {
+        if (triggerType == ScheduleTriggerType.Cron && string.IsNullOrWhiteSpace(cronExpression))
+        {
+            return "Cron expression is required for scheduled triggers";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Determines whether an update request would add, remove or replace any step of a built-in schedule.
+    /// The request is considered unchanged only when its steps map exactly onto the existing step Ids.
+    /// </summary>
+    private static bool BuiltInStepsWouldChange(List<ScheduleStep> existingSteps, List<ScheduleStepRequest> requestedSteps)
+    {
+        var existingIds = existingSteps.Select(s => s.Id).ToHashSet();
+        var requestedIds = requestedSteps
+            .Where(s => s.Id.HasValue && s.Id.Value != Guid.Empty)
+            .Select(s => s.Id!.Value)
+            .ToHashSet();
+
+        // A requested step with no matching existing Id is an addition or replacement.
+        var addsOrReplaces = requestedSteps.Any(s => !s.Id.HasValue || s.Id.Value == Guid.Empty || !existingIds.Contains(s.Id.Value));
+        // An existing step absent from the request is a removal.
+        var removes = existingIds.Any(existingId => !requestedIds.Contains(existingId));
+
+        return addsOrReplaces || removes;
+    }
+
+    /// <summary>
+    /// Reconciles a schedule's steps against the requested set: deletes steps absent from the request, updates
+    /// steps present in both, and creates steps new to the request. Not called for built-in schedules, whose
+    /// steps are immutable.
+    /// </summary>
+    private async Task ReconcileScheduleStepsAsync(
+        Guid id,
+        List<ScheduleStepRequest> requestedSteps,
+        ActivityInitiatorType initiatorType,
+        Guid? initiatorId,
+        string? initiatorName)
+    {
+        var existingSteps = await _application.Scheduler.GetScheduleStepsAsync(id);
+        var existingStepIds = existingSteps.Select(s => s.Id).ToHashSet();
+        var requestStepIds = requestedSteps
+            .Where(s => s.Id.HasValue && s.Id.Value != Guid.Empty)
+            .Select(s => s.Id!.Value)
+            .ToHashSet();
+
+        // Delete steps not in request
+        foreach (var stepToDelete in existingSteps.Where(s => !requestStepIds.Contains(s.Id)))
+        {
+            await _application.Scheduler.DeleteScheduleStepAsync(stepToDelete);
+        }
+
+        // Update or create steps
+        foreach (var stepRequest in requestedSteps)
+        {
+            if (stepRequest.Id.HasValue && existingStepIds.Contains(stepRequest.Id.Value))
+            {
+                // Update existing step
+                var existingStep = await _application.Scheduler.GetScheduleStepAsync(stepRequest.Id.Value);
+                if (existingStep != null)
+                {
+                    existingStep.StepIndex = stepRequest.StepIndex;
+                    existingStep.Name = stepRequest.Name;
+                    existingStep.ExecutionMode = stepRequest.ExecutionMode;
+                    existingStep.StepType = stepRequest.StepType;
+                    existingStep.ContinueOnFailure = stepRequest.ContinueOnFailure;
+                    existingStep.Timeout = stepRequest.TimeoutSeconds.HasValue
+                        ? TimeSpan.FromSeconds(stepRequest.TimeoutSeconds.Value)
+                        : null;
+                    existingStep.ConnectedSystemId = stepRequest.ConnectedSystemId;
+                    existingStep.RunProfileId = stepRequest.RunProfileId;
+                    existingStep.ScriptPath = stepRequest.ScriptPath;
+                    existingStep.Arguments = stepRequest.Arguments;
+                    existingStep.ExecutablePath = stepRequest.ExecutablePath;
+                    existingStep.WorkingDirectory = stepRequest.WorkingDirectory;
+                    existingStep.SqlConnectionString = stepRequest.SqlConnectionString;
+                    existingStep.SqlScriptPath = stepRequest.SqlScriptPath;
+                    existingStep.LastUpdated = DateTime.UtcNow;
+                    existingStep.LastUpdatedByType = initiatorType;
+                    existingStep.LastUpdatedById = initiatorId;
+                    existingStep.LastUpdatedByName = initiatorName;
+                    await _application.Scheduler.UpdateScheduleStepAsync(existingStep);
+                }
+            }
+            else
+            {
+                // Create new step
+                var newStep = stepRequest.ToEntity(id);
+                newStep.Created = DateTime.UtcNow;
+                newStep.CreatedByType = initiatorType;
+                newStep.CreatedById = initiatorId;
+                newStep.CreatedByName = initiatorName;
+                await _application.Scheduler.CreateScheduleStepAsync(newStep);
+            }
+        }
     }
 
     /// <summary>

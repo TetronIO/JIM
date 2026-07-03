@@ -420,11 +420,17 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("LastConnectorDisconnectedDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("LastScopeEvaluatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Origin")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("ScopeReviewPending")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -439,6 +445,10 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnName("xmin");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ScopeReviewPending")
+                        .HasDatabaseName("IX_MetaverseObjects_ScopeReviewPending")
+                        .HasFilter("\"ScopeReviewPending\"");
 
                     b.HasIndex("TypeId");
 
@@ -517,6 +527,10 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("StringValue");
 
                     b.HasIndex("UnresolvedReferenceValueId");
+
+                    b.HasIndex("AttributeId", "DateTimeValue")
+                        .HasDatabaseName("IX_MetaverseObjectAttributeValues_AttributeId_DateTimeValue")
+                        .HasFilter("\"DateTimeValue\" IS NOT NULL");
 
                     b.HasIndex("AttributeId", "StringValue")
                         .HasDatabaseName("IX_MetaverseObjectAttributeValues_AttributeId_StringValue");
@@ -1496,10 +1510,22 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("MetaverseAttributeId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("RelativeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RelativeDirection")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RelativeUnit")
+                        .HasColumnType("integer");
+
                     b.Property<string>("StringValue")
                         .HasColumnType("text");
 
                     b.Property<int?>("SyncRuleScopingCriteriaGroupId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ValueMode")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
@@ -1547,6 +1573,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("BuiltIn")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
@@ -1861,8 +1890,26 @@ namespace JIM.PostgresData.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool?>("BoolValue")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CaseSensitive")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("ComparisonType")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("DateTimeValue")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("GuidValue")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("IntValue")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("LongValue")
+                        .HasColumnType("bigint");
 
                     b.Property<int>("MetaverseAttributeId")
                         .HasColumnType("integer");
@@ -1870,9 +1917,20 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("PredefinedSearchCriteriaGroupId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("RelativeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RelativeDirection")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RelativeUnit")
+                        .HasColumnType("integer");
+
                     b.Property<string>("StringValue")
-                        .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int>("ValueMode")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -2160,6 +2218,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("JoinType")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("LastScopeEvaluatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
 
@@ -2168,6 +2229,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("PartitionId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("ScopeReviewPending")
+                        .HasColumnType("boolean");
 
                     b.Property<int?>("SecondaryExternalIdAttributeId")
                         .HasColumnType("integer");
@@ -2244,6 +2308,10 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("UnresolvedReferenceValue")
                         .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_UnresolvedReferenceValue")
                         .HasFilter("\"UnresolvedReferenceValue\" IS NOT NULL");
+
+                    b.HasIndex("AttributeId", "DateTimeValue")
+                        .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_DateTimeValue")
+                        .HasFilter("\"DateTimeValue\" IS NOT NULL");
 
                     b.HasIndex("AttributeId", "StringValue")
                         .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_StringValue")
@@ -3159,6 +3227,13 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.HasDiscriminator().HasValue("SynchronisationWorkerTask");
+                });
+
+            modelBuilder.Entity("JIM.Models.Tasking.TemporalScopeReconciliationWorkerTask", b =>
+                {
+                    b.HasBaseType("JIM.Models.Tasking.WorkerTask");
+
+                    b.HasDiscriminator().HasValue("TemporalScopeReconciliationWorkerTask");
                 });
 
             modelBuilder.Entity("ApiKeyRole", b =>

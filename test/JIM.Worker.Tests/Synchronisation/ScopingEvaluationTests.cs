@@ -26,6 +26,65 @@ public class ScopingEvaluationTests
         _scopingEvaluation = new ScopingEvaluationServer();
     }
 
+    #region Invalid operator/type hardening
+
+    [Test]
+    public void IsMvoInScopeForExportRule_InvalidOperatorForAttributeType_ThrowsInvalidOperationException()
+    {
+        // Arrange: a DateTime attribute scoped with a text operator ("Starts With"). Such a criterion should
+        // never persist, but if one reaches the evaluator it must fail loudly rather than silently mis-scope.
+        var accountExpires = new MetaverseAttribute { Id = 9, Name = "Account Expires", Type = AttributeDataType.DateTime };
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            AttributeId = 9,
+            Attribute = accountExpires,
+            DateTimeValue = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        });
+
+        var exportRule = CreateExportSyncRule();
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            MetaverseAttribute = accountExpires,
+            ComparisonType = SearchComparisonType.StartsWith
+        });
+        exportRule.ObjectScopingCriteriaGroups.Add(group);
+
+        // Act & Assert
+        var ex = Assert.Throws<InvalidOperationException>(() => _scopingEvaluation.IsMvoInScopeForExportRule(mvo, exportRule));
+        Assert.That(ex!.Message, Does.Contain("Account Expires"));
+    }
+
+    [Test]
+    public void IsCsoInScopeForImportRule_InvalidOperatorForAttributeType_ThrowsInvalidOperationException()
+    {
+        // Arrange: import-side equivalent, a DateTime attribute scoped with "Contains".
+        var accountExpires = new ConnectedSystemObjectTypeAttribute { Id = 9, Name = "accountExpires", Type = AttributeDataType.DateTime };
+        var cso = CreateTestCso();
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = 9,
+            Attribute = accountExpires,
+            DateTimeValue = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        });
+
+        var importRule = CreateImportSyncRule();
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            ConnectedSystemAttribute = accountExpires,
+            ComparisonType = SearchComparisonType.Contains
+        });
+        importRule.ObjectScopingCriteriaGroups.Add(group);
+
+        // Act & Assert
+        var ex = Assert.Throws<InvalidOperationException>(() => _scopingEvaluation.IsCsoInScopeForImportRule(cso, importRule));
+        Assert.That(ex!.Message, Does.Contain("accountExpires"));
+    }
+
+    #endregion
+
     #region Export (MVO) Scoping Tests
 
     [Test]
@@ -566,6 +625,113 @@ public class ScopingEvaluationTests
         // Assert
         Assert.That(result, Is.True, "Empty group should always return true");
     }
+
+    #region Relative date scoping tests
+
+    private static readonly DateTime FixedNow = new(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc);
+
+    private static (MetaverseObject mvo, SyncRule rule, MetaverseAttribute attr) BuildRelativeDateScenario(DateTime accountExpiry)
+    {
+        var attr = new MetaverseAttribute { Id = 10, Name = "AccountExpiry", Type = AttributeDataType.DateTime };
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { AttributeId = 10, Attribute = attr, DateTimeValue = accountExpiry });
+        var rule = CreateExportSyncRule();
+        return (mvo, rule, attr);
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_RelativeOnOrBeforeDaysFromNow_InScope()
+    {
+        // "on or before 7 days from now" -> boundary 2026-06-22; value 2026-06-18 is before that.
+        var (mvo, rule, attr) = BuildRelativeDateScenario(new DateTime(2026, 6, 18, 0, 0, 0, DateTimeKind.Utc));
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            MetaverseAttribute = attr,
+            ComparisonType = SearchComparisonType.LessThanOrEquals,
+            ValueMode = DateCriteriaValueMode.Relative,
+            RelativeCount = 7,
+            RelativeUnit = RelativeDateUnit.Days,
+            RelativeDirection = RelativeDateDirection.FromNow
+        });
+        rule.ObjectScopingCriteriaGroups.Add(group);
+
+        var result = _scopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, FixedNow);
+
+        Assert.That(result, Is.True, "Account expiring in 3 days is on or before 7 days from now");
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_RelativeAfterDaysAgo_OutOfScopeWhenOlder()
+    {
+        // "after 30 days ago" -> boundary 2026-05-16; value 2026-04-01 is not after it.
+        var (mvo, rule, attr) = BuildRelativeDateScenario(new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc));
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            MetaverseAttribute = attr,
+            ComparisonType = SearchComparisonType.GreaterThan,
+            ValueMode = DateCriteriaValueMode.Relative,
+            RelativeCount = 30,
+            RelativeUnit = RelativeDateUnit.Days,
+            RelativeDirection = RelativeDateDirection.Ago
+        });
+        rule.ObjectScopingCriteriaGroups.Add(group);
+
+        var result = _scopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, FixedNow);
+
+        Assert.That(result, Is.False, "Account that expired 75 days ago is not after the 30-days-ago boundary");
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_RelativeCriterion_MissingAttributeValue_OutOfScope()
+    {
+        var attr = new MetaverseAttribute { Id = 10, Name = "AccountExpiry", Type = AttributeDataType.DateTime };
+        var mvo = CreateTestMvo(); // no AccountExpiry value
+        var rule = CreateExportSyncRule();
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            MetaverseAttribute = attr,
+            ComparisonType = SearchComparisonType.LessThanOrEquals,
+            ValueMode = DateCriteriaValueMode.Relative,
+            RelativeCount = 7,
+            RelativeUnit = RelativeDateUnit.Days,
+            RelativeDirection = RelativeDateDirection.FromNow
+        });
+        rule.ObjectScopingCriteriaGroups.Add(group);
+
+        var result = _scopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, FixedNow);
+
+        Assert.That(result, Is.False, "A relative date criterion must not match an object with no value for the attribute");
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_RelativeBoundaryShiftsAsNowAdvances()
+    {
+        // Same object and criterion, evaluated at two different "now" values, gives different results.
+        // Criterion: AccountExpiry on or before 0 days from now (today, midnight UTC). Value: 2026-06-15 00:00.
+        var (mvo, rule, attr) = BuildRelativeDateScenario(new DateTime(2026, 6, 15, 0, 0, 0, DateTimeKind.Utc));
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            MetaverseAttribute = attr,
+            ComparisonType = SearchComparisonType.LessThanOrEquals,
+            ValueMode = DateCriteriaValueMode.Relative,
+            RelativeCount = 0,
+            RelativeUnit = RelativeDateUnit.Days,
+            RelativeDirection = RelativeDateDirection.FromNow
+        });
+        rule.ObjectScopingCriteriaGroups.Add(group);
+
+        var earlier = _scopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, new DateTime(2026, 6, 10, 9, 0, 0, DateTimeKind.Utc));
+        var onTheDay = _scopingEvaluation.IsMvoInScopeForExportRule(mvo, rule, FixedNow);
+
+        Assert.That(earlier, Is.False, "On 10 June, an account expiring 15 June is not yet on or before today");
+        Assert.That(onTheDay, Is.True, "On 15 June, an account expiring 15 June is on or before today");
+    }
+
+    #endregion
 
     [Test]
     public void IsCsoInScopeForImportRule_NestedGroups_EvaluatesCorrectly()

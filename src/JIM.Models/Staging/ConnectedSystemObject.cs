@@ -75,6 +75,23 @@ public class ConnectedSystemObject
     public DateTime? DateJoined { get; set; }
 
     /// <summary>
+    /// Set by the Temporal Scope Reconciler when this object's relative-date (inbound) scope membership
+    /// has flipped purely because the clock advanced, with no source-data change. The flag lets the
+    /// synchronisation engine's unchanged-since-last-sync skip pass this object through for re-evaluation,
+    /// then is cleared once it has been processed. Part of the flag-and-delegate model (issue #892): the
+    /// reconciler only flags; the existing engine applies the correct outcome (project, join, Attribute
+    /// Flow, disconnect, delete, etc.).
+    /// </summary>
+    public bool ScopeReviewPending { get; set; }
+
+    /// <summary>
+    /// UTC watermark of when the Temporal Scope Reconciler last evaluated this object's relative-date scope.
+    /// Bounds each reconciliation sweep to the objects whose temporal boundary could have crossed since they
+    /// were last evaluated. Null until first reconciled.
+    /// </summary>
+    public DateTime? LastScopeEvaluatedAt { get; set; }
+
+    /// <summary>
     /// A list of the changes made to this Connected System Object.
     /// </summary>
     public List<ConnectedSystemObjectChange> Changes { get; set; } = null!;

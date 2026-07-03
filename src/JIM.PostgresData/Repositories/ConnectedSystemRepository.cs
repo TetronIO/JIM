@@ -1026,6 +1026,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 var isUnchanged =
                     cso.Status == ConnectedSystemObjectStatus.Normal &&
                     cso.MetaverseObjectId.HasValue &&
+                    // A CSO flagged by the Temporal Scope Reconciler (#892) has drifted in or out of scope with the
+                    // clock even though its source data is static. It MUST be treated as changed so its attribute and
+                    // reference values are loaded; otherwise Pass 2 Attribute Flow would run against an empty attribute
+                    // set. The flag is cleared once the object has been re-evaluated.
+                    !cso.ScopeReviewPending &&
                     (cso.LastUpdated == null ? cso.Created <= watermark : cso.LastUpdated.Value <= watermark);
 
                 if (isUnchanged)
@@ -1442,6 +1447,34 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.ConnectedSystemObjects.Where(cso =>
             cso.ConnectedSystem.Id == connectedSystemId &&
             cso.AttributeValues.Any(av => av.Attribute.Id == connectedSystemAttributeId && av.StringValue != null && av.StringValue == attributeValue)).Select(cso => cso.Id).SingleOrDefaultAsync();
+    }
+
+    public async Task MarkConnectedSystemObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc)
+    {
+        if (evaluatedIds.Count == 0)
+            return;
+
+        // Single bulk UPDATE over O(transitions) rows on the reconciler schedule (#892). ScopeReviewPending is
+        // set to true for flagged ids and false for the rest of the evaluated set, so a stale flag self-clears
+        // once the object is back in agreement; LastScopeEvaluatedAt advances for every evaluated object.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects""
+              SET ""LastScopeEvaluatedAt"" = {2},
+                  ""ScopeReviewPending"" = (""Id"" = ANY({1}))
+              WHERE ""Id"" = ANY({0})",
+            evaluatedIds.ToArray(), flaggedIds.ToArray(), nowUtc);
+    }
+
+    public async Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
+    {
+        if (ids.Count == 0)
+            return;
+
+        // Clear the reconciler flag once the sync engine has re-evaluated these objects (#892). A single bulk UPDATE
+        // over the O(flagged) rows processed in the page keeps this off the per-object write path.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects"" SET ""ScopeReviewPending"" = false WHERE ""Id"" = ANY({0})",
+            ids.ToArray());
     }
 
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectAsync(int connectedSystemId, Guid id)
@@ -3890,9 +3923,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(g => g.Criteria)
             .ThenInclude(c => c.MetaverseAttribute)
             .Include(sr => sr.ObjectScopingCriteriaGroups)
+            .ThenInclude(g => g.Criteria)
+            .ThenInclude(c => c.ConnectedSystemAttribute)
+            .Include(sr => sr.ObjectScopingCriteriaGroups)
             .ThenInclude(g => g.ChildGroups)
             .ThenInclude(cg => cg.Criteria)
             .ThenInclude(c => c.MetaverseAttribute)
+            .Include(sr => sr.ObjectScopingCriteriaGroups)
+            .ThenInclude(g => g.ChildGroups)
+            .ThenInclude(cg => cg.Criteria)
+            .ThenInclude(c => c.ConnectedSystemAttribute)
             .OrderBy(x => x.Name);
 
         if (withChangeTracking)
@@ -4959,6 +4999,31 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
+    }
+
+    public async Task<List<Guid>> GetConnectedSystemObjectIdsByDateAttributeRangeAsync(int attributeId, DateTime? afterUtc, DateTime throughUtc)
+    {
+        // Superset candidate selection for the Temporal Scope Reconciler (#892). The composite
+        // (AttributeId, DateTimeValue) partial index serves this equality-then-range predicate.
+        // "DateTimeValue" IS NOT NULL also excludes any asserted-null marker rows. Correctness of the
+        // final in/out-of-scope decision is the reconciler's in-memory full evaluation, so a generous
+        // window here is safe; this query only narrows the set the evaluator has to consider.
+        var sql = @"SELECT DISTINCT av.""ConnectedSystemObjectId"" AS ""Value""
+                    FROM ""ConnectedSystemObjectAttributeValues"" av
+                    WHERE av.""AttributeId"" = {0}
+                      AND av.""DateTimeValue"" IS NOT NULL
+                      AND av.""DateTimeValue"" <= {1}";
+        var parameters = new List<object> { attributeId, throughUtc };
+        if (afterUtc.HasValue)
+        {
+            sql += @"
+                      AND av.""DateTimeValue"" > {2}";
+            parameters.Add(afterUtc.Value);
+        }
+
+        return await Repository.Database.Database
+            .SqlQueryRaw<Guid>(sql, parameters.ToArray())
+            .ToListAsync();
     }
 
     #endregion

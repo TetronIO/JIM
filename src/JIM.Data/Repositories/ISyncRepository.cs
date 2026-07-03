@@ -218,6 +218,12 @@ public interface ISyncRepository
     Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects);
 
     /// <summary>
+    /// Clears the <c>ScopeReviewPending</c> flag on CSOs the sync engine has re-evaluated past the unchanged-skip
+    /// (issue #892). Called at page flush. No-op when <paramref name="ids"/> is empty.
+    /// </summary>
+    Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
+
+    /// <summary>
     /// Updates CSOs that have new attribute values added (e.g., secondary external ID during export).
     /// </summary>
     Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates);
@@ -277,6 +283,24 @@ public interface ISyncRepository
     #endregion
 
     #region Metaverse Object — Writes
+
+    /// <summary>
+    /// Returns up to <paramref name="maxResults"/> Metaverse Object ids flagged <c>ScopeReviewPending</c> by the
+    /// Temporal Scope Reconciler (issue #892), for the sync engine to drain into export re-evaluation.
+    /// </summary>
+    Task<List<Guid>> GetMetaverseObjectIdsWithScopeReviewPendingAsync(int maxResults);
+
+    /// <summary>
+    /// Loads the given Metaverse Objects (no tracking) with their Type and attribute values, for export
+    /// re-evaluation of Temporal Scope Reconciler-flagged objects (issue #892).
+    /// </summary>
+    Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids);
+
+    /// <summary>
+    /// Clears the <c>ScopeReviewPending</c> flag on Metaverse Objects the sync engine has re-evaluated for export
+    /// scope (issue #892). No-op when <paramref name="ids"/> is empty.
+    /// </summary>
+    Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
 
     /// <summary>
     /// Bulk creates MVOs with their attribute values.

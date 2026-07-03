@@ -77,6 +77,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<SyncRuleScopingCriteria> SyncRuleScopingCriteria { get; set; } = null!;
     public virtual DbSet<SyncRuleScopingCriteriaGroup> SyncRuleScopingCriteriaGroups { get; set; } = null!;
     public virtual DbSet<SynchronisationWorkerTask> SynchronisationWorkerTasks { get; set; } = null!;
+    public virtual DbSet<TemporalScopeReconciliationWorkerTask> TemporalScopeReconciliationWorkerTasks { get; set; } = null!;
     public virtual DbSet<TrustedCertificate> TrustedCertificates { get; set; } = null!;
     public virtual DbSet<WorkerTask> WorkerTasks { get; set; } = null!;
 
@@ -445,6 +446,31 @@ public class JimDbContext : DbContext
             .HasIndex(av => new { av.AttributeId, av.StringValue })
             .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_StringValue")
             .HasFilter("\"StringValue\" IS NOT NULL");
+
+        // Composite index on (AttributeId, DateTimeValue) — the Temporal Scope Reconciler's candidate
+        // pre-filter (issue #892) selects CSOs whose date attribute value falls in a boundary-crossing
+        // range for a known AttributeId, e.g. WHERE AttributeId = @dateAttr AND DateTimeValue >= @lo
+        // AND DateTimeValue < @hi. Partial (DateTimeValue IS NOT NULL) to keep it small.
+        modelBuilder.Entity<ConnectedSystemObjectAttributeValue>()
+            .HasIndex(av => new { av.AttributeId, av.DateTimeValue })
+            .HasDatabaseName("IX_ConnectedSystemObjectAttributeValues_AttributeId_DateTimeValue")
+            .HasFilter("\"DateTimeValue\" IS NOT NULL");
+
+        // Composite index on (AttributeId, DateTimeValue) for the outbound (MVO export) lane of the
+        // Temporal Scope Reconciler (issue #892); mirrors the CSO index above. Supersedes the bare
+        // [Index(DateTimeValue)] on the entity for this equality-then-range access pattern.
+        modelBuilder.Entity<MetaverseObjectAttributeValue>()
+            .HasIndex(mav => new { mav.AttributeId, mav.DateTimeValue })
+            .HasDatabaseName("IX_MetaverseObjectAttributeValues_AttributeId_DateTimeValue")
+            .HasFilter("\"DateTimeValue\" IS NOT NULL");
+
+        // Partial index on the Temporal Scope Reconciler flag (issue #892). The sync engine drains flagged
+        // Metaverse Objects into export re-evaluation each run (WHERE "ScopeReviewPending" = true); flags are
+        // rare (O(transitions)), so a partial index keeps that scan O(flagged) rather than O(all MVOs).
+        modelBuilder.Entity<MetaverseObject>()
+            .HasIndex(mvo => mvo.ScopeReviewPending)
+            .HasDatabaseName("IX_MetaverseObjects_ScopeReviewPending")
+            .HasFilter("\"ScopeReviewPending\"");
 
         // Delta sync performance: composite index for timestamp-based queries
         // These enable efficient filtering by ConnectedSystemId + LastUpdated/Created

@@ -7,6 +7,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
@@ -652,6 +653,67 @@ public class ObjectMatchingModeTests
         Assert.That(syncRule.ObjectMatchingRules.Count, Is.EqualTo(1),
             "Matching rules should be preserved when Connected System is in Advanced Mode");
     }
+
+    [Test]
+    public void CreateOrUpdateSyncRuleAsync_ScopingCriterionWithInvalidOperatorForType_ThrowsArgumentException()
+    {
+        // Arrange: an Export rule scoped on a DateTime attribute using a text operator ("Starts With"),
+        // which the evaluator could never satisfy and so must be rejected on the write path.
+        var syncRule = BuildExportSyncRuleWithScopingCriterion(SearchComparisonType.StartsWith);
+
+        // Act & Assert
+        var ex = Assert.ThrowsAsync<ArgumentException>(async () =>
+            await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, _initiatedBy));
+        Assert.That(ex!.Message, Does.Contain("Account Expires"));
+        Assert.That(ex.Message, Does.Contain("StartsWith"));
+
+        _mockCsRepo.Verify(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>()), Times.Never,
+            "The Synchronisation Rule must not be persisted when a scoping operator is invalid for its attribute type.");
+    }
+
+    [Test]
+    public async Task CreateOrUpdateSyncRuleAsync_ScopingCriterionWithValidOperatorForType_SucceedsAsync()
+    {
+        // Arrange: the same DateTime attribute with a valid date operator ("on or after").
+        var syncRule = BuildExportSyncRuleWithScopingCriterion(SearchComparisonType.GreaterThanOrEquals);
+
+        _mockCsRepo.Setup(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(syncRule, _initiatedBy);
+
+        // Assert
+        Assert.That(result, Is.True);
+        _mockCsRepo.Verify(r => r.CreateSyncRuleAsync(It.IsAny<SyncRule>()), Times.Once);
+    }
+
+    private static SyncRule BuildExportSyncRuleWithScopingCriterion(SearchComparisonType comparisonType) => new()
+    {
+        Id = 0,
+        Name = "Export Users",
+        Direction = SyncRuleDirection.Export,
+        ConnectedSystemId = 1,
+        ConnectedSystem = new ConnectedSystem { Id = 1, Name = "Test System" },
+        MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "person" },
+        ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = 1, Name = "user" },
+        ObjectScopingCriteriaGroups = new List<SyncRuleScopingCriteriaGroup>
+        {
+            new()
+            {
+                Type = SearchGroupType.All,
+                Criteria = new List<SyncRuleScopingCriteria>
+                {
+                    new()
+                    {
+                        MetaverseAttribute = new MetaverseAttribute { Id = 50, Name = "Account Expires", Type = AttributeDataType.DateTime },
+                        ComparisonType = comparisonType,
+                        DateTimeValue = new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                    }
+                }
+            }
+        }
+    };
 
     [Test]
     public async Task CreateOrUpdateSyncRuleAsync_ExportRule_AlwaysClearsMatchingRulesAsync()

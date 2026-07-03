@@ -411,6 +411,7 @@ public class ConfigurationSnapshotService
         Add(children, "name", schedule.Name, "Name");
         Add(children, "description", schedule.Description, "Description");
         Add(children, "enabled", Render(schedule.IsEnabled), "Enabled");
+        Add(children, "builtIn", Render(schedule.BuiltIn), "Built-in");
         AddEnum(children, "triggerType", schedule.TriggerType, "Trigger type");
         AddEnum(children, "patternType", schedule.PatternType, "Pattern type");
         Add(children, "intervalValue", Render(schedule.IntervalValue), "Interval value");

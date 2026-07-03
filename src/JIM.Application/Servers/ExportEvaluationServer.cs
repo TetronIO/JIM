@@ -2005,7 +2005,9 @@ public class ExportEvaluationServer
                 AttributeDataType.Boolean => attributeValue.BoolValue,
                 AttributeDataType.Guid => attributeValue.GuidValue,
                 AttributeDataType.Binary => attributeValue.ByteValue,
-                AttributeDataType.Reference => attributeValue.ReferenceValue?.Id.ToString(),
+                // Fall back to the FK scalar when the navigation is not loaded: reconciler-flagged MVOs
+                // (#892) arrive via a no-tracking query that deliberately omits the ReferenceValue Include.
+                AttributeDataType.Reference => attributeValue.ReferenceValue?.Id.ToString() ?? attributeValue.ReferenceValueId?.ToString(),
                 _ => null
             };
 

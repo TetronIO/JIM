@@ -468,15 +468,22 @@ function Test-OpenLDAPSnapshotAvailable {
     return $true
 }
 
-# Interactive scenario selection function
-function Show-ScenarioMenu {
-    # Discover available scenarios. Sort by the numeric index embedded in the filename
-    # (Scenario1, Scenario2, ..., Scenario10, Scenario11) rather than lexically — a plain
-    # Sort-Object Name puts Scenario10/Scenario11 between Scenario1 and Scenario2.
-    $scenariosPath = Join-Path $scriptRoot "scenarios"
-    $scenarioFiles = Get-ChildItem $scenariosPath -Filter "Invoke-*.ps1" | Sort-Object {
+# Discover scenario Invoke-*.ps1 scripts in numeric order. Sort by the numeric index embedded in
+# the filename (Scenario1, Scenario2, ..., Scenario10, ..., Scenario13) rather than lexically — a
+# plain Sort-Object Name puts Scenario10+ between Scenario1 and Scenario2. Single source of truth so
+# the interactive menu and the -Scenario All regression run present scenarios in the same order.
+function Get-ScenarioInvokeScriptsSorted {
+    param([string]$ScenariosPath)
+    return Get-ChildItem $ScenariosPath -Filter "Invoke-*.ps1" | Sort-Object {
         if ($_.BaseName -match 'Scenario(\d+)') { [int]$Matches[1] } else { [int]::MaxValue }
     }, Name
+}
+
+# Interactive scenario selection function
+function Show-ScenarioMenu {
+    # Discover available scenarios in numeric order (see Get-ScenarioInvokeScriptsSorted).
+    $scenariosPath = Join-Path $scriptRoot "scenarios"
+    $scenarioFiles = Get-ScenarioInvokeScriptsSorted -ScenariosPath $scenariosPath
 
     if ($scenarioFiles.Count -eq 0) {
         Write-Host "${RED}No scenario scripts found in $scenariosPath${NC}"
@@ -534,6 +541,8 @@ function Show-ScenarioMenu {
                 "*Scenario9*" { "Partition-scoped import run profiles" }
                 "*Scenario10*" { "Sync rule scoping behaviour" }
                 "*Scenario11*" { "Sync rule scoping criteria evaluation matrix" }
+                "*Scenario12*" { "Relative-date inbound scoping (joiner / leaver)" }
+                "*Scenario13*" { "Relative-date outbound scoping (staged provisioning)" }
                 default { "Integration test scenario" }
             }
         }
@@ -1154,7 +1163,9 @@ $templateIrrelevantScenarios = @(
     "*Scenario4*",   # Deletion Rules - provisions individual test users, ignores template
     "*Scenario6*",   # Scheduler Service - tests scheduler functionality, no data template needed
     "*Scenario10*",  # Sync Rule Scoping - template-independent, only a handful of explicit test users
-    "*Scenario11*"   # Scoping Criteria Matrix - bespoke deterministic seed, template informational
+    "*Scenario11*",  # Scoping Criteria Matrix - bespoke deterministic seed, template informational
+    "*Scenario12*",  # Relative-Date Scoping - fixed test users positioned relative to "now"
+    "*Scenario13*"   # Relative-Date Outbound Scoping - fixed test users positioned relative to "now"
 )
 
 function Test-TemplateRelevant {
@@ -1506,9 +1517,10 @@ if ($Scenario -eq "All") {
         exit 1
     }
 
-    # Discover scenario scripts and filter out stubs
+    # Discover scenario scripts in numeric order (same ordering as the interactive menu) and filter
+    # out stubs.
     $scenariosPath = Join-Path $scriptRoot "scenarios"
-    $scenarioFiles = Get-ChildItem $scenariosPath -Filter "Invoke-*.ps1" | Sort-Object Name
+    $scenarioFiles = Get-ScenarioInvokeScriptsSorted -ScenariosPath $scenariosPath
     $implementedScenarios = @()
 
     foreach ($file in $scenarioFiles) {

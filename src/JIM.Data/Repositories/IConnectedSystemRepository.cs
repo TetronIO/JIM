@@ -95,6 +95,22 @@ public interface IConnectedSystemRepository
     public Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
 
     /// <summary>
+    /// Bulk-updates the Temporal Scope Reconciler bookkeeping on a set of Connected System Objects (issue #892):
+    /// advances <c>LastScopeEvaluatedAt</c> to <paramref name="nowUtc"/> for every evaluated object, and sets
+    /// <c>ScopeReviewPending</c> true for those in <paramref name="flaggedIds"/> and false for the rest (so a
+    /// prior flag self-clears once the object is back in agreement). No-op when <paramref name="evaluatedIds"/>
+    /// is empty.
+    /// </summary>
+    public Task MarkConnectedSystemObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc);
+
+    /// <summary>
+    /// Clears the <c>ScopeReviewPending</c> flag on a set of Connected System Objects (issue #892) once the sync
+    /// engine has re-evaluated them past the unchanged-skip. Called at page flush during synchronisation. No-op when
+    /// <paramref name="ids"/> is empty.
+    /// </summary>
+    public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
+
+    /// <summary>
     /// Bulk-loads all CSO external ID mappings for a Connected System.
     /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
     /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.
@@ -907,5 +923,18 @@ public interface IConnectedSystemRepository
     /// <param name="connectedSystemId">The Connected System ID to check.</param>
     /// <returns>The running task, or null if no task is running.</returns>
     Task<SynchronisationWorkerTask?> GetRunningSyncTaskAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Returns the IDs of Connected System Objects whose value for the given date attribute falls within the
+    /// (afterUtc, throughUtc] window. Backs the inbound lane of the Temporal Scope Reconciler's candidate
+    /// pre-filter (#892): the caller shifts this window by a relative-date criterion's offset so the result is a
+    /// superset of the CSOs whose truth-value for that criterion flipped since the last reconciliation. The final
+    /// scope decision is made by the reconciler's in-memory full evaluation, so a generous window is safe. Served
+    /// by the composite (AttributeId, DateTimeValue) partial index.
+    /// </summary>
+    /// <param name="attributeId">The Connected System Object Type Attribute the criterion filters on.</param>
+    /// <param name="afterUtc">Exclusive lower bound on the date value, or null to omit the lower bound (bootstrap / open window).</param>
+    /// <param name="throughUtc">Inclusive upper bound on the date value.</param>
+    Task<List<Guid>> GetConnectedSystemObjectIdsByDateAttributeRangeAsync(int attributeId, DateTime? afterUtc, DateTime throughUtc);
     #endregion
 }

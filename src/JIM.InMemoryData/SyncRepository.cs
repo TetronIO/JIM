@@ -546,6 +546,13 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
+    {
+        foreach (var stored in ids.Select(id => _csos.TryGetValue(id, out var cso) ? cso : null).Where(cso => cso != null))
+            stored!.ScopeReviewPending = false;
+        return Task.CompletedTask;
+    }
+
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(
         List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
     {
@@ -817,6 +824,34 @@ public class SyncRepository : ISyncRepository
     #endregion
 
     #region Metaverse Object — Writes
+
+    public Task<List<Guid>> GetMetaverseObjectIdsWithScopeReviewPendingAsync(int maxResults)
+    {
+        var ids = _mvos.Values
+            .Where(mvo => mvo.ScopeReviewPending)
+            .OrderBy(mvo => mvo.Id)
+            .Select(mvo => mvo.Id)
+            .Take(maxResults)
+            .ToList();
+        return Task.FromResult(ids);
+    }
+
+    public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids)
+    {
+        var result = ids
+            .Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null)
+            .Where(mvo => mvo != null)
+            .Select(mvo => mvo!)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    public Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
+    {
+        foreach (var stored in ids.Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null).Where(mvo => mvo != null))
+            stored!.ScopeReviewPending = false;
+        return Task.CompletedTask;
+    }
 
     public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
     {

@@ -37,6 +37,35 @@ public interface IMetaverseRepository
     #region objects
     public Task<MetaverseObject?> GetMetaverseObjectAsync(Guid id);
 
+    /// <summary>
+    /// Batch-loads Metaverse Objects by ID with their attribute values, using <c>AsNoTracking</c>. Used by the
+    /// Temporal Scope Reconciler (issue #892) to evaluate export scope in memory for outbound candidates.
+    /// </summary>
+    public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids);
+
+    /// <summary>
+    /// Returns up to <paramref name="maxResults"/> Metaverse Object ids currently flagged
+    /// <c>ScopeReviewPending</c> by the Temporal Scope Reconciler (issue #892), ordered by id. Backed by a
+    /// partial index so the query stays O(flagged). Used by the sync engine to drain flagged Metaverse Objects
+    /// into export re-evaluation.
+    /// </summary>
+    public Task<List<Guid>> GetMetaverseObjectIdsWithScopeReviewPendingAsync(int maxResults);
+
+    /// <summary>
+    /// Clears the <c>ScopeReviewPending</c> flag on Metaverse Objects the sync engine has re-evaluated for export
+    /// scope (issue #892). No-op when <paramref name="ids"/> is empty.
+    /// </summary>
+    public Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
+
+    /// <summary>
+    /// Bulk-updates the Temporal Scope Reconciler bookkeeping on a set of Metaverse Objects (issue #892):
+    /// advances <c>LastScopeEvaluatedAt</c> to <paramref name="nowUtc"/> for every evaluated object, and sets
+    /// <c>ScopeReviewPending</c> true for those in <paramref name="flaggedIds"/> and false for the rest (so a
+    /// prior flag self-clears once the object is back in agreement). No-op when <paramref name="evaluatedIds"/>
+    /// is empty.
+    /// </summary>
+    public Task MarkMetaverseObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc);
+
     public Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id);
 
     /// <summary>
@@ -98,21 +127,6 @@ public interface IMetaverseRepository
         string? searchQuery = null,
         string? filterAttributeName = null,
         string? filterAttributeValue = null);
-
-    public Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsOfTypeAsync(
-        int metaverseObjectTypeId,
-        int page,
-        int pageSize,
-        QuerySortBy querySortBy = QuerySortBy.DateCreated,
-        QueryRange queryRange = QueryRange.Forever);
-
-    public Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsOfTypeAsync(
-        PredefinedSearch predefinedSearch,
-        int page,
-        int pageSize,
-        string? searchQuery = null,
-        string? sortBy = null,
-        bool sortDescending = true);
 
     /// <summary>
     /// Gets a paginated list of lightweight Metaverse Object headers with only the attributes defined
@@ -361,5 +375,18 @@ public interface IMetaverseRepository
     /// <param name="attributeId">The unique identifier of the attribute.</param>
     /// <returns>A list of Synchronisation Rule references (ID and Name) that use this attribute.</returns>
     public Task<List<SyncRuleReference>> GetSyncRulesReferencingAttributeAsync(int attributeId);
+
+    /// <summary>
+    /// Returns the IDs of Metaverse Objects of the given type whose value for the given date attribute falls
+    /// within the (afterUtc, throughUtc] window. Backs the outbound (export) lane of the Temporal Scope
+    /// Reconciler's candidate pre-filter (#892); the caller shifts the window by a relative-date criterion's
+    /// offset. Filters by object type because a Metaverse Attribute is shared across types. Served by the
+    /// composite (AttributeId, DateTimeValue) partial index, which also excludes asserted-null marker rows.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type the export rule targets.</param>
+    /// <param name="attributeId">The Metaverse Attribute the criterion filters on.</param>
+    /// <param name="afterUtc">Exclusive lower bound on the date value, or null to omit the lower bound (bootstrap / open window).</param>
+    /// <param name="throughUtc">Inclusive upper bound on the date value.</param>
+    public Task<List<Guid>> GetMetaverseObjectIdsByDateAttributeRangeAsync(int metaverseObjectTypeId, int attributeId, DateTime? afterUtc, DateTime throughUtc);
     #endregion
 }

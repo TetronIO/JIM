@@ -152,6 +152,9 @@ public partial class SyncRepository : ISyncRepository
     public Task UpdateConnectedSystemObjectJoinStatesAsync(List<ConnectedSystemObject> connectedSystemObjects)
         => _repo.ConnectedSystems.UpdateConnectedSystemObjectJoinStatesAsync(connectedSystemObjects);
 
+    public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
+        => _repo.ConnectedSystems.ClearConnectedSystemObjectScopeReviewPendingAsync(ids);
+
     public Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(
         List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates)
         => _repo.ConnectedSystems.UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(updates);
@@ -181,6 +184,15 @@ public partial class SyncRepository : ISyncRepository
     #endregion
 
     #region Metaverse Object — Writes
+
+    public Task<List<Guid>> GetMetaverseObjectIdsWithScopeReviewPendingAsync(int maxResults)
+        => _repo.Metaverse.GetMetaverseObjectIdsWithScopeReviewPendingAsync(maxResults);
+
+    public Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids)
+        => _repo.Metaverse.GetMetaverseObjectsByIdsNoTrackingAsync(ids);
+
+    public Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
+        => _repo.Metaverse.ClearMetaverseObjectScopeReviewPendingAsync(ids);
 
     public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         => CreateMetaverseObjectsBulkAsync(metaverseObjects as List<MetaverseObject> ?? metaverseObjects.ToList());

@@ -63,6 +63,23 @@ public class MetaverseObject
     public MetaverseObjectOrigin Origin { get; set; } = MetaverseObjectOrigin.Projected;
 
     /// <summary>
+    /// Set by the Temporal Scope Reconciler when this object's relative-date (outbound / export) scope
+    /// membership has flipped purely because the clock advanced, with no Metaverse data change. The flag
+    /// lets export evaluation, which otherwise only considers changed Metaverse Objects, pass this object
+    /// through for re-evaluation, then is cleared once it has been processed. Part of the flag-and-delegate
+    /// model (issue #892): the reconciler only flags; the existing engine applies the correct outcome
+    /// (provision, deprovision, Attribute Flow, etc.).
+    /// </summary>
+    public bool ScopeReviewPending { get; set; }
+
+    /// <summary>
+    /// UTC watermark of when the Temporal Scope Reconciler last evaluated this object's relative-date export
+    /// scope. Bounds each reconciliation sweep to the objects whose temporal boundary could have crossed since
+    /// they were last evaluated. Null until first reconciled.
+    /// </summary>
+    public DateTime? LastScopeEvaluatedAt { get; set; }
+
+    /// <summary>
     /// Concurrency token using PostgreSQL's xmin system column.
     /// </summary>
     public uint xmin { get; set; }

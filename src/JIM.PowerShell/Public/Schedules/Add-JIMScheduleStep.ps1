@@ -36,6 +36,9 @@ function Add-JIMScheduleStep {
     .PARAMETER ContinueOnFailure
         If specified, the schedule continues even if this step fails.
 
+    .PARAMETER ChangeReason
+        An optional reason for the change, recorded against this Schedule's change history.
+
     .PARAMETER PassThru
         If specified, returns the updated Schedule object.
 
@@ -90,6 +93,10 @@ function Add-JIMScheduleStep {
         [switch]$Parallel,
 
         [switch]$ContinueOnFailure,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
 
         [switch]$PassThru
     )
@@ -194,6 +201,10 @@ function Add-JIMScheduleStep {
                     intervalWindowEnd = $schedule.intervalWindowEnd
                     cronExpression = $schedule.cronExpression
                     steps = $allSteps
+                }
+
+                if ($PSBoundParameters.ContainsKey('ChangeReason')) {
+                    $body.changeReason = $ChangeReason
                 }
 
                 $result = Invoke-JIMApi -Endpoint "/api/v1/schedules/$ScheduleId" -Method 'PUT' -Body $body

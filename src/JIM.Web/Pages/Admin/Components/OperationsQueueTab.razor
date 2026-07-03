@@ -41,7 +41,8 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" sm="2" Class="d-flex align-end pb-2">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleExecuteRunProfileSubmitAsync" DropShadow="false" FullWidth="true" Style="height: 50px;">Execute</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleExecuteRunProfileSubmitAsync" DropShadow="false" FullWidth="true" Style="height: 50px;"
+                           Disabled="@(_selectedConnectedSystemHeader == null || _selectedConnectedSystemRunProfile == null)">Execute</MudButton>
             </MudItem>
         </MudGrid>
     </MudForm>

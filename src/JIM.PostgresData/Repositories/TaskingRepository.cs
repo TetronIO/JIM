@@ -33,6 +33,10 @@ public class TaskingRepository : ITaskingRepository
                 Repository.Database.SynchronisationWorkerTasks.Add(synchronisationWorkerTask);
                 await Repository.Database.SaveChangesAsync();
                 break;
+            case TemporalScopeReconciliationWorkerTask temporalScopeReconciliationTask:
+                Repository.Database.TemporalScopeReconciliationWorkerTasks.Add(temporalScopeReconciliationTask);
+                await Repository.Database.SaveChangesAsync();
+                break;
             case ClearConnectedSystemObjectsWorkerTask clearConnectedSystemObjectsTask:
                 Repository.Database.ClearConnectedSystemObjectsTasks.Add(clearConnectedSystemObjectsTask);
                 await Repository.Database.SaveChangesAsync();

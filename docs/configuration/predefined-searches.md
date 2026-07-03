@@ -14,7 +14,7 @@ A predefined search ties together:
 
 - **A target Metaverse Object Type**<br /> The object type whose objects this search returns.
 - **A set of attributes**<br /> The fields surfaced as columns in the result list, in display order.
-- **A criteria tree**<br /> Groups of criteria with AND/OR logic and nested groups, controlling which objects match.
+- **Criteria**<br /> Conditions on attribute values that control which objects match (see [Filtering with criteria](#filtering-with-criteria) below).
 - **A stable URI slug**<br /> The human-readable identifier (e.g. `people`, `security-groups`) that consuming code uses to invoke the search.
 
 ## Stable URI slug
@@ -57,11 +57,50 @@ The administrative surface is what this page describes. The running surface is p
 1. Browse the catalogue (which still includes disabled searches)
 2. Update the relevant search with the enabled flag set to true
 
+## Filtering with criteria
+
+A predefined search can filter its results with **criteria**: conditions tested against a Metaverse Object's attribute values. Criteria live in **criteria groups**; a search can have one or more groups, and each group holds one or more criteria.
+
+Each criterion combines:
+
+- **An attribute**<br /> Any attribute of the search's Metaverse Object Type.
+- **A comparison operator**<br /> The operators offered depend on the attribute's data type (see below).
+- **A value**<br /> Typed to match the attribute (a number for a Number attribute, a date for a DateTime attribute, and so on).
+
+### Operators by attribute type
+
+| Attribute type | Operators |
+|----------------|-----------|
+| Text | equals, does not equal, starts with, does not start with, ends with, does not end with, contains, does not contain |
+| Number, Long Number, Date/Time | equals, does not equal, less than, less than or equal to, greater than, greater than or equal to |
+| Boolean, GUID | equals, does not equal |
+
+For **Date/Time** attributes the editor shows the operators in calendar wording: *before*, *on or before*, *after*, *on or after*, *equals*, *does not equal*. Date/Time values are stored and compared in UTC.
+
+A Date/Time criterion can compare against either a fixed date (**Absolute**) or a date worked out **Relative** to now (a count, a unit of Hours/Days/Weeks/Months/Years, and a direction of Ago or From now). Relative criteria are re-evaluated every time the search runs, so "expiring within the next 7 days" keeps moving with time. Days and coarser units round to midnight UTC; Hours keeps exact-instant precision; month and year offsets are calendar-correct. See [relative dates in scope filters](synchronisation-rules.md#relative-dates-in-scope-filters) for the shared behaviour.
+
+**Text comparisons are case-sensitive by default.** Switch a text criterion to case-insensitive when you want, for example, `Finance` and `finance` to match the same value.
+
+### How criteria combine
+
+Each group has a **logic type**:
+
+- **All (AND)**<br /> the group matches only when every criterion (and nested child group) in it matches.
+- **Any (OR)**<br /> the group matches when at least one criterion (or nested child group) in it matches.
+
+**Top-level groups are combined with OR**: an object matches the search when it matches any one of the top-level groups. A search with no criteria returns every object of its Metaverse Object Type, and an empty group matches everything.
+
+**Nested groups** let you express mixed logic. For example, "in Finance or Sales, and active" is a top-level **All** group containing the `IsActive = true` criterion and a child **Any** group containing `Department = Finance` and `Department = Sales`, giving `(Department = Finance OR Department = Sales) AND IsActive = true`. (Nesting is supported one level deep, which covers these mixed-logic expressions.)
+
+### Editing criteria
+
+On the Predefined Search detail page in the portal, the **Criteria** panel lets you add a criteria group, then add criteria to it, each with the attribute, operator and value controls above. Within a group you can also add a nested child group (with its own All / Any logic). Removing a group removes everything within it. The same operations are available through the [PowerShell cmdlets](../powershell/predefined-searches.md) and the REST API.
+
 ## Manage Predefined Searches
 
 - **JIM portal**<br /> Predefined Searches area of the admin UI
-- **PowerShell**<br /> [Predefined Searches cmdlets](../powershell/predefined-searches.md) (`Get-JIMPredefinedSearch`, `Set-JIMPredefinedSearch`, etc.)
-- **REST API**<br /> Predefined Searches endpoints in the [interactive API reference](../../api/reference/)
+- **PowerShell**<br /> [Predefined Searches cmdlets](../powershell/predefined-searches.md) (`Get-JIMPredefinedSearch`, `Set-JIMPredefinedSearch`, and the criteria cmdlets such as `New-JIMPredefinedSearchCriterion`)
+- **REST API**<br /> Predefined Searches endpoints in the [interactive API reference](../../api/reference/), including the criteria-group and criteria endpoints
 
 ## See also
 

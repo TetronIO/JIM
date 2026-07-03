@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -27,6 +28,7 @@ public class PredefinedSearchesControllerTests
 {
     private Mock<IRepository> _mockRepository = null!;
     private Mock<ISearchRepository> _mockSearchRepo = null!;
+    private Mock<IMetaverseRepository> _mockMetaverseRepo = null!;
     private Mock<ILogger<PredefinedSearchesController>> _mockLogger = null!;
     private JimApplication _application = null!;
     private PredefinedSearchesController _controller = null!;
@@ -36,7 +38,9 @@ public class PredefinedSearchesControllerTests
     {
         _mockRepository = new Mock<IRepository>();
         _mockSearchRepo = new Mock<ISearchRepository>();
+        _mockMetaverseRepo = new Mock<IMetaverseRepository>();
         _mockRepository.Setup(r => r.Search).Returns(_mockSearchRepo.Object);
+        _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
         _mockLogger = new Mock<ILogger<PredefinedSearchesController>>();
         _application = new JimApplication(_mockRepository.Object);
         _controller = new PredefinedSearchesController(_mockLogger.Object, _application);
@@ -174,5 +178,386 @@ public class PredefinedSearchesControllerTests
 
         Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
         _mockSearchRepo.Verify(r => r.UpdatePredefinedSearchAsync(It.IsAny<PredefinedSearch>()), Times.Never);
+    }
+
+    // ─── Criteria groups and criteria ───
+
+    private const int SearchId = 7;
+    private const int GroupId = 11;
+    private const int ObjectTypeId = 1;
+
+    private static PredefinedSearch BuildSearchWithGroup(params PredefinedSearchCriteria[] criteria)
+    {
+        var search = BuildSearch(SearchId, isEnabled: true);
+        var group = new PredefinedSearchCriteriaGroup { Id = GroupId, Type = SearchGroupType.All, Position = 0 };
+        group.Criteria.AddRange(criteria);
+        search.CriteriaGroups.Add(group);
+        return search;
+    }
+
+    private MetaverseAttribute SetUpAttribute(int id, string name, AttributeDataType type, bool onObjectType = true)
+    {
+        var attribute = new MetaverseAttribute
+        {
+            Id = id,
+            Name = name,
+            Type = type,
+            MetaverseObjectTypes = onObjectType
+                ? new List<MetaverseObjectType> { new() { Id = ObjectTypeId, Name = "Person" } }
+                : new List<MetaverseObjectType>()
+        };
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeWithObjectTypesAsync(id, It.IsAny<bool>())).ReturnsAsync(attribute);
+        return attribute;
+    }
+
+    [Test]
+    public async Task GetCriteriaGroupsAsync_WithExistingSearch_ReturnsGroupsAsync()
+    {
+        var search = BuildSearchWithGroup(new PredefinedSearchCriteria { Id = 1, ComparisonType = SearchComparisonType.Equals, StringValue = "x" });
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(search);
+
+        var result = await _controller.GetCriteriaGroupsAsync(SearchId);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var groups = (List<PredefinedSearchCriteriaGroupDto>)((OkObjectResult)result).Value!;
+        Assert.That(groups, Has.Count.EqualTo(1));
+        Assert.That(groups[0].Id, Is.EqualTo(GroupId));
+        Assert.That(groups[0].Criteria, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetCriteriaGroupsAsync_WithUnknownSearch_ReturnsNotFoundAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync((PredefinedSearch?)null);
+
+        var result = await _controller.GetCriteriaGroupsAsync(SearchId);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task CreateCriteriaGroupAsync_WithValidType_ReturnsCreatedAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchCoreAsync(SearchId)).ReturnsAsync(BuildSearch(SearchId, true));
+        _mockSearchRepo.Setup(r => r.CreatePredefinedSearchCriteriaGroupAsync(SearchId, null, SearchGroupType.Any, 2))
+            .ReturnsAsync(new PredefinedSearchCriteriaGroup { Id = 99, Type = SearchGroupType.Any, Position = 2 });
+
+        var result = await _controller.CreateCriteriaGroupAsync(SearchId, new CreatePredefinedSearchCriteriaGroupRequest { Type = "Any", Position = 2 });
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var dto = (PredefinedSearchCriteriaGroupDto)((CreatedAtRouteResult)result).Value!;
+        Assert.That(dto.Type, Is.EqualTo("Any"));
+    }
+
+    [Test]
+    public async Task CreateCriteriaGroupAsync_WithInvalidType_ReturnsBadRequestAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchCoreAsync(SearchId)).ReturnsAsync(BuildSearch(SearchId, true));
+
+        var result = await _controller.CreateCriteriaGroupAsync(SearchId, new CreatePredefinedSearchCriteriaGroupRequest { Type = "Maybe" });
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task CreateChildCriteriaGroupAsync_WithValidParent_ReturnsCreatedAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        _mockSearchRepo.Setup(r => r.CreatePredefinedSearchCriteriaGroupAsync(SearchId, GroupId, SearchGroupType.Any, 0))
+            .ReturnsAsync(new PredefinedSearchCriteriaGroup { Id = 50, Type = SearchGroupType.Any });
+
+        var result = await _controller.CreateChildCriteriaGroupAsync(SearchId, GroupId, new CreatePredefinedSearchCriteriaGroupRequest { Type = "Any" });
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var dto = (PredefinedSearchCriteriaGroupDto)((CreatedAtRouteResult)result).Value!;
+        Assert.That(dto.Type, Is.EqualTo("Any"));
+    }
+
+    [Test]
+    public async Task CreateChildCriteriaGroupAsync_WithUnknownParent_ReturnsNotFoundAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+
+        var result = await _controller.CreateChildCriteriaGroupAsync(SearchId, groupId: 999, new CreatePredefinedSearchCriteriaGroupRequest { Type = "Any" });
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+        _mockSearchRepo.Verify(r => r.CreatePredefinedSearchCriteriaGroupAsync(It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<SearchGroupType>(), It.IsAny<int>()), Times.Never);
+    }
+
+    [Test]
+    public async Task DeleteCriteriaGroupAsync_WithUnknownGroup_ReturnsNotFoundAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+
+        var result = await _controller.DeleteCriteriaGroupAsync(SearchId, groupId: 999);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+        _mockSearchRepo.Verify(r => r.DeletePredefinedSearchCriteriaGroupAsync(It.IsAny<int>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithTextEquals_ReturnsCreatedAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(20, "Department", AttributeDataType.Text);
+        _mockSearchRepo.Setup(r => r.CreatePredefinedSearchCriterionAsync(GroupId, It.IsAny<PredefinedSearchCriteria>()))
+            .ReturnsAsync((int _, PredefinedSearchCriteria c) => { c.Id = 5; return c; });
+
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 20, ComparisonType = "Equals", StringValue = "Finance" };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var dto = (PredefinedSearchCriteriaDto)((CreatedAtRouteResult)result).Value!;
+        Assert.That(dto.StringValue, Is.EqualTo("Finance"));
+        Assert.That(dto.AttributeDataType, Is.EqualTo("Text"));
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithNumberGreaterThan_ReturnsCreatedAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(21, "MemberCount", AttributeDataType.Number);
+        _mockSearchRepo.Setup(r => r.CreatePredefinedSearchCriterionAsync(GroupId, It.IsAny<PredefinedSearchCriteria>()))
+            .ReturnsAsync((int _, PredefinedSearchCriteria c) => { c.Id = 6; return c; });
+
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 21, ComparisonType = "GreaterThan", IntValue = 0 };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        var dto = (PredefinedSearchCriteriaDto)((CreatedAtRouteResult)result).Value!;
+        Assert.That(dto.IntValue, Is.EqualTo(0));
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithDateTimeLessThan_NormalisesToUtcAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(22, "AccountExpiry", AttributeDataType.DateTime);
+        PredefinedSearchCriteria? captured = null;
+        _mockSearchRepo.Setup(r => r.CreatePredefinedSearchCriterionAsync(GroupId, It.IsAny<PredefinedSearchCriteria>()))
+            .ReturnsAsync((int _, PredefinedSearchCriteria c) => { c.Id = 7; captured = c; return c; });
+
+        var request = new PredefinedSearchCriterionRequest
+        {
+            MetaverseAttributeId = 22,
+            ComparisonType = "LessThan",
+            DateTimeValue = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Unspecified)
+        };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.DateTimeValue!.Value.Kind, Is.EqualTo(DateTimeKind.Utc));
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithBooleanEquals_ReturnsCreatedAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(23, "IsActive", AttributeDataType.Boolean);
+        _mockSearchRepo.Setup(r => r.CreatePredefinedSearchCriterionAsync(GroupId, It.IsAny<PredefinedSearchCriteria>()))
+            .ReturnsAsync((int _, PredefinedSearchCriteria c) => { c.Id = 8; return c; });
+
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 23, ComparisonType = "Equals", BoolValue = true };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithOperatorNotApplicableToType_ReturnsBadRequestAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(21, "MemberCount", AttributeDataType.Number);
+
+        // StartsWith is a text-only operator; invalid for a Number attribute.
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 21, ComparisonType = "StartsWith", IntValue = 1 };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockSearchRepo.Verify(r => r.CreatePredefinedSearchCriterionAsync(It.IsAny<int>(), It.IsAny<PredefinedSearchCriteria>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithMissingValueCarrier_ReturnsBadRequestAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(21, "MemberCount", AttributeDataType.Number);
+
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 21, ComparisonType = "GreaterThan" };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithInvalidComparisonType_ReturnsBadRequestAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(20, "Department", AttributeDataType.Text);
+
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 20, ComparisonType = "Sideways", StringValue = "x" };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithAttributeNotOnObjectType_ReturnsBadRequestAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(30, "Foreign", AttributeDataType.Text, onObjectType: false);
+
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 30, ComparisonType = "Equals", StringValue = "x" };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithUnknownAttribute_ReturnsBadRequestAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeWithObjectTypesAsync(404, It.IsAny<bool>())).ReturnsAsync((MetaverseAttribute?)null);
+
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 404, ComparisonType = "Equals", StringValue = "x" };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithRelativeDate_ReturnsCreatedAndPersistsRelativeFieldsAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(22, "AccountExpiry", AttributeDataType.DateTime);
+        PredefinedSearchCriteria? captured = null;
+        _mockSearchRepo.Setup(r => r.CreatePredefinedSearchCriterionAsync(GroupId, It.IsAny<PredefinedSearchCriteria>()))
+            .ReturnsAsync((int _, PredefinedSearchCriteria c) => { c.Id = 9; captured = c; return c; });
+
+        var request = new PredefinedSearchCriterionRequest
+        {
+            MetaverseAttributeId = 22,
+            ComparisonType = "LessThanOrEquals",
+            ValueMode = "Relative",
+            RelativeCount = 7,
+            RelativeUnit = "Days",
+            RelativeDirection = "FromNow"
+        };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.ValueMode, Is.EqualTo(DateCriteriaValueMode.Relative));
+        Assert.That(captured.RelativeCount, Is.EqualTo(7));
+        Assert.That(captured.RelativeUnit, Is.EqualTo(RelativeDateUnit.Days));
+        Assert.That(captured.RelativeDirection, Is.EqualTo(RelativeDateDirection.FromNow));
+        Assert.That(captured.DateTimeValue, Is.Null);
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithRelativeOnNonDateAttribute_ReturnsBadRequestAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(20, "Department", AttributeDataType.Text);
+
+        var request = new PredefinedSearchCriterionRequest
+        {
+            MetaverseAttributeId = 20,
+            ComparisonType = "Equals",
+            ValueMode = "Relative",
+            RelativeCount = 7,
+            RelativeUnit = "Days",
+            RelativeDirection = "FromNow"
+        };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockSearchRepo.Verify(r => r.CreatePredefinedSearchCriterionAsync(It.IsAny<int>(), It.IsAny<PredefinedSearchCriteria>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithRelativeMissingUnit_ReturnsBadRequestAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(22, "AccountExpiry", AttributeDataType.DateTime);
+
+        var request = new PredefinedSearchCriterionRequest
+        {
+            MetaverseAttributeId = 22,
+            ComparisonType = "LessThanOrEquals",
+            ValueMode = "Relative",
+            RelativeCount = 7,
+            RelativeDirection = "FromNow"
+        };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithUnknownGroup_ReturnsNotFoundAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 20, ComparisonType = "Equals", StringValue = "x" };
+        var result = await _controller.CreateCriterionAsync(SearchId, groupId: 999, request);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task UpdateCriterionAsync_WithValidRequest_ReturnsOkAsync()
+    {
+        var existing = new PredefinedSearchCriteria { Id = 5, ComparisonType = SearchComparisonType.Equals, StringValue = "old" };
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup(existing));
+        SetUpAttribute(20, "Department", AttributeDataType.Text);
+        _mockSearchRepo.Setup(r => r.UpdatePredefinedSearchCriterionAsync(It.IsAny<PredefinedSearchCriteria>()))
+            .ReturnsAsync((PredefinedSearchCriteria c) => c);
+
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 20, ComparisonType = "Contains", StringValue = "new" };
+        var result = await _controller.UpdateCriterionAsync(SearchId, GroupId, criterionId: 5, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var dto = (PredefinedSearchCriteriaDto)((OkObjectResult)result).Value!;
+        Assert.That(dto.ComparisonType, Is.EqualTo("Contains"));
+        Assert.That(dto.StringValue, Is.EqualTo("new"));
+    }
+
+    [Test]
+    public async Task UpdateCriterionAsync_WithUnknownCriterion_ReturnsNotFoundAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(20, "Department", AttributeDataType.Text);
+
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 20, ComparisonType = "Equals", StringValue = "x" };
+        var result = await _controller.UpdateCriterionAsync(SearchId, GroupId, criterionId: 999, request);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+        _mockSearchRepo.Verify(r => r.UpdatePredefinedSearchCriterionAsync(It.IsAny<PredefinedSearchCriteria>()), Times.Never);
+    }
+
+    [Test]
+    public async Task DeleteCriterionAsync_WithExistingCriterion_ReturnsNoContentAsync()
+    {
+        var existing = new PredefinedSearchCriteria { Id = 5, ComparisonType = SearchComparisonType.Equals, StringValue = "x" };
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup(existing));
+        _mockSearchRepo.Setup(r => r.DeletePredefinedSearchCriterionAsync(5)).ReturnsAsync(true);
+
+        var result = await _controller.DeleteCriterionAsync(SearchId, GroupId, criterionId: 5);
+
+        Assert.That(result, Is.InstanceOf<NoContentResult>());
+        _mockSearchRepo.Verify(r => r.DeletePredefinedSearchCriterionAsync(5), Times.Once);
+    }
+
+    [Test]
+    public async Task DeleteCriterionAsync_WithUnknownCriterion_ReturnsNotFoundAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+
+        var result = await _controller.DeleteCriterionAsync(SearchId, GroupId, criterionId: 999);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+        _mockSearchRepo.Verify(r => r.DeletePredefinedSearchCriterionAsync(It.IsAny<int>()), Times.Never);
     }
 }
