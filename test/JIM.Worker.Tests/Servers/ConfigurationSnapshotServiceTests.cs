@@ -190,6 +190,48 @@ public class ConfigurationSnapshotServiceTests
     // -- Connected System redaction ------------------------------------------------------------------------------------
 
     [Test]
+    public void CreateSnapshot_ConnectedSystem_CapturesObjectTypeMatchingRules()
+    {
+        // Simple Mode Object Matching Rules attach to a Connected System Object Type; they are the system's matching
+        // configuration and must be snapshotted, or a rule change diffs as "no change".
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 3,
+            Name = "AD",
+            ConnectorDefinitionId = 4,
+            ObjectTypes =
+            [
+                new ConnectedSystemObjectType
+                {
+                    Id = 7, Name = "user", Selected = true,
+                    ObjectMatchingRules = [new ObjectMatchingRule { Id = 9, Order = 1, TargetMetaverseAttributeId = 5 }]
+                }
+            ]
+        };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        var objectType = Child(snapshot.Root, "objectTypes")!.Children![0];
+        var matchingRules = Child(objectType, "objectMatchingRules");
+        Assert.That(matchingRules, Is.Not.Null, "the object type's matching rules must be part of the system's configuration snapshot");
+        Assert.That(matchingRules!.Children, Has.Count.EqualTo(1));
+        Assert.That(matchingRules.Children![0].ItemId, Is.EqualTo(9), "collection items must carry the stable DB id for diff matching");
+        Assert.That(Child(matchingRules.Children[0], "targetMetaverseAttributeId")!.Value, Is.EqualTo("5"));
+    }
+
+    [Test]
+    public void CreateSnapshot_ConnectedSystem_ExcludesRuntimeStatus()
+    {
+        // Status (Active/Deleting) is runtime state, not configuration; snapshotting it would record phantom
+        // configuration changes around deletion attempts.
+        var connectedSystem = new ConnectedSystem { Id = 3, Name = "AD", ConnectorDefinitionId = 4, Status = ConnectedSystemStatus.Deleting };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        Assert.That(Child(snapshot.Root, "status"), Is.Null, "runtime status must not be part of the configuration snapshot");
+    }
+
+    [Test]
     public void CreateSnapshot_ConnectedSystem_RedactsEncryptedSettingAndKeepsPlainSetting()
     {
         const string secret = "super-secret-pw";
