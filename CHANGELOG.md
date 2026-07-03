@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Every Connected System configuration change now records a versioned snapshot in its change history. Previously, several paths created an Activity but captured nothing, leaving blank Activity detail pages: schema updates and imports, hierarchy imports, container auto-selection after export, bulk attribute updates, matching-mode switches, worker-initiated updates, and the REST API partition/container selection endpoints (which recorded no Activity at all).
+- 🐛 Saving a Connected System or Synchronisation Rule without actually changing anything no longer records a duplicate configuration version; a change entry now always represents a real difference.
+- 🐛 Resetting a Connected System's status after a failed deletion no longer records a spurious configuration change; status is runtime state, not configuration.
 - 🐛 Updated the bundled Microsoft.OpenApi library to a patched release (2.7.5), clearing a high-severity advisory (GHSA-v5pm-xwqc-g5wc: circular schema references could terminate OpenAPI document parsing) present in JIM's API documentation generation.
 - 🐛 A Connected System hierarchy refresh that retrieves no partitions no longer wipes the configured hierarchy. Previously, if the connector returned zero partitions (typically a transient connection, authentication, or scope problem rather than a genuinely empty directory), every existing partition and container, including selected ones, was treated as removed and deleted. JIM now leaves the existing hierarchy untouched in that case and records a warning on the Activity so the cause can be investigated.
 - 🐛 A completed example data generation Activity no longer shows a stale "Persisting to database..." progress line; the transient progress message is cleared when the Activity completes.

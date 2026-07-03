@@ -504,6 +504,22 @@ public class ActivityRepository : IActivityRepository
         return max ?? 0;
     }
 
+    public async Task<string?> GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType targetType, int targetObjectId)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectId)
+            .OrderByDescending(a => a.ConfigurationChangeVersion)
+            .Select(a => a.ConfigurationChangeSnapshot)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<string?> GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType targetType, Guid targetObjectId)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectId)
+            .OrderByDescending(a => a.ConfigurationChangeVersion)
+            .Select(a => a.ConfigurationChangeSnapshot)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task<int> GetConfigurationChangeCountAsync(ActivityTargetType targetType, int targetObjectId)
     {
         return await ConfigurationChangeQuery(targetType, targetObjectId).CountAsync();

@@ -107,6 +107,20 @@ public interface IActivityRepository
     public Task<int> GetMaxConfigurationChangeVersionAsync(ActivityTargetType targetType, Guid targetObjectId);
 
     /// <summary>
+    /// Gets the snapshot JSON of the highest configuration-change version recorded for a configuration object, or null
+    /// if none exists yet. Used by the idempotent capture guard: a new capture whose snapshot is identical to the
+    /// latest stored one is skipped rather than recorded as a no-change version.
+    /// </summary>
+    public Task<string?> GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType targetType, int targetObjectId);
+
+    /// <summary>
+    /// Gets the snapshot JSON of the highest configuration-change version recorded for a Guid-keyed configuration
+    /// object (e.g. a <see cref="ActivityTargetType.Schedule"/>), or null if none exists yet. The Guid-keyed
+    /// counterpart of <see cref="GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType,int)"/>.
+    /// </summary>
+    public Task<string?> GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType targetType, Guid targetObjectId);
+
+    /// <summary>
     /// Counts the versioned configuration-change activities recorded for a configuration object.
     /// </summary>
     public Task<int> GetConfigurationChangeCountAsync(ActivityTargetType targetType, int targetObjectId);
