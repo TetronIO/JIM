@@ -310,6 +310,12 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // Flush any RPEIs from cross-page resolution
             await FlushRpeisAsync();
 
+            // Outbound Temporal Scope Reconciler apply step (#892): re-evaluate export scope for Metaverse
+            // Objects the reconciler flagged, whose export-rule scope drifted with the clock without a data
+            // change (the change-driven export path never revisits them). Runs after all inbound-driven changes
+            // are persisted so provisioning/deprovisioning reflects the fully reconciled Metaverse state.
+            await ProcessScopeReviewPendingMetaverseObjectsAsync();
+
             // Ensure the activity and any pending db updates are applied after all pages are processed
             await _syncRepo.UpdateActivityAsync(_activity);
 

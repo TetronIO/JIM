@@ -16,6 +16,9 @@ function Remove-JIMScheduleStep {
     .PARAMETER StepIndex
         The index of the step to remove (0-based).
 
+    .PARAMETER ChangeReason
+        An optional reason for the change, recorded against this Schedule's change history.
+
     .PARAMETER Force
         Bypasses confirmation prompts.
 
@@ -49,6 +52,10 @@ function Remove-JIMScheduleStep {
         [Parameter(Mandatory)]
         [ValidateRange(0, [int]::MaxValue)]
         [int]$StepIndex,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
 
         [switch]$Force,
 
@@ -129,6 +136,10 @@ function Remove-JIMScheduleStep {
                     intervalWindowEnd = $schedule.intervalWindowEnd
                     cronExpression = $schedule.cronExpression
                     steps = $renumberedSteps
+                }
+
+                if ($PSBoundParameters.ContainsKey('ChangeReason')) {
+                    $body.changeReason = $ChangeReason
                 }
 
                 $result = Invoke-JIMApi -Endpoint "/api/v1/schedules/$ScheduleId" -Method 'PUT' -Body $body

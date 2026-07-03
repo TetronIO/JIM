@@ -12,6 +12,7 @@ using JIM.Models.Staging;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using NpgsqlTypes;
 using Serilog;
 using System.Diagnostics;
 namespace JIM.PostgresData.Repositories;
@@ -328,6 +329,62 @@ public class MetaverseRepository : IMetaverseRepository
     #endregion
 
     #region Metaverse Objects
+    public async Task<List<MetaverseObject>> GetMetaverseObjectsByIdsNoTrackingAsync(IEnumerable<Guid> ids)
+    {
+        var idList = ids as IReadOnlyCollection<Guid> ?? ids.ToList();
+        if (idList.Count == 0)
+            return new List<MetaverseObject>();
+
+        return await Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Include(mvo => mvo.Type)
+            .Include(mvo => mvo.AttributeValues)
+            .ThenInclude(av => av.Attribute)
+            .Where(mvo => idList.Contains(mvo.Id))
+            .ToListAsync();
+    }
+
+    public async Task<List<Guid>> GetMetaverseObjectIdsWithScopeReviewPendingAsync(int maxResults)
+    {
+        // O(transitions) via the partial index on ScopeReviewPending. Ordered by Id for stable paging across
+        // successive sync runs that each drain a batch of flagged Metaverse Objects (#892).
+        return await Repository.Database.MetaverseObjects
+            .AsNoTracking()
+            .Where(mvo => mvo.ScopeReviewPending)
+            .OrderBy(mvo => mvo.Id)
+            .Select(mvo => mvo.Id)
+            .Take(maxResults)
+            .ToListAsync();
+    }
+
+    public async Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
+    {
+        if (ids.Count == 0)
+            return;
+
+        // Clear the reconciler flag once the sync engine has re-evaluated these Metaverse Objects' export scope
+        // (#892). A single bulk UPDATE over the O(flagged) rows processed keeps this off the per-object write path.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjects"" SET ""ScopeReviewPending"" = false WHERE ""Id"" = ANY({0})",
+            ids.ToArray());
+    }
+
+    public async Task MarkMetaverseObjectsScopeEvaluatedAsync(IReadOnlyCollection<Guid> evaluatedIds, IReadOnlyCollection<Guid> flaggedIds, DateTime nowUtc)
+    {
+        if (evaluatedIds.Count == 0)
+            return;
+
+        // Single bulk UPDATE over O(transitions) rows on the reconciler schedule (#892). ScopeReviewPending is
+        // set to true for flagged ids and false for the rest of the evaluated set, so a stale flag self-clears
+        // once the object is back in agreement; LastScopeEvaluatedAt advances for every evaluated object.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjects""
+              SET ""LastScopeEvaluatedAt"" = {2},
+                  ""ScopeReviewPending"" = (""Id"" = ANY({1}))
+              WHERE ""Id"" = ANY({0})",
+            evaluatedIds.ToArray(), flaggedIds.ToArray(), nowUtc);
+    }
+
     public async Task<MetaverseObject?> GetMetaverseObjectAsync(Guid id)
     {
         return await Repository.Database.MetaverseObjects.
@@ -804,240 +861,166 @@ public class MetaverseRepository : IMetaverseRepository
         return await Repository.Database.MetaverseObjects.Where(x => x.Type.Id == metaverseObjectTypeId).CountAsync();
     }
 
-    public async Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsOfTypeAsync(
-        int metaverseObjectTypeId,
-        int page = 1,
-        int pageSize = 20,
-        QuerySortBy querySortBy = QuerySortBy.DateCreated,
-        QueryRange queryRange = QueryRange.Forever)
+    /// <summary>
+    /// Recursively builds a parenthesised SQL boolean expression for a predefined-search criteria group:
+    /// its criteria and nested child groups combined with AND (group type All) or OR (group type Any).
+    /// An empty group (no criteria and no child groups) is always-true and renders as <c>TRUE</c>, matching
+    /// the in-memory semantics of <see cref="JIM.Application"/>'s scoping evaluator. The shared
+    /// <paramref name="criteriaIndex"/> is incremented per criterion so parameter names stay unique across the tree.
+    /// </summary>
+    private static string BuildPredefinedSearchGroupSql(PredefinedSearchCriteriaGroup group, ref int criteriaIndex, List<NpgsqlParameter> parameters, DateTime nowUtc)
     {
-        if (pageSize < 1)
-            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+        var clauses = new List<string>();
 
-        if (page < 1)
-            page = 1;
-
-        // limit page size to avoid increasing latency unnecessarily
-        if (pageSize > 100)
-            pageSize = 100;
-
-        var objects = from o in Repository.Database.MetaverseObjects.
-                AsSplitQuery(). // Use split query to avoid cartesian explosion from collection includes
-                Include(mo => mo.AttributeValues).
-                ThenInclude(av => av.Attribute).
-                Where(q => q.Type.Id == metaverseObjectTypeId)
-            select o;
-
-        if (queryRange != QueryRange.Forever)
+        foreach (var criteria in group.Criteria)
         {
-            switch (queryRange)
-            {
-                case QueryRange.LastYear:
-                    objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(365));
-                    break;
-                case QueryRange.LastMonth:
-                    objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(30));
-                    break;
-                case QueryRange.LastWeek:
-                    objects = objects.Where(q => q.Created >= DateTime.UtcNow - TimeSpan.FromDays(7));
-                    break;
-            }
+            clauses.Add(BuildPredefinedSearchCriterionSql(criteria, criteriaIndex, parameters, nowUtc));
+            criteriaIndex++;
         }
 
-        switch (querySortBy)
-        {
-            case QuerySortBy.DateCreated:
-                objects = objects.OrderByDescending(q => q.Created);
-                break;
+        foreach (var childGroup in group.ChildGroups)
+            clauses.Add(BuildPredefinedSearchGroupSql(childGroup, ref criteriaIndex, parameters, nowUtc));
 
-            // todo (#813): support more ways of sorting, i.e. by attribute value
-        }
+        // An empty group matches everything (parity with ScopingEvaluationServer's empty-group handling).
+        if (clauses.Count == 0)
+            return "TRUE";
 
-        // now just retrieve a page's worth of images from the results
-        var grossCount = objects.Count();
-        var offset = (page - 1) * pageSize;
-        var itemsToGet = grossCount >= pageSize ? pageSize : grossCount;
-        var results = await objects.Skip(offset).Take(itemsToGet).ToListAsync();
-
-        // now with all the ids we know how many total results there are and so can populate paging info
-        var pagedResultSet = new PagedResultSet<MetaverseObject>
-        {
-            PageSize = pageSize,
-            TotalResults = grossCount,
-            CurrentPage = page,
-            QuerySortBy = querySortBy,
-            QueryRange = queryRange,
-            Results = results
-        };
-
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages) 
-            return pagedResultSet;
-            
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
-
+        var joiner = group.Type == SearchGroupType.All ? " AND " : " OR ";
+        return $"({string.Join(joiner, clauses)})";
     }
 
-    public async Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectsOfTypeAsync(
-        PredefinedSearch predefinedSearch,
-        int page,
-        int pageSize,
-        string? searchQuery = null,
-        string? sortBy = null,
-        bool sortDescending = true)
+    /// <summary>
+    /// Builds a parameterised EXISTS / NOT EXISTS SQL fragment for a single predefined-search criterion.
+    /// The attribute-value column is selected to match the attribute's data type (Text, Number, LongNumber,
+    /// DateTime, Boolean, Guid) so the per-column indexes on MetaverseObjectAttributeValues stay usable, and
+    /// the requested comparison operator is validated against that data type. Adds the attribute-id and value
+    /// parameters to <paramref name="parameters"/>. Throws <see cref="NotSupportedException"/> for an operator
+    /// that does not apply to the attribute's data type (callers validate at the API boundary before reaching here).
+    /// </summary>
+    private static string BuildPredefinedSearchCriterionSql(PredefinedSearchCriteria criteria, int index, List<NpgsqlParameter> parameters, DateTime nowUtc)
     {
-        if (pageSize < 1)
-            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+        var attrParam = $"@criteriaAttrId{index}";
+        var valParamName = $"criteriaVal{index}";
+        var valParam = $"@{valParamName}";
+        parameters.Add(new NpgsqlParameter($"criteriaAttrId{index}", criteria.MetaverseAttributeId));
 
-        if (page < 1)
-            page = 1;
+        var dataType = criteria.GetAttributeDataType()
+            ?? throw new NotSupportedException("Predefined search criterion has no resolvable attribute data type.");
 
-        // limit page size to avoid increasing latency unnecessarily
-        if (pageSize > 100)
-            pageSize = 100;
+        // EXISTS: at least one of the object's values for this attribute satisfies the predicate.
+        string Exists(string predicate) =>
+            $"""EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND {predicate})""";
+        // NOT EXISTS: none of the object's values for this attribute satisfies the predicate (negative text operators).
+        string NotExists(string predicate) =>
+            $"""NOT EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND {predicate})""";
 
-        // construct the base query.
-        // No AsSplitQuery: the query is paginated (max 100 rows) so cartesian explosion is bounded,
-        // and AsSplitQuery can fail to correlate split queries correctly at scale.
-        var objects = from o in Repository.Database.MetaverseObjects.
-                Include(mo => mo.Type).
-                Include(mo => mo.AttributeValues).
-                ThenInclude(av => av.Attribute).
-                Where(q => q.Type.Id == predefinedSearch.MetaverseObjectType.Id)
-            select o;
+        NotSupportedException Unsupported() =>
+            new($"SearchComparisonType.{criteria.ComparisonType} is not supported for {dataType} attributes.");
 
-        // is there criteria to use in the predefined search criteria groups?
-        foreach (var group in predefinedSearch.CriteriaGroups)
+        switch (dataType)
         {
-            foreach (var criteria in group.Criteria)
+            case AttributeDataType.Text:
             {
-                switch (criteria.ComparisonType)
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Text) { Value = (object?)criteria.StringValue ?? DBNull.Value });
+                const string col = "cav.\"StringValue\"";
+                // ILIKE is case-insensitive; LIKE / = are case-sensitive. lower() keeps equality case-insensitive.
+                return criteria.ComparisonType switch
                 {
-                    case SearchComparisonType.Equals:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue == criteria.StringValue));
-                        break;
-                    case SearchComparisonType.NotEquals:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != criteria.StringValue));
-                        break;
-                    case SearchComparisonType.StartsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != null && av.StringValue.StartsWith(criteria.StringValue)));
-                        break;
-                    case SearchComparisonType.NotStartsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && (av.StringValue == null || !av.StringValue.StartsWith(criteria.StringValue))));
-                        break;
-                    case SearchComparisonType.EndsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && av.StringValue != null && av.StringValue.EndsWith(criteria.StringValue)));
-                        break;
-                    case SearchComparisonType.NotEndsWith:
-                        objects = objects.Where(q => q.AttributeValues.Any(av => av.Attribute.Id == criteria.MetaverseAttribute.Id && (av.StringValue == null || !av.StringValue.EndsWith(criteria.StringValue))));
-                        break;
-
-                    case SearchComparisonType.Contains: // need to lookup if we need to handle contains different with postgres
-                    case SearchComparisonType.NotContains:
-                    case SearchComparisonType.LessThan: // for numbers, we need a number value property on the criteria object
-                    case SearchComparisonType.LessThanOrEquals:
-                    case SearchComparisonType.GreaterThan:
-                    case SearchComparisonType.GreaterThanOrEquals:
-                        throw new NotSupportedException($"Not currently supporting PredefinedSearchComparisonType.{criteria.ComparisonType}");
-                }
+                    SearchComparisonType.Equals => criteria.CaseSensitive
+                        ? Exists($"{col} = {valParam}")
+                        : Exists($"lower({col}) = lower({valParam})"),
+                    SearchComparisonType.NotEquals => criteria.CaseSensitive
+                        ? Exists($"{col} <> {valParam}")
+                        : Exists($"lower({col}) <> lower({valParam})"),
+                    SearchComparisonType.StartsWith => Exists(criteria.CaseSensitive
+                        ? $"{col} IS NOT NULL AND {col} LIKE {valParam} || '%'"
+                        : $"{col} IS NOT NULL AND {col} ILIKE {valParam} || '%'"),
+                    SearchComparisonType.NotStartsWith => NotExists(criteria.CaseSensitive
+                        ? $"{col} IS NOT NULL AND {col} LIKE {valParam} || '%'"
+                        : $"{col} IS NOT NULL AND {col} ILIKE {valParam} || '%'"),
+                    SearchComparisonType.EndsWith => Exists(criteria.CaseSensitive
+                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam}"
+                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam}"),
+                    SearchComparisonType.NotEndsWith => NotExists(criteria.CaseSensitive
+                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam}"
+                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam}"),
+                    SearchComparisonType.Contains => Exists(criteria.CaseSensitive
+                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam} || '%'"
+                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam} || '%'"),
+                    SearchComparisonType.NotContains => NotExists(criteria.CaseSensitive
+                        ? $"{col} IS NOT NULL AND {col} LIKE '%' || {valParam} || '%'"
+                        : $"{col} IS NOT NULL AND {col} ILIKE '%' || {valParam} || '%'"),
+                    _ => throw Unsupported()
+                };
             }
-
-            if (group.Type == SearchGroupType.All)
-            {
-                // err?
-            }
-            else
-            {
-                // Any
-                // More err...
-            }
-
-            // todo (#850): handle group nesting as well
+            case AttributeDataType.Number:
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Integer) { Value = (object?)criteria.IntValue ?? DBNull.Value });
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"IntValue\"", valParam, Exists, Unsupported);
+            case AttributeDataType.LongNumber:
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Bigint) { Value = (object?)criteria.LongValue ?? DBNull.Value });
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"LongValue\"", valParam, Exists, Unsupported);
+            case AttributeDataType.DateTime:
+                // Resolve a relative criterion to a literal boundary before binding, so the SQL sees a constant
+                // and the DateTimeValue index stays usable. Absolute criteria use their stored value.
+                var dateBoundary = criteria.ValueMode == DateCriteriaValueMode.Relative && criteria.RelativeCount.HasValue && criteria.RelativeUnit.HasValue && criteria.RelativeDirection.HasValue
+                    ? RelativeDateResolver.Resolve(criteria.RelativeCount.Value, criteria.RelativeUnit.Value, criteria.RelativeDirection.Value, nowUtc)
+                    : NormaliseToUtc(criteria.DateTimeValue);
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.TimestampTz) { Value = (object?)dateBoundary ?? DBNull.Value });
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"DateTimeValue\"", valParam, Exists, Unsupported);
+            case AttributeDataType.Boolean:
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Boolean) { Value = (object?)criteria.BoolValue ?? DBNull.Value });
+                return criteria.ComparisonType switch
+                {
+                    SearchComparisonType.Equals => Exists($"cav.\"BoolValue\" = {valParam}"),
+                    SearchComparisonType.NotEquals => Exists($"cav.\"BoolValue\" <> {valParam}"),
+                    _ => throw Unsupported()
+                };
+            case AttributeDataType.Guid:
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Uuid) { Value = (object?)criteria.GuidValue ?? DBNull.Value });
+                return criteria.ComparisonType switch
+                {
+                    SearchComparisonType.Equals => Exists($"cav.\"GuidValue\" = {valParam}"),
+                    SearchComparisonType.NotEquals => Exists($"cav.\"GuidValue\" <> {valParam}"),
+                    _ => throw Unsupported()
+                };
+            default:
+                throw new NotSupportedException($"Predefined search criteria are not supported for {dataType} attributes.");
         }
+    }
 
-        // Apply search filter - searches across all attribute values
-        // Search is case-insensitive for user convenience
-        if (!string.IsNullOrWhiteSpace(searchQuery))
+    /// <summary>
+    /// Builds the SQL predicate for an ordered (Number / LongNumber / DateTime) comparison, supporting
+    /// equality and the four ordering operators. Throws for any operator that does not apply.
+    /// </summary>
+    private static string BuildOrderedComparisonSql(SearchComparisonType comparisonType, string column, string valParam, Func<string, string> exists, Func<NotSupportedException> unsupported)
+    {
+        return comparisonType switch
         {
-            var searchPattern = $"%{searchQuery}%";
-            objects = objects.Where(o => o.AttributeValues.Any(av =>
-                av.StringValue != null && EF.Functions.ILike(av.StringValue, searchPattern)));
-        }
-
-        // Apply sorting - sort by attribute value if specified, otherwise by Created date
-        // The sortBy parameter corresponds to the attribute name
-        if (!string.IsNullOrWhiteSpace(sortBy))
-        {
-            // Sort by the specified attribute's string value
-            objects = sortDescending
-                ? objects.OrderByDescending(o => o.AttributeValues
-                    .Where(av => av.Attribute.Name == sortBy)
-                    .Select(av => av.StringValue)
-                    .FirstOrDefault())
-                : objects.OrderBy(o => o.AttributeValues
-                    .Where(av => av.Attribute.Name == sortBy)
-                    .Select(av => av.StringValue)
-                    .FirstOrDefault());
-        }
-        else
-        {
-            // Default sort by Created date
-            objects = sortDescending
-                ? objects.OrderByDescending(q => q.Created)
-                : objects.OrderBy(q => q.Created);
-        }
-
-        // Get total count for pagination
-        var grossCount = await objects.CountAsync();
-        var offset = (page - 1) * pageSize;
-
-        // Materialise a page of full entities so that Include chains are honoured
-        // (Include is ignored when projecting via .Select(), leaving navigation properties null).
-        // Max page size is 100 so the overhead of loading full entities is negligible.
-        var predefinedSearchAttributeIds = predefinedSearch.Attributes
-            .Select(a => a.MetaverseAttribute.Id)
-            .ToHashSet();
-
-        var pageEntities = await objects.Skip(offset).Take(pageSize).ToListAsync();
-
-        // Project to headers in memory where Attribute navigations are populated
-        var results = pageEntities.Select(d => new MetaverseObjectHeader
-        {
-            Id = d.Id,
-            Created = d.Created,
-            Status = d.Status,
-            TypeId = d.Type.Id,
-            TypeName = d.Type.Name,
-            TypePluralName = d.Type.PluralName,
-            AttributeValues = d.AttributeValues
-                .Where(av => predefinedSearchAttributeIds.Contains(av.Attribute.Id))
-                .ToList()
-        }).ToList();
-
-        // now with all the ids we know how many total results there are and so can populate paging info
-        var pagedResultSet = new PagedResultSet<MetaverseObjectHeader>
-        {
-            PageSize = pageSize,
-            TotalResults = grossCount,
-            CurrentPage = page,
-            Results = results
+            SearchComparisonType.Equals => exists($"{column} = {valParam}"),
+            SearchComparisonType.NotEquals => exists($"{column} <> {valParam}"),
+            SearchComparisonType.LessThan => exists($"{column} < {valParam}"),
+            SearchComparisonType.LessThanOrEquals => exists($"{column} <= {valParam}"),
+            SearchComparisonType.GreaterThan => exists($"{column} > {valParam}"),
+            SearchComparisonType.GreaterThanOrEquals => exists($"{column} >= {valParam}"),
+            _ => throw unsupported()
         };
+    }
 
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
+    /// <summary>
+    /// Ensures a DateTime is expressed as UTC before it is bound to a 'timestamp with time zone' parameter.
+    /// Values stored by JIM are UTC (see DateTime handling in src/CLAUDE.md); Unspecified-kind values are treated as UTC.
+    /// </summary>
+    private static DateTime? NormaliseToUtc(DateTime? value)
+    {
+        if (!value.HasValue)
+            return null;
 
-        // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
+        return value.Value.Kind switch
+        {
+            DateTimeKind.Utc => value.Value,
+            DateTimeKind.Local => value.Value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)
+        };
     }
 
     /// <inheritdoc/>
@@ -1090,37 +1073,23 @@ public class MetaverseRepository : IMetaverseRepository
             sharedParams.Add(new NpgsqlParameter("searchPattern", $"%{searchQuery}%"));
         }
 
-        // Criteria group filters
-        var criteriaIdx = 0;
-        foreach (var group in predefinedSearch.CriteriaGroups)
+        // Criteria group filters.
+        // Each criterion compares the typed attribute-value column that matches the attribute's data type
+        // (so the per-column indexes on MetaverseObjectAttributeValues remain usable). Within a group, criteria
+        // and nested child groups are combined with AND (group type All) or OR (group type Any); the top-level
+        // groups are OR-ed together, matching the in-memory semantics of ScopingEvaluationServer. An empty group
+        // is always-true. No criteria groups means no filter (all objects of the type).
+        if (predefinedSearch.CriteriaGroups.Count > 0)
         {
-            foreach (var criteria in group.Criteria)
-            {
-                var attrParam = $"@criteriaAttrId{criteriaIdx}";
-                var valParam = $"@criteriaVal{criteriaIdx}";
-                sharedParams.Add(new NpgsqlParameter($"criteriaAttrId{criteriaIdx}", criteria.MetaverseAttribute.Id));
-                sharedParams.Add(new NpgsqlParameter($"criteriaVal{criteriaIdx}", criteria.StringValue));
+            var criteriaIdx = 0;
+            // Resolve "now" once for the whole query so every relative date criterion shares one boundary.
+            var nowUtc = DateTime.UtcNow;
+            var groupClauses = new List<string>();
+            foreach (var group in predefinedSearch.CriteriaGroups)
+                groupClauses.Add(BuildPredefinedSearchGroupSql(group, ref criteriaIdx, sharedParams, nowUtc));
 
-                var subquery = criteria.ComparisonType switch
-                {
-                    SearchComparisonType.Equals =>
-                        $"""EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND cav."StringValue" = {valParam})""",
-                    SearchComparisonType.NotEquals =>
-                        $"""EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND cav."StringValue" != {valParam})""",
-                    SearchComparisonType.StartsWith =>
-                        $"""EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND cav."StringValue" IS NOT NULL AND cav."StringValue" LIKE {valParam} || '%')""",
-                    SearchComparisonType.NotStartsWith =>
-                        $"""NOT EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND cav."StringValue" IS NOT NULL AND cav."StringValue" LIKE {valParam} || '%')""",
-                    SearchComparisonType.EndsWith =>
-                        $"""EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND cav."StringValue" IS NOT NULL AND cav."StringValue" LIKE '%' || {valParam})""",
-                    SearchComparisonType.NotEndsWith =>
-                        $"""NOT EXISTS (SELECT 1 FROM "MetaverseObjectAttributeValues" cav WHERE cav."MetaverseObjectId" = m."Id" AND cav."AttributeId" = {attrParam} AND cav."StringValue" IS NOT NULL AND cav."StringValue" LIKE '%' || {valParam})""",
-                    _ => throw new NotSupportedException($"Not currently supporting PredefinedSearchComparisonType.{criteria.ComparisonType}")
-                };
-
-                whereClause += $" AND {subquery}";
-                criteriaIdx++;
-            }
+            // Top-level groups are OR-ed. (A single seeded group reduces to just that group's clause.)
+            whereClause += $" AND ({string.Join(" OR ", groupClauses)})";
         }
 
         // Count query — lean, no joins
@@ -2053,6 +2022,33 @@ public class MetaverseRepository : IMetaverseRepository
             CurrentPage = page,
             PageSize = pageSize
         };
+    }
+
+    public async Task<List<Guid>> GetMetaverseObjectIdsByDateAttributeRangeAsync(int metaverseObjectTypeId, int attributeId, DateTime? afterUtc, DateTime throughUtc)
+    {
+        // Superset candidate selection for the outbound (export) lane of the Temporal Scope Reconciler (#892).
+        // The composite (AttributeId, DateTimeValue) partial index serves the equality-then-range predicate;
+        // "DateTimeValue" IS NOT NULL also excludes asserted-null marker rows. Filtering by object type is
+        // required because a Metaverse Attribute is shared across types. The final in/out-of-scope decision is
+        // the reconciler's in-memory full evaluation, so a generous window here is safe.
+        var sql = @"SELECT DISTINCT av.""MetaverseObjectId"" AS ""Value""
+                    FROM ""MetaverseObjectAttributeValues"" av
+                    INNER JOIN ""MetaverseObjects"" mvo ON mvo.""Id"" = av.""MetaverseObjectId""
+                    WHERE av.""AttributeId"" = {0}
+                      AND mvo.""TypeId"" = {1}
+                      AND av.""DateTimeValue"" IS NOT NULL
+                      AND av.""DateTimeValue"" <= {2}";
+        var parameters = new List<object> { attributeId, metaverseObjectTypeId, throughUtc };
+        if (afterUtc.HasValue)
+        {
+            sql += @"
+                      AND av.""DateTimeValue"" > {3}";
+            parameters.Add(afterUtc.Value);
+        }
+
+        return await Repository.Database.Database
+            .SqlQueryRaw<Guid>(sql, parameters.ToArray())
+            .ToListAsync();
     }
 
     #endregion

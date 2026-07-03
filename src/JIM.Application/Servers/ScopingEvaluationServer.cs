@@ -5,6 +5,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Search;
 using JIM.Models.Staging;
+using JIM.Utilities;
 using Serilog;
 namespace JIM.Application.Servers;
 
@@ -24,7 +25,7 @@ public class ScopingEvaluationServer
     /// Checks if an MVO is in scope for an export rule based on scoping criteria.
     /// No scoping criteria means all objects of the type are in scope.
     /// </summary>
-    public bool IsMvoInScopeForExportRule(MetaverseObject mvo, SyncRule exportRule)
+    public bool IsMvoInScopeForExportRule(MetaverseObject mvo, SyncRule exportRule, DateTime? nowUtc = null)
     {
         if (exportRule.Direction != SyncRuleDirection.Export)
         {
@@ -36,10 +37,13 @@ public class ScopingEvaluationServer
         if (exportRule.ObjectScopingCriteriaGroups.Count == 0)
             return true;
 
+        // Resolve "now" once per evaluation so all relative date criteria in this pass share a single boundary.
+        var evaluationTime = nowUtc ?? DateTime.UtcNow;
+
         // Evaluate each criteria group (they are ORed together at the top level)
         foreach (var criteriaGroup in exportRule.ObjectScopingCriteriaGroups)
         {
-            if (EvaluateMvoScopingCriteriaGroup(mvo, criteriaGroup))
+            if (EvaluateMvoScopingCriteriaGroup(mvo, criteriaGroup, evaluationTime))
                 return true;
         }
 
@@ -49,20 +53,20 @@ public class ScopingEvaluationServer
     /// <summary>
     /// Evaluates a single scoping criteria group against an MVO.
     /// </summary>
-    private bool EvaluateMvoScopingCriteriaGroup(MetaverseObject mvo, SyncRuleScopingCriteriaGroup group)
+    private bool EvaluateMvoScopingCriteriaGroup(MetaverseObject mvo, SyncRuleScopingCriteriaGroup group, DateTime nowUtc)
     {
         var criteriaResults = new List<bool>();
 
         // Evaluate individual criteria
         foreach (var criterion in group.Criteria)
         {
-            criteriaResults.Add(EvaluateMvoScopingCriterion(mvo, criterion));
+            criteriaResults.Add(EvaluateMvoScopingCriterion(mvo, criterion, nowUtc));
         }
 
         // Evaluate child groups recursively
         foreach (var childGroup in group.ChildGroups)
         {
-            criteriaResults.Add(EvaluateMvoScopingCriteriaGroup(mvo, childGroup));
+            criteriaResults.Add(EvaluateMvoScopingCriteriaGroup(mvo, childGroup, nowUtc));
         }
 
         if (criteriaResults.Count == 0)
@@ -80,10 +84,15 @@ public class ScopingEvaluationServer
     /// <summary>
     /// Evaluates a single scoping criterion against an MVO attribute.
     /// </summary>
-    private bool EvaluateMvoScopingCriterion(MetaverseObject mvo, SyncRuleScopingCriteria criterion)
+    private bool EvaluateMvoScopingCriterion(MetaverseObject mvo, SyncRuleScopingCriteria criterion, DateTime nowUtc)
     {
         if (criterion.MetaverseAttribute == null)
             return false;
+
+        // Fail fast (and loudly) if the operator cannot apply to this attribute type. Such a criterion should
+        // never have been persisted (the write path now rejects it), but if a legacy or externally-mutated rule
+        // carries one, evaluating it would silently drop objects from scope; hard-fail so it is reported instead.
+        EnsureOperatorValidForType(criterion, criterion.MetaverseAttribute.Type, criterion.MetaverseAttribute.Name);
 
         // Get the MVO attribute value (excluding asserted-null markers, #91: scoping must evaluate against a real
         // value or genuine absence, so an asserted null is treated as "no value present" like an absent row)
@@ -93,8 +102,10 @@ public class ScopingEvaluationServer
         // Handle null/missing attribute values
         if (mvoAttributeValue == null)
         {
-            // Only Equals with null value should match
+            // Only Equals against an all-null absolute criterion should match a missing value.
+            // A relative date criterion always resolves to a real boundary, so it never matches a missing value here.
             return criterion.ComparisonType == SearchComparisonType.Equals &&
+                   criterion.ValueMode == DateCriteriaValueMode.Absolute &&
                    criterion.StringValue == null &&
                    criterion.IntValue == null &&
                    criterion.LongValue == null &&
@@ -109,7 +120,7 @@ public class ScopingEvaluationServer
             AttributeDataType.Text => EvaluateStringComparison(mvoAttributeValue.StringValue, criterion.StringValue, criterion.ComparisonType, criterion.CaseSensitive),
             AttributeDataType.Number => EvaluateNumberComparison(mvoAttributeValue.IntValue, criterion.IntValue, criterion.ComparisonType),
             AttributeDataType.LongNumber => EvaluateLongNumberComparison(mvoAttributeValue.LongValue, criterion.LongValue, criterion.ComparisonType),
-            AttributeDataType.DateTime => EvaluateDateTimeComparison(mvoAttributeValue.DateTimeValue, criterion.DateTimeValue, criterion.ComparisonType),
+            AttributeDataType.DateTime => EvaluateDateTimeComparison(mvoAttributeValue.DateTimeValue, ResolveCriterionDate(criterion, nowUtc), criterion.ComparisonType),
             AttributeDataType.Boolean => EvaluateBooleanComparison(mvoAttributeValue.BoolValue, criterion.BoolValue, criterion.ComparisonType),
             AttributeDataType.Guid => EvaluateGuidComparison(mvoAttributeValue.GuidValue, criterion.GuidValue, criterion.ComparisonType),
             _ => false
@@ -124,7 +135,7 @@ public class ScopingEvaluationServer
     /// Checks if a CSO is in scope for an import rule based on scoping criteria.
     /// No scoping criteria means all objects of the type are in scope.
     /// </summary>
-    public bool IsCsoInScopeForImportRule(ConnectedSystemObject cso, SyncRule importRule)
+    public bool IsCsoInScopeForImportRule(ConnectedSystemObject cso, SyncRule importRule, DateTime? nowUtc = null)
     {
         if (importRule.Direction != SyncRuleDirection.Import)
         {
@@ -136,10 +147,13 @@ public class ScopingEvaluationServer
         if (importRule.ObjectScopingCriteriaGroups.Count == 0)
             return true;
 
+        // Resolve "now" once per evaluation so all relative date criteria in this pass share a single boundary.
+        var evaluationTime = nowUtc ?? DateTime.UtcNow;
+
         // Evaluate each criteria group (they are ORed together at the top level)
         foreach (var criteriaGroup in importRule.ObjectScopingCriteriaGroups)
         {
-            if (EvaluateCsoScopingCriteriaGroup(cso, criteriaGroup))
+            if (EvaluateCsoScopingCriteriaGroup(cso, criteriaGroup, evaluationTime))
                 return true;
         }
 
@@ -149,20 +163,20 @@ public class ScopingEvaluationServer
     /// <summary>
     /// Evaluates a single scoping criteria group against a CSO.
     /// </summary>
-    private bool EvaluateCsoScopingCriteriaGroup(ConnectedSystemObject cso, SyncRuleScopingCriteriaGroup group)
+    private bool EvaluateCsoScopingCriteriaGroup(ConnectedSystemObject cso, SyncRuleScopingCriteriaGroup group, DateTime nowUtc)
     {
         var criteriaResults = new List<bool>();
 
         // Evaluate individual criteria
         foreach (var criterion in group.Criteria)
         {
-            criteriaResults.Add(EvaluateCsoScopingCriterion(cso, criterion));
+            criteriaResults.Add(EvaluateCsoScopingCriterion(cso, criterion, nowUtc));
         }
 
         // Evaluate child groups recursively
         foreach (var childGroup in group.ChildGroups)
         {
-            criteriaResults.Add(EvaluateCsoScopingCriteriaGroup(cso, childGroup));
+            criteriaResults.Add(EvaluateCsoScopingCriteriaGroup(cso, childGroup, nowUtc));
         }
 
         if (criteriaResults.Count == 0)
@@ -180,10 +194,15 @@ public class ScopingEvaluationServer
     /// <summary>
     /// Evaluates a single scoping criterion against a CSO attribute.
     /// </summary>
-    private bool EvaluateCsoScopingCriterion(ConnectedSystemObject cso, SyncRuleScopingCriteria criterion)
+    private bool EvaluateCsoScopingCriterion(ConnectedSystemObject cso, SyncRuleScopingCriteria criterion, DateTime nowUtc)
     {
         if (criterion.ConnectedSystemAttribute == null)
             return false;
+
+        // Fail fast (and loudly) if the operator cannot apply to this attribute type. Such a criterion should
+        // never have been persisted (the write path now rejects it), but if a legacy or externally-mutated rule
+        // carries one, evaluating it would silently drop objects from scope; hard-fail so it is reported instead.
+        EnsureOperatorValidForType(criterion, criterion.ConnectedSystemAttribute.Type, criterion.ConnectedSystemAttribute.Name);
 
         // Get the CSO attribute value
         var csoAttributeValue = cso.AttributeValues
@@ -192,8 +211,10 @@ public class ScopingEvaluationServer
         // Handle null/missing attribute values
         if (csoAttributeValue == null)
         {
-            // Only Equals with null value should match
+            // Only Equals against an all-null absolute criterion should match a missing value.
+            // A relative date criterion always resolves to a real boundary, so it never matches a missing value here.
             return criterion.ComparisonType == SearchComparisonType.Equals &&
+                   criterion.ValueMode == DateCriteriaValueMode.Absolute &&
                    criterion.StringValue == null &&
                    criterion.IntValue == null &&
                    criterion.LongValue == null &&
@@ -208,11 +229,44 @@ public class ScopingEvaluationServer
             AttributeDataType.Text => EvaluateStringComparison(csoAttributeValue.StringValue, criterion.StringValue, criterion.ComparisonType, criterion.CaseSensitive),
             AttributeDataType.Number => EvaluateNumberComparison(csoAttributeValue.IntValue, criterion.IntValue, criterion.ComparisonType),
             AttributeDataType.LongNumber => EvaluateLongNumberComparison(csoAttributeValue.LongValue, criterion.LongValue, criterion.ComparisonType),
-            AttributeDataType.DateTime => EvaluateDateTimeComparison(csoAttributeValue.DateTimeValue, criterion.DateTimeValue, criterion.ComparisonType),
+            AttributeDataType.DateTime => EvaluateDateTimeComparison(csoAttributeValue.DateTimeValue, ResolveCriterionDate(criterion, nowUtc), criterion.ComparisonType),
             AttributeDataType.Boolean => EvaluateBooleanComparison(csoAttributeValue.BoolValue, criterion.BoolValue, criterion.ComparisonType),
             AttributeDataType.Guid => EvaluateGuidComparison(csoAttributeValue.GuidValue, criterion.GuidValue, criterion.ComparisonType),
             _ => false
         };
+    }
+
+    /// <summary>
+    /// Throws <see cref="InvalidOperationException"/> if the criterion's comparison operator is not applicable
+    /// to the attribute's data type (per the shared <see cref="SearchComparisonOperators"/> rule), after logging
+    /// the misconfiguration. Defence in depth: the write path rejects such combinations, so reaching here means a
+    /// rule was persisted before that guard existed or was mutated outside it; failing loudly surfaces the problem
+    /// rather than silently mis-scoping objects.
+    /// </summary>
+    private static void EnsureOperatorValidForType(SyncRuleScopingCriteria criterion, AttributeDataType type, string attributeName)
+    {
+        if (SearchComparisonOperators.IsValid(criterion.ComparisonType, type))
+            return;
+
+        Log.Error("Scoping evaluation: comparison operator {Operator} is not valid for the {Type} attribute {Attribute}; " +
+                  "the Synchronisation Rule is misconfigured", criterion.ComparisonType, type, attributeName);
+        throw new InvalidOperationException(
+            $"Comparison operator '{criterion.ComparisonType}' is not valid for the {type} attribute '{attributeName}' on scoping criteria.");
+    }
+
+    /// <summary>
+    /// Resolves the effective DateTime boundary for a criterion: the relative boundary (resolved against
+    /// <paramref name="nowUtc"/>) when the criterion is Relative, otherwise its fixed <see cref="SyncRuleScopingCriteria.DateTimeValue"/>.
+    /// </summary>
+    private static DateTime? ResolveCriterionDate(SyncRuleScopingCriteria criterion, DateTime nowUtc)
+    {
+        if (criterion.ValueMode == DateCriteriaValueMode.Relative &&
+            criterion.RelativeCount.HasValue && criterion.RelativeUnit.HasValue && criterion.RelativeDirection.HasValue)
+        {
+            return RelativeDateResolver.Resolve(criterion.RelativeCount.Value, criterion.RelativeUnit.Value, criterion.RelativeDirection.Value, nowUtc);
+        }
+
+        return criterion.DateTimeValue;
     }
 
     #endregion

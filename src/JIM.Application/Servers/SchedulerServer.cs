@@ -1,6 +1,9 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Data.Common;
+using System.Text.Json;
+using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Scheduling;
 using JIM.Models.Tasking;
@@ -56,19 +59,122 @@ public class SchedulerServer
         return await Application.Repository.Scheduling.GetSchedulesAsync(page, pageSize, searchQuery, sortBy, sortDescending);
     }
 
-    public async Task CreateScheduleAsync(Schedule schedule)
+    public async Task CreateScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
+        // Every configuration change is tracked with an immutable Activity, the same as Connected Systems and
+        // Synchronisation Rules. Internal run-time bookkeeping (NextRunTime / LastRunTime) bypasses this method
+        // and writes straight to the repository, so those ticks are correctly not audited here.
+        var activity = new Activity
+        {
+            TargetName = schedule.Name,
+            TargetType = ActivityTargetType.Schedule,
+            TargetOperationType = ActivityTargetOperationType.Create
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         await Application.Repository.Scheduling.CreateScheduleAsync(schedule);
+        await CaptureConfigurationChangeAsync(activity, schedule.Id, changeReason);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateScheduleAsync(Schedule schedule)
+    public async Task UpdateScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
+        var activity = new Activity
+        {
+            TargetName = schedule.Name,
+            TargetType = ActivityTargetType.Schedule,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         await Application.Repository.Scheduling.UpdateScheduleAsync(schedule);
+        await CaptureConfigurationChangeAsync(activity, schedule.Id, changeReason);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task DeleteScheduleAsync(Schedule schedule)
+    public async Task DeleteScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
+        // Built-in schedules (for example the seeded Temporal Scope Reconciliation schedule) are part of
+        // the product and must not be deleted; they may be enabled, disabled and re-timed, but not removed.
+        // This is the authoritative backstop for any caller; the API also rejects the request with a 400.
+        if (schedule.BuiltIn)
+            throw new InvalidOperationException($"The built-in schedule '{schedule.Name}' cannot be deleted.");
+
+        var activity = new Activity
+        {
+            TargetName = schedule.Name,
+            TargetType = ActivityTargetType.Schedule,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
+        await CaptureConfigurationDeletionAsync(activity, schedule, changeReason);
         await Application.Repository.Scheduling.DeleteScheduleAsync(schedule);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Captures a redacted, versioned configuration snapshot of a Schedule onto its audit Activity, mirroring
+    /// ConnectedSystemServer.CaptureConfigurationChangeAsync. The schedule is reloaded with its steps so the
+    /// snapshot reflects persisted truth rather than the caller's partial in-memory graph; call it after the
+    /// change has been persisted and, at a call site that also reconciles steps, after the step changes too.
+    /// Best-effort: a capture failure is logged but never fails the configuration operation that succeeded.
+    /// </summary>
+    private async Task CaptureConfigurationChangeAsync(Activity activity, Guid scheduleId, string? changeReason)
+    {
+        // The reason is recorded independently of the snapshot toggle and has no external dependencies, so it is
+        // set outside the best-effort block below.
+        if (!string.IsNullOrWhiteSpace(changeReason))
+            activity.ChangeReason = changeReason.Trim();
+
+        try
+        {
+            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+                return;
+
+            var schedule = await Application.Repository.Scheduling.GetScheduleWithStepsAsync(scheduleId);
+            if (schedule == null)
+                return;
+
+            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
+            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(schedule, hashKey);
+            activity.ScheduleId ??= schedule.Id;
+            activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.Schedule, schedule.Id);
+            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        {
+            // Best-effort secondary metadata recorded after the entity has already been persisted; it must never
+            // fail or roll back the configuration operation that succeeded. The miss is logged, never silent.
+            Log.Warning(ex, "CaptureConfigurationChangeAsync: failed to capture configuration snapshot for Schedule {ScheduleId}; the change was saved but its history snapshot was not recorded.", scheduleId);
+        }
+    }
+
+    /// <summary>
+    /// Captures a tombstone snapshot of a Schedule onto its delete Activity, before the schedule is removed.
+    /// Matching the Synchronisation Rule deletion behaviour, this does not set <see cref="Activity.ScheduleId"/>
+    /// or a version: the schedule is deleted before the Activity completes, so the Activity is left unlinked and
+    /// the snapshot is surfaced via the Activity itself rather than the object's history.
+    /// </summary>
+    private async Task CaptureConfigurationDeletionAsync(Activity activity, Schedule schedule, string? changeReason)
+    {
+        // See CaptureConfigurationChangeAsync: the reason is recorded independently of the snapshot toggle.
+        if (!string.IsNullOrWhiteSpace(changeReason))
+            activity.ChangeReason = changeReason.Trim();
+
+        try
+        {
+            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+                return;
+
+            // Reload with steps for a complete tombstone; fall back to the caller's entity if already gone.
+            var persisted = await Application.Repository.Scheduling.GetScheduleWithStepsAsync(schedule.Id) ?? schedule;
+            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
+            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
+            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        {
+            // Best-effort: a capture failure must never fail the deletion that is about to proceed; the miss is logged.
+            Log.Warning(ex, "CaptureConfigurationDeletionAsync: failed to capture deletion snapshot for Schedule {ScheduleId}; the deletion proceeded but its history snapshot was not recorded.", schedule.Id);
+        }
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -87,17 +193,33 @@ public class SchedulerServer
 
     public async Task CreateScheduleStepAsync(ScheduleStep step)
     {
+        await GuardStepScheduleNotBuiltInAsync(step, "added to");
         await Application.Repository.Scheduling.CreateScheduleStepAsync(step);
     }
 
     public async Task UpdateScheduleStepAsync(ScheduleStep step)
     {
+        await GuardStepScheduleNotBuiltInAsync(step, "changed on");
         await Application.Repository.Scheduling.UpdateScheduleStepAsync(step);
     }
 
     public async Task DeleteScheduleStepAsync(ScheduleStep step)
     {
+        await GuardStepScheduleNotBuiltInAsync(step, "removed from");
         await Application.Repository.Scheduling.DeleteScheduleStepAsync(step);
+    }
+
+    /// <summary>
+    /// Authoritative backstop that prevents any caller from adding, changing or removing the steps of a built-in
+    /// schedule (for example the seeded Temporal Scope Reconciliation schedule); its steps are defined and
+    /// maintained by JIM. The portal and REST API also enforce this, returning a friendly error before reaching
+    /// here. A no-op when the parent schedule is a normal user schedule or cannot be found.
+    /// </summary>
+    private async Task GuardStepScheduleNotBuiltInAsync(ScheduleStep step, string verb)
+    {
+        var schedule = await Application.Repository.Scheduling.GetScheduleAsync(step.ScheduleId);
+        if (schedule?.BuiltIn == true)
+            throw new InvalidOperationException($"Steps cannot be {verb} the built-in schedule '{schedule.Name}'.");
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -518,6 +640,10 @@ public class SchedulerServer
                 await QueueRunProfileStepAsync(execution, step, isParallelGroup, initialStatus, initiatorType, initiatorId, initiatorName);
                 break;
 
+            case ScheduleStepType.TemporalScopeReconciliation:
+                await QueueTemporalScopeReconciliationStepAsync(execution, step, isParallelGroup, initialStatus, initiatorType, initiatorId, initiatorName);
+                break;
+
             case ScheduleStepType.PowerShell:
             case ScheduleStepType.Executable:
             case ScheduleStepType.SqlScript:
@@ -574,5 +700,64 @@ public class SchedulerServer
 
         Log.Debug("QueueRunProfileStepAsync: Created worker task {TaskId} for step {StepId} with status {Status}",
             result.WorkerTaskId, step.Id, initialStatus);
+    }
+
+    /// <summary>
+    /// Queues a Temporal Scope Reconciliation step (issue #892) by creating a TemporalScopeReconciliationWorkerTask.
+    /// The task carries no per-step configuration; the worker derives its watermark from the schedule's execution
+    /// history at run time.
+    /// </summary>
+    private async Task QueueTemporalScopeReconciliationStepAsync(
+        ScheduleExecution execution,
+        ScheduleStep step,
+        bool isParallelGroup,
+        WorkerTaskStatus initialStatus,
+        ActivityInitiatorType initiatorType,
+        Guid? initiatorId,
+        string? initiatorName)
+    {
+        var workerTask = new TemporalScopeReconciliationWorkerTask
+        {
+            Status = initialStatus,
+            InitiatedByType = initiatorType,
+            InitiatedById = initiatorId,
+            InitiatedByName = initiatorName,
+            ScheduleExecutionId = execution.Id,
+            ScheduleStepIndex = step.StepIndex,
+            ContinueOnFailure = step.ContinueOnFailure,
+            ExecutionMode = isParallelGroup ? WorkerTaskExecutionMode.Parallel : WorkerTaskExecutionMode.Sequential
+        };
+
+        var result = await Application.Tasking.CreateWorkerTaskAsync(workerTask);
+        if (!result.Success)
+        {
+            throw new InvalidOperationException($"Failed to create worker task for step {step.Id}: {result.ErrorMessage}");
+        }
+
+        Log.Debug("QueueTemporalScopeReconciliationStepAsync: Created worker task {TaskId} for step {StepId} with status {Status}",
+            result.WorkerTaskId, step.Id, initialStatus);
+    }
+
+    /// <summary>
+    /// Derives the failure-safe watermark for a Temporal Scope Reconciliation sweep (issue #892): the start time
+    /// of the previous successfully completed execution of the same schedule. Because a failed sweep never reaches
+    /// Completed status, its window is re-covered by the next sweep rather than silently skipped. Returns null when
+    /// there is no prior completed execution (the first, bootstrap sweep, which considers every transitioned object
+    /// once).
+    /// </summary>
+    /// <param name="currentExecutionId">The in-progress execution running the sweep.</param>
+    public async Task<DateTime?> GetTemporalScopeReconciliationWatermarkAsync(Guid currentExecutionId)
+    {
+        var current = await Application.Repository.Scheduling.GetScheduleExecutionAsync(currentExecutionId);
+        if (current == null)
+        {
+            Log.Warning("GetTemporalScopeReconciliationWatermarkAsync: Execution {ExecutionId} not found; using bootstrap (null) watermark.", currentExecutionId);
+            return null;
+        }
+
+        // StartedAt is populated the moment an execution begins; fall back to QueuedAt defensively.
+        var currentStartedAt = current.StartedAt ?? current.QueuedAt;
+        var previous = await Application.Repository.Scheduling.GetLastCompletedScheduleExecutionAsync(current.ScheduleId, currentStartedAt);
+        return previous?.StartedAt;
     }
 }

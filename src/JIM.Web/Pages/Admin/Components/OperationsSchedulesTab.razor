@@ -16,7 +16,7 @@
     <MudTable @ref="_table" T="Schedule" ServerData="ServerReload"
               RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged"
               Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
-              Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer"
+              Outlined="true" Elevation="0" OnRowClick="HandleRowClick" RowClass="cursor-pointer schedules-row"
               Loading="@_loading" LoadingProgressColor="Color.Primary">
         <ToolBarContent>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
@@ -62,7 +62,7 @@
                 <MudText Typo="Typo.body1">@context.Name</MudText>
                 @if (!string.IsNullOrEmpty(context.Description))
                 {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.Description</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">@context.Description</MudText>
                 }
             </MudTd>
             <MudTd DataLabel="Steps">
@@ -145,10 +145,19 @@
                                        OnClick="@(() => HandleRunNowAsync(context))"
                                        Disabled="@(context.Steps.Count == 0)" />
                     </MudTooltip>
-                    <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                       OnClick="@(() => HandleDeleteAsync(context))" />
-                    </MudTooltip>
+                    @if (context.BuiltIn)
+                    {
+                        <MudTooltip Text="Built-in schedule; cannot be deleted" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Disabled="true" />
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <MudTooltip Text="Delete" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                           OnClick="@(() => HandleDeleteAsync(context))" />
+                        </MudTooltip>
+                    }
                 </MudStack>
             </MudTd>
         </RowTemplate>
@@ -166,6 +175,16 @@
             <MudTablePager />
         </PagerContent>
     </MudTable>
+
+    @* The table is dense, which tightens vertical cell padding; restore top/bottom breathing room so it
+       balances the horizontal padding. MudBlazor's dense rule (.mud-table-dense * .mud-table-row
+       .mud-table-cell) is three classes, so this selector adds the row+cell element names to outrank it. *@
+    <style>
+        tr.schedules-row.mud-table-row td.mud-table-cell {
+            padding-top: 12px;
+            padding-bottom: 12px;
+        }
+    </style>
 }
 
 @code {
@@ -291,7 +310,7 @@
         schedule.LastUpdatedById = user.Id;
         schedule.LastUpdatedByName = user.DisplayName;
 
-        await jim.Scheduler.UpdateScheduleAsync(schedule);
+        await jim.Scheduler.UpdateScheduleAsync(schedule, ActivityInitiatorType.User, user.Id, user.DisplayName);
 
         var action = schedule.IsEnabled ? "enabled" : "disabled";
         Snackbar.Add($"Schedule '{schedule.Name}' has been {action}.", Severity.Success);
@@ -347,6 +366,14 @@
 
     private async Task HandleDeleteAsync(Schedule schedule)
     {
+        // Built-in schedules cannot be deleted (the delete affordance is already locked for them; this is the
+        // defence-in-depth guard so the application layer never throws into the circuit).
+        if (schedule.BuiltIn)
+        {
+            Snackbar.Add($"The built-in schedule '{schedule.Name}' cannot be deleted.", Severity.Warning);
+            return;
+        }
+
         var confirmed = await DialogService.ShowMessageBoxAsync(
             "Delete Schedule",
             $"Are you sure you want to delete '{schedule.Name}'? This action cannot be undone.",
@@ -357,7 +384,8 @@
             return;
 
         using var jim = JimFactory.Create();
-        await jim.Scheduler.DeleteScheduleAsync(schedule);
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        await jim.Scheduler.DeleteScheduleAsync(schedule, ActivityInitiatorType.User, user.Id, user.DisplayName);
         Snackbar.Add($"Schedule '{schedule.Name}' has been deleted.", Severity.Success);
         _table?.ReloadServerData();
     }

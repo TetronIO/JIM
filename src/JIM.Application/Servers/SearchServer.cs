@@ -82,4 +82,72 @@ public class SearchServer
         return predefinedSearch;
     }
     #endregion
+
+    #region predefined search criteria groups
+    /// <summary>
+    /// Retrieves a single criteria group with its criteria (and their attributes) and immediate child groups.
+    /// </summary>
+    public async Task<PredefinedSearchCriteriaGroup?> GetPredefinedSearchCriteriaGroupAsync(int groupId)
+    {
+        return await Application.Repository.Search.GetPredefinedSearchCriteriaGroupAsync(groupId);
+    }
+
+    /// <summary>
+    /// Creates a new criteria group, attached to the predefined search (top-level) or to a parent group (nested).
+    /// </summary>
+    public async Task<PredefinedSearchCriteriaGroup> CreatePredefinedSearchCriteriaGroupAsync(int predefinedSearchId, int? parentGroupId, SearchGroupType type, int position)
+    {
+        return await Application.Repository.Search.CreatePredefinedSearchCriteriaGroupAsync(predefinedSearchId, parentGroupId, type, position);
+    }
+
+    /// <summary>
+    /// Updates a criteria group's logic type and position. Returns null if the group does not exist.
+    /// </summary>
+    public async Task<PredefinedSearchCriteriaGroup?> UpdatePredefinedSearchCriteriaGroupAsync(int groupId, SearchGroupType type, int position)
+    {
+        return await Application.Repository.Search.UpdatePredefinedSearchCriteriaGroupAsync(groupId, type, position);
+    }
+
+    /// <summary>
+    /// Deletes a criteria group and its entire subtree. Returns false if the group does not exist.
+    /// </summary>
+    public async Task<bool> DeletePredefinedSearchCriteriaGroupAsync(int groupId)
+    {
+        return await Application.Repository.Search.DeletePredefinedSearchCriteriaGroupAsync(groupId);
+    }
+    #endregion
+
+    #region predefined search criteria
+    /// <summary>
+    /// Retrieves a single criterion with its Metaverse attribute.
+    /// </summary>
+    public async Task<PredefinedSearchCriteria?> GetPredefinedSearchCriterionAsync(int criterionId)
+    {
+        return await Application.Repository.Search.GetPredefinedSearchCriterionAsync(criterionId);
+    }
+
+    /// <summary>
+    /// Adds a criterion to a criteria group. Returns null if the group does not exist.
+    /// </summary>
+    public async Task<PredefinedSearchCriteria?> CreatePredefinedSearchCriterionAsync(int groupId, PredefinedSearchCriteria criterion)
+    {
+        return await Application.Repository.Search.CreatePredefinedSearchCriterionAsync(groupId, criterion);
+    }
+
+    /// <summary>
+    /// Updates an existing criterion. Returns null if it does not exist.
+    /// </summary>
+    public async Task<PredefinedSearchCriteria?> UpdatePredefinedSearchCriterionAsync(PredefinedSearchCriteria criterion)
+    {
+        return await Application.Repository.Search.UpdatePredefinedSearchCriterionAsync(criterion);
+    }
+
+    /// <summary>
+    /// Deletes a criterion. Returns false if it does not exist.
+    /// </summary>
+    public async Task<bool> DeletePredefinedSearchCriterionAsync(int criterionId)
+    {
+        return await Application.Repository.Search.DeletePredefinedSearchCriterionAsync(criterionId);
+    }
+    #endregion
 }

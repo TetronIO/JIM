@@ -83,6 +83,11 @@ public abstract class SyncTaskProcessorBase
     // and DateJoined stays null in the database after projection or join.
     protected readonly List<ConnectedSystemObject> _pendingCsoJoinUpdates = [];
 
+    // Batch collection of CSO ids that carried the Temporal Scope Reconciler flag (ScopeReviewPending, #892) and
+    // have now been re-evaluated in Pass 2. The flag is cleared for these at page flush so the reconciler does not
+    // keep re-flagging an object that is back in agreement.
+    protected readonly List<Guid> _pendingScopeReviewClears = [];
+
     // Batch collection for deferred provisioning CSO creation (avoid per-CSO database calls)
     protected readonly List<ConnectedSystemObject> _provisioningCsosToCreate = [];
 
@@ -428,7 +433,10 @@ public abstract class SyncTaskProcessorBase
         // Skip unchanged CSOs — their attributes haven't changed since the last completed sync,
         // so Attribute Flow would produce zero changes. This avoids the overhead of loading and
         // comparing attribute values for the majority of CSOs in large-scale repeat syncs.
-        if (connectedSystemObject.IsUnchangedSinceLastSync)
+        // Exception: a CSO flagged by the Temporal Scope Reconciler (ScopeReviewPending, #892) has drifted in or
+        // out of scope with the clock despite static source data; it must be re-evaluated even though unchanged.
+        // (The loader already forces a full attribute load for such CSOs so Attribute Flow has real values.)
+        if (connectedSystemObject.IsUnchangedSinceLastSync && !connectedSystemObject.ScopeReviewPending)
             return;
 
         // Skip if no Synchronisation Rules defined AND not in simple mode — nothing to join/project/flow.
@@ -543,6 +551,12 @@ public abstract class SyncTaskProcessorBase
                     _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
                 }
             }
+
+            // Pass 2 completed without error, so the object has been re-evaluated: clear any Temporal Scope
+            // Reconciler flag at page flush. Recorded here (not before the try) so a failed re-evaluation leaves
+            // the flag set and the reconciler re-flags it next sweep (fail-safe).
+            if (connectedSystemObject.ScopeReviewPending)
+                _pendingScopeReviewClears.Add(connectedSystemObject.Id);
         }
         catch (SyncJoinException joinEx)
         {
@@ -1462,7 +1476,7 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     protected async Task PersistPendingMetaverseObjectsAsync()
     {
-        if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0 && _pendingCsoJoinUpdates.Count == 0)
+        if (_pendingMvoCreates.Count == 0 && _pendingMvoUpdates.Count == 0 && _pendingCsoJoinUpdates.Count == 0 && _pendingScopeReviewClears.Count == 0)
             return;
 
         using var span = Diagnostics.Sync.StartSpan("PersistPendingMetaverseObjects");
@@ -1525,6 +1539,16 @@ public abstract class SyncTaskProcessorBase
             await _syncRepo.UpdateConnectedSystemObjectJoinStatesAsync(_pendingCsoJoinUpdates);
             Log.Verbose("PersistPendingMetaverseObjectsAsync: Updated {Count} CSO join states in batch", _pendingCsoJoinUpdates.Count);
             _pendingCsoJoinUpdates.Clear();
+        }
+
+        // Clear the Temporal Scope Reconciler flag for CSOs re-evaluated this page (#892). Done last, after the
+        // page's substantive MVO/CSO writes have persisted, so a flag is only cleared once its object's outcome
+        // is safely stored; if an earlier write throws, the flag stays set and the object is reconsidered next sweep.
+        if (_pendingScopeReviewClears.Count > 0)
+        {
+            await _syncRepo.ClearConnectedSystemObjectScopeReviewPendingAsync(_pendingScopeReviewClears);
+            Log.Verbose("PersistPendingMetaverseObjectsAsync: Cleared ScopeReviewPending on {Count} CSO(s) in batch", _pendingScopeReviewClears.Count);
+            _pendingScopeReviewClears.Clear();
         }
 
         // Re-key deferred MVO→RPEI mappings now that newly projected MVOs have real IDs.
@@ -2363,6 +2387,75 @@ public abstract class SyncTaskProcessorBase
         }
 
         span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Outbound Temporal Scope Reconciler apply step (issue #892). Re-evaluates export scope for Metaverse
+    /// Objects the reconciler flagged (<c>ScopeReviewPending</c>): their export-rule scope drifted with the clock
+    /// (a Metaverse Attribute relative-date criterion crossed) while their data stayed static, so the
+    /// change-driven export path never revisits them. Runs once after the CSO page loop, draining flagged
+    /// Metaverse Objects in batches through the same export evaluation the per-page flow uses: provision when
+    /// newly in scope, deprovision when out. Only meaningful in a sync run (the export evaluation cache is
+    /// present); a no-op otherwise.
+    ///
+    /// Empty <c>changedAttributes</c> is intentional: <c>CreateAttributeValueChanges</c> falls back to the MVO's
+    /// current values for a provision (Create) and produces no Pending Export for an unchanged in-scope object,
+    /// and deprovision is scope-driven. Whichever system's sync runs first handles its own export rules; a
+    /// still-mismatched object is re-flagged by the next reconciler sweep (eventually consistent).
+    /// </summary>
+    protected async Task ProcessScopeReviewPendingMetaverseObjectsAsync()
+    {
+        // Export evaluation only happens in sync runs, where the cache is built at sync start.
+        if (_exportEvaluationCache == null)
+            return;
+
+        const int batchSize = 500;
+        var totalProcessed = 0;
+
+        while (!_cancellationTokenSource.IsCancellationRequested)
+        {
+            var flaggedIds = await _syncRepo.GetMetaverseObjectIdsWithScopeReviewPendingAsync(batchSize);
+            if (flaggedIds.Count == 0)
+                break;
+
+            var mvos = await _syncRepo.GetMetaverseObjectsByIdsNoTrackingAsync(flaggedIds);
+            foreach (var mvo in mvos)
+            {
+                // Give each flagged MVO an RPEI so the reconciler-driven exports are recorded on the sync
+                // Activity. The RPEI is linked to the MVO through _mvoIdToRpei (the same mechanism the per-page
+                // flow uses); provisioning-CSO change records and export outcomes resolve the originating RPEI
+                // via that map. The MVO is loaded no-tracking; provisioning CSOs reference it by FK scalar only.
+                var rpei = _activity.PrepareRunProfileExecutionItem();
+                _activity.RunProfileExecutionItems.Add(rpei);
+                _mvoIdToRpei[mvo.Id] = rpei;
+
+                _pendingExportEvaluations.Add((mvo, [], null));
+            }
+
+            // Reuse the per-page export flush sequence. EvaluatePendingExportsAsync refreshes the export cache for
+            // these MVOs, evaluates in/out-of-scope, and clears _pendingExportEvaluations; the flush methods
+            // persist provisioning CSOs, Pending Exports, reference snapshots and RPEIs (FlushRpeisAsync also
+            // clears _mvoIdToRpei and the RPEI collection).
+            await EvaluatePendingExportsAsync();
+            await FlushPendingExportOperationsAsync();
+            await ResolvePendingExportReferenceSnapshotsAsync();
+            await FlushRpeisAsync();
+
+            // Clear the flag for every MVO evaluated this batch (whether or not it produced an export), only after
+            // the batch's writes have persisted; if a write throws, the flag stays set and the object is
+            // reconsidered next sweep (fail-safe).
+            await _syncRepo.ClearMetaverseObjectScopeReviewPendingAsync(flaggedIds);
+
+            _syncRepo.ClearChangeTracker();
+            totalProcessed += mvos.Count;
+
+            // Fewer than a full batch means the flagged set is drained.
+            if (flaggedIds.Count < batchSize)
+                break;
+        }
+
+        if (totalProcessed > 0)
+            Log.Information("ProcessScopeReviewPendingMetaverseObjectsAsync: re-evaluated export scope for {Count} reconciler-flagged Metaverse Object(s) (#892)", totalProcessed);
     }
 
     /// <summary>

@@ -136,6 +136,19 @@ flowchart LR
 
 The inline call at `SyncTaskProcessorBase.cs:1364` is what makes "HR changes department, DB row removed in the same sync" work. Without it, the deprovision would be deferred to the next export run against the target Connected System.
 
+## Relative date criteria
+
+A DateTime scoping criterion can compare against a date resolved relative to "now" instead of a fixed value. The criterion stores `ValueMode = Relative` plus `RelativeCount` / `RelativeUnit` (Hours, Days, Weeks, Months, Years) / `RelativeDirection` (Ago, FromNow); the absolute `DateTimeValue` is unused in that mode.
+
+`RelativeDateResolver.Resolve(count, unit, direction, nowUtc)` (`src/JIM.Models/Search/`) turns those fields into a concrete UTC boundary: FromNow adds and Ago subtracts; month/year arithmetic is calendar-correct (clamping short months); every unit except Hours is rounded down to midnight UTC (whole-day rounding), while Hours keeps instant precision. It is a pure function: the caller supplies `nowUtc` so the boundary is deterministic and resolved once per evaluation pass.
+
+`ScopingEvaluationServer` resolves "now" once at the top of `IsMvoInScopeForExportRule` / `IsCsoInScopeForImportRule` (injectable for tests) and feeds the resolved boundary into the existing `EvaluateDateTimeComparison`. A relative criterion never matches an object with no value for the attribute. The predefined-search query translator resolves the boundary to a literal before building the SQL predicate, so the per-column DateTime index stays usable.
+
+Worked examples (export rule on a Person's termination-date attribute):
+
+- **Leavers terminated within the last year**: an `All` group with the date attribute *on or before* `30 days ago` (`LessThanOrEquals`, 30 Days Ago) and *after* `364 days ago` (`GreaterThan`, 364 Days Ago). The window slides forward on every run.
+- **Accounts expiring soon**: `AccountExpiry` *on or before* `7 days from now` (`LessThanOrEquals`, 7 Days FromNow) scopes in objects due to expire within the coming week.
+
 ## What scoping does not do today
 
 The following behaviours are out of scope for the current implementation. They are captured here for administrators planning deployments and for future design work.

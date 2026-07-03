@@ -13,6 +13,9 @@ function Enable-JIMSchedule {
     .PARAMETER Id
         The unique identifier (GUID) of the Schedule to enable.
 
+    .PARAMETER ChangeReason
+        An optional reason for the change, recorded against this Schedule's change history.
+
     .PARAMETER PassThru
         If specified, returns the updated Schedule object.
 
@@ -23,6 +26,11 @@ function Enable-JIMSchedule {
         Enable-JIMSchedule -Id "12345678-1234-1234-1234-123456789012"
 
         Enables the specified Schedule.
+
+    .EXAMPLE
+        Enable-JIMSchedule -Id "12345678-..." -ChangeReason "Maintenance window over (CHG0042)"
+
+        Enables the Schedule and records a reason against its change history.
 
     .EXAMPLE
         Get-JIMSchedule -Name "Delta*" | Enable-JIMSchedule
@@ -41,6 +49,10 @@ function Enable-JIMSchedule {
         [Alias('ScheduleId')]
         [guid]$Id,
 
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -54,8 +66,14 @@ function Enable-JIMSchedule {
         if ($PSCmdlet.ShouldProcess($Id, "Enable Schedule")) {
             Write-Verbose "Enabling Schedule: $Id"
 
+            # The reason travels as a query parameter because the enable action has no request body.
+            $enableEndpoint = "/api/v1/schedules/$Id/enable"
+            if ($PSBoundParameters.ContainsKey('ChangeReason')) {
+                $enableEndpoint += "?changeReason=$([System.Uri]::EscapeDataString($ChangeReason))"
+            }
+
             try {
-                $result = Invoke-JIMApi -Endpoint "/api/v1/schedules/$Id/enable" -Method 'POST'
+                $result = Invoke-JIMApi -Endpoint $enableEndpoint -Method 'POST'
 
                 Write-Verbose "Enabled Schedule: $Id"
 

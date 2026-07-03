@@ -149,6 +149,21 @@ namespace JIM.Application.Servers
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.
                 workerTask.Activity = activity;
             }
+            else if (workerTask is TemporalScopeReconciliationWorkerTask)
+            {
+                // The Temporal Scope Reconciler sweep (issue #892) is a system-wide maintenance operation not
+                // scoped to a single entity, so it is tracked with a system-targeted activity for audit purposes.
+                var activity = new Activity
+                {
+                    TargetName = "Temporal Scope Reconciliation",
+                    TargetType = ActivityTargetType.TemporalScopeReconciliation,
+                    TargetOperationType = ActivityTargetOperationType.Execute
+                };
+                await CreateActivityFromWorkerTaskAsync(activity, workerTask);
+
+                // associate the activity with the worker task so the worker task processor can complete the activity when done.
+                workerTask.Activity = activity;
+            }
 
             await Application.Repository.Tasking.CreateWorkerTaskAsync(workerTask);
 

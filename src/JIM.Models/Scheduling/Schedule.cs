@@ -24,6 +24,13 @@ public class Schedule : IAuditable
     /// </summary>
     public string? Description { get; set; }
 
+    /// <summary>
+    /// When true, this Schedule is provided and maintained by JIM itself (for example the Temporal Scope
+    /// Reconciliation schedule; issue #892). Administrators may enable/disable it and change its interval,
+    /// but may not rename or delete it. User-created schedules have this set to false.
+    /// </summary>
+    public bool BuiltIn { get; set; }
+
     // -----------------------------------------------------------------------------------------------------------------
     // Timing Configuration
     // -----------------------------------------------------------------------------------------------------------------

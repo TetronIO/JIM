@@ -13,6 +13,9 @@ function Remove-JIMSchedule {
     .PARAMETER Id
         The unique identifier (GUID) of the Schedule to remove.
 
+    .PARAMETER ChangeReason
+        An optional reason for the deletion, recorded against the change history.
+
     .PARAMETER Force
         Bypasses confirmation prompts.
 
@@ -25,9 +28,9 @@ function Remove-JIMSchedule {
         Removes the specified Schedule (with confirmation).
 
     .EXAMPLE
-        Remove-JIMSchedule -Id "12345678-..." -Force
+        Remove-JIMSchedule -Id "12345678-..." -Force -ChangeReason "Decommissioned (CHG0123)"
 
-        Removes the specified Schedule without confirmation.
+        Removes the specified Schedule without confirmation and records a reason against the change history.
 
     .EXAMPLE
         Get-JIMSchedule -Name "Old*" | Remove-JIMSchedule -Force
@@ -43,6 +46,10 @@ function Remove-JIMSchedule {
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('ScheduleId')]
         [guid]$Id,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
 
         [switch]$Force
     )
@@ -67,8 +74,14 @@ function Remove-JIMSchedule {
         if ($Force -or $PSCmdlet.ShouldProcess($scheduleName, "Remove Schedule")) {
             Write-Verbose "Removing Schedule: $Id ($scheduleName)"
 
+            # The reason is supplied as a query parameter because HTTP DELETE bodies are awkward for clients.
+            $deleteEndpoint = "/api/v1/schedules/$Id"
+            if ($PSBoundParameters.ContainsKey('ChangeReason')) {
+                $deleteEndpoint += "?changeReason=$([System.Uri]::EscapeDataString($ChangeReason))"
+            }
+
             try {
-                Invoke-JIMApi -Endpoint "/api/v1/schedules/$Id" -Method 'DELETE'
+                Invoke-JIMApi -Endpoint $deleteEndpoint -Method 'DELETE'
                 Write-Verbose "Removed Schedule: $Id"
             }
             catch {

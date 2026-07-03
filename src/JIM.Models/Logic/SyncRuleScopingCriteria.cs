@@ -6,7 +6,7 @@ using JIM.Models.Search;
 using JIM.Models.Staging;
 namespace JIM.Models.Logic;
 
-public class SyncRuleScopingCriteria
+public class SyncRuleScopingCriteria : ICriterionValues
 {
     public int Id { get; set; }
 
@@ -46,6 +46,27 @@ public class SyncRuleScopingCriteria
     public bool CaseSensitive { get; set; } = true;
 
     /// <summary>
+    /// For DateTime attributes, whether this criterion compares against a fixed (Absolute) date held in
+    /// <see cref="DateTimeValue"/>, or a date resolved Relative to "now" at each evaluation. Defaults to Absolute.
+    /// </summary>
+    public DateCriteriaValueMode ValueMode { get; set; } = DateCriteriaValueMode.Absolute;
+
+    /// <summary>
+    /// The number of units to offset from "now" when <see cref="ValueMode"/> is Relative. Zero or positive.
+    /// </summary>
+    public int? RelativeCount { get; set; }
+
+    /// <summary>
+    /// The unit of the relative offset (Hours, Days, Weeks, Months, Years) when <see cref="ValueMode"/> is Relative.
+    /// </summary>
+    public RelativeDateUnit? RelativeUnit { get; set; }
+
+    /// <summary>
+    /// The direction of the relative offset (Ago or FromNow) when <see cref="ValueMode"/> is Relative.
+    /// </summary>
+    public RelativeDateDirection? RelativeDirection { get; set; }
+
+    /// <summary>
     /// Gets the data type of the attribute being evaluated (from either MV or CS attribute).
     /// </summary>
     public AttributeDataType? GetAttributeDataType()
@@ -81,9 +102,20 @@ public class SyncRuleScopingCriteria
             AttributeDataType.Number => "Number: " + IntValue,
             AttributeDataType.LongNumber => "LongNumber: " + LongValue,
             AttributeDataType.Boolean => "Boolean: " + (BoolValue is null ? "Null" : BoolValue.Value.ToString()),
-            AttributeDataType.DateTime => "Date: " + DateTimeValue,
+            AttributeDataType.DateTime => DescribeDateValue(),
             AttributeDataType.Guid => "Guid: " + GuidValue,
             _ => "Unsupported data type"
         };
+    }
+
+    /// <summary>
+    /// Renders the DateTime value for display: a relative phrase ("30 days ago") when Relative, otherwise the absolute date.
+    /// </summary>
+    private string DescribeDateValue()
+    {
+        if (ValueMode == DateCriteriaValueMode.Relative && RelativeCount.HasValue && RelativeUnit.HasValue && RelativeDirection.HasValue)
+            return RelativeDateResolver.Describe(RelativeCount.Value, RelativeUnit.Value, RelativeDirection.Value);
+
+        return "Date: " + DateTimeValue;
     }
 }

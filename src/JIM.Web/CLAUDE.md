@@ -19,6 +19,18 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<WhitespaceValue Value="@x" />` | A value that is present but consists only of whitespace (the `<EmptyValue />` sibling) | "Empty values" below |
 | `<TextValueDisplay Value="@x" />` | Any text attribute-value display: dispatches to `<EmptyValue />` / `<WhitespaceValue />` / the value | "Empty values" below |
 
+## Form action gating and input immediacy
+
+Three interaction rules that have repeatedly regressed (multiple times each on a single branch). Treat them as defaults for every form and dialog with inputs.
+
+**1. Gate the action button on the mandatory fields; never validate-on-click only.** A primary action (Save / Add / Create / Update / Execute) MUST be `Disabled` until its mandatory inputs are present and valid. A handler that pops a `Snackbar` warning and `return`s (or worse, silently `return`s) when a required field is empty is **not** a substitute: the user can still click an obviously-incomplete form, and a silent return gives no feedback at all. Two ways, in order of preference:
+- **Preferred (enforcement):** wrap the inputs in `<MudForm @bind-IsValid="_formValid">` and set `Disabled="@(!_formValid)"` on the submit button. The form derives validity from each field's `Required`/validation, so there is no separate rule to keep in sync. See `ConnectedSystemCreate.razor`, `ConnectedSystemDetailsTab.razor`.
+- **When a MudForm does not fit** (inline editors, or non-field state such as "at least one day selected"): gate on a small predicate (`CanSave()` / `DisableXButton()`) that mirrors *exactly* the blocking checks in the handler, so the button and the handler cannot drift. See `ScheduleEditorDialog.CanSaveStep()`, `SyncRuleDetailScopingCriteriaGroup.DisableAddCriteriaButton()`.
+
+**2. `Immediate="true"` on typed inputs that drive live UI.** `MudTextField` / `MudNumericField` commit their value on **blur** by default, so anything that reacts to the value (a gated button's `Disabled`, a live preview, inline `Required` validation) will not update until focus leaves the field. If the value drives live UI, set `Immediate="true"`. For search/filter-as-you-type, add `DebounceInterval="300"` so it does not fire every keystroke. `MudSelect`, `MudCheckBox`, `MudRadioGroup`, `MudDatePicker` and `MudSwitch` commit on click and never need this.
+
+**3. A child value editor MUST notify its parent of edits.** A child component that mutates a by-reference model via `@bind` re-renders only itself; the parent's dependent UI (for example an Add button gated on that model) goes stale. Expose an `[Parameter] public EventCallback OnChanged`, raise it from each input via `@bind-Value:after`, and have the parent wire `OnChanged` to `StateHasChanged` (or its own handler). See `CriterionValueEditor.razor` and its hosts.
+
 ## Row density (compact-row toggle)
 
 All data tables should let users switch between normal and compact row spacing, persisted globally so the choice follows the user across every table.

@@ -79,4 +79,11 @@ public interface ISchedulingRepository
     /// Gets all schedules that need their NextRunTime recalculated.
     /// </summary>
     Task<List<Schedule>> GetSchedulesForNextRunCalculationAsync();
+
+    /// <summary>
+    /// Gets the most recent successfully completed execution of a schedule that started before the given instant.
+    /// Used by the Temporal Scope Reconciler (issue #892) to derive its failure-safe watermark: the previous
+    /// successful sweep's start time. Returns null when there is no prior completed execution (bootstrap sweep).
+    /// </summary>
+    Task<ScheduleExecution?> GetLastCompletedScheduleExecutionAsync(Guid scheduleId, DateTime beforeStartedAt);
 }

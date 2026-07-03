@@ -22,8 +22,15 @@ public enum ActivityTargetType
     /// </summary>
     System = 12,
     /// <summary>
-    /// A Schedule: the plan that defines what to run and when. Guid-keyed, so its configuration-change history is
-    /// associated via <see cref="Activity.ScheduleId"/> rather than an integer foreign key.
+    /// A Schedule: the plan that defines what to run and when, covering create, update (including enable, disable
+    /// and re-time) and delete. Guid-keyed, so its configuration-change history is associated via
+    /// <see cref="Activity.ScheduleId"/> rather than an integer foreign key.
     /// </summary>
-    Schedule = 13
+    Schedule = 13,
+
+    /// <summary>
+    /// The Temporal Scope Reconciler sweep (issue #892), which re-evaluates relative-date scoping across all
+    /// enabled Synchronisation Rules that carry a relative-date criterion.
+    /// </summary>
+    TemporalScopeReconciliation = 14
 }
