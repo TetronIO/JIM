@@ -100,9 +100,11 @@ Quick reference:
 
 > **Full commands, aliases, Docker workflows, dependency policy, troubleshooting:** `.devcontainer/CLAUDE.md`
 
+**Cloud sandbox (Claude Code on the web):** the SessionStart hook (`.claude/hooks/session-start.sh`) provisions the .NET SDK, PowerShell and Docker automatically. Run the stack with `pwsh ./scripts/Start-SandboxStack.ps1` and verify changes at runtime per `engineering/SANDBOX_RUNTIME_VERIFICATION.md`. Never use `jim-build` (Docker image builds) in sandboxes; the light stack is canonical there.
+
 ## Scripting
 
-Use PowerShell (`.ps1`) for ALL automation, integration tests, and utility scripts; it is cross-platform. Never create bash/shell scripts for project automation. Exception: `.devcontainer/setup.sh` runs during container creation.
+Use PowerShell (`.ps1`) for ALL automation, integration tests, and utility scripts; it is cross-platform. Never create bash/shell scripts for project automation. Exceptions: `.devcontainer/setup.sh` (runs during container creation) and `.claude/hooks/session-start.sh` (runs during sandbox bootstrap, before PowerShell exists).
 
 ## Design Principles
 
