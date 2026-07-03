@@ -102,6 +102,7 @@
                 }
             </MudTd>
             <MudTd DataLabel="Status" Class="@GetRowClass(settingContext)">
+                @* Each status gets its own colour so the column scans at a glance: grey locked, blue modified, green default. *@
                 @if (settingContext.IsReadOnly)
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.Lock">Read-only</MudChip>
@@ -126,7 +127,7 @@
                 }
                 else
                 {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.Check">Default</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Default</MudChip>
                 }
             </MudTd>
             <MudTd DataLabel="Actions" Class="@GetRowClass(settingContext)">
