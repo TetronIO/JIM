@@ -105,6 +105,14 @@ public class ConfigurationSnapshotService
             AddReference(children, "targetConnectedSystemAttributeId", mapping.TargetConnectedSystemAttributeId, mapping.TargetConnectedSystemAttribute?.Name, "Target Connected System Attribute");
             AddEnum(children, "inboundValueProcessing", mapping.InboundValueProcessing, "Inbound value processing");
             AddEnum(children, "caseNormalisation", mapping.CaseNormalisation, "Case normalisation");
+
+            // Priority and "Null is a value" determine which contributor wins a multi-source Metaverse attribute, so
+            // they are configuration. int.MaxValue is the "sole contributor / no explicit priority" sentinel, not a
+            // real priority, so it is omitted rather than rendered as a meaningless 2147483647.
+            if (mapping.Priority != int.MaxValue)
+                Add(children, "priority", Render(mapping.Priority), "Priority");
+            Add(children, "nullIsValue", Render(mapping.NullIsValue), "Null is a value");
+
             children.Add(BuildMappingSources(mapping.Sources));
             items.Add(ConfigurationSnapshotNode.ObjectNode("attributeFlowRule", children, "Attribute Flow", mapping.Id));
         }
