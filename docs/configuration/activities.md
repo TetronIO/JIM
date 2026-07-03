@@ -48,7 +48,7 @@ A schedule execution typically appears as a parent activity with one child activ
 
 The Activity page in the admin portal filters a busy list down to what you are reviewing:
 
-- **Category quick-filter**<br /> One click isolates a whole class of activity: **Configuration** (Connected Systems, Synchronisation Rules, Schedules, schema, settings), **Identity data** (Metaverse Objects), **Synchronisation** (Run Profile executions), or **System** (housekeeping, resets, data generation). Selecting a category sets the Type filter to the matching target types; you can then fine-tune individual types.
+- **Category quick-filter**<br /> One click isolates a whole class of activity: **Configuration** (Connected Systems, Synchronisation Rules, Schedules, schema, settings), **Identity** (Metaverse Objects), **Synchronisation** (Run Profile executions), or **System** (housekeeping, resets, data generation). Selecting a category sets the Type filter to the matching target types; you can then fine-tune individual types.
 - **Detail filters**<br /> Operation, outcome, type, status, initiator (user, API key, or system), a created date range, and a target/initiator search.
 - **Shareable URLs**<br /> The filter state is reflected in the page URL, so a filtered view can be bookmarked or shared; opening the link reproduces the same view. For example, reviewing user-made configuration changes over the last week is one URL an auditor can return to each review cycle.
 
