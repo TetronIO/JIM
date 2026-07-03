@@ -460,6 +460,9 @@ env
 !.claude/commands/**
 !.claude/skills/
 !.claude/skills/**
+!.claude/hooks/
+!.claude/hooks/**
+!.claude/settings.json
 
 # Integration test artifacts
 test/integration/results/
