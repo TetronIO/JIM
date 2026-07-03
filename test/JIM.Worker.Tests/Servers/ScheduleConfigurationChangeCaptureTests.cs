@@ -115,6 +115,56 @@ public class ScheduleConfigurationChangeCaptureTests
     }
 
     [Test]
+    public async Task UpdateScheduleAsync_WithChangeReason_RecordsReasonOnActivityAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupHashKeySetting();
+        var schedule = BuildSchedule();
+        _schedulingRepo.Setup(r => r.GetScheduleWithStepsAsync(schedule.Id)).ReturnsAsync(schedule);
+        _activityRepo.Setup(r => r.GetMaxConfigurationChangeVersionAsync(ActivityTargetType.Schedule, schedule.Id))
+            .ReturnsAsync(0);
+
+        await _jim.Scheduler.UpdateScheduleAsync(schedule, ActivityInitiatorType.User, Guid.NewGuid(), "Alice Admin",
+            changeReason: "Re-timed for maintenance window (CHG0042)");
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("Re-timed for maintenance window (CHG0042)"));
+        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Is.Not.Null);
+    }
+
+    [Test]
+    public async Task UpdateScheduleAsync_WithChangeReasonAndTrackingDisabled_StillRecordsReasonAsync()
+    {
+        // The reason is recorded independently of the snapshot toggle, matching Synchronisation Rules
+        // and Connected Systems.
+        SetupTrackingSetting(enabled: false);
+        var schedule = BuildSchedule();
+
+        await _jim.Scheduler.UpdateScheduleAsync(schedule, ActivityInitiatorType.User, Guid.NewGuid(), "Alice Admin",
+            changeReason: "no tracking");
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("no tracking"));
+        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Is.Null);
+    }
+
+    [Test]
+    public async Task DeleteScheduleAsync_WithChangeReason_RecordsReasonOnTombstoneActivityAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupHashKeySetting();
+        var schedule = BuildSchedule();
+        _schedulingRepo.Setup(r => r.GetScheduleWithStepsAsync(schedule.Id)).ReturnsAsync(schedule);
+
+        await _jim.Scheduler.DeleteScheduleAsync(schedule, ActivityInitiatorType.User, Guid.NewGuid(), "Alice Admin",
+            changeReason: "decommissioned");
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("decommissioned"));
+        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"Schedule\""));
+    }
+
+    [Test]
     public async Task CreateScheduleAsync_WhenTrackingEnabled_CapturesVersionOneSnapshotAsync()
     {
         SetupTrackingSetting(enabled: true);

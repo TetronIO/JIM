@@ -54,6 +54,9 @@ function New-JIMSchedule {
     .PARAMETER Enabled
         Whether the schedule should be enabled after creation. Default is $false.
 
+    .PARAMETER ChangeReason
+        An optional reason for the change, recorded against this Schedule's change history.
+
     .PARAMETER PassThru
         If specified, returns the created Schedule object.
 
@@ -132,6 +135,10 @@ function New-JIMSchedule {
         [Parameter()]
         [switch]$Enabled,
 
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -174,6 +181,10 @@ function New-JIMSchedule {
 
             if ($Description) {
                 $body.description = $Description
+            }
+
+            if ($PSBoundParameters.ContainsKey('ChangeReason')) {
+                $body.changeReason = $ChangeReason
             }
 
             # Add schedule configuration based on trigger type

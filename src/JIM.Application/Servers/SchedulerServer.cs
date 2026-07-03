@@ -59,7 +59,7 @@ public class SchedulerServer
         return await Application.Repository.Scheduling.GetSchedulesAsync(page, pageSize, searchQuery, sortBy, sortDescending);
     }
 
-    public async Task CreateScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
+    public async Task CreateScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
         // Every configuration change is tracked with an immutable Activity, the same as Connected Systems and
         // Synchronisation Rules. Internal run-time bookkeeping (NextRunTime / LastRunTime) bypasses this method
@@ -72,11 +72,11 @@ public class SchedulerServer
         };
         await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         await Application.Repository.Scheduling.CreateScheduleAsync(schedule);
-        await CaptureConfigurationChangeAsync(activity, schedule.Id);
+        await CaptureConfigurationChangeAsync(activity, schedule.Id, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
+    public async Task UpdateScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
         var activity = new Activity
         {
@@ -86,11 +86,11 @@ public class SchedulerServer
         };
         await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         await Application.Repository.Scheduling.UpdateScheduleAsync(schedule);
-        await CaptureConfigurationChangeAsync(activity, schedule.Id);
+        await CaptureConfigurationChangeAsync(activity, schedule.Id, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task DeleteScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
+    public async Task DeleteScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
         // Built-in schedules (for example the seeded Temporal Scope Reconciliation schedule) are part of
         // the product and must not be deleted; they may be enabled, disabled and re-timed, but not removed.
@@ -105,7 +105,7 @@ public class SchedulerServer
             TargetOperationType = ActivityTargetOperationType.Delete
         };
         await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
-        await CaptureConfigurationDeletionAsync(activity, schedule);
+        await CaptureConfigurationDeletionAsync(activity, schedule, changeReason);
         await Application.Repository.Scheduling.DeleteScheduleAsync(schedule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
@@ -117,8 +117,13 @@ public class SchedulerServer
     /// change has been persisted and, at a call site that also reconciles steps, after the step changes too.
     /// Best-effort: a capture failure is logged but never fails the configuration operation that succeeded.
     /// </summary>
-    private async Task CaptureConfigurationChangeAsync(Activity activity, Guid scheduleId)
+    private async Task CaptureConfigurationChangeAsync(Activity activity, Guid scheduleId, string? changeReason)
     {
+        // The reason is recorded independently of the snapshot toggle and has no external dependencies, so it is
+        // set outside the best-effort block below.
+        if (!string.IsNullOrWhiteSpace(changeReason))
+            activity.ChangeReason = changeReason.Trim();
+
         try
         {
             if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
@@ -148,8 +153,12 @@ public class SchedulerServer
     /// or a version: the schedule is deleted before the Activity completes, so the Activity is left unlinked and
     /// the snapshot is surfaced via the Activity itself rather than the object's history.
     /// </summary>
-    private async Task CaptureConfigurationDeletionAsync(Activity activity, Schedule schedule)
+    private async Task CaptureConfigurationDeletionAsync(Activity activity, Schedule schedule, string? changeReason)
     {
+        // See CaptureConfigurationChangeAsync: the reason is recorded independently of the snapshot toggle.
+        if (!string.IsNullOrWhiteSpace(changeReason))
+            activity.ChangeReason = changeReason.Trim();
+
         try
         {
             if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())

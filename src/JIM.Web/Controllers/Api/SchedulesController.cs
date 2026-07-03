@@ -131,7 +131,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             schedule.Steps.Add(step);
         }
 
-        await _application.Scheduler.CreateScheduleAsync(schedule, initiatorType, initiatorId, initiatorName);
+        await _application.Scheduler.CreateScheduleAsync(schedule, initiatorType, initiatorId, initiatorName, changeReason: request.ChangeReason);
 
         _logger.LogInformation("Created schedule {ScheduleId} with {StepCount} steps", schedule.Id, schedule.Steps.Count);
 
@@ -216,7 +216,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             await ReconcileScheduleStepsAsync(id, request.Steps, initiatorType, initiatorId, initiatorName);
         }
 
-        await _application.Scheduler.UpdateScheduleAsync(existingSchedule, initiatorType, initiatorId, initiatorName);
+        await _application.Scheduler.UpdateScheduleAsync(existingSchedule, initiatorType, initiatorId, initiatorName, changeReason: request.ChangeReason);
 
         _logger.LogInformation("Updated schedule {ScheduleId}", id);
 
@@ -229,6 +229,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     /// Delete a schedule
     /// </summary>
     /// <param name="id">The unique identifier of the schedule to delete.</param>
+    /// <param name="changeReason">An optional reason for the deletion, recorded against the change history.</param>
     /// <returns>No content on success.</returns>
     [HttpDelete("{id:guid}", Name = "DeleteSchedule")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -236,7 +237,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteAsync(Guid id)
+    public async Task<IActionResult> DeleteAsync(Guid id, [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Deleting schedule {ScheduleId}", id);
 
@@ -253,7 +254,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         }
 
         var (initiatorType, initiatorId, initiatorName) = await GetInitiatorInfoAsync();
-        await _application.Scheduler.DeleteScheduleAsync(existingSchedule, initiatorType, initiatorId, initiatorName);
+        await _application.Scheduler.DeleteScheduleAsync(existingSchedule, initiatorType, initiatorId, initiatorName, changeReason);
 
         _logger.LogInformation("Deleted schedule {ScheduleId}", id);
         return NoContent();
@@ -263,13 +264,14 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     /// Enable a schedule
     /// </summary>
     /// <param name="id">The unique identifier of the schedule.</param>
+    /// <param name="changeReason">An optional reason for the change, recorded against the change history.</param>
     /// <returns>The updated schedule.</returns>
     [HttpPost("{id:guid}/enable", Name = "EnableSchedule")]
     [ProducesResponseType(typeof(ScheduleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> EnableAsync(Guid id)
+    public async Task<IActionResult> EnableAsync(Guid id, [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Enabling schedule {ScheduleId}", id);
 
@@ -287,7 +289,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         schedule.LastUpdatedById = initiatorId;
         schedule.LastUpdatedByName = initiatorName;
 
-        await _application.Scheduler.UpdateScheduleAsync(schedule, initiatorType, initiatorId, initiatorName);
+        await _application.Scheduler.UpdateScheduleAsync(schedule, initiatorType, initiatorId, initiatorName, changeReason);
 
         _logger.LogInformation("Enabled schedule {ScheduleId}", id);
         return Ok(ScheduleDto.FromEntity(schedule));
@@ -297,13 +299,14 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
     /// Disable a schedule
     /// </summary>
     /// <param name="id">The unique identifier of the schedule.</param>
+    /// <param name="changeReason">An optional reason for the change, recorded against the change history.</param>
     /// <returns>The updated schedule.</returns>
     [HttpPost("{id:guid}/disable", Name = "DisableSchedule")]
     [ProducesResponseType(typeof(ScheduleDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DisableAsync(Guid id)
+    public async Task<IActionResult> DisableAsync(Guid id, [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Disabling schedule {ScheduleId}", id);
 
@@ -321,7 +324,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         schedule.LastUpdatedById = initiatorId;
         schedule.LastUpdatedByName = initiatorName;
 
-        await _application.Scheduler.UpdateScheduleAsync(schedule, initiatorType, initiatorId, initiatorName);
+        await _application.Scheduler.UpdateScheduleAsync(schedule, initiatorType, initiatorId, initiatorName, changeReason);
 
         _logger.LogInformation("Disabled schedule {ScheduleId}", id);
         return Ok(ScheduleDto.FromEntity(schedule));

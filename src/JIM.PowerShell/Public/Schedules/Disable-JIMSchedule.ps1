@@ -13,6 +13,9 @@ function Disable-JIMSchedule {
     .PARAMETER Id
         The unique identifier (GUID) of the Schedule to disable.
 
+    .PARAMETER ChangeReason
+        An optional reason for the change, recorded against this Schedule's change history.
+
     .PARAMETER PassThru
         If specified, returns the updated Schedule object.
 
@@ -23,6 +26,11 @@ function Disable-JIMSchedule {
         Disable-JIMSchedule -Id "12345678-1234-1234-1234-123456789012"
 
         Disables the specified Schedule.
+
+    .EXAMPLE
+        Disable-JIMSchedule -Id "12345678-..." -ChangeReason "Paused for data centre move (CHG0077)"
+
+        Disables the Schedule and records a reason against its change history.
 
     .EXAMPLE
         Get-JIMSchedule | Where-Object { $_.name -like "*Test*" } | Disable-JIMSchedule
@@ -41,6 +49,10 @@ function Disable-JIMSchedule {
         [Alias('ScheduleId')]
         [guid]$Id,
 
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -54,8 +66,14 @@ function Disable-JIMSchedule {
         if ($PSCmdlet.ShouldProcess($Id, "Disable Schedule")) {
             Write-Verbose "Disabling Schedule: $Id"
 
+            # The reason travels as a query parameter because the disable action has no request body.
+            $disableEndpoint = "/api/v1/schedules/$Id/disable"
+            if ($PSBoundParameters.ContainsKey('ChangeReason')) {
+                $disableEndpoint += "?changeReason=$([System.Uri]::EscapeDataString($ChangeReason))"
+            }
+
             try {
-                $result = Invoke-JIMApi -Endpoint "/api/v1/schedules/$Id/disable" -Method 'POST'
+                $result = Invoke-JIMApi -Endpoint $disableEndpoint -Method 'POST'
 
                 Write-Verbose "Disabled Schedule: $Id"
 

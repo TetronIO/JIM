@@ -87,6 +87,12 @@ public class CreateScheduleRequest
     /// The steps to include in this schedule.
     /// </summary>
     public List<ScheduleStepRequest> Steps { get; set; } = new();
+
+    /// <summary>
+    /// An optional reason for the change, recorded against this schedule's change history.
+    /// </summary>
+    [StringLength(2000)]
+    public string? ChangeReason { get; set; }
 }
 
 /// <summary>
@@ -171,6 +177,12 @@ public class UpdateScheduleRequest
     /// Existing steps not in this list will be deleted.
     /// </summary>
     public List<ScheduleStepRequest> Steps { get; set; } = new();
+
+    /// <summary>
+    /// An optional reason for the change, recorded against this schedule's change history.
+    /// </summary>
+    [StringLength(2000)]
+    public string? ChangeReason { get; set; }
 }
 
 /// <summary>

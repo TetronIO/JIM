@@ -55,6 +55,9 @@ function Set-JIMSchedule {
     .PARAMETER Steps
         Array of step objects to replace the existing steps.
 
+    .PARAMETER ChangeReason
+        An optional reason for the change, recorded against this Schedule's change history.
+
     .PARAMETER PassThru
         If specified, returns the updated Schedule object.
 
@@ -65,6 +68,11 @@ function Set-JIMSchedule {
         Set-JIMSchedule -Id "12345678-..." -Name "Updated Schedule Name"
 
         Updates the name of a schedule.
+
+    .EXAMPLE
+        Set-JIMSchedule -Id "12345678-..." -IntervalValue 15 -ChangeReason "Tighter sync cadence (CHG0042)"
+
+        Re-times the schedule and records a reason against its change history.
 
     .EXAMPLE
         Get-JIMSchedule -Id "12345678-..." | Set-JIMSchedule -Description "New description"
@@ -123,6 +131,10 @@ function Set-JIMSchedule {
 
         [Parameter()]
         [array]$Steps,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
 
         [switch]$PassThru
     )
@@ -218,6 +230,10 @@ function Set-JIMSchedule {
 
             if ($PSBoundParameters.ContainsKey('CronExpression')) {
                 $body.cronExpression = $CronExpression
+            }
+
+            if ($PSBoundParameters.ContainsKey('ChangeReason')) {
+                $body.changeReason = $ChangeReason
             }
 
             try {

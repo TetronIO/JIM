@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Scheduling;
 using JIM.Models.Utility;
 using JIM.Web.Controllers.Api;
@@ -627,6 +628,38 @@ public class SchedulesControllerTests
 
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
         _mockSchedulingRepository.Verify(r => r.UpdateScheduleAsync(It.IsAny<Schedule>()), Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateAsync_WithChangeReason_RecordsReasonOnAuditActivityAsync()
+    {
+        var id = Guid.NewGuid();
+        var existingSchedule = new Schedule { Id = id, Name = "Schedule", Steps = new List<ScheduleStep>() };
+        var request = new UpdateScheduleRequest
+        {
+            Name = "Schedule",
+            TriggerType = ScheduleTriggerType.Manual,
+            Steps = new List<ScheduleStepRequest>(),
+            ChangeReason = "Paused for data centre move (CHG0077)"
+        };
+
+        Activity? capturedActivity = null;
+        _mockActivityRepository.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))
+            .Callback<Activity>(a => capturedActivity = a)
+            .Returns(Task.CompletedTask);
+        _mockActivityRepository.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>()))
+            .Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleAsync(id)).ReturnsAsync(existingSchedule);
+        _mockSchedulingRepository.Setup(r => r.UpdateScheduleAsync(It.IsAny<Schedule>())).Returns(Task.CompletedTask);
+        _mockSchedulingRepository.Setup(r => r.GetScheduleStepsAsync(id)).ReturnsAsync(new List<ScheduleStep>());
+        _mockSchedulingRepository.Setup(r => r.GetScheduleWithStepsAsync(id))
+            .ReturnsAsync(new Schedule { Id = id, Name = "Schedule", Steps = new List<ScheduleStep>() });
+
+        var result = await _controller.UpdateAsync(id, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That(capturedActivity, Is.Not.Null);
+        Assert.That(capturedActivity!.ChangeReason, Is.EqualTo("Paused for data centre move (CHG0077)"));
     }
 
     [Test]
