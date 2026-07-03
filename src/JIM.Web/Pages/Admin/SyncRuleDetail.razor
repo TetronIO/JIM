@@ -1,6 +1,7 @@
 @page "/admin/sync-rules/new"
 @page "/admin/sync-rules/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Logic
 @using JIM.Models.Staging.DTOs
@@ -59,6 +60,13 @@ else if (_syncRule != null)
 
         @if (_syncRule.Id > 0)
         {
+            <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
+                <ConfigurationChangesTab TargetType="ActivityTargetType.SyncRule" ObjectId="_syncRule.Id" ObjectTypeLabel="Synchronisation Rule" />
+            </MudTabPanel>
+        }
+
+        @if (_syncRule.Id > 0)
+        {
             <MudTabPanel Text="Danger Zone" Icon="@Icons.Material.Filled.Warning" BadgeColor="Color.Error" ID="@("danger-zone")">
                 <MudPaper Class="pa-4 jim-paper-danger-zone" Outlined="false">
                     <MudText Typo="Typo.h5" Class="mb-3">Danger Zone</MudText>
@@ -74,8 +82,8 @@ else if (_syncRule != null)
 
     </NavigableMudTabs>
 
-    @* Save bar - applies to the whole rule from any editing tab, but not the Danger Zone tab (which has its own delete action) *@
-    @if (!IsDangerZoneTabActive)
+    @* Save bar - applies to the whole rule from any editing tab, but not the read-only Changes or Danger Zone tabs *@
+    @if (!IsReadOnlyTabActive)
     {
     <div class="mt-6">
         @if (_syncRule.Validate().Count > 0)
@@ -116,11 +124,12 @@ else if (_syncRule != null)
     private bool _loaded;
     private int? _loadedId;
     private int _activeTabIndex;
+    private int _changeCount;
 
-    // The Danger Zone tab is the last panel and only exists for an existing rule (Details, Matching, Scope,
-    // Attribute Flow precede it). The save bar has no meaning there, so it is hidden when that tab is active.
-    private const int DangerZoneTabIndex = 4;
-    private bool IsDangerZoneTabActive => _syncRule is { Id: > 0 } && _activeTabIndex == DangerZoneTabIndex;
+    // Details, Matching, Scope, Attribute Flow occupy indexes 0-3. For an existing rule, Changes (4) and Danger
+    // Zone (5) follow; both are read-only views, so the editing save bar is hidden when either is active.
+    private const int ChangesTabIndex = 4;
+    private bool IsReadOnlyTabActive => _syncRule is { Id: > 0 } && _activeTabIndex >= ChangesTabIndex;
 
     // A single JimApplication (and its DbContext) is held for the whole edit session. The rule is loaded
     // change-tracked and every tab mutates that tracked graph, so the final save lets EF Core diff and
@@ -171,6 +180,9 @@ else if (_syncRule != null)
 
             _syncRuleNameOrCreate = _syncRule.Name;
             _breadcrumbs.Add(new BreadcrumbItem(_syncRule.Name, href: null, disabled: true));
+
+            // lightweight count for the Changes tab badge (one row fetched; TotalResults only)
+            _changeCount = (await _jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.SyncRule, _syncRule.Id, 1, 1)).TotalResults;
         }
         else
         {

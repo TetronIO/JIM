@@ -156,9 +156,42 @@ public class ConfigurationDiffServiceTests
         Assert.That(ConfigurationDiffService.Summarise(diff), Is.EqualTo("Description"));
     }
 
+    [Test]
+    public void Diff_ScheduleSteps_MatchByGuidIdNotStepIndex()
+    {
+        var stepA = Guid.NewGuid();
+        var stepB = Guid.NewGuid();
+
+        // Two parallel steps share StepIndex 0, so only their Guid ids distinguish them. Between versions the two steps
+        // swap position and step A's script path changes. Matching by Guid must see one modified step; matching by the
+        // (non-unique) StepIndex would instead report churn.
+        var v1 = SnapSchedule((stepA, 0, "/a.ps1"), (stepB, 0, "/b.ps1"));
+        var v2 = SnapSchedule((stepB, 0, "/b.ps1"), (stepA, 0, "/a-changed.ps1"));
+
+        var diff = _diff.Diff(v1, v2, oldVersion: 1, newVersion: 2);
+
+        Assert.That(diff.AddedCount, Is.EqualTo(0), "no step was added; the steps were only reordered/edited");
+        Assert.That(diff.RemovedCount, Is.EqualTo(0), "no step was removed; matching is by Guid id, not StepIndex");
+        Assert.That(diff.ModifiedCount, Is.EqualTo(1), "exactly step A's script path changed");
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private ConfigurationSnapshot Snap(ConnectedSystem cs) => _snapshots.CreateSnapshot(cs, HashKey);
+
+    private ConfigurationSnapshot SnapSchedule(params (Guid id, int stepIndex, string scriptPath)[] steps)
+    {
+        var schedule = new JIM.Models.Scheduling.Schedule { Id = Guid.NewGuid(), Name = "Sched" };
+        foreach (var (id, stepIndex, scriptPath) in steps)
+            schedule.Steps.Add(new JIM.Models.Scheduling.ScheduleStep
+            {
+                Id = id,
+                StepIndex = stepIndex,
+                StepType = JIM.Models.Scheduling.ScheduleStepType.PowerShell,
+                ScriptPath = scriptPath
+            });
+        return _snapshots.CreateSnapshot(schedule, HashKey);
+    }
 
     private static ConfigurationDiffNode? Find(ConfigurationDiffNode node, string key)
     {

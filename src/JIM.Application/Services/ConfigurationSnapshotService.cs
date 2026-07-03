@@ -8,7 +8,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using JIM.Models.Activities;
 using JIM.Models.Logic;
+using JIM.Models.Scheduling;
 using JIM.Models.Staging;
+using JIM.Utilities;
 
 namespace JIM.Application.Services;
 
@@ -26,6 +28,9 @@ public class ConfigurationSnapshotService
 
     /// <summary>The object-type discriminator stored on a Connected System snapshot.</summary>
     public const string ConnectedSystemObjectType = "ConnectedSystem";
+
+    /// <summary>The object-type discriminator stored on a Schedule snapshot.</summary>
+    public const string ScheduleObjectType = "Schedule";
 
     private JimApplication Application { get; }
 
@@ -67,16 +72,16 @@ public class ConfigurationSnapshotService
 
         var children = new List<ConfigurationSnapshotNode>();
         Add(children, "name", rule.Name, "Name");
-        Add(children, "direction", Render(rule.Direction), "Direction");
+        AddEnum(children, "direction", rule.Direction, "Direction");
         Add(children, "enabled", Render(rule.Enabled), "Enabled");
         Add(children, "provisionToConnectedSystem", Render(rule.ProvisionToConnectedSystem), "Provision to Connected System");
         Add(children, "projectToMetaverse", Render(rule.ProjectToMetaverse), "Project to Metaverse");
-        Add(children, "outboundDeprovisionAction", Render(rule.OutboundDeprovisionAction), "Outbound deprovision action");
-        Add(children, "inboundOutOfScopeAction", Render(rule.InboundOutOfScopeAction), "Inbound out-of-scope action");
+        AddEnum(children, "outboundDeprovisionAction", rule.OutboundDeprovisionAction, "Outbound deprovision action");
+        AddEnum(children, "inboundOutOfScopeAction", rule.InboundOutOfScopeAction, "Inbound out-of-scope action");
         Add(children, "enforceState", Render(rule.EnforceState), "Enforce state");
-        Add(children, "connectedSystemId", Render(rule.ConnectedSystemId), "Connected System");
-        Add(children, "connectedSystemObjectTypeId", Render(rule.ConnectedSystemObjectTypeId), "Connected System Object Type");
-        Add(children, "metaverseObjectTypeId", Render(rule.MetaverseObjectTypeId), "Metaverse Object Type");
+        AddReference(children, "connectedSystemId", rule.ConnectedSystemId, rule.ConnectedSystem?.Name, "Connected System");
+        AddReference(children, "connectedSystemObjectTypeId", rule.ConnectedSystemObjectTypeId, rule.ConnectedSystemObjectType?.Name, "Connected System Object Type");
+        AddReference(children, "metaverseObjectTypeId", rule.MetaverseObjectTypeId, rule.MetaverseObjectType?.Name, "Metaverse Object Type");
         children.Add(BuildAttributeFlowRules(rule.AttributeFlowRules));
         children.Add(BuildObjectMatchingRules(rule.ObjectMatchingRules));
         children.Add(BuildScopingCriteriaGroups("objectScopingCriteriaGroups", "Scope", rule.ObjectScopingCriteriaGroups));
@@ -96,10 +101,10 @@ public class ConfigurationSnapshotService
         foreach (var mapping in mappings.OrderBy(m => m.Id))
         {
             var children = new List<ConfigurationSnapshotNode>();
-            Add(children, "targetMetaverseAttributeId", Render(mapping.TargetMetaverseAttributeId), "Target Metaverse Attribute");
-            Add(children, "targetConnectedSystemAttributeId", Render(mapping.TargetConnectedSystemAttributeId), "Target Connected System Attribute");
-            Add(children, "inboundValueProcessing", Render(mapping.InboundValueProcessing), "Inbound value processing");
-            Add(children, "caseNormalisation", Render(mapping.CaseNormalisation), "Case normalisation");
+            AddReference(children, "targetMetaverseAttributeId", mapping.TargetMetaverseAttributeId, mapping.TargetMetaverseAttribute?.Name, "Target Metaverse Attribute");
+            AddReference(children, "targetConnectedSystemAttributeId", mapping.TargetConnectedSystemAttributeId, mapping.TargetConnectedSystemAttribute?.Name, "Target Connected System Attribute");
+            AddEnum(children, "inboundValueProcessing", mapping.InboundValueProcessing, "Inbound value processing");
+            AddEnum(children, "caseNormalisation", mapping.CaseNormalisation, "Case normalisation");
             children.Add(BuildMappingSources(mapping.Sources));
             items.Add(ConfigurationSnapshotNode.ObjectNode("attributeFlowRule", children, "Attribute Flow", mapping.Id));
         }
@@ -113,8 +118,8 @@ public class ConfigurationSnapshotService
         {
             var children = new List<ConfigurationSnapshotNode>();
             Add(children, "order", Render(source.Order), "Order");
-            Add(children, "metaverseAttributeId", Render(source.MetaverseAttributeId), "Metaverse Attribute");
-            Add(children, "connectedSystemAttributeId", Render(source.ConnectedSystemAttributeId), "Connected System Attribute");
+            AddReference(children, "metaverseAttributeId", source.MetaverseAttributeId, source.MetaverseAttribute?.Name, "Metaverse Attribute");
+            AddReference(children, "connectedSystemAttributeId", source.ConnectedSystemAttributeId, source.ConnectedSystemAttribute?.Name, "Connected System Attribute");
             Add(children, "expression", source.Expression, "Expression");
             items.Add(ConfigurationSnapshotNode.ObjectNode("source", children, "Source", source.Id));
         }
@@ -129,8 +134,8 @@ public class ConfigurationSnapshotService
             var children = new List<ConfigurationSnapshotNode>();
             Add(children, "order", Render(rule.Order), "Order");
             Add(children, "caseSensitive", Render(rule.CaseSensitive), "Case sensitive");
-            Add(children, "metaverseObjectTypeId", Render(rule.MetaverseObjectTypeId), "Metaverse Object Type");
-            Add(children, "targetMetaverseAttributeId", Render(rule.TargetMetaverseAttributeId), "Target Metaverse Attribute");
+            AddReference(children, "metaverseObjectTypeId", rule.MetaverseObjectTypeId, rule.MetaverseObjectType?.Name, "Metaverse Object Type");
+            AddReference(children, "targetMetaverseAttributeId", rule.TargetMetaverseAttributeId, rule.TargetMetaverseAttribute?.Name, "Target Metaverse Attribute");
             children.Add(BuildObjectMatchingRuleSources(rule.Sources));
             items.Add(ConfigurationSnapshotNode.ObjectNode("objectMatchingRule", children, "Object Matching Rule", rule.Id));
         }
@@ -144,8 +149,8 @@ public class ConfigurationSnapshotService
         {
             var children = new List<ConfigurationSnapshotNode>();
             Add(children, "order", Render(source.Order), "Order");
-            Add(children, "connectedSystemAttributeId", Render(source.ConnectedSystemAttributeId), "Connected System Attribute");
-            Add(children, "metaverseAttributeId", Render(source.MetaverseAttributeId), "Metaverse Attribute");
+            AddReference(children, "connectedSystemAttributeId", source.ConnectedSystemAttributeId, source.ConnectedSystemAttribute?.Name, "Connected System Attribute");
+            AddReference(children, "metaverseAttributeId", source.MetaverseAttributeId, source.MetaverseAttribute?.Name, "Metaverse Attribute");
             Add(children, "expression", source.Expression, "Expression");
             items.Add(ConfigurationSnapshotNode.ObjectNode("source", children, "Source", source.Id));
         }
@@ -158,7 +163,7 @@ public class ConfigurationSnapshotService
         foreach (var group in groups.OrderBy(g => g.Position).ThenBy(g => g.Id))
         {
             var children = new List<ConfigurationSnapshotNode>();
-            Add(children, "type", Render(group.Type), "Match");
+            AddEnum(children, "type", group.Type, "Match");
             Add(children, "position", Render(group.Position), "Position");
             children.Add(BuildScopingCriteria(group.Criteria));
             children.Add(BuildScopingCriteriaGroups("childGroups", "Nested groups", group.ChildGroups));
@@ -173,9 +178,9 @@ public class ConfigurationSnapshotService
         foreach (var criterion in criteria.OrderBy(c => c.Id))
         {
             var children = new List<ConfigurationSnapshotNode>();
-            Add(children, "metaverseAttributeId", Render(criterion.MetaverseAttributeId), "Metaverse Attribute");
-            Add(children, "connectedSystemAttributeId", Render(criterion.ConnectedSystemAttributeId), "Connected System Attribute");
-            Add(children, "comparisonType", Render(criterion.ComparisonType), "Comparison");
+            AddReference(children, "metaverseAttributeId", criterion.MetaverseAttributeId, criterion.MetaverseAttribute?.Name, "Metaverse Attribute");
+            AddReference(children, "connectedSystemAttributeId", criterion.ConnectedSystemAttributeId, criterion.ConnectedSystemAttribute?.Name, "Connected System Attribute");
+            AddEnum(children, "comparisonType", criterion.ComparisonType, "Comparison");
             Add(children, "stringValue", criterion.StringValue, "Value");
             Add(children, "intValue", Render(criterion.IntValue), "Value");
             Add(children, "longValue", Render(criterion.LongValue), "Value");
@@ -202,10 +207,11 @@ public class ConfigurationSnapshotService
         var children = new List<ConfigurationSnapshotNode>();
         Add(children, "name", connectedSystem.Name, "Name");
         Add(children, "description", connectedSystem.Description, "Description");
-        Add(children, "status", Render(connectedSystem.Status), "Status");
-        Add(children, "connectorDefinitionId", Render(connectedSystem.ConnectorDefinitionId), "Connector");
-        Add(children, "objectMatchingRuleMode", Render(connectedSystem.ObjectMatchingRuleMode), "Object matching rule mode");
-        Add(children, "settingValuesValid", Render(connectedSystem.SettingValuesValid), "Setting values valid");
+        AddEnum(children, "status", connectedSystem.Status, "Status");
+        AddReference(children, "connectorDefinitionId", connectedSystem.ConnectorDefinitionId, connectedSystem.ConnectorDefinition?.Name, "Connector");
+        AddEnum(children, "objectMatchingRuleMode", connectedSystem.ObjectMatchingRuleMode, "Object matching rule mode");
+        // SettingValuesValid is deliberately excluded: it is internal UI-flow state (whether the connector has validated
+        // the settings), not configuration, so it does not belong in a configuration change history.
         Add(children, "maxExportParallelism", Render(connectedSystem.MaxExportParallelism), "Max export parallelism");
         children.Add(BuildSettingValues(connectedSystem.SettingValues, hashKey));
         children.Add(BuildRunProfiles(connectedSystem.RunProfiles));
@@ -223,13 +229,18 @@ public class ConfigurationSnapshotService
 
     private ConfigurationSnapshotNode BuildSettingValues(List<ConnectedSystemSettingValue> settingValues, byte[] hashKey)
     {
-        var items = new List<ConfigurationSnapshotNode>();
-        foreach (var settingValue in settingValues.OrderBy(sv => sv.Setting?.Id ?? sv.Id))
-            items.Add(BuildSettingValueNode(settingValue, hashKey));
+        // Unset settings (BuildSettingValueNode returns null) are skipped, so the snapshot records only configured
+        // settings and does not litter creation history with empty "+ File Path:" lines.
+        var items = settingValues
+            .OrderBy(sv => sv.Setting?.Id ?? sv.Id)
+            .Select(sv => BuildSettingValueNode(sv, hashKey))
+            .Where(node => node != null)
+            .Select(node => node!)
+            .ToList();
         return ConfigurationSnapshotNode.CollectionNode("settingValues", items, "Settings");
     }
 
-    private ConfigurationSnapshotNode BuildSettingValueNode(ConnectedSystemSettingValue settingValue, byte[] hashKey)
+    private ConfigurationSnapshotNode? BuildSettingValueNode(ConnectedSystemSettingValue settingValue, byte[] hashKey)
     {
         var label = settingValue.Setting?.Name ?? $"Setting {settingValue.Id}";
         var nodeKey = !string.IsNullOrEmpty(settingValue.Setting?.Name) ? settingValue.Setting!.Name! : $"setting-{settingValue.Id}";
@@ -242,6 +253,10 @@ public class ConfigurationSnapshotService
                        settingValue.Setting?.Type == ConnectedSystemSettingType.StringEncrypted;
         if (isSecret)
         {
+            // An unset secret (no encrypted value) is not configuration; skip it rather than record an empty hash.
+            if (string.IsNullOrEmpty(settingValue.StringEncryptedValue))
+                return null;
+
             var node = ConfigurationSnapshotNode.Secret(nodeKey, ComputeSecretHash(settingValue.StringEncryptedValue, hashKey), label);
             node.ItemId = itemId;
             return node;
@@ -252,6 +267,10 @@ public class ConfigurationSnapshotService
             value = Render(settingValue.IntValue.Value);
         if (string.IsNullOrEmpty(value) && settingValue.Setting?.Type == ConnectedSystemSettingType.CheckBox)
             value = Render(settingValue.CheckboxValue);
+
+        // An unset setting is not configuration; skip it, matching how the top-level scalar Add() helper skips empties.
+        if (string.IsNullOrEmpty(value))
+            return null;
 
         var scalar = ConfigurationSnapshotNode.Scalar(nodeKey, value, label);
         scalar.ItemId = itemId;
@@ -270,6 +289,14 @@ public class ConfigurationSnapshotService
         if (string.IsNullOrEmpty(plaintext))
             return string.Empty;
 
+        return ComputePlaintextHash(plaintext, hashKey);
+    }
+
+    // Keyed hash (HMAC-SHA-256) of an already-plaintext secret. Used for values that are stored in plaintext (e.g. a
+    // Schedule step's SQL connection string) rather than encrypted; the deterministic keyed hash lets a change be
+    // detected across versions without ever storing the value.
+    private static string ComputePlaintextHash(string plaintext, byte[] hashKey)
+    {
         using var hmac = new HMACSHA256(hashKey);
         return Convert.ToBase64String(hmac.ComputeHash(Encoding.UTF8.GetBytes(plaintext)));
     }
@@ -281,10 +308,10 @@ public class ConfigurationSnapshotService
         {
             var children = new List<ConfigurationSnapshotNode>();
             Add(children, "name", runProfile.Name, "Name");
-            Add(children, "runType", Render(runProfile.RunType), "Run type");
+            AddEnum(children, "runType", runProfile.RunType, "Run type");
             Add(children, "pageSize", Render(runProfile.PageSize), "Page size");
             Add(children, "filePath", runProfile.FilePath, "File path");
-            Add(children, "partitionId", Render(runProfile.Partition?.Id), "Partition");
+            AddReference(children, "partitionId", runProfile.Partition?.Id, runProfile.Partition?.Name, "Partition");
             items.Add(ConfigurationSnapshotNode.ObjectNode("runProfile", children, "Run Profile", runProfile.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("runProfiles", items, "Run Profiles");
@@ -314,11 +341,11 @@ public class ConfigurationSnapshotService
         {
             var children = new List<ConfigurationSnapshotNode>();
             Add(children, "name", attribute.Name, "Name");
-            Add(children, "type", Render(attribute.Type), "Type");
-            Add(children, "attributePlurality", Render(attribute.AttributePlurality), "Plurality");
+            AddEnum(children, "type", attribute.Type, "Type");
+            AddEnum(children, "attributePlurality", attribute.AttributePlurality, "Plurality");
             Add(children, "isExternalId", Render(attribute.IsExternalId), "External ID");
             Add(children, "isSecondaryExternalId", Render(attribute.IsSecondaryExternalId), "Secondary external ID");
-            Add(children, "writability", Render(attribute.Writability), "Writability");
+            AddEnum(children, "writability", attribute.Writability, "Writability");
             items.Add(ConfigurationSnapshotNode.ObjectNode("attribute", children, attribute.Name, attribute.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("attributes", items, "Attributes");
@@ -355,12 +382,109 @@ public class ConfigurationSnapshotService
         return ConfigurationSnapshotNode.CollectionNode("containers", items, "Containers");
     }
 
+    // -- Schedule ------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a scoped, redacted snapshot of a Schedule (a Guid-keyed configuration object). Only configuration is
+    /// captured: runtime and audit state (NextRunTime, LastRunTime, Created, LastUpdated and every initiator/CreatedBy/
+    /// LastUpdatedBy field) is excluded. A step's SQL connection string can contain a secret, so it is redacted to a
+    /// keyed hash (using <paramref name="hashKey"/>) exactly like a Connected System setting value; its value is never
+    /// stored. Steps are captured as a collection keyed by their Guid id (their StepIndex is not unique).
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(Schedule schedule, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(schedule);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", schedule.Name, "Name");
+        Add(children, "description", schedule.Description, "Description");
+        Add(children, "enabled", Render(schedule.IsEnabled), "Enabled");
+        AddEnum(children, "triggerType", schedule.TriggerType, "Trigger type");
+        AddEnum(children, "patternType", schedule.PatternType, "Pattern type");
+        Add(children, "intervalValue", Render(schedule.IntervalValue), "Interval value");
+        AddEnum(children, "intervalUnit", schedule.IntervalUnit, "Interval unit");
+        Add(children, "intervalWindowStart", schedule.IntervalWindowStart, "Interval window start");
+        Add(children, "intervalWindowEnd", schedule.IntervalWindowEnd, "Interval window end");
+        Add(children, "daysOfWeek", schedule.DaysOfWeek, "Days of week");
+        Add(children, "runTimes", schedule.RunTimes, "Run times");
+        Add(children, "cronExpression", schedule.CronExpression, "Cron expression");
+        children.Add(BuildScheduleSteps(schedule.Steps, hashKey));
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = ScheduleObjectType,
+            ObjectGuidId = schedule.Id,
+            ObjectName = schedule.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("schedule", children, "Schedule")
+        };
+    }
+
+    private ConfigurationSnapshotNode BuildScheduleSteps(List<ScheduleStep> steps, byte[] hashKey)
+    {
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var step in steps.OrderBy(s => s.StepIndex).ThenBy(s => s.Id))
+        {
+            var children = new List<ConfigurationSnapshotNode>();
+            Add(children, "stepIndex", Render(step.StepIndex), "Step index");
+            Add(children, "name", step.Name, "Name");
+            AddEnum(children, "stepType", step.StepType, "Step type");
+            AddEnum(children, "executionMode", step.ExecutionMode, "Execution mode");
+            Add(children, "continueOnFailure", Render(step.ContinueOnFailure), "Continue on failure");
+            Add(children, "timeout", Render(step.Timeout), "Timeout");
+            AddReference(children, "connectedSystemId", step.ConnectedSystemId, null, "Connected System");
+            AddReference(children, "runProfileId", step.RunProfileId, null, "Run Profile");
+            Add(children, "scriptPath", step.ScriptPath, "Script path");
+            Add(children, "arguments", step.Arguments, "Arguments");
+            Add(children, "executablePath", step.ExecutablePath, "Executable path");
+            Add(children, "workingDirectory", step.WorkingDirectory, "Working directory");
+            Add(children, "sqlScriptPath", step.SqlScriptPath, "SQL script path");
+            // A SQL connection string can carry a credential; redact it to a keyed hash so a change is detectable but the
+            // value is never stored. Unlike a Connected System setting it is persisted as plaintext, so the hash is taken
+            // over the plaintext directly rather than after a decrypt. An empty value is not configuration; skip it.
+            if (!string.IsNullOrEmpty(step.SqlConnectionString))
+                children.Add(ConfigurationSnapshotNode.Secret("sqlConnectionString", ComputePlaintextHash(step.SqlConnectionString, hashKey), "SQL connection string"));
+
+            var label = !string.IsNullOrEmpty(step.Name) ? step.Name : $"Step {step.StepIndex}";
+            items.Add(ConfigurationSnapshotNode.ObjectNode("step", children, label, step.Id));
+        }
+        return ConfigurationSnapshotNode.CollectionNode("steps", items, "Steps");
+    }
+
     // -- value rendering -----------------------------------------------------------------------------------------------
 
     private static void Add(List<ConfigurationSnapshotNode> nodes, string key, string? value, string label)
     {
         if (!string.IsNullOrEmpty(value))
             nodes.Add(ConfigurationSnapshotNode.Scalar(key, value, label));
+    }
+
+    // Records an enum: the raw enum name is stored for stable diffing, with a spaced, human-friendly display form
+    // (e.g. "TreatWhitespaceAsNoValue" -> "Treat Whitespace As No Value").
+    private static void AddEnum<TEnum>(List<ConfigurationSnapshotNode> nodes, string key, TEnum value, string label) where TEnum : struct, Enum
+    {
+        var raw = value.ToString();
+        nodes.Add(ConfigurationSnapshotNode.Scalar(key, raw, label, raw.SplitOnCapitalLetters()));
+    }
+
+    // Records a nullable enum, skipping when unset (matching Add()'s skip-empty behaviour).
+    private static void AddEnum<TEnum>(List<ConfigurationSnapshotNode> nodes, string key, TEnum? value, string label) where TEnum : struct, Enum
+    {
+        if (value.HasValue)
+            AddEnum(nodes, key, value.Value, label);
+    }
+
+    // Records a foreign-key reference: the raw id is stored for stable diffing (so a re-point to a different entity is
+    // detected even when the two share a name), with the resolved name as the human-friendly display value when the
+    // referenced entity is available on the loaded graph (otherwise the id is shown). A null id records nothing,
+    // matching Add()'s skip-empty behaviour.
+    private static void AddReference(List<ConfigurationSnapshotNode> nodes, string key, int? id, string? name, string label)
+    {
+        if (!id.HasValue)
+            return;
+
+        var raw = id.Value.ToString(CultureInfo.InvariantCulture);
+        var display = string.IsNullOrEmpty(name) ? null : name;
+        nodes.Add(ConfigurationSnapshotNode.Scalar(key, raw, label, display));
     }
 
     private static string Render(bool value) => value ? "true" : "false";
@@ -376,6 +500,8 @@ public class ConfigurationSnapshotService
     private static string? Render(DateTime? value) => value?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 
     private static string? Render(Guid? value) => value?.ToString("D");
+
+    private static string? Render(TimeSpan? value) => value?.ToString("c", CultureInfo.InvariantCulture);
 
     private static string Render<TEnum>(TEnum value) where TEnum : struct, Enum => value.ToString();
 }

@@ -95,16 +95,38 @@ public class ChangeHistoryServer
         {
             var current = rows[i];
             var predecessor = i + 1 < rows.Count ? rows[i + 1] : null;
+
+            // The operation shown in an object's configuration history describes what happened to the object as a whole,
+            // not to whichever sub-entity carried the change. A granular endpoint (e.g. adding an Attribute Flow mapping)
+            // records its own Create/Delete operation on its Activity, but at the object level that is an Update. The only
+            // version that is genuinely a creation is the object's first; every later version is an update of an existing
+            // object. The extra older row fetched above guarantees predecessor is null only for that genuine first version.
+            var isFirstVersion = predecessor == null;
+
+            // Compute the diff against the predecessor once and carry it on the row: the list renders it inline, so there
+            // is no second round-trip per row, and the summary is derived from the same diff. The first version has no
+            // predecessor, so its diff shows the whole object as created.
+            var currentSnapshot = ConfigurationSnapshotService.Deserialise(current.SnapshotJson);
+            var predecessorSnapshot = ConfigurationSnapshotService.Deserialise(predecessor?.SnapshotJson);
+            var diff = currentSnapshot == null
+                ? null
+                : _application.ConfigurationDiffs.Diff(predecessorSnapshot, currentSnapshot, predecessor?.Version, current.Version);
+
             items.Add(new ConfigurationChangeHistoryItem
             {
                 ActivityId = current.ActivityId,
                 Version = current.Version,
-                Operation = current.Operation,
+                Operation = isFirstVersion ? ActivityTargetOperationType.Create : ActivityTargetOperationType.Update,
                 InitiatedByType = current.InitiatedByType,
+                InitiatedById = current.InitiatedById,
                 InitiatedByName = current.InitiatedByName,
                 When = current.When,
                 Reason = current.Reason,
-                Summary = BuildChangeSummary(current, predecessor)
+                // The first version is a creation regardless of the recording activity's own operation; otherwise the
+                // summary is the one-line rollup of the diff we just computed (falling back to a generic label if the
+                // snapshot could not be deserialised).
+                Summary = isFirstVersion ? "Created" : diff != null ? ConfigurationDiffService.Summarise(diff) : "Updated",
+                Diff = diff
             });
         }
 
@@ -159,20 +181,6 @@ public class ChangeHistoryServer
             return null;
 
         return _application.ConfigurationDiffs.Diff(fromSnapshot, toSnapshot, from?.Version, toVersion);
-    }
-
-    private string BuildChangeSummary(ConfigurationChangeActivityData current, ConfigurationChangeActivityData? predecessor)
-    {
-        if (current.Operation == ActivityTargetOperationType.Create)
-            return "Created";
-
-        var currentSnapshot = ConfigurationSnapshotService.Deserialise(current.SnapshotJson);
-        var predecessorSnapshot = ConfigurationSnapshotService.Deserialise(predecessor?.SnapshotJson);
-        if (currentSnapshot == null || predecessorSnapshot == null)
-            return "Updated";
-
-        var diff = _application.ConfigurationDiffs.Diff(predecessorSnapshot, currentSnapshot, predecessor!.Version, current.Version);
-        return ConfigurationDiffService.Summarise(diff);
     }
 
     private static Activity CreateCleanupActivity()

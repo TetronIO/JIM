@@ -94,6 +94,34 @@ public class ConnectedSystemServer
         }
     }
 
+    // Captures a versioned configuration snapshot for a Synchronisation Rule whose change was made through a granular
+    // sub-entity endpoint (an Attribute Flow mapping, a matching rule, etc.). The parent rule is reloaded in full so the
+    // snapshot reflects persisted truth rather than the caller's partial in-memory sub-entity graph; without this the
+    // rule's captured history drifts from reality and a later whole-rule save reports pre-existing children as "added".
+    // The supplied Activity is already SyncRule-targeted, so capturing onto it surfaces the change in the rule's history.
+    private async Task CaptureSyncRuleConfigurationChangeAsync(Activity activity, int syncRuleId)
+    {
+        if (syncRuleId <= 0)
+            return;
+
+        var rule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (rule != null)
+            await CaptureConfigurationChangeAsync(activity, rule, changeReason: null);
+    }
+
+    // Connected System counterpart of CaptureSyncRuleConfigurationChangeAsync: reloads the whole Connected System so a
+    // change made through a granular sub-entity endpoint (a Run Profile, an object-type or attribute selection, a
+    // partition or container selection) records a complete, versioned snapshot under the system's configuration history.
+    private async Task CaptureConnectedSystemConfigurationChangeAsync(Activity activity, int connectedSystemId)
+    {
+        if (connectedSystemId <= 0)
+            return;
+
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem != null)
+            await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
+    }
+
     /// <summary>
     /// Captures a tombstone snapshot of a Synchronisation Rule onto its delete Activity, before the rule is removed.
     /// Unlike create/update capture this does not set <see cref="Activity.SyncRuleId"/> or a version: the rule is
@@ -2326,6 +2354,7 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateObjectTypeAsync(objectType);
 
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, objectType.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -2362,6 +2391,7 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateAttributeAsync(attribute);
 
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, attribute.ConnectedSystemObjectType?.ConnectedSystemId ?? 0);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -2389,6 +2419,7 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateObjectTypeAsync(objectType);
 
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, objectType.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -2416,6 +2447,7 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateAttributeAsync(attribute);
 
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, attribute.ConnectedSystemObjectType?.ConnectedSystemId ?? 0);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -3955,6 +3987,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
         // Capture the object type before ClearMappingNavigationProperties detaches the SyncRule nav; auto-assign
         // needs it to scope the attribute's priority list.
         var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
@@ -3964,7 +3997,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
 
         await AutoAssignImportMappingPriorityAsync(mapping, metaverseObjectTypeId);
-
+        await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -3991,6 +4024,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
         // Capture the object type before ClearMappingNavigationProperties detaches the SyncRule nav; auto-assign
         // needs it to scope the attribute's priority list.
         var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
@@ -4000,7 +4034,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
 
         await AutoAssignImportMappingPriorityAsync(mapping, metaverseObjectTypeId);
-
+        await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4029,9 +4063,11 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
         AuditHelper.SetUpdated(mapping, initiatedBy);
         await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingAsync(mapping);
 
+        await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4057,6 +4093,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
         // Capture the import mapping's attribute scope before deletion so the remaining contributors can be re-densified.
         var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
         var targetMetaverseAttributeId = mapping.TargetMetaverseAttributeId;
@@ -4066,6 +4103,7 @@ public class ConnectedSystemServer
         if (metaverseObjectTypeId.HasValue && targetMetaverseAttributeId.HasValue)
             await RedensifyAttributePriorityAfterRemovalAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
 
+        await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4091,6 +4129,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
         // Capture the import mapping's attribute scope before deletion so the remaining contributors can be re-densified.
         var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
         var targetMetaverseAttributeId = mapping.TargetMetaverseAttributeId;
@@ -4100,6 +4139,7 @@ public class ConnectedSystemServer
         if (metaverseObjectTypeId.HasValue && targetMetaverseAttributeId.HasValue)
             await RedensifyAttributePriorityAfterRemovalAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
 
+        await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4432,6 +4472,7 @@ public class ConnectedSystemServer
 
         // now the Run Profile has been persisted, associated it with the activity and complete it.
         activity.ConnectedSystemRunProfileId = connectedSystemRunProfile.Id;
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemRunProfile.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4461,6 +4502,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.CreateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
 
         activity.ConnectedSystemRunProfileId = connectedSystemRunProfile.Id;
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemRunProfile.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4484,6 +4526,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemRunProfile.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4509,6 +4552,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemRunProfile.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4533,6 +4577,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetUpdated(connectedSystemRunProfile, initiatedBy);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemRunProfile.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4559,6 +4604,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         AuditHelper.SetUpdated(connectedSystemRunProfile, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemRunProfile.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5251,6 +5297,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetCreated(rule, initiatedBy);
         await Application.Repository.ConnectedSystems.CreateObjectMatchingRuleAsync(rule);
+        await CaptureSyncRuleConfigurationChangeAsync(activity, rule.SyncRuleId ?? 0);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5269,6 +5316,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         AuditHelper.SetCreated(rule, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.CreateObjectMatchingRuleAsync(rule);
+        await CaptureSyncRuleConfigurationChangeAsync(activity, rule.SyncRuleId ?? 0);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5287,6 +5335,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetUpdated(rule, initiatedBy);
         await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
+        await CaptureSyncRuleConfigurationChangeAsync(activity, rule.SyncRuleId ?? 0);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5305,6 +5354,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         AuditHelper.SetUpdated(rule, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
+        await CaptureSyncRuleConfigurationChangeAsync(activity, rule.SyncRuleId ?? 0);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5322,6 +5372,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         await Application.Repository.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule);
+        await CaptureSyncRuleConfigurationChangeAsync(activity, rule.SyncRuleId ?? 0);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5339,6 +5390,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule);
+        await CaptureSyncRuleConfigurationChangeAsync(activity, rule.SyncRuleId ?? 0);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 

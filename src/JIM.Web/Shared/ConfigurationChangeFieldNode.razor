@@ -1,0 +1,203 @@
+@using JIM.Models.Activities
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Recursively renders one node of a configuration diff in the field-history style:
+     - a modified scalar is a single "Label  old → new" row (old struck-through, new emphasised);
+     - a set / cleared scalar reads "Label  not set → value" / "Label  value → removed";
+     - a whole added / removed item (an Attribute Flow, an Attribute, an Object Type) is a small tinted card listing
+       its values, rather than a wall of + / - lines;
+     - a modified item or a collection is a quiet context header with its changed descendants beneath.
+   Unchanged nodes and empty collections render nothing. Secret values are never shown, only that they changed. *@
+
+@if (_render)
+{
+    @if (Node.NodeType == ConfigurationSnapshotNodeType.Scalar)
+    {
+        <div class="fh-row" style="@_indent">
+            <span class="fh-label">@_label</span>
+            @if (_leftText != null)
+            {
+                <span class="@_leftClass">@_leftText</span>
+            }
+            @if (_showArrow)
+            {
+                <span class="fh-arrow">→</span>
+            }
+            @if (_rightText != null)
+            {
+                <span class="@_rightClass">@_rightText</span>
+            }
+        </div>
+    }
+    else if (_isCard)
+    {
+        <div class="fh-card @(_cardAdded ? "fh-card-added" : "fh-card-removed")" style="@_indent">
+            <div class="fh-card-head">@(_cardAdded ? "+" : "−") @_label</div>
+            <div class="fh-card-body">
+                @foreach (var child in Node.Children!)
+                {
+                    <ConfigurationChangeFieldNode Node="child" Depth="0" Context="_childContext" />
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        @* A modified item, or a collection: a quiet context header (unless the collection just repeats its items' label)
+           with the changed descendants beneath it. *@
+        @if (!_transparent)
+        {
+            <div class="fh-group" style="@_indent">@_label</div>
+        }
+        @foreach (var child in Node.Children!)
+        {
+            <ConfigurationChangeFieldNode Node="child" Depth="@(_transparent ? Depth : Depth + 1)" Context="_childContext" />
+        }
+    }
+}
+
+@code {
+    /// <summary>The diff node to render.</summary>
+    [Parameter, EditorRequired]
+    public ConfigurationDiffNode Node { get; set; } = null!;
+
+    /// <summary>Nesting depth, used for indentation; 0 for a top-level field.</summary>
+    [Parameter]
+    public int Depth { get; set; }
+
+    /// <summary>Whether this node sits inside a wholly added / removed subtree (so its scalars are single values).</summary>
+    [Parameter]
+    public DiffRenderContext Context { get; set; } = DiffRenderContext.Normal;
+
+    private bool _render;
+    private string _label = string.Empty;
+    private string _indent = string.Empty;
+
+    // Display strings prefer the captured human-friendly DisplayValue (resolved FK name, spaced enum), falling back to
+    // the raw value when none was captured.
+    private string? _oldDisplay;
+    private string? _newDisplay;
+
+    // A scalar row is rendered as an optional left token, an optional "→", and an optional right token, so a set, a
+    // change, a removal, and a hidden secret all read in the same "before → after" shape.
+    private string? _leftText;
+    private string? _leftClass;
+    private bool _showArrow;
+    private string? _rightText;
+    private string? _rightClass;
+
+    private bool _isCard;
+    private bool _cardAdded;
+    private bool _transparent;
+    private DiffRenderContext _childContext;
+
+    protected override void OnParametersSet()
+    {
+        _label = string.IsNullOrEmpty(Node.Label) ? Node.Key : Node.Label;
+        _indent = Depth > 0 ? $"padding-left: {Depth * 20}px;" : string.Empty;
+        _oldDisplay = Node.OldDisplayValue ?? Node.OldValue;
+        _newDisplay = Node.NewDisplayValue ?? Node.NewValue;
+
+        // An unchanged node, or an empty collection ("+ Attributes" with nothing under it), renders nothing.
+        _render = Node.ChangeType != ConfigurationDiffChangeType.Unchanged
+            && !(Node.NodeType == ConfigurationSnapshotNodeType.Collection && (Node.Children == null || Node.Children.Count == 0));
+
+        // Inside a wholly added / removed subtree, every descendant carries that same context; otherwise the context is
+        // taken from this node's own change type.
+        _childContext = Context != DiffRenderContext.Normal
+            ? Context
+            : Node.ChangeType switch
+            {
+                ConfigurationDiffChangeType.Added => DiffRenderContext.Added,
+                ConfigurationDiffChangeType.Removed => DiffRenderContext.Removed,
+                _ => DiffRenderContext.Normal
+            };
+
+        // A whole item that appeared or vanished (against an existing object) is drawn as a card. Nested items inside an
+        // already added / removed subtree render as quiet groups instead, to avoid cards within cards.
+        _isCard = Node.NodeType == ConfigurationSnapshotNodeType.Object
+            && (Node.ItemId.HasValue || Node.ItemGuidId.HasValue)
+            && Context == DiffRenderContext.Normal
+            && Node.ChangeType is ConfigurationDiffChangeType.Added or ConfigurationDiffChangeType.Removed;
+        _cardAdded = Node.ChangeType == ConfigurationDiffChangeType.Added;
+
+        // A collection whose own label merely repeats its items' label (e.g. an "Attribute Flow" collection of "Attribute
+        // Flow" items) adds nothing; render its items at its own depth with no header.
+        _transparent = Node.NodeType == ConfigurationSnapshotNodeType.Collection
+            && Node.Children is { Count: > 0 }
+            && Node.Children.All(c => (string.IsNullOrEmpty(c.Label) ? c.Key : c.Label) == _label);
+
+        if (Node.NodeType == ConfigurationSnapshotNodeType.Scalar)
+            ResolveScalar();
+    }
+
+    // Resolves the left / arrow / right tokens for a scalar row. Secrets follow the same shape as ordinary values (so a
+    // set secret reads "not set → secret set") but never expose the value itself.
+    private void ResolveScalar()
+    {
+        _leftText = _rightText = _leftClass = _rightClass = null;
+        _showArrow = false;
+
+        if (Node.IsSecret)
+        {
+            // Inside a wholly added / removed item the secret is a single token, matching its non-secret siblings.
+            if (Context != DiffRenderContext.Normal)
+            {
+                (_rightText, _rightClass) = ("secret set", "fh-secret");
+                return;
+            }
+
+            switch (Node.ChangeType)
+            {
+                case ConfigurationDiffChangeType.Added:
+                    (_leftText, _leftClass) = ("not set", "fh-none");
+                    _showArrow = true;
+                    (_rightText, _rightClass) = ("secret set", "fh-secret");
+                    break;
+                case ConfigurationDiffChangeType.Removed:
+                    (_leftText, _leftClass) = ("secret set", "fh-secret");
+                    _showArrow = true;
+                    (_rightText, _rightClass) = ("removed", "fh-none");
+                    break;
+                default:
+                    (_rightText, _rightClass) = ("secret changed; value hidden", "fh-secret");
+                    break;
+            }
+            return;
+        }
+
+        // Inside a wholly added / removed subtree every value is new / gone, shown as a single token, not "before → after".
+        if (Context == DiffRenderContext.Added)
+        {
+            (_rightText, _rightClass) = (_newDisplay, "fh-new");
+            return;
+        }
+        if (Context == DiffRenderContext.Removed)
+        {
+            (_rightText, _rightClass) = (_oldDisplay, "fh-old");
+            return;
+        }
+
+        switch (Node.ChangeType)
+        {
+            case ConfigurationDiffChangeType.Added:
+                (_leftText, _leftClass) = ("not set", "fh-none");
+                _showArrow = true;
+                (_rightText, _rightClass) = (_newDisplay, "fh-new");
+                break;
+            case ConfigurationDiffChangeType.Removed:
+                (_leftText, _leftClass) = (_oldDisplay, "fh-old");
+                _showArrow = true;
+                (_rightText, _rightClass) = ("removed", "fh-none");
+                break;
+            default:
+                (_leftText, _leftClass) = (_oldDisplay, "fh-old");
+                _showArrow = true;
+                (_rightText, _rightClass) = (_newDisplay, "fh-new");
+                break;
+        }
+    }
+}

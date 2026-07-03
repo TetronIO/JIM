@@ -26,6 +26,7 @@ public class ConfigurationChangeHistoryRetrievalTests
     private JimApplication _jim = null!;
     private static readonly byte[] HashKey = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
     private static readonly DateTime When = new(2026, 6, 26, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly Guid InitiatorId = Guid.NewGuid();
 
     [SetUp]
     public void SetUp()
@@ -60,6 +61,55 @@ public class ConfigurationChangeHistoryRetrievalTests
         Assert.That(result.Results[0].Summary, Is.EqualTo("Description"), "v2 changed the description versus v1");
         Assert.That(result.Results[1].Version, Is.EqualTo(1));
         Assert.That(result.Results[1].Summary, Is.EqualTo("Created"), "v1 is the creation");
+    }
+
+    [Test]
+    public async Task GetConfigurationChangeHistoryAsync_ReportsObjectLevelOperationAndInitiatorIdAsync()
+    {
+        // v2 was recorded by a granular sub-entity endpoint whose activity carries operation Create (e.g. adding an
+        // Attribute Flow mapping), but at the object level it is an update of an already-existing object. Only v1, which
+        // has no predecessor, is a genuine creation.
+        var rows = new List<ConfigurationChangeActivityData>
+        {
+            Data(version: 2, ActivityTargetOperationType.Create, SnapJson(Cs("v2"))),
+            Data(version: 1, ActivityTargetOperationType.Create, SnapJson(Cs("v1")))
+        };
+        _activityRepo.Setup(r => r.GetConfigurationChangeCountAsync(ActivityTargetType.ConnectedSystem, 9)).ReturnsAsync(2);
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivitiesAsync(ActivityTargetType.ConnectedSystem, 9, 0, 21)).ReturnsAsync(rows);
+
+        var result = await _jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ConnectedSystem, 9);
+
+        Assert.That(result.Results[0].Version, Is.EqualTo(2));
+        Assert.That(result.Results[0].Operation, Is.EqualTo(ActivityTargetOperationType.Update),
+            "a later version is an object-level update even when its recording activity was a sub-entity create");
+        Assert.That(result.Results[1].Version, Is.EqualTo(1));
+        Assert.That(result.Results[1].Operation, Is.EqualTo(ActivityTargetOperationType.Create), "the first version is the creation");
+        Assert.That(result.Results[0].InitiatedById, Is.EqualTo(InitiatorId), "the principal id must flow through so the UI can link to it");
+    }
+
+    [Test]
+    public async Task GetConfigurationChangeHistoryAsync_AttachesDiffToEachItemAsync()
+    {
+        // The list carries the full diff per row so the UI renders it inline without a second round-trip; the diff is
+        // already computed to build the summary, so attaching it is free.
+        var rows = new List<ConfigurationChangeActivityData>
+        {
+            Data(version: 2, ActivityTargetOperationType.Update, SnapJson(Cs("v2"))),
+            Data(version: 1, ActivityTargetOperationType.Create, SnapJson(Cs("v1")))
+        };
+        _activityRepo.Setup(r => r.GetConfigurationChangeCountAsync(ActivityTargetType.ConnectedSystem, 9)).ReturnsAsync(2);
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivitiesAsync(ActivityTargetType.ConnectedSystem, 9, 0, 21)).ReturnsAsync(rows);
+
+        var result = await _jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ConnectedSystem, 9);
+
+        Assert.That(result.Results[0].Diff, Is.Not.Null, "v2 must carry its diff against v1");
+        Assert.That(result.Results[0].Diff!.ModifiedCount, Is.EqualTo(1), "the description changed between v1 and v2");
+        Assert.That(result.Results[0].Diff.OldVersion, Is.EqualTo(1));
+        Assert.That(result.Results[0].Diff.NewVersion, Is.EqualTo(2));
+
+        // The first version has no predecessor, so its diff shows the whole object as created (root Added).
+        Assert.That(result.Results[1].Diff, Is.Not.Null, "the creation row must carry a diff too");
+        Assert.That(result.Results[1].Diff!.Root.ChangeType, Is.EqualTo(ConfigurationDiffChangeType.Added));
     }
 
     [Test]
@@ -119,6 +169,7 @@ public class ConfigurationChangeHistoryRetrievalTests
         Version = version,
         Operation = operation,
         InitiatedByType = ActivityInitiatorType.User,
+        InitiatedById = InitiatorId,
         InitiatedByName = "Tester",
         When = When,
         Reason = null,

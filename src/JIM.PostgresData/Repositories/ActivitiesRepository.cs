@@ -446,8 +446,14 @@ public class ActivityRepository : IActivityRepository
 
     private IQueryable<Activity> ConfigurationChangeQuery(ActivityTargetType targetType, int targetObjectId)
     {
+        // Membership of an object's configuration history is determined by "carries a captured snapshot version AND
+        // belongs to this object (by FK)", NOT by the activity's own TargetType. A configuration object is changed both
+        // by whole-object saves (TargetType SyncRule / ConnectedSystem) and by granular sub-entity endpoints whose
+        // activities are typed for the child (ConnectedSystemRunProfile, ObjectMatchingRule, etc.). Keying on the FK +
+        // version surfaces every versioned change regardless of which endpoint recorded it; only capture sets a version,
+        // so non-configuration activities (which never carry one) are naturally excluded.
         var query = Repository.Database.Activities
-            .Where(a => a.TargetType == targetType && a.ConfigurationChangeVersion != null);
+            .Where(a => a.ConfigurationChangeVersion != null);
 
         return targetType switch
         {
@@ -458,12 +464,28 @@ public class ActivityRepository : IActivityRepository
         };
     }
 
+    // Guid-keyed counterpart of ConfigurationChangeQuery, for configuration objects (e.g. a Schedule) whose id is a Guid
+    // and which associate their change activities via a dedicated Guid foreign key rather than an integer one.
+    private IQueryable<Activity> ConfigurationChangeQuery(ActivityTargetType targetType, Guid targetObjectId)
+    {
+        var query = Repository.Database.Activities
+            .Where(a => a.ConfigurationChangeVersion != null);
+
+        return targetType switch
+        {
+            ActivityTargetType.Schedule => query.Where(a => a.ScheduleId == targetObjectId),
+            _ => throw new ArgumentOutOfRangeException(nameof(targetType), targetType,
+                "Unsupported Guid-keyed configuration target type for change history.")
+        };
+    }
+
     private static readonly Expression<Func<Activity, ConfigurationChangeActivityData>> ToConfigurationChangeData = a => new ConfigurationChangeActivityData
     {
         ActivityId = a.Id,
         Version = a.ConfigurationChangeVersion ?? 0,
         Operation = a.TargetOperationType,
         InitiatedByType = a.InitiatedByType,
+        InitiatedById = a.InitiatedById,
         InitiatedByName = a.InitiatedByName,
         When = a.Created,
         Reason = a.ChangeReason,
@@ -471,6 +493,12 @@ public class ActivityRepository : IActivityRepository
     };
 
     public async Task<int> GetMaxConfigurationChangeVersionAsync(ActivityTargetType targetType, int targetObjectId)
+    {
+        var max = await ConfigurationChangeQuery(targetType, targetObjectId).MaxAsync(a => (int?)a.ConfigurationChangeVersion);
+        return max ?? 0;
+    }
+
+    public async Task<int> GetMaxConfigurationChangeVersionAsync(ActivityTargetType targetType, Guid targetObjectId)
     {
         var max = await ConfigurationChangeQuery(targetType, targetObjectId).MaxAsync(a => (int?)a.ConfigurationChangeVersion);
         return max ?? 0;
