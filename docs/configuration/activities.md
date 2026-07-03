@@ -66,7 +66,7 @@ A few properties of this model:
 !!! note "Coverage"
     Configuration change history covers Synchronisation Rules, Connected Systems, and Schedules, and is enabled by default (set the `ChangeTracking.ConfigurationChanges.Enabled` [Service Setting](../powershell/service-settings.md) to disable it; disabling does not delete existing history). Connected System Object and Metaverse Object change history is a separate, related capability.
 
-Retrieve configuration change history with the `Get-JIMConfigurationChangeHistory` [cmdlet](../powershell/history.md) (paged summary, single-version diff, or compare two versions) or the equivalent `change-history` endpoints in the [interactive API reference](../../api/reference/). To record a reason with a change, pass `-ChangeReason` to the write cmdlets, or the optional reason field on the REST write requests.
+Retrieve configuration change history with the `Get-JIMConfigurationChangeHistory` [cmdlet](../powershell/history.md) (paged summary, single-version diff, or compare two versions) or the equivalent `change-history` endpoints in the [interactive API reference](../../api/reference/). To record a reason with a change, enter it in the optional "Reason for change" prompt that appears when saving from the admin portal, pass `-ChangeReason` to the write cmdlets, or use the optional reason field on the REST write requests. The reason is optional in all three; cancelling the admin portal prompt abandons the save.
 
 ## Common workflows
 

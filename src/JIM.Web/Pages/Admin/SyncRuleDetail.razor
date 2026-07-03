@@ -210,9 +210,14 @@ else if (_syncRule != null)
         // are we transitioning from new to existing?
         var isSyncRuleNew = _syncRule.Id == 0;
 
+        // offer an optional reason for the configuration change history; cancelling aborts the save
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, isSyncRuleNew ? "Create" : "Update");
+        if (cancelled)
+            return;
+
         // save on the SAME context the rule was loaded on, so EF Core's change tracker sees the edits
         var user = await Helpers.GetUserAsync(_jim, AuthenticationStateTask);
-        var wasSuccessful = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user);
+        var wasSuccessful = await _jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(_syncRule, user, changeReason: changeReason);
         switch (wasSuccessful)
         {
             // send the user to the existing-sync-rule view.

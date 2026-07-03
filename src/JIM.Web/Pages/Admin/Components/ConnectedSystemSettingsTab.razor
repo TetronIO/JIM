@@ -1,6 +1,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Staging
 @inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -180,8 +181,17 @@
             return;
         }
 
+        // offer an optional reason for the configuration change history once validation has passed;
+        // cancelling aborts the save
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+        if (cancelled)
+        {
+            _settingsBeingSaved = false;
+            return;
+        }
+
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
+        await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user, changeReason);
         Snackbar.Add("Your setting changes have been saved.", Severity.Success);
         _settingsBeingSaved = false;
 
