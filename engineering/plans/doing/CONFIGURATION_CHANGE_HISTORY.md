@@ -1,9 +1,9 @@
 # Configuration Change History - Implementation Plan
 
-- **Status:** Doing (Phases 1, 2, 3, 5, 6, 7 complete)
+- **Status:** Doing (Phases 1-7 complete; Phase 3 comment-on-save dialog outstanding)
 - **Issue:** [#14](https://github.com/TetronIO/JIM/issues/14)
 - **PRD:** [`engineering/prd/PRD_CONFIGURATION_CHANGE_HISTORY.md`](../../prd/PRD_CONFIGURATION_CHANGE_HISTORY.md)
-- **Note (2026-07-03):** The backend (capture, redaction, diff engine, retrieval), REST API, PowerShell module, the per-object Changes tab (as `ConfigurationChangesTab` on Synchronisation Rule and Connected System detail pages, and as a History tab in the Schedule editor), and the Activity-detail diff rendering (Phase 4 item 3) are delivered. Delivered beyond plan: Schedule support (Guid-keyed retrieval, API, PowerShell, UI; write-side capture in progress on a cooperating branch), capture coverage across all Connected System mutation paths, a semantic no-change dedupe guard (a save that changes nothing records no version), Simple Mode Object Matching Rule capture, per-rule attribute-priority capture, runtime state (status, import watermark) excluded from snapshots and Activities, and a "no snapshot" explanation on the Activity detail page. Phase 7 (type-aware retention) is delivered: configuration-change Activities have their own retention period (`History.ConfigurationChangeRetentionPeriod`, default ~10 years) and the general history cleanup spares them. Remaining: the Phase 3 comment-on-save reason dialog, Phase 4 items 1-2 (Activities-list filters and URL persistence), and Phase 8 (rollback, future). Connected System hard-delete capture is deferred as its own slice (pair with Phase 8 rollback); Synchronisation Rule delete is captured. The keyed-HMAC redaction approach (Open Question 3) is confirmed.
+- **Note (2026-07-03):** The backend (capture, redaction, diff engine, retrieval), REST API, PowerShell module, the per-object Changes tab (as `ConfigurationChangesTab` on Synchronisation Rule and Connected System detail pages, and as a History tab in the Schedule editor), and the Activity-detail diff rendering (Phase 4 item 3) are delivered. Delivered beyond plan: Schedule support (Guid-keyed retrieval, API, PowerShell, UI; write-side capture in progress on a cooperating branch), capture coverage across all Connected System mutation paths, a semantic no-change dedupe guard (a save that changes nothing records no version), Simple Mode Object Matching Rule capture, per-rule attribute-priority capture, runtime state (status, import watermark) excluded from snapshots and Activities, and a "no snapshot" explanation on the Activity detail page. Phase 7 (type-aware retention) is delivered: configuration-change Activities have their own retention period (`History.ConfigurationChangeRetentionPeriod`, default ~10 years) and the general history cleanup spares them. Phase 4 is delivered in full (category quick-filter, initiator-type and date-range filters, URL-persisted filter state). Remaining: the Phase 3 comment-on-save reason dialog and Phase 8 (rollback, future). Connected System hard-delete capture is deferred as its own slice (pair with Phase 8 rollback); Synchronisation Rule delete is captured. The keyed-HMAC redaction approach (Open Question 3) is confirmed.
 
 ## Overview
 
@@ -319,9 +319,9 @@ In `-AsDiff`, `+` lines render green and `-` lines red via `$PSStyle` (git-style
 
 **Files:** `JIM.Web/Pages/Admin/Components/ConfigurationChangesTab.razor` + `JIM.Web/Shared/ConfigurationChangeFieldNode.razor`; the two detail pages and the Schedule editor dialog.
 
-### Phase 4: Activities list integration
-1. Category quick-filter (All / Configuration / Identity data / Sync runs / System) mapping `ActivityTargetType` groups; initiator-type filter; date-range filter. ⬜
-2. URL-persisted filter state. ⬜
+### Phase 4: Activities list integration ✅
+1. Category quick-filter (All / Configuration / Identity data / Sync runs / System) mapping `ActivityTargetType` groups; initiator-type filter; date-range filter. ✅
+2. URL-persisted filter state. ✅
 3. Config-change row links to the object's Changes tab at the version, and the Activity detail page renders the same diff. ✅ *(The Activity detail page renders the diff inline, loading by the change's object FK rather than the Activity's target type, links to the changed object, and explains a legitimately-missing snapshot.)*
 
 **Files:** `JIM.Web/Pages/ActivityList.razor`; `ActivityDetail.razor`; application-layer Activity query filters.
