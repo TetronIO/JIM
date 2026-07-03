@@ -428,13 +428,9 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
     /// </summary>
     private static PredefinedSearchCriteriaGroup? FindCriteriaGroup(PredefinedSearch search, int groupId)
     {
-        foreach (var group in search.CriteriaGroups)
-        {
-            var match = FindCriteriaGroup(group, groupId);
-            if (match != null)
-                return match;
-        }
-        return null;
+        return search.CriteriaGroups
+            .Select(group => FindCriteriaGroup(group, groupId))
+            .FirstOrDefault(match => match != null);
     }
 
     private static PredefinedSearchCriteriaGroup? FindCriteriaGroup(PredefinedSearchCriteriaGroup group, int groupId)
@@ -442,13 +438,9 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
         if (group.Id == groupId)
             return group;
 
-        foreach (var child in group.ChildGroups)
-        {
-            var match = FindCriteriaGroup(child, groupId);
-            if (match != null)
-                return match;
-        }
-        return null;
+        return group.ChildGroups
+            .Select(child => FindCriteriaGroup(child, groupId))
+            .FirstOrDefault(match => match != null);
     }
 
     /// <summary>

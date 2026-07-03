@@ -36,7 +36,7 @@ public static class RelativeDateResolver
         {
             RelativeDateUnit.Hours => nowUtc.AddHours(signedCount),
             RelativeDateUnit.Days => nowUtc.AddDays(signedCount),
-            RelativeDateUnit.Weeks => nowUtc.AddDays(signedCount * 7),
+            RelativeDateUnit.Weeks => nowUtc.AddDays(signedCount * 7d),
             RelativeDateUnit.Months => nowUtc.AddMonths(signedCount),
             RelativeDateUnit.Years => nowUtc.AddYears(signedCount),
             _ => throw new ArgumentOutOfRangeException(nameof(unit), unit, "Unsupported relative date unit.")

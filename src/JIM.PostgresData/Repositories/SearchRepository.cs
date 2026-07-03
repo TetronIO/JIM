@@ -133,11 +133,12 @@ public class SearchRepository : ISearchRepository
 
         if (parentGroupId.HasValue)
         {
+            var parentId = parentGroupId.Value;
             var parent = await Repository.Database.PredefinedSearchCriteriaGroups
                 .AsTracking()
                 .Include(g => g.ChildGroups)
-                .SingleOrDefaultAsync(g => g.Id == parentGroupId.Value)
-                ?? throw new ArgumentException($"Parent criteria group with ID {parentGroupId.Value} not found.");
+                .SingleOrDefaultAsync(g => g.Id == parentId)
+                ?? throw new ArgumentException($"Parent criteria group with ID {parentId} not found.");
             GuardTracked(parent, nameof(CreatePredefinedSearchCriteriaGroupAsync));
             parent.ChildGroups.Add(group);
         }

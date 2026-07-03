@@ -548,11 +548,8 @@ public class SyncRepository : ISyncRepository
 
     public Task ClearConnectedSystemObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
     {
-        foreach (var id in ids)
-        {
-            if (_csos.TryGetValue(id, out var stored))
-                stored.ScopeReviewPending = false;
-        }
+        foreach (var stored in ids.Select(id => _csos.TryGetValue(id, out var cso) ? cso : null).Where(cso => cso != null))
+            stored!.ScopeReviewPending = false;
         return Task.CompletedTask;
     }
 
@@ -851,11 +848,8 @@ public class SyncRepository : ISyncRepository
 
     public Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
     {
-        foreach (var id in ids)
-        {
-            if (_mvos.TryGetValue(id, out var stored))
-                stored.ScopeReviewPending = false;
-        }
+        foreach (var stored in ids.Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null).Where(mvo => mvo != null))
+            stored!.ScopeReviewPending = false;
         return Task.CompletedTask;
     }
 

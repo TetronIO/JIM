@@ -147,21 +147,13 @@ public class ScopeReconciliationServer
 
     private static IEnumerable<(int AttributeId, int Count, RelativeDateUnit Unit, RelativeDateDirection Direction)> EnumerateGroup(SyncRuleScopingCriteriaGroup group, SyncRuleDirection direction)
     {
-        foreach (var criterion in group.Criteria)
-        {
-            if (criterion.ValueMode != DateCriteriaValueMode.Relative)
-                continue;
-            if (!criterion.RelativeCount.HasValue || !criterion.RelativeUnit.HasValue || !criterion.RelativeDirection.HasValue)
-                continue;
+        var completeRelativeCriteria = group.Criteria
+            .Where(c => c.ValueMode == DateCriteriaValueMode.Relative &&
+                        c.RelativeCount.HasValue && c.RelativeUnit.HasValue && c.RelativeDirection.HasValue)
+            .Select(c => (Criterion: c, AttributeId: direction == SyncRuleDirection.Import ? c.ConnectedSystemAttributeId : c.MetaverseAttributeId))
+            .Where(pair => pair.AttributeId.HasValue)
+            .Select(pair => (pair.AttributeId!.Value, pair.Criterion.RelativeCount!.Value, pair.Criterion.RelativeUnit!.Value, pair.Criterion.RelativeDirection!.Value));
 
-            var attributeId = direction == SyncRuleDirection.Import ? criterion.ConnectedSystemAttributeId : criterion.MetaverseAttributeId;
-            if (!attributeId.HasValue)
-                continue;
-
-            yield return (attributeId.Value, criterion.RelativeCount.Value, criterion.RelativeUnit.Value, criterion.RelativeDirection.Value);
-        }
-
-        foreach (var childCriterion in group.ChildGroups.SelectMany(child => EnumerateGroup(child, direction)))
-            yield return childCriterion;
+        return completeRelativeCriteria.Concat(group.ChildGroups.SelectMany(child => EnumerateGroup(child, direction)));
     }
 }
