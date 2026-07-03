@@ -107,9 +107,29 @@ public interface IActivityRepository
     public Task<int> GetMaxConfigurationChangeVersionAsync(ActivityTargetType targetType, Guid targetObjectId);
 
     /// <summary>
+    /// Gets the snapshot JSON of the highest configuration-change version recorded for a configuration object, or null
+    /// if none exists yet. Used by the idempotent capture guard: a new capture whose snapshot is identical to the
+    /// latest stored one is skipped rather than recorded as a no-change version.
+    /// </summary>
+    public Task<string?> GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType targetType, int targetObjectId);
+
+    /// <summary>
+    /// Gets the snapshot JSON of the highest configuration-change version recorded for a Guid-keyed configuration
+    /// object (e.g. a <see cref="ActivityTargetType.Schedule"/>), or null if none exists yet. The Guid-keyed
+    /// counterpart of <see cref="GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType,int)"/>.
+    /// </summary>
+    public Task<string?> GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType targetType, Guid targetObjectId);
+
+    /// <summary>
     /// Counts the versioned configuration-change activities recorded for a configuration object.
     /// </summary>
     public Task<int> GetConfigurationChangeCountAsync(ActivityTargetType targetType, int targetObjectId);
+
+    /// <summary>
+    /// Counts the versioned configuration-change activities recorded for a Guid-keyed configuration object (e.g. a
+    /// <see cref="ActivityTargetType.Schedule"/>).
+    /// </summary>
+    public Task<int> GetConfigurationChangeCountAsync(ActivityTargetType targetType, Guid targetObjectId);
 
     /// <summary>
     /// Returns a page of versioned configuration-change activities for a configuration object, newest version first,
@@ -118,15 +138,34 @@ public interface IActivityRepository
     public Task<List<ConfigurationChangeActivityData>> GetConfigurationChangeActivitiesAsync(ActivityTargetType targetType, int targetObjectId, int skip, int take);
 
     /// <summary>
+    /// Returns a page of versioned configuration-change activities for a Guid-keyed configuration object, newest
+    /// version first. The Guid-keyed counterpart of
+    /// <see cref="GetConfigurationChangeActivitiesAsync(ActivityTargetType,int,int,int)"/>.
+    /// </summary>
+    public Task<List<ConfigurationChangeActivityData>> GetConfigurationChangeActivitiesAsync(ActivityTargetType targetType, Guid targetObjectId, int skip, int take);
+
+    /// <summary>
     /// Returns the configuration-change activity for a specific version of a configuration object, or null if absent.
     /// </summary>
     public Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityByVersionAsync(ActivityTargetType targetType, int targetObjectId, int version);
+
+    /// <summary>
+    /// Returns the configuration-change activity for a specific version of a Guid-keyed configuration object, or null
+    /// if absent.
+    /// </summary>
+    public Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityByVersionAsync(ActivityTargetType targetType, Guid targetObjectId, int version);
 
     /// <summary>
     /// Returns the configuration-change activity for the highest version below <paramref name="version"/> (the
     /// immediate predecessor), or null if none exists. Used to diff a version against the one before it.
     /// </summary>
     public Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityBeforeVersionAsync(ActivityTargetType targetType, int targetObjectId, int version);
+
+    /// <summary>
+    /// Returns the configuration-change activity for the highest version below <paramref name="version"/> of a
+    /// Guid-keyed configuration object, or null if none exists.
+    /// </summary>
+    public Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityBeforeVersionAsync(ActivityTargetType targetType, Guid targetObjectId, int version);
 
 
     /// <summary>

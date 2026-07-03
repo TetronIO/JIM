@@ -58,9 +58,21 @@ public class ConnectedSystemServer
 
             var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
             var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey);
+            var serialised = ConfigurationSnapshotService.Serialise(snapshot);
             activity.ConnectedSystemId ??= connectedSystem.Id;
+
+            // Idempotent capture guard: serialisation is deterministic (stable ordering, no timestamps, keyed secret
+            // hashes), so an identical string means nothing changed. Skipping keeps no-change saves (e.g. worker paths
+            // that persist after every import) from consuming versions and drowning real changes in noise.
+            var latest = await Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.ConnectedSystem, connectedSystem.Id);
+            if (latest == serialised)
+            {
+                Log.Debug("CaptureConfigurationChangeAsync: configuration of Connected System {ConnectedSystemId} is unchanged from its latest snapshot; no new version recorded.", connectedSystem.Id);
+                return;
+            }
+
             activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.ConnectedSystem, connectedSystem.Id);
-            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+            activity.ConfigurationChangeSnapshot = serialised;
         }
         catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
         {
@@ -83,9 +95,19 @@ public class ConnectedSystemServer
 
             var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
             var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey);
+            var serialised = ConfigurationSnapshotService.Serialise(snapshot);
             activity.SyncRuleId ??= syncRule.Id;
+
+            // Idempotent capture guard: see the Connected System overload above.
+            var latest = await Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SyncRule, syncRule.Id);
+            if (latest == serialised)
+            {
+                Log.Debug("CaptureConfigurationChangeAsync: configuration of Synchronisation Rule {SyncRuleId} is unchanged from its latest snapshot; no new version recorded.", syncRule.Id);
+                return;
+            }
+
             activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.SyncRule, syncRule.Id);
-            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+            activity.ConfigurationChangeSnapshot = serialised;
         }
         catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
         {
@@ -452,6 +474,8 @@ public class ConnectedSystemServer
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
 
+        // Reload for the snapshot: schema reconciliation assigns ids server-side, so the caller's graph is stale.
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -558,7 +582,24 @@ public class ConnectedSystemServer
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Persists a runtime status change (e.g. resetting <see cref="ConnectedSystemStatus.Deleting"/> back to
+    /// <see cref="ConnectedSystemStatus.Active"/> after a failed deletion) without creating an Activity or capturing a
+    /// configuration snapshot. Status is runtime state, not configuration; routing it through the full
+    /// <see cref="UpdateConnectedSystemAsync(ConnectedSystem, MetaverseObject?, string?)"/> would record a spurious
+    /// configuration-change version.
+    /// </summary>
+    public async Task UpdateConnectedSystemStatusAsync(ConnectedSystem connectedSystem, ConnectedSystemStatus status)
+    {
+        if (connectedSystem == null)
+            throw new ArgumentNullException(nameof(connectedSystem));
+
+        connectedSystem.Status = status;
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
     }
 
     /// <summary>
@@ -636,6 +677,7 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
         await Application.Activities.CompleteActivityAsync(activity);
 
         return result;
@@ -1378,6 +1420,10 @@ public class ConnectedSystemServer
 
         await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedBy);
 
+        // A schema import changes the system's configuration (object types and attributes); capture it onto the
+        // ImportSchema activity so the change is versioned in the system's history. Reloaded, as ids are assigned on save.
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+
         // finish the activity
         await Application.Activities.CompleteActivityAsync(activity);
 
@@ -1532,6 +1578,9 @@ public class ConnectedSystemServer
 
         await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedByApiKey);
 
+        // Capture the configuration change onto the ImportSchema activity: see the user-initiated overload above.
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+
         await Application.Activities.CompleteActivityAsync(activity);
 
         return result;
@@ -1600,6 +1649,10 @@ public class ConnectedSystemServer
         // Persist the changes
         await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedBy);
 
+        // A hierarchy import changes the system's configuration (partitions and containers); capture it onto the
+        // ImportHierarchy activity so the change is versioned in the system's history. Reloaded, as ids are assigned on save.
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+
         // finish the activity
         await Application.Activities.CompleteActivityAsync(activity);
 
@@ -1663,6 +1716,9 @@ public class ConnectedSystemServer
 
         // Persist the changes
         await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedByApiKey);
+
+        // Capture the configuration change onto the ImportHierarchy activity: see the user-initiated overload above.
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
 
         // finish the activity
         await Application.Activities.CompleteActivityAsync(activity);
@@ -1807,6 +1863,10 @@ public class ConnectedSystemServer
                 await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedByUser);
 
             activity.Message = $"Auto-selected {containersAdded} container(s) created during export";
+
+            // Container additions change the system's import scope; capture the configuration change onto this
+            // activity so it is versioned in the system's history. Reloaded, as container ids are assigned on save.
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
         }
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -1925,6 +1985,10 @@ public class ConnectedSystemServer
         {
             await PersistConnectedSystemUpdateAsync(connectedSystem, initiatorType, initiatorId, initiatorName);
             activity.Message = $"Auto-selected {containersAdded} container(s) created during export";
+
+            // Container additions change the system's import scope; capture the configuration change onto this
+            // activity so it is versioned in the system's history. Reloaded, as container ids are assigned on save.
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
         }
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -2531,7 +2595,13 @@ public class ConnectedSystemServer
         }
 
         if (updated.Count > 0)
+        {
             await Application.Repository.ConnectedSystems.UpdateAttributesAsync(updated);
+
+            // Attribute selection changes are configuration; capture the change onto this activity so it is
+            // versioned in the system's history. Reloaded so the snapshot reflects persisted truth.
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+        }
 
         if (errors.Count > 0)
             await Application.Activities.CompleteActivityWithWarningAsync(activity);
@@ -2622,7 +2692,13 @@ public class ConnectedSystemServer
         }
 
         if (updated.Count > 0)
+        {
             await Application.Repository.ConnectedSystems.UpdateAttributesAsync(updated);
+
+            // Attribute selection changes are configuration; capture the change onto this activity so it is
+            // versioned in the system's history. Reloaded so the snapshot reflects persisted truth.
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+        }
 
         if (errors.Count > 0)
             await Application.Activities.CompleteActivityWithWarningAsync(activity);
@@ -3776,12 +3852,24 @@ public class ConnectedSystemServer
     #endregion
 
     #region Connected System Partitions
-    public async Task CreateConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition)
+    // Partition and container writes change the system's import scope, which is configuration: every mutation is
+    // recorded with an Activity and a versioned snapshot via ExecuteScopeConfigurationChangeAsync. There are
+    // deliberately no activity-less overloads, so any future caller inherits capture automatically.
+
+    /// <summary>
+    /// Creates a Connected System Partition, recording the change with an Activity and a versioned configuration
+    /// snapshot of the owning Connected System.
+    /// </summary>
+    public async Task CreateConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition, int connectedSystemId, MetaverseObject? initiatedBy)
     {
         if (connectedSystemPartition == null)
             throw new ArgumentNullException(nameof(connectedSystemPartition));
 
-        await Application.Repository.ConnectedSystems.CreateConnectedSystemPartitionAsync(connectedSystemPartition);
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Create partition: {connectedSystemPartition.Name}",
+            () => Application.Repository.ConnectedSystems.CreateConnectedSystemPartitionAsync(connectedSystemPartition),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
     }
 
     public async Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem)
@@ -3797,20 +3885,52 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionAsync(id, withChangeTracking);
     }
 
-    public async Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition)
+    /// <summary>
+    /// Updates a Connected System Partition (e.g. its import-scope selection), recording the change with an Activity
+    /// and a versioned configuration snapshot of the owning Connected System.
+    /// </summary>
+    public async Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition, int connectedSystemId, MetaverseObject? initiatedBy)
     {
         if (partition == null)
             throw new ArgumentNullException(nameof(partition));
 
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition);
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Update partition: {partition.Name}",
+            () => Application.Repository.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
     }
 
-    public async Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition)
+    /// <summary>
+    /// Updates a Connected System Partition (initiated by API key), recording the change with an Activity and a
+    /// versioned configuration snapshot of the owning Connected System.
+    /// </summary>
+    public async Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition, int connectedSystemId, ApiKey initiatedByApiKey)
+    {
+        if (partition == null)
+            throw new ArgumentNullException(nameof(partition));
+
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Update partition: {partition.Name}",
+            () => Application.Repository.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey));
+    }
+
+    /// <summary>
+    /// Deletes a Connected System Partition, recording the change with an Activity and a versioned configuration
+    /// snapshot of the owning Connected System.
+    /// </summary>
+    public async Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition, int connectedSystemId, MetaverseObject? initiatedBy)
     {
         if (connectedSystemPartition == null)
             throw new ArgumentNullException(nameof(connectedSystemPartition));
 
-        await Application.Repository.ConnectedSystems.DeleteConnectedSystemPartitionAsync(connectedSystemPartition);
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Delete partition: {connectedSystemPartition.Name}",
+            () => Application.Repository.ConnectedSystems.DeleteConnectedSystemPartitionAsync(connectedSystemPartition),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
     }
     #endregion
 
@@ -3818,13 +3938,18 @@ public class ConnectedSystemServer
     /// <summary>
     /// Used to create a top-level container (optionally with children), when the connector does not implement Partitions.
     /// If the connector implements Partitions, then use CreateConnectedSystemPartitionAsync and add the container to that.
+    /// The change is recorded with an Activity and a versioned configuration snapshot of the owning Connected System.
     /// </summary>
-    public async Task CreateConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer)
+    public async Task CreateConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer, int connectedSystemId, MetaverseObject? initiatedBy)
     {
         if (connectedSystemContainer == null)
             throw new ArgumentNullException(nameof(connectedSystemContainer));
 
-        await Application.Repository.ConnectedSystems.CreateConnectedSystemContainerAsync(connectedSystemContainer);
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Create container: {connectedSystemContainer.Name}",
+            () => Application.Repository.ConnectedSystems.CreateConnectedSystemContainerAsync(connectedSystemContainer),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
     }
 
     public async Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem)
@@ -3840,21 +3965,83 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemContainerAsync(id);
     }
 
-    public async Task UpdateConnectedSystemContainerAsync(ConnectedSystemContainer container)
+    /// <summary>
+    /// Updates a Connected System Container (e.g. its import-scope selection), recording the change with an Activity
+    /// and a versioned configuration snapshot of the owning Connected System.
+    /// </summary>
+    public async Task UpdateConnectedSystemContainerAsync(ConnectedSystemContainer container, int connectedSystemId, MetaverseObject? initiatedBy)
     {
         if (container == null)
             throw new ArgumentNullException(nameof(container));
 
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemContainerAsync(container);
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Update container: {container.Name}",
+            () => Application.Repository.ConnectedSystems.UpdateConnectedSystemContainerAsync(container),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
     }
 
-    public async Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer)
+    /// <summary>
+    /// Updates a Connected System Container (initiated by API key), recording the change with an Activity and a
+    /// versioned configuration snapshot of the owning Connected System.
+    /// </summary>
+    public async Task UpdateConnectedSystemContainerAsync(ConnectedSystemContainer container, int connectedSystemId, ApiKey initiatedByApiKey)
+    {
+        if (container == null)
+            throw new ArgumentNullException(nameof(container));
+
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Update container: {container.Name}",
+            () => Application.Repository.ConnectedSystems.UpdateConnectedSystemContainerAsync(container),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey));
+    }
+
+    /// <summary>
+    /// Deletes a Connected System Container, recording the change with an Activity and a versioned configuration
+    /// snapshot of the owning Connected System.
+    /// </summary>
+    public async Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer, int connectedSystemId, MetaverseObject? initiatedBy)
     {
         if (connectedSystemContainer == null)
             throw new ArgumentNullException(nameof(connectedSystemContainer));
 
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Delete container: {connectedSystemContainer.Name}",
+            () => Application.Repository.ConnectedSystems.DeleteConnectedSystemContainerAsync(connectedSystemContainer),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
+    }
 
-        await Application.Repository.ConnectedSystems.DeleteConnectedSystemContainerAsync(connectedSystemContainer);
+    /// <summary>
+    /// Shared execution shape for partition/container configuration changes: create an Update Activity against the
+    /// owning Connected System, persist the change, capture a versioned configuration snapshot (reloaded so it
+    /// reflects persisted truth), then complete the Activity.
+    /// </summary>
+    private async Task ExecuteScopeConfigurationChangeAsync(
+        int connectedSystemId,
+        string message,
+        Func<Task> persistAsync,
+        Func<Activity, Task> createActivityAsync)
+    {
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+
+        // The activity targets the owning Connected System (whose configuration changed), so the operation is always
+        // Update; whether a partition/container was created, updated or deleted is carried by the message.
+        var activity = new Activity
+        {
+            TargetName = connectedSystem?.Name ?? "Unknown",
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemId = connectedSystemId,
+            Message = message
+        };
+        await createActivityAsync(activity);
+
+        await persistAsync();
+
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemId);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
     #endregion
 

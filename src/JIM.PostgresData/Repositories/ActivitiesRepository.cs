@@ -504,12 +504,43 @@ public class ActivityRepository : IActivityRepository
         return max ?? 0;
     }
 
+    public async Task<string?> GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType targetType, int targetObjectId)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectId)
+            .OrderByDescending(a => a.ConfigurationChangeVersion)
+            .Select(a => a.ConfigurationChangeSnapshot)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<string?> GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType targetType, Guid targetObjectId)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectId)
+            .OrderByDescending(a => a.ConfigurationChangeVersion)
+            .Select(a => a.ConfigurationChangeSnapshot)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task<int> GetConfigurationChangeCountAsync(ActivityTargetType targetType, int targetObjectId)
     {
         return await ConfigurationChangeQuery(targetType, targetObjectId).CountAsync();
     }
 
+    public async Task<int> GetConfigurationChangeCountAsync(ActivityTargetType targetType, Guid targetObjectId)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectId).CountAsync();
+    }
+
     public async Task<List<ConfigurationChangeActivityData>> GetConfigurationChangeActivitiesAsync(ActivityTargetType targetType, int targetObjectId, int skip, int take)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectId)
+            .OrderByDescending(a => a.ConfigurationChangeVersion)
+            .Skip(skip)
+            .Take(take)
+            .Select(ToConfigurationChangeData)
+            .ToListAsync();
+    }
+
+    public async Task<List<ConfigurationChangeActivityData>> GetConfigurationChangeActivitiesAsync(ActivityTargetType targetType, Guid targetObjectId, int skip, int take)
     {
         return await ConfigurationChangeQuery(targetType, targetObjectId)
             .OrderByDescending(a => a.ConfigurationChangeVersion)
@@ -527,7 +558,24 @@ public class ActivityRepository : IActivityRepository
             .FirstOrDefaultAsync();
     }
 
+    public async Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityByVersionAsync(ActivityTargetType targetType, Guid targetObjectId, int version)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectId)
+            .Where(a => a.ConfigurationChangeVersion == version)
+            .Select(ToConfigurationChangeData)
+            .FirstOrDefaultAsync();
+    }
+
     public async Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityBeforeVersionAsync(ActivityTargetType targetType, int targetObjectId, int version)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectId)
+            .Where(a => a.ConfigurationChangeVersion < version)
+            .OrderByDescending(a => a.ConfigurationChangeVersion)
+            .Select(ToConfigurationChangeData)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityBeforeVersionAsync(ActivityTargetType targetType, Guid targetObjectId, int version)
     {
         return await ConfigurationChangeQuery(targetType, targetObjectId)
             .Where(a => a.ConfigurationChangeVersion < version)

@@ -4,7 +4,7 @@
 function Get-JIMConfigurationChangeHistory {
     <#
     .SYNOPSIS
-        Gets the configuration change history for a Synchronisation Rule or Connected System in JIM.
+        Gets the configuration change history for a Synchronisation Rule, Connected System, or Schedule in JIM.
 
     .DESCRIPTION
         Retrieves the recorded configuration changes for a configuration object. Three modes are supported:
@@ -20,11 +20,12 @@ function Get-JIMConfigurationChangeHistory {
         is reported only as "changed", never by value.
 
     .PARAMETER Type
-        The kind of configuration object: 'SynchronisationRule' or 'ConnectedSystem'.
+        The kind of configuration object: 'SynchronisationRule', 'ConnectedSystem', or 'Schedule'.
 
     .PARAMETER Id
-        The unique identifier (integer) of the configuration object. Accepts the 'id' property from the
-        pipeline, so a piped Synchronisation Rule or Connected System binds automatically.
+        The unique identifier of the configuration object: an integer for a Synchronisation Rule or Connected
+        System, or a GUID for a Schedule. Accepts the 'id' property from the pipeline, so a piped
+        Synchronisation Rule, Connected System, or Schedule binds automatically.
 
     .PARAMETER All
         Automatically paginate through all change-history entries and return every row. Cannot be used with -Page.
@@ -81,6 +82,11 @@ function Get-JIMConfigurationChangeHistory {
 
         Compares versions 6 and 8 of Synchronisation Rule 5 as a coloured diff.
 
+    .EXAMPLE
+        Get-JIMSchedule -Name "Nightly Sync" | Get-JIMConfigurationChangeHistory -Type Schedule
+
+        Pipes a Schedule in (binding its GUID id) and lists its recorded configuration changes.
+
     .LINK
         Get-JIMSyncRule
 
@@ -94,11 +100,14 @@ function Get-JIMConfigurationChangeHistory {
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('SynchronisationRule', 'ConnectedSystem')]
+        [ValidateSet('SynchronisationRule', 'ConnectedSystem', 'Schedule')]
         [string]$Type,
 
+        # A string rather than [int] so it can carry either an integer (Synchronisation Rule / Connected System)
+        # or a GUID (Schedule); validated per -Type in the process block.
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
-        [int]$Id,
+        [ValidateNotNullOrEmpty()]
+        [string]$Id,
 
         [Parameter(Mandatory, ParameterSetName = 'All')]
         [switch]$All,
@@ -134,13 +143,30 @@ function Get-JIMConfigurationChangeHistory {
     )
 
     process {
+        # Validate the id shape per object type before anything else (so a bad id fails fast, even offline):
+        # Synchronisation Rules and Connected Systems are integer-keyed, Schedules are GUID-keyed.
+        if ($Type -eq 'Schedule') {
+            $parsedGuid = [Guid]::Empty
+            if (-not [Guid]::TryParse($Id, [ref]$parsedGuid)) {
+                Write-Error "For -Type Schedule, -Id must be a GUID (Schedules are GUID-keyed). Got: '$Id'."
+                return
+            }
+            $base = "/api/v1/schedules/$Id/change-history"
+        }
+        else {
+            $parsedInt = 0
+            if (-not [int]::TryParse($Id, [ref]$parsedInt)) {
+                Write-Error "For -Type $Type, -Id must be an integer. Got: '$Id'."
+                return
+            }
+            $segment = if ($Type -eq 'SynchronisationRule') { 'sync-rules' } else { 'connected-systems' }
+            $base = "/api/v1/synchronisation/$segment/$Id/change-history"
+        }
+
         if (-not $script:JIMConnection) {
             Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
             return
         }
-
-        $segment = if ($Type -eq 'SynchronisationRule') { 'sync-rules' } else { 'connected-systems' }
-        $base = "/api/v1/synchronisation/$segment/$Id/change-history"
 
         switch ($PSCmdlet.ParameterSetName) {
             'Version' {

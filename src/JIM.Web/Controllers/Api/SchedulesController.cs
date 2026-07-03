@@ -4,6 +4,7 @@
 using Asp.Versioning;
 using JIM.Application;
 using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Scheduling;
 using JIM.Utilities;
 using JIM.Web.Models.Api;
@@ -373,6 +374,70 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
             Message = $"Schedule '{schedule.Name}' started successfully"
         });
     }
+
+    #region Configuration Change History
+
+    /// <summary>
+    /// List the change history for a Schedule.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Schedule.</param>
+    /// <param name="pagination">Pagination parameters.</param>
+    /// <returns>A paged list of change-history entries, newest version first, each with a one-line summary.</returns>
+    /// <response code="200">Change history returned (empty if the Schedule has no recorded configuration changes).</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("{id:guid}/change-history", Name = "GetScheduleChangeHistory")]
+    [ProducesResponseType(typeof(PaginatedResponse<ConfigurationChangeHistoryItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetScheduleChangeHistoryAsync(Guid id, [FromQuery] PaginationRequest pagination)
+    {
+        var result = await _application.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.Schedule, id, pagination.Page, pagination.PageSize);
+        return Ok(PaginatedResponse<ConfigurationChangeHistoryItem>.Create(result.Results, result.TotalResults, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
+    /// Get a single version of a Schedule's change history, with its snapshot and the diff against the previous version.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Schedule.</param>
+    /// <param name="changeVersion">The per-object change version to retrieve.</param>
+    /// <returns>The change detail: metadata, the redacted snapshot, and the diff against the previous version.</returns>
+    /// <response code="200">The change detail.</response>
+    /// <response code="404">No change with that version was found for the Schedule.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("{id:guid}/change-history/{changeVersion:int}", Name = "GetScheduleChange")]
+    [ProducesResponseType(typeof(ConfigurationChangeDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetScheduleChangeAsync(Guid id, int changeVersion)
+    {
+        var detail = await _application.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.Schedule, id, changeVersion);
+        if (detail == null)
+            return NotFound(ApiErrorResponse.NotFound($"No change history found for Schedule {id} version {changeVersion}."));
+        return Ok(detail);
+    }
+
+    /// <summary>
+    /// Compare two versions of a Schedule's configuration.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Schedule.</param>
+    /// <param name="fromVersion">The earlier version to compare from.</param>
+    /// <param name="toVersion">The later version to compare to.</param>
+    /// <returns>The structured diff of the later version against the earlier.</returns>
+    /// <response code="200">The diff.</response>
+    /// <response code="404">One of the requested versions was not found for the Schedule.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("{id:guid}/change-history/compare", Name = "CompareScheduleChanges")]
+    [ProducesResponseType(typeof(ConfigurationDiff), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CompareScheduleChangesAsync(Guid id, [FromQuery] int fromVersion, [FromQuery] int toVersion)
+    {
+        var diff = await _application.ChangeHistory.CompareConfigurationChangesAsync(ActivityTargetType.Schedule, id, fromVersion, toVersion);
+        if (diff == null)
+            return NotFound(ApiErrorResponse.NotFound($"Could not compare versions {fromVersion} and {toVersion} for Schedule {id}."));
+        return Ok(diff);
+    }
+
+    #endregion
 
     /// <summary>
     /// Validates the schedule request (trigger and steps).
