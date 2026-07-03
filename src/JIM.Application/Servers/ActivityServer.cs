@@ -98,6 +98,24 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// Returns the snapshot JSON of the latest configuration-change version recorded for a configuration object, or
+    /// null if none exists yet. Used by the idempotent capture guard to skip no-change captures.
+    /// </summary>
+    public async Task<string?> GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType targetType, int targetObjectId)
+    {
+        return await Application.Repository.Activity.GetLatestConfigurationChangeSnapshotAsync(targetType, targetObjectId);
+    }
+
+    /// <summary>
+    /// Returns the snapshot JSON of the latest configuration-change version recorded for a Guid-keyed configuration
+    /// object (e.g. a Schedule), or null if none exists yet.
+    /// </summary>
+    public async Task<string?> GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType targetType, Guid targetObjectId)
+    {
+        return await Application.Repository.Activity.GetLatestConfigurationChangeSnapshotAsync(targetType, targetObjectId);
+    }
+
+    /// <summary>
     /// Creates and persists an Activity using an initiator triad (Type, Id, Name).
     /// Used when the full principal object is not available (e.g., from WorkerTask).
     /// </summary>

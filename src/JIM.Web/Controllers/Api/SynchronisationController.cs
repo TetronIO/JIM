@@ -763,7 +763,12 @@ public class SynchronisationController(
         if (request.Selected.HasValue)
             partition.Selected = request.Selected.Value;
 
-        await _application.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition);
+        // Partition selection is configuration; the server records the change with an Activity and a versioned snapshot.
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (apiKey != null)
+            await _application.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition, connectedSystemId, apiKey);
+        else
+            await _application.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition, connectedSystemId, initiatedBy);
 
         // Reload to get full entity with relationships
         var updated = await _application.ConnectedSystems.GetConnectedSystemPartitionAsync(partitionId);
@@ -814,7 +819,12 @@ public class SynchronisationController(
         if (request.Selected.HasValue)
             container.Selected = request.Selected.Value;
 
-        await _application.ConnectedSystems.UpdateConnectedSystemContainerAsync(container);
+        // Container selection is configuration; the server records the change with an Activity and a versioned snapshot.
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (apiKey != null)
+            await _application.ConnectedSystems.UpdateConnectedSystemContainerAsync(container, connectedSystemId, apiKey);
+        else
+            await _application.ConnectedSystems.UpdateConnectedSystemContainerAsync(container, connectedSystemId, initiatedBy);
 
         // Reload to get full entity with relationships
         var updated = await _application.ConnectedSystems.GetConnectedSystemContainerAsync(containerId);
