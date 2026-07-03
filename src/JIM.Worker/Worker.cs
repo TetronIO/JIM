@@ -453,8 +453,9 @@ public class Worker : BackgroundService
                                             var connectedSystem = await taskJim.ConnectedSystems.GetConnectedSystemCoreAsync(deleteConnectedSystemTask.ConnectedSystemId, withChangeTracking: true);
                                             if (connectedSystem != null && connectedSystem.Status == ConnectedSystemStatus.Deleting)
                                             {
-                                                connectedSystem.Status = ConnectedSystemStatus.Active;
-                                                await taskJim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, (MetaverseObject?)null);
+                                                // Status is runtime state, not configuration: the status-only update avoids
+                                                // recording a spurious configuration-change version for the reset.
+                                                await taskJim.ConnectedSystems.UpdateConnectedSystemStatusAsync(connectedSystem, ConnectedSystemStatus.Active);
                                                 Log.Warning("ExecuteAsync: Reset Connected System {Id} status to Active after deletion failure", deleteConnectedSystemTask.ConnectedSystemId);
                                             }
                                         }

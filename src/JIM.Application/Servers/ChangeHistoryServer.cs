@@ -79,10 +79,7 @@ public class ChangeHistoryServer
     /// </summary>
     public async Task<PagedResultSet<ConfigurationChangeHistoryItem>> GetConfigurationChangeHistoryAsync(ActivityTargetType targetType, int objectId, int page = 1, int pageSize = 20)
     {
-        if (page < 1)
-            page = 1;
-        if (pageSize < 1)
-            pageSize = 20;
+        NormalisePaging(ref page, ref pageSize);
 
         var total = await _application.Repository.Activity.GetConfigurationChangeCountAsync(targetType, objectId);
         var skip = (page - 1) * pageSize;
@@ -90,21 +87,76 @@ public class ChangeHistoryServer
         // Fetch one extra older row so the oldest row on the page can be diffed against its predecessor.
         var rows = await _application.Repository.Activity.GetConfigurationChangeActivitiesAsync(targetType, objectId, skip, pageSize + 1);
 
+        return BuildHistoryPage(rows, total, page, pageSize);
+    }
+
+    /// <summary>
+    /// Returns a page of a Guid-keyed configuration object's (e.g. a Schedule's) change history, newest version first.
+    /// The Guid-keyed counterpart of <see cref="GetConfigurationChangeHistoryAsync(ActivityTargetType,int,int,int)"/>.
+    /// </summary>
+    public async Task<PagedResultSet<ConfigurationChangeHistoryItem>> GetConfigurationChangeHistoryAsync(ActivityTargetType targetType, Guid objectId, int page = 1, int pageSize = 20)
+    {
+        NormalisePaging(ref page, ref pageSize);
+
+        var total = await _application.Repository.Activity.GetConfigurationChangeCountAsync(targetType, objectId);
+        var skip = (page - 1) * pageSize;
+
+        // Fetch one extra older row so the oldest row on the page can be diffed against its predecessor.
+        var rows = await _application.Repository.Activity.GetConfigurationChangeActivitiesAsync(targetType, objectId, skip, pageSize + 1);
+
+        return BuildHistoryPage(rows, total, page, pageSize);
+    }
+
+    private static void NormalisePaging(ref int page, ref int pageSize)
+    {
+        if (page < 1)
+            page = 1;
+        if (pageSize < 1)
+            pageSize = 20;
+    }
+
+    // Builds the history page from the fetched rows (which include one extra older row so the oldest row on the page
+    // can be diffed against its predecessor). Shared by the int- and Guid-keyed overloads so both key shapes stay
+    // behaviourally identical.
+    private PagedResultSet<ConfigurationChangeHistoryItem> BuildHistoryPage(List<ConfigurationChangeActivityData> rows, int total, int page, int pageSize)
+    {
         var items = new List<ConfigurationChangeHistoryItem>();
         for (var i = 0; i < rows.Count && i < pageSize; i++)
         {
             var current = rows[i];
             var predecessor = i + 1 < rows.Count ? rows[i + 1] : null;
+
+            // The operation shown in an object's configuration history describes what happened to the object as a whole,
+            // not to whichever sub-entity carried the change. A granular endpoint (e.g. adding an Attribute Flow mapping)
+            // records its own Create/Delete operation on its Activity, but at the object level that is an Update. The only
+            // version that is genuinely a creation is the object's first; every later version is an update of an existing
+            // object. The extra older row fetched above guarantees predecessor is null only for that genuine first version.
+            var isFirstVersion = predecessor == null;
+
+            // Compute the diff against the predecessor once and carry it on the row: the list renders it inline, so there
+            // is no second round-trip per row, and the summary is derived from the same diff. The first version has no
+            // predecessor, so its diff shows the whole object as created.
+            var currentSnapshot = ConfigurationSnapshotService.Deserialise(current.SnapshotJson);
+            var predecessorSnapshot = ConfigurationSnapshotService.Deserialise(predecessor?.SnapshotJson);
+            var diff = currentSnapshot == null
+                ? null
+                : _application.ConfigurationDiffs.Diff(predecessorSnapshot, currentSnapshot, predecessor?.Version, current.Version);
+
             items.Add(new ConfigurationChangeHistoryItem
             {
                 ActivityId = current.ActivityId,
                 Version = current.Version,
-                Operation = current.Operation,
+                Operation = isFirstVersion ? ActivityTargetOperationType.Create : ActivityTargetOperationType.Update,
                 InitiatedByType = current.InitiatedByType,
+                InitiatedById = current.InitiatedById,
                 InitiatedByName = current.InitiatedByName,
                 When = current.When,
                 Reason = current.Reason,
-                Summary = BuildChangeSummary(current, predecessor)
+                // The first version is a creation regardless of the recording activity's own operation; otherwise the
+                // summary is the one-line rollup of the diff we just computed (falling back to a generic label if the
+                // snapshot could not be deserialised).
+                Summary = isFirstVersion ? "Created" : diff != null ? ConfigurationDiffService.Summarise(diff) : "Updated",
+                Diff = diff
             });
         }
 
@@ -124,11 +176,33 @@ public class ChangeHistoryServer
     public async Task<ConfigurationChangeDetail?> GetConfigurationChangeAsync(ActivityTargetType targetType, int objectId, int version)
     {
         var current = await _application.Repository.Activity.GetConfigurationChangeActivityByVersionAsync(targetType, objectId, version);
+        var predecessor = current == null
+            ? null
+            : await _application.Repository.Activity.GetConfigurationChangeActivityBeforeVersionAsync(targetType, objectId, version);
+        return BuildChangeDetail(current, predecessor);
+    }
+
+    /// <summary>
+    /// Returns a single configuration change of a Guid-keyed configuration object (e.g. a Schedule) in full, or null
+    /// if the version does not exist or carries no snapshot.
+    /// </summary>
+    public async Task<ConfigurationChangeDetail?> GetConfigurationChangeAsync(ActivityTargetType targetType, Guid objectId, int version)
+    {
+        var current = await _application.Repository.Activity.GetConfigurationChangeActivityByVersionAsync(targetType, objectId, version);
+        var predecessor = current == null
+            ? null
+            : await _application.Repository.Activity.GetConfigurationChangeActivityBeforeVersionAsync(targetType, objectId, version);
+        return BuildChangeDetail(current, predecessor);
+    }
+
+    // Builds the change detail from the fetched version and its predecessor. Shared by the int- and Guid-keyed
+    // overloads.
+    private ConfigurationChangeDetail? BuildChangeDetail(ConfigurationChangeActivityData? current, ConfigurationChangeActivityData? predecessor)
+    {
         var currentSnapshot = ConfigurationSnapshotService.Deserialise(current?.SnapshotJson);
         if (current == null || currentSnapshot == null)
             return null;
 
-        var predecessor = await _application.Repository.Activity.GetConfigurationChangeActivityBeforeVersionAsync(targetType, objectId, version);
         var predecessorSnapshot = ConfigurationSnapshotService.Deserialise(predecessor?.SnapshotJson);
 
         return new ConfigurationChangeDetail
@@ -153,26 +227,29 @@ public class ChangeHistoryServer
     {
         var from = await _application.Repository.Activity.GetConfigurationChangeActivityByVersionAsync(targetType, objectId, fromVersion);
         var to = await _application.Repository.Activity.GetConfigurationChangeActivityByVersionAsync(targetType, objectId, toVersion);
+        return BuildComparison(from, to, toVersion);
+    }
+
+    /// <summary>
+    /// Compares any two versions of a Guid-keyed configuration object (e.g. a Schedule), returning the structured diff
+    /// of the later against the earlier, or null if the later version does not exist or carries no snapshot.
+    /// </summary>
+    public async Task<ConfigurationDiff?> CompareConfigurationChangesAsync(ActivityTargetType targetType, Guid objectId, int fromVersion, int toVersion)
+    {
+        var from = await _application.Repository.Activity.GetConfigurationChangeActivityByVersionAsync(targetType, objectId, fromVersion);
+        var to = await _application.Repository.Activity.GetConfigurationChangeActivityByVersionAsync(targetType, objectId, toVersion);
+        return BuildComparison(from, to, toVersion);
+    }
+
+    // Builds the comparison diff from the two fetched versions. Shared by the int- and Guid-keyed overloads.
+    private ConfigurationDiff? BuildComparison(ConfigurationChangeActivityData? from, ConfigurationChangeActivityData? to, int toVersion)
+    {
         var fromSnapshot = ConfigurationSnapshotService.Deserialise(from?.SnapshotJson);
         var toSnapshot = ConfigurationSnapshotService.Deserialise(to?.SnapshotJson);
         if (toSnapshot == null)
             return null;
 
         return _application.ConfigurationDiffs.Diff(fromSnapshot, toSnapshot, from?.Version, toVersion);
-    }
-
-    private string BuildChangeSummary(ConfigurationChangeActivityData current, ConfigurationChangeActivityData? predecessor)
-    {
-        if (current.Operation == ActivityTargetOperationType.Create)
-            return "Created";
-
-        var currentSnapshot = ConfigurationSnapshotService.Deserialise(current.SnapshotJson);
-        var predecessorSnapshot = ConfigurationSnapshotService.Deserialise(predecessor?.SnapshotJson);
-        if (currentSnapshot == null || predecessorSnapshot == null)
-            return "Updated";
-
-        var diff = _application.ConfigurationDiffs.Diff(predecessorSnapshot, currentSnapshot, predecessor!.Version, current.Version);
-        return ConfigurationDiffService.Summarise(diff);
     }
 
     private static Activity CreateCleanupActivity()

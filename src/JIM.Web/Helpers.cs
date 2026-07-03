@@ -442,6 +442,23 @@ public static class Helpers
     }
 
     /// <summary>
+    /// Gets the in-app link to a security principal that initiated an activity, or null when the principal cannot be
+    /// linked (no id, or a System / unattributed initiator). Used to make initiator names clickable in change history.
+    /// </summary>
+    public static string? GetInitiatorHref(ActivityInitiatorType initiatorType, Guid? initiatedById)
+    {
+        if (initiatedById == null)
+            return null;
+
+        return initiatorType switch
+        {
+            ActivityInitiatorType.User => $"/t/users/v/{initiatedById}",
+            ActivityInitiatorType.ApiKey => $"/admin/apikeys/{initiatedById}",
+            _ => null
+        };
+    }
+
+    /// <summary>
     /// Gets the MudBlazor icon for an initiator type string.
     /// Accepts "User", "ApiKey", "Import", or other values.
     /// </summary>

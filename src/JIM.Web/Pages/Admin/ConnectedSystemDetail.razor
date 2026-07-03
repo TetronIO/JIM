@@ -1,5 +1,6 @@
 ﻿@page "/admin/connected-systems/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Logic
 @using JIM.Models.Staging
@@ -60,6 +61,10 @@
             <ConnectedSystemRunProfilesTab ConnectedSystem="_connectedSystem" />
         </MudTabPanel>
 
+        <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
+            <ConfigurationChangesTab TargetType="ActivityTargetType.ConnectedSystem" ObjectId="_connectedSystem.Id" ObjectTypeLabel="Connected System" />
+        </MudTabPanel>
+
         <MudTabPanel Text="Danger Zone" Icon="@Icons.Material.Filled.Warning" BadgeColor="Color.Error" ID="@("danger-zone")">
             <ConnectedSystemDangerZoneTab ConnectedSystem="_connectedSystem" />
         </MudTabPanel>
@@ -78,6 +83,7 @@
     private string? _partitionsAndHierarchiesText;
     private string? _partitionAndHierarchyText;
     private int _pendingExportCount;
+    private int _changeCount;
     private List<BreadcrumbItem> _breadcrumbs = null!;
 
     private IList<MetaverseAttribute>? _metaverseAttributes;
@@ -125,6 +131,7 @@
         }
 
         _pendingExportCount = await jim.ConnectedSystems.GetPendingExportsCountAsync(Id);
+        _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ConnectedSystem, Id, 1, 1)).TotalResults;
         _metaverseAttributes ??= await jim.Metaverse.GetMetaverseAttributesAsync();
     }
 

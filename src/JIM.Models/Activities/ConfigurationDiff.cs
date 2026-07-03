@@ -5,16 +5,20 @@ namespace JIM.Models.Activities;
 
 /// <summary>
 /// The structured difference between two configuration snapshots of the same object, produced by
-/// <c>ConfigurationDiffService</c>. The same tree feeds every surface: the web UI renders it as a collapsible tree,
-/// PowerShell renders it as a git-style coloured diff, and the REST API returns it as data.
+/// <c>ConfigurationDiffService</c>. The same tree feeds every surface: the web UI renders it as an audit-style field
+/// history (each field's value before and after), PowerShell renders it as a git-style coloured diff, and the REST API
+/// returns it as data.
 /// </summary>
 public class ConfigurationDiff
 {
     /// <summary>The configuration object type, e.g. "SynchronisationRule" or "ConnectedSystem".</summary>
     public string ObjectType { get; set; } = null!;
 
-    /// <summary>The database identifier of the configuration object.</summary>
+    /// <summary>The integer database identifier of the configuration object; zero for Guid-keyed objects (see <see cref="ObjectGuidId"/>).</summary>
     public int ObjectId { get; set; }
+
+    /// <summary>The Guid database identifier of the configuration object, for Guid-keyed objects (e.g. a Schedule); null otherwise.</summary>
+    public Guid? ObjectGuidId { get; set; }
 
     /// <summary>The display name of the configuration object (from the newer snapshot).</summary>
     public string? ObjectName { get; set; }
