@@ -44,6 +44,14 @@ For Run Profile activities, JIM stores a per-object record of what happened (wit
 
 A schedule execution typically appears as a parent activity with one child activity per step. Use the children listing to walk down a schedule's execution tree from the top-level run into the individual operations it triggered.
 
+## Filtering the Activity list
+
+The Activity page in the admin portal filters a busy list down to what you are reviewing:
+
+- **Category quick-filter**<br /> One click isolates a whole class of activity: **Configuration** (Connected Systems, Synchronisation Rules, Schedules, schema, settings), **Identity data** (Metaverse Objects), **Sync runs** (Run Profile executions), or **System** (housekeeping, resets, data generation). Selecting a category sets the Type filter to the matching target types; you can then fine-tune individual types.
+- **Detail filters**<br /> Operation, outcome, type, status, initiator (user, API key, or system), a created date range, and a target/initiator search.
+- **Shareable URLs**<br /> The filter state is reflected in the page URL, so a filtered view can be bookmarked or shared; opening the link reproduces the same view. For example, reviewing user-made configuration changes over the last week is one URL an auditor can return to each review cycle.
+
 ## Configuration change history
 
 Changes to configuration objects are recorded on the Activity itself. When you create, update, or delete a Synchronisation Rule, Connected System, or Schedule, JIM captures a complete, versioned snapshot of the object's post-change state and carries it on the originating Activity, alongside who made the change, when, and an optional reason. This is how JIM answers "what did this rule look like last week, and who changed it" without a separate audit store.

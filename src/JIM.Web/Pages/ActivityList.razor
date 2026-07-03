@@ -27,6 +27,21 @@
 
 @if (_preferencesLoaded)
 {
+@* ─── Category quick-filter ─── *@
+<MudStack Row="true" Spacing="2" Class="mt-4 flex-wrap" AlignItems="AlignItems.Center">
+    <MudText Typo="Typo.button" Class="mud-text-secondary">Category:</MudText>
+    <MudChip T="string" OnClick="() => OnCategorySelectedAsync(null)"
+             Variant="@(IsAllCategorySelected ? Variant.Filled : Variant.Outlined)"
+             Color="@(IsAllCategorySelected ? Color.Primary : Color.Default)">All</MudChip>
+    @foreach (var category in Enum.GetValues<ActivityTargetCategory>())
+    {
+        var chipCategory = category;
+        <MudChip T="string" OnClick="() => OnCategorySelectedAsync(chipCategory)"
+                 Variant="@(_selectedCategory == chipCategory ? Variant.Filled : Variant.Outlined)"
+                 Color="@(_selectedCategory == chipCategory ? Color.Primary : Color.Default)">@GetCategoryLabel(chipCategory)</MudChip>
+    }
+</MudStack>
+
 <MudStack Row="true" Spacing="3" Class="mt-3 flex-wrap" AlignItems="AlignItems.End">
     <MudItem Class="flex-grow-1">
         <MudSelect T="ActivityTargetOperationType" Label="Operation" Variant="Variant.Outlined"
@@ -99,6 +114,22 @@
             <MudSelectItem T="ActivityStatus" Value="ActivityStatus.Cancelled">Cancelled</MudSelectItem>
         </MudSelect>
     </MudItem>
+    <MudItem Class="flex-grow-1">
+        <MudSelect T="ActivityInitiatorType" Label="Initiator" Variant="Variant.Outlined"
+                   Dense="true" Clearable="true" MultiSelection="true"
+                   SelectedValues="_filterInitiatorTypes"
+                   SelectedValuesChanged="OnInitiatorTypeFilterChanged"
+                   MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
+            <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.User">User</MudSelectItem>
+            <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.ApiKey">API Key</MudSelectItem>
+            <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.System">System</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem Class="flex-grow-1">
+        <MudDateRangePicker Label="Created between" Variant="Variant.Outlined" Margin="Margin.Dense"
+                            DateRange="_filterDateRange" DateRangeChanged="OnDateRangeChanged"
+                            Clearable="true" AutoClose="true" />
+    </MudItem>
     <MudItem Class="d-flex align-end">
         <MudCheckBox T="bool" Value="_filterHasChildren" ValueChanged="OnHasChildrenFilterChanged"
                      Label="Has child activities" Dense="true" Class="mb-1 mud-typography-nowrap" />
@@ -118,7 +149,7 @@
     LoadingProgressColor="Color.Primary">
     <ToolBarContent>
         <MudSpacer />
-        <MudTextField T="string" ValueChanged="@(s => OnSearch(s))" Variant="Variant.Outlined" Placeholder="Search target or initiator" Margin="Margin.Dense"
+        <MudTextField T="string" Value="@_searchString" ValueChanged="@(s => OnSearch(s))" Variant="Variant.Outlined" Placeholder="Search target or initiator" Margin="Margin.Dense"
             Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium"
             Class="mt-0" />
     </ToolBarContent>
@@ -480,20 +511,29 @@
     // Snapshot of last-displayed data for change detection during polling
     private string? _lastDataFingerprint;
 
-    // Filter state
-    private IReadOnlyCollection<ActivityTargetOperationType> _filterOperations = [];
-    private IReadOnlyCollection<ActivityOutcomeType> _filterOutcomes = [];
-    private IReadOnlyCollection<ActivityTargetType> _filterTypes = Enum.GetValues<ActivityTargetType>()
+    // Filter state. The default Type selection shows everything except NotSet and Run Profile executions (which
+    // have their own Operations page); this default writes no URL state.
+    private static readonly IReadOnlyCollection<ActivityTargetType> DefaultTypeFilter = Enum.GetValues<ActivityTargetType>()
         .Where(t => t != ActivityTargetType.NotSet && t != ActivityTargetType.ConnectedSystemRunProfile)
         .ToList();
+    private IReadOnlyCollection<ActivityTargetOperationType> _filterOperations = [];
+    private IReadOnlyCollection<ActivityOutcomeType> _filterOutcomes = [];
+    private IReadOnlyCollection<ActivityTargetType> _filterTypes = DefaultTypeFilter;
     private IReadOnlyCollection<ActivityStatus> _filterStatuses = [];
+    private IReadOnlyCollection<ActivityInitiatorType> _filterInitiatorTypes = [];
+    private DateRange? _filterDateRange;
+    private ActivityTargetCategory? _selectedCategory;
     private bool _filterHasChildren;
+
+    private bool IsAllCategorySelected => _selectedCategory == null && _filterTypes.Count == DefaultTypeFilter.Count &&
+                                          !_filterTypes.Except(DefaultTypeFilter).Any();
 
     protected override async Task OnInitializedAsync()
     {
         NavManager.LocationChanged += OnLocationChanged;
         _currentPath = GetPathWithoutQuery(NavManager.Uri);
         _currentPage = GetPageFromUrl() - 1; // MudTable uses 0-indexed pages
+        ApplyFiltersFromUrl();
         await UpdatePageStateAsync();
 
         // Setup polling for auto-refresh, only reloading when data has actually changed
@@ -515,6 +555,8 @@
                     var outcomes = _filterOutcomes.Any() ? _filterOutcomes : null;
                     var types = _filterTypes.Any() ? _filterTypes : null;
                     var statuses = _filterStatuses.Any() ? _filterStatuses : null;
+                    var initiatorTypes = _filterInitiatorTypes.Any() ? _filterInitiatorTypes : null;
+                    var (createdFrom, createdTo) = GetCreatedRangeUtc();
 
                     using var pollJim = JimFactory.Create();
                     var result = await pollJim.Activities.GetActivitiesAsync(
@@ -526,7 +568,10 @@
                         outcomes,
                         types,
                         statuses,
-                        _filterHasChildren ? true : null);
+                        _filterHasChildren ? true : null,
+                        initiatorTypes,
+                        createdFrom,
+                        createdTo);
 
                     var fingerprint = BuildFingerprint(result.Results);
                     if (fingerprint != _lastDataFingerprint)
@@ -661,6 +706,8 @@
             var outcomes = _filterOutcomes.Any() ? _filterOutcomes : null;
             var types = _filterTypes.Any() ? _filterTypes : null;
             var statuses = _filterStatuses.Any() ? _filterStatuses : null;
+            var initiatorTypes = _filterInitiatorTypes.Any() ? _filterInitiatorTypes : null;
+            var (createdFrom, createdTo) = GetCreatedRangeUtc();
 
             using var jim = JimFactory.Create();
             var result = await jim.Activities.GetActivitiesAsync(
@@ -674,7 +721,10 @@
                 outcomes,
                 types,
                 statuses,
-                _filterHasChildren ? true : null);
+                _filterHasChildren ? true : null,
+                initiatorTypes,
+                createdFrom,
+                createdTo);
 
             _childActivityCounts = await jim.Activities.GetChildActivityCountsAsync(result.Results.Select(a => a.Id));
             _lastDataFingerprint = BuildFingerprint(result.Results);
@@ -692,16 +742,114 @@
         }
     }
 
+    /// <summary>
+    /// Writes the page number and every non-default filter into the URL query string (replacing the current history
+    /// entry), so a filtered view is shareable and bookmarkable. Defaults write nothing, keeping the URL clean.
+    /// </summary>
     private void UpdateUrlWithPage(int page)
     {
         var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
         var baseUrl = uri.GetLeftPart(UriPartial.Path);
 
-        // Only add ?p= if not on page 1
-        var newUrl = page > 1 ? $"{baseUrl}?p={page}" : baseUrl;
+        var queryParams = new List<string>();
+        if (page > 1)
+            queryParams.Add($"p={page}");
+        if (!string.IsNullOrWhiteSpace(_searchString))
+            queryParams.Add($"q={Uri.EscapeDataString(_searchString)}");
+        if (_selectedCategory != null)
+            queryParams.Add($"cat={_selectedCategory}");
+        else if (!IsAllCategorySelected && _filterTypes.Any())
+            queryParams.Add($"type={string.Join(',', _filterTypes)}");
+        if (_filterOperations.Any())
+            queryParams.Add($"op={string.Join(',', _filterOperations)}");
+        if (_filterOutcomes.Any())
+            queryParams.Add($"outcome={string.Join(',', _filterOutcomes)}");
+        if (_filterStatuses.Any())
+            queryParams.Add($"status={string.Join(',', _filterStatuses)}");
+        if (_filterInitiatorTypes.Any())
+            queryParams.Add($"init={string.Join(',', _filterInitiatorTypes)}");
+        if (_filterDateRange?.Start != null)
+            queryParams.Add($"from={_filterDateRange.Start:yyyy-MM-dd}");
+        if (_filterDateRange?.End != null)
+            queryParams.Add($"to={_filterDateRange.End:yyyy-MM-dd}");
+        if (_filterHasChildren)
+            queryParams.Add("kids=1");
+
+        var newUrl = queryParams.Count > 0 ? $"{baseUrl}?{string.Join('&', queryParams)}" : baseUrl;
 
         // Update URL without navigation (replace current history entry)
         NavManager.NavigateTo(newUrl, replace: true);
+    }
+
+    /// <summary>
+    /// Seeds the filter state from the URL query string on first load, so a shared or bookmarked filtered view
+    /// reproduces exactly. An explicit type list takes precedence over a category.
+    /// </summary>
+    private void ApplyFiltersFromUrl()
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+
+        var search = query["q"];
+        if (!string.IsNullOrWhiteSpace(search))
+            _searchString = search;
+
+        var types = ParseEnumList<ActivityTargetType>(query["type"]);
+        if (types.Count > 0)
+        {
+            _filterTypes = types;
+        }
+        else if (Enum.TryParse<ActivityTargetCategory>(query["cat"], ignoreCase: true, out var category))
+        {
+            _selectedCategory = category;
+            _filterTypes = ActivityTargetTypeCategories.GetTargetTypes(category);
+        }
+
+        var operations = ParseEnumList<ActivityTargetOperationType>(query["op"]);
+        if (operations.Count > 0)
+            _filterOperations = operations;
+
+        var outcomes = ParseEnumList<ActivityOutcomeType>(query["outcome"]);
+        if (outcomes.Count > 0)
+            _filterOutcomes = outcomes;
+
+        var statuses = ParseEnumList<ActivityStatus>(query["status"]);
+        if (statuses.Count > 0)
+            _filterStatuses = statuses;
+
+        var initiatorTypes = ParseEnumList<ActivityInitiatorType>(query["init"]);
+        if (initiatorTypes.Count > 0)
+            _filterInitiatorTypes = initiatorTypes;
+
+        DateTime? from = DateTime.TryParse(query["from"], out var fromDate) ? fromDate : null;
+        DateTime? to = DateTime.TryParse(query["to"], out var toDate) ? toDate : null;
+        if (from != null || to != null)
+            _filterDateRange = new DateRange(from, to);
+
+        if (query["kids"] == "1")
+            _filterHasChildren = true;
+    }
+
+    private static List<T> ParseEnumList<T>(string? value) where T : struct, Enum
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return [];
+        return value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(part => Enum.TryParse<T>(part, ignoreCase: true, out var parsed) ? parsed : (T?)null)
+            .Where(parsed => parsed.HasValue)
+            .Select(parsed => parsed!.Value)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Converts the picked local date range into an inclusive UTC window: the whole of the start day through the
+    /// whole of the end day.
+    /// </summary>
+    private (DateTime? createdFrom, DateTime? createdTo) GetCreatedRangeUtc()
+    {
+        DateTime? from = _filterDateRange?.Start?.Date.ToUniversalTime();
+        DateTime? to = _filterDateRange?.End?.Date.AddDays(1).AddTicks(-1).ToUniversalTime();
+        return (from, to);
     }
 
     private void OnSearch(string text)
@@ -758,9 +906,40 @@
 
     private void OnTypeFilterChanged(IReadOnlyCollection<ActivityTargetType> values)
     {
+        // A manual type selection overrides any category quick-filter choice.
+        _selectedCategory = null;
         _filterTypes = values;
         _table?.ReloadServerData();
     }
+
+    private Task OnCategorySelectedAsync(ActivityTargetCategory? category)
+    {
+        _selectedCategory = category;
+        _filterTypes = category == null ? DefaultTypeFilter : ActivityTargetTypeCategories.GetTargetTypes(category.Value);
+        return _table?.ReloadServerData() ?? Task.CompletedTask;
+    }
+
+    private void OnInitiatorTypeFilterChanged(IReadOnlyCollection<ActivityInitiatorType> values)
+    {
+        _filterInitiatorTypes = values;
+        _table?.ReloadServerData();
+    }
+
+    private void OnDateRangeChanged(DateRange? range)
+    {
+        // Treat a cleared or empty range as no date filter.
+        _filterDateRange = range?.Start == null && range?.End == null ? null : range;
+        _table?.ReloadServerData();
+    }
+
+    private static string GetCategoryLabel(ActivityTargetCategory category) => category switch
+    {
+        ActivityTargetCategory.Configuration => "Configuration",
+        ActivityTargetCategory.IdentityData => "Identity data",
+        ActivityTargetCategory.SyncRuns => "Sync runs",
+        ActivityTargetCategory.System => "System",
+        _ => category.ToString()
+    };
 
     private void OnStatusFilterChanged(IReadOnlyCollection<ActivityStatus> values)
     {
