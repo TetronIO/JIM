@@ -11,7 +11,7 @@
 <MudPaper Class="pa-4" Outlined="true">
     <MudForm @bind-IsValid="@_isDetailsFormValid" @bind-Errors="@_detailsFormErrors">
         <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="SyncRule.Name"
-                      @bind-Value:after="NotifyChangedAsync" Variant="Variant.Outlined" />
+                      @bind-Value:after="NotifyChangedAsync" Immediate="true" Variant="Variant.Outlined" />
 
         @if (SyncRule.Id > 0 && SyncRule.ConnectedSystem != null)
         {
