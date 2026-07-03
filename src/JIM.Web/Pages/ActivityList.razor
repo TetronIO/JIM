@@ -126,7 +126,8 @@
         </MudSelect>
     </MudItem>
     <MudItem Class="flex-grow-1">
-        <MudDateRangePicker Label="Created between" Variant="Variant.Outlined" Margin="Margin.Dense"
+        @* No dense margin: matches the height of the neighbouring filter selects. *@
+        <MudDateRangePicker Label="Created between" Variant="Variant.Outlined"
                             DateRange="_filterDateRange" DateRangeChanged="OnDateRangeChanged"
                             Clearable="true" AutoClose="true" />
     </MudItem>
@@ -936,7 +937,7 @@
     {
         ActivityTargetCategory.Configuration => "Configuration",
         ActivityTargetCategory.IdentityData => "Identity data",
-        ActivityTargetCategory.SyncRuns => "Sync runs",
+        ActivityTargetCategory.SyncRuns => "Synchronisation",
         ActivityTargetCategory.System => "System",
         _ => category.ToString()
     };
