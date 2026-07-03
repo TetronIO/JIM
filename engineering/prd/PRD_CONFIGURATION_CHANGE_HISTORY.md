@@ -1,6 +1,6 @@
 # Configuration Change History
 
-- **Status:** Planned
+- **Status:** Doing
 - **Created:** 2026-06-25
 - **Author:** JayVDZ
 - **Issue:** [#14](https://github.com/TetronIO/JIM/issues/14)
@@ -176,17 +176,17 @@ The equivalent capability for business and identity data (Connected System Objec
 
 ## Acceptance Criteria
 
-> **Implementation status (2026-06-29):** ticks below reflect the delivered backend (capture, redaction, diff engine, retrieval), REST API, and PowerShell surfaces. The per-object Changes tab and Activities-list filters (UI) and type-aware retention remain; see the [implementation plan](../plans/CONFIGURATION_CHANGE_HISTORY.md) for phase status.
+> **Implementation status (2026-07-03):** the backend (capture, redaction, diff engine, retrieval), REST API, PowerShell, the per-object Changes tab (Synchronisation Rule, Connected System, and Schedule), and the Activity-detail diff rendering are delivered. Capture integrity has been hardened beyond the original plan: coverage across all Connected System mutation paths, a semantic no-change dedupe guard, Simple Mode Object Matching Rule capture, per-rule attribute-priority capture, and exclusion of runtime state (status, import watermark) from both snapshots and Activities. Remaining: the comment-on-save reason dialog (UI), the Activities-list filters, type-aware retention, Schedule write-side capture (in progress on a cooperating branch), and rollback (future). See the [implementation plan](../plans/doing/CONFIGURATION_CHANGE_HISTORY.md) for phase status.
 
-- [x] Creating, updating, or deleting a supported configuration object records a change entry with initiator, UTC timestamp, version number, and a complete post-change snapshot, carried with its Activity. *(Create and update for both types, plus Synchronisation Rule delete, are captured; Connected System hard-delete capture is deferred to a follow-up.)*
-- [ ] Synchronisation Rule and Connected System detail pages each have a "Changes" tab showing version history with version number, initiator, time, optional reason, and a summary.
-- [ ] Selecting a version renders a structured tree diff (additions, removals, modifications with old-to-new values, friendly labels, unchanged branches collapsed).
-- [x] Any two versions of a supported object can be compared. *(Diff engine plus compare endpoint and cmdlet; in-portal compare ships with the Changes tab.)*
+- [x] Creating, updating, or deleting a supported configuration object records a change entry with initiator, UTC timestamp, version number, and a complete post-change snapshot, carried with its Activity. *(Create and update for both types, plus Synchronisation Rule delete, are captured; Connected System hard-delete capture is deferred to a follow-up. Schedules: retrieval, API, PowerShell, and UI are delivered; write-side capture is in progress on a cooperating branch.)*
+- [x] Synchronisation Rule and Connected System detail pages each have a "Changes" tab showing version history with version number, initiator, time, optional reason, and a summary. *(Delivered as the shared `ConfigurationChangesTab`, also hosted as a History tab in the Schedule editor.)*
+- [x] Selecting a version renders a structured tree diff (additions, removals, modifications with old-to-new values, friendly labels, unchanged branches collapsed).
+- [x] Any two versions of a supported object can be compared. *(Diff engine, compare endpoint and cmdlet, and in-portal compare in the Changes tab.)*
 - [x] Sensitive configuration values are never stored in, or rendered from, the change history in any surface.
-- [ ] An optional reason can be entered on save (UI) and is shown in the history.
+- [ ] An optional reason can be entered on save (UI) and is shown in the history. *(The reason is captured and shown from the API and PowerShell; the UI comment-on-save dialog remains.)*
 - [ ] The Activities list view has a Configuration category quick-filter, initiator-type and date-range filters, and URL-persisted filter state.
-- [ ] A configuration-change activity links through to the relevant object and version diff.
-- [ ] Configuration change history is retained independently of identity-data history (target-type-aware Activity retention).
+- [x] A configuration-change activity links through to the relevant object and version diff. *(The Activity detail page renders the same diff inline, loading by the change's object rather than the Activity's target type, links to the changed object, including Object Matching Rules to their owning object's Matching tab, and explains why no snapshot exists when one was legitimately not captured.)*
+- [ ] Configuration change history is retained independently of identity-data history (target-type-aware Activity retention). *(Not started; note that the existing generic Activity retention currently applies to configuration-change Activities too.)*
 - [x] Configuration change tracking can be disabled via a Service Setting (default enabled); disabling retains existing history.
 - [ ] Expired configuration change history is cleaned up by worker housekeeping and recorded via an Activity.
 - [x] The REST API and PowerShell module have full parity for: recording an optional reason on configuration create/update/delete; retrieving change history (summary and single-change detail); and (when delivered) rollback.
