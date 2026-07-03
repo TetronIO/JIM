@@ -69,31 +69,32 @@
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">@settingContext.Description</MudText>
                 }
             </MudTd>
-            <MudTd DataLabel="Value" Class="@GetRowClass(settingContext)">
+            <MudTd DataLabel="Value" Class="@($"jim-nowrap {GetRowClass(settingContext)}")">
+                @* Controls sit to the left of the value so values stay left-aligned regardless of their length. *@
                 @if (settingContext.ValueType == ServiceSettingValueType.StringEncrypted)
                 {
                     @if (_revealedSecrets.Contains(settingContext.Key) && _decryptedCache.TryGetValue(settingContext.Key, out var decrypted))
                     {
+                        <MudIconButton Icon="@Icons.Material.Outlined.VisibilityOff" Variant="Variant.Filled" Size="Size.Small" Class="me-2" OnClick="() => HideSecret(settingContext.Key)" />
                         <span class="jim-text-code">@(decrypted.Value ?? "(not set)")</span>
-                        <MudIconButton Icon="@Icons.Material.Outlined.VisibilityOff" Variant="Variant.Filled" Size="Size.Small" OnClick="() => HideSecret(settingContext.Key)" />
                     }
                     else
                     {
+                        <MudIconButton Icon="@Icons.Material.Outlined.Visibility" Variant="Variant.Filled" Size="Size.Small" Class="me-2" OnClick="() => RevealSecretAsync(settingContext.Key)" />
                         <span class="jim-text-code">********</span>
-                        <MudIconButton Icon="@Icons.Material.Outlined.Visibility" Variant="Variant.Filled" Size="Size.Small" OnClick="() => RevealSecretAsync(settingContext.Key)" />
                     }
                 }
                 else if (settingContext.ValueType == ServiceSettingValueType.Guid)
                 {
                     var guidValue = settingContext.GetEffectiveValue();
-                    <span class="jim-text-code me-1">@(guidValue ?? "(not set)")</span>
                     @if (!string.IsNullOrEmpty(guidValue))
                     {
                         <MudTooltip Text="Copy to clipboard" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Variant="Variant.Filled" Size="Size.Small"
+                            <MudIconButton Icon="@Icons.Material.Outlined.ContentCopy" Variant="Variant.Filled" Size="Size.Small" Class="me-2"
                                            OnClick="() => CopyToClipboardAsync(guidValue!)" />
                         </MudTooltip>
                     }
+                    <span class="jim-text-code">@(guidValue ?? "(not set)")</span>
                 }
                 else
                 {
@@ -101,6 +102,7 @@
                 }
             </MudTd>
             <MudTd DataLabel="Status" Class="@GetRowClass(settingContext)">
+                @* Each status gets its own colour so the column scans at a glance: grey locked, blue modified, green default. *@
                 @if (settingContext.IsReadOnly)
                 {
                     <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.Lock">Read-only</MudChip>
@@ -125,7 +127,7 @@
                 }
                 else
                 {
-                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Icon="@Icons.Material.Filled.Check">Default</MudChip>
+                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success" Icon="@Icons.Material.Filled.Check">Default</MudChip>
                 }
             </MudTd>
             <MudTd DataLabel="Actions" Class="@GetRowClass(settingContext)">
@@ -243,7 +245,9 @@
 
     private string GetRowClass(ServiceSetting setting)
     {
-        return setting.IsReadOnly ? "jim-readonly-row" : "";
+        // py-3 balances the cell's vertical breathing room against its generous horizontal padding, so the
+        // name/description block is not cramped against the row edges.
+        return setting.IsReadOnly ? "jim-readonly-row py-3" : "py-3";
     }
 
     private bool IsGroupExpanded(object? groupKey)

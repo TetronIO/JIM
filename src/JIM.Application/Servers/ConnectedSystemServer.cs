@@ -4171,9 +4171,10 @@ public class ConnectedSystemServer
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
         {
-            TargetName = $"Mapping to {targetName}",
+            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SyncRule,
+            SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
             TargetOperationType = ActivityTargetOperationType.Create
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
@@ -4208,9 +4209,10 @@ public class ConnectedSystemServer
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
         {
-            TargetName = $"Mapping to {targetName}",
+            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SyncRule,
+            SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
             TargetOperationType = ActivityTargetOperationType.Create
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
@@ -4247,9 +4249,10 @@ public class ConnectedSystemServer
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
         {
-            TargetName = $"Mapping to {targetName}",
+            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SyncRule,
+            SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
             TargetOperationType = ActivityTargetOperationType.Update
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
@@ -4277,9 +4280,10 @@ public class ConnectedSystemServer
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
         {
-            TargetName = $"Mapping to {targetName}",
+            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SyncRule,
+            SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
             TargetOperationType = ActivityTargetOperationType.Delete
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
@@ -4313,9 +4317,10 @@ public class ConnectedSystemServer
         var targetName = mapping.TargetMetaverseAttribute?.Name ?? mapping.TargetConnectedSystemAttribute?.Name ?? "Unknown";
         var activity = new Activity
         {
-            TargetName = $"Mapping to {targetName}",
+            TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
             TargetContext = mapping.SyncRule?.Name,
             TargetType = ActivityTargetType.SyncRule,
+            SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
             TargetOperationType = ActivityTargetOperationType.Delete
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
