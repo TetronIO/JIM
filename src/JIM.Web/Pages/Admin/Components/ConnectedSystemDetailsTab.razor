@@ -1,5 +1,6 @@
 @using JIM.Models.Staging
 @inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -46,9 +47,14 @@
 
     private async Task HandleValidDetailsSubmitAsync()
     {
+        // offer an optional reason for the configuration change history; cancelling aborts the save
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+        if (cancelled)
+            return;
+
         using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
+        await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user, changeReason);
         Snackbar.Add("Your details changes have been saved.", Severity.Success);
     }
 }
