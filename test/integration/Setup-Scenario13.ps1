@@ -226,7 +226,7 @@ Write-TestStep "Step 8" "Selecting Target object type and attributes"
 
 Set-JIMConnectedSystemObjectType -ConnectedSystemId $targetSystem.id -ObjectTypeId $targetUserType.id -Selected $true | Out-Null
 
-$targetAttrs = @("samAccountName", "displayName", "email", "employeeId")
+$targetAttrs = @("samAccountName", "displayName", "email", "employeeId", "manager")
 $targetAttrUpdates = @{}
 foreach ($attr in $targetUserType.attributes) {
     if ($attr.name -in $targetAttrs) {
@@ -337,6 +337,20 @@ foreach ($mapping in $exportMappings) {
     }
 }
 Write-Host "  OK Created $exportMappingsCreated export attribute flow mappings" -ForegroundColor Green
+
+# The manager mapping is an expression flow over a Reference attribute: it proves a
+# reconciler-driven provision evaluates reference attributes (#892). A direct Reference-to-Text
+# mapping is rejected by design (type mismatch) and a CSV column cannot be typed as Reference,
+# so the expression form is the File-connector-compatible way to export a reference. The
+# reconciler loads flagged Metaverse Objects via a lean no-tracking query that carries reference
+# values as FK scalars only; mv["Manager"] must evaluate from that scalar (producing the
+# referenced Metaverse Object's ID) rather than silently evaluating to null.
+$managerCsAttr = $targetUserType.attributes | Where-Object { $_.name -eq "manager" }
+if (-not $managerCsAttr) { throw "Target 'manager' attribute not found in schema" }
+New-JIMSyncRuleMapping -SyncRuleId $exportRule.id `
+    -TargetConnectedSystemAttributeId $managerCsAttr.id `
+    -Expression 'mv["Manager"]' | Out-Null
+Write-Host "  OK Created manager expression mapping (mv[`"Manager`"] -> manager)" -ForegroundColor Green
 
 # Step 13: Relative-date scoping criteria on the export rule - the "currently-started" window.
 # All (AND) group: Employee Start Date <= now. Hours/0/FromNow resolves to the exact current

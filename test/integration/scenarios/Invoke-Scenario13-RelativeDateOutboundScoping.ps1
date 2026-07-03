@@ -29,7 +29,11 @@
         reconsiders it). Then triggers the Temporal Scope Reconciler, which flags the joiner's
         Metaverse Object as its export scope has flipped; the next sync re-evaluates it, provisions
         it downstream (flag-and-delegate), and the target connector space grows to two objects. The
-        control is untouched throughout.
+        control is untouched throughout. The joiner also carries a Manager reference (to the
+        control), exported via an mv["Manager"] expression mapping, and the exported row must
+        carry the referenced Metaverse Object's ID: the reconciler loads flagged Metaverse
+        Objects without the ReferenceValue navigation, so this proves reference attributes
+        survive a reconciler-driven provision end-to-end via the FK-scalar fallback (#892).
 
     File-connector target by design (a header-only CSV the connector appends to): no directory
     container, so the test stays fast and free of directory flakiness, mirroring Scenario 12. The
@@ -172,9 +176,11 @@ function Write-HRCsv {
 
 function Write-TargetHeaderCsv {
     # Header-only CSV: the File connector infers the export schema from the header row and appends
-    # exported rows to it. Regenerated fresh so no state leaks between runs.
+    # exported rows to it. Regenerated fresh so no state leaks between runs. The manager column
+    # receives the exported Manager reference (the referenced Metaverse Object's ID, via the
+    # mv["Manager"] expression mapping), proving the reconciler-driven reference export flow (#892).
     $csvPath = Join-Path ([IO.Path]::GetTempPath()) "scenario13-target.csv"
-    Set-Content -Path $csvPath -Value "samAccountName,displayName,email,employeeId" -Encoding UTF8
+    Set-Content -Path $csvPath -Value "samAccountName,displayName,email,employeeId,manager" -Encoding UTF8
     Copy-CsvToConnectorFiles -SourcePath $csvPath -DestinationName "scenario13-target.csv"
     Remove-Item $csvPath -Force -ErrorAction SilentlyContinue
 }
@@ -360,6 +366,31 @@ try {
             }
             Write-Host "  OK Hot path alone did not provision the joiner (target count still 1)" -ForegroundColor Green
 
+            # Give the joiner a Manager reference (pointing at the control) ahead of the
+            # reconciler-driven provision (#892). The apply step loads flagged Metaverse Objects
+            # via a lean no-tracking query that carries reference attribute values as FK scalars
+            # only (no ReferenceValue navigation); the export below proves that shape end-to-end:
+            # the provision's mv["Manager"] expression must evaluate from the FK scalar and export
+            # the referenced Metaverse Object's ID, not silently produce null. The row is inserted
+            # directly as an internally-managed value (contributor columns null; identical to what
+            # an inbound reference flow persists) because the File connector cannot type a CSV
+            # column as Reference, and JIM has no Metaverse Object value write API by design.
+            $controlMvos = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue $empControl)
+            $joinerMvos = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue $empProvision)
+            if ($controlMvos.Count -ne 1 -or $joinerMvos.Count -ne 1) {
+                throw "T2 expected exactly one Metaverse Object each for control/joiner; got $($controlMvos.Count)/$($joinerMvos.Count)"
+            }
+            # Cast to [guid] so the SQL interpolation below cannot carry anything but a GUID
+            # (psql -c does not support bind parameters; same pattern as Assert-ExportRpeisHaveCsoLink).
+            $controlMvoId = [guid]$controlMvos[0].id
+            $joinerMvoId = [guid]$joinerMvos[0].id
+            $seedSql = "INSERT INTO ""MetaverseObjectAttributeValues"" (""Id"", ""AttributeId"", ""MetaverseObjectId"", ""ReferenceValueId"", ""NullValue"") SELECT gen_random_uuid(), ma.""Id"", '$joinerMvoId', '$controlMvoId', false FROM ""MetaverseAttributes"" ma WHERE ma.""Name"" = 'Manager';"
+            $seedResult = docker compose exec -T jim.database psql -U jim -d jim -c $seedSql 2>&1
+            if ($LASTEXITCODE -ne 0 -or "$seedResult" -notmatch "INSERT 0 1") {
+                throw "T2 failed to seed the joiner's Manager reference: $seedResult"
+            }
+            Write-Host "  OK Seeded joiner's Manager reference (-> control) ahead of the reconciler-driven provision" -ForegroundColor Green
+
             # Trigger the Temporal Scope Reconciler: it flags the joiner's Metaverse Object because
             # its export scope has flipped (start date now in the past).
             Invoke-Reconciler -Label "T2"
@@ -377,12 +408,29 @@ try {
             $exp = Invoke-TargetExport -SystemId $targetSystem.id -Label "T2"
             Assert-ActivityHasChanges -ActivityId $exp.activityId -Name "T2 Export" -ExpectedChangeType "Exported" -MinCount 1
 
+            # The exported joiner row must carry the Manager reference: mv["Manager"] evaluates to
+            # the referenced Metaverse Object's ID (the control). This is the #892 reference-flow
+            # proof: the reconciler-loaded Metaverse Object has no ReferenceValue navigation, so a
+            # populated manager cell proves the expression context fell back to the FK scalar
+            # rather than silently evaluating the reference to null.
+            $joinerUser = Get-TestUser -EmployeeId $empProvision
+            $targetCsvRaw = docker compose exec -T jim.worker cat /connector-files/test-data/scenario13-target.csv 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "T2 could not read the exported target CSV: $targetCsvRaw" }
+            $joinerRows = @(@($targetCsvRaw | ConvertFrom-Csv) | Where-Object { $_.samAccountName -eq $joinerUser.samAccountName })
+            if ($joinerRows.Count -ne 1) {
+                throw "T2 expected exactly 1 exported row for the joiner ($($joinerUser.samAccountName)); got $($joinerRows.Count)"
+            }
+            if ($joinerRows[0].manager -ne "$controlMvoId") {
+                throw "T2 joiner's exported manager should carry the control's Metaverse Object ID '$controlMvoId' but was '$($joinerRows[0].manager)'. The reconciler-driven provision dropped the reference (#892)."
+            }
+            Write-Host "  OK Joiner's Manager reference exported (mv[`"Manager`"] -> control's Metaverse Object ID; reconciler reference flow proven)" -ForegroundColor Green
+
             # The control must remain provisioned and untouched (count of 2 covers both known users).
             if (-not (Test-MvoExists -EmployeeId $empControl)) {
                 throw "T2 control ($empControl) Metaverse Object unexpectedly gone"
             }
 
-            Add-StepResult -Name "ProvisionedOnSchedule" -Success $true -Note "Identical data; the Temporal Scope Reconciler flagged the joiner as 'now' advanced past its fixed start date, and the next sync provisioned it downstream (flag-and-delegate). The hot path alone missed it."
+            Add-StepResult -Name "ProvisionedOnSchedule" -Success $true -Note "Identical data; the Temporal Scope Reconciler flagged the joiner as 'now' advanced past its fixed start date, and the next sync provisioned it downstream (flag-and-delegate) with its Manager reference carried in the exported row. The hot path alone missed it."
         }
         catch {
             Add-StepResult -Name "ProvisionedOnSchedule" -Success $false -ErrorMsg $_.Exception.Message
