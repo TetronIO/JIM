@@ -798,6 +798,17 @@ internal class SeedingServer
 
         await SeedSettingAsync(new ServiceSetting
         {
+            Key = Constants.SettingKeys.ConfigurationChangeRetentionPeriod,
+            DisplayName = "Configuration change retention period",
+            Description = "The duration for which configuration change history (versioned Connected System, Synchronisation Rule, and Schedule snapshots) is retained. Kept separately from, and typically much longer than, the history retention period. Format: d.hh:mm:ss (e.g., '3650.00:00:00' for ~10 years).",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.TimeSpan,
+            DefaultValue = "3650.00:00:00", // ~10 years
+            IsReadOnly = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
             Key = Constants.SettingKeys.HistoryCleanupBatchSize,
             DisplayName = "History cleanup batch size",
             Description = "Maximum number of records to delete per cleanup batch during housekeeping. Lower values reduce database load but take longer to clean up large volumes. Higher values are faster but may cause temporary performance impact.",

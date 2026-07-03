@@ -229,6 +229,13 @@ public static class Constants
         public const string HistoryRetentionPeriod = "History.RetentionPeriod";
 
         /// <summary>
+        /// How long configuration-change Activities (those carrying a versioned configuration snapshot) are retained.
+        /// Kept separately from, and typically much longer than, the general history retention period, because they
+        /// are the configuration change history. Default: 3650 days (~10 years).
+        /// </summary>
+        public const string ConfigurationChangeRetentionPeriod = "History.ConfigurationChangeRetentionPeriod";
+
+        /// <summary>
         /// Maximum number of records to delete per cleanup batch during housekeeping.
         /// Default: 100, prevents long-running transactions and database locks.
         /// </summary>
