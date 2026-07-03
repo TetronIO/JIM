@@ -1,0 +1,22 @@
+/* Copyright (c) Tetron Limited. All rights reserved. */
+/* Licensed under the Tetron Commercial License. See LICENSE file in the project root. */
+
+/* Clamps a large configuration diff to a comfortable height so it does not dominate the change timeline. The fade at
+   the bottom signals that there is more to see; the "Show all changes" toggle removes the clamp. The max-height is kept
+   roughly in step with MaxVisibleLines in the component. */
+.config-diff-clamp {
+    position: relative;
+    max-height: 20rem;
+    overflow: hidden;
+}
+
+.config-diff-clamp::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3rem;
+    background: linear-gradient(to bottom, transparent, var(--mud-palette-surface));
+    pointer-events: none;
+}

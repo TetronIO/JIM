@@ -58,6 +58,20 @@ public class ConnectedSystemServer
             var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
             var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey);
             activity.ConnectedSystemId ??= connectedSystem.Id;
+
+            // Idempotent capture guard: skip when nothing changed versus the latest stored snapshot, so no-change
+            // saves (e.g. worker paths that persist after every import) do not consume versions and drown real changes
+            // in noise. The comparison must be semantic (via the diff engine), not textual: snapshots are stored in a
+            // jsonb column, and PostgreSQL normalises the text (key ordering, spacing) so the string read back never
+            // equals a fresh serialisation.
+            var latest = ConfigurationSnapshotService.Deserialise(
+                await Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.ConnectedSystem, connectedSystem.Id));
+            if (latest != null && !Application.ConfigurationDiffs.Diff(latest, snapshot).HasChanges)
+            {
+                Log.Debug("CaptureConfigurationChangeAsync: configuration of Connected System {ConnectedSystemId} is unchanged from its latest snapshot; no new version recorded.", connectedSystem.Id);
+                return;
+            }
+
             activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.ConnectedSystem, connectedSystem.Id);
             activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
         }
@@ -83,6 +97,16 @@ public class ConnectedSystemServer
             var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
             var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey);
             activity.SyncRuleId ??= syncRule.Id;
+
+            // Idempotent capture guard, compared semantically: see the Connected System overload above.
+            var latest = ConfigurationSnapshotService.Deserialise(
+                await Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SyncRule, syncRule.Id));
+            if (latest != null && !Application.ConfigurationDiffs.Diff(latest, snapshot).HasChanges)
+            {
+                Log.Debug("CaptureConfigurationChangeAsync: configuration of Synchronisation Rule {SyncRuleId} is unchanged from its latest snapshot; no new version recorded.", syncRule.Id);
+                return;
+            }
+
             activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.SyncRule, syncRule.Id);
             activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
         }
@@ -92,6 +116,58 @@ public class ConnectedSystemServer
             // operation that already succeeded; the miss is logged rather than surfaced to the caller.
             Log.Warning(ex, "CaptureConfigurationChangeAsync: failed to capture configuration snapshot for Synchronisation Rule {SyncRuleId}; the change was saved but its history snapshot was not recorded.", syncRule.Id);
         }
+    }
+
+    // Captures a versioned configuration snapshot for a Synchronisation Rule whose change was made through a granular
+    // sub-entity endpoint (an Attribute Flow mapping, a matching rule, etc.). The parent rule is reloaded in full so the
+    // snapshot reflects persisted truth rather than the caller's partial in-memory sub-entity graph; without this the
+    // rule's captured history drifts from reality and a later whole-rule save reports pre-existing children as "added".
+    // The supplied Activity is already SyncRule-targeted, so capturing onto it surfaces the change in the rule's history.
+    private async Task CaptureSyncRuleConfigurationChangeAsync(Activity activity, int syncRuleId)
+    {
+        if (syncRuleId <= 0)
+            return;
+
+        var rule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(syncRuleId);
+        if (rule != null)
+            await CaptureConfigurationChangeAsync(activity, rule, changeReason: null);
+    }
+
+    // Connected System counterpart of CaptureSyncRuleConfigurationChangeAsync: reloads the whole Connected System so a
+    // change made through a granular sub-entity endpoint (a Run Profile, an object-type or attribute selection, a
+    // partition or container selection) records a complete, versioned snapshot under the system's configuration history.
+    private async Task CaptureConnectedSystemConfigurationChangeAsync(Activity activity, int connectedSystemId)
+    {
+        if (connectedSystemId <= 0)
+            return;
+
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+        if (connectedSystem != null)
+            await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
+    }
+
+    // Routes an Object Matching Rule change to the configuration history of whichever object owns the rule: the
+    // Synchronisation Rule in Advanced Mode (the rule attaches to a SyncRule, resolved from the scalar FK or the
+    // navigation), or the Connected System in Simple Mode (the rule attaches to a Connected System Object Type).
+    // Simple Mode rules previously captured nothing at all.
+    private async Task CaptureObjectMatchingRuleConfigurationChangeAsync(Activity activity, ObjectMatchingRule rule)
+    {
+        var syncRuleId = rule.SyncRuleId ?? rule.SyncRule?.Id;
+        if (syncRuleId is > 0)
+        {
+            await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId.Value);
+            return;
+        }
+
+        var connectedSystemId = rule.ConnectedSystemObjectType?.ConnectedSystemId;
+        if (connectedSystemId == null && rule.ConnectedSystemObjectTypeId.HasValue)
+        {
+            var objectType = await Application.Repository.ConnectedSystems.GetObjectTypeAsync(rule.ConnectedSystemObjectTypeId.Value);
+            connectedSystemId = objectType?.ConnectedSystemId;
+        }
+
+        if (connectedSystemId is > 0)
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemId.Value);
     }
 
     /// <summary>
@@ -423,6 +499,8 @@ public class ConnectedSystemServer
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemSchemaAsync(connectedSystem);
 
+        // Reload for the snapshot: schema reconciliation assigns ids server-side, so the caller's graph is stale.
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -529,7 +607,24 @@ public class ConnectedSystemServer
         SanitiseConnectedSystemUserInput(connectedSystem);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Persists a runtime status change (e.g. resetting <see cref="ConnectedSystemStatus.Deleting"/> back to
+    /// <see cref="ConnectedSystemStatus.Active"/> after a failed deletion) without creating an Activity or capturing a
+    /// configuration snapshot. Status is runtime state, not configuration; routing it through the full
+    /// <see cref="UpdateConnectedSystemAsync(ConnectedSystem, MetaverseObject?, string?)"/> would record a spurious
+    /// configuration-change version.
+    /// </summary>
+    public async Task UpdateConnectedSystemStatusAsync(ConnectedSystem connectedSystem, ConnectedSystemStatus status)
+    {
+        if (connectedSystem == null)
+            throw new ArgumentNullException(nameof(connectedSystem));
+
+        connectedSystem.Status = status;
+        await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
     }
 
     /// <summary>
@@ -607,6 +702,7 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem);
 
+        await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
         await Application.Activities.CompleteActivityAsync(activity);
 
         return result;
@@ -1349,6 +1445,10 @@ public class ConnectedSystemServer
 
         await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedBy);
 
+        // A schema import changes the system's configuration (object types and attributes); capture it onto the
+        // ImportSchema activity so the change is versioned in the system's history. Reloaded, as ids are assigned on save.
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+
         // finish the activity
         await Application.Activities.CompleteActivityAsync(activity);
 
@@ -1503,6 +1603,9 @@ public class ConnectedSystemServer
 
         await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedByApiKey);
 
+        // Capture the configuration change onto the ImportSchema activity: see the user-initiated overload above.
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+
         await Application.Activities.CompleteActivityAsync(activity);
 
         return result;
@@ -1571,6 +1674,10 @@ public class ConnectedSystemServer
         // Persist the changes
         await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedBy);
 
+        // A hierarchy import changes the system's configuration (partitions and containers); capture it onto the
+        // ImportHierarchy activity so the change is versioned in the system's history. Reloaded, as ids are assigned on save.
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+
         // finish the activity
         await Application.Activities.CompleteActivityAsync(activity);
 
@@ -1634,6 +1741,9 @@ public class ConnectedSystemServer
 
         // Persist the changes
         await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedByApiKey);
+
+        // Capture the configuration change onto the ImportHierarchy activity: see the user-initiated overload above.
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
 
         // finish the activity
         await Application.Activities.CompleteActivityAsync(activity);
@@ -1778,6 +1888,10 @@ public class ConnectedSystemServer
                 await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedByUser);
 
             activity.Message = $"Auto-selected {containersAdded} container(s) created during export";
+
+            // Container additions change the system's import scope; capture the configuration change onto this
+            // activity so it is versioned in the system's history. Reloaded, as container ids are assigned on save.
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
         }
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -1896,6 +2010,10 @@ public class ConnectedSystemServer
         {
             await PersistConnectedSystemUpdateAsync(connectedSystem, initiatorType, initiatorId, initiatorName);
             activity.Message = $"Auto-selected {containersAdded} container(s) created during export";
+
+            // Container additions change the system's import scope; capture the configuration change onto this
+            // activity so it is versioned in the system's history. Reloaded, as container ids are assigned on save.
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
         }
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -2326,6 +2444,7 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateObjectTypeAsync(objectType);
 
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, objectType.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -2362,6 +2481,7 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateAttributeAsync(attribute);
 
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, attribute.ConnectedSystemObjectType?.ConnectedSystemId ?? 0);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -2389,6 +2509,7 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateObjectTypeAsync(objectType);
 
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, objectType.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -2416,6 +2537,7 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateAttributeAsync(attribute);
 
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, attribute.ConnectedSystemObjectType?.ConnectedSystemId ?? 0);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -2498,7 +2620,13 @@ public class ConnectedSystemServer
         }
 
         if (updated.Count > 0)
+        {
             await Application.Repository.ConnectedSystems.UpdateAttributesAsync(updated);
+
+            // Attribute selection changes are configuration; capture the change onto this activity so it is
+            // versioned in the system's history. Reloaded so the snapshot reflects persisted truth.
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+        }
 
         if (errors.Count > 0)
             await Application.Activities.CompleteActivityWithWarningAsync(activity);
@@ -2589,7 +2717,13 @@ public class ConnectedSystemServer
         }
 
         if (updated.Count > 0)
+        {
             await Application.Repository.ConnectedSystems.UpdateAttributesAsync(updated);
+
+            // Attribute selection changes are configuration; capture the change onto this activity so it is
+            // versioned in the system's history. Reloaded so the snapshot reflects persisted truth.
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+        }
 
         if (errors.Count > 0)
             await Application.Activities.CompleteActivityWithWarningAsync(activity);
@@ -3175,6 +3309,17 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Returns the count of Connected System Objects for a particular Connected System, optionally filtered by Object Type and/or Partition.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System to find the object count for.</param>
+    /// <param name="objectTypeId">Optional Object Type ID to filter by.</param>
+    /// <param name="partitionId">Optional Partition ID to filter by.</param>
+    public async Task<int> GetConnectedSystemObjectCountAsync(int connectedSystemId, int? objectTypeId, int? partitionId)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId, objectTypeId, partitionId);
+    }
+
+    /// <summary>
     /// Returns the count of Connected System Objects joined to a specific Metaverse Object.
     /// Used to determine if an MVO has any remaining connectors before deletion.
     /// </summary>
@@ -3732,12 +3877,24 @@ public class ConnectedSystemServer
     #endregion
 
     #region Connected System Partitions
-    public async Task CreateConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition)
+    // Partition and container writes change the system's import scope, which is configuration: every mutation is
+    // recorded with an Activity and a versioned snapshot via ExecuteScopeConfigurationChangeAsync. There are
+    // deliberately no activity-less overloads, so any future caller inherits capture automatically.
+
+    /// <summary>
+    /// Creates a Connected System Partition, recording the change with an Activity and a versioned configuration
+    /// snapshot of the owning Connected System.
+    /// </summary>
+    public async Task CreateConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition, int connectedSystemId, MetaverseObject? initiatedBy)
     {
         if (connectedSystemPartition == null)
             throw new ArgumentNullException(nameof(connectedSystemPartition));
 
-        await Application.Repository.ConnectedSystems.CreateConnectedSystemPartitionAsync(connectedSystemPartition);
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Create partition: {connectedSystemPartition.Name}",
+            () => Application.Repository.ConnectedSystems.CreateConnectedSystemPartitionAsync(connectedSystemPartition),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
     }
 
     public async Task<IList<ConnectedSystemPartition>> GetConnectedSystemPartitionsAsync(ConnectedSystem connectedSystem)
@@ -3753,20 +3910,52 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemPartitionAsync(id, withChangeTracking);
     }
 
-    public async Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition)
+    /// <summary>
+    /// Updates a Connected System Partition (e.g. its import-scope selection), recording the change with an Activity
+    /// and a versioned configuration snapshot of the owning Connected System.
+    /// </summary>
+    public async Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition, int connectedSystemId, MetaverseObject? initiatedBy)
     {
         if (partition == null)
             throw new ArgumentNullException(nameof(partition));
 
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition);
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Update partition: {partition.Name}",
+            () => Application.Repository.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
     }
 
-    public async Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition)
+    /// <summary>
+    /// Updates a Connected System Partition (initiated by API key), recording the change with an Activity and a
+    /// versioned configuration snapshot of the owning Connected System.
+    /// </summary>
+    public async Task UpdateConnectedSystemPartitionAsync(ConnectedSystemPartition partition, int connectedSystemId, ApiKey initiatedByApiKey)
+    {
+        if (partition == null)
+            throw new ArgumentNullException(nameof(partition));
+
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Update partition: {partition.Name}",
+            () => Application.Repository.ConnectedSystems.UpdateConnectedSystemPartitionAsync(partition),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey));
+    }
+
+    /// <summary>
+    /// Deletes a Connected System Partition, recording the change with an Activity and a versioned configuration
+    /// snapshot of the owning Connected System.
+    /// </summary>
+    public async Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition, int connectedSystemId, MetaverseObject? initiatedBy)
     {
         if (connectedSystemPartition == null)
             throw new ArgumentNullException(nameof(connectedSystemPartition));
 
-        await Application.Repository.ConnectedSystems.DeleteConnectedSystemPartitionAsync(connectedSystemPartition);
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Delete partition: {connectedSystemPartition.Name}",
+            () => Application.Repository.ConnectedSystems.DeleteConnectedSystemPartitionAsync(connectedSystemPartition),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
     }
     #endregion
 
@@ -3774,13 +3963,18 @@ public class ConnectedSystemServer
     /// <summary>
     /// Used to create a top-level container (optionally with children), when the connector does not implement Partitions.
     /// If the connector implements Partitions, then use CreateConnectedSystemPartitionAsync and add the container to that.
+    /// The change is recorded with an Activity and a versioned configuration snapshot of the owning Connected System.
     /// </summary>
-    public async Task CreateConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer)
+    public async Task CreateConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer, int connectedSystemId, MetaverseObject? initiatedBy)
     {
         if (connectedSystemContainer == null)
             throw new ArgumentNullException(nameof(connectedSystemContainer));
 
-        await Application.Repository.ConnectedSystems.CreateConnectedSystemContainerAsync(connectedSystemContainer);
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Create container: {connectedSystemContainer.Name}",
+            () => Application.Repository.ConnectedSystems.CreateConnectedSystemContainerAsync(connectedSystemContainer),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
     }
 
     public async Task<IList<ConnectedSystemContainer>> GetConnectedSystemContainersAsync(ConnectedSystem connectedSystem)
@@ -3796,21 +3990,83 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectedSystemContainerAsync(id);
     }
 
-    public async Task UpdateConnectedSystemContainerAsync(ConnectedSystemContainer container)
+    /// <summary>
+    /// Updates a Connected System Container (e.g. its import-scope selection), recording the change with an Activity
+    /// and a versioned configuration snapshot of the owning Connected System.
+    /// </summary>
+    public async Task UpdateConnectedSystemContainerAsync(ConnectedSystemContainer container, int connectedSystemId, MetaverseObject? initiatedBy)
     {
         if (container == null)
             throw new ArgumentNullException(nameof(container));
 
-        await Application.Repository.ConnectedSystems.UpdateConnectedSystemContainerAsync(container);
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Update container: {container.Name}",
+            () => Application.Repository.ConnectedSystems.UpdateConnectedSystemContainerAsync(container),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
     }
 
-    public async Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer)
+    /// <summary>
+    /// Updates a Connected System Container (initiated by API key), recording the change with an Activity and a
+    /// versioned configuration snapshot of the owning Connected System.
+    /// </summary>
+    public async Task UpdateConnectedSystemContainerAsync(ConnectedSystemContainer container, int connectedSystemId, ApiKey initiatedByApiKey)
+    {
+        if (container == null)
+            throw new ArgumentNullException(nameof(container));
+
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Update container: {container.Name}",
+            () => Application.Repository.ConnectedSystems.UpdateConnectedSystemContainerAsync(container),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey));
+    }
+
+    /// <summary>
+    /// Deletes a Connected System Container, recording the change with an Activity and a versioned configuration
+    /// snapshot of the owning Connected System.
+    /// </summary>
+    public async Task DeleteConnectedSystemContainerAsync(ConnectedSystemContainer connectedSystemContainer, int connectedSystemId, MetaverseObject? initiatedBy)
     {
         if (connectedSystemContainer == null)
             throw new ArgumentNullException(nameof(connectedSystemContainer));
 
+        await ExecuteScopeConfigurationChangeAsync(
+            connectedSystemId,
+            $"Delete container: {connectedSystemContainer.Name}",
+            () => Application.Repository.ConnectedSystems.DeleteConnectedSystemContainerAsync(connectedSystemContainer),
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
+    }
 
-        await Application.Repository.ConnectedSystems.DeleteConnectedSystemContainerAsync(connectedSystemContainer);
+    /// <summary>
+    /// Shared execution shape for partition/container configuration changes: create an Update Activity against the
+    /// owning Connected System, persist the change, capture a versioned configuration snapshot (reloaded so it
+    /// reflects persisted truth), then complete the Activity.
+    /// </summary>
+    private async Task ExecuteScopeConfigurationChangeAsync(
+        int connectedSystemId,
+        string message,
+        Func<Task> persistAsync,
+        Func<Activity, Task> createActivityAsync)
+    {
+        var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+
+        // The activity targets the owning Connected System (whose configuration changed), so the operation is always
+        // Update; whether a partition/container was created, updated or deleted is carried by the message.
+        var activity = new Activity
+        {
+            TargetName = connectedSystem?.Name ?? "Unknown",
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ConnectedSystemId = connectedSystemId,
+            Message = message
+        };
+        await createActivityAsync(activity);
+
+        await persistAsync();
+
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemId);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
     #endregion
 
@@ -3944,6 +4200,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
         // Capture the object type before ClearMappingNavigationProperties detaches the SyncRule nav; auto-assign
         // needs it to scope the attribute's priority list.
         var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
@@ -3953,7 +4210,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
 
         await AutoAssignImportMappingPriorityAsync(mapping, metaverseObjectTypeId);
-
+        await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -3980,6 +4237,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
         // Capture the object type before ClearMappingNavigationProperties detaches the SyncRule nav; auto-assign
         // needs it to scope the attribute's priority list.
         var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
@@ -3989,7 +4247,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.CreateSyncRuleMappingAsync(mapping);
 
         await AutoAssignImportMappingPriorityAsync(mapping, metaverseObjectTypeId);
-
+        await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4018,9 +4276,11 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
         AuditHelper.SetUpdated(mapping, initiatedBy);
         await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingAsync(mapping);
 
+        await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4046,6 +4306,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
         // Capture the import mapping's attribute scope before deletion so the remaining contributors can be re-densified.
         var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
         var targetMetaverseAttributeId = mapping.TargetMetaverseAttributeId;
@@ -4055,6 +4316,7 @@ public class ConnectedSystemServer
         if (metaverseObjectTypeId.HasValue && targetMetaverseAttributeId.HasValue)
             await RedensifyAttributePriorityAfterRemovalAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
 
+        await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4080,6 +4342,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
+        var syncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId ?? 0;
         // Capture the import mapping's attribute scope before deletion so the remaining contributors can be re-densified.
         var metaverseObjectTypeId = mapping.SyncRule?.MetaverseObjectTypeId;
         var targetMetaverseAttributeId = mapping.TargetMetaverseAttributeId;
@@ -4089,6 +4352,7 @@ public class ConnectedSystemServer
         if (metaverseObjectTypeId.HasValue && targetMetaverseAttributeId.HasValue)
             await RedensifyAttributePriorityAfterRemovalAsync(metaverseObjectTypeId.Value, targetMetaverseAttributeId.Value);
 
+        await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4312,6 +4576,8 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
 
+        await CaptureAttributePriorityChangeOnAffectedRulesAsync(activity, changed,
+            child => Application.Activities.CreateActivityAsync(child, initiatedBy));
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4332,7 +4598,44 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
 
+        await CaptureAttributePriorityChangeOnAffectedRulesAsync(activity, changed,
+            child => Application.Activities.CreateActivityAsync(child, initiatedByApiKey));
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// An attribute priority change spans the Synchronisation Rules of every changed mapping, so one snapshot cannot
+    /// represent it. Each affected rule instead captures its own versioned snapshot onto a child Activity linked to
+    /// the parent reorder Activity, so every rule's configuration history shows the priority change. The rule is
+    /// reloaded in full so the snapshot reflects persisted truth.
+    /// </summary>
+    private async Task CaptureAttributePriorityChangeOnAffectedRulesAsync(Activity parentActivity, List<SyncRuleMapping> changed, Func<Activity, Task> createChildActivityAsync)
+    {
+        var affectedRuleIds = changed
+            .Select(m => m.SyncRuleId ?? m.SyncRule?.Id)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct();
+
+        foreach (var ruleId in affectedRuleIds)
+        {
+            var rule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(ruleId);
+            if (rule == null)
+                continue;
+
+            var childActivity = new Activity
+            {
+                TargetName = rule.Name,
+                TargetType = ActivityTargetType.SyncRule,
+                TargetOperationType = ActivityTargetOperationType.Update,
+                SyncRuleId = ruleId,
+                ParentActivityId = parentActivity.Id,
+                Message = parentActivity.TargetName
+            };
+            await createChildActivityAsync(childActivity);
+            await CaptureConfigurationChangeAsync(childActivity, rule, changeReason: null);
+            await Application.Activities.CompleteActivityAsync(childActivity);
+        }
     }
 
     /// <summary>
@@ -4421,6 +4724,7 @@ public class ConnectedSystemServer
 
         // now the Run Profile has been persisted, associated it with the activity and complete it.
         activity.ConnectedSystemRunProfileId = connectedSystemRunProfile.Id;
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemRunProfile.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4450,6 +4754,7 @@ public class ConnectedSystemServer
         await Application.Repository.ConnectedSystems.CreateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
 
         activity.ConnectedSystemRunProfileId = connectedSystemRunProfile.Id;
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemRunProfile.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4473,6 +4778,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemRunProfile.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4498,6 +4804,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.DeleteConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemRunProfile.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4522,6 +4829,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetUpdated(connectedSystemRunProfile, initiatedBy);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemRunProfile.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4548,6 +4856,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         AuditHelper.SetUpdated(connectedSystemRunProfile, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(connectedSystemRunProfile);
+        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemRunProfile.ConnectedSystemId);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5240,6 +5549,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetCreated(rule, initiatedBy);
         await Application.Repository.ConnectedSystems.CreateObjectMatchingRuleAsync(rule);
+        await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5258,6 +5568,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         AuditHelper.SetCreated(rule, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.CreateObjectMatchingRuleAsync(rule);
+        await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5276,6 +5587,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetUpdated(rule, initiatedBy);
         await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
+        await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5294,6 +5606,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         AuditHelper.SetUpdated(rule, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
+        await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5311,6 +5624,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         await Application.Repository.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule);
+        await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5328,6 +5642,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule);
+        await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 

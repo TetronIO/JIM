@@ -23,9 +23,18 @@ public class ConfigurationSnapshot
     public string ObjectType { get; set; } = null!;
 
     /// <summary>
-    /// The database identifier of the configuration object.
+    /// The integer database identifier of the configuration object, for integer-keyed objects (Connected System,
+    /// Synchronisation Rule). Zero for Guid-keyed objects, which use <see cref="ObjectGuidId"/> instead.
     /// </summary>
     public int ObjectId { get; set; }
+
+    /// <summary>
+    /// The Guid database identifier of the configuration object, for Guid-keyed objects (e.g. a Schedule). Null for
+    /// integer-keyed objects, which use <see cref="ObjectId"/>. Kept as a separate nullable field rather than widening
+    /// <see cref="ObjectId"/> so existing stored snapshots (which carry an integer objectId and no objectGuidId) still
+    /// deserialise unchanged.
+    /// </summary>
+    public Guid? ObjectGuidId { get; set; }
 
     /// <summary>
     /// The display name of the configuration object at capture time.

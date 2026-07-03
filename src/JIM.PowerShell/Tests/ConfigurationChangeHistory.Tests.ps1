@@ -33,17 +33,30 @@ Describe 'Get-JIMConfigurationChangeHistory' {
     }
 
     Context 'Parameter validation' {
-        It 'Requires Type and restricts it to the two configuration object kinds' {
+        It 'Requires Type and restricts it to the three configuration object kinds' {
             $type = $command.Parameters['Type']
             ($type.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory }) | Should -Not -BeNullOrEmpty
             $validateSet = $type.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
             $validateSet.ValidValues | Should -Contain 'SynchronisationRule'
             $validateSet.ValidValues | Should -Contain 'ConnectedSystem'
+            $validateSet.ValidValues | Should -Contain 'Schedule'
         }
 
         It 'Accepts Id from the pipeline by property name' {
             $id = $command.Parameters['Id']
             ($id.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipelineByPropertyName }) | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Types Id as string so it can carry an integer or a GUID' {
+            $command.Parameters['Id'].ParameterType | Should -Be ([string])
+        }
+
+        It 'Rejects a non-GUID Id for -Type Schedule' {
+            { Get-JIMConfigurationChangeHistory -Type Schedule -Id 5 -ErrorAction Stop } | Should -Throw '*GUID*'
+        }
+
+        It 'Rejects a non-integer Id for -Type SynchronisationRule' {
+            { Get-JIMConfigurationChangeHistory -Type SynchronisationRule -Id ([Guid]::NewGuid().ToString()) -ErrorAction Stop } | Should -Throw '*integer*'
         }
 
         It 'Exposes Version, CompareFrom, CompareTo, AsDiff and Raw' {

@@ -20,5 +20,10 @@ public enum ActivityTargetType
     /// <summary>
     /// A system-wide operation that is not scoped to a single entity, such as a factory reset.
     /// </summary>
-    System = 12
+    System = 12,
+    /// <summary>
+    /// A Schedule: the plan that defines what to run and when. Guid-keyed, so its configuration-change history is
+    /// associated via <see cref="Activity.ScheduleId"/> rather than an integer foreign key.
+    /// </summary>
+    Schedule = 13
 }

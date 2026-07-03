@@ -442,6 +442,38 @@ public static class Helpers
     }
 
     /// <summary>
+    /// Gets the in-app link to a security principal that initiated an activity, or null when the principal cannot be
+    /// linked (no id, or a System / unattributed initiator). Used to make initiator names clickable in change history.
+    /// </summary>
+    public static string? GetInitiatorHref(ActivityInitiatorType initiatorType, Guid? initiatedById)
+    {
+        if (initiatedById == null)
+            return null;
+
+        return initiatorType switch
+        {
+            ActivityInitiatorType.User => $"/t/users/v/{initiatedById}",
+            ActivityInitiatorType.ApiKey => $"/admin/apikeys/{initiatedById}",
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Gets the in-app link to the surface where an Object Matching Rule is managed, or null when neither owning-object
+    /// id is known (e.g. an activity recorded before rules were linked to their owner). A rule has no page of its own:
+    /// an Advanced Mode rule lives on its Synchronisation Rule's Matching tab, a Simple Mode rule on its Connected
+    /// System's Matching tab. Used to make matching-rule activity targets clickable.
+    /// </summary>
+    public static string? GetObjectMatchingRuleHref(int? syncRuleId, int? connectedSystemId)
+    {
+        if (syncRuleId.HasValue)
+            return $"/admin/sync-rules/{syncRuleId}?t=matching";
+        if (connectedSystemId.HasValue)
+            return $"/admin/connected-systems/{connectedSystemId}/?t=matching";
+        return null;
+    }
+
+    /// <summary>
     /// Gets the MudBlazor icon for an initiator type string.
     /// Accepts "User", "ApiKey", "Import", or other values.
     /// </summary>

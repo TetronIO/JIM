@@ -146,6 +146,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ScheduleExecutionId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ScheduleId")
+                        .HasColumnType("uuid");
+
                     b.Property<int?>("ScheduleStepIndex")
                         .HasColumnType("integer");
 

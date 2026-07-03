@@ -10,18 +10,23 @@ Cmdlets for generating sample identity data for testing and evaluation purposes.
 
 ## Get-JIMExampleDataSet
 
-Retrieves available example data sets. Each data set represents a collection of pre-generated identity objects that can be browsed or inspected.
+Retrieves available example data sets. Each data set is a named pool of string values (e.g. a list of cities, or first names) that Data Generation Templates can draw from.
 
 ### Syntax
 
 ```powershell
+# List (default)
 Get-JIMExampleDataSet [-Page <int>] [-PageSize <int>]
+
+# ById
+Get-JIMExampleDataSet -Id <int>
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
+| `Id` | `int` | Yes (ById set) | | The ID of a specific data set to retrieve, including its values. |
 | `Page` | `int` | No | `1` | Page number for paginated results. |
 | `PageSize` | `int` | No | `100` | Number of results per page (maximum 1000). |
 
@@ -35,12 +40,116 @@ Returns one or more `PSCustomObject` instances representing example data sets.
 Get-JIMExampleDataSet
 ```
 
+```powershell title="Get a specific data set, including its values"
+Get-JIMExampleDataSet -Id 5
+```
+
 ```powershell title="List data sets with pagination"
 Get-JIMExampleDataSet -Page 2 -PageSize 50
 ```
 
 ```powershell title="Select specific properties"
 Get-JIMExampleDataSet | Select-Object Name, Description, ObjectCount
+```
+
+---
+
+## New-JIMExampleDataSet
+
+Creates a new Example Data Set.
+
+### Syntax
+
+```powershell
+New-JIMExampleDataSet -Name <string> -Culture <string> [-Values <string[]>] [-PassThru]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Name` | `string` | Yes | | The name for the data set. |
+| `Culture` | `string` | Yes | | The .NET culture the values are in, e.g. `en-GB`. |
+| `Values` | `string[]` | No | | The string values that make up this data set. |
+| `PassThru` | `switch` | No | `$false` | Returns the created data set object. |
+
+### Output
+
+If `-PassThru` is specified, returns the created Example Data Set object.
+
+### Examples
+
+```powershell title="Create a data set of UK city names"
+New-JIMExampleDataSet -Name "UK Cities" -Culture "en-GB" -Values "London", "Manchester", "Bristol" -PassThru
+```
+
+---
+
+## Set-JIMExampleDataSet
+
+Updates an existing Example Data Set. Built-in data sets cannot be updated.
+
+### Syntax
+
+```powershell
+Set-JIMExampleDataSet -Id <int> [-Name <string>] [-Culture <string>] [-Values <string[]>] [-PassThru]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `int` | Yes | | The ID of the data set to update. Accepts pipeline input. |
+| `Name` | `string` | No | | A new name for the data set. |
+| `Culture` | `string` | No | | A new .NET culture for the values. |
+| `Values` | `string[]` | No | | When specified, replaces the entire set of values. |
+| `PassThru` | `switch` | No | `$false` | Returns the updated data set object. |
+
+### Output
+
+If `-PassThru` is specified, returns the updated Example Data Set object.
+
+### Examples
+
+```powershell title="Rename a data set"
+Set-JIMExampleDataSet -Id 5 -Name "UK Cities (Extended)"
+```
+
+```powershell title="Replace a data set's values"
+Set-JIMExampleDataSet -Id 5 -Values "London", "Manchester", "Bristol", "Leeds" -PassThru
+```
+
+---
+
+## Remove-JIMExampleDataSet
+
+Deletes an Example Data Set. Built-in data sets cannot be removed. This action cannot be undone.
+
+### Syntax
+
+```powershell
+Remove-JIMExampleDataSet -Id <int> [-Force]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `int` | Yes | | The ID of the data set to remove. Accepts pipeline input. |
+| `Force` | `switch` | No | `$false` | Bypasses confirmation prompts. |
+
+### Output
+
+None.
+
+### Examples
+
+```powershell title="Remove a data set with confirmation"
+Remove-JIMExampleDataSet -Id 5
+```
+
+```powershell title="Remove a data set without confirmation"
+Remove-JIMExampleDataSet -Id 5 -Force
 ```
 
 ---

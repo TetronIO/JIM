@@ -1,0 +1,115 @@
+@using JIM.Models.Activities
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The summary line for a configuration diff: an optional "vA → vB" and the added / removed / changed count chips, each
+   naming the kind of thing counted. Used by ConfigurationChangeFieldHistory as its header. *@
+
+@if (Diff != null && (Diff.HasChanges || (Diff.OldVersion.HasValue && Diff.NewVersion.HasValue)))
+{
+    <div class="d-flex flex-wrap align-center gap-2 mb-3">
+        @if (Diff.OldVersion.HasValue && Diff.NewVersion.HasValue)
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">v@(Diff.OldVersion) → v@(Diff.NewVersion)</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-disabled">·</MudText>
+        }
+        @if (Diff.AddedCount > 0)
+        {
+            <MudChip T="string" Variant="Variant.Text" Color="Color.Success" Icon="@Icons.Material.Filled.Add">@_addedText</MudChip>
+        }
+        @if (Diff.RemovedCount > 0)
+        {
+            <MudChip T="string" Variant="Variant.Text" Color="Color.Error" Icon="@Icons.Material.Filled.Remove">@_removedText</MudChip>
+        }
+        @if (Diff.ModifiedCount > 0)
+        {
+            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.Edit">@_modifiedText</MudChip>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>The structured configuration diff whose counts are summarised.</summary>
+    [Parameter, EditorRequired]
+    public ConfigurationDiff Diff { get; set; } = null!;
+
+    // Chip text naming the kind of thing counted, so "1 added" reads as "1 Attribute Flow added". A scalar is a
+    // "property"; a collection item is named by its kind (e.g. "Attribute Flow"). Built by walking the diff with the same
+    // rules as ConfigurationDiffService.Tally, so the kinds and counts always agree.
+    private string _addedText = string.Empty;
+    private string _removedText = string.Empty;
+    private string _modifiedText = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        var added = new List<string>();
+        var removed = new List<string>();
+        var modified = new List<string>();
+        if (Diff?.Root != null)
+            Collect(Diff.Root, added, removed, modified);
+
+        _addedText = BuildText(added, Diff?.AddedCount ?? 0, "added");
+        _removedText = BuildText(removed, Diff?.RemovedCount ?? 0, "removed");
+        _modifiedText = BuildText(modified, Diff?.ModifiedCount ?? 0, "changed");
+    }
+
+    private static void Collect(ConfigurationDiffNode node, List<string> added, List<string> removed, List<string> modified)
+    {
+        switch (node.ChangeType)
+        {
+            case ConfigurationDiffChangeType.Modified:
+                if (node.NodeType == ConfigurationSnapshotNodeType.Scalar)
+                    modified.Add(Kind(node));
+                CollectChildren(node, added, removed, modified);
+                break;
+
+            case ConfigurationDiffChangeType.Added:
+            case ConfigurationDiffChangeType.Removed:
+                // A collection item or a scalar is named once; a structural container that appeared/vanished is described
+                // by its contained items instead. Mirrors the tally so a kind is listed for every counted change.
+                if (node.ItemId.HasValue || node.ItemGuidId.HasValue || node.NodeType == ConfigurationSnapshotNodeType.Scalar)
+                    (node.ChangeType == ConfigurationDiffChangeType.Added ? added : removed).Add(Kind(node));
+                else
+                    CollectChildren(node, added, removed, modified);
+                break;
+
+            case ConfigurationDiffChangeType.Unchanged:
+                CollectChildren(node, added, removed, modified);
+                break;
+        }
+    }
+
+    private static void CollectChildren(ConfigurationDiffNode node, List<string> added, List<string> removed, List<string> modified)
+    {
+        if (node.Children == null)
+            return;
+        foreach (var child in node.Children)
+            Collect(child, added, removed, modified);
+    }
+
+    // The kind of a counted node: a scalar is a generic "property"; a collection item is named by its label (its kind,
+    // e.g. "Attribute Flow", or its own name for named items such as attributes).
+    private static string Kind(ConfigurationDiffNode node) =>
+        node.NodeType == ConfigurationSnapshotNodeType.Scalar ? "property" : string.IsNullOrEmpty(node.Label) ? node.Key : node.Label;
+
+    // "{count} {kind, pluralised} {verb}", e.g. "1 property changed", "2 Attribute Flows added". Falls back to a generic
+    // "item" when a single count spans more than one kind.
+    private static string BuildText(List<string> kinds, int count, string verb)
+    {
+        var distinct = kinds.Distinct().ToList();
+        var noun = distinct.Count == 1 ? distinct[0] : "item";
+        return $"{count} {Pluralise(noun, count)} {verb}";
+    }
+
+    private static string Pluralise(string noun, int count)
+    {
+        if (count == 1)
+            return noun;
+        if (noun.EndsWith("y", StringComparison.Ordinal) && noun.Length > 1 && "aeiou".IndexOf(char.ToLowerInvariant(noun[^2])) < 0)
+            return noun[..^1] + "ies"; // property -> properties
+        if (noun.EndsWith("s", StringComparison.Ordinal))
+            return noun + "es";
+        return noun + "s";
+    }
+}

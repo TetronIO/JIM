@@ -72,17 +72,34 @@ function Get-JIMConnectedSystemObject {
 
         Gets the count of objects in partition 5 of Connected System 1.
 
+    .EXAMPLE
+        Get-JIMConnectedSystemObject -ConnectedSystemId 1
+
+        Gets the first page of Connected System Object headers for Connected System 1.
+
+    .EXAMPLE
+        Get-JIMConnectedSystemObject -ConnectedSystemId 1 -Search "smith" -Status Obsolete
+
+        Gets Obsolete objects matching "smith" in Connected System 1.
+
+    .EXAMPLE
+        Get-JIMConnectedSystemObject -ConnectedSystemId 1 -All
+
+        Gets every Connected System Object header for Connected System 1 (auto-paginates).
+
     .LINK
         Get-JIMConnectedSystem
         Get-JIMPendingExport
     #>
-    [CmdletBinding(DefaultParameterSetName = 'ById')]
+    [CmdletBinding(DefaultParameterSetName = 'List')]
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'AttributeValues', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'AttributeValuesAll', ValueFromPipelineByPropertyName)]
         [Parameter(Mandatory, ParameterSetName = 'Count', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'List', ValueFromPipelineByPropertyName)]
+        [Parameter(Mandatory, ParameterSetName = 'ListAll', ValueFromPipelineByPropertyName)]
         [int]$ConnectedSystemId,
 
         [Parameter(Mandatory, ParameterSetName = 'ById', ValueFromPipelineByPropertyName)]
@@ -97,28 +114,54 @@ function Get-JIMConnectedSystemObject {
 
         [Parameter(ParameterSetName = 'AttributeValues')]
         [Parameter(ParameterSetName = 'AttributeValuesAll')]
+        [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
         [string]$Search,
 
         [Parameter(ParameterSetName = 'AttributeValues')]
+        [Parameter(ParameterSetName = 'List')]
         [ValidateRange(1, [int]::MaxValue)]
         [int]$Page = 1,
 
         [Parameter(ParameterSetName = 'AttributeValues')]
         [Parameter(ParameterSetName = 'AttributeValuesAll')]
+        [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
         [ValidateRange(1, 100)]
         [int]$PageSize = 50,
 
         [Parameter(Mandatory, ParameterSetName = 'AttributeValuesAll')]
+        [Parameter(Mandatory, ParameterSetName = 'ListAll')]
         [switch]$All,
 
         [Parameter(Mandatory, ParameterSetName = 'Count')]
         [switch]$Count,
 
         [Parameter(ParameterSetName = 'Count')]
+        [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
         [int]$ObjectTypeId,
 
         [Parameter(ParameterSetName = 'Count')]
-        [int]$PartitionId
+        [int]$PartitionId,
+
+        [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
+        [ValidateSet('Normal', 'Obsolete', 'PendingProvisioning')]
+        [string]$Status,
+
+        [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
+        [ValidateSet('NotJoined', 'Projected', 'Provisioned', 'Joined')]
+        [string]$JoinType,
+
+        [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
+        [string]$SortBy,
+
+        [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
+        [switch]$Ascending
     )
 
     process {
@@ -182,6 +225,36 @@ function Get-JIMConnectedSystemObject {
                     if ($Search) {
                         $endpoint += "&search=$([System.Uri]::EscapeDataString($Search))"
                     }
+
+                    $response = Invoke-JIMApi -Endpoint $endpoint
+                    foreach ($item in $response.items) {
+                        $item
+                    }
+
+                    $hasMore = $response.hasNextPage
+                    $currentPage++
+                }
+            }
+
+            'List' {
+                Write-Verbose "Getting Connected System Objects for Connected System $ConnectedSystemId (Page: $Page, PageSize: $PageSize)"
+                $endpoint = Get-JIMConnectedSystemObjectListEndpoint -ConnectedSystemId $ConnectedSystemId -Page $Page -PageSize $PageSize `
+                    -Search $Search -Status $Status -ObjectTypeId $ObjectTypeId -JoinType $JoinType -SortBy $SortBy -Ascending:$Ascending
+
+                $response = Invoke-JIMApi -Endpoint $endpoint
+                foreach ($item in $response.items) {
+                    $item
+                }
+            }
+
+            'ListAll' {
+                Write-Verbose "Getting all Connected System Objects for Connected System $ConnectedSystemId"
+                $currentPage = 1
+                $hasMore = $true
+
+                while ($hasMore) {
+                    $endpoint = Get-JIMConnectedSystemObjectListEndpoint -ConnectedSystemId $ConnectedSystemId -Page $currentPage -PageSize $PageSize `
+                        -Search $Search -Status $Status -ObjectTypeId $ObjectTypeId -JoinType $JoinType -SortBy $SortBy -Ascending:$Ascending
 
                     $response = Invoke-JIMApi -Endpoint $endpoint
                     foreach ($item in $response.items) {

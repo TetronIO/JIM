@@ -289,3 +289,167 @@ Describe 'Get-JIMMetaverseAttribute' {
         }
     }
 }
+
+Describe 'Get-JIMMetaverseAttributePriority' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Get-JIMMetaverseAttributePriority
+        }
+
+        It 'Should have a mandatory AttributeId parameter' {
+            $param = $command.Parameters['AttributeId']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have a mandatory ObjectTypeId parameter' {
+            $param = $command.Parameters['ObjectTypeId']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Requires Connection' {
+
+        BeforeEach {
+            Disconnect-JIM
+        }
+
+        It 'Should throw when not connected' {
+            { Get-JIMMetaverseAttributePriority -AttributeId 1 -ObjectTypeId 1 -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll {
+            $help = Get-Help Get-JIMMetaverseAttributePriority -Full
+        }
+
+        It 'Should have a synopsis' {
+            $help.Synopsis | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have examples' {
+            $help.Examples.Example.Count | Should -BeGreaterThan 0
+        }
+
+        It 'Should have related links' {
+            $help.RelatedLinks | Should -Not -BeNullOrEmpty
+        }
+    }
+}
+
+Describe 'Set-JIMMetaverseAttributePriority' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Set-JIMMetaverseAttributePriority
+        }
+
+        It 'Should have a mandatory MappingId array parameter' {
+            $param = $command.Parameters['MappingId']
+            $param.ParameterType.Name | Should -Be 'Int32[]'
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have PassThru switch parameter' {
+            $command.Parameters['PassThru'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Should support ShouldProcess' {
+            $command.Parameters['WhatIf'] | Should -Not -BeNullOrEmpty
+            $command.Parameters['Confirm'] | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Requires Connection' {
+
+        BeforeEach {
+            Disconnect-JIM
+        }
+
+        It 'Should throw when not connected' {
+            { Set-JIMMetaverseAttributePriority -AttributeId 1 -ObjectTypeId 1 -MappingId 1, 2 -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll {
+            $help = Get-Help Set-JIMMetaverseAttributePriority -Full
+        }
+
+        It 'Should have a synopsis' {
+            $help.Synopsis | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have examples' {
+            $help.Examples.Example.Count | Should -BeGreaterThan 0
+        }
+
+        It 'Should have related links' {
+            $help.RelatedLinks | Should -Not -BeNullOrEmpty
+        }
+    }
+}
+
+Describe 'Move-JIMMetaverseAttributePriority' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Move-JIMMetaverseAttributePriority
+        }
+
+        It 'Should have a mandatory MappingId parameter' {
+            $param = $command.Parameters['MappingId']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have a mandatory Position parameter' {
+            $param = $command.Parameters['Position']
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have NullIsValue as a switch parameter' {
+            $command.Parameters['NullIsValue'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Should support ShouldProcess' {
+            $command.Parameters['WhatIf'] | Should -Not -BeNullOrEmpty
+            $command.Parameters['Confirm'] | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Requires Connection' {
+
+        BeforeEach {
+            Disconnect-JIM
+        }
+
+        It 'Should throw when not connected' {
+            { Move-JIMMetaverseAttributePriority -AttributeId 1 -ObjectTypeId 1 -MappingId 1 -Position 1 -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll {
+            $help = Get-Help Move-JIMMetaverseAttributePriority -Full
+        }
+
+        It 'Should have a synopsis' {
+            $help.Synopsis | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have examples' {
+            $help.Examples.Example.Count | Should -BeGreaterThan 0
+        }
+
+        It 'Should have related links' {
+            $help.RelatedLinks | Should -Not -BeNullOrEmpty
+        }
+    }
+}
