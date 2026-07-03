@@ -88,6 +88,38 @@ public class ConfigurationSnapshotServiceTests
     }
 
     [Test]
+    public void CreateSnapshot_SyncRule_CapturesMappingPriorityAndNullIsValue()
+    {
+        // Priority and "Null is a value" determine which contributor wins a multi-source Metaverse attribute, so they
+        // are configuration and must be snapshotted; without them a priority reorder diffs as "no change".
+        var mapping = new SyncRuleMapping { Id = 100, TargetMetaverseAttributeId = 5, Priority = 2, NullIsValue = true };
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
+        Assert.That(Child(flow, "priority")!.Value, Is.EqualTo("2"));
+        Assert.That(Child(flow, "nullIsValue")!.Value, Is.EqualTo("true"));
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_OmitsSentinelPriority()
+    {
+        // int.MaxValue is the "sole contributor / no explicit priority" sentinel, not a real priority; rendering it
+        // would show a meaningless 2147483647 in the field history.
+        var mapping = new SyncRuleMapping { Id = 100, TargetMetaverseAttributeId = 5 };
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
+        Assert.That(Child(flow, "priority"), Is.Null, "the sentinel priority must not be snapshotted");
+        Assert.That(Child(flow, "nullIsValue")!.Value, Is.EqualTo("false"));
+    }
+
+    [Test]
     public void CreateSnapshot_SyncRule_EnrichesForeignKeysAndEnumsWithDisplayValues()
     {
         var mapping = new SyncRuleMapping
@@ -156,6 +188,48 @@ public class ConfigurationSnapshotServiceTests
     }
 
     // -- Connected System redaction ------------------------------------------------------------------------------------
+
+    [Test]
+    public void CreateSnapshot_ConnectedSystem_CapturesObjectTypeMatchingRules()
+    {
+        // Simple Mode Object Matching Rules attach to a Connected System Object Type; they are the system's matching
+        // configuration and must be snapshotted, or a rule change diffs as "no change".
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 3,
+            Name = "AD",
+            ConnectorDefinitionId = 4,
+            ObjectTypes =
+            [
+                new ConnectedSystemObjectType
+                {
+                    Id = 7, Name = "user", Selected = true,
+                    ObjectMatchingRules = [new ObjectMatchingRule { Id = 9, Order = 1, TargetMetaverseAttributeId = 5 }]
+                }
+            ]
+        };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        var objectType = Child(snapshot.Root, "objectTypes")!.Children![0];
+        var matchingRules = Child(objectType, "objectMatchingRules");
+        Assert.That(matchingRules, Is.Not.Null, "the object type's matching rules must be part of the system's configuration snapshot");
+        Assert.That(matchingRules!.Children, Has.Count.EqualTo(1));
+        Assert.That(matchingRules.Children![0].ItemId, Is.EqualTo(9), "collection items must carry the stable DB id for diff matching");
+        Assert.That(Child(matchingRules.Children[0], "targetMetaverseAttributeId")!.Value, Is.EqualTo("5"));
+    }
+
+    [Test]
+    public void CreateSnapshot_ConnectedSystem_ExcludesRuntimeStatus()
+    {
+        // Status (Active/Deleting) is runtime state, not configuration; snapshotting it would record phantom
+        // configuration changes around deletion attempts.
+        var connectedSystem = new ConnectedSystem { Id = 3, Name = "AD", ConnectorDefinitionId = 4, Status = ConnectedSystemStatus.Deleting };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        Assert.That(Child(snapshot.Root, "status"), Is.Null, "runtime status must not be part of the configuration snapshot");
+    }
 
     [Test]
     public void CreateSnapshot_ConnectedSystem_RedactsEncryptedSettingAndKeepsPlainSetting()

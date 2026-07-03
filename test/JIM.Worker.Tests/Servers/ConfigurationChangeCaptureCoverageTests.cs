@@ -234,6 +234,33 @@ public class ConfigurationChangeCaptureCoverageTests
     }
 
     [Test]
+    public async Task UpdateConnectedSystemAsync_WhenStoredSnapshotIsJsonbNormalised_StillSkipsUnchangedAsync()
+    {
+        var connectedSystem = BuildConnectedSystem();
+
+        // First save captures; harvest the stored snapshot.
+        await _jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, NewUser());
+        var storedSnapshot = _completedActivity!.ConfigurationChangeSnapshot;
+        Assert.That(storedSnapshot, Is.Not.Null);
+
+        // PostgreSQL stores the snapshot in a jsonb column, which normalises the text (key ordering, spacing), so the
+        // string read back never equals the fresh serialisation. Emulate that with a semantically-identical reformat:
+        // the guard must compare meaning, not bytes, or it never skips anything in production.
+        var normalised = System.Text.Json.Nodes.JsonNode.Parse(storedSnapshot!)!
+            .ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        Assert.That(normalised, Is.Not.EqualTo(storedSnapshot), "the reformat must differ textually for this test to prove anything");
+        _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.ConnectedSystem, 1))
+            .ReturnsAsync(normalised);
+        _completedActivity = null;
+
+        await _jim.ConnectedSystems.UpdateConnectedSystemAsync(connectedSystem, NewUser());
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null, "a semantically-unchanged configuration must not consume a version, regardless of jsonb text normalisation");
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Null);
+    }
+
+    [Test]
     public async Task CreateOrUpdateSyncRuleAsync_WhenSnapshotUnchanged_SkipsVersionAndSnapshotAsync()
     {
         _csRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
@@ -278,13 +305,14 @@ public class ConfigurationChangeCaptureCoverageTests
             new ConnectedSystemSettingValue
             {
                 Id = 10,
-                Setting = new ConnectorDefinitionSetting { Name = "File Path", Required = true, Type = ConnectedSystemSettingType.File },
+                // Distinct Setting ids matter: the snapshot keys setting nodes on Setting.Id for diff matching.
+                Setting = new ConnectorDefinitionSetting { Id = 100, Name = "File Path", Required = true, Type = ConnectedSystemSettingType.File },
                 StringValue = "/data/users.csv"
             },
             new ConnectedSystemSettingValue
             {
                 Id = 11,
-                Setting = new ConnectorDefinitionSetting { Name = "Mode", Required = true, Type = ConnectedSystemSettingType.DropDown },
+                Setting = new ConnectorDefinitionSetting { Id = 101, Name = "Mode", Required = true, Type = ConnectedSystemSettingType.DropDown },
                 StringValue = "Import Only"
             }
         ],

@@ -115,6 +115,45 @@ public class ConfigurationChangeCaptureGranularTests
     }
 
     [Test]
+    public async Task CreateObjectMatchingRuleAsync_ObjectTypeAttached_CapturesConnectedSystemSnapshotAsync()
+    {
+        // A Simple Mode Object Matching Rule attaches to a Connected System Object Type, not a Synchronisation Rule; it
+        // is Connected System configuration, so the change must be captured in the system's history (the reported gap:
+        // these previously captured nothing at all).
+        _csRepo.Setup(r => r.GetConnectedSystemAsync(3, It.IsAny<bool>())).ReturnsAsync(BuildConnectedSystem);
+        _csRepo.Setup(r => r.CreateObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>())).Returns(Task.CompletedTask);
+        var rule = new ObjectMatchingRule
+        {
+            Id = 9,
+            ConnectedSystemObjectTypeId = 7,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType
+            {
+                Id = 7, Name = "user", ConnectedSystemId = 3, ConnectedSystem = new ConnectedSystem { Id = 3, Name = "AD" }
+            }
+        };
+
+        await _jim.ConnectedSystems.CreateObjectMatchingRuleAsync(rule, NewApiKey());
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(7));
+        Assert.That(_completedActivity.ConnectedSystemId, Is.EqualTo(3), "the activity must carry the Connected System id so the change is queryable in its history and the target can link to the Matching tab");
+        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"ConnectedSystem\""));
+    }
+
+    [Test]
+    public async Task DeleteObjectMatchingRuleAsync_SyncRuleNavigationOnly_CapturesSyncRuleSnapshotAsync()
+    {
+        // The rule arrives with only the SyncRule navigation populated (no scalar FK); capture must still resolve the
+        // owning Synchronisation Rule rather than silently skipping.
+        _csRepo.Setup(r => r.DeleteObjectMatchingRuleAsync(It.IsAny<ObjectMatchingRule>())).Returns(Task.CompletedTask);
+        var rule = new ObjectMatchingRule { Id = 9, SyncRule = new SyncRule { Id = 55, Name = "AD Export" } };
+
+        await _jim.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule, NewUser());
+
+        AssertCapturedRuleVersion();
+    }
+
+    [Test]
     public async Task CreateSyncRuleMappingAsync_WhenTrackingDisabled_RecordsNoSnapshotAsync()
     {
         SetupTrackingSetting(enabled: false);

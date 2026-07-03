@@ -85,6 +85,49 @@ Get-JIMLogFile | Where-Object Service -eq 'worker'
 
 ---
 
+## Watch-JIMLog
+
+Streams log entries to the console as they arrive, colour-coded by level (red for `Error`/`Fatal`, yellow for `Warning`, dark grey for `Debug`/`Verbose`). Polls the Logs API on an interval, displaying only entries newer than the last one seen, and runs until interrupted with ++ctrl+c++. Transient API failures are reported as warnings and polling continues.
+
+Output is formatted for the console; for structured objects suitable for the pipeline, use `Get-JIMLogEntry` instead.
+
+### Syntax
+
+```powershell
+Watch-JIMLog [-Service <string>] [-Level <string[]>] [-Search <string>]
+    [-IntervalSeconds <int>] [-MaxPolls <int>]
+```
+
+### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Service` | `string` | No | | Filter by service name (`web`, `worker`, `scheduler`). Omit for all services. |
+| `Level` | `string[]` | No | | Specific log levels to include (`Verbose`, `Debug`, `Information`, `Warning`, `Error`, `Fatal`). Omit for all levels. |
+| `Search` | `string` | No | | Text to search for in the log message (case-insensitive). |
+| `IntervalSeconds` | `int` | No | `2` | Number of seconds to wait between polls (1-300). |
+| `MaxPolls` | `int` | No | | Maximum number of poll cycles to run before stopping. Omit to run until interrupted. |
+
+### Output
+
+None. Each new entry is written to the console as `[timestamp] [LEVEL] [service] message`, colour-coded by level.
+
+### Examples
+
+```powershell title="Stream log entries from all services"
+Watch-JIMLog
+```
+
+```powershell title="Stream only worker errors"
+Watch-JIMLog -Service worker -Level Error, Fatal
+```
+
+```powershell title="Stream with a custom poll interval"
+Watch-JIMLog -IntervalSeconds 5
+```
+
+---
+
 ## See also
 
 - [Activities](activities.md): the audit trail for synchronisation operations, complementary to raw service logs

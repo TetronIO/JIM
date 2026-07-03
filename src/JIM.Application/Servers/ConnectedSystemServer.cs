@@ -58,21 +58,23 @@ public class ConnectedSystemServer
 
             var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
             var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey);
-            var serialised = ConfigurationSnapshotService.Serialise(snapshot);
             activity.ConnectedSystemId ??= connectedSystem.Id;
 
-            // Idempotent capture guard: serialisation is deterministic (stable ordering, no timestamps, keyed secret
-            // hashes), so an identical string means nothing changed. Skipping keeps no-change saves (e.g. worker paths
-            // that persist after every import) from consuming versions and drowning real changes in noise.
-            var latest = await Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.ConnectedSystem, connectedSystem.Id);
-            if (latest == serialised)
+            // Idempotent capture guard: skip when nothing changed versus the latest stored snapshot, so no-change
+            // saves (e.g. worker paths that persist after every import) do not consume versions and drown real changes
+            // in noise. The comparison must be semantic (via the diff engine), not textual: snapshots are stored in a
+            // jsonb column, and PostgreSQL normalises the text (key ordering, spacing) so the string read back never
+            // equals a fresh serialisation.
+            var latest = ConfigurationSnapshotService.Deserialise(
+                await Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.ConnectedSystem, connectedSystem.Id));
+            if (latest != null && !Application.ConfigurationDiffs.Diff(latest, snapshot).HasChanges)
             {
                 Log.Debug("CaptureConfigurationChangeAsync: configuration of Connected System {ConnectedSystemId} is unchanged from its latest snapshot; no new version recorded.", connectedSystem.Id);
                 return;
             }
 
             activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.ConnectedSystem, connectedSystem.Id);
-            activity.ConfigurationChangeSnapshot = serialised;
+            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
         }
         catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
         {
@@ -95,19 +97,19 @@ public class ConnectedSystemServer
 
             var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
             var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey);
-            var serialised = ConfigurationSnapshotService.Serialise(snapshot);
             activity.SyncRuleId ??= syncRule.Id;
 
-            // Idempotent capture guard: see the Connected System overload above.
-            var latest = await Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SyncRule, syncRule.Id);
-            if (latest == serialised)
+            // Idempotent capture guard, compared semantically: see the Connected System overload above.
+            var latest = ConfigurationSnapshotService.Deserialise(
+                await Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SyncRule, syncRule.Id));
+            if (latest != null && !Application.ConfigurationDiffs.Diff(latest, snapshot).HasChanges)
             {
                 Log.Debug("CaptureConfigurationChangeAsync: configuration of Synchronisation Rule {SyncRuleId} is unchanged from its latest snapshot; no new version recorded.", syncRule.Id);
                 return;
             }
 
             activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.SyncRule, syncRule.Id);
-            activity.ConfigurationChangeSnapshot = serialised;
+            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
         }
         catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
         {
@@ -143,6 +145,30 @@ public class ConnectedSystemServer
         var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
         if (connectedSystem != null)
             await CaptureConfigurationChangeAsync(activity, connectedSystem, changeReason: null);
+    }
+
+    // Routes an Object Matching Rule change to the configuration history of whichever object owns the rule: the
+    // Synchronisation Rule in Advanced Mode (the rule attaches to a SyncRule, resolved from the scalar FK or the
+    // navigation), or the Connected System in Simple Mode (the rule attaches to a Connected System Object Type).
+    // Simple Mode rules previously captured nothing at all.
+    private async Task CaptureObjectMatchingRuleConfigurationChangeAsync(Activity activity, ObjectMatchingRule rule)
+    {
+        var syncRuleId = rule.SyncRuleId ?? rule.SyncRule?.Id;
+        if (syncRuleId is > 0)
+        {
+            await CaptureSyncRuleConfigurationChangeAsync(activity, syncRuleId.Value);
+            return;
+        }
+
+        var connectedSystemId = rule.ConnectedSystemObjectType?.ConnectedSystemId;
+        if (connectedSystemId == null && rule.ConnectedSystemObjectTypeId.HasValue)
+        {
+            var objectType = await Application.Repository.ConnectedSystems.GetObjectTypeAsync(rule.ConnectedSystemObjectTypeId.Value);
+            connectedSystemId = objectType?.ConnectedSystemId;
+        }
+
+        if (connectedSystemId is > 0)
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystemId.Value);
     }
 
     /// <summary>
@@ -4551,6 +4577,8 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
 
+        await CaptureAttributePriorityChangeOnAffectedRulesAsync(activity, changed,
+            child => Application.Activities.CreateActivityAsync(child, initiatedBy));
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -4571,7 +4599,44 @@ public class ConnectedSystemServer
 
         await Application.Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(changed);
 
+        await CaptureAttributePriorityChangeOnAffectedRulesAsync(activity, changed,
+            child => Application.Activities.CreateActivityAsync(child, initiatedByApiKey));
         await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// An attribute priority change spans the Synchronisation Rules of every changed mapping, so one snapshot cannot
+    /// represent it. Each affected rule instead captures its own versioned snapshot onto a child Activity linked to
+    /// the parent reorder Activity, so every rule's configuration history shows the priority change. The rule is
+    /// reloaded in full so the snapshot reflects persisted truth.
+    /// </summary>
+    private async Task CaptureAttributePriorityChangeOnAffectedRulesAsync(Activity parentActivity, List<SyncRuleMapping> changed, Func<Activity, Task> createChildActivityAsync)
+    {
+        var affectedRuleIds = changed
+            .Select(m => m.SyncRuleId ?? m.SyncRule?.Id)
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct();
+
+        foreach (var ruleId in affectedRuleIds)
+        {
+            var rule = await Application.Repository.ConnectedSystems.GetSyncRuleAsync(ruleId);
+            if (rule == null)
+                continue;
+
+            var childActivity = new Activity
+            {
+                TargetName = rule.Name,
+                TargetType = ActivityTargetType.SyncRule,
+                TargetOperationType = ActivityTargetOperationType.Update,
+                SyncRuleId = ruleId,
+                ParentActivityId = parentActivity.Id,
+                Message = parentActivity.TargetName
+            };
+            await createChildActivityAsync(childActivity);
+            await CaptureConfigurationChangeAsync(childActivity, rule, changeReason: null);
+            await Application.Activities.CompleteActivityAsync(childActivity);
+        }
     }
 
     /// <summary>
@@ -5530,7 +5595,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetCreated(rule, initiatedBy);
         await Application.Repository.ConnectedSystems.CreateObjectMatchingRuleAsync(rule);
-        await CaptureSyncRuleConfigurationChangeAsync(activity, rule.SyncRuleId ?? 0);
+        await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5549,7 +5614,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         AuditHelper.SetCreated(rule, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.CreateObjectMatchingRuleAsync(rule);
-        await CaptureSyncRuleConfigurationChangeAsync(activity, rule.SyncRuleId ?? 0);
+        await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5568,7 +5633,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         AuditHelper.SetUpdated(rule, initiatedBy);
         await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
-        await CaptureSyncRuleConfigurationChangeAsync(activity, rule.SyncRuleId ?? 0);
+        await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5587,7 +5652,7 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         AuditHelper.SetUpdated(rule, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.UpdateObjectMatchingRuleAsync(rule);
-        await CaptureSyncRuleConfigurationChangeAsync(activity, rule.SyncRuleId ?? 0);
+        await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5605,7 +5670,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
         await Application.Repository.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule);
-        await CaptureSyncRuleConfigurationChangeAsync(activity, rule.SyncRuleId ?? 0);
+        await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -5623,7 +5688,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
         await Application.Repository.ConnectedSystems.DeleteObjectMatchingRuleAsync(rule);
-        await CaptureSyncRuleConfigurationChangeAsync(activity, rule.SyncRuleId ?? 0);
+        await CaptureObjectMatchingRuleConfigurationChangeAsync(activity, rule);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 

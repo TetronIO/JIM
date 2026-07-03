@@ -60,11 +60,18 @@
     padding: 0.35rem 0 0.15rem;
 }
 
-/* A wholly added / removed item, drawn as a small tinted card of its values. */
+/* A wholly added / removed item, drawn as a small tinted card of its values. The vertical margin matches the card's
+   horizontal breathing room inside its parent panel, so stacked cards read as evenly spaced on all sides. The last
+   card drops its bottom margin: the parent panel's own padding then closes the layout, keeping the gap beneath the
+   final card equal to the gaps at its sides. */
 .fh-card {
     border-radius: 8px;
     padding: 0.55rem 0.75rem;
-    margin: 0.4rem 0;
+    margin: 1rem 0;
+}
+
+.fh-card:last-child {
+    margin-bottom: 0;
 }
 
 .fh-card-added {

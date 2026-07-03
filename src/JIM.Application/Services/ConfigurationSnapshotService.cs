@@ -105,6 +105,14 @@ public class ConfigurationSnapshotService
             AddReference(children, "targetConnectedSystemAttributeId", mapping.TargetConnectedSystemAttributeId, mapping.TargetConnectedSystemAttribute?.Name, "Target Connected System Attribute");
             AddEnum(children, "inboundValueProcessing", mapping.InboundValueProcessing, "Inbound value processing");
             AddEnum(children, "caseNormalisation", mapping.CaseNormalisation, "Case normalisation");
+
+            // Priority and "Null is a value" determine which contributor wins a multi-source Metaverse attribute, so
+            // they are configuration. int.MaxValue is the "sole contributor / no explicit priority" sentinel, not a
+            // real priority, so it is omitted rather than rendered as a meaningless 2147483647.
+            if (mapping.Priority != int.MaxValue)
+                Add(children, "priority", Render(mapping.Priority), "Priority");
+            Add(children, "nullIsValue", Render(mapping.NullIsValue), "Null is a value");
+
             children.Add(BuildMappingSources(mapping.Sources));
             items.Add(ConfigurationSnapshotNode.ObjectNode("attributeFlowRule", children, "Attribute Flow", mapping.Id));
         }
@@ -207,7 +215,8 @@ public class ConfigurationSnapshotService
         var children = new List<ConfigurationSnapshotNode>();
         Add(children, "name", connectedSystem.Name, "Name");
         Add(children, "description", connectedSystem.Description, "Description");
-        AddEnum(children, "status", connectedSystem.Status, "Status");
+        // Status (Active/Deleting) is deliberately excluded: it is runtime state, not configuration, so it does not
+        // belong in a configuration change history (it would record phantom changes around deletion attempts).
         AddReference(children, "connectorDefinitionId", connectedSystem.ConnectorDefinitionId, connectedSystem.ConnectorDefinition?.Name, "Connector");
         AddEnum(children, "objectMatchingRuleMode", connectedSystem.ObjectMatchingRuleMode, "Object matching rule mode");
         // SettingValuesValid is deliberately excluded: it is internal UI-flow state (whether the connector has validated
@@ -327,6 +336,9 @@ public class ConfigurationSnapshotService
             Add(children, "selected", Render(objectType.Selected), "Selected");
             Add(children, "removeContributedAttributesOnObsoletion", Render(objectType.RemoveContributedAttributesOnObsoletion), "Remove contributed attributes on obsoletion");
             children.Add(BuildObjectTypeAttributes(objectType.Attributes));
+            // Simple Mode Object Matching Rules attach to the object type; they are the system's matching
+            // configuration, so they belong in its snapshot (Advanced Mode rules live on the Synchronisation Rule).
+            children.Add(BuildObjectMatchingRules(objectType.ObjectMatchingRules));
             items.Add(ConfigurationSnapshotNode.ObjectNode("objectType", children, "Object Type", objectType.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("objectTypes", items, "Object Types");
