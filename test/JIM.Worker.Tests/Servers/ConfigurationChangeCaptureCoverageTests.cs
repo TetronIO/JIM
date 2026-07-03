@@ -20,9 +20,9 @@ namespace JIM.Worker.Tests.Servers;
 
 /// <summary>
 /// Tests that close the configuration-change capture coverage gaps: every code path that mutates a Connected System's
-/// configuration must record a versioned snapshot on its Activity (schema updates, worker-initiated triad updates,
-/// object-matching mode switches, container auto-selection, bulk attribute updates and the partition/container API
-/// endpoints), while runtime-state writes (a status flip) must not pollute the configuration history. Also covers the
+/// configuration must record a versioned snapshot on its Activity (schema updates, object-matching mode switches,
+/// container auto-selection, bulk attribute updates and the partition/container API endpoints), while runtime-state
+/// writes (a status flip, the import watermark) must not pollute the configuration history. Also covers the
 /// idempotent capture guard: a capture whose snapshot is identical to the object's latest stored one records no new
 /// version, so worker paths can capture liberally without generating no-change noise.
 /// </summary>
@@ -80,17 +80,6 @@ public class ConfigurationChangeCaptureCoverageTests
     public void TearDown() => _jim?.Dispose();
 
     // -- gap paths: an Activity existed but no snapshot was captured ------------------------------------------------------
-
-    [Test]
-    public async Task UpdateConnectedSystemWithTriadAsync_WhenTrackingEnabled_CapturesVersionedSnapshotAsync()
-    {
-        var connectedSystem = BuildConnectedSystem();
-
-        await _jim.ConnectedSystems.UpdateConnectedSystemWithTriadAsync(
-            connectedSystem, ActivityInitiatorType.System, null, "Infrastructure Key");
-
-        AssertCapturedConnectedSystemVersion();
-    }
 
     [Test]
     public async Task UpdateConnectedSystemSchemaAsync_WhenTrackingEnabled_CapturesVersionedSnapshotAsync()
@@ -203,6 +192,20 @@ public class ConfigurationChangeCaptureCoverageTests
         Assert.That(connectedSystem.Status, Is.EqualTo(ConnectedSystemStatus.Active));
         _csRepo.Verify(r => r.UpdateConnectedSystemAsync(connectedSystem), Times.Once);
         Assert.That(_createdActivity, Is.Null, "a runtime status flip is not a configuration change and must not create an Activity");
+        Assert.That(_completedActivity, Is.Null);
+    }
+
+    [Test]
+    public async Task UpdateConnectedSystemPersistedConnectorDataAsync_DoesNotCreateActivityOrCaptureSnapshotAsync()
+    {
+        var connectedSystem = BuildConnectedSystem();
+        connectedSystem.PersistedConnectorData = "watermark-cookie-v1";
+
+        await _jim.ConnectedSystems.UpdateConnectedSystemPersistedConnectorDataAsync(connectedSystem, "watermark-cookie-v2");
+
+        Assert.That(connectedSystem.PersistedConnectorData, Is.EqualTo("watermark-cookie-v2"));
+        _csRepo.Verify(r => r.UpdateConnectedSystemAsync(connectedSystem), Times.Once);
+        Assert.That(_createdActivity, Is.Null, "the import watermark is machine-generated runtime state, not a configuration change, and must not create an Activity");
         Assert.That(_completedActivity, Is.Null);
     }
 
