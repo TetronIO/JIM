@@ -69,7 +69,7 @@
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">@settingContext.Description</MudText>
                 }
             </MudTd>
-            <MudTd DataLabel="Value" Class="@GetRowClass(settingContext)">
+            <MudTd DataLabel="Value" Class="@($"jim-nowrap {GetRowClass(settingContext)}")">
                 @* Controls sit to the left of the value so values stay left-aligned regardless of their length. *@
                 @if (settingContext.ValueType == ServiceSettingValueType.StringEncrypted)
                 {
