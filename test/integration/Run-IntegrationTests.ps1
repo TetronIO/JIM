@@ -2904,10 +2904,11 @@ Write-Step "Starting docker events capture -> $dockerEventsLogPath"
 $dockerEventsProcess = Start-DockerEventsCapture -LogPath $dockerEventsLogPath
 
 # Start the JIM error watcher. This tails jim.web / jim.worker / jim.scheduler
-# logs for [ERR] lines and writes any matches to a sentinel file. Start-JIMRunProfile
-# -Wait loops check the sentinel between polls (via the JIM_RUNPROFILE_ABORT_SENTINEL
-# env var) so a stalled activity accompanied by an [ERR] aborts immediately rather
-# than polling forever.
+# logs for Error/Fatal level lines (text-template '[HH:mm:ss ERR]'/'[HH:mm:ss FTL]'
+# markers and CLEF '"@l":"Error"'/'"@l":"Fatal"') and writes any matches to a
+# sentinel file. Start-JIMRunProfile -Wait loops check the sentinel between polls
+# (via the JIM_RUNPROFILE_ABORT_SENTINEL env var) so a stalled activity
+# accompanied by an error aborts immediately rather than polling forever.
 $errWatcherSentinel = Join-Path $scriptRoot "results" "errors-$Scenario-$Template-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
 Write-Step "Starting JIM error watcher (sentinel: $errWatcherSentinel)"
 $errWatcher = Start-JimErrorWatcher -SentinelPath $errWatcherSentinel -Since $step5Start
@@ -2970,7 +2971,7 @@ finally {
 
     if ($capturedLines.Count -gt 0) {
         Write-Host ""
-        Write-Host "${RED}✗ JIM error watcher captured $($capturedLines.Count) [ERR] line(s) during the scenario:${NC}"
+        Write-Host "${RED}✗ JIM error watcher captured $($capturedLines.Count) Error/Fatal line(s) during the scenario:${NC}"
         foreach ($line in $capturedLines | Select-Object -First 10) {
             Write-Host "    $line" -ForegroundColor Red
         }

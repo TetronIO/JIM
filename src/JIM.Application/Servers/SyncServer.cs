@@ -288,6 +288,12 @@ public class SyncServer : ISyncServer
     public Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo)
         => _exportEval.EvaluateMvoDeletionAsync(mvo);
 
+    public Task<ReferenceRecallContext> CaptureReferenceRecallContextAsync(IReadOnlyCollection<Guid> deletionCandidateMvoIds)
+        => _exportEval.CaptureReferenceRecallContextAsync(deletionCandidateMvoIds);
+
+    public Task<ReferenceRecallResult> StageReferenceRecallExportsAsync(ReferenceRecallContext context, IReadOnlyCollection<Guid> deletedMvoIds)
+        => _exportEval.StageReferenceRecallExportsAsync(context, deletedMvoIds);
+
     #endregion
 
     #region Export Execution

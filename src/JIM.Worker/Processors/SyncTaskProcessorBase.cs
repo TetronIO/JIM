@@ -2581,6 +2581,14 @@ public abstract class SyncTaskProcessorBase
         using var span = Diagnostics.Sync.StartSpan("FlushPendingMvoDeletions");
         span.SetTag("deleteCount", _pendingMvoDeletions.Count);
 
+        // Reference recall (#908): capture which other Metaverse Objects reference the deletion
+        // candidates, and the candidates' per-system resolved reference values, BEFORE deletion
+        // nulls the reference FKs and disconnects their CSOs. Staging happens after the loop, for
+        // only the objects that actually got deleted.
+        var deletionCandidateIds = _pendingMvoDeletions.Select(d => d.Mvo.Id).ToList();
+        var referenceRecallContext = await _syncServer.CaptureReferenceRecallContextAsync(deletionCandidateIds);
+        var deletedMvoIds = new List<Guid>();
+
         foreach (var (mvo, finalAttributeValues) in _pendingMvoDeletions)
         {
             try
@@ -2631,6 +2639,7 @@ public abstract class SyncTaskProcessorBase
                     _activity.InitiatedById,
                     _activity.InitiatedByName,
                     finalAttributeValues);
+                deletedMvoIds.Add(mvo.Id);
                 Log.Information(
                     "FlushPendingMvoDeletionsAsync: Deleted MVO {MvoId} ({DisplayName})",
                     mvo.Id, mvo.DisplayName ?? "No display name");
@@ -2645,6 +2654,21 @@ public abstract class SyncTaskProcessorBase
                 mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
                 await _syncRepo.UpdateMetaverseObjectAsync(mvo);
             }
+        }
+
+        // Reference recall (#908): stage membership-removal Pending Exports for Metaverse Objects
+        // that referenced the deleted objects. Without this, referencing groups' target CSOs never
+        // change, the unchanged-skip means no sync re-evaluates them, and a target without
+        // referential integrity keeps the deleted object as a member forever.
+        if (deletedMvoIds.Count > 0)
+        {
+            var recallResult = await _syncServer.StageReferenceRecallExportsAsync(referenceRecallContext, deletedMvoIds);
+            Log.Information(
+                "FlushPendingMvoDeletionsAsync: Reference recall for {DeletedCount} deleted MVO(s): " +
+                "{ReferencingCount} referencing MVO(s) evaluated, {PeCount} Pending Export(s) staged with " +
+                "{ChangeCount} removal change(s), {DroppedCount} unresolvable change(s) dropped",
+                deletedMvoIds.Count, recallResult.ReferencingObjectsEvaluated, recallResult.PendingExportsStaged,
+                recallResult.RemovalChangesStaged, recallResult.UnresolvableChangesDropped);
         }
 
         _pendingMvoDeletions.Clear();
