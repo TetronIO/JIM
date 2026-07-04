@@ -79,15 +79,45 @@ else
     echo "  TLS already configured"
 fi
 
-# Disable password complexity if NOCOMPLEXITY is set
-if [ "${NOCOMPLEXITY}" = "true" ]; then
-    echo "Disabling password complexity..."
-    ${SAMBA_BIN}/samba-tool domain passwordsettings set --complexity=off 2>/dev/null || true
-    ${SAMBA_BIN}/samba-tool domain passwordsettings set --history-length=0 2>/dev/null || true
-    ${SAMBA_BIN}/samba-tool domain passwordsettings set --min-pwd-age=0 2>/dev/null || true
-    ${SAMBA_BIN}/samba-tool domain passwordsettings set --max-pwd-age=0 2>/dev/null || true
-    echo "  Password complexity disabled"
+# Configure domain password policy. This must always run and must fail the build if it
+# cannot apply: these settings are baked into the committed image, and the test
+# credentials must never expire. This block was previously gated on NOCOMPLEXITY (which
+# is only set on the committed image, never during the build's docker exec) with all
+# failures suppressed, so --max-pwd-age=0 silently never applied; published images kept
+# the 42-day default and every Samba AD integration test started failing 44 days after
+# the image build with "The supplied credential is invalid".
+echo "Configuring domain password policy..."
+${SAMBA_BIN}/samba-tool domain passwordsettings set --complexity=off
+${SAMBA_BIN}/samba-tool domain passwordsettings set --history-length=0
+${SAMBA_BIN}/samba-tool domain passwordsettings set --min-pwd-age=0
+${SAMBA_BIN}/samba-tool domain passwordsettings set --max-pwd-age=0
+
+# Belt and braces: mark the Administrator password itself as never expiring
+# (userAccountControl 512 -> 66048 adds DONT_EXPIRE_PASSWD 0x10000), so the credential
+# survives even if the domain policy is ever reset to defaults.
+echo "Setting DONT_EXPIRE_PASSWD on Administrator..."
+cat > /tmp/admin-uac.ldif << EOF
+dn: CN=Administrator,CN=Users,${DOMAIN_DC}
+changetype: modify
+replace: userAccountControl
+userAccountControl: 66048
+EOF
+${SAMBA_BIN}/ldbmodify -H ${SAMBA_PRIVATE}/sam.ldb /tmp/admin-uac.ldif
+rm -f /tmp/admin-uac.ldif
+
+# Verify both settings actually applied; read them back rather than trusting exit codes.
+echo "Verifying password policy..."
+max_age=$(${SAMBA_BIN}/samba-tool domain passwordsettings show | grep "Maximum password age" | grep -o '[0-9]*$')
+if [ "${max_age}" != "0" ]; then
+    echo "ERROR: Maximum password age is '${max_age}', expected 0; the Administrator credential would expire" >&2
+    exit 1
 fi
+admin_uac=$(${SAMBA_BIN}/ldbsearch -H ${SAMBA_PRIVATE}/sam.ldb -b "CN=Administrator,CN=Users,${DOMAIN_DC}" -s base userAccountControl | grep '^userAccountControl:' | awk '{print $2}')
+if [ $(( admin_uac & 65536 )) -eq 0 ]; then
+    echo "ERROR: Administrator userAccountControl is '${admin_uac}'; DONT_EXPIRE_PASSWD (0x10000) not set" >&2
+    exit 1
+fi
+echo "  Password policy verified (max age 0, Administrator password never expires)"
 
 # Create baseline OU structure for integration testing
 # These OUs are created here (during post-provisioning) so they're baked into

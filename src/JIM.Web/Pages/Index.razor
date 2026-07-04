@@ -62,7 +62,7 @@
                     else
                     {
                         <MudIcon Icon="@Icons.Material.Outlined.RadioButtonUnchecked" Class="mud-text-disabled" />
-                        <MudLink Typo="Typo.body1" Href="/admin/operations">Create a Schedule</MudLink>
+                        <MudLink Typo="Typo.body1" Href="/admin/operations?t=schedules">Create a Schedule</MudLink>
                     }
                 </MudStack>
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
@@ -235,7 +235,7 @@
                     <MudIcon Icon="@Icons.Material.Outlined.Schedule" Size="Size.Large" Class="mud-text-disabled" />
                     <MudText Typo="Typo.body1" Class="mud-text-secondary">No schedules have been created yet.</MudText>
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" DropShadow="false"
-                               Href="/admin/operations" Class="mt-2"
+                               Href="/admin/operations?t=schedules" Class="mt-2"
                                StartIcon="@Icons.Material.Filled.Add">
                         Create a Schedule
                     </MudButton>
@@ -354,7 +354,7 @@
     private void HandleScheduleRowClick(TableRowClickEventArgs<Schedule> args)
     {
         if (args.Item == null) return;
-        NavManager.NavigateTo("/admin/operations");
+        NavManager.NavigateTo("/admin/operations?t=schedules");
     }
 
     // ─── Schedule Description Helpers (reused from OperationsSchedulesTab) ───

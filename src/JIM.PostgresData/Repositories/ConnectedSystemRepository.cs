@@ -701,14 +701,57 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     #region Connected System Objects
     public async Task DeleteConnectedSystemObjectAsync(ConnectedSystemObject connectedSystemObject)
     {
+        await ClearReferencesToConnectedSystemObjectsAsync([connectedSystemObject.Id]);
         Repository.Database.ConnectedSystemObjects.Remove(connectedSystemObject);
         await Repository.Database.SaveChangesAsync();
     }
 
     public async Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
     {
+        await ClearReferencesToConnectedSystemObjectsAsync(connectedSystemObjects.Select(cso => cso.Id).ToList());
         Repository.Database.ConnectedSystemObjects.RemoveRange(connectedSystemObjects);
         await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Nulls reference values held by OTHER rows that point at the given CSOs, mirroring the reference
+    /// cleanup the Metaverse Object deletion path performs. Two restrict-behaviour FKs target
+    /// ConnectedSystemObjects: ConnectedSystemObjectAttributeValues.ReferenceValueId (for example a group
+    /// CSO's member values still referencing a deprovisioned user's CSO before the membership removals
+    /// are confirmed) and MetaverseObjectAttributeValues.UnresolvedReferenceValueId (an inbound reference
+    /// that never resolved to a Metaverse Object). Without this cleanup, deleting a still-referenced CSO
+    /// violates the FK constraint (PostgreSQL 23503) and fails the whole sync run. The raw reference
+    /// string (UnresolvedReferenceValue, for example the DN) is preserved on CSO rows, so the next
+    /// confirming import still reconciles the value normally.
+    /// </summary>
+    private async Task ClearReferencesToConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> csoIds)
+    {
+        if (csoIds.Count == 0)
+            return;
+
+        var idArray = csoIds.ToArray();
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjectAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = ANY({0})",
+            idArray);
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjectAttributeValues"" SET ""UnresolvedReferenceValueId"" = NULL WHERE ""UnresolvedReferenceValueId"" = ANY({0})",
+            idArray);
+
+        // Update tracked entities to match the database state, otherwise SaveChangesAsync would try to
+        // write the stale FK value back (same pattern as DeleteMetaverseObjectAsync's CSO detach).
+        var deletedIds = csoIds as HashSet<Guid> ?? [.. csoIds];
+        foreach (var trackedValue in Repository.Database.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>()
+            .Where(e => e.Entity.ReferenceValueId.HasValue && deletedIds.Contains(e.Entity.ReferenceValueId.Value)))
+        {
+            trackedValue.Entity.ReferenceValueId = null;
+            trackedValue.Entity.ReferenceValue = null;
+        }
+        foreach (var trackedValue in Repository.Database.ChangeTracker.Entries<MetaverseObjectAttributeValue>()
+            .Where(e => e.Entity.UnresolvedReferenceValueId.HasValue && deletedIds.Contains(e.Entity.UnresolvedReferenceValueId.Value)))
+        {
+            trackedValue.Entity.UnresolvedReferenceValueId = null;
+            trackedValue.Entity.UnresolvedReferenceValue = null;
+        }
     }
 
     /// <summary>
@@ -4394,10 +4437,27 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Persists priority/null-handling changes across a set of mappings in a single transaction (#91).
+    /// Updates the scalar columns via a tracked reload rather than UpdateRange: contributor lists are
+    /// materialised with the context's default no-tracking behaviour, so sibling mappings carry separate
+    /// TargetMetaverseAttribute instances with the same key, and attaching the second instance's graph
+    /// throws an EF identity conflict.
     /// </summary>
     public async Task UpdateSyncRuleMappingsAsync(IReadOnlyCollection<SyncRuleMapping> mappings)
     {
-        Repository.Database.SyncRuleMappings.UpdateRange(mappings);
+        var changesById = mappings.ToDictionary(m => m.Id);
+        var ids = changesById.Keys.ToList();
+        var tracked = await Repository.Database.SyncRuleMappings
+            .AsTracking()
+            .Where(m => ids.Contains(m.Id))
+            .ToListAsync();
+
+        foreach (var mapping in tracked)
+        {
+            var source = changesById[mapping.Id];
+            mapping.Priority = source.Priority;
+            mapping.NullIsValue = source.NullIsValue;
+        }
+
         await Repository.Database.SaveChangesAsync();
     }
     #endregion

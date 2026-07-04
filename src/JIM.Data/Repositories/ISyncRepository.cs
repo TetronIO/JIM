@@ -303,6 +303,16 @@ public interface ISyncRepository
     Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
 
     /// <summary>
+    /// Returns the reference attribute values held by OTHER Metaverse Objects that point at any of the given
+    /// Metaverse Objects. Called before deleting the given objects so reference recall can stage
+    /// membership-removal Pending Exports for the referencing objects (issue #908); the deletion path nulls
+    /// the reference FKs, after which the linkage is unrecoverable. References held by objects that are
+    /// themselves in <paramref name="referencedMetaverseObjectIds"/> are excluded.
+    /// </summary>
+    Task<List<MvoReferenceRecallCandidate>> GetMetaverseObjectReferenceRecallCandidatesAsync(
+        IReadOnlyCollection<Guid> referencedMetaverseObjectIds);
+
+    /// <summary>
     /// Bulk creates MVOs with their attribute values.
     /// </summary>
     Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects);

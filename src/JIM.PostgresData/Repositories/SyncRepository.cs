@@ -194,6 +194,10 @@ public partial class SyncRepository : ISyncRepository
     public Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
         => _repo.Metaverse.ClearMetaverseObjectScopeReviewPendingAsync(ids);
 
+    public Task<List<MvoReferenceRecallCandidate>> GetMetaverseObjectReferenceRecallCandidatesAsync(
+        IReadOnlyCollection<Guid> referencedMetaverseObjectIds)
+        => _repo.Metaverse.GetMetaverseObjectReferenceRecallCandidatesAsync(referencedMetaverseObjectIds);
+
     public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         => CreateMetaverseObjectsBulkAsync(metaverseObjects as List<MetaverseObject> ?? metaverseObjects.ToList());
 

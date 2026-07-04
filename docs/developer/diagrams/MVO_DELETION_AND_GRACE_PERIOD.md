@@ -78,8 +78,10 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    PageEnd([Page flush:<br/>FlushPendingMvoDeletionsAsync]) --> Loop{More MVOs<br/>in batch?}
-    Loop -->|No| Done([Done])
+    PageEnd([Page flush:<br/>FlushPendingMvoDeletionsAsync]) --> Capture[CaptureReferenceRecallContextAsync:<br/>Record who references the candidates and the<br/>candidates' per-system resolved reference values]
+    Capture --> Loop{More MVOs<br/>in batch?}
+    Loop -->|No| Recall[StageReferenceRecallExportsAsync:<br/>Stage membership-removal Pending Exports<br/>for objects that referenced the deleted MVOs]
+    Recall --> Done([Done])
 
     Loop -->|Yes| EvalExports[EvaluateMvoDeletionAsync:<br/>Create delete Pending Exports<br/>for provisioned target CSOs]
     EvalExports --> DeleteMVO[DeleteMetaverseObjectAsync<br/>with initiator info]
@@ -105,8 +107,10 @@ flowchart TD
 
     RuleCheck -->|WhenAuthoritative<br/>SourceDisconnected| Eligible[Always eligible once marked<br/>May still have target CSOs]
 
-    Eligible --> Loop{More eligible<br/>MVOs?}
-    Loop -->|No| Done([Done])
+    Eligible --> Capture[CaptureReferenceRecallContextAsync:<br/>Record who references the candidates and the<br/>candidates' per-system resolved reference values]
+    Capture --> Loop{More eligible<br/>MVOs?}
+    Loop -->|No| Recall[StageReferenceRecallExportsAsync:<br/>Stage membership-removal Pending Exports<br/>for objects that referenced the deleted MVOs]
+    Recall --> Done([Done])
 
     Loop -->|Yes| EvalExports[EvaluateMvoDeletionAsync:<br/>Create delete Pending Exports<br/>for remaining provisioned CSOs]
     EvalExports --> DeleteMVO[DeleteMetaverseObjectAsync<br/>Uses ORIGINAL initiator info<br/>from when MVO was marked]
@@ -152,6 +156,8 @@ stateDiagram-v2
 - **Initiator preservation**<br /> When an MVO is marked for deferred deletion, the original initiator info (who/what caused the disconnection) is captured on the MVO. When housekeeping eventually deletes it, this original initiator is used in the audit trail, not "housekeeping" or "system".
 
 - **Export cleanup before deletion**<br /> Both immediate and housekeeping deletion paths call `EvaluateMvoDeletionAsync()` before the actual deletion. This creates delete Pending Exports for any provisioned target system CSOs, ensuring the external system is cleaned up.
+
+- **Reference recall after deletion (#908)**<br /> Both deletion paths also stage membership-removal Pending Exports for every Metaverse Object that referenced a deleted one (for example groups whose Static Members included a deleted leaver). The referencing linkage and the deleted objects' per-system resolved reference values (for example target DNs) are captured via `CaptureReferenceRecallContextAsync()` before deletion, because `DeleteMetaverseObjectAsync()` nulls the reference FKs and `EvaluateMvoDeletionAsync()` disconnects the CSOs. After the deletions, `StageReferenceRecallExportsAsync()` evaluates each referencing object once with every reference it lost in the batch, staging Remove changes whose values are pre-resolved at staging time; export-time resolution walks MVO to joined CSO and can never succeed for a deleted object. Without this recall, targets without referential integrity would keep deleted users as group members forever, because the referencing groups' CSOs never change and the unchanged-skip means no sync re-evaluates them.
 
 - **Fallback on failure**<br /> If immediate deletion fails (e.g., database error), the system sets `LastConnectorDisconnectedDate` as a fallback. This ensures housekeeping will pick up the MVO for retry on the next cycle, rather than losing the deletion intent.
 

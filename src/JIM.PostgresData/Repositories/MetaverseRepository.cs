@@ -9,6 +9,7 @@ using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Search;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -355,6 +356,57 @@ public class MetaverseRepository : IMetaverseRepository
             .Select(mvo => mvo.Id)
             .Take(maxResults)
             .ToListAsync();
+    }
+
+    public async Task<List<MvoReferenceRecallCandidate>> GetMetaverseObjectReferenceRecallCandidatesAsync(
+        IReadOnlyCollection<Guid> referencedMetaverseObjectIds)
+    {
+        if (referencedMetaverseObjectIds.Count == 0)
+            return new List<MvoReferenceRecallCandidate>();
+
+        // Raw SQL into a flat DTO (Summary-tier, sync hot path): a burst deletion can have tens of
+        // thousands of inbound references and entity materialisation cost is unwarranted here.
+        // Rows whose owning Metaverse Object is itself being deleted are excluded: there is nothing
+        // to export for a referencing object that is also going away.
+        var ids = referencedMetaverseObjectIds.ToArray();
+        var candidates = new List<MvoReferenceRecallCandidate>();
+
+        var connection = Repository.Database.Database.GetDbConnection();
+        var wasOpen = connection.State == System.Data.ConnectionState.Open;
+        if (!wasOpen)
+            await connection.OpenAsync();
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText =
+                @"SELECT ""MetaverseObjectId"", ""Id"", ""AttributeId"", ""ReferenceValueId""
+                  FROM ""MetaverseObjectAttributeValues""
+                  WHERE ""ReferenceValueId"" = ANY(@referencedIds)
+                    AND NOT (""MetaverseObjectId"" = ANY(@referencedIds))";
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "referencedIds";
+            parameter.Value = ids;
+            command.Parameters.Add(parameter);
+
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                candidates.Add(new MvoReferenceRecallCandidate
+                {
+                    ReferencingMetaverseObjectId = reader.GetGuid(0),
+                    AttributeValueId = reader.GetGuid(1),
+                    MetaverseAttributeId = reader.GetInt32(2),
+                    ReferencedMetaverseObjectId = reader.GetGuid(3)
+                });
+            }
+        }
+        finally
+        {
+            if (!wasOpen)
+                await connection.CloseAsync();
+        }
+
+        return candidates;
     }
 
     public async Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)

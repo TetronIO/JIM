@@ -388,11 +388,40 @@ function Get-SnapshotImageTag {
     return "jim-samba-ad:${Role}-$($Size.ToLower())"
 }
 
+function Get-SambaBaseBuildHash {
+    # Compute expected build hash for the base Samba AD images from the files that affect
+    # them. Must match the hash computed by Build-SambaImages.ps1 (same file list, same order).
+    $sambaScriptDir = Join-Path $scriptRoot "docker" "samba-ad-prebuilt"
+    $filesToHash = @(
+        (Join-Path $sambaScriptDir "post-provision.sh"),
+        (Join-Path $sambaScriptDir "start-samba.sh")
+    )
+    $combinedContent = ($filesToHash | ForEach-Object { Get-Content -Path $_ -Raw }) -join ""
+    return [System.BitConverter]::ToString(
+        [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($combinedContent))
+    ).Replace("-", "").Substring(0, 16).ToLower()
+}
+
 function Test-SnapshotAvailable {
     param([string]$ImageTag, [string]$ExpectedHash)
     $inspect = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.samba.snapshot-hash"}}' 2>&1
     if ($LASTEXITCODE -ne 0) { return $false }
-    return "$inspect" -eq $ExpectedHash
+    if ("$inspect" -ne $ExpectedHash) { return $false }
+
+    # Also verify the snapshot was baked from the current base image build. Snapshots
+    # capture the base's provisioned state (e.g. password policy, TLS, OUs), so checking
+    # the base image on disk is not enough: a snapshot built from an older base stays
+    # stale even after the base itself is rebuilt. Snapshots without the base-hash label
+    # predate this check and are treated as stale.
+    $snapshotBaseHash = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.samba.base-hash"}}' 2>&1
+    if ($LASTEXITCODE -ne 0) { return $false }
+    $expectedBuildHash = Get-SambaBaseBuildHash
+    if ("$snapshotBaseHash" -ne $expectedBuildHash) {
+        Write-Host "  ${YELLOW}Snapshot '$ImageTag' was built from a stale base image (base hash '$snapshotBaseHash' != $expectedBuildHash) — snapshot needs rebuild${NC}"
+        return $false
+    }
+
+    return $true
 }
 
 # Track whether snapshots are being used (set during container startup)
@@ -453,15 +482,16 @@ function Test-OpenLDAPSnapshotAvailable {
     if ($LASTEXITCODE -ne 0) { return $false }
     if ("$inspect" -ne $ExpectedHash) { return $false }
 
-    # Also verify the base image is current. A snapshot built from a stale base image
-    # contains outdated init scripts (e.g. wrong MDB map sizes) even if the snapshot
-    # hash matches, because the hash is computed from files on disk, not the image contents.
-    $baseImage = "ghcr.io/tetronio/jim-openldap:primary"
-    $baseBuildHash = docker image inspect $baseImage --format '{{index .Config.Labels "jim.openldap.build-hash"}}' 2>&1
+    # Also verify the snapshot was baked from the current base image build. Snapshots
+    # capture the base's init state (schema, suffixes, accesslog config), so checking
+    # the base image on disk is not enough: a snapshot built from an older base stays
+    # stale even after the base itself is rebuilt. Snapshots without the base-hash label
+    # predate this check and are treated as stale.
+    $snapshotBaseHash = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.openldap.base-hash"}}' 2>&1
     if ($LASTEXITCODE -ne 0) { return $false }
     $expectedBuildHash = Get-OpenLDAPBaseBuildHash
-    if ("$baseBuildHash" -ne $expectedBuildHash) {
-        Write-Host "  ${YELLOW}OpenLDAP base image is stale (build hash $baseBuildHash != $expectedBuildHash) — snapshot needs rebuild${NC}"
+    if ("$snapshotBaseHash" -ne $expectedBuildHash) {
+        Write-Host "  ${YELLOW}Snapshot '$ImageTag' was built from a stale base image (base hash '$snapshotBaseHash' != $expectedBuildHash) — snapshot needs rebuild${NC}"
         return $false
     }
 
@@ -1916,14 +1946,8 @@ else {
 
 $buildScript = Join-Path $scriptRoot "docker" "samba-ad-prebuilt" "Build-SambaImages.ps1"
 
-# Compute current build content hash from source scripts
-$sambaScriptDir = Join-Path $scriptRoot "docker" "samba-ad-prebuilt"
-$postProvisionContent = Get-Content -Path (Join-Path $sambaScriptDir "post-provision.sh") -Raw
-$startSambaContent = Get-Content -Path (Join-Path $sambaScriptDir "start-samba.sh") -Raw
-$combinedContent = $postProvisionContent + $startSambaContent
-$currentBuildHash = [System.BitConverter]::ToString(
-    [System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($combinedContent))
-).Replace("-", "").Substring(0, 16).ToLower()
+# Compute current build content hash from source scripts (shared with Test-SnapshotAvailable)
+$currentBuildHash = Get-SambaBaseBuildHash
 
 # Function to check if a Samba image needs rebuilding (missing or stale)
 function Test-SambaImageNeedsRebuild {
@@ -2226,6 +2250,29 @@ if (-not $IgnoreSnapshots -and $Scenario -like "*Scenario1*") {
 }
 
 if ($DirectoryType -eq "OpenLDAP") {
+    # Ensure the base OpenLDAP image is current before any snapshot handling, so snapshot
+    # rebuilds use a fresh base image. Docker compose starts a stale base image as-is (the
+    # build: fallback only applies when the image is absent), so changes to the Dockerfile,
+    # init script or bootstrap LDIF would otherwise be silently ignored.
+    $expectedOlBuildHash = Get-OpenLDAPBaseBuildHash
+    $olBaseImage = "ghcr.io/tetronio/jim-openldap:primary"
+    $olBaseBuildHash = docker image inspect $olBaseImage --format '{{index .Config.Labels "jim.openldap.build-hash"}}' 2>&1
+    $olBaseImageMissing = $LASTEXITCODE -ne 0
+    if ($olBaseImageMissing -or "$olBaseBuildHash" -ne $expectedOlBuildHash) {
+        $olRebuildReason = if ($olBaseImageMissing) { "not found" } else { "stale (hash $olBaseBuildHash != $expectedOlBuildHash)" }
+        Write-Warning "OpenLDAP base image needs rebuilding: $olRebuildReason"
+        Write-Step "Building OpenLDAP base image..."
+        & "$scriptRoot/docker/openldap/Build-OpenLdapImage.ps1"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Failure "Failed to build OpenLDAP base image"
+            exit 1
+        }
+        Write-Success "OpenLDAP base image built successfully"
+    }
+    else {
+        Write-Success "OpenLDAP base image is current (hash $expectedOlBuildHash)"
+    }
+
     # Check for pre-populated OpenLDAP snapshot images
     # S1 does not need pre-populated data — the target directory starts empty
     if (-not $IgnoreSnapshots -and $Scenario -notlike "*Scenario1*") {
@@ -2881,10 +2928,11 @@ Write-Step "Starting docker events capture -> $dockerEventsLogPath"
 $dockerEventsProcess = Start-DockerEventsCapture -LogPath $dockerEventsLogPath
 
 # Start the JIM error watcher. This tails jim.web / jim.worker / jim.scheduler
-# logs for [ERR] lines and writes any matches to a sentinel file. Start-JIMRunProfile
-# -Wait loops check the sentinel between polls (via the JIM_RUNPROFILE_ABORT_SENTINEL
-# env var) so a stalled activity accompanied by an [ERR] aborts immediately rather
-# than polling forever.
+# logs for Error/Fatal level lines (text-template '[HH:mm:ss ERR]'/'[HH:mm:ss FTL]'
+# markers and CLEF '"@l":"Error"'/'"@l":"Fatal"') and writes any matches to a
+# sentinel file. Start-JIMRunProfile -Wait loops check the sentinel between polls
+# (via the JIM_RUNPROFILE_ABORT_SENTINEL env var) so a stalled activity
+# accompanied by an error aborts immediately rather than polling forever.
 $errWatcherSentinel = Join-Path $scriptRoot "results" "errors-$Scenario-$Template-$(Get-Date -Format 'yyyy-MM-dd_HHmmss').log"
 Write-Step "Starting JIM error watcher (sentinel: $errWatcherSentinel)"
 $errWatcher = Start-JimErrorWatcher -SentinelPath $errWatcherSentinel -Since $step5Start
@@ -2947,7 +2995,7 @@ finally {
 
     if ($capturedLines.Count -gt 0) {
         Write-Host ""
-        Write-Host "${RED}✗ JIM error watcher captured $($capturedLines.Count) [ERR] line(s) during the scenario:${NC}"
+        Write-Host "${RED}✗ JIM error watcher captured $($capturedLines.Count) Error/Fatal line(s) during the scenario:${NC}"
         foreach ($line in $capturedLines | Select-Object -First 10) {
             Write-Host "    $line" -ForegroundColor Red
         }

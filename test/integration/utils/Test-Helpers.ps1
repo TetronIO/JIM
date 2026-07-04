@@ -2436,15 +2436,40 @@ function Assert-ActivityItemsHaveOutcomeSummary {
     }
 }
 
+function Get-JimErrorLinePattern {
+    <#
+    .SYNOPSIS
+        Returns the regex used to detect Error and Fatal level log lines.
+
+    .DESCRIPTION
+        Shared by Start-JimErrorWatcher and Assert-NoWorkerErrors so both layers
+        of error detection agree on what constitutes an error line. Covers every
+        format the JIM services emit:
+
+          - Serilog console text template, which renders the level inside the
+            same bracket pair as the timestamp: '[16:33:02 ERR]', '[16:33:02 FTL]'.
+            Also matches a bare '[ERR]'/'[FTL]' should the template ever change.
+          - CLEF/compact JSON (RenderedCompactJsonFormatter): '"@l":"Error"',
+            '"@l":"Fatal"'. CLEF omits @l entirely for Information-level events,
+            so anchoring on the @l property cannot false-positive on messages
+            that merely contain the word 'Error'.
+
+    .OUTPUTS
+        [string] Regex pattern.
+    #>
+    return '\[(?:[^\]]*\s)?(?:ERR|FTL)\]|"@l"\s*:\s*"(?:Error|Fatal)"'
+}
+
 function Start-JimErrorWatcher {
     <#
     .SYNOPSIS
-        Starts background jobs that tail JIM container logs for [ERR] lines.
+        Starts background jobs that tail JIM container logs for Error/Fatal lines.
 
     .DESCRIPTION
         Spawns one background job per target container (jim.web, jim.worker,
         jim.scheduler) that runs `docker logs --since <time> -f <container>` and
-        appends any line containing '[ERR]' to a shared sentinel file.
+        appends any Error or Fatal level line (see Get-JimErrorLinePattern) to a
+        shared sentinel file.
 
         Returns a handle object containing the jobs, the sentinel file path, the
         start time, and an optional regex of allowed patterns to ignore.
@@ -2465,8 +2490,8 @@ function Start-JimErrorWatcher {
 
     .PARAMETER AllowPattern
         Optional regex. Lines matching this pattern are NOT written to the sentinel
-        file, even if they contain '[ERR]'. Use sparingly and only for genuinely
-        benign patterns confirmed to not indicate a real failure.
+        file, even if they match the error pattern. Use sparingly and only for
+        genuinely benign patterns confirmed to not indicate a real failure.
 
     .PARAMETER Containers
         Container names to tail. Defaults to jim.web, jim.worker, jim.scheduler.
@@ -2502,7 +2527,7 @@ function Start-JimErrorWatcher {
     $jobs = @()
     foreach ($container in $Containers) {
         $job = Start-Job -Name "jim-err-watcher-$container" -ScriptBlock {
-            param($containerName, $since, $sentinel, $allowPattern)
+            param($containerName, $since, $sentinel, $allowPattern, $errorPattern)
 
             # `docker logs -f ... 2>&1` merges stderr into stdout so the pipeline
             # sees every log line regardless of which stream the sink uses. The
@@ -2511,7 +2536,7 @@ function Start-JimErrorWatcher {
             & docker logs --since $since -f $containerName 2>&1 | ForEach-Object {
                 $line = $_
                 if ($null -eq $line) { return }
-                if ($line -match '\[ERR\]') {
+                if ($line -match $errorPattern) {
                     if ($allowPattern -and ($line -match $allowPattern)) { return }
                     $stamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
                     # Open/append/close per line so the sentinel is durable even
@@ -2519,7 +2544,7 @@ function Start-JimErrorWatcher {
                     [System.IO.File]::AppendAllText($sentinel, "[$stamp] [$containerName] $line`n")
                 }
             }
-        } -ArgumentList $container, $sinceString, $SentinelPath, $AllowPattern
+        } -ArgumentList $container, $sinceString, $SentinelPath, $AllowPattern, (Get-JimErrorLinePattern)
 
         $jobs += $job
     }
@@ -2870,14 +2895,14 @@ function Stop-DockerEventsCapture {
 function Assert-NoWorkerErrors {
     <#
     .SYNOPSIS
-        Post-scenario scan of JIM container logs for [ERR] lines.
+        Post-scenario scan of JIM container logs for Error/Fatal lines.
 
     .DESCRIPTION
         Belt-and-braces companion to the live watcher. Runs a one-shot
         `docker logs --since <time>` against each target container and fails the
-        scenario if any line containing '[ERR]' is found. Use this even if the
-        live watcher reported nothing, to catch lines that raced the watcher's
-        start-up or shutdown.
+        scenario if any Error or Fatal level line (see Get-JimErrorLinePattern)
+        is found. Use this even if the live watcher reported nothing, to catch
+        lines that raced the watcher's start-up or shutdown.
 
     .PARAMETER Since
         DateTime marking the start of the log window.
@@ -2889,7 +2914,7 @@ function Assert-NoWorkerErrors {
         Containers to scan. Defaults to jim.web, jim.worker, jim.scheduler.
 
     .OUTPUTS
-        Throws if any [ERR] line is found (outside the allowlist). Returns
+        Throws if any Error/Fatal line is found (outside the allowlist). Returns
         quietly on success.
     #>
     param(
@@ -2905,12 +2930,13 @@ function Assert-NoWorkerErrors {
 
     $sinceString = $Since.AddSeconds(-1).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     $allErrors = @()
+    $errorPattern = Get-JimErrorLinePattern
 
     foreach ($container in $Containers) {
         # 2>&1 merges stderr (where some log sinks write) into stdout so the
         # Select-String below sees every log line, not just stdout.
         $output = docker logs --since $sinceString $container 2>&1
-        $errorLines = $output | Where-Object { $_ -match '\[ERR\]' }
+        $errorLines = $output | Where-Object { $_ -match $errorPattern }
         if ($AllowPattern) {
             $errorLines = $errorLines | Where-Object { $_ -notmatch $AllowPattern }
         }
@@ -2920,17 +2946,17 @@ function Assert-NoWorkerErrors {
     }
 
     if ($allErrors.Count -gt 0) {
-        Write-Host "✗ FAILED: Detected $($allErrors.Count) [ERR] line(s) in JIM container logs:" -ForegroundColor Red
+        Write-Host "✗ FAILED: Detected $($allErrors.Count) Error/Fatal line(s) in JIM container logs:" -ForegroundColor Red
         foreach ($line in $allErrors | Select-Object -First 20) {
             Write-Host "    $line" -ForegroundColor Red
         }
         if ($allErrors.Count -gt 20) {
             Write-Host "    ... ($($allErrors.Count - 20) more not shown)" -ForegroundColor Red
         }
-        throw "JIM logged $($allErrors.Count) [ERR] line(s) during the scenario. See output above."
+        throw "JIM logged $($allErrors.Count) Error/Fatal line(s) during the scenario. See output above."
     }
 
-    Write-Host "✓ PASSED: No [ERR] lines in jim.web, jim.worker, or jim.scheduler logs" -ForegroundColor Green
+    Write-Host "✓ PASSED: No Error/Fatal lines in jim.web, jim.worker, or jim.scheduler logs" -ForegroundColor Green
 }
 
 # Functions are automatically available when dot-sourced

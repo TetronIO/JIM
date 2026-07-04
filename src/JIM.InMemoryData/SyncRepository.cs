@@ -853,6 +853,29 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    public Task<List<MvoReferenceRecallCandidate>> GetMetaverseObjectReferenceRecallCandidatesAsync(
+        IReadOnlyCollection<Guid> referencedMetaverseObjectIds)
+    {
+        var referencedIds = referencedMetaverseObjectIds as HashSet<Guid> ?? [.. referencedMetaverseObjectIds];
+
+        // Navigation fallback mirrors the FK-first convention used elsewhere in tests.
+        var candidates = _mvos.Values
+            .Where(mvo => !referencedIds.Contains(mvo.Id))
+            .SelectMany(mvo => mvo.AttributeValues
+                .Select(attributeValue => (Mvo: mvo, AttributeValue: attributeValue,
+                    ReferencedId: attributeValue.ReferenceValueId ?? attributeValue.ReferenceValue?.Id))
+                .Where(row => row.ReferencedId.HasValue && referencedIds.Contains(row.ReferencedId.Value)))
+            .Select(row => new MvoReferenceRecallCandidate
+            {
+                ReferencingMetaverseObjectId = row.Mvo.Id,
+                AttributeValueId = row.AttributeValue.Id,
+                MetaverseAttributeId = row.AttributeValue.AttributeId,
+                ReferencedMetaverseObjectId = row.ReferencedId!.Value
+            })
+            .ToList();
+        return Task.FromResult(candidates);
+    }
+
     public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
     {
         foreach (var mvo in metaverseObjects)
