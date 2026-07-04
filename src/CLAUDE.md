@@ -236,6 +236,15 @@ var schedule = await Jim.Scheduler.GetScheduleAsync(id);
 3. Register in DI container
 4. Add tests
 
+**Adding a built-in (seeded) object or audited configuration entity:**
+
+Two invariants here are enforced only by remembering them, and both have been missed before (the built-in example data template in #866, then the built-in Temporal Scope Reconciliation schedule):
+
+1. **Seed idempotently via `SeedingServer`**: check-then-create, safe to run on every startup.
+2. **Audited entities must be created through the audited path, even by the seeder.** If the entity carries configuration change history and Activities (Connected Systems, Synchronisation Rules, Schedules; anything in the configuration `ActivityTargetType` set), seed it via its owning server's create method with `ActivityInitiatorType.System` (see `SeedBuiltInSchedulesAsync`), never `Repository.*` directly. A repository-direct seed records no Create Activity and no version-1 snapshot, so the object's change history begins with whichever principal touches it next, misattributing its origin.
+3. **Factory reset must restore it.** The wipe truncates most tables and built-in data is contractually preserved; ensure `SystemServer.ResetSystemAsync` re-seeds the object after the wipe, and extend the reset tests to prove it. (#916 proposes replacing the bespoke post-reset repairs with a re-run of the whole seeding pipeline; once that lands, seeding through the pipeline covers this step automatically.)
+4. Cover with red-first unit tests (`BuiltInScheduleSeedingTests` / `SystemResetBuiltInScheduleTests` show the mock pattern), and update docs and the changelog if user-facing.
+
 **Adding API Endpoint:**
 1. Add method to controller in `JIM.Web/Controllers/Api/`
 2. Use DTOs for request/response (in `JIM.Web/Models/Api/`)
