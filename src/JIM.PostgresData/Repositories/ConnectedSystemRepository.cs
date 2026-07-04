@@ -1438,8 +1438,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         // Use a direct SQL query to get the external ID string (preferring secondary, falling
         // back to primary) for every CSO referenced by the given CSO's attribute values.
-        // This bypasses EF's AsSplitQuery() materialisation which can silently drop navigations
-        // (see dotnet/efcore#33826), providing a reliable fallback for ImportRefMatchesCsoValue.
+        // This is the primary source for resolved-reference matching during import diffing:
+        // hydration deliberately does not materialise ReferenceValue navigations (#917), so
+        // ImportRefMatchesCsoValue matches persisted references through this dictionary. It also
+        // sidesteps EF's AsSplitQuery() materialisation, which can silently drop navigations
+        // (see dotnet/efcore#33826).
         var rows = await Repository.Database.Database
             .SqlQueryRaw<ReferenceExternalIdRow>(
                 """
@@ -1942,6 +1945,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // entities as single instances within this query without touching the tracker.
         // The save phase uses raw SQL for parent CSO rows and explicit add/remove for attribute
         // values, so change tracking is not required during import processing.
+        //
+        // ReferenceValue navigations are deliberately NOT included (#917): at ~5k groups x ~200
+        // members that include materialises ~1M referenced CSO entities (plus their Types) that
+        // the import diff never needs. Resolved references carry their FK in ReferenceValueId,
+        // and ImportRefMatchesCsoValue matches them via the GetReferenceExternalIdsAsync SQL
+        // dictionary, which prefers the same secondary-then-primary external id the navigation
+        // path used.
         return await Repository.Database.ConnectedSystemObjects
             .AsNoTrackingWithIdentityResolution()
             .AsSplitQuery()
@@ -1949,9 +1959,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
-            .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(refCso => refCso!.Type)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
             .ToListAsync();
     }

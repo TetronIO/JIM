@@ -1934,17 +1934,17 @@ public class SyncImportTaskProcessor
 
                         foreach (var existingRef in csoRefAttrValues.Take(3)) // Log first 3 for brevity
                         {
-                            var refCsoId = existingRef.ReferenceValue?.Id.ToString() ?? "(null)";
-                            var secExtId = existingRef.ReferenceValue?.SecondaryExternalIdAttributeValue?.StringValue ?? "(null)";
+                            var refCsoId = existingRef.ReferenceValueId?.ToString() ?? "(null)";
                             var unresolved = existingRef.UnresolvedReferenceValue ?? "(null)";
-                            Log.Debug("  Existing ref: ReferenceValueId={RefCsoId}, SecondaryExtId={SecExtId}, UnresolvedRef={Unresolved}",
-                                refCsoId, secExtId, unresolved);
+                            Log.Debug("  Existing ref: ReferenceValueId={RefCsoId}, UnresolvedRef={Unresolved}",
+                                refCsoId, unresolved);
                         }
 
                         // Helper: Check if an import reference string matches an existing CSO attribute value.
-                        // This handles both unresolved references and resolved references.
-                        // The refExtIdLookup parameter provides a SQL-based fallback when EF's AsSplitQuery()
-                        // fails to materialise the ReferenceValue navigation (dotnet/efcore#33826).
+                        // This handles both unresolved references and resolved references. Persisted resolved
+                        // references match via refExtIdLookup (built by GetReferenceExternalIdsAsync): hydration
+                        // deliberately does not materialise ReferenceValue navigations (#917), so the navigation
+                        // branch below only fires for values resolved in-memory earlier in this run.
                         static bool ImportRefMatchesCsoValue(string importRef, ConnectedSystemObjectAttributeValue av, IReadOnlyDictionary<Guid, string>? refExtIdLookup)
                         {
                             // Check unresolved reference (case-sensitive to preserve data fidelity)
@@ -1965,8 +1965,8 @@ public class SyncImportTaskProcessor
                                     return true;
                             }
 
-                            // Fallback: when AsSplitQuery() dropped the ReferenceValue navigation,
-                            // use the pre-loaded SQL dictionary to match by referenced CSO's external ID
+                            // Persisted resolved references: match by the referenced CSO's external id
+                            // via the pre-loaded SQL dictionary (hydration does not load the navigation)
                             if (av.ReferenceValueId.HasValue &&
                                 refExtIdLookup != null &&
                                 refExtIdLookup.TryGetValue(av.ReferenceValueId.Value, out var fallbackExternalId) &&
@@ -1988,17 +1988,23 @@ public class SyncImportTaskProcessor
                             .Where(importRef => !csoRefAttrValues.Any(av => ImportRefMatchesCsoValue(importRef, av, referenceExternalIdLookup)))
                             .ToList();
 
-                        // Count how many resolved refs were saved by the SQL dictionary fallback
-                        // (i.e., ReferenceValue was null but ReferenceValueId matched via the dictionary)
-                        if (referenceExternalIdLookup != null && referenceExternalIdLookup.Count > 0)
+                        // Resolved references are matched via the SQL dictionary by design (#917):
+                        // hydration no longer materialises ReferenceValue navigations, so a null
+                        // navigation with a populated ReferenceValueId is the expected shape, not a
+                        // materialisation failure. The problem case is a resolved reference the
+                        // dictionary has no entry for; that would cause a spurious removal/re-add.
+                        if (referenceExternalIdLookup != null)
                         {
-                            var nullNavigationCount = csoRefAttrValues.Count(av => av.ReferenceValueId.HasValue && av.ReferenceValue == null);
-                            if (nullNavigationCount > 0)
+                            var unmatchableCount = csoRefAttrValues.Count(av =>
+                                av.ReferenceValueId.HasValue &&
+                                av.ReferenceValue == null &&
+                                !referenceExternalIdLookup.ContainsKey(av.ReferenceValueId.Value));
+                            if (unmatchableCount > 0)
                             {
-                                Log.Warning("UpdateConnectedSystemObjectFromImportObject: {NullCount} of {TotalCount} reference values " +
-                                    "for attribute '{AttrName}' on CSO {CsoId} had null ReferenceValue navigation (AsSplitQuery materialisation failure). " +
-                                    "SQL dictionary fallback was used for matching.",
-                                    nullNavigationCount, csoRefAttrValues.Count, csoAttribute.Name, connectedSystemObject.Id);
+                                Log.Warning("UpdateConnectedSystemObjectFromImportObject: {UnmatchableCount} of {TotalCount} resolved reference values " +
+                                    "for attribute '{AttrName}' on CSO {CsoId} have no entry in the reference external id dictionary; " +
+                                    "they cannot be matched against the import and may be spuriously removed and re-added.",
+                                    unmatchableCount, csoRefAttrValues.Count, csoAttribute.Name, connectedSystemObject.Id);
                             }
                         }
 
