@@ -987,14 +987,12 @@ public class Worker : BackgroundService
         // A persistence failure leaves the DbContext's change tracker still holding the very entities
         // that failed to save; any further SaveChanges on that context re-attempts the same doomed
         // write and fails identically. Record the failure via a fresh context straight away instead
-        // of fighting the poisoned one.
-        if (originalException is DbUpdateException)
-        {
-            if (await TryFailActivityOnFreshContextAsync(activity, originalException, context))
-                return;
-            // Fresh context failed too (for example the database is down); fall through to the
-            // in-context attempts as a long shot before declaring the activity stuck.
-        }
+        // of fighting the poisoned one. If the fresh context fails too (for example the database is
+        // down), fall through to the in-context attempts as a long shot before declaring the
+        // activity stuck.
+        if (originalException is DbUpdateException &&
+            await TryFailActivityOnFreshContextAsync(activity, originalException, context))
+            return;
 
         try
         {
