@@ -4,6 +4,7 @@
 @using JIM.Models.Staging;
 @using JIM.Web.Models;
 @inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
 @inject NavigationManager NavManager
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -30,7 +31,7 @@
             }
         </MudSelect>
         <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="_model.Name"
-                      Variant="Variant.Outlined" />
+                      Immediate="true" Variant="Variant.Outlined" />
         <MudTextField Label="Description" @bind-Value="_model.Description" Lines="5" Variant="Variant.Outlined" />
     </MudForm>
 </MudPaper>
@@ -62,6 +63,11 @@
 
     private async Task HandleValidSubmit()
     {
+        // offer an optional reason for the configuration change history; cancelling aborts the create
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Create");
+        if (cancelled)
+            return;
+
         using var jim = JimFactory.Create();
         var connectorDefinitionId = int.Parse(_model.ConnectorId);
         var connectorDefinition = await jim.ConnectedSystems.GetConnectorDefinitionAsync(connectorDefinitionId);
@@ -77,7 +83,7 @@
 
         // attribute the operation to the user
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        await jim.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, user);
+        await jim.ConnectedSystems.CreateConnectedSystemAsync(connectedSystem, user, changeReason);
         NavManager.NavigateTo($"/admin/connected-systems/{connectedSystem.Id}");
     }
 }

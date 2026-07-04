@@ -169,7 +169,7 @@
     </TitleContent>
     <DialogContent>
         <MudTextField T="string" @bind-Value="_createName" Label="Name" Required="true"
-            RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-3"
+            RequiredError="A name is required" Immediate="true" Variant="Variant.Outlined" Class="mt-3"
             HelperText="A friendly name for this API key (e.g., 'CI/CD Pipeline')" />
         <MudTextField T="string" @bind-Value="_createDescription" Label="Description" Lines="2"
             Variant="Variant.Outlined" Class="mt-4" HelperText="Optional description of what this key is used for" />
@@ -243,7 +243,7 @@
     </TitleContent>
     <DialogContent>
         <MudTextField T="string" @bind-Value="_editName" Label="Name" Required="true" RequiredError="A name is required"
-            Variant="Variant.Outlined" Class="mt-3" />
+            Immediate="true" Variant="Variant.Outlined" Class="mt-3" />
         <MudTextField T="string" @bind-Value="_editDescription" Label="Description" Lines="2" Variant="Variant.Outlined"
             Class="mt-4" />
         <MudText Typo="Typo.subtitle2" Class="mt-5 mb-2">Roles</MudText>

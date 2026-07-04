@@ -199,6 +199,101 @@ public class ScheduleConfigurationChangeCaptureTests
         _schedulingRepo.Verify(r => r.DeleteScheduleAsync(schedule), Times.Once);
     }
 
+    // -- idempotent capture guard --------------------------------------------------------------------------------------
+
+    [Test]
+    public async Task UpdateScheduleAsync_WhenSnapshotUnchanged_SkipsVersionAndSnapshotAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupHashKeySetting();
+        var schedule = BuildSchedule();
+        _schedulingRepo.Setup(r => r.GetScheduleWithStepsAsync(schedule.Id)).ReturnsAsync(schedule);
+        _activityRepo.Setup(r => r.GetMaxConfigurationChangeVersionAsync(ActivityTargetType.Schedule, schedule.Id))
+            .ReturnsAsync(6);
+
+        // First save: no prior snapshot exists, so a versioned snapshot is captured.
+        await _jim.Scheduler.UpdateScheduleAsync(schedule, ActivityInitiatorType.User, Guid.NewGuid(), "Alice Admin");
+        Assert.That(_completedActivity, Is.Not.Null);
+        var storedSnapshot = _completedActivity!.ConfigurationChangeSnapshot;
+        Assert.That(storedSnapshot, Is.Not.Null);
+        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(7));
+
+        // Second save of the identical configuration: the latest stored snapshot matches semantically, so no new
+        // version is recorded, matching the Connected System and Synchronisation Rule dedupe behaviour.
+        _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.Schedule, schedule.Id))
+            .ReturnsAsync(storedSnapshot);
+        _completedActivity = null;
+
+        await _jim.Scheduler.UpdateScheduleAsync(schedule, ActivityInitiatorType.User, Guid.NewGuid(), "Alice Admin",
+            changeReason: "no-op save");
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null, "an unchanged Schedule must not consume a version");
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Null, "an unchanged Schedule must not store a duplicate snapshot");
+        Assert.That(_completedActivity!.ScheduleId, Is.EqualTo(schedule.Id), "the activity still deep-links to the Schedule when the capture is skipped");
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("no-op save"), "the reason is still recorded independently of the dedupe guard");
+    }
+
+    [Test]
+    public async Task UpdateScheduleAsync_WhenStoredSnapshotIsJsonbNormalised_StillSkipsUnchangedAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupHashKeySetting();
+        var schedule = BuildSchedule();
+        _schedulingRepo.Setup(r => r.GetScheduleWithStepsAsync(schedule.Id)).ReturnsAsync(schedule);
+        _activityRepo.Setup(r => r.GetMaxConfigurationChangeVersionAsync(ActivityTargetType.Schedule, schedule.Id))
+            .ReturnsAsync(0);
+
+        // First save captures; harvest the stored snapshot.
+        await _jim.Scheduler.UpdateScheduleAsync(schedule, ActivityInitiatorType.User, Guid.NewGuid(), "Alice Admin");
+        var storedSnapshot = _completedActivity!.ConfigurationChangeSnapshot;
+        Assert.That(storedSnapshot, Is.Not.Null);
+
+        // PostgreSQL stores the snapshot in a jsonb column, which normalises the text (key ordering, spacing), so the
+        // string read back never equals the fresh serialisation. Emulate that with a semantically-identical reformat:
+        // the guard must compare meaning, not bytes, or it never skips anything in production.
+        var normalised = System.Text.Json.Nodes.JsonNode.Parse(storedSnapshot!)!
+            .ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        Assert.That(normalised, Is.Not.EqualTo(storedSnapshot), "the reformat must differ textually for this test to prove anything");
+        _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.Schedule, schedule.Id))
+            .ReturnsAsync(normalised);
+        _completedActivity = null;
+
+        await _jim.Scheduler.UpdateScheduleAsync(schedule, ActivityInitiatorType.User, Guid.NewGuid(), "Alice Admin");
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null, "a semantically-unchanged Schedule must not consume a version, regardless of jsonb text normalisation");
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Null);
+    }
+
+    [Test]
+    public async Task UpdateScheduleAsync_WhenConfigurationDiffers_CapturesNewVersionAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupHashKeySetting();
+        var schedule = BuildSchedule();
+        _schedulingRepo.Setup(r => r.GetScheduleWithStepsAsync(schedule.Id)).ReturnsAsync(schedule);
+        _activityRepo.Setup(r => r.GetMaxConfigurationChangeVersionAsync(ActivityTargetType.Schedule, schedule.Id))
+            .ReturnsAsync(3);
+
+        // First save captures version 4; harvest the stored snapshot, then genuinely change the configuration.
+        await _jim.Scheduler.UpdateScheduleAsync(schedule, ActivityInitiatorType.User, Guid.NewGuid(), "Alice Admin");
+        var storedSnapshot = _completedActivity!.ConfigurationChangeSnapshot;
+        Assert.That(storedSnapshot, Is.Not.Null);
+        _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.Schedule, schedule.Id))
+            .ReturnsAsync(storedSnapshot);
+        _activityRepo.Setup(r => r.GetMaxConfigurationChangeVersionAsync(ActivityTargetType.Schedule, schedule.Id))
+            .ReturnsAsync(4);
+        schedule.CronExpression = "30 * * * *";
+        _completedActivity = null;
+
+        await _jim.Scheduler.UpdateScheduleAsync(schedule, ActivityInitiatorType.User, Guid.NewGuid(), "Alice Admin");
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(5), "a real change must still record the next version");
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Not.Null);
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private void SetupTrackingSetting(bool enabled) =>

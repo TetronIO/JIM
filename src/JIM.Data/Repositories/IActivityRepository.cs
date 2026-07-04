@@ -42,7 +42,10 @@ public interface IActivityRepository
         IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
         IEnumerable<ActivityTargetType>? typeFilter = null,
         IEnumerable<ActivityStatus>? statusFilter = null,
-        bool? hasChildActivities = null);
+        bool? hasChildActivities = null,
+        IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
+        DateTime? createdFrom = null,
+        DateTime? createdTo = null);
 
     public Task<PagedResultSet<Activity>> GetWorkerTaskActivitiesAsync(
         int page,

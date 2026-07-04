@@ -5,6 +5,7 @@
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities
 @inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -879,6 +880,12 @@
             _schedule.IntervalWindowEnd = null;
         }
 
+        // offer an optional reason for the configuration change history once validation has passed;
+        // cancelling aborts the save (nested dialogs render fine through the shared dialog provider)
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, ScheduleId.HasValue ? "Save" : "Create");
+        if (cancelled)
+            return;
+
         _saving = true;
 
         try
@@ -988,7 +995,7 @@
                 }
                 }
 
-                await jim.Scheduler.UpdateScheduleAsync(dbSchedule, ActivityInitiatorType.User, user.Id, user.DisplayName);
+                await jim.Scheduler.UpdateScheduleAsync(dbSchedule, ActivityInitiatorType.User, user.Id, user.DisplayName, changeReason);
 
                 Snackbar.Add("Schedule updated successfully.", Severity.Success);
             }
@@ -1012,7 +1019,7 @@
                 }
 
                 // This will save the schedule and all its steps in one transaction
-                await jim.Scheduler.CreateScheduleAsync(_schedule, ActivityInitiatorType.User, user.Id, user.DisplayName);
+                await jim.Scheduler.CreateScheduleAsync(_schedule, ActivityInitiatorType.User, user.Id, user.DisplayName, changeReason);
 
                 Snackbar.Add("Schedule created successfully.", Severity.Success);
             }

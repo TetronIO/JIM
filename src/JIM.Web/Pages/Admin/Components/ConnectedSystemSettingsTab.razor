@@ -1,6 +1,7 @@
 @using JIM.Models.Core
 @using JIM.Models.Staging
 @inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -12,6 +13,7 @@
 </MudText>
 
 <MudForm @ref="_settingsForm" @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors">
+    <PrefilledFormValidator />
     @if (SettingCategories != null)
     {
         @for (var i = 0; i < SettingCategories.Count; i++)
@@ -74,6 +76,7 @@
                         <ConnectedSystemSettingField SettingValue="@settingValue"
                                                      CssClass="@(j == categorySettings.Count - 1 ? "" : "mb-5")"
                                                      IsRequired="@ConnectorSettingValidator.IsSettingRequired(ConnectedSystem.SettingValues, settingValue.Setting)"
+                                                     Immediate="true"
                                                      IsExportOnlyMode="@ConnectedSystem.IsExportOnlyMode()"
                                                      ValueChanged="OnSettingValueChanged"
                                                      FileSelected="OnFileSelectedAsync" />
@@ -178,8 +181,17 @@
             return;
         }
 
+        // offer an optional reason for the configuration change history once validation has passed;
+        // cancelling aborts the save
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+        if (cancelled)
+        {
+            _settingsBeingSaved = false;
+            return;
+        }
+
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user);
+        await jim.ConnectedSystems.UpdateConnectedSystemAsync(ConnectedSystem, user, changeReason);
         Snackbar.Add("Your setting changes have been saved.", Severity.Success);
         _settingsBeingSaved = false;
 

@@ -309,6 +309,9 @@ public class ActivityServer
     /// <param name="typeFilter">Optional filter for target types (additive/OR within filter).</param>
     /// <param name="statusFilter">Optional filter for activity statuses (additive/OR within filter).</param>
     /// <param name="hasChildActivities">Optional filter: true = only activities with children, false = only without, null = all.</param>
+    /// <param name="initiatorTypeFilter">Optional filter for initiator types (user / API key / system; additive/OR within filter).</param>
+    /// <param name="createdFrom">Optional inclusive lower bound on the activity's Created time (UTC).</param>
+    /// <param name="createdTo">Optional inclusive upper bound on the activity's Created time (UTC).</param>
     public async Task<PagedResultSet<Activity>> GetActivitiesAsync(
         int page = 1,
         int pageSize = 20,
@@ -320,11 +323,15 @@ public class ActivityServer
         IEnumerable<ActivityOutcomeType>? outcomeFilter = null,
         IEnumerable<ActivityTargetType>? typeFilter = null,
         IEnumerable<ActivityStatus>? statusFilter = null,
-        bool? hasChildActivities = null)
+        bool? hasChildActivities = null,
+        IEnumerable<ActivityInitiatorType>? initiatorTypeFilter = null,
+        DateTime? createdFrom = null,
+        DateTime? createdTo = null)
     {
         return await Application.Repository.Activity.GetActivitiesAsync(
             page, pageSize, searchQuery, sortBy, sortDescending, initiatedById,
-            operationFilter, outcomeFilter, typeFilter, statusFilter, hasChildActivities);
+            operationFilter, outcomeFilter, typeFilter, statusFilter, hasChildActivities,
+            initiatorTypeFilter, createdFrom, createdTo);
     }
 
     /// <summary>
