@@ -1488,10 +1488,21 @@ public class SyncImportTaskProcessor
                     await _syncRepo.UpdateActivityMessageAsync(_activity,
                         $"Processing imported objects ({importIndex + 1:N0} / {totalObjectsInBatch:N0})" +
                         throughput.FormatThroughput(importIndex + 1, totalObjectsInBatch));
+
+                    // Periodic memory diagnostics (#917): the import processing phase accumulates
+                    // hydrated CSOs until the save phase, so at scale this is where peak memory
+                    // builds. Debug level to keep Information logs clean on routine runs.
+                    Log.Debug("ProcessImportObjectsAsync: Memory at {Processed:N0}/{Total:N0}: GC heap {HeapMb:N0} MB, working set {WorkingSetMb:N0} MB, tracker entries {TrackerEntries:N0}, pending updates {PendingUpdates:N0}",
+                        importIndex + 1, totalObjectsInBatch,
+                        GC.GetTotalMemory(false) / 1024 / 1024,
+                        Environment.WorkingSet / 1024 / 1024,
+                        _syncRepo.GetChangeTrackerEntityCount(),
+                        connectedSystemObjectsToBeUpdated.Count);
                 }
 
-                // No periodic ClearChangeTracker needed. HydrateCsoAsync now uses AsNoTracking,
-                // so loaded CSOs and their navigation entities do not enter the change tracker.
+                // No periodic ClearChangeTracker needed: HydrateCsoAsync loads without tracking
+                // (AsNoTrackingWithIdentityResolution, #917), so hydrated CSOs and their
+                // navigation entities do not enter the change tracker.
             }
         }
 
