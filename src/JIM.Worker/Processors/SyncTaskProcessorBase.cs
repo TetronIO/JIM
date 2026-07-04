@@ -742,6 +742,7 @@ public abstract class SyncTaskProcessorBase
         // discarded when the MVO is deleted moments later (#390).
         var hasGracePeriod = mvo.Type?.DeletionGracePeriod is { } gp && gp > TimeSpan.Zero;
         var skipRecallForImmediateDeletion = mvoDeletionFate == MvoDeletionFate.DeletedImmediately;
+        var recallClearedAttributeCount = 0;
         if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !skipRecallForImmediateDeletion)
         {
             // Find all MVO attribute values contributed by this Connected System and mark them for removal
@@ -787,6 +788,10 @@ public abstract class SyncTaskProcessorBase
                 var reElectedAttributeIds = additions.Select(a => a.AttributeId).ToHashSet();
                 var changedAttributes = removals.Concat(additions).ToList();
                 var removedAttributes = removals.Where(r => !reElectedAttributeIds.Contains(r.AttributeId)).ToHashSet();
+
+                // Tally the attributes genuinely cleared (recalled with no surviving contributor re-elected and no
+                // other value remaining) for the NoContributor observability outcome (#91), built further below.
+                recallClearedAttributeCount = CountClearedAttributes(mvo, additions, removals);
 
                 // Track attribute changes on the RPEI (these are part of the disconnection)
                 deletionExecutionItem.AttributeFlowCount = changedAttributes.Count;
@@ -848,6 +853,17 @@ public abstract class SyncTaskProcessorBase
                 SyncOutcomeBuilder.AddChildOutcome(deletionExecutionItem, disconnectedRoot,
                     ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
                     detailCount: deletionExecutionItem.AttributeFlowCount);
+            }
+
+            // In Detailed mode, surface recalled attributes with no surviving contributor (#91): genuinely cleared
+            // (not re-elected, not frozen under a grace period), so the blank is an event an admin may act on.
+            if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
+                && recallClearedAttributeCount > 0)
+            {
+                SyncOutcomeBuilder.AddChildOutcome(deletionExecutionItem, disconnectedRoot,
+                    ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor,
+                    targetEntityDescription: mvoDisplayName,
+                    detailCount: recallClearedAttributeCount);
             }
 
             SyncOutcomeBuilder.AddChildOutcome(deletionExecutionItem, disconnectedRoot,
@@ -1182,6 +1198,15 @@ public abstract class SyncTaskProcessorBase
                                 ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull,
                                 targetEntityDescription: mvoDescription,
                                 detailCount: assertedNullCount);
+
+                        // Also surface attributes cleared with no contributor (#91): a value was removed and no rule
+                        // supplied a replacement (nor asserted the blank), so the attribute became blank by absence.
+                        var clearedAttributeCount = CountClearedAttributes(mvo, additions, removals);
+                        if (clearedAttributeCount > 0)
+                            SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
+                                ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor,
+                                targetEntityDescription: mvoDescription,
+                                detailCount: clearedAttributeCount);
                     }
 
                     // Register MVO→RPEI mapping for export evaluation outcome linking.
@@ -3213,15 +3238,43 @@ public abstract class SyncTaskProcessorBase
 
             // The survivor belongs to a different Connected System than the one being synced, so its Connected System
             // Object Type is not in the run's per-system _objectTypes cache; include it so the engine can resolve the
-            // survivor's type. Re-flow non-reference attributes through the gate (reference attributes need their own
-            // resolution passes and are re-elected on a subsequent sync; recalled scalar attributes are the scenario).
+            // survivor's type. Reference attributes are re-flowed too: unlike import-time flow (where a referenced
+            // object may not exist yet, needing deferred passes), every object a surviving CSO references already
+            // exists and is joined at recall time, so its references resolve in this single pass. This is the final
+            // opportunity to resolve them in this run, hence isFinalReferencePass (an unresolvable reference warns).
             var objectTypesForSurvivor = new List<ConnectedSystemObjectType>(_objectTypes);
             if (survivor.Type != null && objectTypesForSurvivor.All(t => t.Id != survivor.Type.Id))
                 objectTypesForSurvivor.Add(survivor.Type);
 
             _syncEngine.FlowInboundAttributes(survivor, rule, objectTypesForSurvivor, _expressionEvaluator,
-                skipReferenceAttributes: true, onlyReferenceAttributes: false, isFinalReferencePass: false, _attributePriorityContext);
+                skipReferenceAttributes: false, onlyReferenceAttributes: false, isFinalReferencePass: true, _attributePriorityContext);
         }
+    }
+
+    /// <summary>
+    /// Counts the attributes genuinely cleared by a set of pending Metaverse Object changes: a value was removed,
+    /// no replacement value (nor asserted-null marker) was added, and no other value remains for the attribute (a
+    /// multi-valued attribute shrinking is not a clear). These are the "no contributor" events (#91) surfaced as
+    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor"/> outcomes; an attribute that was
+    /// already blank reports nothing. Callable before or after the pending changes are applied.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object the changes apply to.</param>
+    /// <param name="additions">The attribute values added this run.</param>
+    /// <param name="removals">The attribute values removed this run.</param>
+    protected static int CountClearedAttributes(
+        MetaverseObject mvo,
+        IReadOnlyCollection<MetaverseObjectAttributeValue> additions,
+        IReadOnlyCollection<MetaverseObjectAttributeValue> removals)
+    {
+        if (removals.Count == 0)
+            return 0;
+
+        var reAddedAttributeIds = additions.Select(av => av.AttributeId).ToHashSet();
+        return removals
+            .Select(av => av.AttributeId)
+            .Distinct()
+            .Count(attributeId => !reAddedAttributeIds.Contains(attributeId) &&
+                                  !mvo.AttributeValues.Any(av => av.AttributeId == attributeId && !removals.Contains(av)));
     }
 
     /// <summary>

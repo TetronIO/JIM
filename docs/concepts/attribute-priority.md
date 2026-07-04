@@ -41,6 +41,17 @@ If the source that currently provides an attribute's value disconnects (its obje
 
 This means an authoritative source leaving hands an attribute down to the next source rather than dropping it, so downstream systems receive the fallback value instead of an unintended clear. The next contributor is resolved exactly as in normal flow, so if it has **"Null is a value"** set and supplies no value, the attribute is asserted null rather than handed further down.
 
+Re-election covers every attribute type, including references: a manager or group membership recalled from a departing source is handed to the surviving contributor within the same synchronisation run, not left blank until that source next synchronises. It also holds when the surviving source carries the identical value; the value simply remains, now attributed to the surviving contributor.
+
+## 🔍 Seeing resolution decisions
+
+Synchronisation Activities record notable resolution outcomes against each object, visible on the Activity detail page (with detailed outcome tracking enabled, the default):
+
+- **MVO Null Asserted**<br /> A contributor with "Null is a value" positively asserted a blank for one or more attributes. The blank is deliberate and authoritative.
+- **MVO No Contributor**<br /> An attribute value was cleared because no contributor supplied a replacement: the last contributing source withdrew its value, or disconnected with no surviving contributor to re-elect. An attribute that was already blank is never reported, so these outcomes only appear when a run actually removed something.
+
+Together these distinguish the two kinds of blank an administrator may need to investigate: one that was asserted on purpose, and one that happened because every source fell away.
+
 ## 🛠️ Configuring priority
 
 Attribute priority is configured per (Metaverse Object Type, Metaverse attribute). The priority order, and the "Null is a value" flag, are managed through the REST API and PowerShell module:

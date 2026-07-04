@@ -107,6 +107,34 @@ public class AttributePriorityWorkflowTests : WorkflowTestBase
             "the AssertedNull outcome should count the asserted attribute(s)");
     }
 
+    [Test]
+    public async Task FullSync_SoleContributorWithdrawsValue_EmitsNoContributorSyncOutcomeAsync()
+    {
+        // The Directory source contributes DisplayName, then withdraws it without "Null is a value". The clear
+        // must surface in the RPEI outcome graph as a NoContributor outcome: the value became blank because no
+        // rule contributed a replacement, distinct from an AssertedNull (where a rule positively asserts blank).
+        var ctx = await SetUpTwoSourcesAsync(directoryDisplayNamePriority: 1, hrDisplayNamePriority: 2);
+
+        await RunFullSyncAsync(ctx.Directory); // projects MVO, DisplayName = Directory Display
+
+        var directoryCso = SyncRepo.ConnectedSystemObjects.Values.Single(c => c.ConnectedSystemId == ctx.Directory.Id);
+        var displayNameValue = directoryCso.AttributeValues.Single(av => av.Attribute?.Name == "DisplayName");
+        directoryCso.AttributeValues.Remove(displayNameValue);
+        await ModifyCsoAsync(directoryCso);
+
+        var activity = await RunFullSyncReturningActivityAsync(ctx.Directory);
+        Assert.That(ResolvedDisplayName(ctx), Is.Null, "precondition: the withdrawn DisplayName clears");
+
+        var noContributorOutcomes = activity.RunProfileExecutionItems
+            .SelectMany(r => r.SyncOutcomes)
+            .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor)
+            .ToList();
+        Assert.That(noContributorOutcomes, Is.Not.Empty,
+            "clearing an attribute with no remaining contributor should emit a NoContributor sync outcome");
+        Assert.That(noContributorOutcomes.Sum(o => o.DetailCount ?? 0), Is.EqualTo(1),
+            "the NoContributor outcome should count exactly the cleared DisplayName attribute");
+    }
+
     /// <summary>
     /// Asserts the one Person MVO holds exactly one asserted-null DisplayName marker (carrying HR's provenance) and no
     /// real DisplayName value.
