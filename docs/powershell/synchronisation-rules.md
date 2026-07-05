@@ -181,7 +181,7 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <st
 | `Id` | `int` | Yes (ById, Enable, Disable sets) | | The ID of the Synchronisation Rule to modify. Accepts pipeline input. |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A Synchronisation Rule object from `Get-JIMSyncRule`. Accepts pipeline input. |
 | `Name` | `string` | No | | New display name for the Synchronisation Rule |
-| `Description` | `string` | No | | New description of what the Synchronisation Rule is for. Pass `$null` to clear it. Maximum 1000 characters. |
+| `Description` | `string` | No | | New description of what the Synchronisation Rule is for. Pass `$null` (or an empty string) to clear it. Maximum 1000 characters. |
 | `Enable` | `switch` | Yes (Enable set) | | Enables the Synchronisation Rule |
 | `Disable` | `switch` | Yes (Disable set) | | Disables the Synchronisation Rule |
 | `ProjectToMetaverse` | `bool` | No | | Controls whether the rule projects new Metaverse Objects |

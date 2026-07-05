@@ -21,7 +21,7 @@ function Set-JIMSyncRule {
 
     .PARAMETER Description
         An optional description of what the Synchronisation Rule does.
-        Pass $null to clear an existing description.
+        Pass $null (or an empty string) to clear an existing description.
 
     .PARAMETER Enable
         Enables the Sync Rule.
