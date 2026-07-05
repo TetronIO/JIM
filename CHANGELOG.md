@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- ⚡ Synchronisation imports use far less memory at large scale: loading existing objects for comparison no longer retains every loaded entity (plus a modification-tracking snapshot of it) in memory for the whole run, and no longer loads every referenced object's full record just to compare group memberships. At 100,000 users with ~5,000 groups these two costs accounted for multiple gigabytes of the worker's peak memory and could exhaust the host during a delta import of large membership changes.
+- ⚡ The worker now returns large amounts of memory to the operating system after each heavy operation completes, instead of holding its peak allocation indefinitely while idle, and logs its effective garbage-collection configuration at startup.
 - ⚡ Generating example data is dramatically faster: the built-in "Users & Groups" template (10,000 users) now completes generation in seconds rather than minutes. Live progress updates were being written to the database from inside the parallel generation loop in a way that blocked it (a generation thread held the lock other threads needed while waiting on the database write), stalling generation to roughly one object per second; progress is now reported from a background task that never blocks generation.
 - ⚡ Example data value uniqueness (the `[UniqueInt]` suffix, single-use values, and sequential numbering) is now tracked with constant-time lookups instead of rescanning an ever-growing list under a global lock, removing a cost that grew with the square of the object count at larger template sizes.
 

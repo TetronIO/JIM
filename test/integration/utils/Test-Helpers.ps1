@@ -2625,6 +2625,75 @@ function Stop-JimErrorWatcher {
     return $lines
 }
 
+function Clear-StaleIntegrationMonitors {
+    <#
+    .SYNOPSIS
+        Reap monitor processes and sidecar containers leaked by a previous
+        crashed or hard-killed runner (#918).
+
+    .DESCRIPTION
+        A healthy run stops its own monitors in the scenario finally block, so
+        anything matched here is stale by definition. Concurrent runner
+        invocations are impossible on one host (shared container names, ports
+        and volumes), which makes a host-wide sweep safe.
+
+        Reaps three monitor types:
+        - docker-stats samplers (Capture-DockerStats.ps1): matched by command
+          line, covering both the .NET global-tool shim and the dotnet child
+          that survives it.
+        - volume-audit sidecar containers: matched by the
+          jim-integration-monitor label (with a name-prefix fallback for
+          containers created before the label existed).
+        - docker events capturers: matched by the runner's distinctive
+          --format string.
+
+        Also removes leftover *.stop signal files in the results directory.
+
+    .PARAMETER ResultsPath
+        The runner's results directory, used to clear leftover stop files.
+
+    .OUTPUTS
+        None. Logs one summary line, plus a line per reaped stray.
+    #>
+    param(
+        [string]$ResultsPath
+    )
+
+    $reapedProcesses = 0
+    $reapedContainers = 0
+
+    $strayProcesses = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.Id -ne $PID -and $_.CommandLine -and (
+            $_.CommandLine -match 'Capture-DockerStats\.ps1' -or
+            $_.CommandLine -match 'docker events --format.*Actor\.Attributes\.image'
+        )
+    })
+    foreach ($stray in $strayProcesses) {
+        Write-Host "  Reaping stray monitor process (PID $($stray.Id)): $($stray.ProcessName)" -ForegroundColor DarkYellow
+        Stop-Process -Id $stray.Id -Force -ErrorAction SilentlyContinue
+        $reapedProcesses++
+    }
+
+    $strayContainers = @(
+        (& docker ps -q --filter 'label=jim-integration-monitor' 2>$null)
+        (& docker ps -q --filter 'name=jim-volume-audit-' 2>$null)
+    ) | Where-Object { $_ } | Select-Object -Unique
+    foreach ($containerId in $strayContainers) {
+        Write-Host "  Reaping stray monitor container $containerId" -ForegroundColor DarkYellow
+        & docker rm -f $containerId 2>&1 | Out-Null
+        $reapedContainers++
+    }
+
+    if ($ResultsPath -and (Test-Path $ResultsPath)) {
+        Get-ChildItem -Path $ResultsPath -Filter '*.stop' -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+    }
+
+    if ($reapedProcesses -gt 0 -or $reapedContainers -gt 0) {
+        Write-Host "  Reaped $reapedProcesses stray monitor process(es) and $reapedContainers stray container(s) from a previous run" -ForegroundColor Yellow
+    }
+}
+
 function Start-ConnectorVolumeAuditor {
     <#
     .SYNOPSIS
@@ -2695,6 +2764,10 @@ function Start-ConnectorVolumeAuditor {
     $runArgs = @(
         'run', '-d', '--rm', '--init',
         '--name', $containerName,
+        # Label lets the runner's startup sweep reap strays from a crashed run (#918):
+        # inotifywait -m never exits on its own, and --rm only removes the container
+        # after exit, so a hard-killed runner otherwise leaks the sidecar forever.
+        '--label', 'jim-integration-monitor=volume-audit',
         '-v', 'jim-connector-files-volume:/watch:ro',
         '-v', "${LogPath}:/audit.log",
         'alpine:3.20',
