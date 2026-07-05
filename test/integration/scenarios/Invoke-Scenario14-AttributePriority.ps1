@@ -75,9 +75,38 @@
        two numbers Frank used to have), with Secondary's numbers completely absent (no
        fallback). Dave (S14-3) is the control.
 
-    -- INSERT NEW STEPS HERE (Phase D: authority/propagation): add the ValidateSet entry above,
-       a $testResults.Steps-tracked block below (mirroring BaselineResolution's structure), and
-       update .PARAMETER Step. --
+    10. DisabledRuleNoOpinion - the Primary import Synchronisation Rule is disabled outright. A Full
+        Synchronisation (Secondary) alone re-elects Dave's (S14-3) Description AND Job Title to
+        Secondary in the same run: a disabled rule's mapping is excluded from the Attribute
+        Priority contributor cache entirely, so it is treated as no opinion, not a stuck
+        last-written value, and "Null is a value" on the disabled rule's Job Title mapping has no
+        bearing (never consulted for an excluded mapping). Primary is then re-enabled and a Full
+        Synchronisation (Primary) retakes both attributes, restoring the inherited end-state.
+
+    11. PriorityReorderPropagation - Description's priority is reordered to Secondary=1/Primary=2.
+        Delta Synchronisation of both systems, with no staged import changes, leaves Dave's
+        Description untouched (apply-only propagation: Delta Synchronisation with nothing modified
+        since the last sync processes no Connected System Objects at all). A Full Synchronisation
+        (Secondary) then re-resolves every joined object against the new order, handing Dave's
+        Description to Secondary. The order is restored to Primary=1/Secondary=2 and a Full
+        Synchronisation (Primary) retakes it, restoring the inherited end-state.
+
+    A third planned cell, OutOfScopeNoOpinion (excluding a subject from the Primary rule's scope via
+    a Scoping Criteria Group and expecting a hand-over to Secondary, mirroring RecallReElection's "no
+    opinion" re-election), was investigated and DROPPED: the engine does not currently compose scope
+    exit with Attribute Priority re-election. HandleCsoOutOfScopeAsync's Disconnect branch
+    (src/JIM.Worker/Processors/SyncTaskProcessorBase.cs, "Break the join between CSO and MVO") marks
+    the leaving system's contributed attribute values for removal but never calls
+    ReElectSurvivingContributorsAsync, unlike the structurally equivalent CSO-obsoletion path
+    (ProcessObsoleteConnectedSystemObjectAsync, which does call it immediately after the same kind of
+    removal marking). A scope exit under the default InboundOutOfScopeAction=Disconnect therefore
+    blanks the attribute instead of handing it to a surviving lower-priority contributor. Writing a
+    step that asserted a hand-over would fail against the real engine; writing one that asserted the
+    blank instead would misrepresent a "no opinion, hand over" test as passing coverage for what is
+    actually an unresolved composition gap between two features (see
+    engineering/plans/doing/ATTRIBUTE_PRIORITY.md Phase 4, "Object moves into/out of a scoped rule's
+    coverage: authority transfers on next sync", itself still unchecked). Reported to the user rather
+    than coded around.
 
     Step composition under -Step All: RecallReElection through NoContributorCleared were each
     given a distinct subject (Alice, Bob, Carol, Erin) precisely so they compose safely when run
@@ -97,10 +126,20 @@
     so a configuration change's blast radius must be reasoned through explicitly, not assumed
     narrow because only one user's LDAP entry was touched.
 
+    DisabledRuleNoOpinion and PriorityReorderPropagation (Phase D) both reuse Dave (S14-3): unlike
+    Phases B and C, neither step touches LDAP data at all (both mutate configuration only: rule
+    Enabled state, then Attribute Priority order), and both restore their own configuration mutation
+    before returning, so Dave ends each step in exactly the state Phase C left him in, undisturbed
+    for whichever step runs next. Each documents, in its own comments, the full blast radius of its
+    configuration change across every OTHER joined subject (a disabled rule or reordered priority
+    affects every joined object, not just Dave), without asserting each of them individually, to
+    keep the step's own assertions scoped to its named subject while remaining honest about scope.
+
 .PARAMETER Step
     Which test step to execute (BaselineResolution, RecallReElection, IdenticalValueHandOver,
     WithdrawalReElection, NoContributorCleared, AssertedNullOverridesSurvivor,
-    NotJoinedNoOpinion, MidLifeJoinBlanksClear, MvaNullIsValueAssertsEmptySet, All).
+    NotJoinedNoOpinion, MidLifeJoinBlanksClear, MvaNullIsValueAssertsEmptySet,
+    DisabledRuleNoOpinion, PriorityReorderPropagation, All).
     Run-IntegrationTests.ps1 resets and repopulates OpenLDAP for every scenario invocation, so a
     single named -Step run starts from a fresh environment with no synchronised state; the script
     therefore establishes the baseline (both systems fully imported and synchronised) before
@@ -144,7 +183,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("BaselineResolution", "RecallReElection", "IdenticalValueHandOver", "WithdrawalReElection", "NoContributorCleared", "AssertedNullOverridesSurvivor", "NotJoinedNoOpinion", "MidLifeJoinBlanksClear", "MvaNullIsValueAssertsEmptySet", "All")]
+    [ValidateSet("BaselineResolution", "RecallReElection", "IdenticalValueHandOver", "WithdrawalReElection", "NoContributorCleared", "AssertedNullOverridesSurvivor", "NotJoinedNoOpinion", "MidLifeJoinBlanksClear", "MvaNullIsValueAssertsEmptySet", "DisabledRuleNoOpinion", "PriorityReorderPropagation", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -1185,18 +1224,302 @@ userPassword: Test@123!
         }
     }
 
-    # -- INSERT NEW STEP DISPATCH BLOCKS HERE (Phase D: authority/propagation). Mirror the
-    #    "if ($Step -eq ... -or $Step -eq 'All')" shape above. --
-    #
-    # Inherited end-state at this point (under -Step All, or after the last Phase C step run
-    # standalone left its flags/data in place): Frank (S14-5) has both Job Title and Other
+    # ========================================================================
+    # Test 10: DisabledRuleNoOpinion
+    # ========================================================================
+    if ($Step -eq "DisabledRuleNoOpinion" -or $Step -eq "All") {
+        Write-TestSection "Test 10: Disabled Rule, No Opinion (Dave, disabling Primary hands Description and Job Title to Secondary)"
+
+        $disabledRuleSuccess = $true
+        $disabledRuleNotes = @()
+
+        try {
+            $primaryImportRuleName = "$primarySystemName Import Users"
+            $secondaryImportRuleName = "$secondarySystemName Import Users"
+
+            $primaryImportRule = @(Get-JIMSyncRule) | Where-Object { $_.name -eq $primaryImportRuleName } | Select-Object -First 1
+            if (-not $primaryImportRule) {
+                throw "Could not resolve '$primaryImportRuleName' Synchronisation Rule."
+            }
+
+            $daveMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-3" -PageSize 5) | Select-Object -First 1
+            if (-not $daveMvo) {
+                throw "Could not resolve Dave (S14-3) Metaverse Object."
+            }
+
+            # Disable Primary's import rule. AttributePriorityContext's constructor
+            # (src/JIM.Application/Services/AttributePriorityContext.cs:44-65) builds its contributor cache
+            # only from "allSyncRules.Where(r => r.Enabled && r.Direction == SyncRuleDirection.Import)": a
+            # disabled rule's mapping is excluded from the cache entirely, not merely flagged. ShouldApply
+            # (AttributePriorityContext.cs:107-123) then treats a stale incumbent whose rule no longer
+            # appears in the cache ("GetContributor(...) returns null") exactly like "no comparable
+            # incumbent" and returns true: a disabled rule is no opinion, just like RuleNotApplicable (no
+            # joined CSO), not a stuck last-written value that blocks a lower-priority challenger.
+            #
+            # Disabling itself changes nothing on its own: GetSyncRulesAsync(connectedSystemId,
+            # includeDisabledSyncRules: false, ...) (src/JIM.PostgresData/Repositories/ConnectedSystemRepository.cs:4006-4041),
+            # called by both SyncFullSyncTaskProcessor.cs:69 and SyncDeltaSyncTaskProcessor.cs:86, filters
+            # the disabled rule out of "activeSyncRules" at the query layer, before any per-object
+            # processing happens. No recall or re-evaluation fires from the act of disabling; only the
+            # NEXT sync run that touches the attribute picks up the change.
+            Write-Host "Disabling '$primaryImportRuleName'..." -ForegroundColor Gray
+            Set-JIMSyncRule -Id $primaryImportRule.id -Disable | Out-Null
+
+            $primaryImportRuleAfterDisable = Get-JIMSyncRule -Id $primaryImportRule.id
+            if ($primaryImportRuleAfterDisable.enabled) {
+                throw "'$primaryImportRuleName' still reports enabled=true after Set-JIMSyncRule -Disable."
+            }
+            Write-Host "  OK '$primaryImportRuleName' disabled and verified via read-back" -ForegroundColor Green
+
+            # A Full Synchronisation of SECONDARY alone is what re-elects Dave's attributes: it calls
+            # ProcessInboundAttributeFlow for every joined CSO's own mapping unconditionally
+            # (SyncTaskProcessorBase.cs:1104), regardless of whether that CSO's own staged data changed,
+            # so Secondary's mapping is re-evaluated against the freshly-rebuilt AttributePriorityContext
+            # (rebuilt once per run from the CURRENT Enabled state, per BuildDriftDetectionCache, called
+            # at SyncFullSyncTaskProcessor.cs:83) with Primary now absent from it. A Full Synchronisation
+            # of the disabled PRIMARY system is deliberately NOT run here: its own rule is filtered out of
+            # "activeSyncRules" before any mapping is even read, so it would do nothing useful; this is
+            # the opposite of RecallReElection/WithdrawalReElection, where it is the LEAVING system's own
+            # Full Synchronisation that drives the recall (an explicit Disconnected/ConnectedNoValue
+            # outcome on that system's own CSO). A disabled rule has no such explicit outcome at all: its
+            # CSO is simply never visited.
+            Write-Host "Running Full Synchronisation (Secondary)..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Secondary) after disabling '$primaryImportRuleName'"
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
+                -ExpectedValue "Secondary-sourced description for Dave Dixon (S14)" `
+                -ExpectedContributingSyncRuleName $secondaryImportRuleName `
+                -Name "Dave's Description (Primary disabled: no opinion, Secondary takes over)"
+
+            # Job Title carries "Null is a value" on Primary's mapping (set by Phase C's
+            # Set-Scenario14AttributePrimaryNullIsValue), but the flag is irrelevant here: a disabled
+            # rule's mapping is excluded from the contributor cache before NullIsValue is ever consulted
+            # (SyncEngine.AttributeFlow.cs's ApplyNoValueOutcome only runs for a mapping that is actually
+            # processed). Job Title therefore behaves identically to Description, handing over to
+            # Secondary's real value in full rather than asserting null: this proves the "disabled = no
+            # opinion, flag irrelevant" hypothesis rather than merely assuming it.
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Job Title" `
+                -ExpectedValue "Coordinator (Secondary)" `
+                -ExpectedContributingSyncRuleName $secondaryImportRuleName `
+                -Name "Dave's Job Title (Primary disabled: NullIsValue on the disabled rule's mapping has no bearing, Secondary takes over in full)"
+
+            # Blast radius: disabling Primary's rule removes EVERY Primary mapping from the priority
+            # contributor cache, for EVERY attribute, for EVERY object still joined to Primary; it is not
+            # scoped to Dave or to Description/Job Title. The same Full Synchronisation (Secondary) run
+            # above also hands Carol's and Erin's Job Title (still Primary-sourced going into this step),
+            # Frank's Job Title and Other Telephones (previously asserted null; with Primary's NullIsValue
+            # mapping excluded while disabled, Secondary's real values win instead of a null assertion)
+            # and Grace's Job Title and Description over to Secondary. Only Alice and Bob are unaffected
+            # (they have no Primary CSO at all, so Primary was already RuleNotApplicable for them before
+            # and after the disable). None of this is asserted individually here, to keep the step's own
+            # assertions scoped to its named subject, but an administrator disabling an authoritative
+            # import rule with live joined objects must understand the effect is this broad.
+            $disabledRuleNotes += "Disabling '$primaryImportRuleName' handed Dave's Description and Job Title to Secondary (NullIsValue on the disabled rule irrelevant); the same Full Synchronisation (Secondary) run also re-elected every other Primary-joined subject's Primary-sourced attributes (not asserted individually here; see step comments for the full blast radius)"
+
+            # Re-enable and restore. Full Synchronisation (Primary) alone is sufficient: Primary's mapping
+            # re-enters the freshly-rebuilt AttributePriorityContext at priority 1, beating the Secondary
+            # incumbent (priority 2) for every attribute Primary still supplies a value for, per
+            # ShouldApply's canonical (priority ascending, mapping id) comparison. This also restores
+            # Carol/Erin/Frank/Grace's attributes from the blast radius above, since Full Synchronisation
+            # reprocesses every Primary CSO, not just Dave's.
+            Write-Host "Re-enabling '$primaryImportRuleName'..." -ForegroundColor Gray
+            Set-JIMSyncRule -Id $primaryImportRule.id -Enable | Out-Null
+
+            $primaryImportRuleAfterEnable = Get-JIMSyncRule -Id $primaryImportRule.id
+            if (-not $primaryImportRuleAfterEnable.enabled) {
+                throw "'$primaryImportRuleName' still reports enabled=false after Set-JIMSyncRule -Enable."
+            }
+            Write-Host "  OK '$primaryImportRuleName' re-enabled and verified via read-back" -ForegroundColor Green
+
+            Write-Host "Running Full Synchronisation (Primary)..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Primary) after re-enabling '$primaryImportRuleName'"
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
+                -ExpectedValue "Primary-sourced description for Dave Dixon (S14)" `
+                -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Dave's Description (Primary re-enabled: the priority gate lets the higher-priority contributor retake)"
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Job Title" `
+                -ExpectedValue "Coordinator (Primary)" `
+                -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Dave's Job Title (Primary re-enabled: retaken, restoring the inherited end-state for later steps)"
+
+            $disabledRuleNotes += "Re-enabling '$primaryImportRuleName' and running Full Synchronisation (Primary) restored Dave's Description and Job Title to Primary, and (per the same blast-radius reasoning) every other Primary-joined subject's Primary-sourced attributes too"
+        }
+        catch {
+            $disabledRuleSuccess = $false
+            $disabledRuleNotes += "Error: $_"
+            throw
+        }
+        finally {
+            $testResults.Steps += @{
+                Name = "DisabledRuleNoOpinion"
+                Success = $disabledRuleSuccess
+                Note = ($disabledRuleNotes -join "; ")
+            }
+        }
+    }
+
+    # ========================================================================
+    # Test 11: PriorityReorderPropagation
+    # ========================================================================
+    if ($Step -eq "PriorityReorderPropagation" -or $Step -eq "All") {
+        Write-TestSection "Test 11: Priority Reorder Propagation (Description: Secondary=1/Primary=2; apply-only, Delta Synchronisation no-ops, Full Synchronisation re-resolves)"
+
+        $reorderSuccess = $true
+        $reorderNotes = @()
+
+        try {
+            $primaryImportRuleName = "$primarySystemName Import Users"
+            $secondaryImportRuleName = "$secondarySystemName Import Users"
+
+            $daveMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-3" -PageSize 5) | Select-Object -First 1
+            if (-not $daveMvo) {
+                throw "Could not resolve Dave (S14-3) Metaverse Object."
+            }
+
+            $mvDescriptionAttr = @(Get-JIMMetaverseAttribute) | Where-Object { $_.name -eq "Description" }
+            $mvUserTypeForReorder = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
+            if (-not $mvDescriptionAttr -or -not $mvUserTypeForReorder) {
+                throw "Could not resolve the 'Description' Metaverse attribute and/or 'User' Metaverse Object Type."
+            }
+
+            $priorityBefore = Get-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserTypeForReorder.id
+            $contributorsBefore = @($priorityBefore.contributors)
+            $primaryMapping = $contributorsBefore | Where-Object { $_.connectedSystemName -eq $primarySystemName }
+            $secondaryMapping = $contributorsBefore | Where-Object { $_.connectedSystemName -eq $secondarySystemName }
+            if (-not $primaryMapping -or -not $secondaryMapping) {
+                throw "Could not resolve both 'Description' contributors from Attribute Priority read-back."
+            }
+            if ($primaryMapping.priority -ne 1 -or $secondaryMapping.priority -ne 2) {
+                throw "Expected the inherited Primary=1/Secondary=2 order for 'Description' at the start of this step; found Primary=$($primaryMapping.priority), Secondary=$($secondaryMapping.priority). A prior step may not have restored its own configuration mutation."
+            }
+
+            # Reorder: Secondary=1, Primary=2. Set-JIMMetaverseAttributePriority's -MappingId array order
+            # IS the priority order (highest first), exactly as Setup-Scenario14.ps1 Step 10 and the
+            # Set-Scenario14AttributePrimaryNullIsValue helper above already rely on.
+            Write-Host "Reordering 'Description' priority: Secondary=1, Primary=2..." -ForegroundColor Gray
+            Set-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserTypeForReorder.id `
+                -MappingId @($secondaryMapping.mappingId, $primaryMapping.mappingId) | Out-Null
+
+            $priorityAfterReorder = Get-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserTypeForReorder.id
+            $contributorsAfterReorder = @($priorityAfterReorder.contributors)
+            $secondaryAfterReorder = $contributorsAfterReorder | Where-Object { $_.connectedSystemName -eq $secondarySystemName }
+            $primaryAfterReorder = $contributorsAfterReorder | Where-Object { $_.connectedSystemName -eq $primarySystemName }
+            if (-not $secondaryAfterReorder -or $secondaryAfterReorder.priority -ne 1 -or -not $primaryAfterReorder -or $primaryAfterReorder.priority -ne 2) {
+                throw "'Description' priority read-back mismatch after reorder: expected Secondary=1/Primary=2, got $(@($contributorsAfterReorder | ForEach-Object { "$($_.connectedSystemName)=$($_.priority)" }) -join ', ')"
+            }
+            Write-Host "  OK 'Description' reordered to Secondary=1, Primary=2 and verified via read-back" -ForegroundColor Green
+
+            # (a) Apply-only propagation (engineering/plans/doing/ATTRIBUTE_PRIORITY.md, "Configuration
+            # Change Propagation"): changing priority configuration does not itself initiate
+            # synchronisation. SyncDeltaSyncTaskProcessor.cs:49-74 computes the delta watermark from
+            # ConnectedSystem.LastSyncCompletedAt and, when GetConnectedSystemObjectModifiedSinceCountAsync
+            # returns zero, completes immediately without processing a single Connected System Object ("No
+            # CSOs modified since last sync. Completing immediately."). No LDAP data has changed since the
+            # last Full Import/Full Synchronisation of either system in this step, so both Delta
+            # Synchronisations below touch nothing, leaving Dave's Description exactly as it was (Primary's
+            # value, Primary provenance) despite the reorder.
+            $primaryDeltaSync = $primaryProfiles | Where-Object { $_.name -eq "Delta Synchronisation" }
+            $secondaryDeltaSync = $secondaryProfiles | Where-Object { $_.name -eq "Delta Synchronisation" }
+            if (-not $primaryDeltaSync -or -not $secondaryDeltaSync) {
+                throw "Could not resolve 'Delta Synchronisation' Run Profiles. Ensure Setup-Scenario14.ps1 completed successfully."
+            }
+
+            Write-Host "Running Delta Synchronisation (Primary) with no staged import changes..." -ForegroundColor Gray
+            $deltaPrimaryResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryDeltaSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $deltaPrimaryResult.activityId -Name "Delta Synchronisation (Primary) after reordering 'Description'"
+
+            Write-Host "Running Delta Synchronisation (Secondary) with no staged import changes..." -ForegroundColor Gray
+            $deltaSecondaryResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryDeltaSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $deltaSecondaryResult.activityId -Name "Delta Synchronisation (Secondary) after reordering 'Description'"
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
+                -ExpectedValue "Primary-sourced description for Dave Dixon (S14)" `
+                -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Dave's Description (unchanged: Delta Synchronisation with no staged import changes processes no Connected System Objects, apply-only)"
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Job Title" `
+                -ExpectedValue "Coordinator (Primary)" `
+                -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Dave's Job Title (control: only Description's priority was reordered)"
+
+            # (b) Full Synchronisation re-resolves every joined object against the new configuration.
+            # Secondary now outranks Primary for Description (priority 1 vs 2), so Full Synchronisation
+            # (Secondary) re-evaluating Secondary's own mapping via ProcessInboundAttributeFlow flips
+            # Dave's Description over.
+            Write-Host "Running Full Synchronisation (Secondary)..." -ForegroundColor Gray
+            $fullSecondaryResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $fullSecondaryResult.activityId -Name "Full Synchronisation (Secondary) after reordering 'Description'"
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
+                -ExpectedValue "Secondary-sourced description for Dave Dixon (S14)" `
+                -ExpectedContributingSyncRuleName $secondaryImportRuleName `
+                -Name "Dave's Description (Full Synchronisation re-resolves to the new priority order: Secondary now wins)"
+
+            # Blast radius: reordering Description's priority affects every joined object's Description,
+            # not just Dave's. Frank's and Grace's Primary-sourced Description also hand over to Secondary
+            # during this window (Carol's and Erin's are already Secondary-sourced since Phase B/C and see
+            # no change; Alice/Bob have no Primary CSO and are likewise unaffected). Job Title, Manager and
+            # Other Telephones are untouched throughout, since only Description's priority order changed.
+            $reorderNotes += "Reordering 'Description' to Secondary=1/Primary=2 had no effect until a Full Synchronisation ran (apply-only): Delta Synchronisation with no staged changes left Dave's Description on Primary, Full Synchronisation (Secondary) flipped it to Secondary (Frank and Grace's Description likewise handed to Secondary; not asserted individually here)"
+
+            # Restore Primary=1/Secondary=2 and Full Synchronisation (Primary) so the inherited end-state
+            # for any later phase is unchanged by this step.
+            Write-Host "Restoring 'Description' priority: Primary=1, Secondary=2..." -ForegroundColor Gray
+            Set-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserTypeForReorder.id `
+                -MappingId @($primaryMapping.mappingId, $secondaryMapping.mappingId) | Out-Null
+
+            $priorityRestored = Get-JIMMetaverseAttributePriority -AttributeId $mvDescriptionAttr.id -ObjectTypeId $mvUserTypeForReorder.id
+            $contributorsRestored = @($priorityRestored.contributors)
+            $primaryRestored = $contributorsRestored | Where-Object { $_.connectedSystemName -eq $primarySystemName }
+            $secondaryRestored = $contributorsRestored | Where-Object { $_.connectedSystemName -eq $secondarySystemName }
+            if (-not $primaryRestored -or $primaryRestored.priority -ne 1 -or -not $secondaryRestored -or $secondaryRestored.priority -ne 2) {
+                throw "'Description' priority read-back mismatch after restore: expected Primary=1/Secondary=2, got $(@($contributorsRestored | ForEach-Object { "$($_.connectedSystemName)=$($_.priority)" }) -join ', ')"
+            }
+            Write-Host "  OK 'Description' restored to Primary=1, Secondary=2 and verified via read-back" -ForegroundColor Green
+
+            Write-Host "Running Full Synchronisation (Primary)..." -ForegroundColor Gray
+            $fullPrimaryResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $fullPrimaryResult.activityId -Name "Full Synchronisation (Primary) after restoring 'Description' priority"
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Description" `
+                -ExpectedValue "Primary-sourced description for Dave Dixon (S14)" `
+                -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Dave's Description (priority order restored, Full Synchronisation retakes Primary)"
+
+            $reorderNotes += "Restored Primary=1/Secondary=2 for 'Description' and ran Full Synchronisation (Primary); Dave's Description (and Frank/Grace's, per the same blast radius) returned to Primary's value"
+        }
+        catch {
+            $reorderSuccess = $false
+            $reorderNotes += "Error: $_"
+            throw
+        }
+        finally {
+            $testResults.Steps += @{
+                Name = "PriorityReorderPropagation"
+                Success = $reorderSuccess
+                Note = ($reorderNotes -join "; ")
+            }
+        }
+    }
+
+    # Inherited end-state at this point (under -Step All, or after the last Phase D step run
+    # standalone left its flags/data in place): Phase D's two steps (DisabledRuleNoOpinion,
+    # PriorityReorderPropagation) each restore their own configuration mutation (rule Enabled state;
+    # Attribute Priority order) before returning, so the state below is UNCHANGED from Phase C's
+    # inherited end-state. Frank (S14-5) has both Job Title and Other
     # Telephones asserted null with Primary provenance; Grace (S14-6) is joined to BOTH suffixes,
     # with her Job Title asserted null (Primary provenance) and her Description Primary-sourced;
     # NullIsValue is set on Primary's Job Title and Other Telephones mappings. No later Phase C
     # step depends on Job Title/Other Telephones neutrality, and Phase C deliberately does NOT
     # unset these flags at the end of MvaNullIsValueAssertsEmptySet: no unsetting cmdlet call is
-    # needed there because nothing downstream in this phase requires it. Phase D must manage its
-    # own preconditions against this inherited state rather than assuming a clean slate.
+    # needed there because nothing downstream in this phase requires it. Phase D's own steps read
+    # this same inherited state (both mutate and restore configuration only; neither touches LDAP
+    # data), so any future phase inherits it unchanged and must manage its own preconditions against
+    # it rather than assuming a clean slate.
 
     # Calculate overall success
     $failedSteps = @($testResults.Steps | Where-Object { $_.Success -eq $false })
