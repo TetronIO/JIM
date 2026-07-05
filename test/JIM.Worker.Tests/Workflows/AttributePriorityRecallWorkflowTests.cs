@@ -179,6 +179,47 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
             "single-source HR DisplayName has no surviving contributor, so it is frozen (preserved) for the grace window, not cleared");
     }
 
+    [Test]
+    public async Task Withdrawal_WinnerWithdrawsValueInPlace_ReElectsSurvivorInSameRunAsync()
+    {
+        var ctx = await SetUpTwoContributorsToDescriptionAsync(hrDescriptionPriority: 1, trainingDescriptionPriority: 2);
+
+        // HR projects and wins Description; Training joins but its lower-priority Description is suppressed.
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training);
+
+        var mvo = SyncRepo.MetaverseObjects.Values.Single();
+        var description = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDescriptionAttributeId && !av.NullValue);
+        Assert.That(description?.StringValue, Is.EqualTo(HrDescription), "HR (priority 1) should win Description while joined");
+
+        // In-place withdrawal: HR stays joined but stops supplying its Description value (no "Null is a value"
+        // assertion). The suppressed Training survivor must be re-elected in this same run, not left blank until
+        // the Training system next synchronises.
+        var hrDescriptionValue = ctx.HrCso.AttributeValues.Single(av => av.Attribute?.Name == "HrDescription");
+        ctx.HrCso.AttributeValues.Remove(hrDescriptionValue);
+        await ModifyCsoAsync(ctx.HrCso);
+
+        var deltaActivity = await RunDeltaSyncReturningActivityAsync(ctx.Hr);
+        Assert.That(deltaActivity.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
+            Is.False, "withdrawal re-election must complete without unhandled errors");
+
+        mvo = SyncRepo.MetaverseObjects.Values.Single();
+        var reElected = mvo.AttributeValues.SingleOrDefault(av => av.AttributeId == ctx.MvDescriptionAttributeId && !av.NullValue);
+        Assert.That(reElected, Is.Not.Null,
+            "Description must not be blanked: the surviving Training contributor (priority 2) should be re-elected in the same run");
+        Assert.That(reElected!.StringValue, Is.EqualTo(TrainingDescription),
+            "the withdrawn Description should be handed to the surviving Training value, not cleared");
+        Assert.That(reElected.ContributedBySyncRuleId, Is.EqualTo(ctx.TrainingImportRuleId),
+            "the re-elected value must carry the surviving Training rule's provenance");
+
+        var noContributorDetailCount = deltaActivity.RunProfileExecutionItems
+            .SelectMany(r => r.SyncOutcomes)
+            .Where(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor)
+            .Sum(o => o.DetailCount ?? 0);
+        Assert.That(noContributorDetailCount, Is.EqualTo(0),
+            "a re-elected attribute must not be reported as cleared with no contributor");
+    }
+
     private sealed record TwoContributorContext(
         ConnectedSystem Hr,
         ConnectedSystem Training,

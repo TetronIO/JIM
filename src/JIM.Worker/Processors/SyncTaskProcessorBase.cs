@@ -1118,6 +1118,26 @@ public abstract class SyncTaskProcessorBase
             // This ensures reference attributes are processed after all CSOs in the page have MVOs
             _pendingReferenceAttributeProcessing.Add((connectedSystemObject, inboundSyncRules));
 
+            // Withdrawal re-election (#91): an authoritative source withdrawing a value in place hands the
+            // attribute to the next contributor in the same run, rather than leaving it blank until the survivor's
+            // system next synchronises. Explicit "Null is a value" assertions write a marker into the additions, so
+            // they are never treated as cleared here; the priority gate means only a winning rule's no-value
+            // contribution can produce a clear.
+            if (_attributePriorityContext != null && connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.Count > 0)
+            {
+                var clearedAttributeIds = GetClearedAttributeIds(
+                    connectedSystemObject.MetaverseObject,
+                    connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions,
+                    connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals);
+
+                var withdrawnValues = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals
+                    .Where(av => clearedAttributeIds.Contains(av.AttributeId))
+                    .ToList();
+
+                if (withdrawnValues.Count > 0)
+                    await ReElectSurvivingContributorsAsync(connectedSystemObject.MetaverseObject, withdrawnValues, connectedSystemObject);
+            }
+
             // Count actual attribute changes that were queued
             var attributesAdded = connectedSystemObject.MetaverseObject.PendingAttributeValueAdditions.Count;
             var attributesRemoved = connectedSystemObject.MetaverseObject.PendingAttributeValueRemovals.Count;
@@ -3166,17 +3186,18 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Next-contributor recall fallback (#91, Phase 2c): when the winning contributor's CSO is obsoleted and its
-    /// values recalled, re-elect any still-joined lower-priority contributor for the recalled attributes so the
-    /// attribute is handed to the next source rather than blanked. Surviving Connected System Objects are re-flowed
-    /// through the normal inbound attribute-flow gate; with the leaver's values already marked for removal, the gate
-    /// elects the highest-priority survivor (lower-priority survivors lose and write nothing). A no-op when attribute
-    /// priority is inactive, the MVO type is unavailable, or a recalled attribute has no other contributor (it is then
+    /// Next-contributor recall fallback (#91, Phase 2c): when a winning contributor's Connected System Object is
+    /// obsoleted, or a still-joined winner withdraws its value in place without asserting null, re-elect any
+    /// still-joined lower-priority contributor for the affected attributes so the attribute is handed to the next
+    /// source rather than blanked. Surviving Connected System Objects are re-flowed through the normal inbound
+    /// attribute-flow gate; with the leaver's/withdrawer's values already marked for removal, the gate elects the
+    /// highest-priority survivor (lower-priority survivors lose and write nothing). A no-op when attribute priority
+    /// is inactive, the MVO type is unavailable, or a recalled attribute has no other contributor (it is then
     /// genuinely cleared by the caller).
     /// </summary>
     /// <param name="mvo">The Metaverse Object whose attributes are being recalled.</param>
-    /// <param name="recalledValues">The attribute values contributed by the obsoleting system, marked for removal.</param>
-    /// <param name="leaver">The obsoleting Connected System Object whose contribution is being recalled.</param>
+    /// <param name="recalledValues">The attribute values contributed by the obsoleting or withdrawing system, marked for removal.</param>
+    /// <param name="leaver">The obsoleting or withdrawing Connected System Object whose contribution is being recalled.</param>
     protected async Task ReElectSurvivingContributorsAsync(MetaverseObject mvo, List<MetaverseObjectAttributeValue> recalledValues, ConnectedSystemObject leaver)
     {
         var priorityContext = _attributePriorityContext;
@@ -3252,11 +3273,35 @@ public abstract class SyncTaskProcessorBase
     }
 
     /// <summary>
-    /// Counts the attributes genuinely cleared by a set of pending Metaverse Object changes: a value was removed,
-    /// no replacement value (nor asserted-null marker) was added, and no other value remains for the attribute (a
-    /// multi-valued attribute shrinking is not a clear). These are the "no contributor" events (#91) surfaced as
-    /// <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor"/> outcomes; an attribute that was
-    /// already blank reports nothing. Callable before or after the pending changes are applied.
+    /// Identifies the attributes genuinely cleared by a set of pending Metaverse Object changes: a value was
+    /// removed, no replacement value (nor asserted-null marker) was added, and no other value remains for the
+    /// attribute (a multi-valued attribute shrinking is not a clear). An attribute that was already blank is not
+    /// included. Callable before or after the pending changes are applied.
+    /// </summary>
+    /// <param name="mvo">The Metaverse Object the changes apply to.</param>
+    /// <param name="additions">The attribute values added this run.</param>
+    /// <param name="removals">The attribute values removed this run.</param>
+    protected static HashSet<int> GetClearedAttributeIds(
+        MetaverseObject mvo,
+        IReadOnlyCollection<MetaverseObjectAttributeValue> additions,
+        IReadOnlyCollection<MetaverseObjectAttributeValue> removals)
+    {
+        if (removals.Count == 0)
+            return new HashSet<int>();
+
+        var reAddedAttributeIds = additions.Select(av => av.AttributeId).ToHashSet();
+        return removals
+            .Select(av => av.AttributeId)
+            .Distinct()
+            .Where(attributeId => !reAddedAttributeIds.Contains(attributeId) &&
+                                  !mvo.AttributeValues.Any(av => av.AttributeId == attributeId && !removals.Contains(av)))
+            .ToHashSet();
+    }
+
+    /// <summary>
+    /// Counts the attributes genuinely cleared by a set of pending Metaverse Object changes. These are the "no
+    /// contributor" events (#91) surfaced as <see cref="ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor"/>
+    /// outcomes. Delegates to <see cref="GetClearedAttributeIds"/> for the cleared-attribute determination.
     /// </summary>
     /// <param name="mvo">The Metaverse Object the changes apply to.</param>
     /// <param name="additions">The attribute values added this run.</param>
@@ -3265,17 +3310,7 @@ public abstract class SyncTaskProcessorBase
         MetaverseObject mvo,
         IReadOnlyCollection<MetaverseObjectAttributeValue> additions,
         IReadOnlyCollection<MetaverseObjectAttributeValue> removals)
-    {
-        if (removals.Count == 0)
-            return 0;
-
-        var reAddedAttributeIds = additions.Select(av => av.AttributeId).ToHashSet();
-        return removals
-            .Select(av => av.AttributeId)
-            .Distinct()
-            .Count(attributeId => !reAddedAttributeIds.Contains(attributeId) &&
-                                  !mvo.AttributeValues.Any(av => av.AttributeId == attributeId && !removals.Contains(av)));
-    }
+        => GetClearedAttributeIds(mvo, additions, removals).Count;
 
     /// <summary>
     /// Applies pending attribute value changes to a Metaverse Object.

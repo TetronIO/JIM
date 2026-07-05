@@ -35,13 +35,15 @@ Resolution is always deterministic. Two contributors to one attribute cannot sha
 
 When you add a new import mapping to an attribute that already has contributors, it is placed at the **lowest** priority. A newly added source therefore never silently takes over an attribute; you promote it explicitly when you want it to win.
 
-## 🔁 When the winning source disconnects
+## 🔁 When the winning source disconnects or withdraws
 
 If the source that currently provides an attribute's value disconnects (its object is removed from that Connected System), JIM does not simply blank the attribute. It re-elects the next contributor: a still-connected, in-scope lower-priority source takes over, and its value flows into the Metaverse in place of the departed one. Only when no other source contributes is the attribute cleared.
 
 This means an authoritative source leaving hands an attribute down to the next source rather than dropping it, so downstream systems receive the fallback value instead of an unintended clear. The next contributor is resolved exactly as in normal flow, so if it has **"Null is a value"** set and supplies no value, the attribute is asserted null rather than handed further down.
 
 Re-election covers every attribute type, including references: a manager or group membership recalled from a departing source is handed to the surviving contributor within the same synchronisation run, not left blank until that source next synchronises. It also holds when the surviving source carries the identical value; the value simply remains, now attributed to the surviving contributor.
+
+The same hand-over applies when the winning source stays connected but simply stops supplying a value, without "Null is a value" set: for example, an expression that starts evaluating to null, or a source attribute that becomes unpopulated. The next-priority contributor takes over in the same synchronisation run, exactly as it would if the winning source had disconnected. Only when no other source contributes is the attribute cleared.
 
 ## 🔍 Seeing resolution decisions
 
