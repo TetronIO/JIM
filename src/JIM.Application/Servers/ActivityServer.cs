@@ -116,6 +116,25 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// Returns the next per-object configuration-change version (current maximum + 1) for a string-keyed configuration
+    /// object (e.g. a Service Setting, keyed by its setting key).
+    /// </summary>
+    public async Task<int> GetNextConfigurationChangeVersionAsync(ActivityTargetType targetType, string targetObjectKey)
+    {
+        var max = await Application.Repository.Activity.GetMaxConfigurationChangeVersionAsync(targetType, targetObjectKey);
+        return max + 1;
+    }
+
+    /// <summary>
+    /// Returns the snapshot JSON of the latest configuration-change version recorded for a string-keyed configuration
+    /// object (e.g. a Service Setting), or null if none exists yet.
+    /// </summary>
+    public async Task<string?> GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType targetType, string targetObjectKey)
+    {
+        return await Application.Repository.Activity.GetLatestConfigurationChangeSnapshotAsync(targetType, targetObjectKey);
+    }
+
+    /// <summary>
     /// Creates and persists an Activity using an initiator triad (Type, Id, Name).
     /// Used when the full principal object is not available (e.g., from WorkerTask).
     /// </summary>

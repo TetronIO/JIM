@@ -41,6 +41,7 @@ public class JimApplication : IDisposable
     public AuthServer Auth { get; }
     public CertificateServer Certificates { get; }
     public ChangeHistoryServer ChangeHistory { get; }
+    public ConfigurationChangeCaptureService ConfigurationChangeCapture { get; }
     public ConfigurationDiffService ConfigurationDiffs { get; }
     public ConfigurationSnapshotService ConfigurationSnapshots { get; }
     public ConnectedSystemServer ConnectedSystems { get; }
@@ -66,6 +67,7 @@ public class JimApplication : IDisposable
         Auth = new AuthServer(this);
         Certificates = new CertificateServer(this);
         ChangeHistory = new ChangeHistoryServer(this);
+        ConfigurationChangeCapture = new ConfigurationChangeCaptureService(this);
         ConfigurationDiffs = new ConfigurationDiffService();
         ConfigurationSnapshots = new ConfigurationSnapshotService(this);
         ConnectedSystems = new ConnectedSystemServer(this);

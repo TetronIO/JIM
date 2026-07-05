@@ -63,7 +63,7 @@ JIM is deployed in high-trust environments (healthcare, finance, government). "W
 
 **Cross-cutting**
 
-10. Schedule step create, update, and delete via their direct application-layer methods capture a snapshot of the owning Schedule, so API-driven step changes are versioned the same as editor-driven ones.
+10. Every Schedule step mutation path records exactly one versioned snapshot of the owning Schedule per save, and the application layer must not offer an unaudited step mutation surface. *(Corrected 2026-07-05 during Phase 1: the draft presumed API-driven step changes bypassed capture, but there are no step-level REST endpoints; both step mutation surfaces reconcile steps and then perform the audited whole-Schedule update, which captures them. The residual risk is the bare application-layer step methods, which rely on callers following that pattern; the implementation plan proposes consolidating step reconciliation into the audited Schedule update as the durable fix.)*
 11. Each newly covered type's history is retrievable via `GetConfigurationChangeHistoryAsync` (correct key shape per type), the per-type REST `change-history` endpoints, and `Get-JIMConfigurationChangeHistory -Type <TypeName>`, with single-version diff and compare-two-versions parity.
 12. Each newly covered type's history is viewable in the admin portal from where the object is managed: a Changes tab where a detail page exists (API Keys have one), and a per-row history affordance opening the standard version list/diff view on list-plus-dialog pages (Service Settings, Certificates, Predefined Searches where no detail page exists), following the Schedule editor's History tab precedent.
 13. The optional reason is capturable for every newly covered mutation: the shared "Reason for change" prompt on UI save paths, `-ChangeReason` on the write cmdlets, and the optional reason field on REST write DTOs. Where a write cmdlet or REST write endpoint does not yet exist for a type, adding it is in scope only insofar as needed for reason parity; broader endpoint coverage remains tracked elsewhere.
@@ -146,7 +146,7 @@ Resolved from the draft's open questions:
 - [ ] Every mutation path for API Key, Role (definition and assignment), Predefined Search (including criteria and groups), Connector Definition, and Example Data Template/Set records an Activity carrying a versioned snapshot.
 - [ ] API Key mutations no longer bypass the application layer; the Blazor page calls new server methods.
 - [ ] Encrypted Service Setting values and API key secrets never appear in stored or rendered history; redaction is covered by tests.
-- [ ] Schedule step create/update/delete via the application layer captures the owning Schedule's snapshot.
+- [ ] No Schedule step mutation path bypasses capture: every step change records exactly one versioned snapshot of the owning Schedule per save.
 - [ ] Each newly covered type's history is retrievable via the REST API and `Get-JIMConfigurationChangeHistory` with diff and compare parity, and viewable in the admin portal where the object is managed.
 - [ ] The reason prompt, `-ChangeReason`, and REST reason field work for the newly covered types' mutations.
 - [ ] The enable toggle, semantic no-change dedupe, best-effort capture, and configuration-change retention apply to all new capture paths, covered by tests per path.

@@ -157,6 +157,74 @@ public class ConfigurationChangeHistoryRetrievalTests
         Assert.That(diff.ModifiedCount, Is.EqualTo(1));
     }
 
+    // -- string-keyed overloads (Service Settings, whose primary key is the setting key) --------------------------------
+
+    [Test]
+    public async Task GetConfigurationChangeHistoryAsync_StringKeyed_ReturnsPagedItemsWithSummariesAsync()
+    {
+        const string key = "History.RetentionPeriod";
+        var rows = new List<ConfigurationChangeActivityData>
+        {
+            Data(version: 2, ActivityTargetOperationType.Update, SnapJson(Cs("v2"))),
+            Data(version: 1, ActivityTargetOperationType.Create, SnapJson(Cs("v1")))
+        };
+        _activityRepo.Setup(r => r.GetConfigurationChangeCountAsync(ActivityTargetType.ServiceSetting, key)).ReturnsAsync(2);
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivitiesAsync(ActivityTargetType.ServiceSetting, key, 0, 21)).ReturnsAsync(rows);
+
+        var result = await _jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ServiceSetting, key);
+
+        Assert.That(result.TotalResults, Is.EqualTo(2));
+        Assert.That(result.Results, Has.Count.EqualTo(2));
+        Assert.That(result.Results[0].Version, Is.EqualTo(2));
+        Assert.That(result.Results[0].Summary, Is.EqualTo("Description"), "v2 changed the description versus v1");
+        Assert.That(result.Results[1].Operation, Is.EqualTo(ActivityTargetOperationType.Create), "the first version is the creation");
+    }
+
+    [Test]
+    public async Task GetConfigurationChangeAsync_StringKeyed_ReturnsSnapshotAndDiffAgainstPredecessorAsync()
+    {
+        const string key = "History.RetentionPeriod";
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivityByVersionAsync(ActivityTargetType.ServiceSetting, key, 2))
+            .ReturnsAsync(Data(2, ActivityTargetOperationType.Update, SnapJson(Cs("v2"))));
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivityBeforeVersionAsync(ActivityTargetType.ServiceSetting, key, 2))
+            .ReturnsAsync(Data(1, ActivityTargetOperationType.Create, SnapJson(Cs("v1"))));
+
+        var detail = await _jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ServiceSetting, key, 2);
+
+        Assert.That(detail, Is.Not.Null);
+        Assert.That(detail!.Version, Is.EqualTo(2));
+        Assert.That(detail.Diff.OldVersion, Is.EqualTo(1));
+        Assert.That(detail.Diff.ModifiedCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task CompareConfigurationChangesAsync_StringKeyed_DiffsTwoArbitraryVersionsAsync()
+    {
+        const string key = "History.RetentionPeriod";
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivityByVersionAsync(ActivityTargetType.ServiceSetting, key, 1))
+            .ReturnsAsync(Data(1, ActivityTargetOperationType.Create, SnapJson(Cs("a"))));
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivityByVersionAsync(ActivityTargetType.ServiceSetting, key, 3))
+            .ReturnsAsync(Data(3, ActivityTargetOperationType.Update, SnapJson(Cs("c"))));
+
+        var diff = await _jim.ChangeHistory.CompareConfigurationChangesAsync(ActivityTargetType.ServiceSetting, key, 1, 3);
+
+        Assert.That(diff, Is.Not.Null);
+        Assert.That(diff!.OldVersion, Is.EqualTo(1));
+        Assert.That(diff.NewVersion, Is.EqualTo(3));
+        Assert.That(diff.ModifiedCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetNextConfigurationChangeVersionAsync_StringKeyed_ReturnsMaxPlusOneAsync()
+    {
+        const string key = "History.RetentionPeriod";
+        _activityRepo.Setup(r => r.GetMaxConfigurationChangeVersionAsync(ActivityTargetType.ServiceSetting, key)).ReturnsAsync(6);
+
+        var next = await _jim.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.ServiceSetting, key);
+
+        Assert.That(next, Is.EqualTo(7));
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private string SnapJson(ConnectedSystem cs) => ConfigurationSnapshotService.Serialise(_jim.ConfigurationSnapshots.CreateSnapshot(cs, HashKey));

@@ -170,6 +170,44 @@ public interface IActivityRepository
     /// </summary>
     public Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityBeforeVersionAsync(ActivityTargetType targetType, Guid targetObjectId, int version);
 
+    /// <summary>
+    /// Gets the highest configuration-change version recorded for a string-keyed configuration object (e.g. a
+    /// <see cref="ActivityTargetType.ServiceSetting"/>, keyed by its setting key), or 0 if none exist yet. The
+    /// string-keyed counterpart of <see cref="GetMaxConfigurationChangeVersionAsync(ActivityTargetType,int)"/>.
+    /// </summary>
+    public Task<int> GetMaxConfigurationChangeVersionAsync(ActivityTargetType targetType, string targetObjectKey);
+
+    /// <summary>
+    /// Gets the snapshot JSON of the highest configuration-change version recorded for a string-keyed configuration
+    /// object (e.g. a <see cref="ActivityTargetType.ServiceSetting"/>), or null if none exists yet. The string-keyed
+    /// counterpart of <see cref="GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType,int)"/>.
+    /// </summary>
+    public Task<string?> GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType targetType, string targetObjectKey);
+
+    /// <summary>
+    /// Counts the versioned configuration-change activities recorded for a string-keyed configuration object (e.g. a
+    /// <see cref="ActivityTargetType.ServiceSetting"/>).
+    /// </summary>
+    public Task<int> GetConfigurationChangeCountAsync(ActivityTargetType targetType, string targetObjectKey);
+
+    /// <summary>
+    /// Returns a page of versioned configuration-change activities for a string-keyed configuration object, newest
+    /// version first. The string-keyed counterpart of
+    /// <see cref="GetConfigurationChangeActivitiesAsync(ActivityTargetType,int,int,int)"/>.
+    /// </summary>
+    public Task<List<ConfigurationChangeActivityData>> GetConfigurationChangeActivitiesAsync(ActivityTargetType targetType, string targetObjectKey, int skip, int take);
+
+    /// <summary>
+    /// Returns the configuration-change activity for a specific version of a string-keyed configuration object, or
+    /// null if absent.
+    /// </summary>
+    public Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityByVersionAsync(ActivityTargetType targetType, string targetObjectKey, int version);
+
+    /// <summary>
+    /// Returns the configuration-change activity for the highest version below <paramref name="version"/> of a
+    /// string-keyed configuration object, or null if none exists.
+    /// </summary>
+    public Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityBeforeVersionAsync(ActivityTargetType targetType, string targetObjectKey, int version);
 
     /// <summary>
     /// Queries the database for RPEI error counts for an activity, returning the total number of

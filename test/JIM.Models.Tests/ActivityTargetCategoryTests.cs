@@ -39,6 +39,11 @@ public class ActivityTargetCategoryTests
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ServiceSetting), Is.EqualTo(ActivityTargetCategory.Configuration));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.Schedule), Is.EqualTo(ActivityTargetCategory.Configuration));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.TrustedCertificate), Is.EqualTo(ActivityTargetCategory.Configuration));
+            Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ApiKey), Is.EqualTo(ActivityTargetCategory.Configuration));
+            Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.Role), Is.EqualTo(ActivityTargetCategory.Configuration));
+            Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.PredefinedSearch), Is.EqualTo(ActivityTargetCategory.Configuration));
+            Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ConnectorDefinition), Is.EqualTo(ActivityTargetCategory.Configuration));
+            Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ExampleDataSet), Is.EqualTo(ActivityTargetCategory.Configuration));
         });
     }
 

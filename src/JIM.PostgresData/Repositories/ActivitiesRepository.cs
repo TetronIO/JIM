@@ -483,6 +483,13 @@ public class ActivityRepository : IActivityRepository
         {
             ActivityTargetType.ConnectedSystem => query.Where(a => a.ConnectedSystemId == targetObjectId),
             ActivityTargetType.SyncRule => query.Where(a => a.SyncRuleId == targetObjectId),
+            ActivityTargetType.MetaverseAttribute => query.Where(a => a.MetaverseAttributeId == targetObjectId),
+            ActivityTargetType.MetaverseObjectType => query.Where(a => a.MetaverseObjectTypeId == targetObjectId),
+            ActivityTargetType.PredefinedSearch => query.Where(a => a.PredefinedSearchId == targetObjectId),
+            ActivityTargetType.Role => query.Where(a => a.RoleId == targetObjectId),
+            ActivityTargetType.ConnectorDefinition => query.Where(a => a.ConnectorDefinitionId == targetObjectId),
+            ActivityTargetType.ExampleDataTemplate => query.Where(a => a.ExampleDataTemplateId == targetObjectId),
+            ActivityTargetType.ExampleDataSet => query.Where(a => a.ExampleDataSetId == targetObjectId),
             _ => throw new ArgumentOutOfRangeException(nameof(targetType), targetType,
                 "Unsupported configuration target type for change history.")
         };
@@ -498,8 +505,25 @@ public class ActivityRepository : IActivityRepository
         return targetType switch
         {
             ActivityTargetType.Schedule => query.Where(a => a.ScheduleId == targetObjectId),
+            ActivityTargetType.TrustedCertificate => query.Where(a => a.TrustedCertificateId == targetObjectId),
+            ActivityTargetType.ApiKey => query.Where(a => a.ApiKeyId == targetObjectId),
             _ => throw new ArgumentOutOfRangeException(nameof(targetType), targetType,
                 "Unsupported Guid-keyed configuration target type for change history.")
+        };
+    }
+
+    // String-keyed counterpart of ConfigurationChangeQuery, for configuration objects whose primary key is a string
+    // (Service Settings, keyed by their setting key).
+    private IQueryable<Activity> ConfigurationChangeQuery(ActivityTargetType targetType, string targetObjectKey)
+    {
+        var query = Repository.Database.Activities
+            .Where(a => a.ConfigurationChangeVersion != null);
+
+        return targetType switch
+        {
+            ActivityTargetType.ServiceSetting => query.Where(a => a.ServiceSettingKey == targetObjectKey),
+            _ => throw new ArgumentOutOfRangeException(nameof(targetType), targetType,
+                "Unsupported string-keyed configuration target type for change history.")
         };
     }
 
@@ -602,6 +626,52 @@ public class ActivityRepository : IActivityRepository
     public async Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityBeforeVersionAsync(ActivityTargetType targetType, Guid targetObjectId, int version)
     {
         return await ConfigurationChangeQuery(targetType, targetObjectId)
+            .Where(a => a.ConfigurationChangeVersion < version)
+            .OrderByDescending(a => a.ConfigurationChangeVersion)
+            .Select(ToConfigurationChangeData)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<int> GetMaxConfigurationChangeVersionAsync(ActivityTargetType targetType, string targetObjectKey)
+    {
+        var max = await ConfigurationChangeQuery(targetType, targetObjectKey).MaxAsync(a => (int?)a.ConfigurationChangeVersion);
+        return max ?? 0;
+    }
+
+    public async Task<string?> GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType targetType, string targetObjectKey)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectKey)
+            .OrderByDescending(a => a.ConfigurationChangeVersion)
+            .Select(a => a.ConfigurationChangeSnapshot)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<int> GetConfigurationChangeCountAsync(ActivityTargetType targetType, string targetObjectKey)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectKey).CountAsync();
+    }
+
+    public async Task<List<ConfigurationChangeActivityData>> GetConfigurationChangeActivitiesAsync(ActivityTargetType targetType, string targetObjectKey, int skip, int take)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectKey)
+            .OrderByDescending(a => a.ConfigurationChangeVersion)
+            .Skip(skip)
+            .Take(take)
+            .Select(ToConfigurationChangeData)
+            .ToListAsync();
+    }
+
+    public async Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityByVersionAsync(ActivityTargetType targetType, string targetObjectKey, int version)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectKey)
+            .Where(a => a.ConfigurationChangeVersion == version)
+            .Select(ToConfigurationChangeData)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<ConfigurationChangeActivityData?> GetConfigurationChangeActivityBeforeVersionAsync(ActivityTargetType targetType, string targetObjectKey, int version)
+    {
+        return await ConfigurationChangeQuery(targetType, targetObjectKey)
             .Where(a => a.ConfigurationChangeVersion < version)
             .OrderByDescending(a => a.ConfigurationChangeVersion)
             .Select(ToConfigurationChangeData)

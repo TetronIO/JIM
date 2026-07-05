@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Staging;
 namespace JIM.Models.Activities;
@@ -237,6 +238,61 @@ public class Activity
 
     public Guid? MetaverseObjectId { get; set; }
 
+    // The remaining configuration target columns below follow the ScheduleId precedent: plain scalar columns with no
+    // foreign-key constraint or navigation, so an object's versioned change activities (and their deep-links) survive
+    // the object's later deletion. Each is null for all activities except configuration changes to that type.
+    // Activity.SetConfigurationTargetId maps a target type to its column; the repository's ConfigurationChangeQuery
+    // performs the reverse mapping for retrieval. Keep the two in step.
+
+    /// <summary>
+    /// If this activity records a configuration change to a Service Setting, the setting's key (its string primary
+    /// key, e.g. "History.RetentionPeriod") is recorded here.
+    /// </summary>
+    [MaxLength(100)]
+    public string? ServiceSettingKey { get; set; }
+
+    /// <summary>
+    /// If this activity records a configuration change to a Metaverse Attribute, its id is recorded here.
+    /// </summary>
+    public int? MetaverseAttributeId { get; set; }
+
+    /// <summary>
+    /// If this activity records a configuration change to a Metaverse Object Type, its id is recorded here.
+    /// </summary>
+    public int? MetaverseObjectTypeId { get; set; }
+
+    /// <summary>
+    /// If this activity records a configuration change to a Trusted Certificate, its id is recorded here.
+    /// </summary>
+    public Guid? TrustedCertificateId { get; set; }
+
+    /// <summary>
+    /// If this activity records a configuration change to an API Key, its id is recorded here.
+    /// </summary>
+    public Guid? ApiKeyId { get; set; }
+
+    /// <summary>
+    /// If this activity records a configuration change to a Role (its definition or its membership), the Role's id
+    /// is recorded here.
+    /// </summary>
+    public int? RoleId { get; set; }
+
+    /// <summary>
+    /// If this activity records a configuration change to a Predefined Search (including its criteria groups and
+    /// criteria, which roll up into the owning search's history), the search's id is recorded here.
+    /// </summary>
+    public int? PredefinedSearchId { get; set; }
+
+    /// <summary>
+    /// If this activity records a configuration change to a Connector Definition, its id is recorded here.
+    /// </summary>
+    public int? ConnectorDefinitionId { get; set; }
+
+    /// <summary>
+    /// If this activity records a configuration change to an Example Data Set, its id is recorded here.
+    /// </summary>
+    public int? ExampleDataSetId { get; set; }
+
     // -----------------------------------------------------------------------------------------------------------------
     // Run Profile execution related...
 
@@ -350,6 +406,65 @@ public class Activity
     /// Null for non-configuration activities.
     /// </summary>
     public int? ConfigurationChangeVersion { get; set; }
+
+    /// <summary>
+    /// Records which integer-keyed configuration object this activity's configuration change belongs to, by setting
+    /// the target type's own column (see the target-column block above). A column already set at activity-creation
+    /// time (e.g. by a granular sub-entity endpoint) is preserved. This is the single forward mapping of target type
+    /// to column; the repository's ConfigurationChangeQuery is the reverse mapping. Keep the two in step.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The target type is not an integer-keyed configuration type.</exception>
+    public void SetConfigurationTargetId(ActivityTargetType targetType, int targetObjectId)
+    {
+        switch (targetType)
+        {
+            case ActivityTargetType.ConnectedSystem: ConnectedSystemId ??= targetObjectId; break;
+            case ActivityTargetType.SyncRule: SyncRuleId ??= targetObjectId; break;
+            case ActivityTargetType.MetaverseAttribute: MetaverseAttributeId ??= targetObjectId; break;
+            case ActivityTargetType.MetaverseObjectType: MetaverseObjectTypeId ??= targetObjectId; break;
+            case ActivityTargetType.PredefinedSearch: PredefinedSearchId ??= targetObjectId; break;
+            case ActivityTargetType.Role: RoleId ??= targetObjectId; break;
+            case ActivityTargetType.ConnectorDefinition: ConnectorDefinitionId ??= targetObjectId; break;
+            case ActivityTargetType.ExampleDataTemplate: ExampleDataTemplateId ??= targetObjectId; break;
+            case ActivityTargetType.ExampleDataSet: ExampleDataSetId ??= targetObjectId; break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(targetType), targetType,
+                    "Not an integer-keyed configuration target type.");
+        }
+    }
+
+    /// <summary>
+    /// Guid-keyed counterpart of <see cref="SetConfigurationTargetId(ActivityTargetType,int)"/>.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The target type is not a Guid-keyed configuration type.</exception>
+    public void SetConfigurationTargetId(ActivityTargetType targetType, Guid targetObjectId)
+    {
+        switch (targetType)
+        {
+            case ActivityTargetType.Schedule: ScheduleId ??= targetObjectId; break;
+            case ActivityTargetType.TrustedCertificate: TrustedCertificateId ??= targetObjectId; break;
+            case ActivityTargetType.ApiKey: ApiKeyId ??= targetObjectId; break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(targetType), targetType,
+                    "Not a Guid-keyed configuration target type.");
+        }
+    }
+
+    /// <summary>
+    /// String-keyed counterpart of <see cref="SetConfigurationTargetId(ActivityTargetType,int)"/>, for configuration
+    /// objects whose primary key is a string (Service Settings, keyed by their setting key).
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The target type is not a string-keyed configuration type.</exception>
+    public void SetConfigurationTargetId(ActivityTargetType targetType, string targetObjectKey)
+    {
+        switch (targetType)
+        {
+            case ActivityTargetType.ServiceSetting: ServiceSettingKey ??= targetObjectKey; break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(targetType), targetType,
+                    "Not a string-keyed configuration target type.");
+        }
+    }
 
     public ActivityRunProfileExecutionItem AddRunProfileExecutionItem()
     {

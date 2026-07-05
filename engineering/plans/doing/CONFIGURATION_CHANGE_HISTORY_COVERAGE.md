@@ -1,8 +1,9 @@
 # Configuration Change History Coverage - Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 complete)
 - **Issue:** [#14](https://github.com/TetronIO/JIM/issues/14) *(sub-task of the parent change-history issue)*
-- **PRD:** [`engineering/prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md`](../prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md)
+- **PRD:** [`engineering/prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md`](../../prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md)
+- **Note (2026-07-05):** Phase 1 verification disproved the presumed Schedule step capture gap: there are no step REST endpoints (`Add-JIMScheduleStep` performs a whole-Schedule PUT), and both step-mutation surfaces (the editor dialog and the REST update endpoint) reconcile steps and then call the audited `UpdateScheduleAsync`, which captures the step changes in exactly one version per save. Making the bare step methods capture unconditionally would have double-recorded on every editor/REST save, so Phase 1 instead documented the caller contract on those methods. The durable fix (consolidating step reconciliation into `UpdateScheduleAsync` and making the bare methods private, which also removes the duplicated reconcile logic in the dialog and controller) is proposed as a follow-up slice.
 
 ## Overview
 
@@ -25,7 +26,7 @@ Closes the two-tier audit posture: today an auditor can reconstruct what changed
 | Connected System | int | ✅ | ✅ | `ConnectedSystemServer.cs:343/437/1053` | Detail page + Changes tab |
 | Synchronisation Rule | int | ✅ | ✅ | `ConnectedSystemServer.cs` (create/update 4512, delete 4668) | Detail page + Changes tab |
 | Schedule (whole) | Guid | ✅ | ✅ | `SchedulerServer.cs:62/79/93` | Editor dialog + History tab |
-| Schedule step (direct CRUD) | - | ❌ | ❌ | `SchedulerServer.cs:205/211/217` (pure pass-through) | n/a (API path) |
+| Schedule step (direct CRUD) | - | ⚠️ via owning save | ⚠️ via owning save | `SchedulerServer.cs` step methods are bare, but both callers reconcile then call the audited `UpdateScheduleAsync` (captures once per save) | Schedule editor |
 | Service Setting | **string** (`Key`) | ✅ (update 271/284, revert 296/308 in `ServiceSettingsServer.cs`) | ❌ | as left | `Settings.razor` list + `EditSettingDialog` |
 | Metaverse Attribute | int | ✅ (6 methods, `MetaverseServer.cs:170-307`) | ❌ | as left | Read-only lists only (no edit UI; #377 will add it) |
 | Metaverse Object Type | int | ⚠️ create only; **update at `MetaverseServer.cs:118` records no Activity**; no delete method exists | ❌ | as left | `MetaverseObjectTypeDetail.razor` (deletion-rules save at :372) |
@@ -144,14 +145,14 @@ API Key: prov-api
 
 Each phase is a shippable vertical slice (TDD per capture path, docs and changelog in the same PR). Order follows the PRD's tiering: Tier 1 first, then the security-critical Tier 2 items, then the remainder.
 
-### Phase 1: Capture foundation refactor and shared plumbing
-1. Extract `ConfigurationChangeCapture` helper (toggle, dedupe, version, assignment, best-effort, tombstone variant); refactor the three existing capture paths onto it, existing fixtures green throughout.
-2. New `ActivityTargetType` members + `ActivityTargetTypeCategories` classification.
-3. `Activity` FK columns (+ `ServiceSettingKey` string) and single migration; `JimDbContext` configuration mirroring `SyncRuleId`.
-4. `ConfigurationChangeQuery` cases for all new types; string-keyed overload set through `ActivitiesRepository` → `ActivityServer` → `ChangeHistoryServer`.
-5. Close the Schedule step gap: the direct step CRUD methods (`SchedulerServer.cs:205/211/217`) create an Activity (Schedule target, parent `ScheduleId` FK) and capture the owning Schedule's snapshot via the existing builder; first consumer proving the helper.
+### Phase 1: Capture foundation refactor and shared plumbing ✅
+1. Extract the shared capture service (toggle, dedupe, version, assignment, best-effort, tombstone variant); refactor the five existing capture paths onto it, existing fixtures green throughout. ✅ *(Delivered as `ConfigurationChangeCaptureService`; `Activity.SetConfigurationTargetId` owns the target-type-to-column mapping, mirrored by the repository's `ConfigurationChangeQuery`.)*
+2. New `ActivityTargetType` members + `ActivityTargetTypeCategories` classification. ✅ *(`ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `ExampleDataSet`; all Configuration. `ExampleDataTemplate` stays under System until Phase 9, because its existing activities are generation runs.)*
+3. `Activity` target columns (+ `ServiceSettingKey` string) and single migration. ✅ *(Plain scalar columns following the `ScheduleId` precedent: no FK constraint or navigation, so tombstone history survives target deletion; the older `SyncRuleId`-style constrained FK was deliberately not replicated.)*
+4. `ConfigurationChangeQuery` cases for all new types; string-keyed overload set through `ActivitiesRepository` → `ActivityServer` → `ChangeHistoryServer`. ✅
+5. ~~Close the Schedule step gap~~ **Disproved during implementation** (see the Note in the header): every existing step mutation path is already captured exactly once via the audited whole-Schedule update, and there are no step-level REST endpoints. Unconditional capture in the bare step methods would have double-recorded. Delivered instead: the caller contract is documented on the three step methods; consolidating step reconciliation into `UpdateScheduleAsync` (removing the duplicated reconcile logic in the editor dialog and the REST controller, and making the bare methods private) is the durable fix, proposed as a follow-up slice.
 
-**Files:** `JIM.Application/Services/ConfigurationChangeCapture.cs` (new); `ConnectedSystemServer.cs`; `SchedulerServer.cs`; `ActivityServer.cs`; `ChangeHistoryServer.cs`; `JIM.Models/Activities/*`; `ActivitiesRepository.cs`; `JimDbContext` + migration; capture tests.
+**Files:** `JIM.Application/Services/ConfigurationChangeCaptureService.cs` (new); `ConnectedSystemServer.cs`; `SchedulerServer.cs`; `ActivityServer.cs`; `ChangeHistoryServer.cs`; `JIM.Models/Activities/*`; `IActivityRepository.cs`; `ActivitiesRepository.cs`; migration `AddConfigurationChangeTargetColumnsToActivity`; model and retrieval tests.
 
 ### Phase 2: Service Settings (Tier 1)
 1. Snapshot builder with keyed-HMAC redaction for `StringEncrypted` values and override-vs-default representation.
@@ -219,7 +220,7 @@ Each phase is a shippable vertical slice (TDD per capture path, docs and changel
 
 ## Success Criteria
 
-Maps to the PRD acceptance criteria: every mutation path across the nine type groups records an Activity carrying a versioned, redacted snapshot (including the fixed Metaverse Object Type update and Schedule step direct CRUD); API Key mutations flow through the application layer; encrypted Service Setting values and API key secrets are provably absent from stored and rendered history; every type is retrievable with diff/compare parity via `ChangeHistoryServer`, REST, and `Get-JIMConfigurationChangeHistory`; history is discoverable in the admin portal per the tab/per-row decision; reason capture works on UI, `-ChangeReason`, and REST for the covered mutations; toggle, dedupe, best-effort, and retention behaviours hold for all new paths, each covered by tests.
+Maps to the PRD acceptance criteria: every mutation path across the nine type groups records an Activity carrying a versioned, redacted snapshot (including the fixed Metaverse Object Type update, with Schedule step changes continuing to version exactly once per owning save); API Key mutations flow through the application layer; encrypted Service Setting values and API key secrets are provably absent from stored and rendered history; every type is retrievable with diff/compare parity via `ChangeHistoryServer`, REST, and `Get-JIMConfigurationChangeHistory`; history is discoverable in the admin portal per the tab/per-row decision; reason capture works on UI, `-ChangeReason`, and REST for the covered mutations; toggle, dedupe, best-effort, and retention behaviours hold for all new paths, each covered by tests.
 
 ## Risks and Mitigations
 
