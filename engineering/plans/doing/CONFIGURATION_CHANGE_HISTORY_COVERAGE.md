@@ -1,6 +1,6 @@
 # Configuration Change History Coverage - Implementation Plan
 
-- **Status:** Doing (Phase 1 complete)
+- **Status:** Doing (Phases 1-2 complete)
 - **Issue:** [#14](https://github.com/TetronIO/JIM/issues/14) *(sub-task of the parent change-history issue)*
 - **PRD:** [`engineering/prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md`](../../prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md)
 - **Note (2026-07-05):** Phase 1 verification disproved the presumed Schedule step capture gap: there are no step REST endpoints (`Add-JIMScheduleStep` performs a whole-Schedule PUT), and both step-mutation surfaces (the editor dialog and the REST update endpoint) reconcile steps and then call the audited `UpdateScheduleAsync`, which captures the step changes in exactly one version per save. Making the bare step methods capture unconditionally would have double-recorded on every editor/REST save, so Phase 1 instead documented the caller contract on those methods. The durable fix (consolidating step reconciliation into `UpdateScheduleAsync` and making the bare methods private, which also removes the duplicated reconcile logic in the dialog and controller) is proposed as a follow-up slice.
@@ -154,12 +154,12 @@ Each phase is a shippable vertical slice (TDD per capture path, docs and changel
 
 **Files:** `JIM.Application/Services/ConfigurationChangeCaptureService.cs` (new); `ConnectedSystemServer.cs`; `SchedulerServer.cs`; `ActivityServer.cs`; `ChangeHistoryServer.cs`; `JIM.Models/Activities/*`; `IActivityRepository.cs`; `ActivitiesRepository.cs`; migration `AddConfigurationChangeTargetColumnsToActivity`; model and retrieval tests.
 
-### Phase 2: Service Settings (Tier 1)
-1. Snapshot builder with keyed-HMAC redaction for `StringEncrypted` values and override-vs-default representation.
-2. Capture in `UpdateSettingValueAsync` (both principal overloads) and `RevertSettingToDefaultAsync` (revert diffs show the value returning to default).
-3. REST routes on `ServiceSettingsController` (`{key}`-keyed) + `ChangeReason` on its write DTO; `-ChangeReason` on `Set-JIMServiceSetting`; `Get-JIMConfigurationChangeHistory -Type ServiceSetting`.
-4. UI: shared `ConfigurationChangeHistoryDialog` (new) + per-row history button on `Settings.razor`; `ChangeReasonDialog` on edit and revert.
-5. Tests: capture, redaction (no plaintext/ciphertext ever serialised), dedupe, toggle-off, revert semantics.
+### Phase 2: Service Settings (Tier 1) ✅
+1. Snapshot builder with keyed-HMAC redaction for `StringEncrypted` values and override-vs-default representation. ✅ *(Snapshot carries key, name, category, value type, value, default value and the overridden flag; a revert diffs as the override value being removed and the flag flipping. `ConfigurationSnapshot` gained a nullable `ObjectKey` for string-keyed objects.)*
+2. Capture in `UpdateSettingValueAsync` (both principal overloads) and `RevertSettingToDefaultAsync`. ✅ *(Via the shared capture service's new string-keyed overload; optional `changeReason` threaded through all four mutation methods.)*
+3. REST routes on `ServiceSettingsController` (`{key}`-keyed) + `ChangeReason` on its write DTO and `?changeReason=` on the revert; `-ChangeReason` on `Set-JIMServiceSetting` and `Reset-JIMServiceSetting`; `Get-JIMConfigurationChangeHistory -Type ServiceSetting`. ✅ *(Routes validated at app startup via OpenAPI generation.)*
+4. UI: shared `ConfigurationChangeHistoryDialog` (new, hosts `ConfigurationChangesTab`, which gained an `ObjectKey` string path) + per-row history button on `Settings.razor`; `ChangeReasonDialog` on edit and revert. ✅
+5. Tests: capture, redaction (no plaintext/ciphertext ever serialised; keyed hash asserted via the deserialised node), rotation detection, dedupe, toggle-off, revert semantics, API endpoint tests, Pester coverage. ✅
 
 ### Phase 3: Metaverse Object Types and Attributes (Tier 1)
 1. **Fix the silent update**: `UpdateMetaverseObjectTypeAsync` gains principal-attributed overloads recording an Activity (failing test first; it currently records nothing).

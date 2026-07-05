@@ -1,0 +1,101 @@
+@using JIM.Models.Activities
+@using JIM.Web.Pages.Admin.Components
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Dialog-hosted configuration change history, for objects managed from a list page without a detail page (Service
+   Settings, Trusted Certificates). Hosts the same ConfigurationChangesTab as the detail-page Changes tabs, so all
+   history surfaces render identically; follows the Schedule editor's dialog-hosted History tab precedent. *@
+
+<MudDialog>
+    <DialogContent>
+        <div style="min-height: 200px;">
+            <ConfigurationChangesTab TargetType="@TargetType" ObjectId="@ObjectId" ObjectGuidId="@ObjectGuidId"
+                                     ObjectKey="@ObjectKey" ObjectTypeLabel="@ObjectTypeLabel" />
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>The kind of configuration object whose history is shown.</summary>
+    [Parameter, EditorRequired]
+    public ActivityTargetType TargetType { get; set; }
+
+    /// <summary>The id of an integer-keyed configuration object. Ignored when <see cref="ObjectGuidId"/> or <see cref="ObjectKey"/> is set.</summary>
+    [Parameter]
+    public int ObjectId { get; set; }
+
+    /// <summary>The id of a Guid-keyed configuration object.</summary>
+    [Parameter]
+    public Guid? ObjectGuidId { get; set; }
+
+    /// <summary>The key of a string-keyed configuration object (a Service Setting's setting key).</summary>
+    [Parameter]
+    public string? ObjectKey { get; set; }
+
+    /// <summary>A human-readable label for the object kind, used in the empty-state message.</summary>
+    [Parameter]
+    public string ObjectTypeLabel { get; set; } = "object";
+
+    /// <summary>
+    /// Opens the history dialog for a string-keyed configuration object (e.g. a Service Setting), titled with the
+    /// object's display name. Call from a per-row history affordance on a list page.
+    /// </summary>
+    public static async Task ShowAsync(IDialogService dialogService, ActivityTargetType targetType, string objectKey,
+        string objectTypeLabel, string displayName)
+    {
+        var parameters = new DialogParameters<ConfigurationChangeHistoryDialog>
+        {
+            { x => x.TargetType, targetType },
+            { x => x.ObjectKey, objectKey },
+            { x => x.ObjectTypeLabel, objectTypeLabel }
+        };
+        await ShowCoreAsync(dialogService, parameters, displayName);
+    }
+
+    /// <summary>
+    /// Opens the history dialog for an integer-keyed configuration object.
+    /// </summary>
+    public static async Task ShowAsync(IDialogService dialogService, ActivityTargetType targetType, int objectId,
+        string objectTypeLabel, string displayName)
+    {
+        var parameters = new DialogParameters<ConfigurationChangeHistoryDialog>
+        {
+            { x => x.TargetType, targetType },
+            { x => x.ObjectId, objectId },
+            { x => x.ObjectTypeLabel, objectTypeLabel }
+        };
+        await ShowCoreAsync(dialogService, parameters, displayName);
+    }
+
+    /// <summary>
+    /// Opens the history dialog for a Guid-keyed configuration object.
+    /// </summary>
+    public static async Task ShowAsync(IDialogService dialogService, ActivityTargetType targetType, Guid objectGuidId,
+        string objectTypeLabel, string displayName)
+    {
+        var parameters = new DialogParameters<ConfigurationChangeHistoryDialog>
+        {
+            { x => x.TargetType, targetType },
+            { x => x.ObjectGuidId, (Guid?)objectGuidId },
+            { x => x.ObjectTypeLabel, objectTypeLabel }
+        };
+        await ShowCoreAsync(dialogService, parameters, displayName);
+    }
+
+    private static async Task ShowCoreAsync(IDialogService dialogService, DialogParameters<ConfigurationChangeHistoryDialog> parameters, string displayName)
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true, CloseButton = true };
+        var dialog = await dialogService.ShowAsync<ConfigurationChangeHistoryDialog>($"Change history: {displayName}", parameters, options);
+        await dialog.Result;
+    }
+
+    private void Close() => MudDialog.Close();
+}

@@ -91,4 +91,9 @@ public class ServiceSettingUpdateRequestDto
     /// and revert to the default value.
     /// </summary>
     public string? Value { get; set; }
+
+    /// <summary>
+    /// An optional reason for the change, recorded against the setting's configuration change history.
+    /// </summary>
+    public string? ChangeReason { get; set; }
 }

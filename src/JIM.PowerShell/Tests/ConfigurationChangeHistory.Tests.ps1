@@ -33,13 +33,14 @@ Describe 'Get-JIMConfigurationChangeHistory' {
     }
 
     Context 'Parameter validation' {
-        It 'Requires Type and restricts it to the three configuration object kinds' {
+        It 'Requires Type and restricts it to the covered configuration object kinds' {
             $type = $command.Parameters['Type']
             ($type.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory }) | Should -Not -BeNullOrEmpty
             $validateSet = $type.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
             $validateSet.ValidValues | Should -Contain 'SynchronisationRule'
             $validateSet.ValidValues | Should -Contain 'ConnectedSystem'
             $validateSet.ValidValues | Should -Contain 'Schedule'
+            $validateSet.ValidValues | Should -Contain 'ServiceSetting'
         }
 
         It 'Accepts Id from the pipeline by property name' {
@@ -57,6 +58,13 @@ Describe 'Get-JIMConfigurationChangeHistory' {
 
         It 'Rejects a non-integer Id for -Type SynchronisationRule' {
             { Get-JIMConfigurationChangeHistory -Type SynchronisationRule -Id ([Guid]::NewGuid().ToString()) -ErrorAction Stop } | Should -Throw '*integer*'
+        }
+
+        It 'Accepts a dot-notation string key for -Type ServiceSetting (no id-shape rejection)' {
+            # Service Settings are string-keyed, so any non-empty key passes shape validation; disconnected, the
+            # next failure must be the connect-first error, not an id-shape error.
+            Disconnect-JIM
+            { Get-JIMConfigurationChangeHistory -Type ServiceSetting -Id 'History.RetentionPeriod' -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
         }
 
         It 'Exposes Version, CompareFrom, CompareTo, AsDiff and Raw' {
@@ -93,7 +101,8 @@ Describe 'Get-JIMConfigurationChangeHistory' {
 
 Describe 'ChangeReason on configuration write cmdlets' {
     It '<_> exposes an optional ChangeReason parameter' -ForEach @(
-        'New-JIMSyncRule', 'Set-JIMSyncRule', 'Remove-JIMSyncRule', 'New-JIMConnectedSystem', 'Set-JIMConnectedSystem'
+        'New-JIMSyncRule', 'Set-JIMSyncRule', 'Remove-JIMSyncRule', 'New-JIMConnectedSystem', 'Set-JIMConnectedSystem',
+        'Set-JIMServiceSetting', 'Reset-JIMServiceSetting'
     ) {
         $param = (Get-Command $_).Parameters['ChangeReason']
         $param | Should -Not -BeNullOrEmpty

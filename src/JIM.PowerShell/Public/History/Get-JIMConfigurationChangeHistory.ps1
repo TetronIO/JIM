@@ -4,7 +4,8 @@
 function Get-JIMConfigurationChangeHistory {
     <#
     .SYNOPSIS
-        Gets the configuration change history for a Synchronisation Rule, Connected System, or Schedule in JIM.
+        Gets the configuration change history for a Synchronisation Rule, Connected System, Schedule, or Service
+        Setting in JIM.
 
     .DESCRIPTION
         Retrieves the recorded configuration changes for a configuration object. Three modes are supported:
@@ -20,12 +21,14 @@ function Get-JIMConfigurationChangeHistory {
         is reported only as "changed", never by value.
 
     .PARAMETER Type
-        The kind of configuration object: 'SynchronisationRule', 'ConnectedSystem', or 'Schedule'.
+        The kind of configuration object: 'SynchronisationRule', 'ConnectedSystem', 'Schedule', or
+        'ServiceSetting'.
 
     .PARAMETER Id
         The unique identifier of the configuration object: an integer for a Synchronisation Rule or Connected
-        System, or a GUID for a Schedule. Accepts the 'id' property from the pipeline, so a piped
-        Synchronisation Rule, Connected System, or Schedule binds automatically.
+        System, a GUID for a Schedule, or the dot-notation setting key for a Service Setting (e.g.
+        "History.RetentionPeriod"). Accepts the 'id' property from the pipeline, so a piped Synchronisation
+        Rule, Connected System, or Schedule binds automatically.
 
     .PARAMETER All
         Automatically paginate through all change-history entries and return every row. Cannot be used with -Page.
@@ -87,6 +90,11 @@ function Get-JIMConfigurationChangeHistory {
 
         Pipes a Schedule in (binding its GUID id) and lists its recorded configuration changes.
 
+    .EXAMPLE
+        Get-JIMConfigurationChangeHistory -Type ServiceSetting -Id 'History.RetentionPeriod'
+
+        Lists the recorded configuration changes for the history retention period Service Setting.
+
     .LINK
         Get-JIMSyncRule
 
@@ -100,11 +108,11 @@ function Get-JIMConfigurationChangeHistory {
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('SynchronisationRule', 'ConnectedSystem', 'Schedule')]
+        [ValidateSet('SynchronisationRule', 'ConnectedSystem', 'Schedule', 'ServiceSetting')]
         [string]$Type,
 
-        # A string rather than [int] so it can carry either an integer (Synchronisation Rule / Connected System)
-        # or a GUID (Schedule); validated per -Type in the process block.
+        # A string rather than [int] so it can carry an integer (Synchronisation Rule / Connected System), a GUID
+        # (Schedule), or a setting key (Service Setting); validated per -Type in the process block.
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [ValidateNotNullOrEmpty()]
         [string]$Id,
@@ -144,7 +152,8 @@ function Get-JIMConfigurationChangeHistory {
 
     process {
         # Validate the id shape per object type before anything else (so a bad id fails fast, even offline):
-        # Synchronisation Rules and Connected Systems are integer-keyed, Schedules are GUID-keyed.
+        # Synchronisation Rules and Connected Systems are integer-keyed, Schedules are GUID-keyed, and Service
+        # Settings are keyed by their dot-notation setting key.
         if ($Type -eq 'Schedule') {
             $parsedGuid = [Guid]::Empty
             if (-not [Guid]::TryParse($Id, [ref]$parsedGuid)) {
@@ -152,6 +161,10 @@ function Get-JIMConfigurationChangeHistory {
                 return
             }
             $base = "/api/v1/schedules/$Id/change-history"
+        }
+        elseif ($Type -eq 'ServiceSetting') {
+            # Any non-empty string is a candidate key; escape it for the URL path.
+            $base = "/api/v1/service-settings/$([uri]::EscapeDataString($Id))/change-history"
         }
         else {
             $parsedInt = 0

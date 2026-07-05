@@ -68,6 +68,21 @@ public class ConfigurationChangeCaptureService
     }
 
     /// <summary>
+    /// String-keyed counterpart of
+    /// <see cref="CaptureChangeAsync(Activity,string?,ActivityTargetType,int,Func{byte[],Task{ConfigurationSnapshot?}},string)"/>,
+    /// for configuration objects (e.g. a Service Setting) whose primary key is a string.
+    /// </summary>
+    public async Task CaptureChangeAsync(Activity activity, string? changeReason, ActivityTargetType targetType,
+        string targetObjectKey, Func<byte[], Task<ConfigurationSnapshot?>> buildSnapshotAsync, string targetDescription)
+    {
+        await CaptureChangeCoreAsync(activity, changeReason, buildSnapshotAsync,
+            () => activity.SetConfigurationTargetId(targetType, targetObjectKey),
+            () => Application.Activities.GetLatestConfigurationChangeSnapshotAsync(targetType, targetObjectKey),
+            () => Application.Activities.GetNextConfigurationChangeVersionAsync(targetType, targetObjectKey),
+            targetDescription);
+    }
+
+    /// <summary>
     /// Captures an unversioned tombstone snapshot onto a delete Activity, before the object is removed. Matching
     /// the established Synchronisation Rule and Schedule deletion behaviour, this sets neither the Activity's
     /// target column nor a version: the object is deleted before the Activity completes, so the Activity is left

@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Scheduling;
 using JIM.Models.Staging;
@@ -31,6 +32,9 @@ public class ConfigurationSnapshotService
 
     /// <summary>The object-type discriminator stored on a Schedule snapshot.</summary>
     public const string ScheduleObjectType = "Schedule";
+
+    /// <summary>The object-type discriminator stored on a Service Setting snapshot.</summary>
+    public const string ServiceSettingObjectType = "ServiceSetting";
 
     private JimApplication Application { get; }
 
@@ -461,6 +465,50 @@ public class ConfigurationSnapshotService
             items.Add(ConfigurationSnapshotNode.ObjectNode("step", children, label, step.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("steps", items, "Steps");
+    }
+
+    // -- Service Setting -----------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a scoped snapshot of a Service Setting: its identity and typing metadata, the current (override) value,
+    /// the default value, and the override-vs-default flag, so a revert diffs as the override being removed. For
+    /// <see cref="ServiceSettingValueType.StringEncrypted"/> settings the value and default are never stored in any
+    /// recoverable form; each is represented by a keyed hash so a rotation is detectable without disclosure.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(ServiceSetting setting, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(setting);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "key", setting.Key, "Key");
+        Add(children, "displayName", setting.DisplayName, "Name");
+        AddEnum(children, "category", setting.Category, "Category");
+        AddEnum(children, "valueType", setting.ValueType, "Value type");
+
+        if (setting.ValueType == ServiceSettingValueType.StringEncrypted)
+        {
+            // An unset secret is not configuration; skip it rather than record an empty hash, matching the
+            // Connected System setting-value treatment.
+            if (!string.IsNullOrEmpty(setting.Value))
+                children.Add(ConfigurationSnapshotNode.Secret("value", ComputeSecretHash(setting.Value, hashKey), "Value"));
+            if (!string.IsNullOrEmpty(setting.DefaultValue))
+                children.Add(ConfigurationSnapshotNode.Secret("defaultValue", ComputeSecretHash(setting.DefaultValue, hashKey), "Default value"));
+        }
+        else
+        {
+            Add(children, "value", setting.Value, "Value");
+            Add(children, "defaultValue", setting.DefaultValue, "Default value");
+        }
+
+        Add(children, "overridden", Render(setting.IsOverridden), "Overridden");
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = ServiceSettingObjectType,
+            ObjectKey = setting.Key,
+            ObjectName = setting.DisplayName,
+            Root = ConfigurationSnapshotNode.ObjectNode("serviceSetting", children, "Service Setting")
+        };
     }
 
     // -- value rendering -----------------------------------------------------------------------------------------------
