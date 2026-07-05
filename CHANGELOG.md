@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ The Activity list is now easier to audit: a category quick-filter isolates Configuration, Identity, Synchronisation, or System activity in one click, new initiator (user, API key, or system) and created date-range filters narrow the view, and the filter state is reflected in the URL so a filtered view can be bookmarked or shared.
 - ✨ Example data generation templates can now construct a text attribute from an expression, using the same `mv["Attribute Name"]` syntax and function library as Synchronisation Rule Attribute Flows, so a generated value can be transformed from other attributes on the same object (for example an email domain derived from the assigned company). Referenced attributes are generated first, and circular references are detected up front.
 - ✨ Metaverse attributes contributed by more than one Connected System now resolve to a single winner by a configurable per-attribute priority order, so a higher-priority source is never overwritten by a lower-priority one. An advanced "Null is a value" option lets an authoritative source positively assert "no value", clearing the attribute downstream instead of falling through to a lower-priority source.
+- ✨ Synchronisation Activities now report when an attribute became blank with nothing contributing a replacement, as a distinct "MVO No Contributor" outcome alongside the existing "MVO Null Asserted", so administrators can tell a deliberate clear from one caused by every source falling away.
 
 #### API & PowerShell Coverage (#154)
 
@@ -38,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🔄 When more than one Connected System contributes to the same Metaverse attribute, JIM now resolves the value by attribute priority instead of by synchronisation timing (last-writer-wins). Single-source attributes are unaffected; existing multi-source attributes resolve deterministically until you set an explicit priority order.
 - 🔄 When the source currently providing a multi-source attribute disconnects, JIM now hands the attribute to the next-priority Connected System still contributing it, rather than clearing the value. The attribute is only cleared when no other source contributes.
+- 🔄 Attribute hand-over on source disconnection now also covers reference attributes (such as a manager) in the same synchronisation run, and correctly retains a value when the surviving source holds an identical copy; previously an identical value could be cleared until the surviving source next synchronised.
+- 🔄 Attribute hand-over now also triggers when a still-connected source simply stops supplying a value: the next-priority contributor takes over in the same synchronisation run instead of the attribute staying blank until that contributor next synchronises.
 
 ### Performance
 

@@ -66,7 +66,15 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeType
     /// "no value" for an attribute, persisting an asserted-null marker that clears the attribute downstream. Emitted
     /// during inbound attribute flow so an admin can see a blank was deliberately asserted, not merely uncontributed.
     /// </summary>
-    AssertedNull
+    AssertedNull,
+
+    /// <summary>
+    /// Attribute priority (#91): an attribute value was cleared because no contributor supplied a replacement; the
+    /// last contributing rule stopped providing a value (withdrew it, or its Connected System Object was obsoleted
+    /// with no surviving contributor to re-elect) and nothing asserted the blank. Emitted during inbound attribute
+    /// flow and attribute recall; an attribute that was already blank reports nothing.
+    /// </summary>
+    NoContributor
 }
 
 /// <summary>
