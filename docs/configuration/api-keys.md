@@ -34,6 +34,12 @@ A key carries the permissions of its assigned roles. Almost all endpoints curren
 
 JIM records the timestamp and source IP of each successful authentication. This is useful for spotting unused keys (good rotation candidates) and unexpected callers (potential compromise indicators).
 
+## Change history
+
+Every change to an API key is recorded in [configuration change history](activities.md#configuration-change-history): creating, editing, enabling, disabling, or deleting a key captures a versioned snapshot of its metadata (name, description, key prefix, expiry, enabled state, infrastructure flag, and Role assignments) alongside who made the change, when, and an optional reason. The key secret is never captured in any form, not even a hash: JIM stores only the SHA-256 hash used for authentication on the key itself, and that hash is not part of the change history payload. Last-used tracking (timestamp and source IP) is operational state, not configuration, so it is not part of the history either.
+
+Open a key's history from the Changes tab on its detail page, or retrieve it with `Get-JIMConfigurationChangeHistory -Type ApiKey` or the REST API. The optional "Reason for change" prompt appears when creating, editing, or deleting a key in the admin portal; automation can pass the same reason via `-ChangeReason` on the API key write cmdlets.
+
 ## Common workflows
 
 **Issuing a key for a CI/CD integration:**

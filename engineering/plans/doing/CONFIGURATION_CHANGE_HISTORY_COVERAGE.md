@@ -1,6 +1,6 @@
 # Configuration Change History Coverage - Implementation Plan
 
-- **Status:** Doing (Phases 1-4 complete)
+- **Status:** Doing (Phases 1-5 complete)
 - **Issue:** [#14](https://github.com/TetronIO/JIM/issues/14) *(sub-task of the parent change-history issue)*
 - **PRD:** [`engineering/prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md`](../../prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md)
 - **Note (2026-07-05):** Phase 1 verification disproved the presumed Schedule step capture gap: there are no step REST endpoints (`Add-JIMScheduleStep` performs a whole-Schedule PUT), and both step-mutation surfaces (the editor dialog and the REST update endpoint) reconcile steps and then call the audited `UpdateScheduleAsync`, which captures the step changes in exactly one version per save. Making the bare step methods capture unconditionally would have double-recorded on every editor/REST save, so Phase 1 instead documented the caller contract on those methods. The durable fix (consolidating step reconciliation into `UpdateScheduleAsync` and making the bare methods private, which also removes the duplicated reconcile logic in the dialog and controller) is proposed as a follow-up slice.
@@ -184,11 +184,13 @@ Added after Phase 4, prompted by the Phase 5 finding that API key CRUD bypassed 
 
 Pure relocation throughout: no behaviour change, REST contracts unchanged, existing test suite green. Phase 5 now builds capture onto an already-clean `SecurityServer` surface.
 
-### Phase 5: API Keys (Tier 2, security-critical)
-1. **N-tier fix first**: API key operations move onto `SecurityServer` (decided 2026-07-05: API keys are security principals carrying Role assignments, and Phase 6 routes Role capture through `SecurityServer` anyway, so both security-principal types share one audited home; a separate `ApiKeyServer` was considered and rejected). `ApiKeyList.razor`, `ApiKeyDetail.razor`, and `ApiKeysController` refactored onto it with unchanged REST contracts.
-2. Activity plumbing (`ActivityTargetType.ApiKey`, `ApiKeyId` FK) + snapshot capture; the secret never appears in any snapshot in any form (explicit test); delete tombstone.
-3. REST routes + `ChangeReason` on write DTOs; `-ChangeReason` on `New-JIMApiKey`/`Set-JIMApiKey`; `-Type ApiKey` (Guid-keyed).
-4. UI: `ApiKeyDetail` converted to `NavigableMudTabs` (Details / Activity / Changes); reason prompts on the list page's create/edit/delete dialogs.
+### Phase 5: API Keys (Tier 2, security-critical) ✅
+1. **N-tier fix first**: API key operations move onto `SecurityServer` (decided 2026-07-05: API keys are security principals carrying Role assignments, and Phase 6 routes Role capture through `SecurityServer` anyway, so both security-principal types share one audited home; a separate `ApiKeyServer` was considered and rejected). `ApiKeyList.razor`, `ApiKeyDetail.razor`, and `ApiKeysController` refactored onto it with unchanged REST contracts. ✅ (delivered by the interim N-tier enforcement slice)
+2. Activity plumbing (`ActivityTargetType.ApiKey`, `ApiKeyId` FK) + snapshot capture; the secret never appears in any snapshot in any form (explicit test); delete tombstone. ✅
+3. REST routes + `ChangeReason` on write DTOs; `-ChangeReason` on `New-JIMApiKey`/`Set-JIMApiKey`/`Remove-JIMApiKey`; `-Type ApiKey` (Guid-keyed). ✅
+4. UI: `ApiKeyDetail` converted to `NavigableMudTabs` (Details / Activity / Changes); reason prompts on the list page's create/edit/delete dialogs. ✅
+
+Delivery notes (2026-07-05): the snapshot stores metadata plus Role assignments as reference nodes (ItemId-matched, so re-binding diffs but renaming a Role does not); `KeyHash` is excluded in every form (not even a keyed hash, unlike Connected System credentials, since a key is replaced rather than edited; asserted by test) and `LastUsedAt`/`LastUsedFromIp` are excluded as operational state so authentication traffic cannot churn the dedupe. `RecordApiKeyUsageAsync` deliberately records no Activity. The null-initiator path (JIM.Web bootstrap infrastructure key) falls back to a System-attributed Activity because `ActivityServer.CreateActivityAsync(activity, (MetaverseObject?)null)` would otherwise fail validation; that doc/implementation mismatch in `ActivityServer` is worth a central follow-up. Two adjacent bugs fixed in passing: `ApiKeyRepository.UpdateAsync` and `TrustedCertificateRepository.UpdateAsync` re-load the tracked row and copied only functional fields, silently dropping the `LastUpdated*` audit stamp under JIM.Web's NoTracking default; both now copy the audit fields.
 
 ### Phase 6: Roles (Tier 2, security-critical)
 1. Role snapshot builder (definition fields + member list); `RoleId` FK routing.

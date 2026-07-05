@@ -10,6 +10,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Scheduling;
+using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Utilities;
 
@@ -44,6 +45,9 @@ public class ConfigurationSnapshotService
 
     /// <summary>The object-type discriminator stored on a Trusted Certificate snapshot.</summary>
     public const string TrustedCertificateObjectType = "TrustedCertificate";
+
+    /// <summary>The object-type discriminator stored on an API Key snapshot.</summary>
+    public const string ApiKeyObjectType = "ApiKey";
 
     private JimApplication Application { get; }
 
@@ -653,6 +657,56 @@ public class ConfigurationSnapshotService
             ObjectName = certificate.Name,
             Root = ConfigurationSnapshotNode.ObjectNode("trustedCertificate", children, "Trusted Certificate")
         };
+    }
+
+    // -- API Key ---------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a metadata-only snapshot of an API Key (a Guid-keyed configuration object): its name, description, key
+    /// prefix, expiry, enabled state, whether it is an infrastructure key, and its Role assignments. The key's secret
+    /// material (<see cref="ApiKey.KeyHash"/>) is never captured in any form, not even a keyed hash: unlike a
+    /// Connected System credential there is no legitimate "did it change" question for it, since a key is deleted and
+    /// replaced rather than edited in place, so recording even a hash would serve no purpose beyond risk.
+    /// <see cref="ApiKey.LastUsedAt"/> and <see cref="ApiKey.LastUsedFromIp"/> are operational state, not
+    /// configuration, and are excluded so authentication traffic does not churn the semantic dedupe. API Keys carry
+    /// no other secrets; <paramref name="hashKey"/> keeps the signature uniform with the other builders.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(ApiKey apiKey, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(apiKey);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", apiKey.Name, "Name");
+        Add(children, "description", apiKey.Description, "Description");
+        Add(children, "keyPrefix", apiKey.KeyPrefix, "Key prefix");
+        Add(children, "expiresAt", Render(apiKey.ExpiresAt), "Expires");
+        Add(children, "enabled", Render(apiKey.IsEnabled), "Enabled");
+        Add(children, "infrastructureKey", Render(apiKey.IsInfrastructureKey), "Infrastructure key");
+        children.Add(BuildRoleAssociations(apiKey.Roles));
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = ApiKeyObjectType,
+            ObjectGuidId = apiKey.Id,
+            ObjectName = apiKey.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("apiKey", children, "API Key")
+        };
+    }
+
+    private static ConfigurationSnapshotNode BuildRoleAssociations(List<Role>? roles)
+    {
+        // Associations are captured as references (stable id value, name as the display form), mirroring
+        // BuildAttributeAssociations: binding or unbinding a Role to this key is this key's configuration change;
+        // renaming the Role itself is that Role's own configuration history, so it must not register as a change
+        // here.
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var role in (roles ?? []).OrderBy(r => r.Id))
+        {
+            var node = ConfigurationSnapshotNode.Scalar("roleId", Render(role.Id), "Role", role.Name);
+            node.ItemId = role.Id;
+            items.Add(node);
+        }
+        return ConfigurationSnapshotNode.CollectionNode("roles", items, "Roles");
     }
 
     // -- value rendering -----------------------------------------------------------------------------------------------

@@ -3,6 +3,8 @@
 
 using Asp.Versioning;
 using JIM.Application;
+using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Security;
 using JIM.Utilities;
 using JIM.Web.Middleware.Api;
@@ -27,7 +29,7 @@ namespace JIM.Web.Controllers.Api;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrator")]
 [Produces("application/json")]
-public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication application) : ControllerBase
+public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication application) : ApiControllerBase(application, logger)
 {
     private readonly ILogger<ApiKeysController> _logger = logger;
     private readonly JimApplication _application = application;
@@ -127,8 +129,10 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
             Roles = roles
         };
 
-        apiKey.Created = DateTime.UtcNow;
-        var createdKey = await _application.Security.CreateApiKeyAsync(apiKey);
+        var callerApiKey = await GetCurrentApiKeyAsync();
+        var createdKey = callerApiKey != null
+            ? await _application.Security.CreateApiKeyAsync(apiKey, callerApiKey, request.ChangeReason)
+            : await _application.Security.CreateApiKeyAsync(apiKey, await GetCurrentUserAsync(), request.ChangeReason);
 
         _logger.LogInformation("Created API key {ApiKeyId} with prefix {KeyPrefix}", createdKey.Id, keyPrefix);
 
@@ -198,7 +202,10 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
         existingKey.IsEnabled = request.IsEnabled;
         existingKey.Roles = roles;
 
-        var updatedKey = await _application.Security.UpdateApiKeyAsync(existingKey);
+        var callerApiKey = await GetCurrentApiKeyAsync();
+        var updatedKey = callerApiKey != null
+            ? await _application.Security.UpdateApiKeyAsync(existingKey, callerApiKey, request.ChangeReason)
+            : await _application.Security.UpdateApiKeyAsync(existingKey, await GetCurrentUserAsync(), request.ChangeReason);
 
         _logger.LogInformation("Updated API key {ApiKeyId}", id);
 
@@ -209,13 +216,14 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
     /// Delete an API key
     /// </summary>
     /// <param name="id">The unique identifier of the API key to delete.</param>
+    /// <param name="changeReason">Optional reason for the deletion, recorded on the audit Activity.</param>
     /// <returns>No content on success.</returns>
     [HttpDelete("{id:guid}", Name = "DeleteApiKey")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteAsync(Guid id)
+    public async Task<IActionResult> DeleteAsync(Guid id, [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Deleting API key {ApiKeyId}", id);
 
@@ -225,10 +233,78 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
             return NotFound(new ApiErrorResponse { Message = $"API key not found: {id}" });
         }
 
-        await _application.Security.DeleteApiKeyAsync(id);
+        var callerApiKey = await GetCurrentApiKeyAsync();
+        if (callerApiKey != null)
+            await _application.Security.DeleteApiKeyAsync(id, callerApiKey, changeReason);
+        else
+            await _application.Security.DeleteApiKeyAsync(id, await GetCurrentUserAsync(), changeReason);
 
         _logger.LogInformation("Deleted API key {ApiKeyId} (prefix: {KeyPrefix})", id, existingKey.KeyPrefix);
 
         return NoContent();
     }
+
+    #region Configuration Change History
+
+    /// <summary>
+    /// List the change history for an API Key.
+    /// </summary>
+    /// <param name="id">The unique identifier (GUID) of the API key.</param>
+    /// <param name="pagination">Pagination parameters.</param>
+    /// <returns>A paged list of change-history entries, newest version first, each with a one-line summary.</returns>
+    /// <response code="200">Change history returned (empty if the API key has no recorded configuration changes).</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("{id:guid}/change-history", Name = "GetApiKeyChangeHistory")]
+    [ProducesResponseType(typeof(PaginatedResponse<ConfigurationChangeHistoryItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetApiKeyChangeHistoryAsync(Guid id, [FromQuery] PaginationRequest pagination)
+    {
+        var result = await _application.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ApiKey, id, pagination.Page, pagination.PageSize);
+        return Ok(PaginatedResponse<ConfigurationChangeHistoryItem>.Create(result.Results, result.TotalResults, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
+    /// Get a single version of an API Key's change history, with its snapshot and the diff against the previous version.
+    /// </summary>
+    /// <param name="id">The unique identifier (GUID) of the API key.</param>
+    /// <param name="changeVersion">The per-object change version to retrieve.</param>
+    /// <returns>The change detail: metadata, the snapshot, and the diff against the previous version.</returns>
+    /// <response code="200">The change detail.</response>
+    /// <response code="404">No change with that version was found for the API key.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("{id:guid}/change-history/{changeVersion:int}", Name = "GetApiKeyChange")]
+    [ProducesResponseType(typeof(ConfigurationChangeDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetApiKeyChangeAsync(Guid id, int changeVersion)
+    {
+        var detail = await _application.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ApiKey, id, changeVersion);
+        if (detail == null)
+            return NotFound(ApiErrorResponse.NotFound($"No change history found for API Key {id} version {changeVersion}."));
+        return Ok(detail);
+    }
+
+    /// <summary>
+    /// Compare two versions of an API Key's configuration.
+    /// </summary>
+    /// <param name="id">The unique identifier (GUID) of the API key.</param>
+    /// <param name="fromVersion">The earlier version to compare from.</param>
+    /// <param name="toVersion">The later version to compare to.</param>
+    /// <returns>The structured diff of the later version against the earlier.</returns>
+    /// <response code="200">The diff.</response>
+    /// <response code="404">One of the requested versions was not found for the API key.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("{id:guid}/change-history/compare", Name = "CompareApiKeyChanges")]
+    [ProducesResponseType(typeof(ConfigurationDiff), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CompareApiKeyChangesAsync(Guid id, [FromQuery] int fromVersion, [FromQuery] int toVersion)
+    {
+        var diff = await _application.ChangeHistory.CompareConfigurationChangesAsync(ActivityTargetType.ApiKey, id, fromVersion, toVersion);
+        if (diff == null)
+            return NotFound(ApiErrorResponse.NotFound($"Could not compare versions {fromVersion} and {toVersion} for API Key {id}."));
+        return Ok(diff);
+    }
+
+    #endregion
 }

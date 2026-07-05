@@ -72,6 +72,14 @@ public class ApiKeyRepository : IApiKeyRepository
         existingKey.ExpiresAt = apiKey.ExpiresAt;
         existingKey.IsEnabled = apiKey.IsEnabled;
 
+        // Copy the audit stamp too: callers (JIM.Web) query with NoTracking, so the instance the application layer
+        // stamped is detached and these values would otherwise be silently dropped when this method re-loads the
+        // tracked row.
+        existingKey.LastUpdated = apiKey.LastUpdated;
+        existingKey.LastUpdatedByType = apiKey.LastUpdatedByType;
+        existingKey.LastUpdatedById = apiKey.LastUpdatedById;
+        existingKey.LastUpdatedByName = apiKey.LastUpdatedByName;
+
         // Update roles - clear and re-add
         existingKey.Roles.Clear();
         if (apiKey.Roles.Count > 0)

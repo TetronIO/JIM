@@ -274,6 +274,9 @@
 </MudDialog>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
     private List<ApiKey>? _apiKeys;
     private List<Role> _availableRoles = new();
     private string _searchString = "";
@@ -386,6 +389,11 @@
 
         try
         {
+            // offer an optional reason for the configuration change history; cancelling aborts the create
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Create");
+            if (cancelled)
+                return;
+
             // Generate the API key
             var (fullKey, keyPrefix) = ApiKeyAuthenticationHandler.GenerateApiKey();
             var keyHash = ApiKeyAuthenticationHandler.HashApiKey(fullKey);
@@ -406,8 +414,8 @@
             };
 
             using var jim = JimFactory.Create();
-            apiKey.Created = DateTime.UtcNow;
-            await jim.Security.CreateApiKeyAsync(apiKey);
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            await jim.Security.CreateApiKeyAsync(apiKey, user, changeReason);
 
             Snackbar.Add("API key created successfully.", Severity.Success);
             _createDialogVisible = false;
@@ -462,6 +470,11 @@
 
         try
         {
+            // offer an optional reason for the configuration change history; cancelling aborts the save
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+            if (cancelled)
+                return;
+
             // Create a new ApiKey object with updated values to avoid EF tracking issues
             // The repository will fetch the actual entity and update it
             var updatedKey = new ApiKey
@@ -476,7 +489,8 @@
             };
 
             using var jim = JimFactory.Create();
-            await jim.Security.UpdateApiKeyAsync(updatedKey);
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            await jim.Security.UpdateApiKeyAsync(updatedKey, user, changeReason);
 
             Snackbar.Add("API key updated successfully.", Severity.Success);
             _editDialogVisible = false;
@@ -503,10 +517,16 @@
         if (result != true)
             return;
 
+        // offer an optional reason for the configuration change history; cancelling aborts the delete
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
+        if (cancelled)
+            return;
+
         try
         {
             using var jim = JimFactory.Create();
-            await jim.Security.DeleteApiKeyAsync(apiKey.Id);
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            await jim.Security.DeleteApiKeyAsync(apiKey.Id, user, changeReason);
 
             Snackbar.Add("API key deleted successfully.", Severity.Success);
             await LoadDataAsync();

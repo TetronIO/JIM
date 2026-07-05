@@ -5,7 +5,7 @@ function Get-JIMConfigurationChangeHistory {
     <#
     .SYNOPSIS
         Gets the configuration change history for a Synchronisation Rule, Connected System, Schedule, Service
-        Setting, Metaverse Object Type, Metaverse Attribute, or Trusted Certificate in JIM.
+        Setting, Metaverse Object Type, Metaverse Attribute, Trusted Certificate, or API Key in JIM.
 
     .DESCRIPTION
         Retrieves the recorded configuration changes for a configuration object. Three modes are supported:
@@ -22,13 +22,13 @@ function Get-JIMConfigurationChangeHistory {
 
     .PARAMETER Type
         The kind of configuration object: 'SynchronisationRule', 'ConnectedSystem', 'Schedule',
-        'ServiceSetting', 'MetaverseObjectType', 'MetaverseAttribute', or 'TrustedCertificate'.
+        'ServiceSetting', 'MetaverseObjectType', 'MetaverseAttribute', 'TrustedCertificate', or 'ApiKey'.
 
     .PARAMETER Id
         The unique identifier of the configuration object: an integer for a Synchronisation Rule, Connected
-        System, Metaverse Object Type, or Metaverse Attribute, a GUID for a Schedule or Trusted Certificate,
-        or the dot-notation setting key for a Service Setting (e.g. "History.RetentionPeriod"). Accepts the
-        'id' property from the pipeline, so a piped object binds automatically.
+        System, Metaverse Object Type, or Metaverse Attribute, a GUID for a Schedule, Trusted Certificate, or
+        API Key, or the dot-notation setting key for a Service Setting (e.g. "History.RetentionPeriod").
+        Accepts the 'id' property from the pipeline, so a piped object binds automatically.
 
     .PARAMETER All
         Automatically paginate through all change-history entries and return every row. Cannot be used with -Page.
@@ -105,6 +105,11 @@ function Get-JIMConfigurationChangeHistory {
 
         Pipes a Trusted Certificate in (binding its GUID id) and lists its recorded configuration changes.
 
+    .EXAMPLE
+        Get-JIMApiKey | Get-JIMConfigurationChangeHistory -Type ApiKey
+
+        Pipes an API Key in (binding its GUID id) and lists its recorded configuration changes.
+
     .LINK
         Get-JIMSyncRule
 
@@ -118,7 +123,7 @@ function Get-JIMConfigurationChangeHistory {
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('SynchronisationRule', 'ConnectedSystem', 'Schedule', 'ServiceSetting', 'MetaverseObjectType', 'MetaverseAttribute', 'TrustedCertificate')]
+        [ValidateSet('SynchronisationRule', 'ConnectedSystem', 'Schedule', 'ServiceSetting', 'MetaverseObjectType', 'MetaverseAttribute', 'TrustedCertificate', 'ApiKey')]
         [string]$Type,
 
         # A string rather than [int] so it can carry an integer (Synchronisation Rule / Connected System), a GUID
@@ -163,16 +168,19 @@ function Get-JIMConfigurationChangeHistory {
     process {
         # Validate the id shape per object type before anything else (so a bad id fails fast, even offline):
         # Synchronisation Rules, Connected Systems, Metaverse Object Types and Metaverse Attributes are
-        # integer-keyed, Schedules and Trusted Certificates are GUID-keyed, and Service Settings are keyed by
-        # their dot-notation setting key.
-        if ($Type -in 'Schedule', 'TrustedCertificate') {
+        # integer-keyed, Schedules, Trusted Certificates and API Keys are GUID-keyed, and Service Settings are
+        # keyed by their dot-notation setting key.
+        if ($Type -in 'Schedule', 'TrustedCertificate', 'ApiKey') {
             $parsedGuid = [Guid]::Empty
             if (-not [Guid]::TryParse($Id, [ref]$parsedGuid)) {
                 Write-Error "For -Type $Type, -Id must be a GUID ($($Type)s are GUID-keyed). Got: '$Id'."
                 return
             }
-            $base = if ($Type -eq 'Schedule') { "/api/v1/schedules/$Id/change-history" }
-                    else { "/api/v1/certificates/$Id/change-history" }
+            $base = switch ($Type) {
+                'Schedule' { "/api/v1/schedules/$Id/change-history" }
+                'TrustedCertificate' { "/api/v1/certificates/$Id/change-history" }
+                'ApiKey' { "/api/v1/apikeys/$Id/change-history" }
+            }
         }
         elseif ($Type -eq 'ServiceSetting') {
             # Any non-empty string is a candidate key; escape it for the URL path.
