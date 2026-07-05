@@ -220,19 +220,16 @@ This is the most important section to read before you write an expression that r
 
 When you reference an attribute the object does not have (for example `cs["middleName"]` on a person with no middle name), the expression sees **null**. There are three behaviours to understand.
 
-<!-- MAINTENANCE (#91 attribute priority): point 1 below describes today's unconditional clear on
-     null (SyncEngine.AttributeFlow.cs:204), correct only for a single contributor. When #91 lands,
-     a null becomes ConnectedNoValue and the resolver decides based on priority/NullIsValue, so a
-     null from a non-winning rule no longer clears. Reconcile this section and the date-function
-     note that links here. Points 2 and 3 remain valid. Tracked in
-     engineering/plans/doing/ATTRIBUTE_PRIORITY.md Phase 5. -->
-### 1. A null result means "no value", and clears the target
+### 1. A null result means "no value", never "leave it alone"
 
-When an expression evaluates to null, JIM treats that as a **deliberate assertion that the attribute should have no value**, not as "no opinion, leave it alone". For an import mapping, JIM removes any existing value from the target Metaverse attribute.
+When an expression evaluates to null, JIM treats that as a **deliberate assertion that the mapping supplies no value**, not as "no opinion, leave it alone". This is intentionally different from the behaviour of some traditional ILM tools, where a function call that returned null meant "do nothing".
 
-This is intentionally different from the behaviour of some traditional ILM tools, where a function call that returned null meant "do nothing". In JIM, null means **no value**, and a null result on an import mapping clears the target.
+What happens to the target depends on how many Synchronisation Rules contribute to the attribute:
 
-Which rule's value ultimately wins (and therefore whether a null from one rule actually clears a value contributed by another) is resolved by [priority](../configuration/synchronisation-rules.md#priority). The key authoring takeaway is simpler: **a null result is a clear, not a skip.** If you do not want an expression to clear the target when an input is missing, you must guard it (see point 3).
+- **A single contributor (the common case).**<br /> A null result clears the target: any existing value on the Metaverse attribute is removed.
+- **Multiple contributors.**<br /> [Attribute Priority](attribute-priority.md) resolves the outcome. A null from the winning rule hands the attribute to the next-priority contributor within the same synchronisation run, so a lower-priority source's value takes over rather than the attribute going blank; the target is only cleared when no contributor supplies a value. The exception is a rule with **"Null is a value"** set: its null is authoritative, the target is cleared, and lower-priority contributors are not consulted. A null from a lower-priority rule never disturbs the winning value.
+
+The authoring takeaway is the same either way: **a null result is never "keep the current value".** If you do not want a missing input to change the target, you must guard the expression (see point 3).
 
 ### 2. Built-in string functions are null-safe and propagate null
 
@@ -292,6 +289,8 @@ A result that is only whitespace (spaces, tabs, newlines) is, by default, collap
 | Concatenation with a missing operand (for example `a + "." + null`) | A real, possibly malformed value | ✅ Stored as-is, bypassing the null/clear path |
 | A non-empty value | That value | ✅ Stored |
 
+The "Effect on target" column describes an attribute with a single contributing Synchronisation Rule. Where several rules contribute, a "no value" outcome feeds [Attribute Priority](attribute-priority.md) resolution instead of clearing outright (see point 1).
+
 The rule of thumb: **reference a possibly-absent attribute and you risk clearing the target; concatenate one and you risk writing malformed data.** Guard with `Coalesce()`, `IIF()`, and the `IsNullOrEmpty` / `IsNullOrWhitespace` checks, and test with sample data (including the missing-input case) before you deploy.
 
 ## Common Scenarios
@@ -340,7 +339,7 @@ FromFileTime(cs["accountExpires"])
 
 **Important notes:**
 
-- If the date attribute is empty or missing, these functions return nothing (null), which clears the target (any existing value is removed); see [Nulls, Missing Inputs, and Whitespace](#nulls-missing-inputs-and-whitespace)
+- If the date attribute is empty or missing, these functions return nothing (null), which asserts "no value" for the target: for a sole contributor any existing value is removed; see [Nulls, Missing Inputs, and Whitespace](#nulls-missing-inputs-and-whitespace)
 - AD treats `0` and very large numbers as "never expires" -- `FromFileTime()` returns nothing for these values
 - `ToFileTime()` safely handles empty text, missing values, and invalid dates by returning nothing
 

@@ -831,7 +831,7 @@ Not a sub-issue: **#846** (holistic Guardrails) is deliberately *out of scope* (
 
 - [ ] Add user documentation for the attribute priority surfaces (object type detail page management home and the Data Flow page)
 - [ ] Add user documentation for NullIsValue setting
-- [ ] **Reconcile the existing expression-null docs (#844, already shipped).** `docs/concepts/expressions.md` § "Nulls, Missing Inputs, and Whitespace" (point 1) currently states a null expression result clears the target *unconditionally*, true only for a single contributor (matching today's `SyncEngine.AttributeFlow.cs:204` behaviour). Once this feature lands, a null becomes `ConnectedNoValue` and the resolver decides based on priority/`NullIsValue`, so a null from a non-winning rule no longer clears. Update that section (and the date-function note that links to it) to describe the priority/`NullIsValue` interaction rather than an unconditional clear. The point 2 (null-safe functions propagate null) and point 3 (string-concat yields malformed non-null) content stays valid.
+- [x] **Reconcile the existing expression-null docs (#844, already shipped).** Done (Jul 2026): `docs/concepts/expressions.md` § "Nulls, Missing Inputs, and Whitespace" point 1 now describes the single-contributor clear vs multi-contributor priority resolution (hand-over to the next contributor in the same run, "Null is a value" authoritative clear, a lower-priority null never disturbs the winning value), linking to `concepts/attribute-priority.md`; the date-function note and the summary table carry the same qualification. Points 2 and 3 unchanged (still valid). The maintenance comment that tracked this has been removed.
 
 ---
 
