@@ -19,6 +19,10 @@ function Set-JIMSyncRule {
     .PARAMETER Name
         The new name for the Sync Rule.
 
+    .PARAMETER Description
+        An optional description of what the Synchronisation Rule does.
+        Pass an empty string to clear an existing description.
+
     .PARAMETER Enable
         Enables the Sync Rule.
 
@@ -65,6 +69,11 @@ function Set-JIMSyncRule {
         Updates the name of the Sync Rule with ID 1.
 
     .EXAMPLE
+        Set-JIMSyncRule -Id 1 -Description "Imports user accounts from the HR system"
+
+        Updates the description of the Synchronisation Rule with ID 1. Pass -Description '' to clear it.
+
+    .EXAMPLE
         Set-JIMSyncRule -Id 1 -Disable
 
         Disables the Sync Rule with ID 1.
@@ -98,6 +107,9 @@ function Set-JIMSyncRule {
         [Parameter()]
         [ValidateNotNullOrEmpty()]
         [string]$Name,
+
+        [Parameter()]
+        [string]$Description,
 
         [Parameter(Mandatory, ParameterSetName = 'Enable')]
         [switch]$Enable,
@@ -143,6 +155,10 @@ function Set-JIMSyncRule {
 
         if ($Name) {
             $body.name = $Name
+        }
+
+        if ($PSBoundParameters.ContainsKey('Description')) {
+            $body.description = $Description
         }
 
         if ($Enable) {

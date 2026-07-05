@@ -16,6 +16,8 @@ Synchronisation Rules are the central configuration mechanism for identity synch
 4. **Projection or Provisioning**<br /> What to do when no match is found.
 5. **Attribute mappings**<br /> Which attributes to synchronise and how to transform them.
 
+Each rule also has a name and an optional **description**, a free-text note for recording what the rule is for and why it exists. The description is shown on the rule's Details tab and changes to it are tracked in the [configuration change history](activities.md#configuration-change-history).
+
 ## Direction
 
 Each rule has a direction that determines the flow of data.

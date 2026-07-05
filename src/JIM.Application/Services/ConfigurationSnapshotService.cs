@@ -72,6 +72,7 @@ public class ConfigurationSnapshotService
 
         var children = new List<ConfigurationSnapshotNode>();
         Add(children, "name", rule.Name, "Name");
+        Add(children, "description", rule.Description, "Description");
         AddEnum(children, "direction", rule.Direction, "Direction");
         Add(children, "enabled", Render(rule.Enabled), "Enabled");
         Add(children, "provisionToConnectedSystem", Render(rule.ProvisionToConnectedSystem), "Provision to Connected System");

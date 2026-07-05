@@ -4046,6 +4046,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         {
             Id = sr.Id,
             Name = sr.Name,
+            Description = sr.Description,
             ConnectedSystemName = sr.ConnectedSystem.Name,
             ConnectedSystemObjectTypeName = sr.ConnectedSystemObjectType.Name,
             Created = sr.Created,

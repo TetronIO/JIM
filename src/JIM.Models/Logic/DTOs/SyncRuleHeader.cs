@@ -12,6 +12,11 @@ public class SyncRuleHeader
 
     public string Name { get; set; } = null!;
 
+    /// <summary>
+    /// An optional description of what this Synchronisation Rule does, for administrator reference.
+    /// </summary>
+    public string? Description { get; set; }
+
     public DateTime Created { get; set; }
 
     public int ConnectedSystemId { get; set; }
@@ -50,6 +55,7 @@ public class SyncRuleHeader
         {
             Id = entity.Id,
             Name = entity.Name,
+            Description = entity.Description,
             Created = entity.Created,
             ConnectedSystemId = entity.ConnectedSystemId,
             ConnectedSystemName = entity.ConnectedSystem?.Name ?? string.Empty,
