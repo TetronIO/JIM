@@ -717,6 +717,9 @@ public static class Helpers
             // Attribute priority (#91): a deliberate clear worth drawing the eye to.
             ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull => Color.Warning,
 
+            // Attribute priority (#91): a value cleared with no contributor remaining; also worth attention.
+            ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => Color.Warning,
+
             _ => Color.Default,
         };
     }
@@ -747,6 +750,7 @@ public static class Helpers
             ActivityRunProfileExecutionItemSyncOutcomeType.Exported => "CSO Exported",
             ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned => "CSO Deprovisioned",
             ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull => "MVO Null Asserted",
+            ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => "MVO No Contributor",
             _ => outcomeType.ToString()
         };
     }
@@ -792,6 +796,9 @@ public static class Helpers
 
             // Attribute priority (#91): an explicit "no value" assertion.
             ActivityRunProfileExecutionItemSyncOutcomeType.AssertedNull => Icons.Material.Filled.DoNotDisturbOn,
+
+            // Attribute priority (#91): a value cleared because no contributor supplied a replacement.
+            ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor => Icons.Material.Filled.HighlightOff,
 
             _ => Icons.Material.Filled.Circle,
         };
