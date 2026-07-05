@@ -26,7 +26,7 @@
         else if (_schedule != null)
         {
             <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pt-4" @bind-ActivePanelIndex="_activeTab">
-                <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Settings">
+                <MudTabPanel Text="Details" Icon="@Icons.Material.Filled.Settings">
                     <MudStack Spacing="3">
                         @if (_schedule.BuiltIn)
                         {
@@ -44,6 +44,12 @@
 
                         <MudDivider Class="my-2" />
 
+                        <MudSwitch @bind-Value="_schedule.IsEnabled" Color="Color.Primary" Label="@(_schedule.IsEnabled ? "Schedule is Enabled" : "Schedule is Disabled")" />
+                    </MudStack>
+                </MudTabPanel>
+
+                <MudTabPanel Text="Trigger" Icon="@Icons.Material.Filled.Bolt">
+                    <MudStack Spacing="3">
                         <MudText Typo="Typo.subtitle2">Trigger</MudText>
 
                         <MudRadioGroup @bind-Value="_schedule.TriggerType">
@@ -182,10 +188,6 @@
                                 </MudStack>
                             </MudPaper>
                         }
-
-                        <MudDivider Class="my-2" />
-
-                        <MudSwitch @bind-Value="_schedule.IsEnabled" Color="Color.Primary" Label="@(_schedule.IsEnabled ? "Schedule is Enabled" : "Schedule is Disabled")" />
                     </MudStack>
                 </MudTabPanel>
 
