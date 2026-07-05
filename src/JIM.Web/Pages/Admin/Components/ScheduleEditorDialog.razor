@@ -40,7 +40,8 @@
                                       HelperText="@(_schedule.BuiltIn ? "This is a built-in schedule; its name cannot be changed." : "A descriptive name for this schedule")" />
 
                         <MudTextField @bind-Value="_schedule.Description" Label="Description" Variant="Variant.Outlined"
-                                      Lines="2" HelperText="Optional description of what this schedule does" />
+                                      Lines="2" MaxLines="6" Sizing="InputSizing.Auto"
+                                      HelperText="Optional description of what this schedule does" />
 
                         <MudDivider Class="my-2" />
 

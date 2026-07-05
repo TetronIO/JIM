@@ -32,7 +32,7 @@
         </MudSelect>
         <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="_model.Name"
                       Immediate="true" Variant="Variant.Outlined" />
-        <MudTextField Label="Description" @bind-Value="_model.Description" Lines="5" Variant="Variant.Outlined" />
+        <MudTextField Label="Description" @bind-Value="_model.Description" Lines="5" MaxLines="10" Sizing="InputSizing.Auto" Variant="Variant.Outlined" />
     </MudForm>
 </MudPaper>
 
