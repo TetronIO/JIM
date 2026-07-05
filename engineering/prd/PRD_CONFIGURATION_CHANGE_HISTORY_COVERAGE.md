@@ -3,7 +3,7 @@
 - **Status:** Planned
 - **Created:** 2026-07-05
 - **Author:** JayVDZ
-- **Issue:** #[number] *(create a GitHub issue and link it here)*
+- **Issue:** [#14](https://github.com/TetronIO/JIM/issues/14) *(tracked as a sub-task of the parent change-history issue)*
 
 ## Problem Statement
 
@@ -56,7 +56,7 @@ JIM is deployed in high-trust environments (healthcare, finance, government). "W
 **Tier 2: types that record no Activity today; add Activity plumbing, then snapshots**
 
 5. API Key create, update, and delete record an Activity and a versioned snapshot. The API key secret is never stored in any form (not even hashed) in the snapshot; role assignments and metadata are captured. Prerequisite: API key mutations move from the Blazor page into a proper application-layer server (the page currently calls the repository directly).
-6. Role assignment changes (adding or removing an object's membership of a Role, however initiated, including the automatic first-admin assignment) record an Activity and a versioned snapshot of the role's membership-relevant configuration.
+6. Role definitions and Role assignments are both versioned: changes to a Role's configuration record an Activity and a versioned snapshot (in anticipation of the wider RBAC roll-out under #612, where roles become admin-editable; the capture path must exist even while built-in Roles are seed-only), and adding or removing an object's membership of a Role (however initiated, including the automatic first-admin assignment) records an Activity and a versioned snapshot of the Role's membership-relevant configuration.
 7. Predefined Search create, update, and delete record an Activity and a versioned snapshot; criteria and criteria groups roll up into the owning Predefined Search's snapshot, mirroring how scoping criteria roll into a Synchronisation Rule.
 8. Connector Definition create, update, and delete (including connector file changes) record an Activity and a versioned snapshot of definition metadata (never connector binary content; file changes are recorded as name/size/hash).
 9. Example Data Template and Example Data Set create, update, and delete record an Activity and a versioned snapshot.
@@ -65,7 +65,7 @@ JIM is deployed in high-trust environments (healthcare, finance, government). "W
 
 10. Schedule step create, update, and delete via their direct application-layer methods capture a snapshot of the owning Schedule, so API-driven step changes are versioned the same as editor-driven ones.
 11. Each newly covered type's history is retrievable via `GetConfigurationChangeHistoryAsync` (correct key shape per type), the per-type REST `change-history` endpoints, and `Get-JIMConfigurationChangeHistory -Type <TypeName>`, with single-version diff and compare-two-versions parity.
-12. Each newly covered type's history is viewable in the admin portal from where the object is managed (a Changes tab where a detail page exists; a history affordance on the management dialog or list page otherwise, following the Schedule editor's History tab precedent).
+12. Each newly covered type's history is viewable in the admin portal from where the object is managed: a Changes tab where a detail page exists (API Keys have one), and a per-row history affordance opening the standard version list/diff view on list-plus-dialog pages (Service Settings, Certificates, Predefined Searches where no detail page exists), following the Schedule editor's History tab precedent.
 13. The optional reason is capturable for every newly covered mutation: the shared "Reason for change" prompt on UI save paths, `-ChangeReason` on the write cmdlets, and the optional reason field on REST write DTOs. Where a write cmdlet or REST write endpoint does not yet exist for a type, adding it is in scope only insofar as needed for reason parity; broader endpoint coverage remains tracked elsewhere.
 14. All new capture paths honour the existing behaviours: the `ChangeTracking.ConfigurationChanges.Enabled` toggle, the semantic no-change dedupe guard (a save that changes nothing consumes no version), best-effort capture (a capture failure never rolls back the mutation), and the configuration-change retention period.
 
@@ -131,17 +131,19 @@ JIM is deployed in high-trust environments (healthcare, finance, government). "W
 - Builds directly on the delivered #14 infrastructure (snapshot service, diff engine, retention, Activities filters, reason capture). No external dependencies.
 - Overlaps with #377 (admin CRUD for custom Metaverse Attributes): whichever lands second must respect the other's capture/mutation paths.
 
-## Open Questions
+## Decisions (2026-07-05)
 
-1. Role coverage depth: built-in Roles are seeded and not admin-editable; is capturing **assignments** (who holds the role) sufficient, or should role definitions be versioned too in anticipation of custom roles (#612 direction)?
-2. Where no detail page exists (Service Settings, API Keys, Certificates are list-plus-dialog pages), is a per-row history dialog acceptable, or should the lists gain expandable history panels? Proposal: per-row history affordance opening the standard version list/diff view, per the Schedule editor precedent.
-3. Example Data Templates and Sets are development/demo tooling; is versioned history genuinely wanted, or is a plain Activity (create/update/delete, no snapshot) enough there? Proposal: full parity anyway, since the marginal cost is one snapshot builder and the "everything is versioned" story is simpler to state and test.
-4. Connector Definition file uploads can be large; confirm recording name/size/hash (never content) is sufficient for audit purposes.
+Resolved from the draft's open questions:
+
+1. **Role coverage depth**: Role definitions are versioned as well as assignments, in anticipation of the wider RBAC roll-out (#612).
+2. **History surface**: a Changes tab where a detail page exists (API Keys included); a per-row history affordance for list-plus-dialog pages.
+3. **Example Data**: full parity. A customer-facing UI for CRUDing templates and data sets is anticipated, so the audit trail must be in place.
+4. **Connector files**: recording name/size/hash (never content) is sufficient.
 
 ## Acceptance Criteria
 
 - [ ] Every mutation path for Service Setting, Metaverse Attribute, Metaverse Object Type, and Trusted Certificate records an Activity carrying a versioned snapshot; the Metaverse Object Type update path's missing Activity is fixed.
-- [ ] Every mutation path for API Key, Role assignment, Predefined Search (including criteria and groups), Connector Definition, and Example Data Template/Set records an Activity carrying a versioned snapshot.
+- [ ] Every mutation path for API Key, Role (definition and assignment), Predefined Search (including criteria and groups), Connector Definition, and Example Data Template/Set records an Activity carrying a versioned snapshot.
 - [ ] API Key mutations no longer bypass the application layer; the Blazor page calls new server methods.
 - [ ] Encrypted Service Setting values and API key secrets never appear in stored or rendered history; redaction is covered by tests.
 - [ ] Schedule step create/update/delete via the application layer captures the owning Schedule's snapshot.
