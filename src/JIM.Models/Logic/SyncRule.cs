@@ -17,6 +17,11 @@ public class SyncRule : IAuditable, IValidated
         
     public string Name { get; set; } = null!;
 
+    /// <summary>
+    /// An optional description of what this Synchronisation Rule does, for administrator reference.
+    /// </summary>
+    public string? Description { get; set; }
+
     public DateTime Created { get; set; } = DateTime.UtcNow;
 
     /// <summary>

@@ -100,6 +100,12 @@ Describe 'New-JIMSyncRule' {
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
         }
 
+        It 'Should have an optional Description parameter' {
+            $param = $command.Parameters['Description']
+            $param | Should -Not -BeNullOrEmpty
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -BeNullOrEmpty
+        }
+
         It 'Should have a mandatory ConnectedSystemId parameter in ById set' {
             $param = $command.Parameters['ConnectedSystemId']
             $paramAttr = $param.Attributes | Where-Object {
@@ -154,6 +160,35 @@ Describe 'New-JIMSyncRule' {
         }
     }
 
+    Context 'Request body composition' {
+
+        It 'Sends description in the POST body when -Description is specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMSyncRule -Name 'Test' -ConnectedSystemId 1 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Import -Description 'Imports users from the HR system' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.description -eq 'Imports users from the HR system'
+                }
+            }
+        }
+
+        It 'Omits description from the POST body when -Description is not specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMSyncRule -Name 'Test' -ConnectedSystemId 1 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Import -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('description')
+                }
+            }
+        }
+    }
+
     Context 'Requires Connection' {
 
         BeforeEach {
@@ -194,6 +229,12 @@ Describe 'Set-JIMSyncRule' {
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -Not -BeNullOrEmpty
         }
 
+        It 'Should have an optional Description parameter' {
+            $param = $command.Parameters['Description']
+            $param | Should -Not -BeNullOrEmpty
+            $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory } | Should -BeNullOrEmpty
+        }
+
         It 'Should have Enable switch parameter' {
             $command.Parameters['Enable'].SwitchParameter | Should -BeTrue
         }
@@ -208,6 +249,63 @@ Describe 'Set-JIMSyncRule' {
 
         It 'Should support ShouldProcess' {
             $command.Parameters['WhatIf'] | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Request body composition' {
+
+        It 'Sends description in the PUT body when -Description is specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                Set-JIMSyncRule -Id 1 -Description 'Imports users from the HR system' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.description -eq 'Imports users from the HR system'
+                }
+            }
+        }
+
+        It 'Sends an empty description in the PUT body when -Description is $null (clears the value)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                # the binder coerces $null to '' for [string] parameters, so this and -Description ''
+                # are equivalent; $null is the documented convention for clearing
+                Set-JIMSyncRule -Id 1 -Description $null -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('description') -and $Body.description -eq ''
+                }
+            }
+        }
+
+        It 'Sends an empty description in the PUT body when -Description is an explicit empty string' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                Set-JIMSyncRule -Id 1 -Description '' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('description') -and $Body.description -eq ''
+                }
+            }
+        }
+
+        It 'Omits description from the PUT body when -Description is not specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                Set-JIMSyncRule -Id 1 -Name 'Updated Name' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('description')
+                }
+            }
         }
     }
 

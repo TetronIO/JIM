@@ -1689,6 +1689,7 @@ public class SynchronisationController(
         var syncRule = new SyncRule
         {
             Name = request.Name,
+            Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description,
             ConnectedSystem = connectedSystem,
             ConnectedSystemId = request.ConnectedSystemId,
             ConnectedSystemObjectType = csObjectType,
@@ -1757,6 +1758,10 @@ public class SynchronisationController(
         // Apply updates
         if (!string.IsNullOrEmpty(request.Name))
             syncRule.Name = request.Name;
+
+        // A null Description means "leave unchanged"; an empty or whitespace-only value clears it.
+        if (request.Description != null)
+            syncRule.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description;
 
         if (request.Enabled.HasValue)
             syncRule.Enabled = request.Enabled.Value;

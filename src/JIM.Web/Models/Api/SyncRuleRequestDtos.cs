@@ -20,6 +20,12 @@ public class CreateSyncRuleRequest
     public string Name { get; set; } = null!;
 
     /// <summary>
+    /// An optional description of what the Synchronisation Rule is for.
+    /// </summary>
+    [StringLength(1000)]
+    public string? Description { get; set; }
+
+    /// <summary>
     /// The ID of the Connected System this rule applies to.
     /// </summary>
     [Required]
@@ -82,6 +88,13 @@ public class UpdateSyncRuleRequest
     /// </summary>
     [StringLength(200, MinimumLength = 1)]
     public string? Name { get; set; }
+
+    /// <summary>
+    /// An optional description of what the Synchronisation Rule is for.
+    /// Omit to leave the existing description unchanged; supply an empty string to clear it.
+    /// </summary>
+    [StringLength(1000)]
+    public string? Description { get; set; }
 
     /// <summary>
     /// Whether the Synchronisation Rule is enabled.
