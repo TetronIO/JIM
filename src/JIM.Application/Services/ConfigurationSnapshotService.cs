@@ -36,6 +36,12 @@ public class ConfigurationSnapshotService
     /// <summary>The object-type discriminator stored on a Service Setting snapshot.</summary>
     public const string ServiceSettingObjectType = "ServiceSetting";
 
+    /// <summary>The object-type discriminator stored on a Metaverse Object Type snapshot.</summary>
+    public const string MetaverseObjectTypeObjectType = "MetaverseObjectType";
+
+    /// <summary>The object-type discriminator stored on a Metaverse Attribute snapshot.</summary>
+    public const string MetaverseAttributeObjectType = "MetaverseAttribute";
+
     private JimApplication Application { get; }
 
     private static readonly JsonSerializerOptions SerialiserOptions = new()
@@ -509,6 +515,106 @@ public class ConfigurationSnapshotService
             ObjectName = setting.DisplayName,
             Root = ConfigurationSnapshotNode.ObjectNode("serviceSetting", children, "Service Setting")
         };
+    }
+
+    // -- Metaverse Object Type -----------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a scoped snapshot of a Metaverse Object Type: its identity, its deletion-rule configuration (rule, grace
+    /// period and trigger Connected Systems) and its attribute associations. Metaverse Object Types carry no secrets;
+    /// <paramref name="hashKey"/> keeps the signature uniform with the other builders. Load the object type with its
+    /// attributes so the association list reflects persisted truth.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(MetaverseObjectType objectType, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(objectType);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", objectType.Name, "Name");
+        Add(children, "pluralName", objectType.PluralName, "Plural name");
+        Add(children, "builtIn", Render(objectType.BuiltIn), "Built-in");
+        Add(children, "icon", objectType.Icon, "Icon");
+        AddEnum(children, "deletionRule", objectType.DeletionRule, "Deletion rule");
+        Add(children, "deletionGracePeriod", Render(objectType.DeletionGracePeriod), "Deletion grace period");
+        children.Add(BuildDeletionTriggerSystems(objectType.DeletionTriggerConnectedSystemIds));
+        children.Add(BuildAttributeAssociations(objectType.Attributes));
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = MetaverseObjectTypeObjectType,
+            ObjectId = objectType.Id,
+            ObjectName = objectType.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("metaverseObjectType", children, "Metaverse Object Type")
+        };
+    }
+
+    private static ConfigurationSnapshotNode BuildDeletionTriggerSystems(List<int>? connectedSystemIds)
+    {
+        // Only the ids are held on the entity; they are recorded as the stable diffable value (matching AddReference's
+        // id-first treatment) so a re-point is always detected.
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var id in (connectedSystemIds ?? []).OrderBy(id => id))
+        {
+            var node = ConfigurationSnapshotNode.Scalar("connectedSystemId", Render(id), "Connected System");
+            node.ItemId = id;
+            items.Add(node);
+        }
+        return ConfigurationSnapshotNode.CollectionNode("deletionTriggerConnectedSystemIds", items, "Deletion trigger Connected Systems");
+    }
+
+    private static ConfigurationSnapshotNode BuildAttributeAssociations(List<MetaverseAttribute>? attributes)
+    {
+        // Associations are captured as references (stable id value, name as the display form): binding or unbinding an
+        // attribute is this object type's configuration change; the attribute's own definition has its own history.
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var attribute in (attributes ?? []).OrderBy(a => a.Id))
+        {
+            var node = ConfigurationSnapshotNode.Scalar("attributeId", Render(attribute.Id), "Attribute", attribute.Name);
+            node.ItemId = attribute.Id;
+            items.Add(node);
+        }
+        return ConfigurationSnapshotNode.CollectionNode("attributes", items, "Attributes");
+    }
+
+    // -- Metaverse Attribute -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a scoped snapshot of a Metaverse Attribute: its definition (data type, plurality, rendering hint) and its
+    /// Metaverse Object Type associations. Metaverse Attributes carry no secrets; <paramref name="hashKey"/> keeps the
+    /// signature uniform with the other builders. Load the attribute with its object types so the association list
+    /// reflects persisted truth.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(MetaverseAttribute attribute, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(attribute);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", attribute.Name, "Name");
+        AddEnum(children, "type", attribute.Type, "Type");
+        AddEnum(children, "attributePlurality", attribute.AttributePlurality, "Plurality");
+        Add(children, "builtIn", Render(attribute.BuiltIn), "Built-in");
+        AddEnum(children, "renderingHint", attribute.RenderingHint, "Rendering hint");
+        children.Add(BuildObjectTypeAssociations(attribute.MetaverseObjectTypes));
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = MetaverseAttributeObjectType,
+            ObjectId = attribute.Id,
+            ObjectName = attribute.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("metaverseAttribute", children, "Metaverse Attribute")
+        };
+    }
+
+    private static ConfigurationSnapshotNode BuildObjectTypeAssociations(List<MetaverseObjectType>? objectTypes)
+    {
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var objectType in (objectTypes ?? []).OrderBy(ot => ot.Id))
+        {
+            var node = ConfigurationSnapshotNode.Scalar("metaverseObjectTypeId", Render(objectType.Id), "Metaverse Object Type", objectType.Name);
+            node.ItemId = objectType.Id;
+            items.Add(node);
+        }
+        return ConfigurationSnapshotNode.CollectionNode("metaverseObjectTypes", items, "Metaverse Object Types");
     }
 
     // -- value rendering -----------------------------------------------------------------------------------------------

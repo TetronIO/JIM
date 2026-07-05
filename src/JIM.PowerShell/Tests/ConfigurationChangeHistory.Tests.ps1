@@ -41,6 +41,8 @@ Describe 'Get-JIMConfigurationChangeHistory' {
             $validateSet.ValidValues | Should -Contain 'ConnectedSystem'
             $validateSet.ValidValues | Should -Contain 'Schedule'
             $validateSet.ValidValues | Should -Contain 'ServiceSetting'
+            $validateSet.ValidValues | Should -Contain 'MetaverseObjectType'
+            $validateSet.ValidValues | Should -Contain 'MetaverseAttribute'
         }
 
         It 'Accepts Id from the pipeline by property name' {
@@ -58,6 +60,10 @@ Describe 'Get-JIMConfigurationChangeHistory' {
 
         It 'Rejects a non-integer Id for -Type SynchronisationRule' {
             { Get-JIMConfigurationChangeHistory -Type SynchronisationRule -Id ([Guid]::NewGuid().ToString()) -ErrorAction Stop } | Should -Throw '*integer*'
+        }
+
+        It 'Rejects a non-integer Id for -Type <_>' -ForEach @('MetaverseObjectType', 'MetaverseAttribute') {
+            { Get-JIMConfigurationChangeHistory -Type $_ -Id ([Guid]::NewGuid().ToString()) -ErrorAction Stop } | Should -Throw '*integer*'
         }
 
         It 'Accepts a dot-notation string key for -Type ServiceSetting (no id-shape rejection)' {
@@ -102,7 +108,9 @@ Describe 'Get-JIMConfigurationChangeHistory' {
 Describe 'ChangeReason on configuration write cmdlets' {
     It '<_> exposes an optional ChangeReason parameter' -ForEach @(
         'New-JIMSyncRule', 'Set-JIMSyncRule', 'Remove-JIMSyncRule', 'New-JIMConnectedSystem', 'Set-JIMConnectedSystem',
-        'Set-JIMServiceSetting', 'Reset-JIMServiceSetting'
+        'Set-JIMServiceSetting', 'Reset-JIMServiceSetting',
+        'New-JIMMetaverseObjectType', 'Set-JIMMetaverseObjectType',
+        'New-JIMMetaverseAttribute', 'Set-JIMMetaverseAttribute', 'Remove-JIMMetaverseAttribute'
     ) {
         $param = (Get-Command $_).Parameters['ChangeReason']
         $param | Should -Not -BeNullOrEmpty

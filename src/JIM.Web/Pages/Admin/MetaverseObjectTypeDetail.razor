@@ -1,12 +1,15 @@
-﻿@page "/admin/schema/object-types/{Id:int}"
+@page "/admin/schema/object-types/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Logic
 @using JIM.Models.Staging
 @using JIM.Utilities
+@using JIM.Web.Pages.Admin.Components
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -24,215 +27,237 @@
 
 @if (_metaverseObjectType != null)
 {
-    <MudPaper Class="pa-4" Outlined="true">
-        <MudText Typo="Typo.h5" Class="mb-4">Details</MudText>
-        <MudGrid Spacing="4">
-            <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Name" Variant="Variant.Outlined">@_metaverseObjectType.Name</MudField>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Plural Name" Variant="Variant.Outlined">@_metaverseObjectType.PluralName</MudField>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Built-in?" Variant="Variant.Outlined">@(_metaverseObjectType.BuiltIn ? "Yes" : "No")</MudField>
-            </MudItem>
-            <MudItem xs="12" sm="6" md="4">
-                <MudField Label="Icon" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Helpers.ResolveObjectTypeIcon(_metaverseObjectType.Icon)">
-                    @(_metaverseObjectType.Icon ?? "None")
-                </MudField>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
-                    Browse available icons at the <MudLink Href="https://mudblazor.com/features/icons" Target="_blank">MudBlazor Icon Gallery</MudLink>. Use the <strong>Filled</strong> icon name (e.g., "Person", "Groups", "Devices").
-                </MudText>
-            </MudItem>
-        </MudGrid>
-    </MudPaper>
+    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" TabPanelsClass="pt-5" Class="mt-2" Outlined="true">
 
-    <MudPaper Class="pa-4 mt-6" Outlined="true">
-        <MudText Typo="Typo.h5" Class="mb-2">Deletion Rules</MudText>
-        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">Configure when Metaverse Objects of this type should be automatically deleted.</MudText>
-        <MudGrid>
-            <MudItem xs="12" sm="6" md="4">
-                <MudSelect T="MetaverseObjectDeletionRule" Label="Deletion Rule" @bind-Value="_deletionRule"
-                    Variant="Variant.Outlined" HelperText="@GetDeletionRuleHelperText()">
-                    <MudSelectItem Value="MetaverseObjectDeletionRule.Manual">Manual</MudSelectItem>
-                    <MudSelectItem Value="MetaverseObjectDeletionRule.WhenLastConnectorDisconnected">When Last Connector Disconnected</MudSelectItem>
-                    <MudSelectItem Value="MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected">When Authoritative Source Disconnected</MudSelectItem>
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="4" sm="2" md="2">
-                <MudNumericField T="int" Label="Days" @bind-Value="_gracePeriodDays"
-                    Variant="Variant.Outlined" Min="0" Max="3650" Immediate="true"
-                    HelperText="Grace period" />
-            </MudItem>
-            <MudItem xs="4" sm="2" md="2">
-                <MudNumericField T="int" Label="Hours" @bind-Value="_gracePeriodHours"
-                    Variant="Variant.Outlined" Min="0" Max="23" Immediate="true" />
-            </MudItem>
-            <MudItem xs="4" sm="2" md="2">
-                <MudNumericField T="int" Label="Minutes" @bind-Value="_gracePeriodMinutes"
-                    Variant="Variant.Outlined" Min="0" Max="59" Immediate="true" />
-            </MudItem>
-        </MudGrid>
+        <MudTabPanel Text="Details">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.h5" Class="mb-4">Details</MudText>
+                <MudGrid Spacing="4">
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudField Label="Name" Variant="Variant.Outlined">@_metaverseObjectType.Name</MudField>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudField Label="Plural Name" Variant="Variant.Outlined">@_metaverseObjectType.PluralName</MudField>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudField Label="Built-in?" Variant="Variant.Outlined">@(_metaverseObjectType.BuiltIn ? "Yes" : "No")</MudField>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudField Label="Icon" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Helpers.ResolveObjectTypeIcon(_metaverseObjectType.Icon)">
+                            @(_metaverseObjectType.Icon ?? "None")
+                        </MudField>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                            Browse available icons at the <MudLink Href="https://mudblazor.com/features/icons" Target="_blank">MudBlazor Icon Gallery</MudLink>. Use the <strong>Filled</strong> icon name (e.g., "Person", "Groups", "Devices").
+                        </MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
 
-        @if (_deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected)
-        {
-            <div class="mt-4">
-                <MudText Typo="Typo.subtitle2" Class="mb-2">Authoritative Sources</MudText>
-                @if (_contributingSystems.Any())
+            <MudPaper Class="pa-4 mt-6" Outlined="true">
+                <MudText Typo="Typo.h5" Class="mb-2">Deletion Rules</MudText>
+                <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">Configure when Metaverse Objects of this type should be automatically deleted.</MudText>
+                <MudGrid>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudSelect T="MetaverseObjectDeletionRule" Label="Deletion Rule" @bind-Value="_deletionRule"
+                            Variant="Variant.Outlined" HelperText="@GetDeletionRuleHelperText()">
+                            <MudSelectItem Value="MetaverseObjectDeletionRule.Manual">Manual</MudSelectItem>
+                            <MudSelectItem Value="MetaverseObjectDeletionRule.WhenLastConnectorDisconnected">When Last Connector Disconnected</MudSelectItem>
+                            <MudSelectItem Value="MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected">When Authoritative Source Disconnected</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="4" sm="2" md="2">
+                        <MudNumericField T="int" Label="Days" @bind-Value="_gracePeriodDays"
+                            Variant="Variant.Outlined" Min="0" Max="3650" Immediate="true"
+                            HelperText="Grace period" />
+                    </MudItem>
+                    <MudItem xs="4" sm="2" md="2">
+                        <MudNumericField T="int" Label="Hours" @bind-Value="_gracePeriodHours"
+                            Variant="Variant.Outlined" Min="0" Max="23" Immediate="true" />
+                    </MudItem>
+                    <MudItem xs="4" sm="2" md="2">
+                        <MudNumericField T="int" Label="Minutes" @bind-Value="_gracePeriodMinutes"
+                            Variant="Variant.Outlined" Min="0" Max="59" Immediate="true" />
+                    </MudItem>
+                </MudGrid>
+
+                @if (_deletionRule == MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected)
                 {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-                        Select the Connected Systems that are authoritative sources for this object type.
-                        When ANY of these systems disconnects, the Metaverse Object will be scheduled for deletion.
-                    </MudText>
-                    @foreach (var system in _contributingSystems)
-                    {
-                        <MudCheckBox T="bool" Value="@_selectedAuthoritativeSources.Contains(system.Id)"
-                            ValueChanged="@((bool val) => ToggleAuthoritativeSource(system.Id, val))"
-                            Label="@system.Name" Color="Color.Primary" />
-                    }
+                    <div class="mt-4">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Authoritative Sources</MudText>
+                        @if (_contributingSystems.Any())
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                                Select the Connected Systems that are authoritative sources for this object type.
+                                When ANY of these systems disconnects, the Metaverse Object will be scheduled for deletion.
+                            </MudText>
+                            @foreach (var system in _contributingSystems)
+                            {
+                                <MudCheckBox T="bool" Value="@_selectedAuthoritativeSources.Contains(system.Id)"
+                                    ValueChanged="@((bool val) => ToggleAuthoritativeSource(system.Id, val))"
+                                    Label="@system.Name" Color="Color.Primary" />
+                            }
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                                No contributing systems found. Create inbound Synchronisation Rules for this object type to enable authoritative source selection.
+                            </MudAlert>
+                        }
+                    </div>
                 }
-                else
-                {
-                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
-                        No contributing systems found. Create inbound Synchronisation Rules for this object type to enable authoritative source selection.
-                    </MudAlert>
-                }
-            </div>
-        }
 
-        <MudStack Row="true" Class="mt-5" Spacing="2">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveDeletionRulesAsync"
-                Disabled="@(!CanSave())">
-                Save Changes
-            </MudButton>
-            <MudButton Variant="Variant.Text" OnClick="ResetDeletionRules">Reset</MudButton>
-        </MudStack>
-    </MudPaper>
+                <MudStack Row="true" Class="mt-5" Spacing="2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveDeletionRulesAsync"
+                        Disabled="@(!CanSave())">
+                        Save Changes
+                    </MudButton>
+                    <MudButton Variant="Variant.Text" OnClick="ResetDeletionRules">Reset</MudButton>
+                </MudStack>
+            </MudPaper>
+        </MudTabPanel>
 
-    <MudPaper Class="pa-4 mt-6" Outlined="true">
-        <MudText Typo="Typo.h5" Class="mb-2">Attributes</MudText>
-        <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">These are the attributes bound to the Metaverse Object Type:</MudText>
+        <MudTabPanel Text="Attributes">
+            <MudPaper Class="pa-4" Outlined="true">
+                <MudText Typo="Typo.h5" Class="mb-2">Attributes</MudText>
+                <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">These are the attributes bound to the Metaverse Object Type:</MudText>
 
-    @* Filter Chips Section *@
-    <MudStack Row="true" Spacing="6" Class="mb-3 flex-wrap" AlignItems="AlignItems.Start">
-        @* Type Filter *@
-        <div>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Type:</MudText>
-            <MudChipSet T="AttributeDataType"
-                        SelectionMode="SelectionMode.MultiSelection"
-                        SelectedValues="_selectedTypes"
-                        SelectedValuesChanged="OnTypeFilterChanged">
-                @foreach (var type in GetAvailableTypes())
-                {
-                    <MudChip Value="@type.Key"
-                             Color="@(_selectedTypes.Contains(type.Key) ? Color.Default : Color.Primary)"
-                             Variant="@(_selectedTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)"
-                             SelectedColor="Color.Primary">
-                        @type.Key.ToString().SplitOnCapitalLetters()
-                        <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
-                    </MudChip>
-                }
-            </MudChipSet>
-        </div>
+            @* Filter Chips Section *@
+            <MudStack Row="true" Spacing="6" Class="mb-3 flex-wrap" AlignItems="AlignItems.Start">
+                @* Type Filter *@
+                <div>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Type:</MudText>
+                    <MudChipSet T="AttributeDataType"
+                                SelectionMode="SelectionMode.MultiSelection"
+                                SelectedValues="_selectedTypes"
+                                SelectedValuesChanged="OnTypeFilterChanged">
+                        @foreach (var type in GetAvailableTypes())
+                        {
+                            <MudChip Value="@type.Key"
+                                     Color="@(_selectedTypes.Contains(type.Key) ? Color.Default : Color.Primary)"
+                                     Variant="@(_selectedTypes.Contains(type.Key) ? Variant.Outlined : Variant.Text)"
+                                     SelectedColor="Color.Primary">
+                                @type.Key.ToString().SplitOnCapitalLetters()
+                                <MudText Typo="Typo.caption" Class="ml-1">(@type.Value)</MudText>
+                            </MudChip>
+                        }
+                    </MudChipSet>
+                </div>
 
-        @* Plurality Filter *@
-        <div>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Plurality:</MudText>
-            <MudChipSet T="AttributePlurality"
-                        SelectionMode="SelectionMode.MultiSelection"
-                        SelectedValues="_selectedPluralities"
-                        SelectedValuesChanged="OnPluralityFilterChanged">
-                @foreach (var plurality in GetAvailablePluralities())
-                {
-                    <MudChip Value="@plurality.Key"
-                             Color="@(_selectedPluralities.Contains(plurality.Key) ? Color.Default : Color.Info)"
-                             Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Outlined : Variant.Text)"
-                             SelectedColor="Color.Info">
-                        @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
-                        <MudText Typo="Typo.caption" Class="ml-1">(@plurality.Value)</MudText>
-                    </MudChip>
-                }
-            </MudChipSet>
-        </div>
+                @* Plurality Filter *@
+                <div>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Plurality:</MudText>
+                    <MudChipSet T="AttributePlurality"
+                                SelectionMode="SelectionMode.MultiSelection"
+                                SelectedValues="_selectedPluralities"
+                                SelectedValuesChanged="OnPluralityFilterChanged">
+                        @foreach (var plurality in GetAvailablePluralities())
+                        {
+                            <MudChip Value="@plurality.Key"
+                                     Color="@(_selectedPluralities.Contains(plurality.Key) ? Color.Default : Color.Info)"
+                                     Variant="@(_selectedPluralities.Contains(plurality.Key) ? Variant.Outlined : Variant.Text)"
+                                     SelectedColor="Color.Info">
+                                @(plurality.Key == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                                <MudText Typo="Typo.caption" Class="ml-1">(@plurality.Value)</MudText>
+                            </MudChip>
+                        }
+                    </MudChipSet>
+                </div>
 
-        @* Built-in Filter *@
-        <div>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Built-in:</MudText>
-            <MudChipSet T="bool"
-                        SelectionMode="SelectionMode.MultiSelection"
-                        SelectedValues="_selectedBuiltIn"
-                        SelectedValuesChanged="OnBuiltInFilterChanged">
-                @foreach (var builtIn in GetAvailableBuiltIn())
-                {
-                    <MudChip Value="@builtIn.Key"
-                             Color="Color.Default"
-                             Variant="@(_selectedBuiltIn.Contains(builtIn.Key) ? Variant.Outlined : Variant.Text)"
-                             SelectedColor="Color.Default">
-                        @(builtIn.Key ? "Yes" : "No")
-                        <MudText Typo="Typo.caption" Class="ml-1">(@builtIn.Value)</MudText>
-                    </MudChip>
-                }
-            </MudChipSet>
-        </div>
-    </MudStack>
+                @* Built-in Filter *@
+                <div>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Filter by Built-in:</MudText>
+                    <MudChipSet T="bool"
+                                SelectionMode="SelectionMode.MultiSelection"
+                                SelectedValues="_selectedBuiltIn"
+                                SelectedValuesChanged="OnBuiltInFilterChanged">
+                        @foreach (var builtIn in GetAvailableBuiltIn())
+                        {
+                            <MudChip Value="@builtIn.Key"
+                                     Color="Color.Default"
+                                     Variant="@(_selectedBuiltIn.Contains(builtIn.Key) ? Variant.Outlined : Variant.Text)"
+                                     SelectedColor="Color.Default">
+                                @(builtIn.Key ? "Yes" : "No")
+                                <MudText Typo="Typo.caption" Class="ml-1">(@builtIn.Value)</MudText>
+                            </MudChip>
+                        }
+                    </MudChipSet>
+                </div>
+            </MudStack>
 
-    <MudTable Items="@_metaverseObjectType.Attributes.OrderBy(a => a.Name)" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mb-5" SortLabel="Sort By" Elevation="0" Outlined="true" Filter="new Func<MetaverseAttribute, bool>(FilterAttributes)" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged">
-        <ToolBarContent>
-            <MudSpacer />
-            <MudTextField @bind-Value="_attributeSearchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
-        </ToolBarContent>
-        <HeaderContent>
-            <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.AttributePlurality)"><MudText Typo="Typo.button">Plurality</MudText></MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd DataLabel="Name">@context.Name</MudTd>
-            <MudTd DataLabel="Type">
-                <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Type)" Variant="Variant.Outlined">
-                    @context.Type.ToString().SplitOnCapitalLetters()
-                </MudChip>
-            </MudTd>
-            <MudTd DataLabel="Plurality">
-                <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.AttributePlurality)" Variant="Variant.Text">
-                    @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
-                </MudChip>
-            </MudTd>
-            <MudTd DataLabel="Built-in?">
-                @if (context.BuiltIn)
-                {
-                    <MudTooltip Text="Built-in attribute" Arrow="true" Placement="Placement.Top">
-                        <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
-                    </MudTooltip>
-                }
-                else
-                {
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Custom</MudText>
-                }
-            </MudTd>
-            <MudTd DataLabel="Created">
-                <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
-                    @context.Created.ToLocalTime().ToRelativeTime()
-                </MudTooltip>
-            </MudTd>
-        </RowTemplate>
-        <PagerContent>
-            <MudTablePager />
-        </PagerContent>
-    </MudTable>
-    </MudPaper>
+            <MudTable Items="@_metaverseObjectType.Attributes.OrderBy(a => a.Name)" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mb-5" SortLabel="Sort By" Elevation="0" Outlined="true" Filter="new Func<MetaverseAttribute, bool>(FilterAttributes)" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged">
+                <ToolBarContent>
+                    <MudSpacer />
+                    <MudTextField @bind-Value="_attributeSearchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Type)"><MudText Typo="Typo.button">Type</MudText></MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.AttributePlurality)"><MudText Typo="Typo.button">Plurality</MudText></MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="Type">
+                        <MudChip T="string" Color="@Helpers.GetAttributeTypeChipColour(context.Type)" Variant="Variant.Outlined">
+                            @context.Type.ToString().SplitOnCapitalLetters()
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Plurality">
+                        <MudChip T="string" Color="@Helpers.GetAttributePluralityChipColour(context.AttributePlurality)" Variant="Variant.Text">
+                            @(context.AttributePlurality == AttributePlurality.SingleValued ? "Single-Valued" : "Multi-Valued")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Built-in?">
+                        @if (context.BuiltIn)
+                        {
+                            <MudTooltip Text="Built-in attribute" Arrow="true" Placement="Placement.Top">
+                                <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Custom</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Created">
+                        <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
+                            @context.Created.ToLocalTime().ToRelativeTime()
+                        </MudTooltip>
+                    </MudTd>
+                    <MudTd DataLabel="">
+                        <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowAttributeHistoryDialogAsync(context))" />
+                        </MudTooltip>
+                    </MudTd>
+                </RowTemplate>
+                <PagerContent>
+                    <MudTablePager />
+                </PagerContent>
+            </MudTable>
+            </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
+            <ConfigurationChangesTab TargetType="ActivityTargetType.MetaverseObjectType" ObjectId="Id" ObjectTypeLabel="Metaverse Object Type" />
+        </MudTabPanel>
+
+    </NavigableMudTabs>
 }
 
 @code {
     [Parameter]
     public int Id { get; set; }
 
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
     private MetaverseObjectType? _metaverseObjectType;
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private string _attributeSearchString = "";
     private int _rowsPerPage = 10;
+    private int _changeCount;
 
     // Attribute filter state
     private IReadOnlyCollection<AttributeDataType> _selectedTypes = new List<AttributeDataType>();
@@ -272,6 +297,8 @@
             new("Schema", href: "/admin/schema/"),
             new(_metaverseObjectType.Name, href: null, disabled: true)
         };
+
+        _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.MetaverseObjectType, Id, 1, 1)).TotalResults;
 
         // Load contributing systems (systems with inbound Synchronisation Rules for this object type)
         await LoadContributingSystemsAsync();
@@ -373,6 +400,11 @@
     {
         if (_metaverseObjectType == null) return;
 
+        // offer an optional reason for the configuration change history; cancelling aborts the save
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+        if (cancelled)
+            return;
+
         try
         {
             // Update the object type
@@ -384,7 +416,8 @@
                 : new List<int>();
 
             using var jim = JimFactory.Create();
-            await jim.Metaverse.UpdateMetaverseObjectTypeAsync(_metaverseObjectType);
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            await jim.Metaverse.UpdateMetaverseObjectTypeAsync(_metaverseObjectType, user, changeReason);
 
             // Update original values to reflect saved state
             _originalDeletionRule = _deletionRule;
@@ -393,12 +426,20 @@
             _originalGracePeriodMinutes = _gracePeriodMinutes;
             _originalAuthoritativeSources = new HashSet<int>(_selectedAuthoritativeSources);
 
+            _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.MetaverseObjectType, Id, 1, 1)).TotalResults;
+
             Snackbar.Add("Deletion rules saved successfully.", Severity.Success);
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Failed to save deletion rules: {ex.Message}", Severity.Error);
         }
+    }
+
+    private async Task ShowAttributeHistoryDialogAsync(MetaverseAttribute attribute)
+    {
+        await ConfigurationChangeHistoryDialog.ShowAsync(DialogService, ActivityTargetType.MetaverseAttribute,
+            attribute.Id, "Metaverse Attribute", attribute.Name);
     }
 
     private bool FilterAttributes(MetaverseAttribute attribute)

@@ -1,12 +1,14 @@
 @page "/admin/schema"
 @page "/admin/schema/attributes"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Utilities
 @using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavigationManager
+@inject IDialogService DialogService
 @inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -88,6 +90,7 @@
                     <MudTh><MudTableSortLabel SortLabel="builtin" T="MetaverseAttributeHeader"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortLabel="created" T="MetaverseAttributeHeader"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
                     <MudTh><MudText Typo="Typo.button">Object Types</MudText></MudTh>
+                    <MudTh></MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Name">@context.Name</MudTd>
@@ -127,6 +130,11 @@
                                 <MudChip T="string" Color="Color.Default" Variant="Variant.Filled" Href="@attributeUrl">@stub.Value</MudChip>
                             }
                         }
+                    </MudTd>
+                    <MudTd DataLabel="">
+                        <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowAttributeHistoryDialogAsync(context))" />
+                        </MudTooltip>
                     </MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
@@ -225,6 +233,12 @@
     {
         _searchString = text;
         _attributeTable?.ReloadServerData();
+    }
+
+    private async Task ShowAttributeHistoryDialogAsync(MetaverseAttributeHeader attribute)
+    {
+        await ConfigurationChangeHistoryDialog.ShowAsync(DialogService, ActivityTargetType.MetaverseAttribute,
+            attribute.Id, "Metaverse Attribute", attribute.Name);
     }
 
     private (string Label, Color Color, string Icon) GetDeletionRuleDisplay(MetaverseObjectDeletionRule rule)

@@ -1,6 +1,6 @@
 # Configuration Change History Coverage - Implementation Plan
 
-- **Status:** Doing (Phases 1-2 complete)
+- **Status:** Doing (Phases 1-3 complete)
 - **Issue:** [#14](https://github.com/TetronIO/JIM/issues/14) *(sub-task of the parent change-history issue)*
 - **PRD:** [`engineering/prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md`](../../prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md)
 - **Note (2026-07-05):** Phase 1 verification disproved the presumed Schedule step capture gap: there are no step REST endpoints (`Add-JIMScheduleStep` performs a whole-Schedule PUT), and both step-mutation surfaces (the editor dialog and the REST update endpoint) reconcile steps and then call the audited `UpdateScheduleAsync`, which captures the step changes in exactly one version per save. Making the bare step methods capture unconditionally would have double-recorded on every editor/REST save, so Phase 1 instead documented the caller contract on those methods. The durable fix (consolidating step reconciliation into `UpdateScheduleAsync` and making the bare methods private, which also removes the duplicated reconcile logic in the dialog and controller) is proposed as a follow-up slice.
@@ -161,12 +161,12 @@ Each phase is a shippable vertical slice (TDD per capture path, docs and changel
 4. UI: shared `ConfigurationChangeHistoryDialog` (new, hosts `ConfigurationChangesTab`, which gained an `ObjectKey` string path) + per-row history button on `Settings.razor`; `ChangeReasonDialog` on edit and revert. ✅
 5. Tests: capture, redaction (no plaintext/ciphertext ever serialised; keyed hash asserted via the deserialised node), rotation detection, dedupe, toggle-off, revert semantics, API endpoint tests, Pester coverage. ✅
 
-### Phase 3: Metaverse Object Types and Attributes (Tier 1)
-1. **Fix the silent update**: `UpdateMetaverseObjectTypeAsync` gains principal-attributed overloads recording an Activity (failing test first; it currently records nothing).
-2. Snapshot builders (object type incl. attribute associations and deletion/grace-period config; attribute incl. object-type associations); capture across all `MetaverseServer` mutators; attribute delete records a tombstone.
-3. REST routes on `MetaverseController` (object types and attributes); `-ChangeReason` on the Metaverse `Set-*` cmdlets; both `-Type` values.
-4. UI: `MetaverseObjectTypeDetail` converted to `NavigableMudTabs` with a Changes tab; per-row history on the attribute lists (`SchemaObjectTypeList`, object-type detail attribute table); reason prompt on the deletion-rules save.
-5. Coordinate with #377 (attribute CRUD UI): whichever lands second wires its paths into the other's capture/prompt pattern.
+### Phase 3: Metaverse Object Types and Attributes (Tier 1) ✅
+1. **Fix the silent update**: `UpdateMetaverseObjectTypeAsync` gains principal-attributed overloads recording an Activity (failing test first; it currently records nothing). ✅ *(The unaudited single-argument overload was removed entirely, so a silent update path can no longer be called; both callers, the REST endpoint and the deletion-rules page, now attribute to the current user or API key.)*
+2. Snapshot builders (object type incl. attribute associations and deletion/grace-period config; attribute incl. object-type associations); capture across all `MetaverseServer` mutators; attribute delete records a tombstone. ✅ *(Associations are captured as id-valued reference scalars with the name as display form, so binding changes diff cleanly by `ItemId`; capture lambdas reload the persisted entity with its associations before snapshotting.)*
+3. REST routes on `MetaverseController` (object types and attributes); `-ChangeReason` on the Metaverse `Set-*` cmdlets; both `-Type` values. ✅ *(`ChangeReason` also added to the create request DTOs, `?changeReason=` on the attribute delete, and `-ChangeReason` on `New-JIMMetaverseObjectType`, `New-JIMMetaverseAttribute` and `Remove-JIMMetaverseAttribute`; routes validated at app startup via OpenAPI generation. `docs/powershell/history.md` also caught up with the Phase 2 `ServiceSetting` type, which it had missed.)*
+4. UI: `MetaverseObjectTypeDetail` converted to `NavigableMudTabs` with a Changes tab; per-row history on the attribute lists (`SchemaObjectTypeList`, object-type detail attribute table); reason prompt on the deletion-rules save. ✅ *(Tabs: Details, incl. deletion rules; Attributes; Changes with a count badge.)*
+5. Coordinate with #377 (attribute CRUD UI): whichever lands second wires its paths into the other's capture/prompt pattern. *(Still open on #377's side; all application-layer attribute mutators now capture, so a future attribute CRUD UI only needs the reason prompt.)*
 
 ### Phase 4: Trusted Certificates (Tier 1)
 1. Metadata-only snapshot builder (never key material); capture in the four `CertificateServer` mutators; delete tombstone.
