@@ -6,6 +6,7 @@ using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Scheduling;
 using JIM.Models.Utility;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
@@ -41,6 +42,12 @@ public class SystemControllerTests
         // template / object types and returns early, which is all these reset-flow tests need.
         var mockExampleDataRepo = new Mock<IExampleDataRepository>();
         var mockMetaverseRepo = new Mock<IMetaverseRepository>();
+        // The reset also re-seeds the built-in Temporal Scope Reconciliation schedule (the wipe truncates
+        // the Schedules table). An empty schedule list makes the seeder recreate it; configuration change
+        // tracking is disabled so the audited create takes the lean, deterministic path.
+        var mockSchedulingRepo = new Mock<ISchedulingRepository>();
+        mockSchedulingRepo.Setup(s => s.GetAllSchedulesAsync()).ReturnsAsync(new List<Schedule>());
+        mockSchedulingRepo.Setup(s => s.CreateScheduleAsync(It.IsAny<Schedule>())).Returns(Task.CompletedTask);
 
         mockActivityRepo.Setup(a => a.GetActivitiesAsync(
             It.IsAny<int>(),
@@ -68,12 +75,21 @@ public class SystemControllerTests
 
         mockServiceSettingsRepo.Setup(s => s.GetServiceSettingsAsync()).ReturnsAsync(serviceSettings);
         mockServiceSettingsRepo.Setup(s => s.UpdateServiceSettingsAsync(It.IsAny<ServiceSettings>())).Returns(Task.CompletedTask);
+        mockServiceSettingsRepo.Setup(s => s.GetSettingAsync(Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled))
+            .ReturnsAsync(new ServiceSetting
+            {
+                Key = Constants.SettingKeys.ChangeTrackingConfigurationChangesEnabled,
+                DisplayName = "Track configuration changes",
+                ValueType = ServiceSettingValueType.Boolean,
+                Value = "false"
+            });
 
         mockRepository.Setup(r => r.Activity).Returns(mockActivityRepo.Object);
         mockRepository.Setup(r => r.System).Returns(mockSystemRepo.Object);
         mockRepository.Setup(r => r.ServiceSettings).Returns(mockServiceSettingsRepo.Object);
         mockRepository.Setup(r => r.ExampleData).Returns(mockExampleDataRepo.Object);
         mockRepository.Setup(r => r.Metaverse).Returns(mockMetaverseRepo.Object);
+        mockRepository.Setup(r => r.Scheduling).Returns(mockSchedulingRepo.Object);
 
         var application = new JimApplication(mockRepository.Object);
         var controller = new SystemController(NullLogger<SystemController>.Instance, application)
@@ -164,7 +180,11 @@ public class SystemControllerTests
             act.TargetType == ActivityTargetType.System &&
             act.TargetOperationType == ActivityTargetOperationType.Reset &&
             act.InitiatedByName == "test-admin")), Times.Once);
-        activityRepo.Verify(a => a.UpdateActivityAsync(It.Is<Activity>(act => act.Status == ActivityStatus.Complete)), Times.Once);
+        // Scoped to the Reset activity: the reset also re-seeds the built-in schedule, whose own
+        // Create activity completes through the same repository method.
+        activityRepo.Verify(a => a.UpdateActivityAsync(It.Is<Activity>(act =>
+            act.TargetOperationType == ActivityTargetOperationType.Reset &&
+            act.Status == ActivityStatus.Complete)), Times.Once);
     }
 
     [Test]

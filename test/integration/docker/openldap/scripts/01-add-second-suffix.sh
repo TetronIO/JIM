@@ -56,8 +56,13 @@ done
 #   - mail (from cosine schema, already loaded by Bitnami)
 #   - jimGroupType (custom: group classification, e.g. "Managed", "Self-Service")
 #   - jimGroupStatus (custom: lifecycle status, e.g. "Active", "Archived")
+# Defines jimPerson (SUP inetOrgPerson STRUCTURAL) with additional MAY attributes:
+#   - jimEmployeeEndDate (Generalized Time; typed DateTime by the JIM LDAP connector so
+#     relative-date scoping criteria can target it - Scenario 8 LeaverCohort step, #908)
+#   - jimLeaverCohort (Boolean marker identifying the Scenario 8 leaver-cohort users; read
+#     by the test harness over LDAP, never selected into JIM)
 # OIDs use the 1.3.6.1.4.1.99999 test arc (integration tests only).
-# Schema is global (cn=config), so both Yellowstone and Glitterband suffixes can use jimGroup.
+# Schema is global (cn=config), so both Yellowstone and Glitterband suffixes can use these classes.
 echo "[openldap-init] Loading JIM schema extensions..."
 ldapadd -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<SCHEMA
 dn: cn=jim-extensions,cn=schema,cn=config
@@ -65,7 +70,10 @@ objectClass: olcSchemaConfig
 cn: jim-extensions
 olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.1 NAME 'jimGroupType' DESC 'Group type classification' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
 olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.2 NAME 'jimGroupStatus' DESC 'Group lifecycle status' EQUALITY caseIgnoreMatch SUBSTR caseIgnoreSubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.15 SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.3 NAME 'jimEmployeeEndDate' DESC 'Employment end date' EQUALITY generalizedTimeMatch ORDERING generalizedTimeOrderingMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.24 SINGLE-VALUE )
+olcAttributeTypes: ( 1.3.6.1.4.1.99999.1.1.4 NAME 'jimLeaverCohort' DESC 'Scenario 8 leaver-cohort marker' EQUALITY booleanMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.7 SINGLE-VALUE )
 olcObjectClasses: ( 1.3.6.1.4.1.99999.1.2.1 NAME 'jimGroup' DESC 'Extended group with type, status, and mail' SUP groupOfNames STRUCTURAL MAY ( mail $ jimGroupType $ jimGroupStatus ) )
+olcObjectClasses: ( 1.3.6.1.4.1.99999.1.2.2 NAME 'jimPerson' DESC 'Extended person with employment end date' SUP inetOrgPerson STRUCTURAL MAY ( jimEmployeeEndDate $ jimLeaverCohort ) )
 SCHEMA
 echo "[openldap-init] JIM schema extensions loaded"
 

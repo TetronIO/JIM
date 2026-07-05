@@ -107,6 +107,12 @@ public class SystemServer
         // meant to survive a reset. Recreating it here keeps the out-of-box schema intact without a restart.
         await Application.Seeding.EnsureBuiltInExampleDataTemplateAsync();
 
+        // Restore the built-in Temporal Scope Reconciliation schedule. The wipe truncates the Schedules
+        // table, and built-in data is meant to survive a reset; without an immediate re-seed the schedule
+        // would only reappear on the next worker restart, leaving date-based scope reconciliation silently
+        // inoperative until then.
+        await Application.Seeding.SeedBuiltInSchedulesAsync();
+
         // Record the reset as an Activity AFTER the wipe so it survives it. This is the auditable
         // record of who initiated the reset; it is never optional.
         var activity = new Activity

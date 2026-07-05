@@ -238,10 +238,23 @@ foreach ($imageName in $imagesToBuild) {
         exit 1
     }
 
+    # Verify the Administrator credential authenticates before committing. The image
+    # healthcheck is anonymous (-U% -N) so it can never catch a broken or expiring
+    # admin credential; this authenticated check can, and it is exactly the bind JIM's
+    # LDAP connector performs at connectivity-test time.
+    Write-Host "Step 5: Verifying Administrator credential..." -ForegroundColor Cyan
+    docker exec $containerName /usr/local/samba/bin/smbclient -L localhost -U "Administrator%$($config.Password)" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: Administrator credential failed to authenticate" -ForegroundColor Red
+        docker rm -f $containerName | Out-Null
+        exit 1
+    }
+    Write-Host "  Credential verified" -ForegroundColor Green
+
     # The base image declares /usr/local/samba/{etc,private,var} as volumes.
     # Docker commit/export don't capture volume data, so we need to copy the
     # provisioned data to non-volume locations, then move it back at runtime.
-    Write-Host "Step 5: Copying provisioned data from volumes..." -ForegroundColor Cyan
+    Write-Host "Step 6: Copying provisioned data from volumes..." -ForegroundColor Cyan
 
     # Copy volume data to backup locations (these will be captured by commit)
     docker exec $containerName bash -c "cp -a /usr/local/samba/etc /usr/local/samba/etc.provisioned"
@@ -253,11 +266,11 @@ foreach ($imageName in $imagesToBuild) {
     docker exec $containerName chmod +x /start-samba.sh
 
     # Stop the container cleanly before committing
-    Write-Host "Step 6: Stopping container for commit..." -ForegroundColor Cyan
+    Write-Host "Step 7: Stopping container for commit..." -ForegroundColor Cyan
     docker stop $containerName | Out-Null
 
     # Commit the container as a new image
-    Write-Host "Step 7: Committing container as image..." -ForegroundColor Cyan
+    Write-Host "Step 8: Committing container as image..." -ForegroundColor Cyan
     docker commit `
         --change "ENV REALM=$($config.Domain)" `
         --change "ENV DOMAIN=$shortDomain" `
@@ -278,7 +291,7 @@ foreach ($imageName in $imagesToBuild) {
     }
 
     # Clean up build container
-    Write-Host "Step 8: Cleaning up build container..." -ForegroundColor Cyan
+    Write-Host "Step 9: Cleaning up build container..." -ForegroundColor Cyan
     docker rm -f $containerName | Out-Null
 
     $elapsed = (Get-Date) - $startTime

@@ -585,7 +585,8 @@ internal class SeedingServer
     /// Reconciliation schedule (issue #892), which periodically re-evaluates relative-date scoping for objects
     /// whose scope membership drifts with the clock but whose source data has not changed. Idempotent: it does
     /// nothing if the built-in schedule already exists. Administrators may enable/disable it and change its
-    /// interval, but may not rename or delete it (enforced at the API/UI layer).
+    /// interval, but may not rename or delete it (enforced at the API/UI layer). Runs at service startup and
+    /// again after a factory reset (the wipe truncates the Schedules table).
     /// </summary>
     internal async Task SeedBuiltInSchedulesAsync()
     {
@@ -629,7 +630,12 @@ internal class SeedingServer
             }
         };
 
-        await Application.Repository.Scheduling.CreateScheduleAsync(schedule);
+        // Create through the audited path, not the repository, so the schedule's origin is visible in the
+        // portal: a Create Activity attributed to System and a version-1 configuration change snapshot.
+        // A repository-direct seed leaves no audit trace, so the change history would start at whichever
+        // principal touched the schedule next, misattributing its origin.
+        await Application.Scheduler.CreateScheduleAsync(schedule, ActivityInitiatorType.System, null, "System",
+            changeReason: "Built-in schedule created automatically by JIM.");
         Log.Information("SeedBuiltInSchedulesAsync: Created built-in Temporal Scope Reconciliation schedule {ScheduleId} (hourly).", schedule.Id);
     }
 

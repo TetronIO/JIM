@@ -9,9 +9,10 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <MudPaper Class="pa-4" Outlined="true">
-    <MudForm @bind-IsValid="@_isDetailsFormValid" @bind-Errors="@_detailsFormErrors">
+    @* No @bind-IsValid: the save gate is the parent's model predicate (SyncRule.IsValid()), not form validity. *@
+    <MudForm>
         <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="SyncRule.Name"
-                      @bind-Value:after="NotifyChangedAsync" Variant="Variant.Outlined" />
+                      @bind-Value:after="NotifyChangedAsync" Immediate="true" Variant="Variant.Outlined" />
 
         @if (SyncRule.Id > 0 && SyncRule.ConnectedSystem != null)
         {
@@ -185,9 +186,6 @@
 
     [Parameter]
     public EventCallback OnChanged { get; set; }
-
-    private bool _isDetailsFormValid;
-    private string[] _detailsFormErrors = { };
 
     private async Task NotifyChangedAsync()
     {

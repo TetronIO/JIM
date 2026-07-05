@@ -106,7 +106,7 @@
         <DialogContent>
             <MudForm @bind-IsValid="@IsNewRunProfileFormValid">
                 <MudTextField T="string" @bind-Value="_newRunProfile.Name" Label="Name" Variant="Variant.Outlined"
-                              Class="mt-3" Required="true" RequiredError="A name for the Run Profile is required" />
+                              Class="mt-3" Required="true" RequiredError="A name for the Run Profile is required" Immediate="true" />
 
                 <MudSelect T="ConnectedSystemRunType" @bind-Value="_newRunProfile.RunType" Label="Run Type"
                            Variant="Variant.Outlined" AnchorOrigin="Origin.BottomLeft" Class="mt-5" Required="true"
@@ -164,7 +164,7 @@
                 @if (IsImportRunType(_newRunProfile.RunType) && ConnectedSystem.ConnectorDefinition.SupportsPaging)
                 {
                     <MudNumericField @bind-Value="_newRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined"
-                                     Class="mt-3" Min="0" Step="100" Required="true"
+                                     Class="mt-3" Min="0" Step="100" Required="true" Immediate="true"
                                      RequiredError="How many items to process in one go when importing" />
                 }
             </MudForm>
@@ -188,8 +188,9 @@
         </TitleContent>
         <DialogContent>
             <MudForm @bind-IsValid="@_isEditRunProfileFormValid">
+                <PrefilledFormValidator />
                 <MudTextField T="string" @bind-Value="_editRunProfile.Name" Label="Name" Variant="Variant.Outlined"
-                              Class="mt-3" Required="true" RequiredError="A name for the Run Profile is required" />
+                              Class="mt-3" Required="true" RequiredError="A name for the Run Profile is required" Immediate="true" />
 
                 <MudTextField T="string" Value="@_editRunProfile.RunType.ToString().SplitOnCapitalLetters()" Label="Run Type"
                               Variant="Variant.Outlined" Class="mt-5" Disabled="true"
@@ -218,7 +219,7 @@
                 @if (IsImportRunType(_editRunProfile.RunType) && ConnectedSystem.ConnectorDefinition.SupportsPaging)
                 {
                     <MudNumericField @bind-Value="_editRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined"
-                                     Class="mt-3" Min="0" Step="100" Required="true"
+                                     Class="mt-3" Min="0" Step="100" Required="true" Immediate="true"
                                      RequiredError="How many items to process in one go when importing" />
                 }
             </MudForm>

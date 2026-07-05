@@ -8,6 +8,7 @@ using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Search;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.Models.Utility;
 namespace JIM.Data.Repositories;
 
@@ -56,6 +57,14 @@ public interface IMetaverseRepository
     /// scope (issue #892). No-op when <paramref name="ids"/> is empty.
     /// </summary>
     public Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids);
+
+    /// <summary>
+    /// Returns the reference attribute values held by OTHER Metaverse Objects that point at any of the given
+    /// Metaverse Objects, excluding references held by objects that are themselves in the given set. Called
+    /// before deletion so reference recall can stage membership-removal Pending Exports (issue #908).
+    /// </summary>
+    public Task<List<MvoReferenceRecallCandidate>> GetMetaverseObjectReferenceRecallCandidatesAsync(
+        IReadOnlyCollection<Guid> referencedMetaverseObjectIds);
 
     /// <summary>
     /// Bulk-updates the Temporal Scope Reconciler bookkeeping on a set of Metaverse Objects (issue #892):

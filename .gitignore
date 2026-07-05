@@ -465,7 +465,10 @@ env
 !.claude/settings.json
 
 # Integration test artifacts
-test/integration/results/
+# (contents-level ignore so the README can be re-included; a directory-level
+# ignore would stop git descending and the negation would never apply)
+test/integration/results/*
+!test/integration/results/README.md
 test/integration/test-data/
 test/integration/test-data/.cache/
 test/integration/.api-key

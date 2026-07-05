@@ -128,7 +128,7 @@
     </TitleContent>
     <DialogContent>
         <MudTextField T="string" @bind-Value="_uploadName" Label="Name" Required="true"
-            RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-3"
+            RequiredError="A name is required" Immediate="true" Variant="Variant.Outlined" Class="mt-3"
             HelperText="A friendly name for this certificate (e.g., 'Corp Root CA')" />
         <MudFileUpload T="IBrowserFile" FilesChanged="HandleFileSelected" Accept=".pem,.crt,.cer,.der">
             <CustomContent>
@@ -172,10 +172,10 @@
     </TitleContent>
     <DialogContent>
         <MudTextField T="string" @bind-Value="_filePathName" Label="Name" Required="true"
-            RequiredError="A name is required" Variant="Variant.Outlined" Class="mt-3"
+            RequiredError="A name is required" Immediate="true" Variant="Variant.Outlined" Class="mt-3"
             HelperText="A friendly name for this certificate" />
         <MudTextField T="string" @bind-Value="_filePath" Label="File Path" Required="true"
-            RequiredError="A file path is required" Variant="Variant.Outlined" Class="mt-5"
+            RequiredError="A file path is required" Immediate="true" Variant="Variant.Outlined" Class="mt-5"
             HelperText="Full path to the certificate file (e.g., /connector-files/certs/root-ca.pem)" />
         <MudTextField T="string" @bind-Value="_filePathNotes" Label="Notes" Lines="3" Variant="Variant.Outlined"
             Class="mt-5" HelperText="Optional notes about this certificate" />
@@ -267,7 +267,7 @@
     </TitleContent>
     <DialogContent>
         <MudTextField T="string" @bind-Value="_editName" Label="Name" Required="true" RequiredError="A name is required"
-            Variant="Variant.Outlined" Class="mt-3" />
+            Immediate="true" Variant="Variant.Outlined" Class="mt-3" />
         <MudTextField T="string" @bind-Value="_editNotes" Label="Notes" Lines="3" Variant="Variant.Outlined"
             Class="mt-5" />
         <MudSwitch @bind-Value="_editEnabled" Color="Color.Primary" Label="Enabled" Class="mt-5" />

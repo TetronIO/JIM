@@ -87,6 +87,12 @@ public class Worker : BackgroundService
 
         Log.Information("Starting JIM.Worker — connection pool: Min={MinPoolSize}, Max={MaxPoolSize}",  5, 30);
 
+        // Log the effective GC configuration once at startup (#917): memory behaviour at scale
+        // depends on Server GC and dynamic adaptation (DATAS) being what we think they are, and
+        // this is the only reliable way to see the resolved values inside the container.
+        Log.Information("GC configuration: {GcConfiguration}",
+            string.Join(", ", GC.GetConfigurationVariables().Select(kvp => $"{kvp.Key}={kvp.Value}")));
+
         // as JIM.Worker is the first JimApplication client to start, it's responsible for ensuring the database is initialised.
         // other JimApplication clients will need to check if the app is ready before completing their initialisation.
         // JimApplication instances are ephemeral and should be disposed as soon as a request/batch of work is complete (for database tracking reasons).
@@ -515,6 +521,14 @@ public class Worker : BackgroundService
                             lock (_currentTasksLock)
                                 CurrentTasks.RemoveAll(q => q.TaskId == newWorkerTask.Id);
 
+                            // Trim the heap after memory-heavy tasks (#917). Server GC retains its
+                            // high-water committed heap between tasks (an 11.8 GiB floor was observed
+                            // after a 100k-object full synchronisation), which leaves no headroom for
+                            // the next task's spike on smaller hosts. Mirrors the in-run precedent in
+                            // SyncImportTaskProcessor's save phase. Thresholded so small, frequent
+                            // tasks do not pay for a blocking full collection.
+                            TrimHeapAfterHeavyTask(newWorkerTask.Id);
+
                         }, cancellationTokenSource.Token);
 
                         CurrentTasks.Add(new TaskTask(mainLoopNewWorkerTask.Id, task, cancellationTokenSource));
@@ -619,6 +633,12 @@ public class Worker : BackgroundService
             {
                 Log.Information("PerformHousekeepingAsync: Found {Count} MVOs eligible for deletion", mvosToDelete.Count);
 
+                // Reference recall (#908): capture referencing objects and resolved reference values
+                // BEFORE deletion nulls the reference FKs and disconnects the candidates' CSOs.
+                var recallContext = await jim.ExportEvaluation.CaptureReferenceRecallContextAsync(
+                    mvosToDelete.Select(m => m.Id).ToList());
+                var deletedMvoIds = new List<Guid>();
+
                 foreach (var mvo in mvosToDelete)
                 {
                     try
@@ -637,6 +657,7 @@ public class Worker : BackgroundService
                             mvo.DeletionInitiatedByType,
                             mvo.DeletionInitiatedById,
                             mvo.DeletionInitiatedByName);
+                        deletedMvoIds.Add(mvo.Id);
 
                         Log.Information("PerformHousekeepingAsync: Successfully deleted MVO {MvoId}", mvo.Id);
                     }
@@ -644,6 +665,19 @@ public class Worker : BackgroundService
                     {
                         Log.Error(ex, "PerformHousekeepingAsync: Failed to delete MVO {MvoId}", mvo.Id);
                     }
+                }
+
+                // Reference recall (#908): stage membership-removal Pending Exports for objects that
+                // referenced the deleted MVOs, so targets without referential integrity converge too.
+                if (deletedMvoIds.Count > 0)
+                {
+                    var recallResult = await jim.ExportEvaluation.StageReferenceRecallExportsAsync(recallContext, deletedMvoIds);
+                    Log.Information(
+                        "PerformHousekeepingAsync: Reference recall for {DeletedCount} deleted MVO(s): " +
+                        "{ReferencingCount} referencing MVO(s) evaluated, {PeCount} Pending Export(s) staged with " +
+                        "{ChangeCount} removal change(s), {DroppedCount} unresolvable change(s) dropped",
+                        deletedMvoIds.Count, recallResult.ReferencingObjectsEvaluated, recallResult.PendingExportsStaged,
+                        recallResult.RemovalChangesStaged, recallResult.UnresolvableChangesDropped);
                 }
             }
         }
@@ -964,6 +998,16 @@ public class Worker : BackgroundService
     {
         Log.Error(originalException, "SafeFailActivityAsync: {Context} for activity {ActivityId}", context, activity.Id);
 
+        // A persistence failure leaves the DbContext's change tracker still holding the very entities
+        // that failed to save; any further SaveChanges on that context re-attempts the same doomed
+        // write and fails identically. Record the failure via a fresh context straight away instead
+        // of fighting the poisoned one. If the fresh context fails too (for example the database is
+        // down), fall through to the in-context attempts as a long shot before declaring the
+        // activity stuck.
+        if (originalException is DbUpdateException &&
+            await TryFailActivityOnFreshContextAsync(activity, originalException, context))
+            return;
+
         try
         {
             // First attempt: Use the normal activity failure method
@@ -993,32 +1037,92 @@ public class Worker : BackgroundService
             }
             catch (Exception directEx)
             {
-                Log.Fatal(directEx, "SafeFailActivityAsync: CRITICAL - Could not update activity {ActivityId} status. Activity will remain stuck in InProgress state. " +
+                Log.Error(directEx, "SafeFailActivityAsync: Direct update also failed for activity {ActivityId}, attempting fresh-context update. " +
                     "Original error: {OriginalError}. Failure error: {FailError}",
                     activity.Id, originalException.Message, failEx.Message);
 
-                // Last resort: Create a new DbContext and try to update the activity
-                try
+                // Last resort: a fresh DbContext, unaffected by whatever poisoned the original one.
+                // Only log Fatal once this genuinely fails - a premature Fatal here previously claimed
+                // the activity was stuck while the fresh-context attempt below then succeeded.
+                if (!await TryFailActivityOnFreshContextAsync(activity, originalException, context))
                 {
-                    using var emergencyJim = _jimFactory.Create();
-                    var freshActivity = await emergencyJim.Activities.GetActivityAsync(activity.Id);
-                    if (freshActivity != null && freshActivity.Status == ActivityStatus.InProgress)
-                    {
-                        freshActivity.Status = ActivityStatus.FailedWithError;
-                        freshActivity.ErrorMessage = $"{context}: {GetFullExceptionMessage(originalException)}";
-                        freshActivity.ErrorStackTrace = originalException.ToString();
-                        freshActivity.ExecutionTime = DateTime.UtcNow - freshActivity.Executed;
-                        freshActivity.TotalActivityTime = DateTime.UtcNow - freshActivity.Created;
-                        await emergencyJim.Activities.UpdateActivityAsync(freshActivity);
-                        Log.Warning("SafeFailActivityAsync: EMERGENCY - Marked activity {ActivityId} as failed via emergency DbContext", activity.Id);
-                    }
-                }
-                catch (Exception emergencyEx)
-                {
-                    Log.Fatal(emergencyEx, "SafeFailActivityAsync: EMERGENCY UPDATE FAILED for activity {ActivityId}. Manual database intervention required.", activity.Id);
+                    Log.Fatal("SafeFailActivityAsync: CRITICAL - Could not update activity {ActivityId} status by any method. " +
+                        "Activity will remain stuck in InProgress state. Manual database intervention required. Original error: {OriginalError}",
+                        activity.Id, originalException.Message);
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Attempts to mark an Activity as failed using a freshly created JimApplication (and therefore a fresh
+    /// DbContext), for when the original context's change tracker is poisoned by a failed SaveChanges.
+    /// Returns true when the Activity is confirmed in a terminal state (updated now, or already terminal).
+    /// </summary>
+    private async Task<bool> TryFailActivityOnFreshContextAsync(Activity activity, Exception originalException, string context)
+    {
+        try
+        {
+            using var freshJim = _jimFactory.Create();
+            var freshActivity = await freshJim.Activities.GetActivityAsync(activity.Id);
+            if (freshActivity == null)
+            {
+                Log.Warning("TryFailActivityOnFreshContextAsync: Activity {ActivityId} not found on fresh context", activity.Id);
+                return false;
+            }
+
+            if (freshActivity.Status != ActivityStatus.InProgress)
+            {
+                Log.Information("TryFailActivityOnFreshContextAsync: Activity {ActivityId} is already in terminal state {Status}",
+                    activity.Id, freshActivity.Status);
+                return true;
+            }
+
+            freshActivity.Status = ActivityStatus.FailedWithError;
+            freshActivity.ErrorMessage = $"{context}: {GetFullExceptionMessage(originalException)}";
+
+            // Only persist stack traces for unexpected errors (bugs), not for operational errors
+            if (originalException is not OperationalException)
+                freshActivity.ErrorStackTrace = originalException.ToString();
+
+            freshActivity.ExecutionTime = DateTime.UtcNow - freshActivity.Executed;
+            freshActivity.TotalActivityTime = DateTime.UtcNow - freshActivity.Created;
+            await freshJim.Activities.UpdateActivityAsync(freshActivity);
+
+            Log.Warning("TryFailActivityOnFreshContextAsync: Marked activity {ActivityId} as failed via a fresh context", activity.Id);
+            return true;
+        }
+        catch (Exception freshEx)
+        {
+            Log.Error(freshEx, "TryFailActivityOnFreshContextAsync: Fresh-context update failed for activity {ActivityId}", activity.Id);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Trims the managed heap after a task completes when it is holding a large committed heap (#917).
+    /// Server GC retains its high-water committed memory between tasks, so a 100k-object run leaves
+    /// gigabytes committed while the worker idles, starving the next task's spike on smaller hosts.
+    /// The threshold keeps small, frequent tasks (scheduler steps, housekeeping) from paying for a
+    /// blocking full collection they do not need.
+    /// </summary>
+    private static void TrimHeapAfterHeavyTask(Guid workerTaskId)
+    {
+        // 1 GiB: comfortably above any housekeeping task's heap, comfortably below the multi-GiB
+        // floors observed after scale synchronisation runs.
+        const long trimThresholdBytes = 1024L * 1024 * 1024;
+
+        var heapBefore = GC.GetTotalMemory(false);
+        if (heapBefore < trimThresholdBytes)
+            return;
+
+        GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+        GC.WaitForPendingFinalizers();
+        Log.Information("TrimHeapAfterHeavyTask: Trimmed heap after task {TaskId}: {BeforeMb:N0} MB -> {AfterMb:N0} MB (working set {WorkingSetMb:N0} MB)",
+            workerTaskId,
+            heapBefore / 1024 / 1024,
+            GC.GetTotalMemory(false) / 1024 / 1024,
+            Environment.WorkingSet / 1024 / 1024);
     }
 
     /// <summary>

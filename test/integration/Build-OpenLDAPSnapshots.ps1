@@ -122,18 +122,36 @@ function Get-OpenLDAPSnapshotImageTag {
 function Test-OpenLDAPSnapshotCurrent {
     <#
     .SYNOPSIS
-        Check if a snapshot image exists and has a matching content hash.
+        Check if a snapshot image exists, has a matching content hash, and was baked
+        from the same base image build we would use now.
     #>
     param(
         [string]$ImageTag,
-        [string]$ExpectedHash
+        [string]$ExpectedHash,
+        [string]$BaseImage
     )
 
     $inspect = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.openldap.snapshot-hash"}}' 2>&1
     if ($LASTEXITCODE -ne 0) {
         return $false
     }
-    return "$inspect" -eq $ExpectedHash
+    if ("$inspect" -ne $ExpectedHash) {
+        return $false
+    }
+
+    # Snapshots capture the base image's init state (schema, suffixes, accesslog config),
+    # so rebuilding the base does not refresh existing snapshots. Compare the base build
+    # the snapshot was baked from against the base we would build from now; snapshots
+    # without the base-hash label predate this check and are treated as stale.
+    $snapshotBaseHash = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.openldap.base-hash"}}' 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+    $baseBuildHash = docker image inspect $BaseImage --format '{{index .Config.Labels "jim.openldap.build-hash"}}' 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+    return "$snapshotBaseHash" -eq "$baseBuildHash"
 }
 
 function Build-OpenLDAPSnapshot {
@@ -225,9 +243,16 @@ function Build-OpenLDAPSnapshot {
     Write-Host "  Stopping container..." -ForegroundColor Gray
     docker stop $ContainerName | Out-Null
 
+    # Record which base image build this snapshot was baked from. The snapshot captures
+    # the base's init state (schema, suffixes, accesslog config), so a snapshot from a
+    # stale base stays stale even after the base image on disk is rebuilt; consumers
+    # compare this label to detect that.
+    $baseBuildHash = docker image inspect $BaseImage --format '{{index .Config.Labels "jim.openldap.build-hash"}}' 2>$null
+
     Write-Host "  Committing as $SnapshotTag..." -ForegroundColor Gray
     docker commit `
         --change "LABEL jim.openldap.snapshot-hash=$ContentHash" `
+        --change "LABEL jim.openldap.base-hash=$baseBuildHash" `
         --change "LABEL jim.openldap.snapshot-template=$Template" `
         --change "LABEL jim.openldap.snapshot-date=$(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ')" `
         --change 'CMD ["/start-openldap.sh"]' `
@@ -316,7 +341,7 @@ foreach ($scen in $scenariosToProcess) {
         "General" {
             $tag = Get-OpenLDAPSnapshotImageTag -Role "general" -Size $Template
 
-            if (-not $Force -and (Test-OpenLDAPSnapshotCurrent -ImageTag $tag -ExpectedHash $contentHash)) {
+            if (-not $Force -and (Test-OpenLDAPSnapshotCurrent -ImageTag $tag -ExpectedHash $contentHash -BaseImage $baseImage)) {
                 Write-Host "  Snapshot $tag is up to date — skipping" -ForegroundColor Green
                 continue
             }
@@ -338,7 +363,7 @@ foreach ($scen in $scenariosToProcess) {
         "Scenario8" {
             $tag = Get-OpenLDAPSnapshotImageTag -Role "s8" -Size $Template
 
-            if (-not $Force -and (Test-OpenLDAPSnapshotCurrent -ImageTag $tag -ExpectedHash $contentHash)) {
+            if (-not $Force -and (Test-OpenLDAPSnapshotCurrent -ImageTag $tag -ExpectedHash $contentHash -BaseImage $baseImage)) {
                 Write-Host "  Snapshot $tag is up to date — skipping" -ForegroundColor Green
                 continue
             }
