@@ -91,22 +91,32 @@
         Description to Secondary. The order is restored to Primary=1/Secondary=2 and a Full
         Synchronisation (Primary) retakes it, restoring the inherited end-state.
 
-    A third planned cell, OutOfScopeNoOpinion (excluding a subject from the Primary rule's scope via
-    a Scoping Criteria Group and expecting a hand-over to Secondary, mirroring RecallReElection's "no
-    opinion" re-election), was investigated and DROPPED: the engine does not currently compose scope
-    exit with Attribute Priority re-election. HandleCsoOutOfScopeAsync's Disconnect branch
-    (src/JIM.Worker/Processors/SyncTaskProcessorBase.cs, "Break the join between CSO and MVO") marks
-    the leaving system's contributed attribute values for removal but never calls
-    ReElectSurvivingContributorsAsync, unlike the structurally equivalent CSO-obsoletion path
-    (ProcessObsoleteConnectedSystemObjectAsync, which does call it immediately after the same kind of
-    removal marking). A scope exit under the default InboundOutOfScopeAction=Disconnect therefore
-    blanks the attribute instead of handing it to a surviving lower-priority contributor. Writing a
-    step that asserted a hand-over would fail against the real engine; writing one that asserted the
-    blank instead would misrepresent a "no opinion, hand over" test as passing coverage for what is
-    actually an unresolved composition gap between two features (see
-    engineering/plans/doing/ATTRIBUTE_PRIORITY.md Phase 4, "Object moves into/out of a scoped rule's
-    coverage: authority transfers on next sync", itself still unchecked). Reported to the user rather
-    than coded around.
+    12. OutOfScopeNoOpinion - Erin's (S14-4) Primary entry is excluded from the Primary import
+        Synchronisation Rule's scope via a Scoping Criteria Group (employeeNumber NotEquals
+        "S14-4"), leaving every other user, including Grace (S14-6, joined to Primary too since
+        MidLifeJoinBlanksClear), unaffected. A Full Import (Primary) + Full Synchronisation
+        (Primary) then push her Primary CSO out of scope: InboundOutOfScopeAction=Disconnect (the
+        Synchronisation Rules' unset default) breaks the join, recalls every attribute her Primary
+        CSO contributed and, in the SAME run, re-elects the surviving Secondary contribution,
+        exactly as RecallReElection's CSO deletion and WithdrawalReElection's in-place withdrawal
+        already prove for the other two ways a contributor can stop contributing. Job Title and
+        Other Telephones hand over to Secondary's values; the Manager reference hands over to
+        Secondary's rotation-offset-3 referent, Bob (S14-1), whose own Metaverse Object survives
+        independently via his Secondary CSO since IdenticalValueHandOver deleted his Primary entry;
+        Description, already cleared on both sides by NoContributorCleared, stays absent (no
+        surviving contributor to hand over to). Dave (S14-3) is the control. The scoping criteria
+        group is then removed and a Full Import (Primary) + Full Synchronisation (Primary)
+        re-admits Erin: her Primary CSO rejoins the SAME Metaverse Object via the Employee ID
+        matching rule (the same not-joined-CSO-rejoins-an-existing-object mechanics
+        MidLifeJoinBlanksClear already proves), and Job Title retakes Primary's value. This is the
+        third cell of the tri-state matrix NotJoinedNoOpinion's docstring calls out
+        (RuleNotApplicable/no-joined-CSO is NotJoinedNoOpinion; ConnectedNoValue is
+        AssertedNullOverridesSurvivor/MvaNullIsValueAssertsEmptySet): it was originally
+        investigated and dropped as an engine gap (HandleCsoOutOfScopeAsync's Disconnect branch not
+        calling ReElectSurvivingContributorsAsync), but that gap is now fixed (commits b9471c7,
+        8c25ffc; proven at the workflow-test level by the ScopeExit_* tests in
+        test/JIM.Worker.Tests/Workflows/AttributePriorityRecallWorkflowTests.cs), so this cell is
+        now implemented rather than skipped.
 
     Step composition under -Step All: RecallReElection through NoContributorCleared were each
     given a distinct subject (Alice, Bob, Carol, Erin) precisely so they compose safely when run
@@ -135,11 +145,27 @@
     affects every joined object, not just Dave), without asserting each of them individually, to
     keep the step's own assertions scoped to its named subject while remaining honest about scope.
 
+    OutOfScopeNoOpinion (Phase E) deliberately reuses Erin (S14-4) rather than a fresh subject: its
+    Description assertion depends on NoContributorCleared's (Phase B) end-state, since the scope
+    exit's "no surviving contributor" hand-over for Description only holds if both suffixes already
+    carry no value for it. Under -Step All this dependency is satisfied for free (NoContributorCleared
+    ran earlier in the same invocation); a standalone -Step OutOfScopeNoOpinion run only gets the
+    plain baseline (Step 0b), where Erin's Description is still Primary's original value, so the step
+    establishes its own precondition via a dedicated idempotent helper
+    (Set-Scenario14ErinDescriptionWithdrawn, mirroring Set-Scenario14AttributePrimaryNullIsValue's
+    check-then-mutate pattern) before touching scope, so its assertions are identical in both modes.
+    Its own configuration mutation (the Primary import rule's Scoping Criteria Group) is removed
+    before returning, restoring Job Title, Manager and Other Telephones to the inherited end-state
+    exactly as Phase D's steps restore theirs; Description remains absent throughout, since no step
+    ever gives it a new value to hand over. Bob's Metaverse Object (S14-1, joined via Secondary only
+    since IdenticalValueHandOver) is read as Erin's re-elected Manager reference, not written, so this
+    step leaves him untouched too.
+
 .PARAMETER Step
     Which test step to execute (BaselineResolution, RecallReElection, IdenticalValueHandOver,
     WithdrawalReElection, NoContributorCleared, AssertedNullOverridesSurvivor,
     NotJoinedNoOpinion, MidLifeJoinBlanksClear, MvaNullIsValueAssertsEmptySet,
-    DisabledRuleNoOpinion, PriorityReorderPropagation, All).
+    DisabledRuleNoOpinion, PriorityReorderPropagation, OutOfScopeNoOpinion, All).
     Run-IntegrationTests.ps1 resets and repopulates OpenLDAP for every scenario invocation, so a
     single named -Step run starts from a fresh environment with no synchronised state; the script
     therefore establishes the baseline (both systems fully imported and synchronised) before
@@ -150,7 +176,10 @@
     (Set-Scenario14AttributePrimaryNullIsValue) sets it if a standalone run has not already done
     so, and MidLifeJoinBlanksClear also re-creates Grace's Secondary-only presence
     (NotJoinedNoOpinion's mutation) if she does not already exist, so every step remains
-    independently runnable.
+    independently runnable. OutOfScopeNoOpinion similarly needs Erin's (S14-4) Description already
+    withdrawn on both suffixes (NoContributorCleared's end-state); a dedicated idempotent helper
+    (Set-Scenario14ErinDescriptionWithdrawn) establishes it if a standalone run has not already done
+    so.
 
 .PARAMETER Template
     Accepted for runner compatibility. This scenario seeds its own small, fixed, deterministic
@@ -183,7 +212,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("BaselineResolution", "RecallReElection", "IdenticalValueHandOver", "WithdrawalReElection", "NoContributorCleared", "AssertedNullOverridesSurvivor", "NotJoinedNoOpinion", "MidLifeJoinBlanksClear", "MvaNullIsValueAssertsEmptySet", "DisabledRuleNoOpinion", "PriorityReorderPropagation", "All")]
+    [ValidateSet("BaselineResolution", "RecallReElection", "IdenticalValueHandOver", "WithdrawalReElection", "NoContributorCleared", "AssertedNullOverridesSurvivor", "NotJoinedNoOpinion", "MidLifeJoinBlanksClear", "MvaNullIsValueAssertsEmptySet", "DisabledRuleNoOpinion", "PriorityReorderPropagation", "OutOfScopeNoOpinion", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -476,6 +505,59 @@ userPassword: Test@123!
         Write-Host "Running Full Synchronisation (Secondary)..." -ForegroundColor Gray
         $syncResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryFullSync.id -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Secondary) with Grace present"
+    }
+
+    # Used solely by OutOfScopeNoOpinion: its Description assertion needs Erin's (S14-4)
+    # Description to already carry no contributor on EITHER suffix (NoContributorCleared's, Test
+    # 5, end-state), otherwise a scope exit would hand Description over to Secondary exactly like
+    # Job Title, and the "-ExpectNoValue" assertion would fail. Under -Step All this holds for
+    # free; a standalone -Step OutOfScopeNoOpinion run only gets the plain baseline (Step 0b),
+    # where Erin's Description is still Primary's original value, so this idempotent helper
+    # establishes the precondition itself. Mirrors Set-Scenario14AttributePrimaryNullIsValue's
+    # check-then-mutate shape: probe the current state via Assert-MvoAttributeValue (catching its
+    # thrown assertion failure as "not yet withdrawn" rather than duplicating the psql query), only
+    # withdrawing if the probe shows a real value still present.
+    function Set-Scenario14ErinDescriptionWithdrawn {
+        param(
+            [Parameter(Mandatory=$true)]
+            [guid]$ErinMvoId
+        )
+
+        $alreadyWithdrawn = $true
+        try {
+            Assert-MvoAttributeValue -MvoId $ErinMvoId -AttributeName "Description" -ExpectNoValue `
+                -Name "Erin's Description precondition probe (idempotent check)"
+        }
+        catch {
+            $alreadyWithdrawn = $false
+        }
+
+        if ($alreadyWithdrawn) {
+            Write-Host "  Erin's Description already has no contributor on either suffix (idempotent no-op; NoContributorCleared already ran)" -ForegroundColor Gray
+            return
+        }
+
+        Write-Host "  Erin's Description not yet withdrawn (standalone run); withdrawing both suffixes to match NoContributorCleared's end-state..." -ForegroundColor Gray
+
+        $erinSecondaryDn = "uid=erin14,$($secondaryLdapConfig.UserContainer)"
+        $withdrawSecondaryLdif = "dn: $erinSecondaryDn`nchangetype: modify`ndelete: description`n"
+        Invoke-Scenario14LdapModify -ContainerName $secondaryLdapConfig.ContainerName -LdapUri $secondaryLdapUri `
+            -BindDN $secondaryLdapConfig.BindDN -BindPassword $secondaryLdapConfig.BindPassword -Ldif $withdrawSecondaryLdif
+
+        $erinPrimaryDn = "uid=erin14,$($primaryLdapConfig.UserContainer)"
+        $withdrawPrimaryLdif = "dn: $erinPrimaryDn`nchangetype: modify`ndelete: description`n"
+        Invoke-Scenario14LdapModify -ContainerName $primaryLdapConfig.ContainerName -LdapUri $primaryLdapUri `
+            -BindDN $primaryLdapConfig.BindDN -BindPassword $primaryLdapConfig.BindPassword -Ldif $withdrawPrimaryLdif
+
+        # Both suffixes already carry no description before either import runs, so a normal
+        # baseline re-sync (Import both, then Sync both) converges directly on "no contributor,
+        # cleared" without needing NoContributorCleared's own step-by-step ordering (which proves
+        # the loser-then-winner sequencing separately; that invariant is not re-proven here, only
+        # the end-state is required).
+        Invoke-Scenario14BaselineRuns
+
+        Assert-MvoAttributeValue -MvoId $ErinMvoId -AttributeName "Description" -ExpectNoValue `
+            -Name "Erin's Description (withdrawn both suffixes; precondition established for a standalone run)"
     }
 
     if ($Step -notin @("All", "BaselineResolution")) {
@@ -1506,11 +1588,185 @@ userPassword: Test@123!
         }
     }
 
-    # Inherited end-state at this point (under -Step All, or after the last Phase D step run
+    # ========================================================================
+    # Test 12: OutOfScopeNoOpinion
+    # ========================================================================
+    if ($Step -eq "OutOfScopeNoOpinion" -or $Step -eq "All") {
+        Write-TestSection "Test 12: Out Of Scope, No Opinion (Erin, scope exit re-elects Secondary in the same run)"
+
+        $outOfScopeSuccess = $true
+        $outOfScopeNotes = @()
+
+        try {
+            $primaryImportRuleName = "$primarySystemName Import Users"
+            $secondaryImportRuleName = "$secondarySystemName Import Users"
+
+            $primaryImportRule = @(Get-JIMSyncRule) | Where-Object { $_.name -eq $primaryImportRuleName } | Select-Object -First 1
+            if (-not $primaryImportRule) {
+                throw "Could not resolve '$primaryImportRuleName' Synchronisation Rule."
+            }
+
+            $erinMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-4" -PageSize 5) | Select-Object -First 1
+            $bobMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-1" -PageSize 5) | Select-Object -First 1
+            $daveMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-3" -PageSize 5) | Select-Object -First 1
+            if (-not $erinMvo -or -not $bobMvo -or -not $daveMvo) {
+                throw "Could not resolve Erin (S14-4), Bob (S14-1) and/or Dave (S14-3) Metaverse Objects."
+            }
+
+            # Standalone-run precondition (see the OutOfScopeNoOpinion/Phase E docstring paragraph
+            # above): this step's Description assertion below only holds if Erin's Description
+            # already has no contributor on either suffix. Idempotent no-op under -Step All, since
+            # NoContributorCleared (Test 5) has already established it by this point.
+            Set-Scenario14ErinDescriptionWithdrawn -ErinMvoId $erinMvo.id
+
+            # Exclude ONLY Erin from the Primary import Synchronisation Rule's scope. employeeNumber
+            # NotEquals "S14-4" is the cleanest criterion the operators support (New-JIMScopingCriterion's
+            # -ComparisonType set includes NotEquals; src/JIM.PowerShell/Public/ScopingCriteria/
+            # New-JIMScopingCriterion.ps1): a single criterion on Erin's own join key keeps every
+            # other user in scope, including Grace (S14-6), who by this point under -Step All is
+            # joined to Primary too (MidLifeJoinBlanksClear). An Equals-based "match everyone except
+            # Erin" formulation would need one clause per surviving user and would silently stop
+            # covering any user added afterwards; NotEquals on the excluded subject's own key scales
+            # without maintenance and is the only one of the two that does.
+            Write-Host "Scoping Erin (S14-4) out of the Primary import rule (employeeNumber NotEquals 'S14-4')..." -ForegroundColor Gray
+            $scopeGroup = New-JIMScopingCriteriaGroup -SyncRuleId $primaryImportRule.id -Type All -PassThru
+            New-JIMScopingCriterion -SyncRuleId $primaryImportRule.id -GroupId $scopeGroup.id `
+                -ConnectedSystemAttributeName "employeeNumber" -ComparisonType NotEquals -StringValue "S14-4" | Out-Null
+
+            $persistedCriteria = @(Get-JIMScopingCriteria -SyncRuleId $primaryImportRule.id)
+            if ($persistedCriteria.Count -ne 1 -or @($persistedCriteria[0].criteria).Count -ne 1) {
+                throw "Scoping criteria read-back mismatch: expected exactly one group with one criterion on '$primaryImportRuleName', found $($persistedCriteria.Count) group(s)."
+            }
+            Write-Host "  OK Scoping criteria group $($scopeGroup.id) persisted and verified via read-back" -ForegroundColor Green
+
+            # InboundOutOfScopeAction defaults to Disconnect (SyncRule.cs) and Setup-Scenario14.ps1
+            # never overrides it for either rule, so Erin's Primary CSO going out of scope breaks
+            # the join outright via HandleCsoOutOfScopeAsync's Disconnect branch.
+            Write-Host "Running Full Import (Primary)..." -ForegroundColor Gray
+            $importResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullImport.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import (Primary) after scoping Erin out"
+
+            if ($WaitSeconds -gt 0) { Start-Sleep -Seconds $WaitSeconds }
+
+            Write-Host "Running Full Synchronisation (Primary)..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Primary) after scoping Erin out"
+
+            # HandleCsoOutOfScopeAsync's Disconnect branch (src/JIM.Worker/Processors/
+            # SyncTaskProcessorBase.cs) now calls ReElectSurvivingContributorsAsync, queues export
+            # evaluation and emits NoContributor outcomes for attributes with no survivor (commits
+            # b9471c7, 8c25ffc; proven at the workflow-test level by the ScopeExit_* tests in
+            # test/JIM.Worker.Tests/Workflows/AttributePriorityRecallWorkflowTests.cs). Job Title and
+            # Other Telephones both had Primary as their sole contributor going into this step, so
+            # both hand over to Secondary in the same run.
+            Assert-MvoAttributeValue -MvoId $erinMvo.id -AttributeName "Job Title" `
+                -ExpectedValue "Consultant (Secondary)" `
+                -ExpectedContributingSyncRuleName $secondaryImportRuleName `
+                -Name "Erin's Job Title (scope exit re-elects Secondary, same run)"
+
+            Assert-MvoAttributeValue -MvoId $erinMvo.id -AttributeName "Other Telephones" `
+                -ExpectedValues @("+44 20 7946 2040", "+44 20 7946 2041") `
+                -Name "Erin's Other Telephones (full MVA hand-over to Secondary's set)"
+
+            # Manager: Secondary's rotation offset is 3, so (4 + 3) % 6 = index 1 = Bob (S14-1).
+            # Bob's own Metaverse Object survives independently of this step: IdenticalValueHandOver
+            # (Test 3) deleted his Primary entry outright, so he has been joined via his Secondary
+            # CSO alone since Phase B; resolved above via the same Employee ID lookup as every other
+            # subject in this file.
+            Assert-MvoAttributeValue -MvoId $erinMvo.id -AttributeName "Manager" `
+                -ExpectedReferenceMvoId $bobMvo.id `
+                -ExpectedContributingSyncRuleName $secondaryImportRuleName `
+                -Name "Erin's Manager (re-elected reference: Bob, Secondary's rotation offset 3)"
+
+            # Description has no surviving contributor to hand over to: Set-Scenario14ErinDescriptionWithdrawn
+            # above guarantees both suffixes already carry no value for it, so the scope exit finds
+            # nothing to recall and nothing to re-elect. The NullIsValue flag inherited on Primary's
+            # Job Title mapping since Phase C (Set-Scenario14AttributePrimaryNullIsValue) has no
+            # bearing on Job Title here either: NullIsValue only changes behaviour for a mapping that
+            # IS evaluated (the ConnectedNoValue state), and Primary is not evaluated for Erin at all
+            # post-scope-exit, since its CSO is no longer joined to her Metaverse Object at all
+            # (RuleNotApplicable in all but name), exactly like Alice/Bob's no-Primary-CSO-at-all
+            # state documented in AssertedNullOverridesSurvivor's blast-radius notes.
+            Assert-MvoAttributeValue -MvoId $erinMvo.id -AttributeName "Description" `
+                -ExpectNoValue `
+                -Name "Erin's Description (still absent: no surviving contributor either side)"
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Job Title" `
+                -ExpectedValue "Coordinator (Primary)" -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Dave's Job Title (control: unaffected by Erin's scope exit)"
+
+            $outOfScopeNotes += "Erin's Primary CSO fell out of scope (Disconnect); Job Title, Manager and Other Telephones re-elected to Secondary in the same run, Description stayed absent (no survivor), Dave unaffected"
+
+            # Restore: remove the scoping criteria group and re-admit Erin. Mirrors the removal
+            # mechanism Scenario 10 uses to fully unscope a rule (Invoke-Scenario10-SyncRuleScoping.ps1,
+            # Reset-JIMForCascadeTest): iterate every root-level group and delete it, leaving the rule
+            # with zero scoping criteria groups, which is unconditionally in scope for every object.
+            Write-Host "Removing Erin's scoping criteria group..." -ForegroundColor Gray
+            foreach ($group in @(Get-JIMScopingCriteria -SyncRuleId $primaryImportRule.id)) {
+                Remove-JIMScopingCriteriaGroup -SyncRuleId $primaryImportRule.id -GroupId $group.id -Confirm:$false | Out-Null
+            }
+            $criteriaAfterRemoval = @(Get-JIMScopingCriteria -SyncRuleId $primaryImportRule.id)
+            if ($criteriaAfterRemoval.Count -ne 0) {
+                throw "Expected zero scoping criteria groups on '$primaryImportRuleName' after removal, found $($criteriaAfterRemoval.Count)."
+            }
+            Write-Host "  OK Scoping criteria group removed and verified via read-back" -ForegroundColor Green
+
+            Write-Host "Running Full Import (Primary)..." -ForegroundColor Gray
+            $importResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullImport.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import (Primary) after re-admitting Erin"
+
+            if ($WaitSeconds -gt 0) { Start-Sleep -Seconds $WaitSeconds }
+
+            Write-Host "Running Full Synchronisation (Primary)..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Primary) after re-admitting Erin"
+
+            # Re-entry to scope: Erin's Primary CSO was left NotJoined by HandleCsoOutOfScopeAsync
+            # (JoinType=NotJoined, MetaverseObjectId=null), but the CSO itself was never deleted, so
+            # a normal Full Synchronisation re-runs the Employee ID matching rule and rejoins her
+            # EXISTING Metaverse Object rather than projecting a new one, exactly as
+            # MidLifeJoinBlanksClear (Test 8) already proves for a not-joined CSO joining an
+            # established object. No step beyond a normal Full Import + Full Synchronisation is
+            # required for the rejoin.
+            $erinMvoAfterRejoin = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-4" -PageSize 5)
+            if ($erinMvoAfterRejoin.Count -ne 1 -or $erinMvoAfterRejoin[0].id -ne $erinMvo.id) {
+                throw "Erin's Primary CSO did not rejoin her existing Metaverse Object (ID $($erinMvo.id)) on scope re-entry; found $($erinMvoAfterRejoin.Count) Metaverse Object(s)."
+            }
+
+            Assert-MvoAttributeValue -MvoId $erinMvo.id -AttributeName "Job Title" `
+                -ExpectedValue "Consultant (Primary)" -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Erin's Job Title (re-entry to scope rejoins; Primary retakes)"
+
+            Assert-MvoAttributeValue -MvoId $erinMvo.id -AttributeName "Other Telephones" `
+                -ExpectedValues @("+44 20 7946 1040", "+44 20 7946 1041") `
+                -Name "Erin's Other Telephones (Primary retakes on rejoin)"
+
+            Assert-MvoAttributeValue -MvoId $erinMvo.id -AttributeName "Manager" `
+                -ExpectedReferenceMvoId (@(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-5" -PageSize 5) | Select-Object -First 1).id `
+                -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Erin's Manager (Primary retakes on rejoin: Frank, Primary's rotation offset 1)"
+
+            $outOfScopeNotes += "Removed the scoping criteria group; Erin's Primary CSO rejoined her existing Metaverse Object via Employee ID matching, and Job Title, Manager and Other Telephones returned to Primary"
+        }
+        catch {
+            $outOfScopeSuccess = $false
+            $outOfScopeNotes += "Error: $_"
+            throw
+        }
+        finally {
+            $testResults.Steps += @{
+                Name = "OutOfScopeNoOpinion"
+                Success = $outOfScopeSuccess
+                Note = ($outOfScopeNotes -join "; ")
+            }
+        }
+    }
+
+    # Inherited end-state at this point (under -Step All, or after the last Phase D/E step run
     # standalone left its flags/data in place): Phase D's two steps (DisabledRuleNoOpinion,
     # PriorityReorderPropagation) each restore their own configuration mutation (rule Enabled state;
     # Attribute Priority order) before returning, so the state below is UNCHANGED from Phase C's
-    # inherited end-state. Frank (S14-5) has both Job Title and Other
+    # inherited end-state for everyone except Erin. Frank (S14-5) has both Job Title and Other
     # Telephones asserted null with Primary provenance; Grace (S14-6) is joined to BOTH suffixes,
     # with her Job Title asserted null (Primary provenance) and her Description Primary-sourced;
     # NullIsValue is set on Primary's Job Title and Other Telephones mappings. No later Phase C
@@ -1519,7 +1775,11 @@ userPassword: Test@123!
     # needed there because nothing downstream in this phase requires it. Phase D's own steps read
     # this same inherited state (both mutate and restore configuration only; neither touches LDAP
     # data), so any future phase inherits it unchanged and must manage its own preconditions against
-    # it rather than assuming a clean slate.
+    # it rather than assuming a clean slate. Phase E (OutOfScopeNoOpinion) restores its own scoping
+    # mutation too (the Primary import rule ends with zero Scoping Criteria Groups, exactly as it
+    # began), and leaves Erin (S14-4) exactly where Phase B left her: Description absent both sides,
+    # Job Title/Manager/Other Telephones back on Primary (Job Title "Consultant (Primary)", Manager
+    # Frank via rotation offset 1, Other Telephones the 1040/1041 pair).
 
     # Calculate overall success
     $failedSteps = @($testResults.Steps | Where-Object { $_.Success -eq $false })
