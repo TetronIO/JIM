@@ -14,7 +14,23 @@ namespace JIM.Application;
 
 public class JimApplication : IDisposable
 {
-    public IRepository Repository { get; }
+    /// <summary>
+    /// The data access layer. Internal by design: JIM's N-tier rule says presentation (JIM.Web) and the service
+    /// hosts (JIM.Worker, JIM.Scheduler) must only call the application-layer servers on this facade, never
+    /// repositories directly, so that business rules and audit capture cannot be bypassed. Keeping this internal
+    /// makes a bypass a compile error rather than a review catch. If a caller needs data the facade does not
+    /// expose, add a method to the owning server; do not widen this accessor.
+    /// </summary>
+    internal IRepository Repository { get; }
+
+    /// <summary>
+    /// The synchronisation engine's raw-SQL hot-path repository, sharing this instance's database session.
+    /// This is the single sanctioned exception to the internal <see cref="Repository"/> accessor: the sync
+    /// engine's bulk operations are deliberately repository-direct for performance (see the worker hot-path
+    /// rules in src/CLAUDE.md). Use it only from sync task processing; every other caller goes through the
+    /// application servers on this facade.
+    /// </summary>
+    public JIM.Data.Repositories.ISyncRepository SyncRepository => Repository.Sync;
 
     /// <summary>
     /// The credential protection service for encrypting/decrypting connector passwords.

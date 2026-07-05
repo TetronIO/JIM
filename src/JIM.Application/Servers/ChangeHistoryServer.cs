@@ -76,6 +76,16 @@ public class ChangeHistoryServer
         return await _application.Repository.Activity.GetLastHistoryCleanupTimeAsync();
     }
 
+    /// <summary>
+    /// Gets the count of Connected System Object change history records for a Connected System.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <returns>The count of CSO change records.</returns>
+    public async Task<int> GetCsoChangeCountAsync(int connectedSystemId)
+    {
+        return await _application.Repository.ChangeHistory.GetCsoChangeCountAsync(connectedSystemId);
+    }
+
     // -----------------------------------------------------------------------------------------------------------------
     // Configuration change history retrieval
     // -----------------------------------------------------------------------------------------------------------------

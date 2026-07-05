@@ -5006,6 +5006,22 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Retrieves the count of Pending Export objects for a Connected System with optional filtering
+    /// by change type and status. Optimised for fast counting without loading entity data.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="changeType">Optional change type to filter by (Create, Update, Delete).</param>
+    /// <param name="status">Optional status to filter by (Pending, Failed, etc.).</param>
+    /// <returns>The count of matching Pending Export objects.</returns>
+    public async Task<int> GetPendingExportsFilteredCountAsync(
+        int connectedSystemId,
+        PendingExportChangeType? changeType = null,
+        PendingExportStatus? status = null)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportsFilteredCountAsync(connectedSystemId, changeType, status);
+    }
+
+    /// <summary>
     /// Deletes a Pending Export object.
     /// </summary>
     /// <param name="pendingExport">The Pending Export to delete.</param>
@@ -5185,6 +5201,39 @@ public class ConnectedSystemServer
             .SetTag("page", page)
             .SetTag("pageSize", pageSize);
         return await Application.Repository.ConnectedSystems.GetCsoChangeHistoryAsync(connectedSystemObjectId, page, pageSize);
+    }
+
+    /// <summary>
+    /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
+    /// Used for the deleted objects browser.
+    /// </summary>
+    /// <param name="connectedSystemId">Optional filter by Connected System ID.</param>
+    /// <param name="fromDate">Optional filter for changes on or after this date.</param>
+    /// <param name="toDate">Optional filter for changes on or before this date.</param>
+    /// <param name="externalIdSearch">Optional search term for external ID.</param>
+    /// <param name="page">Page number (1-based).</param>
+    /// <param name="pageSize">Number of items per page.</param>
+    /// <returns>Paginated list of deleted CSO changes ordered by ChangeTime descending.</returns>
+    public async Task<(List<ConnectedSystemObjectChange> Items, int TotalCount)> GetDeletedCsoChangesAsync(
+        int? connectedSystemId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? externalIdSearch = null,
+        int page = 1,
+        int pageSize = 50)
+    {
+        return await Application.Repository.ConnectedSystems.GetDeletedCsoChangesAsync(
+            connectedSystemId, fromDate, toDate, externalIdSearch, page, pageSize);
+    }
+
+    /// <summary>
+    /// Gets the full change history for a deleted CSO by its change ID.
+    /// </summary>
+    /// <param name="changeId">The ID of the CSO change record.</param>
+    /// <returns>List of all changes for that CSO ordered by ChangeTime descending.</returns>
+    public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetDeletedCsoChangeHistoryAsync(changeId);
     }
     #endregion
 

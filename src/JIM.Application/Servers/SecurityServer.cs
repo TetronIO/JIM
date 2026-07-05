@@ -69,4 +69,64 @@ public class SecurityServer
     {
         return await Application.Repository.Security.GetRoleMembersAsync(roleId);
     }
+
+    #region API Keys
+
+    /// <summary>
+    /// Gets all API keys.
+    /// </summary>
+    public async Task<List<ApiKey>> GetApiKeysAsync()
+    {
+        return await Application.Repository.ApiKeys.GetAllAsync();
+    }
+
+    /// <summary>
+    /// Gets an API key by its ID.
+    /// </summary>
+    public async Task<ApiKey?> GetApiKeyAsync(Guid id)
+    {
+        return await Application.Repository.ApiKeys.GetByIdAsync(id);
+    }
+
+    /// <summary>
+    /// Gets an API key by its hash. Used for authentication.
+    /// </summary>
+    public async Task<ApiKey?> GetApiKeyByHashAsync(string keyHash)
+    {
+        return await Application.Repository.ApiKeys.GetByHashAsync(keyHash);
+    }
+
+    /// <summary>
+    /// Creates a new API key.
+    /// </summary>
+    public async Task<ApiKey> CreateApiKeyAsync(ApiKey apiKey)
+    {
+        return await Application.Repository.ApiKeys.CreateAsync(apiKey);
+    }
+
+    /// <summary>
+    /// Updates an existing API key.
+    /// </summary>
+    public async Task<ApiKey> UpdateApiKeyAsync(ApiKey apiKey)
+    {
+        return await Application.Repository.ApiKeys.UpdateAsync(apiKey);
+    }
+
+    /// <summary>
+    /// Deletes an API key.
+    /// </summary>
+    public async Task DeleteApiKeyAsync(Guid id)
+    {
+        await Application.Repository.ApiKeys.DeleteAsync(id);
+    }
+
+    /// <summary>
+    /// Records usage of an API key (updates last used timestamp and IP).
+    /// </summary>
+    public async Task RecordApiKeyUsageAsync(Guid id, string? ipAddress)
+    {
+        await Application.Repository.ApiKeys.RecordUsageAsync(id, ipAddress);
+    }
+
+    #endregion
 }

@@ -254,10 +254,10 @@
     {
         using var jim = JimFactory.Create();
         // Get all pending to calculate summary
-        var result = await jim.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(1, 100, _selectedObjectTypeId);
+        var result = await jim.Metaverse.GetMetaverseObjectsPendingDeletionAsync(1, 100, _selectedObjectTypeId);
         var now = DateTime.UtcNow;
 
-        _totalCount = await jim.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(_selectedObjectTypeId);
+        _totalCount = await jim.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(_selectedObjectTypeId);
 
         // Calculate status counts
         _deprovisioningCount = result.Results.Count(m => m.ConnectedSystemObjects.Any());
@@ -281,7 +281,7 @@
             var page = state.Page + 1;
 
             using var jim = JimFactory.Create();
-            var result = await jim.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
+            var result = await jim.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
                 page,
                 state.PageSize,
                 _selectedObjectTypeId);

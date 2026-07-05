@@ -310,7 +310,7 @@
     private async Task LoadContributingSystemsAsync()
     {
         using var jim = JimFactory.Create();
-        var allSyncRules = await jim.Repository.ConnectedSystems.GetSyncRulesAsync();
+        var allSyncRules = await jim.ConnectedSystems.GetSyncRulesAsync();
         var inboundRulesForType = allSyncRules
             .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.MetaverseObjectTypeId == Id)
             .ToList();

@@ -816,7 +816,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         _logger.LogDebug("Getting Metaverse Objects count (TypeId: {TypeId}, Search: {Search}, FilterAttr: {FilterAttr}={FilterValue})",
             objectTypeId, LogSanitiser.Sanitise(search), LogSanitiser.Sanitise(filterAttributeName), LogSanitiser.Sanitise(filterAttributeValue));
 
-        var count = await _application.Repository.Metaverse.GetMetaverseObjectsCountAsync(
+        var count = await _application.Metaverse.GetMetaverseObjectsCountAsync(
             objectTypeId, search, filterAttributeName, filterAttributeValue);
         return Ok(count);
     }
@@ -938,7 +938,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         _logger.LogDebug("Getting pending deletions (Page: {Page}, PageSize: {PageSize}, TypeId: {TypeId})",
             pagination.Page, pagination.PageSize, objectTypeId);
 
-        var result = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
+        var result = await _application.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
             page: pagination.Page,
             pageSize: pagination.PageSize,
             objectTypeId: objectTypeId);
@@ -967,7 +967,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     public async Task<IActionResult> GetPendingDeletionsCountAsync([FromQuery] int? objectTypeId = null)
     {
         _logger.LogDebug("Getting pending deletions count (TypeId: {TypeId})", objectTypeId);
-        var count = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(objectTypeId);
+        var count = await _application.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(objectTypeId);
         return Ok(count);
     }
 
@@ -989,7 +989,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         _logger.LogDebug("Getting pending deletions summary");
 
         // Get all pending deletions to calculate summary
-        var result = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
+        var result = await _application.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
             page: 1,
             pageSize: 100,
             objectTypeId: null);
@@ -998,7 +998,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         var allPending = result.Results;
 
         // Get total count (may be more than 100)
-        var totalCount = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync();
+        var totalCount = await _application.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync();
 
         // Calculate status counts
         var deprovisioningCount = allPending.Count(m => m.ConnectedSystemObjects.Any());

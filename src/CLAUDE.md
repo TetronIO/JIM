@@ -187,7 +187,7 @@ Repository and server methods that load a single entity follow a weight-based ta
 
 **CRITICAL: Respect N-Tier Architecture - NEVER Bypass Layers:**
 
-JIM follows strict n-tier architecture. Each layer may ONLY call the layer directly below it:
+JIM follows strict n-tier architecture. Each layer may ONLY call the layer directly below it. This is compile-time enforced: `JimApplication.Repository` is `internal`, so a `Jim.Repository.*` call from JIM.Web, JIM.Worker, or JIM.Scheduler is a build error. If a caller needs data the facade does not expose, add a method to the owning server; do not widen the accessor. The single sanctioned exception is `JimApplication.SyncRepository` (`IRepository.Sync`), the sync engine's raw-SQL hot-path repository, usable only from sync task processing:
 
 ```
 +------------------+

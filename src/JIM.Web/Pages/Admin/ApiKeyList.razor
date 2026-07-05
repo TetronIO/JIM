@@ -329,7 +329,7 @@
     {
         using var jim = JimFactory.Create();
         _loading = true;
-        _apiKeys = await jim.Repository.ApiKeys.GetAllAsync();
+        _apiKeys = await jim.Security.GetApiKeysAsync();
         _availableRoles = await jim.Security.GetRolesAsync();
         _loading = false;
     }
@@ -407,7 +407,7 @@
 
             using var jim = JimFactory.Create();
             apiKey.Created = DateTime.UtcNow;
-            await jim.Repository.ApiKeys.CreateAsync(apiKey);
+            await jim.Security.CreateApiKeyAsync(apiKey);
 
             Snackbar.Add("API key created successfully.", Severity.Success);
             _createDialogVisible = false;
@@ -476,7 +476,7 @@
             };
 
             using var jim = JimFactory.Create();
-            await jim.Repository.ApiKeys.UpdateAsync(updatedKey);
+            await jim.Security.UpdateApiKeyAsync(updatedKey);
 
             Snackbar.Add("API key updated successfully.", Severity.Success);
             _editDialogVisible = false;
@@ -506,7 +506,7 @@
         try
         {
             using var jim = JimFactory.Create();
-            await jim.Repository.ApiKeys.DeleteAsync(apiKey.Id);
+            await jim.Security.DeleteApiKeyAsync(apiKey.Id);
 
             Snackbar.Add("API key deleted successfully.", Severity.Success);
             await LoadDataAsync();

@@ -221,6 +221,43 @@ public class SchedulerServer
     }
 
     /// <summary>
+    /// Gets a paginated list of Schedule Executions, optionally filtered by schedule.
+    /// </summary>
+    /// <param name="scheduleId">Optional filter by schedule ID.</param>
+    /// <param name="page">The page number (1-based).</param>
+    /// <param name="pageSize">The number of items per page.</param>
+    /// <param name="sortBy">Optional field to sort by (queuedAt, startedAt, completedAt, status).</param>
+    /// <param name="sortDescending">Whether to sort in descending order (default: true for newest first).</param>
+    /// <returns>A paged result set of Schedule Executions.</returns>
+    public async Task<PagedResultSet<ScheduleExecution>> GetScheduleExecutionsAsync(
+        Guid? scheduleId,
+        int page,
+        int pageSize,
+        string? sortBy = null,
+        bool sortDescending = true)
+    {
+        return await Application.Repository.Scheduling.GetScheduleExecutionsAsync(scheduleId, page, pageSize, sortBy, sortDescending);
+    }
+
+    /// <summary>
+    /// Gets a Schedule Execution by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the execution.</param>
+    public async Task<ScheduleExecution?> GetScheduleExecutionAsync(Guid id)
+    {
+        return await Application.Repository.Scheduling.GetScheduleExecutionAsync(id);
+    }
+
+    /// <summary>
+    /// Gets a Schedule Execution by ID, with its parent Schedule included.
+    /// </summary>
+    /// <param name="id">The unique identifier of the execution.</param>
+    public async Task<ScheduleExecution?> GetScheduleExecutionWithScheduleAsync(Guid id)
+    {
+        return await Application.Repository.Scheduling.GetScheduleExecutionWithScheduleAsync(id);
+    }
+
+    /// <summary>
     /// Starts execution of a schedule. Creates a ScheduleExecution record and queues ALL steps upfront.
     /// Step 0 tasks are set to Queued (ready to run). All subsequent step tasks are set to
     /// WaitingForPreviousStep (visible on the queue but blocked until the worker advances them).
@@ -556,6 +593,18 @@ public class SchedulerServer
                 schedule.CronExpression, schedule.Id);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Persists run-time bookkeeping (NextRunTime/LastRunTime) only. Deliberately records no Activity or
+    /// configuration change: these ticks are operational state produced by the scheduler loop, not a configuration
+    /// change made by a principal, mirroring the rationale documented on <see cref="CreateScheduleAsync"/>. Callers
+    /// must not use this for configuration changes; use
+    /// <see cref="UpdateScheduleAsync(Schedule,ActivityInitiatorType,Guid?,string?,string?)"/> for that.
+    /// </summary>
+    public async Task UpdateScheduleRunTimesAsync(Schedule schedule)
+    {
+        await Application.Repository.Scheduling.UpdateScheduleAsync(schedule);
     }
 
     // -----------------------------------------------------------------------------------------------------------------

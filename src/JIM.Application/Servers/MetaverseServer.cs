@@ -873,6 +873,25 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Gets the count of Metaverse Objects with optional filtering by type, search query, or specific attribute value.
+    /// Optimised for fast counting without loading entity data.
+    /// </summary>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <param name="searchQuery">Optional search query to filter by display name (partial match, case-insensitive).</param>
+    /// <param name="filterAttributeName">Optional attribute name to filter by (must be used with filterAttributeValue).</param>
+    /// <param name="filterAttributeValue">Optional attribute value to filter by (exact match, case-insensitive).</param>
+    /// <returns>The count of matching Metaverse Objects.</returns>
+    public async Task<int> GetMetaverseObjectsCountAsync(
+        int? objectTypeId = null,
+        string? searchQuery = null,
+        string? filterAttributeName = null,
+        string? filterAttributeValue = null)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectsCountAsync(
+            objectTypeId, searchQuery, filterAttributeName, filterAttributeValue);
+    }
+
+    /// <summary>
     /// Attempts to find a single Metaverse Object using criteria from a SyncRuleMapping object and attribute values from a Connected System Object.
     /// This is to help the process of joining a CSO to an MVO.
     /// </summary>
@@ -935,6 +954,65 @@ public class MetaverseServer
         Log.Information("MarkOrphanedMvosForDeletionAsync: Marked {Count} MVOs for deletion for Connected System {Id}", markedCount, connectedSystemId);
 
         return markedCount;
+    }
+
+    /// <summary>
+    /// Gets MVOs that are pending deletion (have LastConnectorDisconnectedDate set but haven't been deleted yet).
+    /// These are MVOs awaiting their grace period to expire before automatic deletion.
+    /// </summary>
+    /// <param name="page">The page number (1-based).</param>
+    /// <param name="pageSize">The number of items per page.</param>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <returns>A paged result set of MVOs pending deletion.</returns>
+    public async Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsPendingDeletionAsync(
+        int page,
+        int pageSize,
+        int? objectTypeId = null)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(page, pageSize, objectTypeId);
+    }
+
+    /// <summary>
+    /// Gets the count of MVOs that are pending deletion.
+    /// </summary>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <returns>The count of MVOs pending deletion.</returns>
+    public async Task<int> GetMetaverseObjectsPendingDeletionCountAsync(int? objectTypeId = null)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(objectTypeId);
+    }
+
+    /// <summary>
+    /// Gets MVO changes where the MVO has been deleted (ChangeType = Deleted and MetaverseObject is null).
+    /// Used for the deleted objects browser.
+    /// </summary>
+    /// <param name="objectTypeId">Optional filter by object type ID.</param>
+    /// <param name="fromDate">Optional filter for changes on or after this date.</param>
+    /// <param name="toDate">Optional filter for changes on or before this date.</param>
+    /// <param name="displayNameSearch">Optional search term for display name.</param>
+    /// <param name="page">Page number (1-based).</param>
+    /// <param name="pageSize">Number of items per page.</param>
+    /// <returns>Paginated list of deleted MVO changes ordered by ChangeTime descending.</returns>
+    public async Task<(List<MetaverseObjectChange> Items, int TotalCount)> GetDeletedMvoChangesAsync(
+        int? objectTypeId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? displayNameSearch = null,
+        int page = 1,
+        int pageSize = 50)
+    {
+        return await Application.Repository.Metaverse.GetDeletedMvoChangesAsync(
+            objectTypeId, fromDate, toDate, displayNameSearch, page, pageSize);
+    }
+
+    /// <summary>
+    /// Gets the full change history for a deleted MVO by its change ID.
+    /// </summary>
+    /// <param name="changeId">The ID of the MVO change record.</param>
+    /// <returns>List of all changes for that MVO ordered by ChangeTime descending.</returns>
+    public async Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
+    {
+        return await Application.Repository.Metaverse.GetDeletedMvoChangeHistoryAsync(changeId);
     }
     #endregion
 }

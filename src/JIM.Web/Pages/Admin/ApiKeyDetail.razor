@@ -226,7 +226,7 @@ else if (!_loading)
     {
         using var jim = JimFactory.Create();
         _loading = true;
-        _apiKey = await jim.Repository.ApiKeys.GetByIdAsync(Id);
+        _apiKey = await jim.Security.GetApiKeyAsync(Id);
         _loading = false;
 
         _breadcrumbs = new List<BreadcrumbItem>

@@ -93,7 +93,7 @@ public class SystemController(ILogger<SystemController> logger, JimApplication a
         // API key authentication: the middleware stashes the key id in HttpContext.Items.
         if (HttpContext.Items.TryGetValue("ApiKeyId", out var apiKeyIdObj) && apiKeyIdObj is Guid apiKeyId)
         {
-            var apiKey = await _application.Repository.ApiKeys.GetByIdAsync(apiKeyId);
+            var apiKey = await _application.Security.GetApiKeyAsync(apiKeyId);
             return (ActivityInitiatorType.ApiKey, apiKeyId, apiKey?.Name ?? "API Key");
         }
 

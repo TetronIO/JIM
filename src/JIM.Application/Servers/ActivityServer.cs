@@ -315,6 +315,15 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// Gets all activities associated with a schedule execution.
+    /// Used by the scheduler to determine step outcomes after worker tasks have been deleted.
+    /// </summary>
+    public async Task<List<Activity>> GetActivitiesByScheduleExecutionAsync(Guid scheduleExecutionId)
+    {
+        return await Application.Repository.Activity.GetActivitiesByScheduleExecutionAsync(scheduleExecutionId);
+    }
+
+    /// <summary>
     /// Retrieves a page's worth of top-level activities, i.e. those that do not have a parent activity.
     /// </summary>
     /// <param name="page">The page number (1-based).</param>

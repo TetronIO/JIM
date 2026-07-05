@@ -62,7 +62,7 @@ public abstract class ApiControllerBase(JimApplication application, ILogger logg
         if (string.IsNullOrEmpty(apiKeyIdClaim) || !Guid.TryParse(apiKeyIdClaim, out var apiKeyId))
             return null;
 
-        return await Application.Repository.ApiKeys.GetByIdAsync(apiKeyId);
+        return await Application.Security.GetApiKeyAsync(apiKeyId);
     }
 
     /// <summary>

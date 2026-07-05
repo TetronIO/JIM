@@ -47,7 +47,7 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
     public async Task<IActionResult> GetAllAsync()
     {
         _logger.LogTrace("Requested all API keys");
-        var apiKeys = await _application.Repository.ApiKeys.GetAllAsync();
+        var apiKeys = await _application.Security.GetApiKeysAsync();
         var dtos = apiKeys.Select(ApiKeyDto.FromEntity);
         return Ok(dtos);
     }
@@ -65,7 +65,7 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
     public async Task<IActionResult> GetByIdAsync(Guid id)
     {
         _logger.LogTrace("Requested API key {ApiKeyId}", id);
-        var apiKey = await _application.Repository.ApiKeys.GetByIdAsync(id);
+        var apiKey = await _application.Security.GetApiKeyAsync(id);
 
         if (apiKey == null)
         {
@@ -128,7 +128,7 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
         };
 
         apiKey.Created = DateTime.UtcNow;
-        var createdKey = await _application.Repository.ApiKeys.CreateAsync(apiKey);
+        var createdKey = await _application.Security.CreateApiKeyAsync(apiKey);
 
         _logger.LogInformation("Created API key {ApiKeyId} with prefix {KeyPrefix}", createdKey.Id, keyPrefix);
 
@@ -172,7 +172,7 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
             return BadRequest(new ApiErrorResponse { Message = "API key name is required" });
         }
 
-        var existingKey = await _application.Repository.ApiKeys.GetByIdAsync(id);
+        var existingKey = await _application.Security.GetApiKeyAsync(id);
         if (existingKey == null)
         {
             return NotFound(new ApiErrorResponse { Message = $"API key not found: {id}" });
@@ -198,7 +198,7 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
         existingKey.IsEnabled = request.IsEnabled;
         existingKey.Roles = roles;
 
-        var updatedKey = await _application.Repository.ApiKeys.UpdateAsync(existingKey);
+        var updatedKey = await _application.Security.UpdateApiKeyAsync(existingKey);
 
         _logger.LogInformation("Updated API key {ApiKeyId}", id);
 
@@ -219,13 +219,13 @@ public class ApiKeysController(ILogger<ApiKeysController> logger, JimApplication
     {
         _logger.LogInformation("Deleting API key {ApiKeyId}", id);
 
-        var existingKey = await _application.Repository.ApiKeys.GetByIdAsync(id);
+        var existingKey = await _application.Security.GetApiKeyAsync(id);
         if (existingKey == null)
         {
             return NotFound(new ApiErrorResponse { Message = $"API key not found: {id}" });
         }
 
-        await _application.Repository.ApiKeys.DeleteAsync(id);
+        await _application.Security.DeleteApiKeyAsync(id);
 
         _logger.LogInformation("Deleted API key {ApiKeyId} (prefix: {KeyPrefix})", id, existingKey.KeyPrefix);
 

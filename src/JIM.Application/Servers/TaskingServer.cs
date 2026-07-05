@@ -250,6 +250,15 @@ namespace JIM.Application.Servers
             return await Application.Repository.Tasking.GetWorkerTasksThatNeedCancellingAsync(workerTaskIds);
         }
 
+        /// <summary>
+        /// Gets all worker tasks associated with a schedule execution.
+        /// Used by the scheduler to monitor step completion.
+        /// </summary>
+        public async Task<List<WorkerTask>> GetWorkerTasksByScheduleExecutionAsync(Guid scheduleExecutionId)
+        {
+            return await Application.Repository.Tasking.GetWorkerTasksByScheduleExecutionAsync(scheduleExecutionId);
+        }
+
         public async Task UpdateWorkerTaskAsync(WorkerTask workerTask)
         {
             await Application.Repository.Tasking.UpdateWorkerTaskAsync(workerTask);

@@ -113,7 +113,7 @@ try
     builder.Services.AddTransient<JimApplication>(sp =>
     {
         var repo = sp.GetRequiredService<IRepository>();
-        var syncRepo = new JIM.PostgresData.Repositories.SyncRepository((JIM.PostgresData.PostgresDataRepository)repo);
+        var syncRepo = repo.Sync;
         var jim = new JimApplication(repo, syncRepository: syncRepo);
         // Inject credential protection service for connector password encryption/decryption
         jim.CredentialProtection = sp.GetService<ICredentialProtectionService>();
@@ -805,7 +805,7 @@ static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
 
     // Check if this key already exists (by hash)
     var keyHash = ApiKeyAuthenticationHandler.HashApiKey(infrastructureApiKey);
-    var existingKey = await jim.Repository.ApiKeys.GetByHashAsync(keyHash);
+    var existingKey = await jim.Security.GetApiKeyByHashAsync(keyHash);
 
     if (existingKey != null)
     {
@@ -844,7 +844,7 @@ static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
         Roles = [adminRole]
     };
 
-    await jim.Repository.ApiKeys.CreateAsync(apiKey);
+    await jim.Security.CreateApiKeyAsync(apiKey);
     Log.Information("InitialiseInfrastructureApiKeyAsync: Created infrastructure API key (prefix: {Prefix}, expires: {Expiry}).",
         keyPrefix, apiKey.ExpiresAt);
 }

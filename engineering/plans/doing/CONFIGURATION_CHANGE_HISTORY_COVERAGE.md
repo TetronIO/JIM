@@ -173,8 +173,19 @@ Each phase is a shippable vertical slice (TDD per capture path, docs and changel
 2. REST routes on `CertificatesController` (Guid) + `ChangeReason` on writes; `-ChangeReason` on `Set-JIMCertificate`; `-Type TrustedCertificate`. ✅ *(`CertificatesController` moved onto `ApiControllerBase` so mutations attribute to the calling user or API key; `-ChangeReason` also added to `Add-JIMCertificate` and `Remove-JIMCertificate`.)*
 3. UI: per-row history button on `CertificateList.razor`; reason prompts on upload, add-from-path, edit, and delete. ✅ *(History surfaced as a Change History action in the row menu, opening the shared `ConfigurationChangeHistoryDialog`.)*
 
+### Interim slice: N-tier enforcement (added 2026-07-05) ✅
+
+Added after Phase 4, prompted by the Phase 5 finding that API key CRUD bypassed the application layer entirely: a sweep found 15 JIM.Web files (~35 call sites) plus 3 Worker/Scheduler sites calling `Repository.*` directly, which is how unaudited mutations happen.
+
+1. All API key data access relocated onto `SecurityServer` as plain pass-throughs (no capture yet; that is Phase 5), including the middleware authentication reads and the bootstrap key creation. ✅
+2. Read pass-through methods added to the owning servers (Metaverse, ConnectedSystems, Scheduler, Activities, Tasking, ChangeHistory) for every remaining JIM.Web bypass; all call sites switched. ✅
+3. Worker/Scheduler: switched to existing or new facade methods, including `UpdateScheduleRunTimesAsync` (deliberately unaudited run-time bookkeeping, now a named contract instead of a raw repository write). ✅
+4. **Enforcement**: `JimApplication.Repository` is now `internal`, so any future bypass is a compile error. The sync engine's raw-SQL hot path gets a deliberate, documented door instead: `IRepository.Sync` (`ISyncRepository`) exposed as `JimApplication.SyncRepository`, replacing four concrete-type casts. The compiler immediately proved its worth by catching two Worker call sites the grep sweeps had missed (they passed `jim.Repository` as a constructor argument, with no trailing `.`). ✅
+
+Pure relocation throughout: no behaviour change, REST contracts unchanged, existing test suite green. Phase 5 now builds capture onto an already-clean `SecurityServer` surface.
+
 ### Phase 5: API Keys (Tier 2, security-critical)
-1. **N-tier fix first**: new application-layer server (e.g. `ApiKeyServer` on `JimApplication`) exposing create/update/delete; `ApiKeyList.razor`, `ApiKeyDetail.razor`, and `ApiKeysController` refactored onto it with unchanged REST contracts.
+1. **N-tier fix first**: API key operations move onto `SecurityServer` (decided 2026-07-05: API keys are security principals carrying Role assignments, and Phase 6 routes Role capture through `SecurityServer` anyway, so both security-principal types share one audited home; a separate `ApiKeyServer` was considered and rejected). `ApiKeyList.razor`, `ApiKeyDetail.razor`, and `ApiKeysController` refactored onto it with unchanged REST contracts.
 2. Activity plumbing (`ActivityTargetType.ApiKey`, `ApiKeyId` FK) + snapshot capture; the secret never appears in any snapshot in any form (explicit test); delete tombstone.
 3. REST routes + `ChangeReason` on write DTOs; `-ChangeReason` on `New-JIMApiKey`/`Set-JIMApiKey`; `-Type ApiKey` (Guid-keyed).
 4. UI: `ApiKeyDetail` converted to `NavigableMudTabs` (Details / Activity / Changes); reason prompts on the list page's create/edit/delete dialogs.
