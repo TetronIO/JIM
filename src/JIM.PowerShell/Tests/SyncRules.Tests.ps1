@@ -267,6 +267,21 @@ Describe 'Set-JIMSyncRule' {
             }
         }
 
+        It 'Sends an empty description in the PUT body when -Description is $null (clears the value)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                # the binder coerces $null to '' for [string] parameters, so this and -Description ''
+                # are equivalent; $null is the documented convention for clearing
+                Set-JIMSyncRule -Id 1 -Description $null -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('description') -and $Body.description -eq ''
+                }
+            }
+        }
+
         It 'Sends an empty description in the PUT body when -Description is an explicit empty string' {
             InModuleScope JIM {
                 $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
