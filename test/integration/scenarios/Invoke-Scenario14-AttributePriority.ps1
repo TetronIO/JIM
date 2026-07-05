@@ -50,10 +50,34 @@
        winner leaving with no surviving contributor). Description ends up with no value at all,
        and the Primary Full Synchronisation Activity records a NoContributor sync outcome
        ("MVO No Contributor" in the UI).
+    6. AssertedNullOverridesSurvivor - "Null is a value" is set on the Primary Job Title
+       mapping, then Frank's (S14-5) Primary Job Title is withdrawn (entry remains). Because
+       the flag is set, JIM asserts null rather than falling back to Secondary's distinct
+       "Architect (Secondary)" value; the Primary Full Synchronisation Activity records an
+       AssertedNull sync outcome. Dave (S14-3) is the control: his unaffected Primary Job Title
+       proves the flag has no collateral effect on other joined, in-scope contributors.
+    7. NotJoinedNoOpinion - a brand-new user, Grace (S14-6, "Grace Green"), is added to the
+       Secondary suffix ONLY (no Primary counterpart exists at all). Even with NullIsValue set
+       on Primary's Job Title mapping, Primary has no joined CSO for Grace, so its rule is
+       RuleNotApplicable ("no opinion") and never engages; Secondary contributes her Job Title
+       and Description in full. This is the HR-migration cell of the tri-state matrix.
+    8. MidLifeJoinBlanksClear - Grace (S14-6) subsequently joins the Primary suffix too, via an
+       entry that omits `title` entirely. Her Primary CSO joins her EXISTING Metaverse Object
+       (proven via a second lookup, not a duplicate projection); because Primary's Job Title
+       mapping now has NullIsValue set and supplies no value, her Job Title flips from
+       Secondary's value to an asserted null with Primary provenance (a new join's blank clears
+       a previously-contributed value). Description, which has no NullIsValue set, wins to
+       Primary normally on the same join.
+    9. MvaNullIsValueAssertsEmptySet - "Null is a value" is set on the Primary Other
+       Telephones mapping (a multi-valued attribute), then Frank's (S14-5) Primary
+       telephoneNumber values are withdrawn entirely. The asserted null collapses to the
+       Metaverse's usual single NullValue marker row (not a per-value marker for each of the
+       two numbers Frank used to have), with Secondary's numbers completely absent (no
+       fallback). Dave (S14-3) is the control.
 
-    -- INSERT NEW STEPS HERE (Phase C: NullIsValue tri-state; Phase D: authority/propagation):
-       add the ValidateSet entry above, a $testResults.Steps-tracked block below (mirroring
-       BaselineResolution's structure), and update .PARAMETER Step. --
+    -- INSERT NEW STEPS HERE (Phase D: authority/propagation): add the ValidateSet entry above,
+       a $testResults.Steps-tracked block below (mirroring BaselineResolution's structure), and
+       update .PARAMETER Step. --
 
     Step composition under -Step All: RecallReElection through NoContributorCleared were each
     given a distinct subject (Alice, Bob, Carol, Erin) precisely so they compose safely when run
@@ -62,13 +86,32 @@
     that step mutated), so a later step's full-system re-sync of an earlier step's mutated user is
     idempotent (no further change, no repeat recall/withdrawal outcome).
 
+    AssertedNullOverridesSurvivor through MvaNullIsValueAssertsEmptySet (Phase C) use Frank
+    (S14-5, previously untouched by Phases A/B) and a brand-new user, Grace (S14-6), rather than
+    reusing Alice/Bob/Carol/Erin: those four carry Phase B end-state (Alice/Bob deleted from
+    Primary; Carol/Erin's Primary Description withdrawn) that Phase C's assertions do not need to
+    reason about on top of the NullIsValue tri-state. Dave (S14-3) continues to serve as the
+    untouched control subject started by BaselineResolution. Every Phase C step that changes
+    Attribute Priority configuration documents, in its own comments, exactly which Phase B
+    subjects it does and does not affect: a Full Synchronisation re-evaluates every joined object,
+    so a configuration change's blast radius must be reasoned through explicitly, not assumed
+    narrow because only one user's LDAP entry was touched.
+
 .PARAMETER Step
     Which test step to execute (BaselineResolution, RecallReElection, IdenticalValueHandOver,
-    WithdrawalReElection, NoContributorCleared, All). Run-IntegrationTests.ps1 resets and
-    repopulates OpenLDAP for every scenario invocation, so a single named -Step run starts from a
-    fresh environment with no synchronised state; the script therefore establishes the baseline
-    (both systems fully imported and synchronised) before dispatching any non-baseline step, and
-    the step then mutates from that baseline rather than from a state left by an earlier step.
+    WithdrawalReElection, NoContributorCleared, AssertedNullOverridesSurvivor,
+    NotJoinedNoOpinion, MidLifeJoinBlanksClear, MvaNullIsValueAssertsEmptySet, All).
+    Run-IntegrationTests.ps1 resets and repopulates OpenLDAP for every scenario invocation, so a
+    single named -Step run starts from a fresh environment with no synchronised state; the script
+    therefore establishes the baseline (both systems fully imported and synchronised) before
+    dispatching any non-baseline step, and the step then mutates from that baseline rather than
+    from a state left by an earlier step. NotJoinedNoOpinion, MidLifeJoinBlanksClear and
+    MvaNullIsValueAssertsEmptySet additionally need "Null is a value" set on the relevant
+    Metaverse attribute's Primary mapping; a shared idempotent helper
+    (Set-Scenario14AttributePrimaryNullIsValue) sets it if a standalone run has not already done
+    so, and MidLifeJoinBlanksClear also re-creates Grace's Secondary-only presence
+    (NotJoinedNoOpinion's mutation) if she does not already exist, so every step remains
+    independently runnable.
 
 .PARAMETER Template
     Accepted for runner compatibility. This scenario seeds its own small, fixed, deterministic
@@ -101,7 +144,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("BaselineResolution", "RecallReElection", "IdenticalValueHandOver", "WithdrawalReElection", "NoContributorCleared", "All")]
+    [ValidateSet("BaselineResolution", "RecallReElection", "IdenticalValueHandOver", "WithdrawalReElection", "NoContributorCleared", "AssertedNullOverridesSurvivor", "NotJoinedNoOpinion", "MidLifeJoinBlanksClear", "MvaNullIsValueAssertsEmptySet", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -281,6 +324,119 @@ try {
         Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Secondary)"
 
         if ($WaitSeconds -gt 0) { Start-Sleep -Seconds $WaitSeconds }
+    }
+
+    # Shared by AssertedNullOverridesSurvivor, NotJoinedNoOpinion, MidLifeJoinBlanksClear (Job
+    # Title) and MvaNullIsValueAssertsEmptySet (Other Telephones): idempotently sets "Null is a
+    # value" on the named Metaverse attribute's Primary mapping, leaving the existing
+    # Primary=1/Secondary=2 order unchanged. Under -Step All, AssertedNullOverridesSurvivor sets
+    # Job Title's flag first and every later Job Title call below becomes a verified no-op; a
+    # standalone single-step run (e.g. -Step MidLifeJoinBlanksClear alone) has nothing set yet, so
+    # the same call performs the real work. Returns the Primary/Secondary mapping IDs either way.
+    function Set-Scenario14AttributePrimaryNullIsValue {
+        param(
+            [Parameter(Mandatory=$true)]
+            [string]$AttributeName
+        )
+
+        $mvAttr = @(Get-JIMMetaverseAttribute) | Where-Object { $_.name -eq $AttributeName }
+        if (-not $mvAttr) {
+            throw "Metaverse attribute '$AttributeName' not found."
+        }
+        $mvUserType = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" } | Select-Object -First 1
+        if (-not $mvUserType) {
+            throw "Metaverse 'User' object type not found."
+        }
+
+        $priorityBefore = Get-JIMMetaverseAttributePriority -AttributeId $mvAttr.id -ObjectTypeId $mvUserType.id
+        $contributorsBefore = @($priorityBefore.contributors)
+        $primaryContributor = $contributorsBefore | Where-Object { $_.connectedSystemName -eq $primarySystemName }
+        $secondaryContributor = $contributorsBefore | Where-Object { $_.connectedSystemName -eq $secondarySystemName }
+        if (-not $primaryContributor -or -not $secondaryContributor) {
+            throw "Could not resolve both '$AttributeName' contributors from Attribute Priority read-back."
+        }
+
+        if ($primaryContributor.nullIsValue -and $primaryContributor.priority -eq 1) {
+            Write-Host "  '$AttributeName' NullIsValue already set on Primary (idempotent no-op)" -ForegroundColor Gray
+            return @{ Primary = $primaryContributor.mappingId; Secondary = $secondaryContributor.mappingId }
+        }
+
+        Set-JIMMetaverseAttributePriority -AttributeId $mvAttr.id -ObjectTypeId $mvUserType.id `
+            -MappingId @($primaryContributor.mappingId, $secondaryContributor.mappingId) `
+            -NullIsValueMappingId @($primaryContributor.mappingId) | Out-Null
+
+        $priorityAfter = Get-JIMMetaverseAttributePriority -AttributeId $mvAttr.id -ObjectTypeId $mvUserType.id
+        $contributorsAfter = @($priorityAfter.contributors)
+        $primaryAfter = $contributorsAfter | Where-Object { $_.connectedSystemName -eq $primarySystemName }
+        $secondaryAfter = $contributorsAfter | Where-Object { $_.connectedSystemName -eq $secondarySystemName }
+        if (-not $primaryAfter -or $primaryAfter.priority -ne 1 -or -not $primaryAfter.nullIsValue -or
+            -not $secondaryAfter -or $secondaryAfter.priority -ne 2 -or $secondaryAfter.nullIsValue) {
+            throw "'$AttributeName' NullIsValue read-back mismatch: expected Primary priority=1/nullIsValue=true, " +
+                "Secondary priority=2/nullIsValue=false. Got: $(@($contributorsAfter | ForEach-Object { "$($_.connectedSystemName)=priority:$($_.priority),nullIsValue:$($_.nullIsValue)" }) -join ', ')"
+        }
+        Write-Host "  OK '$AttributeName' NullIsValue set on Primary (priority 1) and verified via read-back" -ForegroundColor Green
+
+        return @{ Primary = $primaryAfter.mappingId; Secondary = $secondaryAfter.mappingId }
+    }
+
+    # Shared by NotJoinedNoOpinion (whose actual mutation this is) and MidLifeJoinBlanksClear
+    # (which needs Grace's Secondary-only presence already in place, but only gets the plain
+    # baseline when run standalone). Tolerates ldapmodify's "already exists" so a repeat call
+    # (-Step All running both steps back to back) is a harmless LDAP-side no-op; Full
+    # Import/Full Synchronisation of Secondary always run so the caller can rely on Grace being
+    # present and synchronised on return.
+    function New-Scenario14GraceSecondaryOnly {
+        # Grace (S14-6, "Grace Green") follows the populate script's alliterative naming (Alice
+        # Anderson, Bob Baker, ... Frank Foster) and its per-suffix formulas at index 6:
+        #   Job Title:   jobTitles[6 % 6] = jobTitles[0] = "Engineer" -> "Engineer (Secondary)"
+        #   Description: "Secondary-sourced description for Grace Green (S14)"
+        #   Phones:      phonePrefix "20", index 6 -> "+44 20 7946 2060" / "+44 20 7946 2061"
+        #   Manager:     the formula's Secondary rotation offset is 3, so (6 + 3) % 6 = index 3 =
+        #                Dave; Dave is deliberately used for BOTH suffixes below (see the Primary
+        #                add in MidLifeJoinBlanksClear) because Alice/Bob no longer have Primary
+        #                entries after Phase B, so the formula's Primary offset (1 -> index 0 =
+        #                Alice) would create a dangling manager DN in that suffix. Using Dave
+        #                everywhere keeps both entries valid without inventing a bespoke rule.
+        Write-Host "Adding Grace (S14-6) to the Secondary suffix only..." -ForegroundColor Gray
+        $graceSecondaryDn = "uid=grace14,$($secondaryLdapConfig.UserContainer)"
+        $graceManagerDn = "uid=dave14,$($secondaryLdapConfig.UserContainer)"
+        $graceSecondaryLdif = @"
+dn: $graceSecondaryDn
+changetype: add
+objectClass: inetOrgPerson
+uid: grace14
+cn: Grace Green (S14)
+sn: Green
+givenName: Grace
+displayName: Grace Green (S14)
+mail: grace14@glitterband.local
+employeeNumber: S14-6
+description: Secondary-sourced description for Grace Green (S14)
+title: Engineer (Secondary)
+manager: $graceManagerDn
+telephoneNumber: +44 20 7946 2060
+telephoneNumber: +44 20 7946 2061
+userPassword: Test@123!
+
+"@
+        try {
+            Invoke-Scenario14LdapModify -ContainerName $secondaryLdapConfig.ContainerName -LdapUri $secondaryLdapUri `
+                -BindDN $secondaryLdapConfig.BindDN -BindPassword $secondaryLdapConfig.BindPassword -Ldif $graceSecondaryLdif
+        }
+        catch {
+            if ("$_" -notmatch "already exists") { throw }
+            Write-Host "  Grace's Secondary entry already exists (idempotent no-op)" -ForegroundColor Gray
+        }
+
+        Write-Host "Running Full Import (Secondary)..." -ForegroundColor Gray
+        $importResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryFullImport.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import (Secondary) with Grace present"
+
+        if ($WaitSeconds -gt 0) { Start-Sleep -Seconds $WaitSeconds }
+
+        Write-Host "Running Full Synchronisation (Secondary)..." -ForegroundColor Gray
+        $syncResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryFullSync.id -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Secondary) with Grace present"
     }
 
     if ($Step -notin @("All", "BaselineResolution")) {
@@ -714,8 +870,333 @@ try {
         }
     }
 
-    # -- INSERT NEW STEP DISPATCH BLOCKS HERE (Phase C: NullIsValue tri-state; Phase D: authority/propagation).
-    #    Mirror the "if ($Step -eq ... -or $Step -eq 'All')" shape above. --
+    # ========================================================================
+    # Test 6: AssertedNullOverridesSurvivor
+    # ========================================================================
+    if ($Step -eq "AssertedNullOverridesSurvivor" -or $Step -eq "All") {
+        Write-TestSection "Test 6: Asserted Null Overrides Survivor (Frank, NullIsValue on Primary's Job Title blocks fallback)"
+
+        $assertedNullSuccess = $true
+        $assertedNullNotes = @()
+
+        try {
+            $primaryImportRuleName = "$primarySystemName Import Users"
+
+            # Blast radius of setting NullIsValue on the Primary Job Title mapping: it only changes
+            # behaviour for a user whose Primary CSO is JOINED and CONNECTED, NO VALUE for Job Title
+            # (the ConnectedNoValue state). A Full Synchronisation re-evaluates every joined object,
+            # so every other Phase B subject needs reasoning through, not assuming:
+            #   - Alice (S14-0) and Bob (S14-1) have no Primary CSO at all (deleted in Phase B); a
+            #     rule with no joined CSO is RuleNotApplicable ("no opinion"), so NullIsValue never
+            #     engages regardless of the flag. Secondary continues to supply their Job Title.
+            #   - Carol (S14-2) and Erin (S14-4) still have a Primary CSO joined, and it still
+            #     supplies a real Job Title value (only their Description was withdrawn in Phase
+            #     B); ConnectedWithValue, so NullIsValue is irrelevant to them too.
+            #   - Dave (S14-3) is completely untouched by any prior step; used below as the control.
+            # Only Frank (S14-5), whose title is withdrawn below, hits ConnectedNoValue with
+            # NullIsValue set, so he is the only user this step's assertion needs to cover.
+            $null = Set-Scenario14AttributePrimaryNullIsValue -AttributeName "Job Title"
+
+            Write-Host "Withdrawing Frank's Primary Job Title (entry remains, title attribute removed)..." -ForegroundColor Gray
+            $frankPrimaryDn = "uid=frank14,$($primaryLdapConfig.UserContainer)"
+            $withdrawTitleLdif = "dn: $frankPrimaryDn`nchangetype: modify`ndelete: title`n"
+            Invoke-Scenario14LdapModify -ContainerName $primaryLdapConfig.ContainerName -LdapUri $primaryLdapUri `
+                -BindDN $primaryLdapConfig.BindDN -BindPassword $primaryLdapConfig.BindPassword -Ldif $withdrawTitleLdif
+
+            Write-Host "Running Full Import (Primary)..." -ForegroundColor Gray
+            $importResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullImport.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import (Primary) after Frank's Job Title withdrawal"
+
+            if ($WaitSeconds -gt 0) { Start-Sleep -Seconds $WaitSeconds }
+
+            Write-Host "Running Full Synchronisation (Primary)..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Primary) after Frank's Job Title withdrawal"
+
+            $frankMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-5" -PageSize 5) | Select-Object -First 1
+            $daveMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-3" -PageSize 5) | Select-Object -First 1
+            if (-not $frankMvo -or -not $daveMvo) {
+                throw "Could not resolve Frank (S14-5) and/or Dave (S14-3) Metaverse Objects."
+            }
+
+            Assert-MvoAttributeValue -MvoId $frankMvo.id -AttributeName "Job Title" `
+                -ExpectAssertedNull -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Frank's Job Title (asserted null with Primary provenance; NOT Secondary's 'Architect (Secondary)' fallback)"
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Job Title" `
+                -ExpectedValue "Coordinator (Primary)" -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Dave's Job Title (control: unaffected by Frank's NullIsValue assertion)"
+
+            Assert-ActivityItemsHaveOutcomeSummary -ActivityId $syncResult.activityId `
+                -Name "Full Synchronisation (Primary) after Frank's Job Title withdrawal" `
+                -ExpectedOutcomeType "AssertedNull"
+
+            $assertedNullNotes += "Frank's Job Title asserted null with Primary provenance (no fallback to Secondary's 'Architect (Secondary)'); Dave's Primary-sourced title unaffected"
+        }
+        catch {
+            $assertedNullSuccess = $false
+            $assertedNullNotes += "Error: $_"
+            throw
+        }
+        finally {
+            $testResults.Steps += @{
+                Name = "AssertedNullOverridesSurvivor"
+                Success = $assertedNullSuccess
+                Note = ($assertedNullNotes -join "; ")
+            }
+        }
+    }
+
+    # ========================================================================
+    # Test 7: NotJoinedNoOpinion
+    # ========================================================================
+    if ($Step -eq "NotJoinedNoOpinion" -or $Step -eq "All") {
+        Write-TestSection "Test 7: Not Joined, No Opinion (Grace, Secondary-only; Primary's NullIsValue has no bearing on an unjoined rule)"
+
+        $notJoinedSuccess = $true
+        $notJoinedNotes = @()
+
+        try {
+            $secondaryImportRuleName = "$secondarySystemName Import Users"
+
+            # Keep NullIsValue set on Primary's Job Title even when this step runs standalone: a
+            # single -Step NotJoinedNoOpinion invocation only gets the plain baseline (Step 0b),
+            # which never touches this flag. Idempotent: under -Step All this is a verified no-op
+            # because AssertedNullOverridesSurvivor above already set it.
+            $null = Set-Scenario14AttributePrimaryNullIsValue -AttributeName "Job Title"
+
+            # Grace (S14-6) is a brand-new Secondary-only user: no Primary counterpart exists at
+            # all, so the Primary Job Title rule has no joined CSO to evaluate and is
+            # RuleNotApplicable ("no opinion") for her, regardless of NullIsValue. Secondary is
+            # therefore the sole contributor and supplies its value in full: the HR-migration cell
+            # of the tri-state matrix (engineering/plans/doing/ATTRIBUTE_PRIORITY.md Phase 4).
+            New-Scenario14GraceSecondaryOnly
+
+            $graceMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-6" -PageSize 5) | Select-Object -First 1
+            if (-not $graceMvo) {
+                throw "Could not resolve Grace (S14-6) Metaverse Object after her Secondary-only projection."
+            }
+
+            Assert-MvoAttributeValue -MvoId $graceMvo.id -AttributeName "Job Title" `
+                -ExpectedValue "Engineer (Secondary)" -ExpectedContributingSyncRuleName $secondaryImportRuleName `
+                -Name "Grace's Job Title (Secondary contributes fully; Primary's NullIsValue is irrelevant with no joined CSO)"
+
+            Assert-MvoAttributeValue -MvoId $graceMvo.id -AttributeName "Description" `
+                -ExpectedValue "Secondary-sourced description for Grace Green (S14)" -ExpectedContributingSyncRuleName $secondaryImportRuleName `
+                -Name "Grace's Description (Secondary, sole contributor)"
+
+            $notJoinedNotes += "Grace projected from Secondary alone; Primary's Job Title NullIsValue had no bearing because Primary has no joined CSO for her (RuleNotApplicable)"
+        }
+        catch {
+            $notJoinedSuccess = $false
+            $notJoinedNotes += "Error: $_"
+            throw
+        }
+        finally {
+            $testResults.Steps += @{
+                Name = "NotJoinedNoOpinion"
+                Success = $notJoinedSuccess
+                Note = ($notJoinedNotes -join "; ")
+            }
+        }
+    }
+
+    # ========================================================================
+    # Test 8: MidLifeJoinBlanksClear
+    # ========================================================================
+    if ($Step -eq "MidLifeJoinBlanksClear" -or $Step -eq "All") {
+        Write-TestSection "Test 8: Mid-Life Join Blanks Clear (Grace joins Primary; her blank Job Title clears the Secondary value)"
+
+        $midLifeSuccess = $true
+        $midLifeNotes = @()
+
+        try {
+            $primaryImportRuleName = "$primarySystemName Import Users"
+
+            # Same idempotent precondition as NotJoinedNoOpinion: needed for real on a standalone
+            # -Step MidLifeJoinBlanksClear run, a verified no-op under -Step All.
+            $null = Set-Scenario14AttributePrimaryNullIsValue -AttributeName "Job Title"
+
+            $graceMvoBefore = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-6" -PageSize 5) | Select-Object -First 1
+            if (-not $graceMvoBefore) {
+                # Standalone run: Grace does not exist yet (NotJoinedNoOpinion's mutation never
+                # ran). Re-create her Secondary-only presence first so this step has something to
+                # join against, exactly as it would under -Step All.
+                Write-Host "Grace (S14-6) not present yet; establishing her Secondary-only presence first (standalone run precondition)..." -ForegroundColor Gray
+                New-Scenario14GraceSecondaryOnly
+                $graceMvoBefore = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-6" -PageSize 5) | Select-Object -First 1
+                if (-not $graceMvoBefore) {
+                    throw "Could not resolve Grace (S14-6) Metaverse Object after seeding her Secondary-only presence."
+                }
+            }
+
+            # Grace joins Primary via her shared Employee ID (S14-6). Her Primary entry omits
+            # `title` entirely (every other attribute follows the Primary formula), so on join the
+            # Primary rule is ConnectedNoValue for Job Title; with NullIsValue set, that asserts
+            # null and clears the value Secondary had been contributing, rather than leaving
+            # Secondary's "Engineer (Secondary)" in place. Manager points at Dave in both suffixes
+            # for the same dangling-DN reason documented in New-Scenario14GraceSecondaryOnly.
+            Write-Host "Adding Grace (S14-6) to the Primary suffix (no title attribute)..." -ForegroundColor Gray
+            $gracePrimaryDn = "uid=grace14,$($primaryLdapConfig.UserContainer)"
+            $gracePrimaryManagerDn = "uid=dave14,$($primaryLdapConfig.UserContainer)"
+            $gracePrimaryLdif = @"
+dn: $gracePrimaryDn
+changetype: add
+objectClass: inetOrgPerson
+uid: grace14
+cn: Grace Green (S14)
+sn: Green
+givenName: Grace
+displayName: Grace Green (S14)
+mail: grace14@yellowstone.local
+employeeNumber: S14-6
+description: Primary-sourced description for Grace Green (S14)
+manager: $gracePrimaryManagerDn
+telephoneNumber: +44 20 7946 1060
+telephoneNumber: +44 20 7946 1061
+userPassword: Test@123!
+
+"@
+            Invoke-Scenario14LdapModify -ContainerName $primaryLdapConfig.ContainerName -LdapUri $primaryLdapUri `
+                -BindDN $primaryLdapConfig.BindDN -BindPassword $primaryLdapConfig.BindPassword -Ldif $gracePrimaryLdif
+
+            Write-Host "Running Full Import (Primary)..." -ForegroundColor Gray
+            $importResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullImport.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import (Primary) after Grace's mid-life Primary join"
+
+            if ($WaitSeconds -gt 0) { Start-Sleep -Seconds $WaitSeconds }
+
+            Write-Host "Running Full Synchronisation (Primary)..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Primary) after Grace's mid-life Primary join"
+
+            $graceMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-6" -PageSize 5) | Select-Object -First 1
+            if (-not $graceMvo) {
+                throw "Could not resolve Grace (S14-6) Metaverse Object after her mid-life Primary join."
+            }
+            if ($graceMvo.id -ne $graceMvoBefore.id) {
+                throw "Grace's Primary CSO projected a NEW Metaverse Object (ID $($graceMvo.id)) instead of joining her existing one (ID $($graceMvoBefore.id)). Check the Employee ID matching rule."
+            }
+
+            # Second lookup, still returning exactly one MVO: proves the join, not a duplicate projection.
+            $graceMvoRecheck = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-6" -PageSize 5)
+            if ($graceMvoRecheck.Count -ne 1) {
+                throw "Expected exactly one Metaverse Object for Grace (S14-6) after her Primary join, found $($graceMvoRecheck.Count). Duplicate projection suspected."
+            }
+
+            Assert-MvoAttributeValue -MvoId $graceMvo.id -AttributeName "Job Title" `
+                -ExpectAssertedNull -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Grace's Job Title (Primary's blank asserts null on join, clearing Secondary's 'Engineer (Secondary)')"
+
+            Assert-MvoAttributeValue -MvoId $graceMvo.id -AttributeName "Description" `
+                -ExpectedValue "Primary-sourced description for Grace Green (S14)" -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Grace's Description (normal win: Primary outranks Secondary on join, no NullIsValue involved)"
+
+            $midLifeNotes += "Grace's Primary CSO joined her existing Metaverse Object (no duplicate projection); her blank Job Title asserted null and cleared Secondary's value, while Description won normally to Primary"
+        }
+        catch {
+            $midLifeSuccess = $false
+            $midLifeNotes += "Error: $_"
+            throw
+        }
+        finally {
+            $testResults.Steps += @{
+                Name = "MidLifeJoinBlanksClear"
+                Success = $midLifeSuccess
+                Note = ($midLifeNotes -join "; ")
+            }
+        }
+    }
+
+    # ========================================================================
+    # Test 9: MvaNullIsValueAssertsEmptySet
+    # ========================================================================
+    if ($Step -eq "MvaNullIsValueAssertsEmptySet" -or $Step -eq "All") {
+        Write-TestSection "Test 9: MVA NullIsValue Asserts Empty Set (Frank, Other Telephones cleared to nothing, not a Secondary fallback)"
+
+        $mvaNullSuccess = $true
+        $mvaNullNotes = @()
+
+        try {
+            $primaryImportRuleName = "$primarySystemName Import Users"
+
+            # Same blast-radius reasoning as AssertedNullOverridesSurvivor, for a different
+            # attribute: only Frank hits ConnectedNoValue for Other Telephones here (Alice/Bob have
+            # no Primary CSO at all; Carol/Dave/Erin/Grace's Primary entries all still supply
+            # telephoneNumber values). Dave is the control.
+            $null = Set-Scenario14AttributePrimaryNullIsValue -AttributeName "Other Telephones"
+
+            Write-Host "Withdrawing Frank's Primary Other Telephones (entry remains, telephoneNumber attribute removed)..." -ForegroundColor Gray
+            $frankPrimaryDn = "uid=frank14,$($primaryLdapConfig.UserContainer)"
+            $withdrawPhonesLdif = "dn: $frankPrimaryDn`nchangetype: modify`ndelete: telephoneNumber`n"
+            Invoke-Scenario14LdapModify -ContainerName $primaryLdapConfig.ContainerName -LdapUri $primaryLdapUri `
+                -BindDN $primaryLdapConfig.BindDN -BindPassword $primaryLdapConfig.BindPassword -Ldif $withdrawPhonesLdif
+
+            Write-Host "Running Full Import (Primary)..." -ForegroundColor Gray
+            $importResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullImport.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import (Primary) after Frank's Other Telephones withdrawal"
+
+            if ($WaitSeconds -gt 0) { Start-Sleep -Seconds $WaitSeconds }
+
+            Write-Host "Running Full Synchronisation (Primary)..." -ForegroundColor Gray
+            $syncResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullSync.id -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $syncResult.activityId -Name "Full Synchronisation (Primary) after Frank's Other Telephones withdrawal"
+
+            $frankMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-5" -PageSize 5) | Select-Object -First 1
+            $daveMvo = @(Get-JIMMetaverseObject -ObjectTypeName "User" -AttributeName "Employee ID" -AttributeValue "S14-3" -PageSize 5) | Select-Object -First 1
+            if (-not $frankMvo -or -not $daveMvo) {
+                throw "Could not resolve Frank (S14-5) and/or Dave (S14-3) Metaverse Objects."
+            }
+
+            # ApplyNoValueOutcome (src/JIM.Application/Servers/SyncEngine.AttributeFlow.cs) strips
+            # every existing real value row for the attribute and writes exactly ONE NullValue
+            # marker row, regardless of the attribute's plurality: the "ConnectedNoValue, no values
+            # at all" branch (csoAttributeValues.Count == 0) is reached identically whether the
+            # target is single- or multi-valued, so a multi-valued asserted null persists as one
+            # marker row, not one marker per formerly-held value. -ExpectAssertedNull's
+            # row-count-of-1 check therefore applies unchanged to an MVA target; see the
+            # engineering/plans/doing/ATTRIBUTE_PRIORITY.md Phase 4 "NullIsValue on an MVA asserts
+            # the empty set" checklist cell.
+            Assert-MvoAttributeValue -MvoId $frankMvo.id -AttributeName "Other Telephones" `
+                -ExpectAssertedNull -ExpectedContributingSyncRuleName $primaryImportRuleName `
+                -Name "Frank's Other Telephones (asserted empty set with Primary provenance; Secondary's numbers absent, not a fallback)"
+
+            Assert-MvoAttributeValue -MvoId $daveMvo.id -AttributeName "Other Telephones" `
+                -ExpectedValues @("+44 20 7946 1030", "+44 20 7946 1031") `
+                -Name "Dave's Other Telephones (control: unaffected by Frank's NullIsValue assertion)"
+
+            Assert-ActivityItemsHaveOutcomeSummary -ActivityId $syncResult.activityId `
+                -Name "Full Synchronisation (Primary) after Frank's Other Telephones withdrawal" `
+                -ExpectedOutcomeType "AssertedNull"
+
+            $mvaNullNotes += "Frank's Other Telephones asserted as an empty set with Primary provenance (Secondary's numbers absent, no fallback); Dave's Primary-sourced numbers unaffected"
+        }
+        catch {
+            $mvaNullSuccess = $false
+            $mvaNullNotes += "Error: $_"
+            throw
+        }
+        finally {
+            $testResults.Steps += @{
+                Name = "MvaNullIsValueAssertsEmptySet"
+                Success = $mvaNullSuccess
+                Note = ($mvaNullNotes -join "; ")
+            }
+        }
+    }
+
+    # -- INSERT NEW STEP DISPATCH BLOCKS HERE (Phase D: authority/propagation). Mirror the
+    #    "if ($Step -eq ... -or $Step -eq 'All')" shape above. --
+    #
+    # Inherited end-state at this point (under -Step All, or after the last Phase C step run
+    # standalone left its flags/data in place): Frank (S14-5) has both Job Title and Other
+    # Telephones asserted null with Primary provenance; Grace (S14-6) is joined to BOTH suffixes,
+    # with her Job Title asserted null (Primary provenance) and her Description Primary-sourced;
+    # NullIsValue is set on Primary's Job Title and Other Telephones mappings. No later Phase C
+    # step depends on Job Title/Other Telephones neutrality, and Phase C deliberately does NOT
+    # unset these flags at the end of MvaNullIsValueAssertsEmptySet: no unsetting cmdlet call is
+    # needed there because nothing downstream in this phase requires it. Phase D must manage its
+    # own preconditions against this inherited state rather than assuming a clean slate.
 
     # Calculate overall success
     $failedSteps = @($testResults.Steps | Where-Object { $_.Success -eq $false })
