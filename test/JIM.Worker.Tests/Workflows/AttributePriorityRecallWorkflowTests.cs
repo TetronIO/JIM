@@ -155,6 +155,40 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
     }
 
     [Test]
+    public async Task Recall_WithSurvivingContributor_StagesSurvivorValueExportAsync()
+    {
+        // A downstream target holds the HR Description value. When HR's CSO is obsoleted and the Description is
+        // handed to the surviving Training contributor, the target must receive an Update Pending Export carrying
+        // the survivor's value in the same run. This guards the export side of the handover: the MVO re-election
+        // alone is not enough if export evaluation stages the leaver's stale value (which no-net-change detection
+        // then filters out, leaving the target stale forever).
+        var ctx = await SetUpTwoContributorsToDescriptionAsync(hrDescriptionPriority: 1, trainingDescriptionPriority: 2);
+        var target = await AddDescriptionExportTargetAsync(ctx.MvType, ctx.MvDisplayNameAttributeId, ctx.MvDescriptionAttributeId);
+
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training);
+        SimulateTargetExportExecuted(target, displayName: "John Smith", description: HrDescription);
+
+        await MarkCsoObsoleteAsync(ctx.HrCso);
+        var deltaActivity = await RunDeltaSyncReturningActivityAsync(ctx.Hr);
+        Assert.That(deltaActivity.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
+            Is.False, "obsoletion recall export evaluation must complete without unhandled errors");
+
+        var targetExports = SyncRepo.PendingExports.Values
+            .Where(pe => pe.ConnectedSystemObject?.ConnectedSystemId == target.Target.Id)
+            .ToList();
+        Assert.That(targetExports, Has.Count.EqualTo(1),
+            "the obsoletion recall must stage one Update Pending Export for the target system");
+
+        var descriptionChange = targetExports[0].AttributeValueChanges
+            .FirstOrDefault(c => c.AttributeId == target.TargetDescriptionAttribute.Id);
+        Assert.That(descriptionChange, Is.Not.Null,
+            "the export must carry the handed-over Description");
+        Assert.That(descriptionChange!.StringValue, Is.EqualTo(TrainingDescription),
+            "the export must carry the surviving Training value (a change of value, not a clear or the leaver's stale value)");
+    }
+
+    [Test]
     public async Task Recall_HigherPriorityObsoletedUnderGracePeriod_ReElectsSurvivorButFreezesSingleSourceAttributesAsync()
     {
         // A deletion grace period is configured. Today the grace period freezes all recall, so a multi-source
@@ -313,10 +347,109 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
             "single-source HR DisplayName has no surviving contributor, so it is frozen (preserved) for the grace window, not cleared");
     }
 
+    [Test]
+    public async Task ScopeExit_WithSurvivingContributor_QueuesExportEvaluationAsync()
+    {
+        // A downstream target holds the HR Description value. When HR falls out of scope and the Description is
+        // handed to the surviving Training contributor, the target must receive an Update Pending Export carrying
+        // the new value in the same run - mirroring what obsoletion recall already stages via export evaluation.
+        var ctx = await SetUpTwoContributorsToDescriptionWithScopingAsync(hrDescriptionPriority: 1, trainingDescriptionPriority: 2);
+        var target = await AddDescriptionExportTargetAsync(ctx.MvType, ctx.MvDisplayNameAttributeId, ctx.MvDescriptionAttributeId);
+
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training);
+        SimulateTargetExportExecuted(target, displayName: "John Smith", description: HrDescription);
+
+        await PushHrOutOfScopeAsync(ctx);
+        var fullSync2Activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        Assert.That(fullSync2Activity.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
+            Is.False, "scope-exit export evaluation must complete without unhandled errors");
+
+        var targetExports = SyncRepo.PendingExports.Values
+            .Where(pe => pe.ConnectedSystemObject?.ConnectedSystemId == target.Target.Id)
+            .ToList();
+        Assert.That(targetExports, Has.Count.EqualTo(1),
+            "the scope-exit recall must queue export evaluation, staging one Update Pending Export for the target system");
+        Assert.That(targetExports[0].ChangeType, Is.EqualTo(JIM.Models.Transactional.PendingExportChangeType.Update),
+            "the staged Pending Export should be an Update");
+
+        var descriptionChange = targetExports[0].AttributeValueChanges
+            .FirstOrDefault(c => c.AttributeId == target.TargetDescriptionAttribute.Id);
+        Assert.That(descriptionChange, Is.Not.Null,
+            "the export must carry the handed-over Description");
+        Assert.That(descriptionChange!.StringValue, Is.EqualTo(TrainingDescription),
+            "the export must carry the surviving Training value (a change of value, not a clear)");
+    }
+
+    [Test]
+    public async Task ScopeExit_NoSurvivingContributor_QueuesExportEvaluationAsRemovalAsync()
+    {
+        // No surviving Description contributor: the clear must still reach export evaluation, so the target
+        // receives an Update Pending Export null-clearing the stale value rather than keeping it forever.
+        var ctx = await SetUpTwoContributorsToDescriptionWithScopingAsync(
+            hrDescriptionPriority: 1, trainingDescriptionPriority: 2, trainingContributesDescription: false);
+        var target = await AddDescriptionExportTargetAsync(ctx.MvType, ctx.MvDisplayNameAttributeId, ctx.MvDescriptionAttributeId);
+
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training);
+        SimulateTargetExportExecuted(target, displayName: "John Smith", description: HrDescription);
+
+        await PushHrOutOfScopeAsync(ctx);
+        var fullSync2Activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        Assert.That(fullSync2Activity.RunProfileExecutionItems.Any(r => r.ErrorType == ActivityRunProfileExecutionItemErrorType.UnhandledError),
+            Is.False, "scope-exit export evaluation must complete without unhandled errors");
+
+        var targetExports = SyncRepo.PendingExports.Values
+            .Where(pe => pe.ConnectedSystemObject?.ConnectedSystemId == target.Target.Id)
+            .ToList();
+        Assert.That(targetExports, Has.Count.EqualTo(1),
+            "the scope-exit clear must queue export evaluation, staging one Update Pending Export for the target system");
+
+        var descriptionChange = targetExports[0].AttributeValueChanges
+            .FirstOrDefault(c => c.AttributeId == target.TargetDescriptionAttribute.Id);
+        Assert.That(descriptionChange, Is.Not.Null,
+            "the export must include the cleared Description");
+        Assert.That(descriptionChange!.StringValue, Is.Null,
+            "the cleared Description must reach the target as a null-clearing change (a removal, not a stale value)");
+    }
+
+    [Test]
+    public async Task ScopeExit_NoSurvivingContributor_EmitsNoContributorOutcomeAsync()
+    {
+        // Scope exit clears HR's DisplayName, EmployeeId and Description with no surviving contributor for any of
+        // them. In Detailed tracking those clears must surface as a NoContributor child outcome on the
+        // DisconnectedOutOfScope RPEI, exactly as the obsoletion path reports them on its Disconnected RPEI.
+        var ctx = await SetUpTwoContributorsToDescriptionWithScopingAsync(
+            hrDescriptionPriority: 1, trainingDescriptionPriority: 2, trainingContributesDescription: false);
+
+        await RunFullSyncAsync(ctx.Hr);
+        await RunFullSyncAsync(ctx.Training);
+
+        await PushHrOutOfScopeAsync(ctx);
+        var fullSync2Activity = await RunFullSyncReturningActivityAsync(ctx.Hr);
+
+        var outOfScopeRpei = fullSync2Activity.RunProfileExecutionItems
+            .SingleOrDefault(r => r.ObjectChangeType == ObjectChangeType.DisconnectedOutOfScope);
+        Assert.That(outOfScopeRpei, Is.Not.Null, "the scope exit should produce a DisconnectedOutOfScope RPEI");
+
+        var rootOutcome = outOfScopeRpei!.SyncOutcomes.SingleOrDefault(o => o.ParentSyncOutcome == null);
+        Assert.That(rootOutcome, Is.Not.Null, "the RPEI should have a root sync outcome");
+
+        var noContributorOutcome = rootOutcome!.Children
+            .SingleOrDefault(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor);
+        Assert.That(noContributorOutcome, Is.Not.Null,
+            "attributes cleared at scope exit with no surviving contributor should emit a NoContributor outcome");
+        Assert.That(noContributorOutcome!.DetailCount, Is.EqualTo(3),
+            "DisplayName, EmployeeId and Description are all cleared with no survivor");
+    }
+
     private sealed record TwoContributorContext(
         ConnectedSystem Hr,
         ConnectedSystem Training,
         ConnectedSystemObject HrCso,
+        MetaverseObjectType MvType,
         int MvDescriptionAttributeId,
         int MvDisplayNameAttributeId,
         int TrainingImportRuleId);
@@ -326,9 +459,15 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
         ConnectedSystem Training,
         ConnectedSystemObject HrCso,
         ConnectedSystemObjectTypeAttribute HrScopeFlagAttribute,
+        MetaverseObjectType MvType,
         int MvDescriptionAttributeId,
         int MvDisplayNameAttributeId,
         int TrainingImportRuleId);
+
+    private sealed record ExportTargetContext(
+        ConnectedSystem Target,
+        ConnectedSystemObjectTypeAttribute TargetDescriptionAttribute,
+        ConnectedSystemObjectTypeAttribute TargetDisplayNameAttribute);
 
     private sealed record ReferenceContributorContext(
         ConnectedSystem Hr,
@@ -521,7 +660,7 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
             AttributeId = trainingDescriptionAttr.Id, Attribute = trainingDescriptionAttr, StringValue = trainingDescriptionValue, ConnectedSystemObject = trainingCso
         });
 
-        return new TwoContributorContext(hrSystem, trainingSystem, hrCso, mvDescriptionAttr.Id, mvDisplayNameAttr.Id, trainingImportRule.Id);
+        return new TwoContributorContext(hrSystem, trainingSystem, hrCso, mvType, mvDescriptionAttr.Id, mvDisplayNameAttr.Id, trainingImportRule.Id);
     }
 
     /// <summary>
@@ -634,7 +773,88 @@ public class AttributePriorityRecallWorkflowTests : WorkflowTestBase
             });
         }
 
-        return new TwoContributorScopedContext(hrSystem, trainingSystem, hrCso, hrScopeFlagAttr, mvDescriptionAttr.Id, mvDisplayNameAttr.Id, trainingImportRule.Id);
+        return new TwoContributorScopedContext(hrSystem, trainingSystem, hrCso, hrScopeFlagAttr, mvType, mvDescriptionAttr.Id, mvDisplayNameAttr.Id, trainingImportRule.Id);
+    }
+
+    /// <summary>
+    /// Adds a downstream target Connected System to a two-contributor topology: an export Synchronisation Rule
+    /// (with provisioning) mapping the Metaverse DisplayName and Description to matching target attributes, so
+    /// tests can assert that a recall (obsoletion or scope exit) reaches export evaluation and stages Pending
+    /// Exports for the target. Call before the first Full Sync so the target is provisioned when HR projects the
+    /// Metaverse Object.
+    /// </summary>
+    private async Task<ExportTargetContext> AddDescriptionExportTargetAsync(
+        MetaverseObjectType mvType, int mvDisplayNameAttributeId, int mvDescriptionAttributeId)
+    {
+        var targetSystem = await CreateConnectedSystemAsync("AD Target");
+        var targetExternalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
+        var targetDisplayNameAttr = new ConnectedSystemObjectTypeAttribute { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true };
+        var targetDescriptionAttr = new ConnectedSystemObjectTypeAttribute { Name = "Description", Type = AttributeDataType.Text, Selected = true };
+        var targetType = await CreateCsoTypeAsync(targetSystem.Id, "TargetUser",
+            new List<ConnectedSystemObjectTypeAttribute> { targetExternalIdAttr, targetDisplayNameAttr, targetDescriptionAttr });
+
+        var mvDisplayNameAttr = mvType.Attributes.First(a => a.Id == mvDisplayNameAttributeId);
+        var mvDescriptionAttr = mvType.Attributes.First(a => a.Id == mvDescriptionAttributeId);
+
+        var exportRule = new SyncRule
+        {
+            ConnectedSystemId = targetSystem.Id,
+            Name = "AD Export",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            ConnectedSystemObjectTypeId = targetType.Id,
+            ConnectedSystemObjectType = targetType,
+            MetaverseObjectTypeId = mvType.Id,
+            MetaverseObjectType = mvType,
+            ProvisionToConnectedSystem = true
+        };
+        exportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = targetDisplayNameAttr,
+            TargetConnectedSystemAttributeId = targetDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, MetaverseAttribute = mvDisplayNameAttr, MetaverseAttributeId = mvDisplayNameAttr.Id } }
+        });
+        exportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = targetDescriptionAttr,
+            TargetConnectedSystemAttributeId = targetDescriptionAttr.Id,
+            Sources = { new SyncRuleMappingSource { Order = 0, MetaverseAttribute = mvDescriptionAttr, MetaverseAttributeId = mvDescriptionAttr.Id } }
+        });
+
+        DbContext.SyncRules.Add(exportRule);
+        await DbContext.SaveChangesAsync();
+        SyncRepo.SeedSyncRule(exportRule);
+
+        return new ExportTargetContext(targetSystem, targetDescriptionAttr, targetDisplayNameAttr);
+    }
+
+    /// <summary>
+    /// Simulates the provisioning export having been executed against the target Connected System: marks the
+    /// provisioned target CSO Normal, writes the given executed attribute values onto it, and clears all Pending
+    /// Exports so subsequent assertions only see exports staged by the scope-exit recall under test.
+    /// </summary>
+    private ConnectedSystemObject SimulateTargetExportExecuted(ExportTargetContext target, string displayName, string description)
+    {
+        var targetCso = SyncRepo.ConnectedSystemObjects.Values.First(c => c.ConnectedSystemId == target.Target.Id);
+        targetCso.Status = ConnectedSystemObjectStatus.Normal;
+        targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = target.TargetDisplayNameAttribute.Id,
+            Attribute = target.TargetDisplayNameAttribute,
+            StringValue = displayName,
+            ConnectedSystemObject = targetCso
+        });
+        targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = target.TargetDescriptionAttribute.Id,
+            Attribute = target.TargetDescriptionAttribute,
+            StringValue = description,
+            ConnectedSystemObject = targetCso
+        });
+        SyncRepo.ClearAllPendingExports();
+        return targetCso;
     }
 
     /// <summary>

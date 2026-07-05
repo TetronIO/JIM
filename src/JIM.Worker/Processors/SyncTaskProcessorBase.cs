@@ -484,6 +484,11 @@ public abstract class SyncTaskProcessorBase
                     {
                         _pendingMvoChanges.Add((changeResult.DisconnectedMvo, changeResult.RecalledAttributeAdditions ?? [],
                             changeResult.RecalledAttributeValues, ObjectChangeType.DisconnectedOutOfScope, existingRpei, null));
+
+                        // Defensive parity with the new-RPEI branch below: surface genuine scope-exit clears as a
+                        // NoContributor outcome when this RPEI already carries an outcome tree to attach to.
+                        AddNoContributorOutcomeForScopeExit(existingRpei,
+                            existingRpei.SyncOutcomes.FirstOrDefault(o => o.ParentSyncOutcome == null), changeResult);
                     }
                 }
                 else
@@ -543,6 +548,11 @@ public abstract class SyncTaskProcessorBase
                                 ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
                                 detailCount: changeResult.AttributeFlowCount);
                         }
+
+                        // In Detailed mode, surface scope-exit clears with no surviving contributor (#91), mirroring
+                        // the NoContributor emission on the obsoletion path's Disconnected RPEI.
+                        if (changeResult.ChangeType == ObjectChangeType.DisconnectedOutOfScope)
+                            AddNoContributorOutcomeForScopeExit(runProfileExecutionItem, rootOutcome, changeResult);
 
                         // Add MVO deletion fate outcome for DisconnectedOutOfScope when the deletion rule was triggered
                         if (changeResult.ChangeType == ObjectChangeType.DisconnectedOutOfScope
@@ -612,6 +622,38 @@ public abstract class SyncTaskProcessorBase
 
             Log.Error(e, "ProcessActiveConnectedSystemObjectAsync: Unhandled error during pass 2 for {Cso}.",
                 connectedSystemObject);
+        }
+    }
+
+    /// <summary>
+    /// Emits a NoContributor child outcome for a scope-exit disconnection when recalled attributes were genuinely
+    /// cleared: not re-elected to a surviving contributor, no other value remaining, and not frozen under a grace
+    /// period (frozen values are unmarked from the removals before capture, so they never reach this count).
+    /// Mirrors <see cref="ProcessObsoleteConnectedSystemObjectAsync"/>'s NoContributor emission on the obsoletion
+    /// Disconnected RPEI (#91). A no-op outside Detailed tracking, when no root outcome exists to attach to, when
+    /// no recall occurred, or when nothing was genuinely cleared.
+    /// </summary>
+    private void AddNoContributorOutcomeForScopeExit(
+        ActivityRunProfileExecutionItem rpei,
+        ActivityRunProfileExecutionItemSyncOutcome? rootOutcome,
+        MetaverseObjectChangeResult changeResult)
+    {
+        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
+            || rootOutcome == null
+            || changeResult.RecalledAttributeValues == null
+            || changeResult.DisconnectedMvo == null)
+            return;
+
+        var clearedAttributeCount = CountClearedAttributes(
+            changeResult.DisconnectedMvo,
+            changeResult.RecalledAttributeAdditions ?? [],
+            changeResult.RecalledAttributeValues);
+        if (clearedAttributeCount > 0)
+        {
+            SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
+                ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor,
+                targetEntityDescription: changeResult.DisconnectedMvo.DisplayName,
+                detailCount: clearedAttributeCount);
         }
     }
 
@@ -790,15 +832,19 @@ public abstract class SyncTaskProcessorBase
             // notified of the recalled (and any re-elected) attributes via Pending Exports.
             if (mvo.PendingAttributeValueRemovals.Count > 0 || mvo.PendingAttributeValueAdditions.Count > 0)
             {
-                // Capture pending changes BEFORE applying (which clears the pending lists). Re-elected values appear
-                // as additions; an attribute re-elected to a surviving source is a change-to-new-value (present in
-                // additions), not a clear, so it is excluded from removedAttributes (only genuinely cleared
-                // attributes, with no surviving contributor, are reported as removed to export evaluation).
+                // Capture pending changes BEFORE applying (which clears the pending lists), using the same
+                // construction as the normal Attribute Flow path (ProcessMetaverseObjectChangesAsync): additions
+                // FIRST in changedAttributes, and every removal in removedAttributes. Both orderings matter to
+                // export evaluation (CreateAttributeValueChanges): a single-valued attribute exports its FIRST
+                // matching changed value, so the re-elected survivor's addition must precede the leaver's removal
+                // or the target would be staged with the stale value (then dropped by no-net-change detection,
+                // leaving the target stale forever); and a removal only null-clears (single-valued) or stages a
+                // Remove (multi-valued) when present in removedAttributes, so a re-elected attribute exports as a
+                // change-of-value (the addition wins) while a genuinely cleared one exports as a clear.
                 var additions = mvo.PendingAttributeValueAdditions.ToList();
                 var removals = mvo.PendingAttributeValueRemovals.ToList();
-                var reElectedAttributeIds = additions.Select(a => a.AttributeId).ToHashSet();
-                var changedAttributes = removals.Concat(additions).ToList();
-                var removedAttributes = removals.Where(r => !reElectedAttributeIds.Contains(r.AttributeId)).ToHashSet();
+                var changedAttributes = additions.Concat(removals).ToList();
+                var removedAttributes = removals.ToHashSet();
 
                 // Tally the attributes genuinely cleared (recalled with no surviving contributor re-elected and no
                 // other value remaining) for the NoContributor observability outcome (#91), built further below.
@@ -3402,8 +3448,9 @@ public abstract class SyncTaskProcessorBase
     /// Mirrors <see cref="ProcessObsoleteConnectedSystemObjectAsync"/>'s attribute recall semantics for the
     /// Disconnect action (#91): a scope exit is just another way a contributing CSO stops contributing, so it
     /// re-elects a still-joined lower-priority contributor for the recalled attributes rather than blanking them,
-    /// and a configured deletion grace period hands over re-elected attributes while freezing only those with no
-    /// surviving contributor.
+    /// a configured deletion grace period hands over re-elected attributes while freezing only those with no
+    /// surviving contributor, and the recalled/re-elected values are queued for export evaluation so target
+    /// systems receive Pending Exports for the handover or clear.
     /// </summary>
     /// <returns>A result indicating what happened (DisconnectedOutOfScope, OutOfScopeRetainJoin, or NoChanges).</returns>
     protected async Task<MetaverseObjectChangeResult> HandleCsoOutOfScopeAsync(
@@ -3509,6 +3556,17 @@ public abstract class SyncTaskProcessorBase
                     {
                         recalledAttributeValues = mvo.PendingAttributeValueRemovals.ToList();
                         recalledAttributeAdditions = mvo.PendingAttributeValueAdditions.ToList();
+
+                        // Queue for export evaluation so target systems receive Pending Exports for the recalled
+                        // (and any re-elected) attribute values; without this, downstream Connected Systems keep
+                        // the departed source's stale values forever. Same construction as the obsoletion path
+                        // and the normal Attribute Flow path: additions FIRST (a single-valued attribute exports
+                        // its first matching changed value, so the re-elected survivor's value must precede the
+                        // leaver's removal), with every removal in removedAttributes (so a genuine clear
+                        // null-clears the target while a re-elected attribute exports as a change-of-value).
+                        var changedAttributes = recalledAttributeAdditions.Concat(recalledAttributeValues).ToList();
+                        var removedAttributes = recalledAttributeValues.ToHashSet();
+                        MergeOrAddPendingExportEvaluation(mvo, changedAttributes, removedAttributes);
                     }
                 }
                 else if (skipRecallForImmediateDeletion)
