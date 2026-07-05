@@ -42,6 +42,9 @@ public class ConfigurationSnapshotService
     /// <summary>The object-type discriminator stored on a Metaverse Attribute snapshot.</summary>
     public const string MetaverseAttributeObjectType = "MetaverseAttribute";
 
+    /// <summary>The object-type discriminator stored on a Trusted Certificate snapshot.</summary>
+    public const string TrustedCertificateObjectType = "TrustedCertificate";
+
     private JimApplication Application { get; }
 
     private static readonly JsonSerializerOptions SerialiserOptions = new()
@@ -615,6 +618,41 @@ public class ConfigurationSnapshotService
             items.Add(node);
         }
         return ConfigurationSnapshotNode.CollectionNode("metaverseObjectTypes", items, "Metaverse Object Types");
+    }
+
+    // -- Trusted Certificate -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a metadata-only snapshot of a Trusted Certificate (a Guid-keyed configuration object): its name, the
+    /// public X.509 identity fields (thumbprint, subject, issuer, serial number, validity window), its source, enabled
+    /// state and notes. The raw certificate material (DER/PEM bytes) is never captured in any form; the thumbprint
+    /// already identifies the exact certificate, so a swap is always detectable from metadata alone. Trusted
+    /// Certificates carry no secrets; <paramref name="hashKey"/> keeps the signature uniform with the other builders.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(TrustedCertificate certificate, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", certificate.Name, "Name");
+        Add(children, "thumbprint", certificate.Thumbprint, "Thumbprint");
+        Add(children, "subject", certificate.Subject, "Subject");
+        Add(children, "issuer", certificate.Issuer, "Issuer");
+        Add(children, "serialNumber", certificate.SerialNumber, "Serial number");
+        Add(children, "validFrom", Render((DateTime?)certificate.ValidFrom), "Valid from");
+        Add(children, "validTo", Render((DateTime?)certificate.ValidTo), "Valid to");
+        AddEnum(children, "sourceType", certificate.SourceType, "Source");
+        Add(children, "filePath", certificate.FilePath, "File path");
+        Add(children, "enabled", Render(certificate.IsEnabled), "Enabled");
+        Add(children, "notes", certificate.Notes, "Notes");
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = TrustedCertificateObjectType,
+            ObjectGuidId = certificate.Id,
+            ObjectName = certificate.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("trustedCertificate", children, "Trusted Certificate")
+        };
     }
 
     // -- value rendering -----------------------------------------------------------------------------------------------

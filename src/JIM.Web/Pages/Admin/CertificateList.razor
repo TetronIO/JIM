@@ -1,5 +1,6 @@
 @page "/admin/certificates"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Web
@@ -68,6 +69,8 @@
                 <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="_ => ShowDetailsDialog(context)">View
                     Details</MudMenuItem>
                 <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="_ => ShowEditDialog(context)">Edit
+                </MudMenuItem>
+                <MudMenuItem Icon="@Icons.Material.Outlined.History" OnClick="_ => ShowHistoryDialogAsync(context)">Change History
                 </MudMenuItem>
                 <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="_ => HandleDeleteAsync(context)">Delete
                 </MudMenuItem>
@@ -436,6 +439,11 @@ new("Certificates", href: null, disabled: true)
 
         try
         {
+            // offer an optional reason for the configuration change history; cancelling aborts the upload
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Upload");
+            if (cancelled)
+                return;
+
             using var jim = JimFactory.Create();
 
             // Read file content
@@ -448,7 +456,7 @@ new("Certificates", href: null, disabled: true)
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
 
             // Add certificate
-            await jim.Certificates.AddFromDataAsync(_uploadName, certificateData, user, _uploadNotes);
+            await jim.Certificates.AddFromDataAsync(_uploadName, certificateData, user, _uploadNotes, changeReason);
 
             Snackbar.Add("Certificate uploaded successfully.", Severity.Success);
             _uploadDialogVisible = false;
@@ -474,9 +482,14 @@ new("Certificates", href: null, disabled: true)
 
         try
         {
+            // offer an optional reason for the configuration change history; cancelling aborts the add
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Add");
+            if (cancelled)
+                return;
+
             using var jim = JimFactory.Create();
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-            await jim.Certificates.AddFromFilePathAsync(_filePathName, _filePath, user, _filePathNotes);
+            await jim.Certificates.AddFromFilePathAsync(_filePathName, _filePath, user, _filePathNotes, changeReason);
 
             Snackbar.Add("Certificate added successfully.", Severity.Success);
             _filePathDialogVisible = false;
@@ -502,6 +515,11 @@ new("Certificates", href: null, disabled: true)
 
         try
         {
+            // offer an optional reason for the configuration change history; cancelling aborts the save
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+            if (cancelled)
+                return;
+
             using var jim = JimFactory.Create();
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
             await jim.Certificates.UpdateAsync(
@@ -509,7 +527,8 @@ new("Certificates", href: null, disabled: true)
             user,
             _editName,
             _editNotes,
-            _editEnabled);
+            _editEnabled,
+            changeReason);
 
             Snackbar.Add("Certificate updated successfully.", Severity.Success);
             _editDialogVisible = false;
@@ -525,6 +544,12 @@ new("Certificates", href: null, disabled: true)
         }
     }
 
+    private async Task ShowHistoryDialogAsync(TrustedCertificate certificate)
+    {
+        await ConfigurationChangeHistoryDialog.ShowAsync(DialogService, ActivityTargetType.TrustedCertificate,
+            certificate.Id, "Trusted Certificate", certificate.Name);
+    }
+
     private async Task HandleDeleteAsync(TrustedCertificate certificate)
     {
         var result = await DialogService.ShowMessageBoxAsync(
@@ -536,11 +561,16 @@ new("Certificates", href: null, disabled: true)
         if (result != true)
             return;
 
+        // offer an optional reason for the configuration change history; cancelling aborts the delete
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
+        if (cancelled)
+            return;
+
         try
         {
             using var jim = JimFactory.Create();
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-            await jim.Certificates.DeleteAsync(certificate.Id, user);
+            await jim.Certificates.DeleteAsync(certificate.Id, user, changeReason);
 
             Snackbar.Add("Certificate deleted successfully.", Severity.Success);
             await LoadCertificatesAsync();

@@ -1,6 +1,6 @@
 # Configuration Change History Coverage - Implementation Plan
 
-- **Status:** Doing (Phases 1-3 complete)
+- **Status:** Doing (Phases 1-4 complete)
 - **Issue:** [#14](https://github.com/TetronIO/JIM/issues/14) *(sub-task of the parent change-history issue)*
 - **PRD:** [`engineering/prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md`](../../prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md)
 - **Note (2026-07-05):** Phase 1 verification disproved the presumed Schedule step capture gap: there are no step REST endpoints (`Add-JIMScheduleStep` performs a whole-Schedule PUT), and both step-mutation surfaces (the editor dialog and the REST update endpoint) reconcile steps and then call the audited `UpdateScheduleAsync`, which captures the step changes in exactly one version per save. Making the bare step methods capture unconditionally would have double-recorded on every editor/REST save, so Phase 1 instead documented the caller contract on those methods. The durable fix (consolidating step reconciliation into `UpdateScheduleAsync` and making the bare methods private, which also removes the duplicated reconcile logic in the dialog and controller) is proposed as a follow-up slice.
@@ -168,10 +168,10 @@ Each phase is a shippable vertical slice (TDD per capture path, docs and changel
 4. UI: `MetaverseObjectTypeDetail` converted to `NavigableMudTabs` with a Changes tab; per-row history on the attribute lists (`SchemaObjectTypeList`, object-type detail attribute table); reason prompt on the deletion-rules save. ✅ *(Tabs: Details, incl. deletion rules; Attributes; Changes with a count badge.)*
 5. Coordinate with #377 (attribute CRUD UI): whichever lands second wires its paths into the other's capture/prompt pattern. *(Still open on #377's side; all application-layer attribute mutators now capture, so a future attribute CRUD UI only needs the reason prompt.)*
 
-### Phase 4: Trusted Certificates (Tier 1)
-1. Metadata-only snapshot builder (never key material); capture in the four `CertificateServer` mutators; delete tombstone.
-2. REST routes on `CertificatesController` (Guid) + `ChangeReason` on writes; `-ChangeReason` on `Set-JIMCertificate`; `-Type TrustedCertificate`.
-3. UI: per-row history button on `CertificateList.razor`; reason prompts on upload, add-from-path, edit, and delete.
+### Phase 4: Trusted Certificates (Tier 1) ✅
+1. Metadata-only snapshot builder (never key material); capture in the four `CertificateServer` mutators; delete tombstone. ✅ *(The four mutators were refactored onto shared private cores taking initiator delegates, gaining ApiKey overloads in the process; previously every REST certificate mutation was attributed to System because the controller never resolved a principal. Redaction asserted by test: the DER bytes' Base64 never appears in a stored snapshot.)*
+2. REST routes on `CertificatesController` (Guid) + `ChangeReason` on writes; `-ChangeReason` on `Set-JIMCertificate`; `-Type TrustedCertificate`. ✅ *(`CertificatesController` moved onto `ApiControllerBase` so mutations attribute to the calling user or API key; `-ChangeReason` also added to `Add-JIMCertificate` and `Remove-JIMCertificate`.)*
+3. UI: per-row history button on `CertificateList.razor`; reason prompts on upload, add-from-path, edit, and delete. ✅ *(History surfaced as a Change History action in the row menu, opening the shared `ConfigurationChangeHistoryDialog`.)*
 
 ### Phase 5: API Keys (Tier 2, security-critical)
 1. **N-tier fix first**: new application-layer server (e.g. `ApiKeyServer` on `JimApplication`) exposing create/update/delete; `ApiKeyList.razor`, `ApiKeyDetail.razor`, and `ApiKeysController` refactored onto it with unchanged REST contracts.

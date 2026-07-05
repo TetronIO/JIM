@@ -43,6 +43,7 @@ Describe 'Get-JIMConfigurationChangeHistory' {
             $validateSet.ValidValues | Should -Contain 'ServiceSetting'
             $validateSet.ValidValues | Should -Contain 'MetaverseObjectType'
             $validateSet.ValidValues | Should -Contain 'MetaverseAttribute'
+            $validateSet.ValidValues | Should -Contain 'TrustedCertificate'
         }
 
         It 'Accepts Id from the pipeline by property name' {
@@ -54,8 +55,8 @@ Describe 'Get-JIMConfigurationChangeHistory' {
             $command.Parameters['Id'].ParameterType | Should -Be ([string])
         }
 
-        It 'Rejects a non-GUID Id for -Type Schedule' {
-            { Get-JIMConfigurationChangeHistory -Type Schedule -Id 5 -ErrorAction Stop } | Should -Throw '*GUID*'
+        It 'Rejects a non-GUID Id for -Type <_>' -ForEach @('Schedule', 'TrustedCertificate') {
+            { Get-JIMConfigurationChangeHistory -Type $_ -Id 5 -ErrorAction Stop } | Should -Throw '*GUID*'
         }
 
         It 'Rejects a non-integer Id for -Type SynchronisationRule' {
@@ -110,7 +111,8 @@ Describe 'ChangeReason on configuration write cmdlets' {
         'New-JIMSyncRule', 'Set-JIMSyncRule', 'Remove-JIMSyncRule', 'New-JIMConnectedSystem', 'Set-JIMConnectedSystem',
         'Set-JIMServiceSetting', 'Reset-JIMServiceSetting',
         'New-JIMMetaverseObjectType', 'Set-JIMMetaverseObjectType',
-        'New-JIMMetaverseAttribute', 'Set-JIMMetaverseAttribute', 'Remove-JIMMetaverseAttribute'
+        'New-JIMMetaverseAttribute', 'Set-JIMMetaverseAttribute', 'Remove-JIMMetaverseAttribute',
+        'Add-JIMCertificate', 'Set-JIMCertificate', 'Remove-JIMCertificate'
     ) {
         $param = (Get-Command $_).Parameters['ChangeReason']
         $param | Should -Not -BeNullOrEmpty
