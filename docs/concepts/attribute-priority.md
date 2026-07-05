@@ -37,7 +37,7 @@ When you add a new import mapping to an attribute that already has contributors,
 
 ## 🔁 When the winning source disconnects or withdraws
 
-If the source that currently provides an attribute's value disconnects (its object is removed from that Connected System), JIM does not simply blank the attribute. It re-elects the next contributor: a still-connected, in-scope lower-priority source takes over, and its value flows into the Metaverse in place of the departed one. Only when no other source contributes is the attribute cleared.
+If the source that currently provides an attribute's value disconnects (its object is removed from that Connected System) or falls out of its Synchronisation Rule's scope, JIM does not simply blank the attribute. It re-elects the next contributor: a still-connected, in-scope lower-priority source takes over, and its value flows into the Metaverse in place of the departed one. Only when no other source contributes is the attribute cleared.
 
 This means an authoritative source leaving hands an attribute down to the next source rather than dropping it, so downstream systems receive the fallback value instead of an unintended clear. The next contributor is resolved exactly as in normal flow, so if it has **"Null is a value"** set and supplies no value, the attribute is asserted null rather than handed further down.
 

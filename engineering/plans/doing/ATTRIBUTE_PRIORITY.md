@@ -816,7 +816,7 @@ Not a sub-issue: **#846** (holistic Guardrails) is deliberately *out of scope* (
 - [ ] Integration tests for fine-grained authority (worked example 2):
   - [ ] Scoped exception rule (priority 1) wins for in-scope objects; direct changes in the lower-priority system are corrected via EnforceState export
   - [ ] Non-exception objects: higher-priority system's rule wins; losing system's direct changes corrected back
-  - [ ] Object moves into/out of a scoped rule's coverage: authority transfers on next sync
+  - [ ] Object moves into/out of a scoped rule's coverage: authority transfers on next sync (the scope-exit re-election gap was found and fixed in `HandleCsoOutOfScopeAsync` (#91): it marked contributed attributes for removal but never re-elected a surviving lower-priority contributor, unlike the equivalent CSO-obsoletion path; unit-level workflow tests now cover it in `AttributePriorityRecallWorkflowTests`, but this integration cell is still to be written)
 - [ ] Configuration change propagation:
   - [ ] Priority reorder followed by delta sync: only changed CSOs re-resolve (documented apply-only behaviour)
   - [ ] Priority reorder followed by full sync: all objects re-resolve to the new configuration

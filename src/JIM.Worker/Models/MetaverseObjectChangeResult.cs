@@ -52,10 +52,23 @@ public readonly struct MetaverseObjectChangeResult
     /// MVO attribute values that were recalled (removed) during disconnection.
     /// Captured before applying pending changes so the caller can add them to _pendingMvoChanges
     /// for MVO change tracking. This enables the RPEI detail page to show recalled attribute
-    /// values in the causality tree's expandable attribute change table.
+    /// values in the causality tree's expandable attribute change table. Includes attributes handed
+    /// over to a re-elected surviving contributor as well as those genuinely cleared: mirrors
+    /// ProcessObsoleteConnectedSystemObjectAsync, which records the full removals list so the change
+    /// record reflects the whole handover, not just the blank.
     /// Only populated for DisconnectedOutOfScope when attribute recall occurred.
     /// </summary>
     public List<MetaverseObjectAttributeValue>? RecalledAttributeValues { get; init; }
+
+    /// <summary>
+    /// MVO attribute values re-elected from a surviving lower-priority contributor during disconnection (#91).
+    /// Captured before applying pending changes, alongside <see cref="RecalledAttributeValues"/>, so the caller
+    /// can add both to _pendingMvoChanges: the recalled value's removal and the survivor's value being added are
+    /// two sides of the same handover, and both must appear in the MVO change record for the RPEI detail page to
+    /// show it accurately (a value change, not a clear).
+    /// Only populated for DisconnectedOutOfScope when attribute recall occurred.
+    /// </summary>
+    public List<MetaverseObjectAttributeValue>? RecalledAttributeAdditions { get; init; }
 
     /// <summary>
     /// The MVO that was disconnected. Needed by the caller to create MVO change tracking records,
@@ -114,13 +127,15 @@ public readonly struct MetaverseObjectChangeResult
     /// Creates a result indicating a CSO was disconnected because it fell out of scope
     /// of import Synchronisation Rule scoping criteria.
     /// </summary>
-    /// <param name="attributeFlowCount">Optional count of attribute removals that occurred during disconnection.</param>
+    /// <param name="attributeFlowCount">Optional count of attribute changes (removals and re-elected additions) that occurred during disconnection.</param>
     /// <param name="mvoDeletionFate">The fate of the MVO after the disconnection.</param>
     /// <param name="recalledAttributeValues">MVO attribute values that were recalled, for change tracking.</param>
+    /// <param name="recalledAttributeAdditions">MVO attribute values re-elected from a surviving contributor, for change tracking.</param>
     public static MetaverseObjectChangeResult DisconnectedOutOfScope(
         int? attributeFlowCount = null,
         MvoDeletionFate mvoDeletionFate = MvoDeletionFate.NotDeleted,
         List<MetaverseObjectAttributeValue>? recalledAttributeValues = null,
+        List<MetaverseObjectAttributeValue>? recalledAttributeAdditions = null,
         MetaverseObject? disconnectedMvo = null) => new()
     {
         HasChanges = true,
@@ -128,6 +143,7 @@ public readonly struct MetaverseObjectChangeResult
         AttributeFlowCount = attributeFlowCount,
         MvoDeletionFate = mvoDeletionFate,
         RecalledAttributeValues = recalledAttributeValues,
+        RecalledAttributeAdditions = recalledAttributeAdditions,
         DisconnectedMvo = disconnectedMvo
     };
 
