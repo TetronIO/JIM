@@ -252,6 +252,18 @@ public interface ISyncServer
     /// </summary>
     Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo);
 
+    /// <summary>
+    /// Captures the referencing-object and resolution state reference recall needs before Metaverse
+    /// Objects are deleted (issue #908). Call before <see cref="EvaluateMvoDeletionAsync"/>.
+    /// </summary>
+    Task<ReferenceRecallContext> CaptureReferenceRecallContextAsync(IReadOnlyCollection<Guid> deletionCandidateMvoIds);
+
+    /// <summary>
+    /// Stages membership-removal Pending Exports for Metaverse Objects that referenced now-deleted
+    /// Metaverse Objects (reference recall, issue #908). Call after the deletions have been performed.
+    /// </summary>
+    Task<ReferenceRecallResult> StageReferenceRecallExportsAsync(ReferenceRecallContext context, IReadOnlyCollection<Guid> deletedMvoIds);
+
     #endregion
 
     #region Export Execution

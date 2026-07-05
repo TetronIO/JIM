@@ -9,7 +9,12 @@
     Creates users and entitlement groups in Source OpenLDAP (Yellowstone suffix) for
     cross-domain group synchronisation testing. Groups use the jimGroup structural class
     (SUP groupOfNames), which inherits the MUST member constraint and adds mail,
-    jimGroupType, and jimGroupStatus attributes.
+    jimGroupType, and jimGroupStatus attributes. Users use the jimPerson structural class
+    (SUP inetOrgPerson), which adds jimEmployeeEndDate (Generalized Time) so the
+    LeaverCohort scenario step (#908) can scope the inbound user rule on a relative-date
+    criterion; every user gets a fixed far-future end date, and a ~1% cohort (spread across
+    the user index space, never a group's initial member) is marked with jimLeaverCohort=TRUE
+    for the step to discover and deprovision.
 
     The Target suffix (Glitterband) gets only OU structure — JIM provisions groups there.
 
@@ -167,7 +172,9 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
     $dn = "uid=$uid,$($config.PeopleOU)"
 
     [void]$userLdifBuilder.AppendLine("dn: $dn")
-    [void]$userLdifBuilder.AppendLine("objectClass: inetOrgPerson")
+    # jimPerson (SUP inetOrgPerson STRUCTURAL) adds jimEmployeeEndDate so the LeaverCohort
+    # step (#908) can scope the inbound user rule on a relative-date criterion.
+    [void]$userLdifBuilder.AppendLine("objectClass: jimPerson")
     [void]$userLdifBuilder.AppendLine("uid: $uid")
     [void]$userLdifBuilder.AppendLine("cn: $displayName")
     [void]$userLdifBuilder.AppendLine("sn: $lastName")
@@ -181,6 +188,11 @@ for ($i = 0; $i -lt $groupScale.Users; $i++) {
     # employeeType: 90% Active, 10% Archived (matching Samba AD userAccountControl distribution)
     $employeeType = if ($i -eq 0) { "Archived" } elseif (($i % 10) -eq 9) { "Archived" } else { "Active" }
     [void]$userLdifBuilder.AppendLine("employeeType: $employeeType")
+    # Every user is currently employed: a fixed far-future end date keeps everyone inside the
+    # "jimEmployeeEndDate >= now" scope window. The LeaverCohort step later moves the cohort's
+    # end dates to a near-future instant; a fixed constant (rather than now+offset) keeps the
+    # populate output deterministic for snapshot images.
+    [void]$userLdifBuilder.AppendLine("jimEmployeeEndDate: 20991231235959Z")
     [void]$userLdifBuilder.AppendLine("userPassword: Test@123!")
     [void]$userLdifBuilder.AppendLine("")
 
@@ -605,6 +617,73 @@ finally {
 Write-Host "  Created $($createdGroups.Count) groups" -ForegroundColor Green
 
 # ============================================================================
+# Step 3b: Select and mark the leaver cohort (Source only, #908)
+#
+# The LeaverCohort scenario step deprovisions a date-driven cohort via the Temporal
+# Scope Reconciler and asserts the resulting membership removals reach the target.
+# The cohort is chosen HERE because only the populate script holds every group's
+# membership plan in memory: excluding each group's initial member from the cohort
+# guarantees no group is ever emptied by the cohort's removal (groupOfNames requires
+# at least one member value). Cohort users are marked in the directory itself
+# (jimLeaverCohort=TRUE) so the choice survives snapshot images and needs no
+# host-side state; the scenario step discovers them with a single LDAP search.
+# ============================================================================
+Write-TestStep "Step 3b" "Selecting and marking the leaver cohort"
+
+# ~1% of users, at least 1, capped at 10,000 (the reconciler burst size worth measuring).
+$cohortTargetSize = [int][Math]::Min(10000, [Math]::Max(1, [Math]::Ceiling($createdUsers.Count / 100.0)))
+
+$initialMemberDns = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+foreach ($grp in $createdGroups) {
+    [void]$initialMemberDns.Add([string]$grp.Members[0])
+}
+
+# Spread the cohort across the user index space (memberships are assigned as contiguous
+# index ranges, so a stride-spread cohort touches many groups rather than one block).
+# Higher phases first: initial members cluster at low indices, so this minimises skips.
+$cohortUsers = [System.Collections.Generic.List[object]]::new()
+$userCountForCohort = $createdUsers.Count
+$cohortStride = [int][Math]::Max(1, [Math]::Floor($userCountForCohort / $cohortTargetSize))
+:cohortSearch for ($phase = $cohortStride - 1; $phase -ge 0; $phase--) {
+    for ($idx = $phase; $idx -lt $userCountForCohort; $idx += $cohortStride) {
+        $candidate = $createdUsers[$idx]
+        if ($initialMemberDns.Contains([string]$candidate.DN)) { continue }
+        $cohortUsers.Add($candidate)
+        if ($cohortUsers.Count -ge $cohortTargetSize) { break cohortSearch }
+    }
+}
+
+if ($cohortUsers.Count -eq 0) {
+    throw "Leaver cohort selection found no eligible users: every user is the initial member of some group. This template's user count is too small relative to its group count."
+}
+if ($cohortUsers.Count -lt $cohortTargetSize) {
+    Write-Host "  WARNING Cohort reduced to $($cohortUsers.Count) of $cohortTargetSize target (users that are initial group members are excluded)" -ForegroundColor Yellow
+}
+
+$cohortLdifBuilder = [System.Text.StringBuilder]::new()
+foreach ($cohortUser in $cohortUsers) {
+    [void]$cohortLdifBuilder.AppendLine("dn: $($cohortUser.DN)")
+    [void]$cohortLdifBuilder.AppendLine("changetype: modify")
+    [void]$cohortLdifBuilder.AppendLine("replace: jimLeaverCohort")
+    [void]$cohortLdifBuilder.AppendLine("jimLeaverCohort: TRUE")
+    [void]$cohortLdifBuilder.AppendLine("")
+}
+
+$cohortLdifPath = [System.IO.Path]::GetTempFileName()
+Set-Content -Path $cohortLdifPath -Value $cohortLdifBuilder.ToString() -NoNewline
+try {
+    $result = bash -c "cat '$cohortLdifPath' | docker exec -i $containerName ldapmodify -x -H $ldapUri -D '$($config.AdminDN)' -w '$($config.Password)' -c" 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to mark leaver cohort users (exit code $LASTEXITCODE): $result"
+    }
+}
+finally {
+    Remove-Item -Path $cohortLdifPath -Force -ErrorAction SilentlyContinue
+}
+
+Write-Host "  Marked $($cohortUsers.Count) leaver-cohort users (jimLeaverCohort=TRUE), e.g. $($cohortUsers[0].Uid)" -ForegroundColor Green
+
+# ============================================================================
 # Step 4: Assign group memberships (Source only)
 #
 # Membership assignment is batched across multiple groups per docker exec call.
@@ -813,5 +892,6 @@ if ($applicationCount   -gt 0) { Write-Host "  - Applications:     $applicationC
 if ($distributionCount  -gt 0) { Write-Host "  - DistributionLists: $distributionCount" -ForegroundColor Cyan }
 if ($roleCount          -gt 0) { Write-Host "  - Roles:            $roleCount" -ForegroundColor Cyan }
 Write-Host "Total memberships: $totalMemberships" -ForegroundColor Cyan
+Write-Host "Leaver cohort:    $($cohortUsers.Count) users (jimLeaverCohort=TRUE)" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Source OpenLDAP population complete" -ForegroundColor Green

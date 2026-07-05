@@ -79,6 +79,8 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix"    # Scoping criteria evaluation matrix (Default tier)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Quick      # Quick tier (~12 cells, < 90s)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Exhaustive # Exhaustive tier (~152 cells, < 10 min)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario12-RelativeDateScoping"       # Relative-date inbound scoping (joiner/leaver)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario13-RelativeDateOutboundScoping" # Relative-date outbound scoping (staged provisioning)
 
 # Run with a specific template size
 ./test/integration/Run-IntegrationTests.ps1 -Template Nano
@@ -102,7 +104,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Step Joiner                          # Scenario 1: Joiner, Mover, Mover-Rename, Mover-Move, Disable, Enable, Leaver, Reconnection
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Step Provision  # Scenario 2: Provision, ForwardSync, ReverseSync, Conflict
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario7-ClearConnectedSystemObjects" -Step DeleteHistory  # Scenario 7: DeleteHistory, KeepHistory, EdgeCases
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -Step InitialSync  # Scenario 8: InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -Step InitialSync  # Scenario 8: InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort (OpenLDAP only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario10-SyncRuleScoping" -Step InboundEnterScope  # Scenario 10: InboundEnterScope/InboundInScopeUpdate/InboundExitDisconnect/InboundExitRemainJoined/OutboundEnterScope/OutboundExitDisconnect/OutboundExitDelete/CrossSystemCascade/CriteriaOperators
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -OperatorFilter NotEquals  # Scenario 11: filter to cells using a single operator
 
@@ -150,6 +152,8 @@ This single script handles everything:
 | `Scenario9-PartitionScopedImports` | Partition-scoped import Run Profiles | samba-ad-primary / openldap-primary | ✅ |
 | `Scenario10-SyncRuleScoping` | Synchronisation Rule scoping behaviour: inbound enter/in-scope-update/exit (Disconnect, RemainJoined); outbound enter/exit (Disconnect, Delete); cross-system inline cascade; criteria persistence | file (HR CSV), samba-ad-primary / openldap-primary | ✅ |
 | `Scenario11-ScopingCriteriaMatrix` | Scoping criteria evaluation matrix: full operator x value-type x group-structure coverage via batched per-cell CSO and MV types. Three tiers: Quick (~12 cells, < 90s), Default (~41 cells, < 5 min), Exhaustive (~152 cells, < 10 min). Round-trip persistence and API negative-cell probes run first. | file (bespoke deterministic seed) | n/a |
+| `Scenario12-RelativeDateScoping` | Relative-date inbound scoping: date-driven joiner provisioning and leaver deprovisioning, plus per-run re-evaluation against the live clock | file (HR CSV, metaverse-only) | n/a |
+| `Scenario13-RelativeDateOutboundScoping` | Relative-date outbound scoping: downstream provisioning held until a joiner's start date arrives, released via the Temporal Scope Reconciler's outbound lane | file (HR CSV source, CSV export target) | n/a |
 
 **Available Templates (`-Template` parameter):**
 
@@ -875,6 +879,7 @@ These scenarios test group management capabilities - a core ILM function where t
 | 4 | **ReassertState** | JIM reasserts AD1 membership to AD2, overwriting AD2 changes |
 | 5 | **NewGroup** | New group created in AD1 -> provisioned to AD2 |
 | 6 | **DeleteGroup** | Group deleted from AD1 -> deleted from AD2 |
+| 7 | **LeaverCohort** | *(OpenLDAP only; skipped with a message on Samba AD)* Date-driven leaver deprovisioning at scale via the Temporal Scope Reconciler; see [LeaverCohort details](#leavercohort-temporal-scope-reconciliation-at-scale-908) below |
 
 **Diagnostic step** (runs a partial pipeline; does not participate in `-Step All`):
 
@@ -894,10 +899,43 @@ These scenarios test group management capabilities - a core ILM function where t
 ./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step ReassertState -Template Small
 ./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step NewGroup -Template Small
 ./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step DeleteGroup -Template Small
+./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step LeaverCohort -Template Small   # OpenLDAP runs only; skipped on Samba AD
 
 # Run all steps sequentially
 ./Invoke-Scenario8-CrossDomainEntitlementSync.ps1 -Step All -Template Small
+
+# LeaverCohort via the runner (OpenLDAP; any template, including the long-tail Scale templates)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -Step LeaverCohort -DirectoryType OpenLDAP
 ```
+
+##### LeaverCohort: Temporal Scope Reconciliation at Scale (#908)
+
+The **LeaverCohort** step (issue [#908](https://github.com/TetronIO/JIM/issues/908)) exercises the Temporal Scope Reconciler ([#892](https://github.com/TetronIO/JIM/issues/892)) against reference-heavy, burst-shaped leaver deprovisioning at whatever scale the template provides. It is the scale companion to the Nano-scale relative-date scoping scenarios: Scenario 12 covers the inbound lane and Scenario 13 the outbound lane, each with a handful of fixed users, while this step drives the same machinery through a cohort of users and their group memberships. It is appended after `DeleteGroup` in the `-Step All` sequence.
+
+**OpenLDAP only.** The step needs a DateTime-typed source attribute to carry the relative-date scoping criterion. The OpenLDAP image's JIM schema extension defines `jimPerson` (SUP inetOrgPerson STRUCTURAL) with `jimEmployeeEndDate` (Generalized Time) and `jimLeaverCohort` (a Boolean cohort marker). Samba AD has no equivalent writable Generalized-Time attribute, so on Samba AD runs the step is skipped with a message. Run it with `-DirectoryType OpenLDAP` using any template, including the long-tail Scale templates (which are Scenario 8 + OpenLDAP only).
+
+**Population changes**: Scenario 8 OpenLDAP users are created as `jimPerson` with a fixed far-future `jimEmployeeEndDate` (`20991231235959Z`). Roughly 1% of users (minimum 1, capped at 10,000) are marked `jimLeaverCohort=TRUE`; the cohort is spread across the user index space and never includes a group's initial member, so no group can be emptied by the cohort's removal (`groupOfNames` requires at least one member value). The cohort choice lives in the directory itself, so snapshot images stay self-describing.
+
+**Setup changes**:
+
+- The Source user import rule gains a scoping criteria group `jimEmployeeEndDate >= now` (relative: Hours/0/FromNow) with `InboundOutOfScopeAction=Disconnect`.
+- The User Metaverse Object Type gains a `WhenAuthoritativeSourceDisconnected` deletion rule (Source system trigger, zero grace period), mirroring the existing Group rule.
+- The built-in "Temporal Scope Reconciliation" schedule is disabled at setup so it can only be triggered manually by the step (the same pattern Scenarios 12 and 13 use).
+
+**Step flow**:
+
+1. Discover the cohort via LDAP (`jimLeaverCohort=TRUE`).
+2. Restamp the cohort's `jimEmployeeEndDate` to now + `-LeaverWindowSeconds` (default 180) via one batched `ldapmodify`.
+3. Delta import + delta sync on Source: proves the hot path sees the new dates while they are still in scope (asserts zero disconnections).
+4. Wait for the wall clock to pass the boundary.
+5. Negative control: a full sync with no data changes must deprovision nothing (the hot path skips unchanged objects).
+6. Manually trigger the built-in reconciler schedule, which flags the whole cohort in one sweep.
+7. A full sync then disconnects exactly the cohort (asserts `DisconnectedOutOfScope` equals the cohort size); the User deletion rule deletes the Metaverse Objects, and Target deprovisioning plus group membership removals are exported.
+8. Assertions: cohort accounts are removed from the Target directory; per-group Target member sets equal the Source member sets minus the cohort (compared by uid; full verification when the template has 150 or fewer groups, sampled otherwise); Source groups are untouched; no unresolved references; no `[ERR]` lines.
+
+**Design constraint**: the membership removals must be JIM-driven. OpenLDAP has no referential-integrity overlay in this stack, so deleting a Target account never strips member values; any removal observed in Target groups can only have come from JIM's export path.
+
+**Step-specific parameter**: `-LeaverWindowSeconds <int>` (default 180) sets how far in the future the cohort's end dates are placed, i.e. the margin the pre-boundary delta cycle must complete within. Raise it on slow hosts if that cycle overruns before the boundary is crossed.
 
 ---
 
@@ -1055,11 +1093,79 @@ The batched approach is what makes Exhaustive fit inside its wall-clock budget; 
 
 ---
 
+#### Scenario 12: Relative-Date Inbound Scoping
+
+**Purpose**: Exercise relative-date scoping criteria on an inbound (Import) Synchronisation Rule end-to-end. The rule scopes the "currently-employed" window (`employeeStartDate <= now` and `employeeEndDate >= now`), so a user is in scope only while currently employed: date-driven joiner provisioning and leaver deprovisioning. Crucially, it also proves the criterion is re-resolved against the wall clock on every run, not frozen at rule-creation time; unit tests (which inject "now") cannot prove this against the live `DateTime.UtcNow` path.
+
+**Systems**:
+- Source: CSV (HR system, File connector)
+- No directory target; metaverse-only by design. Projection is "provisioned" and last-connector deletion is "deprovisioned"; the cross-system Delete cascade to a target directory is covered by Scenario 10, and the scale variant is covered by Scenario 8's `LeaverCohort` step.
+
+The scenario seeds its own fixed test users positioned relative to "now" and ignores the template.
+
+**Test Steps** (executed sequentially):
+
+| Step | Test Case | Description |
+|------|-----------|-------------|
+| 1 | **InitialScopeWindow** | Seeds a joiner (start date in the future), a leaver (end date in the future) and an always-employed control -> the joiner is out of scope (no Metaverse Object) while the leaver and control are in scope (projected) |
+| 2 | **JoinerProvisionedOnStartDate** | The joiner's start date moves into the past -> the same rule now places them in scope, projecting a Metaverse Object: date-driven provisioning |
+| 3 | **LeaverDeprovisionedOnEndDate** | The leaver's end date moves into the past -> out of scope; with `InboundOutOfScopeAction=Disconnect` the CSO is disconnected and the User type's default `WhenLastConnectorDisconnected` deletion rule removes the orphaned Metaverse Object: date-driven deprovisioning |
+| 4 | **ReEvaluatedEachRun** | A user's end date is a fixed instant a few seconds in the future; sync (in scope), wait past that instant, sync again with no data changes -> the same data falls out of scope purely because "now" advanced |
+
+**Script**: `test/integration/scenarios/Invoke-Scenario12-RelativeDateScoping.ps1`
+
+**Execution Model**:
+
+```powershell
+# Run all steps sequentially (default)
+./Invoke-Scenario12-RelativeDateScoping.ps1 -Step All -ApiKey "jim_..."
+
+# Individual steps
+./Invoke-Scenario12-RelativeDateScoping.ps1 -Step ReEvaluatedEachRun -ApiKey "jim_..."
+```
+
+**Step-specific parameter**: `-WindowSeconds <int>` (default 90) sets how far in the future the `ReEvaluatedEachRun` user's end date is placed; raise it on a slow host if the first import + sync does not complete within the window.
+
+---
+
+#### Scenario 13: Relative-Date Outbound Scoping
+
+**Purpose**: Exercise a relative-date scoping criterion on an outbound (Export) Synchronisation Rule and prove the Temporal Scope Reconciler's outbound lane ([#892](https://github.com/TetronIO/JIM/issues/892)). The export rule holds downstream provisioning until the joiner's start date arrives (`Employee Start Date <= now`). The inbound rule is deliberately unscoped, so the Metaverse Object persists throughout; only the export scope flips as "now" advances, pinning any downstream change on the outbound reconciler lane and nothing else.
+
+**Systems**:
+- Source: CSV (HR system, File connector)
+- Target: File connector (a header-only CSV the connector appends to); no directory container, so the test stays fast and free of directory flakiness, mirroring Scenario 12
+
+The scenario seeds its own fixed test users positioned relative to "now" and ignores the template.
+
+**Test Steps** (executed sequentially):
+
+| Step | Test Case | Description |
+|------|-----------|-------------|
+| 1 | **OutboundInitialScope** | Seeds a control (start date in the past) and a joiner (start date a fixed instant a few seconds in the future). Both project Metaverse Objects (inbound is unscoped); the export rule provisions the control downstream but holds the joiner, so the target connector space has exactly one object |
+| 2 | **ProvisionedOnSchedule** | After the wall clock passes the joiner's start instant, with no data changes: a plain sync provisions nothing new (the hot path never reconsiders an unchanged Metaverse Object); triggering the Temporal Scope Reconciler flags the joiner, the next sync provisions it downstream, and the exported row carries the joiner's Manager reference intact (proving reference attributes survive a reconciler-driven provision) |
+
+**Script**: `test/integration/scenarios/Invoke-Scenario13-RelativeDateOutboundScoping.ps1`
+
+**Execution Model**:
+
+```powershell
+# Run all steps sequentially (default)
+./Invoke-Scenario13-RelativeDateOutboundScoping.ps1 -Step All -ApiKey "jim_..."
+
+# Individual steps
+./Invoke-Scenario13-RelativeDateOutboundScoping.ps1 -Step ProvisionedOnSchedule -ApiKey "jim_..."
+```
+
+**Step-specific parameter**: `-WindowSeconds <int>` (default 120) sets how far in the future the joiner's start date is placed; raise it on a slow host if setup plus the first import + sync + export does not complete before the boundary is crossed.
+
+---
+
 ### Phase 2 (Road-mapped) - Database Scenarios
 
-> The scenario numbers below (Multi-Source Aggregation, Database Source/Target, Performance Baselines) were originally drafted as 9, 10, and 11; those numbers are now taken by implemented Phase 1 scenarios (Partition-Scoped Imports, Synchronisation Rule Scoping, Scoping Criteria Matrix). The renumbered planned scenarios start at 12.
+> The scenario numbers below (Multi-Source Aggregation, Database Source/Target, Performance Baselines) were originally drafted as 9, 10, and 11, then renumbered to 12, 13, and 14 as implemented Phase 1 scenarios claimed each range: Partition-Scoped Imports, Synchronisation Rule Scoping and the Scoping Criteria Matrix took 9-11, and the Relative-Date Scoping scenarios took 12-13. The planned scenarios are now numbered 14-16.
 
-#### Scenario 12: Multi-Source Aggregation
+#### Scenario 14: Multi-Source Aggregation
 
 **Purpose**: Validate multiple database sources feeding the metaverse with join rules and attribute precedence.
 
@@ -1078,24 +1184,24 @@ The batched approach is what makes Exhaustive fit inside its wall-clock budget; 
 | 3 | **Precedence** | SQL Server authoritative for email/phone, Oracle for department/title |
 | 4 | **DataTypes** | VARCHAR, NVARCHAR, DATE, DATETIME, INT, BIT -> correct mapping |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario12-MultiSourceAggregation.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario14-MultiSourceAggregation.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario12-MultiSourceAggregation.ps1 -Step InitialLoad -Template Small
-./Invoke-Scenario12-MultiSourceAggregation.ps1 -Step JoinRules -Template Small
-./Invoke-Scenario12-MultiSourceAggregation.ps1 -Step Precedence -Template Small
-./Invoke-Scenario12-MultiSourceAggregation.ps1 -Step DataTypes -Template Small
+./Invoke-Scenario14-MultiSourceAggregation.ps1 -Step InitialLoad -Template Small
+./Invoke-Scenario14-MultiSourceAggregation.ps1 -Step JoinRules -Template Small
+./Invoke-Scenario14-MultiSourceAggregation.ps1 -Step Precedence -Template Small
+./Invoke-Scenario14-MultiSourceAggregation.ps1 -Step DataTypes -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario12-MultiSourceAggregation.ps1 -Step All -Template Small
+./Invoke-Scenario14-MultiSourceAggregation.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 13: Database Source/Target
+#### Scenario 15: Database Source/Target
 
 **Purpose**: Validate database connector import/export capabilities.
 
@@ -1112,24 +1218,24 @@ The batched approach is what makes Exhaustive fit inside its wall-clock budget; 
 | 3 | **DataTypes** | Data type handling (text, numeric, date, boolean) |
 | 4 | **MultiValue** | Multi-valued attributes (if supported) |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario13-DatabaseSourceTarget.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario15-DatabaseSourceTarget.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario13-DatabaseSourceTarget.ps1 -Step Import -Template Small
-./Invoke-Scenario13-DatabaseSourceTarget.ps1 -Step Export -Template Small
-./Invoke-Scenario13-DatabaseSourceTarget.ps1 -Step DataTypes -Template Small
-./Invoke-Scenario13-DatabaseSourceTarget.ps1 -Step MultiValue -Template Small
+./Invoke-Scenario15-DatabaseSourceTarget.ps1 -Step Import -Template Small
+./Invoke-Scenario15-DatabaseSourceTarget.ps1 -Step Export -Template Small
+./Invoke-Scenario15-DatabaseSourceTarget.ps1 -Step DataTypes -Template Small
+./Invoke-Scenario15-DatabaseSourceTarget.ps1 -Step MultiValue -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario13-DatabaseSourceTarget.ps1 -Step All -Template Small
+./Invoke-Scenario15-DatabaseSourceTarget.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 14: Performance Baselines
+#### Scenario 16: Performance Baselines
 
 **Purpose**: Establish performance characteristics at various scales.
 
@@ -1142,7 +1248,7 @@ The batched approach is what makes Exhaustive fit inside its wall-clock budget; 
 4. Identify bottlenecks
 5. Establish acceptable thresholds
 
-**Script**: `test/integration/scenarios/Invoke-Scenario9-Performance.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario16-Performance.ps1`
 
 ---
 
@@ -1997,6 +2103,8 @@ JIM/
         ├── Setup-Scenario8.ps1                             # Configures JIM for Scenario 8
         ├── Setup-Scenario9.ps1                             # Configures JIM for Scenario 9
         ├── Setup-Scenario10.ps1                            # Configures JIM for Scenario 10
+        ├── Setup-Scenario12.ps1                            # Configures JIM for Scenario 12
+        ├── Setup-Scenario13.ps1                            # Configures JIM for Scenario 13
         ├── Add-Scenario8Schedules.ps1                      # Optional schedule wiring for Scenario 8
         ├── Populate-SambaAD.ps1                            # Samba AD population (Scenarios 1, 4, 5, etc.)
         ├── Populate-SambaAD-Scenario8.ps1                  # Samba AD population (Scenario 8)
@@ -2028,6 +2136,8 @@ JIM/
         │   ├── Invoke-Scenario9-PartitionScopedImports.ps1       # Partition-scoped import Run Profiles
         │   ├── Invoke-Scenario10-SyncRuleScoping.ps1             # Synchronisation Rule scoping behaviour
         │   ├── Invoke-Scenario11-ScopingCriteriaMatrix.ps1       # Scoping criteria evaluation matrix
+        │   ├── Invoke-Scenario12-RelativeDateScoping.ps1         # Relative-date inbound scoping
+        │   ├── Invoke-Scenario13-RelativeDateOutboundScoping.ps1 # Relative-date outbound scoping
         │   ├── data/                                             # Per-scenario data + manifests (incl. Scenario 11 matrix)
         │   └── data/                                              # Scenario-specific CSV overlays (Scenarios 4, 5)
         ├── docker/
@@ -2086,7 +2196,7 @@ JIM/
 
 ## Current Progress & Known Issues
 
-### Phase 1 Status (as of 2026-03-01) - ✅ COMPLETE
+### Phase 1 Status (as of 2026-07-03) - ✅ COMPLETE
 
 | Component | Status | Notes |
 |-----------|--------|-------|
@@ -2100,13 +2210,15 @@ JIM/
 | Scenario 5 | ✅ Complete | Matching rules: 5 tests passing (Projection, Join, DuplicatePrevention, JoinConflict, CaseSensitivity); MultipleRules run separately |
 | Scenario 6 | ✅ Complete | Scheduler service (Create, ManualTrigger, AutoTrigger, Overlap, MultiStep, Parallel) |
 | Scenario 7 | ✅ Complete | Clear Connected System Objects (DeleteHistory, KeepHistory, EdgeCases) |
-| Scenario 8 | ✅ Complete | All 6 tests (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup) plus ImportToMV diagnostic step |
+| Scenario 8 | ✅ Complete | All 7 tests (InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort (OpenLDAP only)) plus ImportToMV diagnostic step |
 | Scenario 9 | ✅ Complete | Partition-scoped import Run Profiles |
 | Scenario 10 | ✅ Complete | Synchronisation Rule scoping behaviour: 9 sub-tests covering the full inbound + outbound scope transition matrix, cross-system inline cascade, and criteria persistence (#656) |
 | Scenario 11 | ✅ Complete | Scoping criteria evaluation matrix: three tiers (Quick / Default / Exhaustive) covering operator x value-type x group-structure end-to-end via batched per-cell CSO types, plus round-trip persistence and API negative-cell probes |
+| Scenario 12 | ✅ Complete | Relative-date inbound scoping: date-driven joiner provisioning and leaver deprovisioning, plus per-run re-evaluation against the live clock (#85) |
+| Scenario 13 | ✅ Complete | Relative-date outbound scoping: staged downstream provisioning via the Temporal Scope Reconciler's outbound lane (#892) |
 | Entitlement (JIM-to-AD) | ⏸️ Deferred | Requires Internal MVO design |
 | Entitlement (Convert Authority) | ⏸️ Deferred | Requires Internal MVO design |
-| Scenarios 12-14 | ⏳ Road-mapped | Database scenarios (multi-source aggregation, database source/target, performance baselines): require Database Connector (#170) |
+| Scenarios 14-16 | ⏳ Road-mapped | Database scenarios (multi-source aggregation, database source/target, performance baselines): require Database Connector (#170) |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
 ### Remaining Work
@@ -2114,7 +2226,7 @@ JIM/
 1. **Complete Scenario 3** - GALSYNC (AD to CSV export); stub script exists but not implemented
 2. **Create GitHub Actions workflow** - `.github/workflows/integration-tests.yml` for CI/CD automation
 3. **Road-mapped: Entitlement Management** - Internal MVO design required (deferred scenarios above)
-4. **Road-mapped: Scenarios 9-11** - Database connector testing (SQL Server, PostgreSQL, Oracle, MySQL)
+4. **Road-mapped: Scenarios 14-16** - Database connector testing (SQL Server, PostgreSQL, Oracle, MySQL)
 
 ---
 

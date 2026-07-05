@@ -96,10 +96,12 @@ $targetBaseDN      = $targetConfig.BaseDN
 $userObjectClass   = $sourceConfig.UserObjectClass
 $groupObjectClass  = $sourceConfig.GroupObjectClass
 
-# Scenario 8 OpenLDAP uses jimGroup (SUP groupOfNames) which adds mail, jimGroupType, jimGroupStatus.
+# Scenario 8 OpenLDAP uses jimGroup (SUP groupOfNames) which adds mail, jimGroupType, jimGroupStatus,
+# and jimPerson (SUP inetOrgPerson) which adds jimEmployeeEndDate for the LeaverCohort step (#908).
 # Override here rather than in the global Get-DirectoryConfig to avoid affecting other scenarios.
 if ($isOpenLDAP) {
     $groupObjectClass = "jimGroup"
+    $userObjectClass = "jimPerson"
 }
 
 # Object type names for schema lookup
@@ -110,9 +112,14 @@ $groupTypeName = $groupObjectClass   # "group" for AD, "jimGroup" for OpenLDAP
 if ($isOpenLDAP) {
     # OpenLDAP uses entryUUID (auto-set by connector), uid, departmentNumber
     # No userAccountControl, extensionAttribute1, userPrincipalName, groupType, managedBy
+    # jimEmployeeEndDate (Generalized Time, typed DateTime by the connector) backs the
+    # relative-date scoping criterion on the user import rule (LeaverCohort step, #908).
+    # It is deliberately NOT mapped to a Metaverse attribute: scoping evaluates the CSO
+    # directly, and an unmapped attribute keeps cohort date restamps cheap (no MVO updates).
     $requiredUserAttributes = @(
         'entryUUID', 'uid', 'givenName', 'sn', 'displayName', 'cn',
-        'mail', 'title', 'departmentNumber', 'employeeNumber', 'o', 'employeeType', 'distinguishedName'
+        'mail', 'title', 'departmentNumber', 'employeeNumber', 'o', 'employeeType', 'distinguishedName',
+        'jimEmployeeEndDate'
     )
     $requiredGroupAttributes = @(
         'entryUUID', 'cn', 'description', 'member', 'mail',
@@ -712,6 +719,32 @@ if (-not $sourceUserImportRule) {
         -ProjectToMetaverse `
         -PassThru
     Write-Host "  ✓ Created: $sourceUserImportRuleName" -ForegroundColor Green
+
+    # OpenLDAP only (LeaverCohort step, #908): scope the rule to currently-employed users via a
+    # relative-date criterion on jimEmployeeEndDate (>= "now"; Hours/0/FromNow resolves to the
+    # exact current instant with no midnight rounding, and is re-resolved on every evaluation).
+    # Populate gives every user a far-future end date, so all users are in scope until the
+    # LeaverCohort step moves the cohort's end dates. Disconnect on scope exit so the User
+    # deletion rule (configured in the deletion-rules step below) can deprovision leavers.
+    # Criteria are created only on the rule-creation path: the runner resets JIM between
+    # scenario runs, so a fresh run always takes this branch.
+    if ($isOpenLDAP) {
+        $endDateAttr = $sourceUserType.attributes | Where-Object { $_.name -eq "jimEmployeeEndDate" }
+        if (-not $endDateAttr) { throw "jimEmployeeEndDate not found in the Source user schema; is the OpenLDAP image up to date?" }
+        if ($endDateAttr.type -ne "DateTime") {
+            throw "jimEmployeeEndDate imported as '$($endDateAttr.type)', expected 'DateTime'. Check the Generalized Time syntax in the OpenLDAP schema extension."
+        }
+
+        $scopeGroup = New-JIMScopingCriteriaGroup -SyncRuleId $sourceUserImportRule.id -Type All -PassThru
+        New-JIMScopingCriterion `
+            -SyncRuleId $sourceUserImportRule.id `
+            -GroupId $scopeGroup.id `
+            -ConnectedSystemAttributeId $endDateAttr.id `
+            -ComparisonType GreaterThanOrEquals `
+            -ValueMode Relative -RelativeCount 0 -RelativeUnit Hours -RelativeDirection FromNow | Out-Null
+        Set-JIMSyncRule -Id $sourceUserImportRule.id -InboundOutOfScopeAction Disconnect | Out-Null
+        Write-Host "  ✓ Scoped '$sourceUserImportRuleName' to jimEmployeeEndDate >= now (InboundOutOfScopeAction=Disconnect)" -ForegroundColor Green
+    }
 }
 else {
     Write-Host "  Sync rule '$sourceUserImportRuleName' already exists" -ForegroundColor Gray
@@ -1197,6 +1230,44 @@ else {
     Write-Host "  ⚠ Could not find Group metaverse object type" -ForegroundColor Yellow
 }
 
+# Configure User deletion rule - Source is authoritative for users too. When a source user
+# CSO disconnects (e.g. the LeaverCohort step's date-driven scope exit, #908) the User MVO
+# is deleted immediately even though the provisioned Target CSO still exists, which stages
+# the Target deprovisioning. No existing step disconnects source users, so this changes
+# nothing for the other tests.
+Write-Host "  Configuring User deletion rule..." -ForegroundColor Gray
+
+$mvUserTypeCurrent = Get-JIMMetaverseObjectType | Where-Object { $_.name -eq "User" }
+
+if ($mvUserTypeCurrent) {
+    Set-JIMMetaverseObjectType -Id $mvUserTypeCurrent.id `
+        -DeletionRule WhenAuthoritativeSourceDisconnected `
+        -DeletionGracePeriod ([TimeSpan]::Zero) `
+        -DeletionTriggerConnectedSystemIds @($sourceSystem.id) | Out-Null
+
+    Write-Host "  ✓ User deletion rule configured (WhenAuthoritativeSourceDisconnected, Source=APAC)" -ForegroundColor Green
+}
+else {
+    Write-Host "  ⚠ Could not find User metaverse object type" -ForegroundColor Yellow
+}
+
+# ============================================================================
+# Step 14: Disable the built-in Temporal Scope Reconciliation schedule
+# ============================================================================
+# The LeaverCohort step (#908) needs the reconciler to run at the exact moment it wants a
+# sweep, never mid-test: the built-in schedule fires hourly on the hour and would flag the
+# cohort early, corrupting the step's negative control. Manual triggering works regardless
+# of a schedule's enabled state, so disabling only suppresses the automatic run (same
+# pattern as Scenarios 12/13).
+Write-TestStep "Step 14" "Disabling the built-in Temporal Scope Reconciliation schedule (manual trigger only)"
+
+$reconSchedule = @(Get-JIMSchedule | Where-Object { $_.name -eq "Temporal Scope Reconciliation" })
+if ($reconSchedule.Count -ne 1) {
+    throw "Expected exactly one built-in 'Temporal Scope Reconciliation' schedule; found $($reconSchedule.Count)"
+}
+Disable-JIMSchedule -Id $reconSchedule[0].id -ErrorAction Stop | Out-Null
+Write-Host "  ✓ Built-in reconciler schedule disabled (ID: $($reconSchedule[0].id))" -ForegroundColor Green
+
 # ============================================================================
 # Summary
 # ============================================================================
@@ -1214,6 +1285,7 @@ Write-Host "  Groups: $sourceSystemName -> Metaverse -> $targetSystemName" -Fore
 Write-Host ""
 Write-Host "Deletion Rules Configured:" -ForegroundColor Yellow
 Write-Host "  Groups: WhenAuthoritativeSourceDisconnected (Source=$sourceSystemName, immediate)" -ForegroundColor Gray
+Write-Host "  Users:  WhenAuthoritativeSourceDisconnected (Source=$sourceSystemName, immediate)" -ForegroundColor Gray
 Write-Host ""
 Write-Host "Run Profiles Created:" -ForegroundColor Yellow
 Write-Host "  $sourceSystemName`: Full Import, Delta Import, Full Sync, Delta Sync, Export" -ForegroundColor Gray

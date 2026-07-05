@@ -118,18 +118,36 @@ function Get-SnapshotImageTag {
 function Test-SnapshotCurrent {
     <#
     .SYNOPSIS
-        Check if a snapshot image exists and has a matching content hash.
+        Check if a snapshot image exists, has a matching content hash, and was baked
+        from the same base image build we would use now.
     #>
     param(
         [string]$ImageTag,
-        [string]$ExpectedHash
+        [string]$ExpectedHash,
+        [string]$BaseImage
     )
 
     $inspect = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.samba.snapshot-hash"}}' 2>&1
     if ($LASTEXITCODE -ne 0) {
         return $false
     }
-    return "$inspect" -eq $ExpectedHash
+    if ("$inspect" -ne $ExpectedHash) {
+        return $false
+    }
+
+    # Snapshots capture the base image's provisioned state (password policy, TLS, OUs),
+    # so rebuilding the base does not refresh existing snapshots. Compare the base build
+    # the snapshot was baked from against the base we would build from now; snapshots
+    # without the base-hash label predate this check and are treated as stale.
+    $snapshotBaseHash = docker image inspect $ImageTag --format '{{index .Config.Labels "jim.samba.base-hash"}}' 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+    $baseBuildHash = docker image inspect $BaseImage --format '{{index .Config.Labels "jim.samba.build-hash"}}' 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+    return "$snapshotBaseHash" -eq "$baseBuildHash"
 }
 
 function Build-Snapshot {
@@ -216,9 +234,16 @@ function Build-Snapshot {
     Write-Host "  Stopping container..." -ForegroundColor Gray
     docker stop $ContainerName | Out-Null
 
+    # Record which base image build this snapshot was baked from. The snapshot captures
+    # the base's provisioned state (password policy, TLS, OUs), so a snapshot from a
+    # stale base stays stale even after the base image on disk is rebuilt; consumers
+    # compare this label to detect that.
+    $baseBuildHash = docker image inspect $BaseImage --format '{{index .Config.Labels "jim.samba.build-hash"}}' 2>$null
+
     Write-Host "  Committing as $SnapshotTag..." -ForegroundColor Gray
     docker commit `
         --change "LABEL jim.samba.snapshot-hash=$ContentHash" `
+        --change "LABEL jim.samba.base-hash=$baseBuildHash" `
         --change "LABEL jim.samba.snapshot-template=$Template" `
         --change "LABEL jim.samba.snapshot-date=$(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ')" `
         --change 'CMD ["/start-samba.sh"]' `
@@ -260,7 +285,7 @@ foreach ($scen in $scenariosToProcess) {
         "Scenario1" {
             $tag = Get-SnapshotImageTag -Role "primary" -Size $Template
 
-            if (-not $Force -and (Test-SnapshotCurrent -ImageTag $tag -ExpectedHash $contentHash)) {
+            if (-not $Force -and (Test-SnapshotCurrent -ImageTag $tag -ExpectedHash $contentHash -BaseImage "ghcr.io/tetronio/jim-samba-ad:primary")) {
                 Write-Host "  Snapshot $tag is up to date — skipping" -ForegroundColor Green
                 continue
             }
@@ -299,7 +324,7 @@ foreach ($scen in $scenariosToProcess) {
             $targetTag = Get-SnapshotImageTag -Role "target-s8" -Size $Template
 
             # Source
-            if (-not $Force -and (Test-SnapshotCurrent -ImageTag $sourceTag -ExpectedHash $contentHash)) {
+            if (-not $Force -and (Test-SnapshotCurrent -ImageTag $sourceTag -ExpectedHash $contentHash -BaseImage "ghcr.io/tetronio/jim-samba-ad:source")) {
                 Write-Host "  Snapshot $sourceTag is up to date — skipping" -ForegroundColor Green
             }
             else {
@@ -331,7 +356,7 @@ foreach ($scen in $scenariosToProcess) {
             }
 
             # Target (just OUs — very fast, but still worth snapshotting for consistency)
-            if (-not $Force -and (Test-SnapshotCurrent -ImageTag $targetTag -ExpectedHash $contentHash)) {
+            if (-not $Force -and (Test-SnapshotCurrent -ImageTag $targetTag -ExpectedHash $contentHash -BaseImage "ghcr.io/tetronio/jim-samba-ad:target")) {
                 Write-Host "  Snapshot $targetTag is up to date — skipping" -ForegroundColor Green
             }
             else {
