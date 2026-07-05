@@ -411,10 +411,10 @@
                     }
                 </MudTabPanel>
 
-                @* History is only meaningful for an existing Schedule; a new one has no recorded configuration changes. *@
+                @* Changes is only meaningful for an existing Schedule; a new one has no recorded configuration changes. *@
                 @if (ScheduleId.HasValue)
                 {
-                    <MudTabPanel Text="History" Icon="@Icons.Material.Filled.History">
+                    <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.History">
                         <ConfigurationChangesTab TargetType="ActivityTargetType.Schedule" ObjectGuidId="ScheduleId" ObjectTypeLabel="Schedule" />
                     </MudTabPanel>
                 }
