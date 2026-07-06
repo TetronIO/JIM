@@ -359,6 +359,46 @@ namespace JIM.Application.Servers
                 $"Service Setting {setting.Key}");
         }
 
+        /// <summary>
+        /// Records a System-attributed Create Activity and version-1 baseline snapshot for a built-in Service Setting
+        /// created in the current seeding pass, grouped under the seeding pass's parent Activity, so its origin is
+        /// visible in the change history and under System Initialisation (matching the other seeded configuration
+        /// types). Built-in Service Settings are created by the per-startup <c>SyncServiceSettingsAsync</c> drift-sync
+        /// rather than the one-time <c>SeedAsync</c> batch, so the caller records the baseline after the sync loop over
+        /// the settings that were newly created this pass. Recording after the full loop guarantees the change-tracking
+        /// toggle and hash-key settings (which the capture itself reads to decide whether and how to redact) already
+        /// exist, so there is no bootstrap-ordering dependency even for the encrypted settings or the hash-key setting
+        /// itself. Idempotency is the caller's responsibility: <see cref="SeedingServer"/> only calls this for settings
+        /// that did not exist before the pass, so a restart re-baselines nothing. A missing setting is a safe no-op.
+        /// </summary>
+        internal async Task RecordSeededServiceSettingBaselineAsync(string key, string displayName, Guid parentActivityId)
+        {
+            var setting = await GetSettingAsync(key);
+            if (setting == null)
+                return;
+
+            var activity = new Activity
+            {
+                TargetName = displayName,
+                TargetType = ActivityTargetType.ServiceSetting,
+                TargetOperationType = ActivityTargetOperationType.Create,
+                ParentActivityId = parentActivityId,
+                Message = $"Created built-in Service Setting '{displayName}'"
+            };
+            await Application.Activities.CreateSystemActivityAsync(activity);
+
+            try
+            {
+                await CaptureConfigurationChangeAsync(activity, setting, "Built-in Service Setting created automatically by JIM.");
+                await Application.Activities.CompleteActivityAsync(activity);
+            }
+            catch (Exception ex)
+            {
+                await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+                throw;
+            }
+        }
+
         private async Task<(ServiceSetting setting, Activity activity)> PrepareUpdateAsync(string key, string? newValue)
         {
             var setting = await GetSettingAsync(key);

@@ -870,6 +870,13 @@ internal class SeedingServer
         stopwatch.Start();
         Log.Information("SyncServiceSettingsAsync: Starting service settings synchronisation...");
 
+        // Capture the keys that already exist so that, after the sync loop, a System-attributed version-1 baseline can
+        // be recorded for only the settings genuinely created in this pass. Diffing keys before/after keeps this out of
+        // the ~20 individual SeedSettingAsync call sites; see RecordSeededServiceSettingBaselineAsync for why the
+        // baseline is deliberately recorded after the full loop (the capture reads the toggle and hash-key settings,
+        // which are themselves seeded here).
+        var existingSettingKeys = (await Application.ServiceSettings.GetAllSettingsAsync()).Select(s => s.Key).ToHashSet();
+
         // SSO Settings (read-only, from environment variables)
         await SeedSettingAsync(new ServiceSetting
         {
@@ -1162,6 +1169,23 @@ internal class SeedingServer
             DefaultValue = null,
             IsReadOnly = true
         }, () => Guid.NewGuid().ToString());
+
+        // Record a System-attributed Create Activity and version-1 baseline for each built-in Service Setting created
+        // this pass, grouped under the seeding parent, so their factory origin is visible in the change history and
+        // under System Initialisation (matching the other seeded configuration types). The list is diffed against the
+        // keys present before the loop, so a normal restart (all settings already present) records nothing and creates
+        // no parent Activity; a single new setting shipped in an upgrade appears under its own System Initialisation
+        // entry. Recording here, after the full loop, guarantees the toggle and hash-key settings the capture depends
+        // on already exist.
+        var createdSettings = (await Application.ServiceSettings.GetAllSettingsAsync())
+            .Where(s => !existingSettingKeys.Contains(s.Key))
+            .ToList();
+        if (createdSettings.Count > 0)
+        {
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            foreach (var setting in createdSettings)
+                await Application.ServiceSettings.RecordSeededServiceSettingBaselineAsync(setting.Key, setting.DisplayName, parentActivityId);
+        }
 
         stopwatch.Stop();
         Log.Information($"SyncServiceSettingsAsync: Completed in: {stopwatch.Elapsed}");

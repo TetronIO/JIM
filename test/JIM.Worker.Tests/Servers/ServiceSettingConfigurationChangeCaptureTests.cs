@@ -228,6 +228,44 @@ public class ServiceSettingConfigurationChangeCaptureTests
         Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("via API"));
     }
 
+    // -- RecordSeededServiceSettingBaselineAsync ----------------------------------------------------------------------
+
+    [Test]
+    public async Task RecordSeededServiceSettingBaselineAsync_RecordsSystemCreateChildWithVersionOneBaselineAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupHashKeySetting();
+        SetupSetting(BuildSetting(value: null));
+        SetupMaxVersion(0);
+        var parentActivityId = Guid.NewGuid();
+
+        await _jim.ServiceSettings.RecordSeededServiceSettingBaselineAsync(SettingKey, "History retention period", parentActivityId);
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.ServiceSetting));
+        Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Create));
+        Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
+        Assert.That(_completedActivity!.ParentActivityId, Is.EqualTo(parentActivityId), "the baseline must group under the seeding parent Activity");
+        Assert.That(_completedActivity!.ServiceSettingKey, Is.EqualTo(SettingKey), "the activity must carry the setting key so history is queryable");
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"ServiceSetting\""));
+    }
+
+    [Test]
+    public async Task RecordSeededServiceSettingBaselineAsync_WhenSettingMissing_RecordsNothingAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupHashKeySetting();
+        // The setting does not exist, so the baseline must be a safe no-op.
+        _settingsRepo.Setup(r => r.GetSettingAsync("Nonexistent.Key")).ReturnsAsync((ServiceSetting?)null);
+        _completedActivity = null; // this fixture's SetUp does not reset it, so clear any leak from a prior test
+        var parentActivityId = Guid.NewGuid();
+
+        await _jim.ServiceSettings.RecordSeededServiceSettingBaselineAsync("Nonexistent.Key", "Nonexistent", parentActivityId);
+
+        Assert.That(_completedActivity, Is.Null, "a missing setting must not create an Activity");
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private static readonly byte[] HashKeyBytes = new byte[32];
