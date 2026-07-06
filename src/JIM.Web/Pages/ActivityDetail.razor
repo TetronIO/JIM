@@ -670,10 +670,24 @@
         </MudTable>
     }
 
-    @if (_childActivities.Count > 0)
+    @if (_childActivityCount > 0 && _preferencesLoaded)
     {
         <MudText Typo="Typo.h5" Class="mt-5">Child Activities</MudText>
-        <MudTable T="Activity" Items="_childActivities" Hover="true" Class="mt-3" Outlined="true" Elevation="0">
+        <MudTable @ref="_childActivitiesTable"
+                  T="Activity"
+                  ServerData="ChildActivitiesServerReload"
+                  RowsPerPage="@_rowsPerPage"
+                  RowsPerPageChanged="OnRowsPerPageChanged"
+                  Hover="true"
+                  Dense="@_dense"
+                  Class="@(_dense ? "mt-3 dense-body-only" : "mt-3")"
+                  Outlined="true"
+                  Elevation="0"
+                  Loading="@_childActivitiesLoading"
+                  LoadingProgressColor="Color.Primary">
+            <ToolBarContent>
+                <TableDensityToggle @bind-Dense="_dense" />
+            </ToolBarContent>
             <HeaderContent>
                 <MudTh></MudTh>
                 <MudTh>Type</MudTh>
@@ -737,6 +751,9 @@
             <NoRecordsContent>
                 <MudText>No child activities found.</MudText>
             </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
         </MudTable>
     }
 }
@@ -753,7 +770,9 @@
     private Activity? _activity;
     private ConfigurationChangeDetail? _configChangeDetail;
     private bool _isAdministrator;
-    private List<Activity> _childActivities = new();
+    private MudTable<Activity>? _childActivitiesTable;
+    private int _childActivityCount;
+    private bool _childActivitiesLoading;
     private ConnectedSystemHeader? _connectedSystemHeader;
     private MetaverseObjectHeader? _metaverseObjectHeader;
     private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
@@ -764,6 +783,7 @@
     private CancellationTokenSource? _pollCts;
     private bool _preferencesLoaded;
     private bool _initialisationComplete;
+    private bool _dense;
 
     // Object type filter - when chips are selected, the table reloads with the filter applied
     private IReadOnlyCollection<string> _selectedObjectTypes = new List<string>();
@@ -795,7 +815,7 @@
         _initiatorMetaverseObjectHeader = null;
         _activityRunProfileExecutionStats = null;
         _configChangeDetail = null;
-        _childActivities = new();
+        _childActivityCount = 0;
         _searchString = "";
         _selectedObjectTypes = new List<string>();
         _selectedErrorTypes = new List<ActivityRunProfileExecutionItemErrorType>();
@@ -842,7 +862,8 @@
         if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute)
             _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
 
-        _childActivities = await jim.Activities.GetChildActivitiesAsync(_activity.Id);
+        // Only the count is loaded here; the Child Activities table pages its rows from the data layer on demand.
+        _childActivityCount = (await jim.Activities.GetChildActivityCountsAsync([_activity.Id])).GetValueOrDefault(_activity.Id);
 
         // Configuration-change activities carry a versioned snapshot; for administrators, load the diff against the
         // previous version so it renders inline with the shared renderer. Gated to Administrators to match the
@@ -894,6 +915,7 @@
             {
                 var preferredSize = await PreferenceService.GetRowsPerPageAsync();
                 _rowsPerPage = preferredSize;
+                _dense = await PreferenceService.GetTableDenseAsync() == true;
                 _preferencesLoaded = true;
                 StateHasChanged(); // Re-render to show the table now that preference is loaded
             }
@@ -951,6 +973,32 @@
         finally
         {
             _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task<TableData<Activity>> ChildActivitiesServerReload(TableState state, CancellationToken token)
+    {
+        _childActivitiesLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Convert MudBlazor's 0-indexed page to our 1-indexed page
+            var page = state.Page + 1;
+
+            using var jim = JimFactory.Create();
+            var result = await jim.Activities.GetChildActivitiesAsync(Id, page, state.PageSize);
+
+            return new TableData<Activity>
+            {
+                TotalItems = result.TotalResults,
+                Items = result.Results
+            };
+        }
+        finally
+        {
+            _childActivitiesLoading = false;
             StateHasChanged();
         }
     }
@@ -1216,11 +1264,15 @@
                     _activity = updated;
 
                     // Refresh child activities and stats while in progress
-                    _childActivities = await jim.Activities.GetChildActivitiesAsync(_activity.Id);
+                    _childActivityCount = (await jim.Activities.GetChildActivityCountsAsync([_activity.Id])).GetValueOrDefault(_activity.Id);
                     if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute)
                         _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
 
                     await InvokeAsync(StateHasChanged);
+
+                    // The Child Activities table is server-paged; ask it to re-fetch its current page.
+                    if (_childActivitiesTable != null)
+                        await InvokeAsync(() => _childActivitiesTable.ReloadServerData());
 
                     // Stop polling once the activity has completed
                     if (updated.Status != ActivityStatus.InProgress)

@@ -26,6 +26,12 @@ public interface IActivityRepository
     public Task<List<Activity>> GetChildActivitiesAsync(Guid parentActivityId);
 
     /// <summary>
+    /// Gets a page's worth of direct child activities for a given parent activity ID,
+    /// ordered by creation date ascending.
+    /// </summary>
+    public Task<PagedResultSet<Activity>> GetChildActivitiesAsync(Guid parentActivityId, int page, int pageSize);
+
+    /// <summary>
     /// Returns a dictionary mapping each activity ID (from the provided set) to its direct child activity count.
     /// IDs with no children are omitted from the result.
     /// </summary>

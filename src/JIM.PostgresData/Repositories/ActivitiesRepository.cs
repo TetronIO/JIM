@@ -256,6 +256,51 @@ public class ActivityRepository : IActivityRepository
             .ToListAsync();
     }
 
+    /// <summary>
+    /// Gets a page's worth of direct child activities for a given parent activity ID,
+    /// ordered by creation date ascending.
+    /// </summary>
+    public async Task<PagedResultSet<Activity>> GetChildActivitiesAsync(Guid parentActivityId, int page, int pageSize)
+    {
+        if (pageSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
+
+        if (page < 1)
+            page = 1;
+
+        // limit page size to avoid increasing latency unnecessarily
+        if (pageSize > 100)
+            pageSize = 100;
+
+        var query = Repository.Database.Activities
+            .Where(a => a.ParentActivityId == parentActivityId)
+            .OrderBy(a => a.Created);
+
+        // Get total count for pagination
+        var grossCount = await query.CountAsync();
+        var offset = (page - 1) * pageSize;
+        var results = await query.Skip(offset).Take(pageSize).ToListAsync();
+
+        var pagedResultSet = new PagedResultSet<Activity>
+        {
+            PageSize = pageSize,
+            TotalResults = grossCount,
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        // don't let users try and request a page that doesn't exist
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
     public async Task<Dictionary<Guid, int>> GetChildActivityCountsAsync(IEnumerable<Guid> activityIds)
     {
         var ids = activityIds.ToList();

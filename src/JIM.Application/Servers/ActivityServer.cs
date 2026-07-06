@@ -306,6 +306,15 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// Gets a page's worth of direct child activities for a given parent activity,
+    /// ordered by creation date ascending.
+    /// </summary>
+    public async Task<PagedResultSet<Activity>> GetChildActivitiesAsync(Guid parentActivityId, int page, int pageSize)
+    {
+        return await Application.Repository.Activity.GetChildActivitiesAsync(parentActivityId, page, pageSize);
+    }
+
+    /// <summary>
     /// Returns a dictionary mapping each activity ID to its direct child activity count.
     /// IDs with no children are omitted from the result.
     /// </summary>
