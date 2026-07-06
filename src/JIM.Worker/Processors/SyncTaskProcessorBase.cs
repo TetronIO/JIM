@@ -3288,12 +3288,26 @@ public abstract class SyncTaskProcessorBase
         var objectTypeId = mvo.Type.Id;
         var recalledAttributeIds = recalledValues.Select(av => av.AttributeId).Distinct().ToList();
 
+        var contestedAttributeIds = recalledAttributeIds
+            .Where(id => priorityContext.GetContributorCount(objectTypeId, id) > 1)
+            .ToList();
+        if (contestedAttributeIds.Count == 0)
+            return;
+
+        // Survivor discovery must query the repository, not the mvo.ConnectedSystemObjects navigation: the sync
+        // page loads hydrate the Metaverse Object with Type and AttributeValues only, so on PostgreSQL that
+        // navigation holds just the sibling CSOs EF happens to be tracking in this run (typically only the leaving
+        // system's own page), and survivors joined via other Connected Systems are invisible, silently disabling
+        // re-election. The in-memory test database auto-fixes the navigation up and masks this; only a
+        // real-database run can catch a regression here.
+        var joinedCsos = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdAsync(mvo.Id);
+
         // Gather the distinct (surviving CSO, contributing rule) pairs to re-flow, highest priority first so the
         // strongest surviving contributor is written first and the gate skips the rest.
         var survivorsToReflow = new List<(ConnectedSystemObject Cso, SyncRule Rule)>();
         var seen = new HashSet<(Guid CsoId, int RuleId)>();
 
-        foreach (var attributeId in recalledAttributeIds.Where(id => priorityContext.GetContributorCount(objectTypeId, id) > 1))
+        foreach (var attributeId in contestedAttributeIds)
         {
             // Contributing rules other than the leaver's own (whose contribution is gone). Project to the rule and
             // filter in one pipeline so the leaver's rule and any rule-less mapping are excluded before the body.
@@ -3302,7 +3316,7 @@ public abstract class SyncTaskProcessorBase
                          .Where(r => r != null && r.ConnectedSystemId != leaver.ConnectedSystemId)
                          .Select(r => r!))
             {
-                foreach (var survivor in mvo.ConnectedSystemObjects.Where(c =>
+                foreach (var survivor in joinedCsos.Where(c =>
                              c.ConnectedSystemId == rule.ConnectedSystemId &&
                              c.Id != leaver.Id &&
                              c.Status != ConnectedSystemObjectStatus.Obsolete))
@@ -3318,10 +3332,13 @@ public abstract class SyncTaskProcessorBase
 
         foreach (var (survivor, rule) in survivorsToReflow)
         {
-            // The obsoletion load does not eagerly fetch sibling CSO attribute values or type; load them explicitly
-            // so the re-flow evaluates real values on PostgreSQL (the in-memory test database auto-tracks navigations
-            // and would mask a missing load).
-            if (survivor.AttributeValues.Count == 0)
+            // The discovery load does not eagerly fetch the survivor's object type or reference-value navigations;
+            // load the full Connected System Object so the re-flow evaluates real values, can resolve the
+            // survivor's type, and can resolve its reference attributes on PostgreSQL (the in-memory test database
+            // auto-tracks navigations and would mask a missing load). A tracked survivor resolves to the same
+            // instance, now fully hydrated.
+            if (survivor.Type == null || survivor.AttributeValues.Count == 0 ||
+                survivor.AttributeValues.Any(av => av.ReferenceValueId.HasValue && av.ReferenceValue == null))
             {
                 var loaded = await _syncRepo.GetConnectedSystemObjectAsync(survivor.ConnectedSystemId, survivor.Id);
                 if (loaded != null)
