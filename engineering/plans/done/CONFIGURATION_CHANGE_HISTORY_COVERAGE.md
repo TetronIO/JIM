@@ -1,6 +1,7 @@
 # Configuration Change History Coverage - Implementation Plan
 
-- **Status:** Doing (Phases 1-9 complete)
+- **Status:** Done
+- **Note:** All ten phases complete. Known cross-type follow-up left open by decision: batch-seeded configuration objects (Predefined Searches, Connector Definitions, Metaverse Object Types/Attributes, Example Data Sets/Template) lose their version-1 baseline Activities on factory reset (the `Activities` table is truncated but the seed objects are preserved, so re-seeding no-ops); close it by re-baselining preserved seed objects after a reset, or re-running the seeding pipeline (#916).
 - **Issue:** [#14](https://github.com/TetronIO/JIM/issues/14) *(sub-task of the parent change-history issue)*
 - **PRD:** [`engineering/prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md`](../../prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md)
 - **Note (2026-07-05):** Phase 1 verification disproved the presumed Schedule step capture gap: there are no step REST endpoints (`Add-JIMScheduleStep` performs a whole-Schedule PUT), and both step-mutation surfaces (the editor dialog and the REST update endpoint) reconcile steps and then call the audited `UpdateScheduleAsync`, which captures the step changes in exactly one version per save. Making the bare step methods capture unconditionally would have double-recorded on every editor/REST save, so Phase 1 instead documented the caller contract on those methods. The durable fix (consolidating step reconciliation into `UpdateScheduleAsync` and making the bare methods private, which also removes the duplicated reconcile logic in the dialog and controller) is proposed as a follow-up slice.
@@ -247,10 +248,12 @@ Delivery notes (2026-07-06): the Phase 1 note left the `ExampleDataTemplate` Act
 
 **Known still-open by decision (unchanged across Phases 7-9):** factory reset truncates `Activities` but preserves the built-in Example Data Sets/Template (and the other batch-seeded types), and `EnsureBuiltInExampleDataTemplateAsync` rebuilds the template via a repository-direct repair path without capture, so their v1 baselines are lost on reset and not recreated. This is the same cross-type reset gap documented in Phases 7 and 8; closing it (re-baselining preserved seed objects after a reset, or re-running the seeding pipeline per #916) remains a deliberate follow-up.
 
-### Phase 10: Close-out
-1. `docs/configuration/activities.md` coverage note updated to enumerate full coverage; per-type doc pages already updated in their phases.
-2. `engineering/DEVELOPER_GUIDE.md` capture-architecture section updated for the centralised helper.
-3. PRD acceptance-criteria sweep; original #14 PRD/plan status notes updated; issue #14 sub-task ticked.
+### Phase 10: Close-out ✅
+1. `docs/configuration/activities.md` coverage note updated to enumerate full coverage; per-type doc pages already updated in their phases. ✅
+2. `engineering/DEVELOPER_GUIDE.md` capture-architecture section updated for the centralised helper. ✅
+3. PRD acceptance-criteria sweep; original #14 PRD/plan status notes updated; issue #14 sub-task ticked. ✅
+
+Delivery notes (2026-07-06): the `activities.md` coverage note now states coverage is complete across every administrator-mutable configuration type (previously it read as a growing subset). The `DEVELOPER_GUIDE.md` section was rewritten from its stale "Synchronisation Rule and Connected System only" framing to describe the delivered architecture: the type-agnostic `ConfigurationChangeCaptureService` (toggle/dedupe/version/best-effort/tombstone, int/Guid/string overloads), `Activity.SetConfigurationTargetId` target-column mapping, per-type redacted `ConfigurationSnapshotService` builders, the now-delivered target-type-aware retention (`History.ConfigurationChangeRetentionPeriod`), the System Initialisation seed-baseline pattern, and the `DataGeneration` run/definition split. The PRD's nine acceptance criteria are all ticked and its status moved to Done. This plan moves to `engineering/plans/done/`.
 
 ## Design Decisions
 
