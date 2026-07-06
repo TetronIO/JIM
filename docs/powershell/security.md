@@ -149,8 +149,8 @@ Adds a Metaverse Object to a security role.
 ### Syntax
 
 ```powershell
-Add-JIMRoleMember -RoleId <int> -MetaverseObjectId <guid>
-Add-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject>
+Add-JIMRoleMember -RoleId <int> -MetaverseObjectId <guid> [-ChangeReason <string>]
+Add-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-ChangeReason <string>]
 ```
 
 ### Parameters
@@ -160,6 +160,7 @@ Add-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject>
 | `RoleId` | `int` | Yes | | The unique identifier of the role to add the member to. |
 | `MetaverseObjectId` | `guid` | Yes* | | The unique identifier of the Metaverse Object. |
 | `InputObject` | `PSCustomObject` | Yes* | | Metaverse Object from the pipeline (e.g., from `Get-JIMMetaverseObject`). |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded on the audit Activity and shown in the Role's [configuration change history](../configuration/roles.md#change-history). |
 
 *One of `MetaverseObjectId` or `InputObject` is required.
 
@@ -178,6 +179,10 @@ $adminRole = Get-JIMRole -Name "Administrator"
 Add-JIMRoleMember -RoleId $adminRole.id -MetaverseObjectId "a1b2c3d4-..."
 ```
 
+```powershell title="Add a member and record a reason"
+Add-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-..." -ChangeReason "Onboarding new administrator (CHG0127)"
+```
+
 ---
 
 ## Remove-JIMRoleMember
@@ -187,8 +192,8 @@ Removes a Metaverse Object from a security role.
 ### Syntax
 
 ```powershell
-Remove-JIMRoleMember -RoleId <int> -MetaverseObjectId <guid> [-Force]
-Remove-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-Force]
+Remove-JIMRoleMember -RoleId <int> -MetaverseObjectId <guid> [-Force] [-ChangeReason <string>]
+Remove-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-Force] [-ChangeReason <string>]
 ```
 
 ### Parameters
@@ -199,6 +204,7 @@ Remove-JIMRoleMember -RoleId <int> -InputObject <PSCustomObject> [-Force]
 | `MetaverseObjectId` | `guid` | Yes* | | The unique identifier of the Metaverse Object. |
 | `InputObject` | `PSCustomObject` | Yes* | | Metaverse Object from the pipeline. |
 | `Force` | `switch` | No | `$false` | Suppresses confirmation prompts. |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded on the audit Activity and shown in the Role's [configuration change history](../configuration/roles.md#change-history). |
 
 *One of `MetaverseObjectId` or `InputObject` is required.
 
@@ -224,9 +230,14 @@ Get-JIMRoleMember -RoleId 2 |
     Remove-JIMRoleMember -RoleId 2 -Force
 ```
 
+```powershell title="Remove a member and record a reason"
+Remove-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-..." -Force -ChangeReason "Offboarding (CHG0128)"
+```
+
 ---
 
 ## See also
 
-- [Roles](../configuration/roles.md): role definitions, static membership, and administrator-lockout safety
+- [Roles](../configuration/roles.md): role definitions, static membership, administrator-lockout safety, and configuration change history
 - [API Keys](api-keys.md)
+- [History](history.md): `Get-JIMConfigurationChangeHistory -Type Role`

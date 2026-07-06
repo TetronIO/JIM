@@ -5,6 +5,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Models.Interfaces;
+using JIM.Models.Security;
 using JIM.Application.Utilities;
 using Serilog;
 using System.Security.Cryptography.X509Certificates;
@@ -50,7 +51,25 @@ public class CertificateServer : ICertificateProvider
     /// <summary>
     /// Adds a certificate from uploaded data (PEM or DER encoded).
     /// </summary>
-    public async Task<TrustedCertificate> AddFromDataAsync(string name, byte[] certificateData, MetaverseObject? initiatedBy = null, string? notes = null)
+    public async Task<TrustedCertificate> AddFromDataAsync(string name, byte[] certificateData, MetaverseObject? initiatedBy = null, string? notes = null, string? changeReason = null)
+    {
+        return await AddFromDataCoreAsync(name, certificateData, notes, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy),
+            certificate => AuditHelper.SetCreated(certificate, initiatedBy));
+    }
+
+    /// <summary>
+    /// Adds a certificate from uploaded data (PEM or DER encoded). API-key initiator overload.
+    /// </summary>
+    public async Task<TrustedCertificate> AddFromDataAsync(string name, byte[] certificateData, ApiKey initiatedByApiKey, string? notes = null, string? changeReason = null)
+    {
+        return await AddFromDataCoreAsync(name, certificateData, notes, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey),
+            certificate => AuditHelper.SetCreated(certificate, initiatedByApiKey));
+    }
+
+    private async Task<TrustedCertificate> AddFromDataCoreAsync(string name, byte[] certificateData, string? notes, string? changeReason,
+        Func<Activity, Task> createActivityAsync, Action<TrustedCertificate> setCreated)
     {
         var activity = new Activity
         {
@@ -59,7 +78,7 @@ public class CertificateServer : ICertificateProvider
             TargetOperationType = ActivityTargetOperationType.Create,
             Message = "Adding trusted certificate from uploaded data"
         };
-        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        await createActivityAsync(activity);
 
         try
         {
@@ -86,10 +105,11 @@ public class CertificateServer : ICertificateProvider
                 Notes = notes
             };
 
-            AuditHelper.SetCreated(certificate, initiatedBy);
+            setCreated(certificate);
             Log.Information("Adding trusted certificate '{Name}' (Thumbprint: {Thumbprint}) from uploaded data", name, thumbprint);
             var result = await Application.Repository.TrustedCertificates.CreateAsync(certificate);
 
+            await CaptureConfigurationChangeAsync(activity, result.Id, changeReason);
             activity.Message = $"Added trusted certificate '{name}' (Subject: {x509Cert.Subject})";
             await Application.Activities.CompleteActivityAsync(activity);
 
@@ -105,7 +125,25 @@ public class CertificateServer : ICertificateProvider
     /// <summary>
     /// Adds a certificate from a file path in the connector-files mount.
     /// </summary>
-    public async Task<TrustedCertificate> AddFromFilePathAsync(string name, string filePath, MetaverseObject? initiatedBy = null, string? notes = null)
+    public async Task<TrustedCertificate> AddFromFilePathAsync(string name, string filePath, MetaverseObject? initiatedBy = null, string? notes = null, string? changeReason = null)
+    {
+        return await AddFromFilePathCoreAsync(name, filePath, notes, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy),
+            certificate => AuditHelper.SetCreated(certificate, initiatedBy));
+    }
+
+    /// <summary>
+    /// Adds a certificate from a file path in the connector-files mount. API-key initiator overload.
+    /// </summary>
+    public async Task<TrustedCertificate> AddFromFilePathAsync(string name, string filePath, ApiKey initiatedByApiKey, string? notes = null, string? changeReason = null)
+    {
+        return await AddFromFilePathCoreAsync(name, filePath, notes, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey),
+            certificate => AuditHelper.SetCreated(certificate, initiatedByApiKey));
+    }
+
+    private async Task<TrustedCertificate> AddFromFilePathCoreAsync(string name, string filePath, string? notes, string? changeReason,
+        Func<Activity, Task> createActivityAsync, Action<TrustedCertificate> setCreated)
     {
         var activity = new Activity
         {
@@ -114,7 +152,7 @@ public class CertificateServer : ICertificateProvider
             TargetOperationType = ActivityTargetOperationType.Create,
             Message = $"Adding trusted certificate from file path: {filePath}"
         };
-        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        await createActivityAsync(activity);
 
         try
         {
@@ -146,10 +184,11 @@ public class CertificateServer : ICertificateProvider
                 Notes = notes
             };
 
-            AuditHelper.SetCreated(certificate, initiatedBy);
+            setCreated(certificate);
             Log.Information("Adding trusted certificate '{Name}' (Thumbprint: {Thumbprint}) from file path: {FilePath}", name, thumbprint, filePath);
             var result = await Application.Repository.TrustedCertificates.CreateAsync(certificate);
 
+            await CaptureConfigurationChangeAsync(activity, result.Id, changeReason);
             activity.Message = $"Added trusted certificate '{name}' from file (Subject: {x509Cert.Subject})";
             await Application.Activities.CompleteActivityAsync(activity);
 
@@ -165,7 +204,25 @@ public class CertificateServer : ICertificateProvider
     /// <summary>
     /// Updates a trusted certificate's editable properties (name, notes, enabled state).
     /// </summary>
-    public async Task UpdateAsync(Guid id, MetaverseObject? initiatedBy = null, string? name = null, string? notes = null, bool? isEnabled = null)
+    public async Task UpdateAsync(Guid id, MetaverseObject? initiatedBy = null, string? name = null, string? notes = null, bool? isEnabled = null, string? changeReason = null)
+    {
+        await UpdateCoreAsync(id, name, notes, isEnabled, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy),
+            certificate => AuditHelper.SetUpdated(certificate, initiatedBy));
+    }
+
+    /// <summary>
+    /// Updates a trusted certificate's editable properties (name, notes, enabled state). API-key initiator overload.
+    /// </summary>
+    public async Task UpdateAsync(Guid id, ApiKey initiatedByApiKey, string? name = null, string? notes = null, bool? isEnabled = null, string? changeReason = null)
+    {
+        await UpdateCoreAsync(id, name, notes, isEnabled, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey),
+            certificate => AuditHelper.SetUpdated(certificate, initiatedByApiKey));
+    }
+
+    private async Task UpdateCoreAsync(Guid id, string? name, string? notes, bool? isEnabled, string? changeReason,
+        Func<Activity, Task> createActivityAsync, Action<TrustedCertificate> setUpdated)
     {
         var certificate = await Application.Repository.TrustedCertificates.GetByIdAsync(id)
             ?? throw new InvalidOperationException($"Certificate with ID {id} not found.");
@@ -177,7 +234,7 @@ public class CertificateServer : ICertificateProvider
             TargetOperationType = ActivityTargetOperationType.Update,
             Message = $"Updating trusted certificate '{certificate.Name}'"
         };
-        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        await createActivityAsync(activity);
 
         try
         {
@@ -199,10 +256,11 @@ public class CertificateServer : ICertificateProvider
                 certificate.IsEnabled = isEnabled.Value;
             }
 
-            AuditHelper.SetUpdated(certificate, initiatedBy);
+            setUpdated(certificate);
             Log.Information("Updating trusted certificate '{Name}' (ID: {Id})", certificate.Name, id);
             await Application.Repository.TrustedCertificates.UpdateAsync(certificate);
 
+            await CaptureConfigurationChangeAsync(activity, id, changeReason);
             activity.Message = changes.Count > 0
                 ? $"Updated trusted certificate: {string.Join(", ", changes)}"
                 : "No changes made to trusted certificate";
@@ -218,7 +276,22 @@ public class CertificateServer : ICertificateProvider
     /// <summary>
     /// Deletes a trusted certificate from the store.
     /// </summary>
-    public async Task DeleteAsync(Guid id, MetaverseObject? initiatedBy = null)
+    public async Task DeleteAsync(Guid id, MetaverseObject? initiatedBy = null, string? changeReason = null)
+    {
+        await DeleteCoreAsync(id, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
+    }
+
+    /// <summary>
+    /// Deletes a trusted certificate from the store. API-key initiator overload.
+    /// </summary>
+    public async Task DeleteAsync(Guid id, ApiKey initiatedByApiKey, string? changeReason = null)
+    {
+        await DeleteCoreAsync(id, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey));
+    }
+
+    private async Task DeleteCoreAsync(Guid id, string? changeReason, Func<Activity, Task> createActivityAsync)
     {
         var certificate = await Application.Repository.TrustedCertificates.GetByIdAsync(id);
         var certificateName = certificate?.Name ?? $"Unknown (ID: {id})";
@@ -230,13 +303,14 @@ public class CertificateServer : ICertificateProvider
             TargetOperationType = ActivityTargetOperationType.Delete,
             Message = $"Deleting trusted certificate '{certificateName}'"
         };
-        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+        await createActivityAsync(activity);
 
         try
         {
             if (certificate != null)
             {
                 Log.Information("Deleting trusted certificate '{Name}' (ID: {Id})", certificate.Name, id);
+                await CaptureConfigurationDeletionAsync(activity, certificate, changeReason);
             }
 
             await Application.Repository.TrustedCertificates.DeleteAsync(id);
@@ -341,6 +415,38 @@ public class CertificateServer : ICertificateProvider
         }
 
         return ParseCertificate(certData);
+    }
+
+    /// <summary>
+    /// Captures a versioned, metadata-only configuration snapshot of a Trusted Certificate onto its audit Activity
+    /// via the shared ConfigurationChangeCaptureService (which owns the toggle, dedupe-guard, versioning and
+    /// best-effort behaviours). The certificate is reloaded so the snapshot reflects persisted truth; call it after
+    /// the change has been persisted.
+    /// </summary>
+    private async Task CaptureConfigurationChangeAsync(Activity activity, Guid certificateId, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+            ActivityTargetType.TrustedCertificate, certificateId,
+            async hashKey =>
+            {
+                var persisted = await Application.Repository.TrustedCertificates.GetByIdAsync(certificateId);
+                return persisted == null ? null : Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
+            },
+            $"Trusted Certificate {certificateId}");
+    }
+
+    /// <summary>
+    /// Captures a tombstone snapshot of a Trusted Certificate onto its delete Activity, before the certificate is
+    /// removed. Matching the other configuration types' deletion behaviour, this does not set
+    /// <see cref="Activity.TrustedCertificateId"/> or a version: the certificate is deleted before the Activity
+    /// completes, so the Activity is left unlinked and the snapshot is surfaced via the Activity itself rather than
+    /// the object's history.
+    /// </summary>
+    private async Task CaptureConfigurationDeletionAsync(Activity activity, TrustedCertificate certificate, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureDeletionAsync(activity, changeReason,
+            hashKey => Task.FromResult<ConfigurationSnapshot?>(Application.ConfigurationSnapshots.CreateSnapshot(certificate, hashKey)),
+            $"Trusted Certificate {certificate.Id}");
     }
 
     /// <summary>

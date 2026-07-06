@@ -18,6 +18,9 @@ function Set-JIMServiceSetting {
     .PARAMETER Value
         The new value for the setting as a string.
 
+    .PARAMETER ChangeReason
+        An optional reason for the change, recorded against the setting's configuration change history.
+
     .PARAMETER PassThru
         If specified, returns the updated service setting object.
 
@@ -34,6 +37,11 @@ function Set-JIMServiceSetting {
 
         Sets the sync page size to 1000 and returns the updated setting.
 
+    .EXAMPLE
+        Set-JIMServiceSetting -Key "History.RetentionPeriod" -Value "30.00:00:00" -ChangeReason "Reduce per CHG0102"
+
+        Sets the history retention period, recording the reason in the setting's change history.
+
     .LINK
         Get-JIMServiceSetting
         Reset-JIMServiceSetting
@@ -48,6 +56,9 @@ function Set-JIMServiceSetting {
         [AllowNull()]
         [AllowEmptyString()]
         [string]$Value,
+
+        [Parameter()]
+        [string]$ChangeReason,
 
         [switch]$PassThru
     )
@@ -64,6 +75,9 @@ function Set-JIMServiceSetting {
 
             try {
                 $body = @{ value = $Value }
+                if ($ChangeReason) {
+                    $body.changeReason = $ChangeReason
+                }
                 $response = Invoke-JIMApi -Endpoint "/api/v1/service-settings/$Key" -Method 'PUT' -Body $body
 
                 Write-Verbose "Updated service setting: $Key"

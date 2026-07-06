@@ -26,4 +26,10 @@ public class UpdateCertificateRequest
     /// Enable or disable the certificate (optional, null to keep current).
     /// </summary>
     public bool? IsEnabled { get; set; }
+
+    /// <summary>
+    /// Optional reason for the change, recorded on the audit Activity and configuration change history.
+    /// </summary>
+    [StringLength(1000, ErrorMessage = "Change reason must not exceed 1000 characters.")]
+    public string? ChangeReason { get; set; }
 }

@@ -53,7 +53,7 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
         _logger.LogTrace("Requested schedule executions page {Page}, size {PageSize}, scheduleId {ScheduleId}",
             (int)page, (int)pageSize, scheduleId?.ToString());
 
-        var result = await _application.Repository.Scheduling.GetScheduleExecutionsAsync(
+        var result = await _application.Scheduler.GetScheduleExecutionsAsync(
             scheduleId, page, pageSize, sortBy, sortDescending);
 
         var dtos = result.Results.Select(ScheduleExecutionDto.FromEntity).ToList();
@@ -75,7 +75,7 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
     {
         _logger.LogTrace("Requested schedule execution {ExecutionId}", id);
 
-        var execution = await _application.Repository.Scheduling.GetScheduleExecutionWithScheduleAsync(id);
+        var execution = await _application.Scheduler.GetScheduleExecutionWithScheduleAsync(id);
         if (execution == null)
         {
             return NotFound(new ApiErrorResponse { Message = $"Schedule execution not found: {id}" });
@@ -84,12 +84,12 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
         var dto = ScheduleExecutionDetailDto.FromEntity(execution);
 
         // Get Activities for this execution (persist after worker task deletion)
-        var activities = await _application.Repository.Activity.GetActivitiesByScheduleExecutionAsync(id);
+        var activities = await _application.Activities.GetActivitiesByScheduleExecutionAsync(id);
         var activitiesByStep = activities.GroupBy(a => a.ScheduleStepIndex ?? -1)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         // Also get any still-active worker tasks (for in-progress status display)
-        var workerTasks = await _application.Repository.Tasking.GetWorkerTasksByScheduleExecutionAsync(id);
+        var workerTasks = await _application.Tasking.GetWorkerTasksByScheduleExecutionAsync(id);
         var tasksByStep = workerTasks.GroupBy(t => t.ScheduleStepIndex ?? -1)
             .ToDictionary(g => g.Key, g => g.ToList());
 
@@ -158,7 +158,7 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
     {
         _logger.LogInformation("Cancelling schedule execution {ExecutionId}", id);
 
-        var execution = await _application.Repository.Scheduling.GetScheduleExecutionAsync(id);
+        var execution = await _application.Scheduler.GetScheduleExecutionAsync(id);
         if (execution == null)
         {
             return NotFound(new ApiErrorResponse { Message = $"Schedule execution not found: {id}" });
@@ -176,7 +176,7 @@ public class ScheduleExecutionsController(ILogger<ScheduleExecutionsController> 
         _logger.LogInformation("Cancelled schedule execution {ExecutionId}", id);
 
         // Reload to get schedule name
-        var updatedExecution = await _application.Repository.Scheduling.GetScheduleExecutionWithScheduleAsync(id);
+        var updatedExecution = await _application.Scheduler.GetScheduleExecutionWithScheduleAsync(id);
         return Ok(ScheduleExecutionDto.FromEntity(updatedExecution!));
     }
 

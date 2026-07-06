@@ -78,9 +78,12 @@ try
 
     Log.Information("Starting JIM.Web{Mode}", isOpenApiGenerateMode ? " (OpenAPI generation mode)" : "");
 
+    // Fail fast if the SSO/admin configuration is missing, before the web host (whose OIDC setup reads the
+    // same variables) is built. The database-dependent part of bootstrap runs after the host is built, so it
+    // can resolve a fully-configured JimApplication from DI (see CompleteJimApplicationBootstrapAsync).
     if (!isOpenApiGenerateMode)
     {
-        await InitialiseJimApplicationAsync();
+        ValidateSsoConfiguration();
     }
 
     var builder = WebApplication.CreateBuilder(args);
@@ -113,7 +116,7 @@ try
     builder.Services.AddTransient<JimApplication>(sp =>
     {
         var repo = sp.GetRequiredService<IRepository>();
-        var syncRepo = new JIM.PostgresData.Repositories.SyncRepository((JIM.PostgresData.PostgresDataRepository)repo);
+        var syncRepo = repo.Sync;
         var jim = new JimApplication(repo, syncRepository: syncRepo);
         // Inject credential protection service for connector password encryption/decryption
         jim.CredentialProtection = sp.GetService<ICredentialProtectionService>();
@@ -653,6 +656,12 @@ try
         return 0;
     }
 
+    // Complete bootstrap now the host is built: wait for the database to be ready, mirror SSO configuration, and
+    // create the infrastructure API key. This runs here (not before builder.Build) so it resolves JimApplication
+    // from DI with the credential protection service attached; a hand-built instance would lack it and silently
+    // degrade configuration change capture, whose hash key is stored encrypted at rest.
+    await CompleteJimApplicationBootstrapAsync(app);
+
     // Eager initialisation: warm up EF Core compiled model and database connection pool
     // before accepting requests. This prevents the first browser request from hanging while
     // .NET JIT-compiles the EF Core model, establishes the initial DB connection, and builds
@@ -732,40 +741,46 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
         Log.Logger = loggerConfiguration.CreateLogger();
 }
 
-static async Task InitialiseJimApplicationAsync()
+// Validates that the SSO and initial-administrator environment variables required for authentication are present.
+// Runs before the web host is built so a misconfigured deployment fails fast with a clear message, before the OIDC
+// setup (which reads the same variables) is configured.
+static void ValidateSsoConfiguration()
 {
-    // Sets up the JIM application, pass in the right database repository (could pass in something else for testing, i.e. In Memory db).
-    // then ensure SSO and Initial admin are setup.
+    Log.Verbose("ValidateSsoConfiguration: Called.");
+    string[] requiredKeys =
+    [
+        Constants.Config.SsoAuthority,
+        Constants.Config.SsoClientId,
+        Constants.Config.SsoSecret,
+        Constants.Config.SsoClaimType,
+        Constants.Config.SsoMvAttribute,
+        Constants.Config.SsoInitialAdmin
+    ];
 
-    // collect auth config variables
-    Log.Verbose("InitialiseJimApplicationAsync: Called.");
-    var ssoAuthority = Environment.GetEnvironmentVariable(Constants.Config.SsoAuthority);
-    if (string.IsNullOrEmpty(ssoAuthority))
-        throw new Exception($"{Constants.Config.SsoAuthority} environment variable missing");
+    var missingKey = requiredKeys.FirstOrDefault(key => string.IsNullOrEmpty(Environment.GetEnvironmentVariable(key)));
+    if (missingKey != null)
+        throw new Exception($"{missingKey} environment variable missing");
+}
 
-    var ssoClientId = Environment.GetEnvironmentVariable(Constants.Config.SsoClientId);
-    if (string.IsNullOrEmpty(ssoClientId))
-        throw new Exception($"{Constants.Config.SsoClientId} environment variable missing");
-
-    var ssoSecret = Environment.GetEnvironmentVariable(Constants.Config.SsoSecret);
-    if (string.IsNullOrEmpty(ssoSecret))
-        throw new Exception($"{Constants.Config.SsoSecret} environment variable missing");
-
-    // collect claim mapping config variables
-    var uniqueIdentifierClaimType = Environment.GetEnvironmentVariable(Constants.Config.SsoClaimType);
-    if (string.IsNullOrEmpty(uniqueIdentifierClaimType))
-        throw new Exception($"{Constants.Config.SsoClaimType} environment variable missing");
-
-    var uniqueIdentifierMetaverseAttributeName = Environment.GetEnvironmentVariable(Constants.Config.SsoMvAttribute);
-    if (string.IsNullOrEmpty(uniqueIdentifierMetaverseAttributeName))
-        throw new Exception($"{Constants.Config.SsoMvAttribute} environment variable missing");
-
-    if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(Constants.Config.SsoInitialAdmin)))
-        throw new Exception($"{Constants.Config.SsoInitialAdmin} environment variable missing");
+// Completes JIM.Web bootstrap once the host is built and the database is ready: mirrors the SSO configuration into
+// the database (so administrators can view it in the portal) and creates the infrastructure API key if requested.
+// Resolves JimApplication from the DI container rather than constructing one by hand, so it carries the credential
+// protection service. Without it, configuration change capture silently degrades: the capture hash key is stored
+// encrypted at rest, so reading it back without the protection service fails and no snapshot is recorded.
+static async Task CompleteJimApplicationBootstrapAsync(WebApplication app)
+{
+    // Environment variables were validated by ValidateSsoConfiguration before the host was built.
+    var ssoAuthority = Environment.GetEnvironmentVariable(Constants.Config.SsoAuthority)!;
+    var ssoClientId = Environment.GetEnvironmentVariable(Constants.Config.SsoClientId)!;
+    var ssoSecret = Environment.GetEnvironmentVariable(Constants.Config.SsoSecret)!;
+    var uniqueIdentifierClaimType = Environment.GetEnvironmentVariable(Constants.Config.SsoClaimType)!;
+    var uniqueIdentifierMetaverseAttributeName = Environment.GetEnvironmentVariable(Constants.Config.SsoMvAttribute)!;
 
     while (true)
     {
-        var jimApplication = new JimApplication(new PostgresDataRepository(new JimDbContext()));
+        // A fresh scope per attempt gives each iteration its own DbContext and disposes it when the scope ends.
+        using var scope = app.Services.CreateScope();
+        var jimApplication = scope.ServiceProvider.GetRequiredService<JimApplication>();
         if (await jimApplication.IsApplicationReadyAsync())
         {
             await jimApplication.InitialiseSsoAsync(ssoAuthority, ssoClientId, ssoSecret, uniqueIdentifierClaimType, uniqueIdentifierMetaverseAttributeName);
@@ -805,7 +820,7 @@ static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
 
     // Check if this key already exists (by hash)
     var keyHash = ApiKeyAuthenticationHandler.HashApiKey(infrastructureApiKey);
-    var existingKey = await jim.Repository.ApiKeys.GetByHashAsync(keyHash);
+    var existingKey = await jim.Security.GetApiKeyByHashAsync(keyHash);
 
     if (existingKey != null)
     {
@@ -844,7 +859,7 @@ static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
         Roles = [adminRole]
     };
 
-    await jim.Repository.ApiKeys.CreateAsync(apiKey);
+    await jim.Security.CreateApiKeyAsync(apiKey);
     Log.Information("InitialiseInfrastructureApiKeyAsync: Created infrastructure API key (prefix: {Prefix}, expires: {Expiry}).",
         keyPrefix, apiKey.ExpiresAt);
 }

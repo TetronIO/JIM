@@ -8,11 +8,13 @@ using System.Threading.Tasks;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Search;
 using JIM.Models.Search.DTOs;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -29,6 +31,7 @@ public class PredefinedSearchesControllerTests
     private Mock<IRepository> _mockRepository = null!;
     private Mock<ISearchRepository> _mockSearchRepo = null!;
     private Mock<IMetaverseRepository> _mockMetaverseRepo = null!;
+    private Mock<IActivityRepository> _mockActivityRepo = null!;
     private Mock<ILogger<PredefinedSearchesController>> _mockLogger = null!;
     private JimApplication _application = null!;
     private PredefinedSearchesController _controller = null!;
@@ -39,11 +42,22 @@ public class PredefinedSearchesControllerTests
         _mockRepository = new Mock<IRepository>();
         _mockSearchRepo = new Mock<ISearchRepository>();
         _mockMetaverseRepo = new Mock<IMetaverseRepository>();
+        _mockActivityRepo = new Mock<IActivityRepository>();
         _mockRepository.Setup(r => r.Search).Returns(_mockSearchRepo.Object);
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
+        _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
+        // Every write path now records a configuration-change Activity (see SearchServer); stub the two calls it
+        // always makes so the pre-existing CRUD tests (which predate that behaviour) keep exercising just the
+        // repository mutation they assert on, without asserting on Activity attribution themselves. The dedicated
+        // ChangeReason-attribution tests live in PredefinedSearchChangeHistoryApiTests.
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _mockLogger = new Mock<ILogger<PredefinedSearchesController>>();
         _application = new JimApplication(_mockRepository.Object);
-        _controller = new PredefinedSearchesController(_mockLogger.Object, _application);
+        _controller = new PredefinedSearchesController(_mockLogger.Object, _application)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
     }
 
     private static PredefinedSearch BuildSearch(int id, bool isEnabled) => new()

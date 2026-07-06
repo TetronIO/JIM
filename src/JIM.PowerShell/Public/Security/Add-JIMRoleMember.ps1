@@ -19,6 +19,10 @@ function Add-JIMRoleMember {
     .PARAMETER InputObject
         Metaverse Object from the pipeline (e.g., from Get-JIMMetaverseObject).
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the Role's configuration
+        change history.
+
     .OUTPUTS
         None.
 
@@ -26,6 +30,11 @@ function Add-JIMRoleMember {
         Add-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
         Adds the specified metaverse object to the role with ID 1.
+
+    .EXAMPLE
+        Add-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-..." -ChangeReason "Onboarding new administrator (CHG0127)"
+
+        Adds a member and records a reason with the change.
 
     .EXAMPLE
         Get-JIMMetaverseObject -Id "a1b2c3d4-..." | Add-JIMRoleMember -RoleId 1
@@ -53,7 +62,10 @@ function Add-JIMRoleMember {
         [Guid]$MetaverseObjectId,
 
         [Parameter(Mandatory, ParameterSetName = 'ByInputObject', ValueFromPipeline)]
-        [PSCustomObject]$InputObject
+        [PSCustomObject]$InputObject,
+
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason
     )
 
     process {
@@ -69,7 +81,11 @@ function Add-JIMRoleMember {
             Write-Verbose "Adding metaverse object $objectId to role $RoleId"
 
             try {
-                $null = Invoke-JIMApi -Endpoint "/api/v1/security/roles/$RoleId/members/$objectId" -Method 'PUT'
+                $endpoint = "/api/v1/security/roles/$RoleId/members/$objectId"
+                if ($ChangeReason) {
+                    $endpoint += "?changeReason=$([uri]::EscapeDataString($ChangeReason))"
+                }
+                $null = Invoke-JIMApi -Endpoint $endpoint -Method 'PUT'
                 Write-Verbose "Added metaverse object $objectId to role $RoleId"
             }
             catch {

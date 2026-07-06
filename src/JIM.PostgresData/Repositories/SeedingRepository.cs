@@ -29,7 +29,6 @@ public class SeedingRepository : ISeedingRepository
         List<MetaverseAttribute> metaverseAttributes,
         List<MetaverseObjectType> metaverseObjectTypes,
         List<PredefinedSearch> predefinedSearches,
-        List<Role> roles,
         List<ExampleDataSet> exampleDataSets,
         List<ExampleDataTemplate> dataGenerationTemplates,
         List<ConnectorDefinition> connectorDefinitions)
@@ -50,12 +49,6 @@ public class SeedingRepository : ISeedingRepository
         {
             Repository.Database.PredefinedSearches.AddRange(predefinedSearches);
             Log.Information($"SeedDataAsync: Created {predefinedSearches.Count} PredefinedSearches");
-        }
-
-        if (roles.Count > 0)
-        {
-            Repository.Database.Roles.AddRange(roles);
-            Log.Information($"SeedDataAsync: Created {roles.Count} Roles");
         }
 
         if (exampleDataSets.Count > 0)

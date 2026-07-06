@@ -21,6 +21,13 @@ public interface IRepository : IDisposable
     public ITaskingRepository Tasking { get; }
     public ITrustedCertificateRepository TrustedCertificates { get; }
 
+    /// <summary>
+    /// The synchronisation engine's raw-SQL hot-path repository, sharing this repository's database session.
+    /// Exists so sync processing can obtain it without casting to a concrete provider type; see the guidance on
+    /// <see cref="JIM.Data.Repositories.ISyncRepository"/> and the worker hot-path rules for when it may be used.
+    /// </summary>
+    public ISyncRepository Sync { get; }
+
     public Task InitialiseDatabaseAsync();
     public Task InitialisationCompleteAsync();
 

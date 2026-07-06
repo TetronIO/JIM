@@ -71,13 +71,13 @@ Adds a certificate to the trusted store.
 
 ```powershell
 # FromFile (default)
-Add-JIMCertificate [-Name] <string> -Path <string> [-Notes <string>] [-PassThru]
+Add-JIMCertificate [-Name] <string> -Path <string> [-Notes <string>] [-ChangeReason <string>] [-PassThru]
 
 # FromData
-Add-JIMCertificate [-Name] <string> -CertificateData <byte[]> [-Notes <string>] [-PassThru]
+Add-JIMCertificate [-Name] <string> -CertificateData <byte[]> [-Notes <string>] [-ChangeReason <string>] [-PassThru]
 
 # FromBase64
-Add-JIMCertificate [-Name] <string> -CertificateBase64 <string> [-Notes <string>] [-PassThru]
+Add-JIMCertificate [-Name] <string> -CertificateBase64 <string> [-Notes <string>] [-ChangeReason <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -89,6 +89,7 @@ Add-JIMCertificate [-Name] <string> -CertificateBase64 <string> [-Notes <string>
 | `CertificateData` | `byte[]` | Yes (FromData) | | Raw certificate bytes |
 | `CertificateBase64` | `string` | Yes (FromBase64) | | Base64-encoded certificate data |
 | `Notes` | `string` | No | | Optional notes or description |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the certificate's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 | `PassThru` | `switch` | No | `$false` | Returns the created certificate object |
 
 ### Output
@@ -129,7 +130,7 @@ Updates a certificate's editable properties (name, notes, enabled status). Certi
 
 ```powershell
 Set-JIMCertificate -Id <guid> [-Name <string>] [-Notes <string>]
-    [-Enable] [-Disable] [-PassThru]
+    [-Enable] [-Disable] [-ChangeReason <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -141,6 +142,7 @@ Set-JIMCertificate -Id <guid> [-Name <string>] [-Notes <string>]
 | `Notes` | `string` | No | | New notes or description |
 | `Enable` | `switch` | No | `$false` | Enables the certificate for use |
 | `Disable` | `switch` | No | `$false` | Disables the certificate without removing it |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the certificate's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 | `PassThru` | `switch` | No | `$false` | Returns the updated certificate object |
 
 ### Output
@@ -180,10 +182,10 @@ Permanently deletes a certificate from the trusted store.
 
 ```powershell
 # ById (default)
-Remove-JIMCertificate -Id <guid> [-Force] [-PassThru]
+Remove-JIMCertificate -Id <guid> [-ChangeReason <string>] [-Force] [-PassThru]
 
 # ByInputObject
-Remove-JIMCertificate -InputObject <PSCustomObject> [-Force] [-PassThru]
+Remove-JIMCertificate -InputObject <PSCustomObject> [-ChangeReason <string>] [-Force] [-PassThru]
 ```
 
 ### Parameters
@@ -193,6 +195,7 @@ Remove-JIMCertificate -InputObject <PSCustomObject> [-Force] [-PassThru]
 | `Id` | `guid` | Yes (ById) | | Certificate identifier. Accepts pipeline input. |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | Certificate object from the pipeline |
 | `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the certificate's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 | `PassThru` | `switch` | No | `$false` | Returns the deleted certificate object |
 
 ### Output

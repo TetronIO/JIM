@@ -5,6 +5,8 @@ using Asp.Versioning;
 using JIM.Web.Extensions.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
+using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core.DTOs;
 using JIM.Utilities;
 using Microsoft.AspNetCore.Authorization;
@@ -25,7 +27,7 @@ namespace JIM.Web.Controllers.Api;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrator")]
 [Produces("application/json")]
-public class CertificatesController(ILogger<CertificatesController> logger, JimApplication application) : ControllerBase
+public class CertificatesController(ILogger<CertificatesController> logger, JimApplication application) : ApiControllerBase(application, logger)
 {
     private readonly ILogger<CertificatesController> _logger = logger;
     private readonly JimApplication _application = application;
@@ -119,10 +121,10 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
         try
         {
             _logger.LogInformation("Adding trusted certificate from uploaded data: {Name}", LogSanitiser.Sanitise(request.Name));
-            var certificate = await _application.Certificates.AddFromDataAsync(
-                request.Name,
-                certificateData,
-                notes: request.Notes);
+            var apiKey = await GetCurrentApiKeyAsync();
+            var certificate = apiKey != null
+                ? await _application.Certificates.AddFromDataAsync(request.Name, certificateData, apiKey, request.Notes, request.ChangeReason)
+                : await _application.Certificates.AddFromDataAsync(request.Name, certificateData, await GetCurrentUserAsync(), request.Notes, request.ChangeReason);
 
             return CreatedAtAction(nameof(GetByIdAsync), new { id = certificate.Id }, TrustedCertificateDetailDto.FromEntity(certificate));
         }
@@ -163,10 +165,10 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
         try
         {
             _logger.LogInformation("Adding trusted certificate from file: {Name} ({FilePath})", LogSanitiser.Sanitise(request.Name), LogSanitiser.Sanitise(request.FilePath));
-            var certificate = await _application.Certificates.AddFromFilePathAsync(
-                request.Name,
-                request.FilePath,
-                notes: request.Notes);
+            var apiKey = await GetCurrentApiKeyAsync();
+            var certificate = apiKey != null
+                ? await _application.Certificates.AddFromFilePathAsync(request.Name, request.FilePath, apiKey, request.Notes, request.ChangeReason)
+                : await _application.Certificates.AddFromFilePathAsync(request.Name, request.FilePath, await GetCurrentUserAsync(), request.Notes, request.ChangeReason);
 
             return CreatedAtAction(nameof(GetByIdAsync), new { id = certificate.Id }, TrustedCertificateDetailDto.FromEntity(certificate));
         }
@@ -207,11 +209,11 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
         try
         {
             _logger.LogInformation("Updating trusted certificate: {Id}", id);
-            await _application.Certificates.UpdateAsync(
-                id,
-                name: request.Name,
-                notes: request.Notes,
-                isEnabled: request.IsEnabled);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.Certificates.UpdateAsync(id, apiKey, request.Name, request.Notes, request.IsEnabled, request.ChangeReason);
+            else
+                await _application.Certificates.UpdateAsync(id, await GetCurrentUserAsync(), request.Name, request.Notes, request.IsEnabled, request.ChangeReason);
 
             return NoContent();
         }
@@ -226,13 +228,14 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
     /// Delete a Trusted Certificate
     /// </summary>
     /// <param name="id">The unique identifier (GUID) of the certificate to delete.</param>
+    /// <param name="changeReason">Optional reason for the deletion, recorded on the audit Activity.</param>
     /// <returns>204 No Content on success.</returns>
     [HttpDelete("{id:guid}", Name = "DeleteCertificate")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> DeleteAsync(Guid id)
+    public async Task<IActionResult> DeleteAsync(Guid id, [FromQuery] string? changeReason = null)
     {
         var existing = await _application.Certificates.GetByIdAsync(id);
         if (existing == null)
@@ -241,7 +244,11 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
         try
         {
             _logger.LogInformation("Deleting trusted certificate: {Id}", id);
-            await _application.Certificates.DeleteAsync(id);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.Certificates.DeleteAsync(id, apiKey, changeReason);
+            else
+                await _application.Certificates.DeleteAsync(id, await GetCurrentUserAsync(), changeReason);
             return NoContent();
         }
         catch (Exception ex)
@@ -308,4 +315,68 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
 
         return File(certificate.CertificateData, "application/x-x509-ca-cert", safeFileName);
     }
+
+    #region Configuration Change History
+
+    /// <summary>
+    /// List the change history for a Trusted Certificate.
+    /// </summary>
+    /// <param name="id">The unique identifier (GUID) of the certificate.</param>
+    /// <param name="pagination">Pagination parameters.</param>
+    /// <returns>A paged list of change-history entries, newest version first, each with a one-line summary.</returns>
+    /// <response code="200">Change history returned (empty if the certificate has no recorded configuration changes).</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("{id:guid}/change-history", Name = "GetCertificateChangeHistory")]
+    [ProducesResponseType(typeof(PaginatedResponse<ConfigurationChangeHistoryItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetCertificateChangeHistoryAsync(Guid id, [FromQuery] PaginationRequest pagination)
+    {
+        var result = await _application.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.TrustedCertificate, id, pagination.Page, pagination.PageSize);
+        return Ok(PaginatedResponse<ConfigurationChangeHistoryItem>.Create(result.Results, result.TotalResults, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
+    /// Get a single version of a Trusted Certificate's change history, with its snapshot and the diff against the previous version.
+    /// </summary>
+    /// <param name="id">The unique identifier (GUID) of the certificate.</param>
+    /// <param name="changeVersion">The per-object change version to retrieve.</param>
+    /// <returns>The change detail: metadata, the snapshot, and the diff against the previous version.</returns>
+    /// <response code="200">The change detail.</response>
+    /// <response code="404">No change with that version was found for the certificate.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("{id:guid}/change-history/{changeVersion:int}", Name = "GetCertificateChange")]
+    [ProducesResponseType(typeof(ConfigurationChangeDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetCertificateChangeAsync(Guid id, int changeVersion)
+    {
+        var detail = await _application.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.TrustedCertificate, id, changeVersion);
+        if (detail == null)
+            return NotFound(ApiErrorResponse.NotFound($"No change history found for Trusted Certificate {id} version {changeVersion}."));
+        return Ok(detail);
+    }
+
+    /// <summary>
+    /// Compare two versions of a Trusted Certificate's configuration.
+    /// </summary>
+    /// <param name="id">The unique identifier (GUID) of the certificate.</param>
+    /// <param name="fromVersion">The earlier version to compare from.</param>
+    /// <param name="toVersion">The later version to compare to.</param>
+    /// <returns>The structured diff of the later version against the earlier.</returns>
+    /// <response code="200">The diff.</response>
+    /// <response code="404">One of the requested versions was not found for the certificate.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("{id:guid}/change-history/compare", Name = "CompareCertificateChanges")]
+    [ProducesResponseType(typeof(ConfigurationDiff), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CompareCertificateChangesAsync(Guid id, [FromQuery] int fromVersion, [FromQuery] int toVersion)
+    {
+        var diff = await _application.ChangeHistory.CompareConfigurationChangesAsync(ActivityTargetType.TrustedCertificate, id, fromVersion, toVersion);
+        if (diff == null)
+            return NotFound(ApiErrorResponse.NotFound($"Could not compare versions {fromVersion} and {toVersion} for Trusted Certificate {id}."));
+        return Ok(diff);
+    }
+
+    #endregion
 }

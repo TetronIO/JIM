@@ -134,17 +134,21 @@ else
 }
 
 @code {
-    /// <summary>The kind of configuration object: ActivityTargetType.SyncRule, ActivityTargetType.ConnectedSystem or ActivityTargetType.Schedule.</summary>
+    /// <summary>The kind of configuration object, e.g. ActivityTargetType.SyncRule, ActivityTargetType.Schedule or ActivityTargetType.ServiceSetting.</summary>
     [Parameter, EditorRequired]
     public ActivityTargetType TargetType { get; set; }
 
-    /// <summary>The id of an integer-keyed configuration object (Synchronisation Rule, Connected System). Ignored when <see cref="ObjectGuidId"/> is set.</summary>
+    /// <summary>The id of an integer-keyed configuration object (Synchronisation Rule, Connected System). Ignored when <see cref="ObjectGuidId"/> or <see cref="ObjectKey"/> is set.</summary>
     [Parameter]
     public int ObjectId { get; set; }
 
     /// <summary>The id of a Guid-keyed configuration object (Schedule). When set, the Guid-keyed read path is used and <see cref="ObjectId"/> is ignored.</summary>
     [Parameter]
     public Guid? ObjectGuidId { get; set; }
+
+    /// <summary>The key of a string-keyed configuration object (a Service Setting's setting key). When set, the string-keyed read path is used and <see cref="ObjectId"/> and <see cref="ObjectGuidId"/> are ignored.</summary>
+    [Parameter]
+    public string? ObjectKey { get; set; }
 
     /// <summary>A human-readable label for the object kind, used in the empty-state message.</summary>
     [Parameter]
@@ -180,9 +184,11 @@ else
     private async Task LoadPageAsync()
     {
         using var jim = JimFactory.Create();
-        var result = ObjectGuidId is { } guidId
-            ? await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(TargetType, guidId, _page, PageSizeConst)
-            : await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(TargetType, ObjectId, _page, PageSizeConst);
+        var result = ObjectKey is { Length: > 0 } key
+            ? await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(TargetType, key, _page, PageSizeConst)
+            : ObjectGuidId is { } guidId
+                ? await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(TargetType, guidId, _page, PageSizeConst)
+                : await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(TargetType, ObjectId, _page, PageSizeConst);
         _items.AddRange(result.Results);
         _totalResults = result.TotalResults;
         _versions = _items.Select(i => i.Version).Distinct().OrderByDescending(v => v).ToList();
@@ -244,9 +250,11 @@ else
         _compareDiff = null;
         StateHasChanged(); // show the spinner while the comparison is fetched
         using var jim = JimFactory.Create();
-        _compareDiff = ObjectGuidId is { } guidId
-            ? await jim.ChangeHistory.CompareConfigurationChangesAsync(TargetType, guidId, _compareFrom.Value, _compareTo.Value)
-            : await jim.ChangeHistory.CompareConfigurationChangesAsync(TargetType, ObjectId, _compareFrom.Value, _compareTo.Value);
+        _compareDiff = ObjectKey is { Length: > 0 } key
+            ? await jim.ChangeHistory.CompareConfigurationChangesAsync(TargetType, key, _compareFrom.Value, _compareTo.Value)
+            : ObjectGuidId is { } guidId
+                ? await jim.ChangeHistory.CompareConfigurationChangesAsync(TargetType, guidId, _compareFrom.Value, _compareTo.Value)
+                : await jim.ChangeHistory.CompareConfigurationChangesAsync(TargetType, ObjectId, _compareFrom.Value, _compareTo.Value);
         _compareLoading = false;
     }
 

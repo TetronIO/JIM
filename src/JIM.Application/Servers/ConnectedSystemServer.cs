@@ -40,83 +40,25 @@ public class ConnectedSystemServer
     // Configuration change capture
     // Captures a redacted, versioned configuration snapshot onto a configuration-change Activity. Called after the
     // entity has been persisted (so its id and graph are current) and before the Activity is completed, so the snapshot
-    // fields are saved as part of the existing CompleteActivityAsync update. Honours the ChangeTracking setting; the
-    // optional change reason is recorded independently of the snapshot toggle.
+    // fields are saved as part of the existing CompleteActivityAsync update. The toggle, dedupe-guard, versioning and
+    // best-effort behaviours are owned by the shared ConfigurationChangeCaptureService; these wrappers supply only the
+    // type-specific snapshot builders.
     // -----------------------------------------------------------------------------------------------------------------
 
     private async Task CaptureConfigurationChangeAsync(Activity activity, ConnectedSystem connectedSystem, string? changeReason)
     {
-        // The reason is recorded independently of the snapshot toggle and has no external dependencies, so it is set
-        // outside the best-effort block below.
-        if (!string.IsNullOrWhiteSpace(changeReason))
-            activity.ChangeReason = changeReason.Trim();
-
-        try
-        {
-            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
-                return;
-
-            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
-            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey);
-            activity.ConnectedSystemId ??= connectedSystem.Id;
-
-            // Idempotent capture guard: skip when nothing changed versus the latest stored snapshot, so no-change
-            // saves (e.g. worker paths that persist after every import) do not consume versions and drown real changes
-            // in noise. The comparison must be semantic (via the diff engine), not textual: snapshots are stored in a
-            // jsonb column, and PostgreSQL normalises the text (key ordering, spacing) so the string read back never
-            // equals a fresh serialisation.
-            var latest = ConfigurationSnapshotService.Deserialise(
-                await Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.ConnectedSystem, connectedSystem.Id));
-            if (latest != null && !Application.ConfigurationDiffs.Diff(latest, snapshot).HasChanges)
-            {
-                Log.Debug("CaptureConfigurationChangeAsync: configuration of Connected System {ConnectedSystemId} is unchanged from its latest snapshot; no new version recorded.", connectedSystem.Id);
-                return;
-            }
-
-            activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.ConnectedSystem, connectedSystem.Id);
-            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
-        {
-            // Configuration change capture is best-effort secondary metadata recorded after the entity has already been
-            // persisted; it must never fail or roll back the configuration operation that succeeded. On failure the
-            // change history simply misses this snapshot. The failure is logged (never silent) so the gap is diagnosable.
-            Log.Warning(ex, "CaptureConfigurationChangeAsync: failed to capture configuration snapshot for Connected System {ConnectedSystemId}; the change was saved but its history snapshot was not recorded.", connectedSystem.Id);
-        }
+        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+            ActivityTargetType.ConnectedSystem, connectedSystem.Id,
+            hashKey => Task.FromResult<ConfigurationSnapshot?>(Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey)),
+            $"Connected System {connectedSystem.Id}");
     }
 
     private async Task CaptureConfigurationChangeAsync(Activity activity, SyncRule syncRule, string? changeReason)
     {
-        if (!string.IsNullOrWhiteSpace(changeReason))
-            activity.ChangeReason = changeReason.Trim();
-
-        try
-        {
-            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
-                return;
-
-            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
-            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey);
-            activity.SyncRuleId ??= syncRule.Id;
-
-            // Idempotent capture guard, compared semantically: see the Connected System overload above.
-            var latest = ConfigurationSnapshotService.Deserialise(
-                await Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SyncRule, syncRule.Id));
-            if (latest != null && !Application.ConfigurationDiffs.Diff(latest, snapshot).HasChanges)
-            {
-                Log.Debug("CaptureConfigurationChangeAsync: configuration of Synchronisation Rule {SyncRuleId} is unchanged from its latest snapshot; no new version recorded.", syncRule.Id);
-                return;
-            }
-
-            activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.SyncRule, syncRule.Id);
-            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
-        {
-            // Best-effort: see the Connected System overload above. A capture failure must never fail the configuration
-            // operation that already succeeded; the miss is logged rather than surfaced to the caller.
-            Log.Warning(ex, "CaptureConfigurationChangeAsync: failed to capture configuration snapshot for Synchronisation Rule {SyncRuleId}; the change was saved but its history snapshot was not recorded.", syncRule.Id);
-        }
+        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+            ActivityTargetType.SyncRule, syncRule.Id,
+            hashKey => Task.FromResult<ConfigurationSnapshot?>(Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey)),
+            $"Synchronisation Rule {syncRule.Id}");
     }
 
     // Captures a versioned configuration snapshot for a Synchronisation Rule whose change was made through a granular
@@ -179,22 +121,74 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task CaptureConfigurationDeletionAsync(Activity activity, SyncRule syncRule, string? changeReason)
     {
-        if (!string.IsNullOrWhiteSpace(changeReason))
-            activity.ChangeReason = changeReason.Trim();
+        await Application.ConfigurationChangeCapture.CaptureDeletionAsync(activity, changeReason,
+            hashKey => Task.FromResult<ConfigurationSnapshot?>(Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey)),
+            $"Synchronisation Rule {syncRule.Id}");
+    }
+
+    // Captures a redacted, versioned snapshot of a Connector Definition onto its audit Activity via the shared
+    // ConfigurationChangeCaptureService. The definition is reloaded with its files and settings so the snapshot
+    // reflects persisted truth rather than the caller's partial in-memory graph; call it after the change has been
+    // persisted and before the Activity is completed. A file change rolls up here too (the file methods reload the
+    // owning definition), matching the granular sub-entity precedent used for Synchronisation Rules and Schedules.
+    private async Task CaptureConnectorDefinitionConfigurationChangeAsync(Activity activity, int connectorDefinitionId, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+            ActivityTargetType.ConnectorDefinition, connectorDefinitionId,
+            async hashKey =>
+            {
+                var definition = await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(connectorDefinitionId);
+                return definition == null ? null : Application.ConfigurationSnapshots.CreateSnapshot(definition, hashKey);
+            },
+            $"Connector Definition {connectorDefinitionId}");
+    }
+
+    // Captures a tombstone snapshot of a Connector Definition onto its delete Activity, before it is removed. Matching
+    // the Synchronisation Rule and Schedule deletion behaviour, this sets neither the Activity's target column nor a
+    // version; the snapshot is surfaced via the Activity itself rather than the object's history.
+    private async Task CaptureConnectorDefinitionDeletionAsync(Activity activity, ConnectorDefinition connectorDefinition, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureDeletionAsync(activity, changeReason,
+            async hashKey =>
+            {
+                // Reload with files and settings for a complete tombstone; fall back to the caller's entity if already gone.
+                var persisted = await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(connectorDefinition.Id) ?? connectorDefinition;
+                return Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
+            },
+            $"Connector Definition {connectorDefinition.Id}");
+    }
+
+    /// <summary>
+    /// Records a System-attributed Create Activity and version-1 baseline snapshot for a built-in Connector Definition
+    /// that has just been seeded, grouping it under the seeding pass's parent Activity. Like the built-in Predefined
+    /// Searches, the built-in Connector Definitions are persisted together in one seeding repository batch, so the
+    /// baseline is recorded after the batch rather than by re-routing each through
+    /// <see cref="CreateConnectorDefinitionAsync"/>. Idempotency is the caller's responsibility:
+    /// <see cref="SeedingServer"/> only calls this for definitions it created in the current pass, so it is safe even
+    /// when configuration change tracking is disabled and no snapshot is recorded.
+    /// </summary>
+    internal async Task RecordSeededConnectorDefinitionBaselineAsync(int connectorDefinitionId, string connectorName, Guid parentActivityId)
+    {
+        var activity = new Activity
+        {
+            TargetName = connectorName,
+            TargetType = ActivityTargetType.ConnectorDefinition,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            ParentActivityId = parentActivityId,
+            Message = $"Created built-in Connector Definition '{connectorName}'"
+        };
+        await Application.Activities.CreateSystemActivityAsync(activity);
 
         try
         {
-            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
-                return;
-
-            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
-            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey);
-            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+            await CaptureConnectorDefinitionConfigurationChangeAsync(activity, connectorDefinitionId,
+                "Built-in Connector Definition created automatically by JIM.");
+            await Application.Activities.CompleteActivityAsync(activity);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
+        catch (Exception ex)
         {
-            // Best-effort: a capture failure must never fail the deletion that is about to proceed; the miss is logged.
-            Log.Warning(ex, "CaptureConfigurationDeletionAsync: failed to capture deletion snapshot for Synchronisation Rule {SyncRuleId}; the deletion proceeded but its history snapshot was not recorded.", syncRule.Id);
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
         }
     }
 
@@ -214,29 +208,101 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(name, withChangeTracking);
     }
 
-    public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
+    /// <summary>
+    /// Creates a Connector Definition, recording a Create Activity and version-1 configuration snapshot. Attributed via
+    /// the initiator triad, so seeding and any future upload UI/API share one audited path. No principal-carrying caller
+    /// exists yet (built-in definitions are seeded); the triad lets that caller arrive without a signature change.
+    /// </summary>
+    public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null, Guid? parentActivityId = null)
     {
+        var activity = new Activity
+        {
+            TargetName = connectorDefinition.Name,
+            TargetType = ActivityTargetType.ConnectorDefinition,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            ParentActivityId = parentActivityId
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         await Application.Repository.ConnectedSystems.CreateConnectorDefinitionAsync(connectorDefinition);
+        await CaptureConnectorDefinitionConfigurationChangeAsync(activity, connectorDefinition.Id, changeReason);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
+    /// <summary>
+    /// Updates a Connector Definition, recording an Update Activity and versioned configuration snapshot. Used today by
+    /// the startup drift-sync (<see cref="SeedingServer"/>), which passes <see cref="ActivityInitiatorType.System"/> and
+    /// the seeding parent so capability/setting changes shipped in new connector code are audited under System
+    /// Initialisation; the semantic dedupe guard means a no-change sync records no new version.
+    /// </summary>
+    public async Task UpdateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null, Guid? parentActivityId = null)
     {
+        var activity = new Activity
+        {
+            TargetName = connectorDefinition.Name,
+            TargetType = ActivityTargetType.ConnectorDefinition,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ParentActivityId = parentActivityId
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         await Application.Repository.ConnectedSystems.UpdateConnectorDefinitionAsync(connectorDefinition);
+        await CaptureConnectorDefinitionConfigurationChangeAsync(activity, connectorDefinition.Id, changeReason);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
+    /// <summary>
+    /// Deletes a Connector Definition, recording a Delete Activity and an unversioned tombstone snapshot before removal.
+    /// </summary>
+    public async Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
+        var activity = new Activity
+        {
+            TargetName = connectorDefinition.Name,
+            TargetType = ActivityTargetType.ConnectorDefinition,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
+        await CaptureConnectorDefinitionDeletionAsync(activity, connectorDefinition, changeReason);
         await Application.Repository.ConnectedSystems.DeleteConnectorDefinitionAsync(connectorDefinition);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile)
+    /// <summary>
+    /// Adds a file to a Connector Definition. The change rolls up into the owning definition's configuration history (an
+    /// Update Activity targeting the definition), matching the granular sub-entity precedent; the owning definition must
+    /// be populated on <see cref="ConnectorDefinitionFile.ConnectorDefinition"/> so the roll-up target can be resolved.
+    /// </summary>
+    public async Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
-        await Application.Repository.ConnectedSystems.CreateConnectorDefinitionFileAsync(connectorDefinitionFile);
+        await PersistConnectorDefinitionFileChangeAsync(connectorDefinitionFile, initiatorType, initiatorId, initiatorName, changeReason,
+            () => Application.Repository.ConnectedSystems.CreateConnectorDefinitionFileAsync(connectorDefinitionFile));
     }
 
-    public async Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile)
+    /// <summary>
+    /// Removes a file from a Connector Definition. Rolls up into the owning definition's configuration history, as
+    /// <see cref="CreateConnectorDefinitionFileAsync"/>.
+    /// </summary>
+    public async Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
-        await Application.Repository.ConnectedSystems.DeleteConnectorDefinitionFileAsync(connectorDefinitionFile);
+        await PersistConnectorDefinitionFileChangeAsync(connectorDefinitionFile, initiatorType, initiatorId, initiatorName, changeReason,
+            () => Application.Repository.ConnectedSystems.DeleteConnectorDefinitionFileAsync(connectorDefinitionFile));
+    }
+
+    // Shared core for the two file mutators: resolve the owning definition, record an Update Activity against it,
+    // persist the file change, then capture the definition's post-change snapshot so the file change versions once.
+    private async Task PersistConnectorDefinitionFileChangeAsync(ConnectorDefinitionFile connectorDefinitionFile, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason, Func<Task> persistAsync)
+    {
+        var owningDefinitionId = connectorDefinitionFile.ConnectorDefinition?.Id;
+        var activity = new Activity
+        {
+            TargetName = connectorDefinitionFile.ConnectorDefinition?.Name ?? connectorDefinitionFile.Filename,
+            TargetType = ActivityTargetType.ConnectorDefinition,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
+        await persistAsync();
+        if (owningDefinitionId is > 0)
+            await CaptureConnectorDefinitionConfigurationChangeAsync(activity, owningDefinitionId.Value, changeReason);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
     #endregion
 
@@ -5078,6 +5144,22 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Retrieves the count of Pending Export objects for a Connected System with optional filtering
+    /// by change type and status. Optimised for fast counting without loading entity data.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="changeType">Optional change type to filter by (Create, Update, Delete).</param>
+    /// <param name="status">Optional status to filter by (Pending, Failed, etc.).</param>
+    /// <returns>The count of matching Pending Export objects.</returns>
+    public async Task<int> GetPendingExportsFilteredCountAsync(
+        int connectedSystemId,
+        PendingExportChangeType? changeType = null,
+        PendingExportStatus? status = null)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportsFilteredCountAsync(connectedSystemId, changeType, status);
+    }
+
+    /// <summary>
     /// Deletes a Pending Export object.
     /// </summary>
     /// <param name="pendingExport">The Pending Export to delete.</param>
@@ -5257,6 +5339,39 @@ public class ConnectedSystemServer
             .SetTag("page", page)
             .SetTag("pageSize", pageSize);
         return await Application.Repository.ConnectedSystems.GetCsoChangeHistoryAsync(connectedSystemObjectId, page, pageSize);
+    }
+
+    /// <summary>
+    /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
+    /// Used for the deleted objects browser.
+    /// </summary>
+    /// <param name="connectedSystemId">Optional filter by Connected System ID.</param>
+    /// <param name="fromDate">Optional filter for changes on or after this date.</param>
+    /// <param name="toDate">Optional filter for changes on or before this date.</param>
+    /// <param name="externalIdSearch">Optional search term for external ID.</param>
+    /// <param name="page">Page number (1-based).</param>
+    /// <param name="pageSize">Number of items per page.</param>
+    /// <returns>Paginated list of deleted CSO changes ordered by ChangeTime descending.</returns>
+    public async Task<(List<ConnectedSystemObjectChange> Items, int TotalCount)> GetDeletedCsoChangesAsync(
+        int? connectedSystemId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? externalIdSearch = null,
+        int page = 1,
+        int pageSize = 50)
+    {
+        return await Application.Repository.ConnectedSystems.GetDeletedCsoChangesAsync(
+            connectedSystemId, fromDate, toDate, externalIdSearch, page, pageSize);
+    }
+
+    /// <summary>
+    /// Gets the full change history for a deleted CSO by its change ID.
+    /// </summary>
+    /// <param name="changeId">The ID of the CSO change record.</param>
+    /// <returns>List of all changes for that CSO ordered by ChangeTime descending.</returns>
+    public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetDeletedCsoChangeHistoryAsync(changeId);
     }
     #endregion
 

@@ -1,7 +1,9 @@
 ﻿@page "/admin/connected-systems/connectors/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities
 @using JIM.Models.Interfaces;
 @using JIM.Models.Staging;
+@using JIM.Web.Pages.Admin.Components
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 
@@ -20,6 +22,10 @@
 
 @if (_connector != null)
 {
+    <div class="mt-6">
+    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-6">
+
+        <MudTabPanel Text="Details">
     <MudPaper Class="pa-4" Outlined="true">
         <MudText Typo="Typo.h5" Class="mb-4">Details</MudText>
         <MudGrid Spacing="4">
@@ -92,6 +98,14 @@
             }
         </NoRecordsContent>
     </MudTable>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
+            <ConfigurationChangesTab TargetType="ActivityTargetType.ConnectorDefinition" ObjectId="@_connector.Id" ObjectTypeLabel="Connector Definition" />
+        </MudTabPanel>
+
+    </NavigableMudTabs>
+    </div>
 }
 
 @code {
@@ -100,6 +114,7 @@
 
     private ConnectorDefinition? _connector;
     private List<BreadcrumbItem> _breadcrumbs = null!;
+    private int _changeCount;
 
     protected override async Task OnInitializedAsync()
     {
@@ -120,6 +135,8 @@
             new("Connectors", href: "/admin/connected-systems/connectors/"),
             new(_connector.Name, href: null, disabled: true)
         };
+
+        _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ConnectorDefinition, _connector.Id, 1, 1)).TotalResults;
     }
 
     private static string GetFileInterfaces(ConnectorDefinitionFile file)

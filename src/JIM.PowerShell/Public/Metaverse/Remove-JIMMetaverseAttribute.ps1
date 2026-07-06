@@ -16,6 +16,10 @@ function Remove-JIMMetaverseAttribute {
     .PARAMETER InputObject
         Attribute object to delete (from pipeline).
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the object's
+        configuration change history.
+
     .PARAMETER Force
         Skips the confirmation prompt.
 
@@ -50,6 +54,10 @@ function Remove-JIMMetaverseAttribute {
         [Parameter(Mandatory, ParameterSetName = 'ByInputObject', ValueFromPipeline)]
         [PSCustomObject]$InputObject,
 
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$Force
     )
 
@@ -71,7 +79,11 @@ function Remove-JIMMetaverseAttribute {
             Write-Verbose "Removing Metaverse Attribute: $attrId"
 
             try {
-                $null = Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes/$attrId" -Method 'DELETE'
+                $endpoint = "/api/v1/metaverse/attributes/$attrId"
+                if ($ChangeReason) {
+                    $endpoint += "?changeReason=$([uri]::EscapeDataString($ChangeReason))"
+                }
+                $null = Invoke-JIMApi -Endpoint $endpoint -Method 'DELETE'
 
                 Write-Verbose "Removed Metaverse Attribute: $attrId"
             }

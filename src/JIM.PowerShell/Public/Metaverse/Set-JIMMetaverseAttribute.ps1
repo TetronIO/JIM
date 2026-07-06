@@ -32,6 +32,10 @@ function Set-JIMMetaverseAttribute {
         Array of Object Type IDs to associate with this attribute.
         This replaces any existing associations.
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the object's
+        configuration change history.
+
     .PARAMETER PassThru
         If specified, returns the updated Attribute object.
 
@@ -81,6 +85,10 @@ function Set-JIMMetaverseAttribute {
 
         [Parameter()]
         [int[]]$ObjectTypeIds,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
 
         [switch]$PassThru
     )
@@ -139,6 +147,10 @@ function Set-JIMMetaverseAttribute {
         if ($body.Count -eq 0) {
             Write-Warning "No updates specified."
             return
+        }
+
+        if ($ChangeReason) {
+            $body.changeReason = $ChangeReason
         }
 
         $displayName = $Name ?? $attrId

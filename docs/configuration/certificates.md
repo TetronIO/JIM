@@ -27,6 +27,12 @@ JIM tracks `Valid From` and `Valid To` dates and surfaces convenience flags: `Is
 
 A separate validation operation lets you check a certificate's chain and validity before relying on it. It does not modify state and is safe to run before enabling a certificate or during routine review.
 
+## Change history
+
+Every change to the certificate store is recorded in [configuration change history](activities.md#configuration-change-history): adding, editing, enabling, disabling, or deleting a certificate captures a versioned snapshot of its metadata (name, thumbprint, subject, issuer, validity window, source, enabled state and notes) alongside who made the change, when, and an optional reason. The raw certificate material is never stored in the history; the thumbprint alone identifies the exact certificate, so a swap is always visible.
+
+Open a certificate's history from the Change History action on its row, or retrieve it with `Get-JIMConfigurationChangeHistory -Type TrustedCertificate` or the REST API. The optional "Reason for change" prompt appears when uploading, adding, editing, or deleting a certificate in the admin portal; automation can pass the same reason via `-ChangeReason` on the certificate write cmdlets.
+
 ## Common workflows
 
 **Adding a new CA certificate from your PKI:**

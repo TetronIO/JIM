@@ -68,6 +68,14 @@ public class TrustedCertificateRepository : ITrustedCertificateRepository
         existing.Notes = certificate.Notes;
         existing.IsEnabled = certificate.IsEnabled;
 
+        // Copy the audit stamp too: callers (JIM.Web) query with NoTracking, so the instance the application layer
+        // stamped is detached and these values would otherwise be silently dropped when this method re-loads the
+        // tracked row.
+        existing.LastUpdated = certificate.LastUpdated;
+        existing.LastUpdatedByType = certificate.LastUpdatedByType;
+        existing.LastUpdatedById = certificate.LastUpdatedById;
+        existing.LastUpdatedByName = certificate.LastUpdatedByName;
+
         await Repository.Database.SaveChangesAsync();
     }
 

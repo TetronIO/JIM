@@ -269,4 +269,52 @@ public class SearchRepository : ISearchRepository
     }
 
     #endregion
+
+    #region owning search resolution
+
+    /// <summary>
+    /// Bounds the parent-group walk in <see cref="GetOwningPredefinedSearchIdForGroupAsync"/> so a corrupt/cyclic
+    /// ParentGroupId chain cannot spin the query loop forever; nesting this deep is not a realistic configuration.
+    /// </summary>
+    private const int MaxCriteriaGroupNestingDepth = 50;
+
+    public async Task<int?> GetOwningPredefinedSearchIdForGroupAsync(int groupId)
+    {
+        var currentGroupId = (int?)groupId;
+        for (var depth = 0; depth < MaxCriteriaGroupNestingDepth && currentGroupId.HasValue; depth++)
+        {
+            var currentGroupIdValue = currentGroupId.Value;
+            var group = await Repository.Database.PredefinedSearchCriteriaGroups
+                .AsNoTracking()
+                .Where(g => g.Id == currentGroupIdValue)
+                .Select(g => new { g.PredefinedSearchId, g.ParentGroupId })
+                .SingleOrDefaultAsync();
+
+            if (group == null)
+                return null;
+
+            if (group.PredefinedSearchId.HasValue)
+                return group.PredefinedSearchId;
+
+            currentGroupId = group.ParentGroupId;
+        }
+
+        return null;
+    }
+
+    public async Task<int?> GetOwningPredefinedSearchIdForCriterionAsync(int criterionId)
+    {
+        var criterion = await Repository.Database.PredefinedSearchCriteria
+            .AsNoTracking()
+            .Where(c => c.Id == criterionId)
+            .Select(c => new { c.PredefinedSearchCriteriaGroupId })
+            .SingleOrDefaultAsync();
+
+        if (criterion == null || !criterion.PredefinedSearchCriteriaGroupId.HasValue)
+            return null;
+
+        return await GetOwningPredefinedSearchIdForGroupAsync(criterion.PredefinedSearchCriteriaGroupId.Value);
+    }
+
+    #endregion
 }
