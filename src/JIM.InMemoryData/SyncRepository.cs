@@ -1235,6 +1235,15 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(_syncRules.Values.ToList());
     }
 
+    public Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync()
+    {
+        var timestamps = _syncRules.Values
+            .Select(r => r.LastUpdated ?? r.Created)
+            .Concat(_syncRules.Values.SelectMany(r => r.AttributeFlowRules).Select(m => m.LastUpdated ?? m.Created))
+            .ToList();
+        return Task.FromResult<DateTime?>(timestamps.Count > 0 ? timestamps.Max() : null);
+    }
+
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
     {
         var types = _objectTypes.Values

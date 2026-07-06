@@ -113,6 +113,29 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         _syncOutcomeTrackingLevel = await _syncServer.GetSyncOutcomeTrackingLevelAsync();
         _csoChangeTrackingEnabled = await _syncServer.GetCsoChangeTrackingEnabledAsync();
 
+        // A Full Synchronisation is the documented way to apply configuration changes (attribute priority
+        // reordering, "Null is a value", rule enable/disable, scoping) to every object. The unchanged-object
+        // optimisation skips Attribute Flow for objects whose SOURCE DATA has not changed since the last
+        // completed sync, which is only safe while the CONFIGURATION has not changed either; otherwise a pure
+        // configuration change would never re-resolve anything until the object's data happened to change.
+        // When any Synchronisation Rule or mapping changed after the watermark (across all Connected Systems,
+        // because another system's priority affects this system's resolution), disable the optimisation for
+        // this run by loading without a watermark, so every object is fully evaluated against the new
+        // configuration.
+        var csoLoadWatermark = _connectedSystem.LastSyncCompletedAt;
+        if (csoLoadWatermark.HasValue)
+        {
+            var configChangedAt = await _syncRepo.GetLatestSyncRuleConfigurationChangeAsync();
+            if (configChangedAt.HasValue && configChangedAt.Value > csoLoadWatermark.Value)
+            {
+                Log.Information("PerformFullSyncAsync: Synchronisation Rule configuration changed at {ConfigChangedAt:O}, " +
+                    "after the last completed sync at {Watermark:O}. Disabling the unchanged-object optimisation for " +
+                    "this run so the new configuration is applied to every object.",
+                    configChangedAt.Value, csoLoadWatermark.Value);
+                csoLoadWatermark = null;
+            }
+        }
+
         // Process CSOs in batches. This enables us to respond to cancellation requests in a reasonable timeframe.
         // Page size is configurable via service settings for performance tuning.
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
@@ -136,7 +159,7 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             {
                 csoPagedResult = await _syncRepo.GetConnectedSystemObjectsAsync(
                     _connectedSystem.Id, i, pageSize, totalCsosToProcess,
-                    _connectedSystem.LastSyncCompletedAt);
+                    csoLoadWatermark);
             }
 
             // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache
