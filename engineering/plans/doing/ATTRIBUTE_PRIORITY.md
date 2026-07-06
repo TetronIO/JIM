@@ -2,7 +2,7 @@
 
 - **Status:** Doing (Phases 1 and 2 complete: schema/model/API, engine resolution, auto-assign/densify, recall fallback incl. references, priority-aware drift, AssertedNull/NoContributor observability; Phase 3 UI and the Phase 4 integration test matrix open)
 - **Issue:** [#91](https://github.com/TetronIO/JIM/issues/91)
-- **Last Updated**: 2026-06-26
+- **Last Updated**: 2026-07-06
 
 ## Overview
 
