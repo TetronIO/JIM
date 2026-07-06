@@ -25,6 +25,12 @@ Two safety checks protect specifically the Administrator role; both reject the r
 
 If you genuinely need to transfer admin to a different identity, add the new admin first, then remove the old one.
 
+## Change history
+
+Every change to a Role is recorded in [configuration change history](activities.md#configuration-change-history): a versioned snapshot captures the Role's definition and its static membership together, so each add or remove records who made the change, when, and an optional reason, alongside the resulting member list. The built-in Administrator Role's creation is recorded as System-attributed version 1 from first startup, so its history has a starting point even though nothing created it interactively.
+
+There is no Role management UI yet (Role definition editing arrives with a future release), so retrieve a Role's history with `Get-JIMConfigurationChangeHistory -Type Role`, the REST API, or the Activity list in the admin portal. Renaming a member does not appear in the Role's own history; that change belongs to the member's history instead, since only membership (who is present) is part of a Role's configuration.
+
 ## Common workflows
 
 **Granting administrator access to a new user:**

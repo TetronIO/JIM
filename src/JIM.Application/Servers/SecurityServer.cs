@@ -55,25 +55,280 @@ public class SecurityServer
         return await Application.Repository.Security.IsObjectInRoleAsync(metaverseObject.Id, roleName);
     }
 
-    public async Task AddObjectToRoleAsync(MetaverseObject metaverseObject, string roleName)
-    {
-        await Application.Repository.Security.AddObjectToRoleAsync(metaverseObject.Id, roleName);
-    }
-
-    public async Task AddObjectToRoleByIdAsync(Guid objectId, int roleId)
-    {
-        await Application.Repository.Security.AddObjectToRoleByIdAsync(objectId, roleId);
-    }
-
-    public async Task RemoveObjectFromRoleAsync(Guid objectId, int roleId)
-    {
-        await Application.Repository.Security.RemoveObjectFromRoleAsync(objectId, roleId);
-    }
-
     public async Task<List<MetaverseObject>> GetRoleMembersAsync(int roleId)
     {
         return await Application.Repository.Security.GetRoleMembersAsync(roleId);
     }
+
+    #region Roles
+
+    /// <summary>
+    /// Creates a new Role definition. Used by seeding today (<see cref="SeedingServer.SeedBuiltInRolesAsync"/>);
+    /// admin-editable Role creation arrives with #612 and will reuse this method.
+    /// </summary>
+    public async Task<Role> CreateRoleAsync(Role role, MetaverseObject? initiatedBy = null, string? changeReason = null)
+    {
+        return await CreateRoleCoreAsync(role, changeReason,
+            activity => CreateRoleActivityAsync(activity, initiatedBy),
+            r => SetRoleCreated(r, initiatedBy));
+    }
+
+    /// <summary>
+    /// Creates a new Role definition. API-key initiator overload.
+    /// </summary>
+    public async Task<Role> CreateRoleAsync(Role role, ApiKey initiatedByApiKey, string? changeReason = null)
+    {
+        return await CreateRoleCoreAsync(role, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey),
+            r => AuditHelper.SetCreated(r, initiatedByApiKey));
+    }
+
+    private async Task<Role> CreateRoleCoreAsync(Role role, string? changeReason,
+        Func<Activity, Task> createActivityAsync, Action<Role> setCreated)
+    {
+        var activity = new Activity
+        {
+            TargetName = role.Name,
+            TargetType = ActivityTargetType.Role,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            Message = $"Creating Role '{role.Name}'"
+        };
+        await createActivityAsync(activity);
+
+        try
+        {
+            setCreated(role);
+            Log.Information("Creating Role '{Name}'", LogSanitiser.Sanitise(role.Name));
+            var result = await Application.Repository.Security.CreateRoleAsync(role);
+
+            await CaptureRoleConfigurationChangeAsync(activity, result.Id, changeReason);
+            activity.Message = $"Created Role '{role.Name}'";
+            await Application.Activities.CompleteActivityAsync(activity);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Adds a Metaverse Object as a static member of a Role, identified by the Role's name. The auditable question
+    /// for a membership change is "who was in this Role and when", so the Activity targets the Role, not the member.
+    /// </summary>
+    public async Task AddObjectToRoleAsync(MetaverseObject metaverseObject, string roleName, MetaverseObject? initiatedBy = null, string? changeReason = null)
+    {
+        await AddObjectToRoleCoreAsync(metaverseObject, roleName, changeReason,
+            activity => CreateRoleActivityAsync(activity, initiatedBy));
+    }
+
+    /// <summary>
+    /// Adds a Metaverse Object as a static member of a Role, identified by the Role's name. API-key initiator overload.
+    /// </summary>
+    public async Task AddObjectToRoleAsync(MetaverseObject metaverseObject, string roleName, ApiKey initiatedByApiKey, string? changeReason = null)
+    {
+        await AddObjectToRoleCoreAsync(metaverseObject, roleName, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey));
+    }
+
+    private async Task AddObjectToRoleCoreAsync(MetaverseObject metaverseObject, string roleName, string? changeReason,
+        Func<Activity, Task> createActivityAsync)
+    {
+        var memberName = metaverseObject.DisplayName ?? $"Unknown (ID: {metaverseObject.Id})";
+
+        var activity = new Activity
+        {
+            TargetName = roleName,
+            TargetType = ActivityTargetType.Role,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            Message = $"Adding '{memberName}' to Role '{roleName}'"
+        };
+        await createActivityAsync(activity);
+
+        try
+        {
+            Log.Information("Adding '{MemberName}' to Role '{RoleName}'", LogSanitiser.Sanitise(memberName), LogSanitiser.Sanitise(roleName));
+            await Application.Repository.Security.AddObjectToRoleAsync(metaverseObject.Id, roleName);
+
+            // The membership mutator is keyed by name, but configuration-change capture is int-keyed, so the Role
+            // must be resolved by name after the change to recover its id.
+            var role = await Application.Repository.Security.GetRoleAsync(roleName);
+            if (role != null)
+                await CaptureRoleConfigurationChangeAsync(activity, role.Id, changeReason);
+
+            activity.Message = $"Added '{memberName}' to Role '{roleName}'";
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Adds a Metaverse Object as a static member of a Role, identified by the Role's id.
+    /// </summary>
+    public async Task AddObjectToRoleByIdAsync(Guid objectId, int roleId, MetaverseObject? initiatedBy = null, string? changeReason = null)
+    {
+        await AddObjectToRoleByIdCoreAsync(objectId, roleId, changeReason,
+            activity => CreateRoleActivityAsync(activity, initiatedBy));
+    }
+
+    /// <summary>
+    /// Adds a Metaverse Object as a static member of a Role, identified by the Role's id. API-key initiator overload.
+    /// </summary>
+    public async Task AddObjectToRoleByIdAsync(Guid objectId, int roleId, ApiKey initiatedByApiKey, string? changeReason = null)
+    {
+        await AddObjectToRoleByIdCoreAsync(objectId, roleId, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey));
+    }
+
+    private async Task AddObjectToRoleByIdCoreAsync(Guid objectId, int roleId, string? changeReason, Func<Activity, Task> createActivityAsync)
+    {
+        var roleName = await ResolveRoleNameAsync(roleId);
+        var memberName = await ResolveMemberNameAsync(objectId);
+
+        var activity = new Activity
+        {
+            TargetName = roleName,
+            TargetType = ActivityTargetType.Role,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            Message = $"Adding '{memberName}' to Role '{roleName}'"
+        };
+        await createActivityAsync(activity);
+
+        try
+        {
+            Log.Information("Adding '{MemberName}' to Role '{RoleName}' (ID: {RoleId})", LogSanitiser.Sanitise(memberName), LogSanitiser.Sanitise(roleName), roleId);
+            await Application.Repository.Security.AddObjectToRoleByIdAsync(objectId, roleId);
+
+            await CaptureRoleConfigurationChangeAsync(activity, roleId, changeReason);
+            activity.Message = $"Added '{memberName}' to Role '{roleName}'";
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Removes a Metaverse Object as a static member of a Role.
+    /// </summary>
+    public async Task RemoveObjectFromRoleAsync(Guid objectId, int roleId, MetaverseObject? initiatedBy = null, string? changeReason = null)
+    {
+        await RemoveObjectFromRoleCoreAsync(objectId, roleId, changeReason,
+            activity => CreateRoleActivityAsync(activity, initiatedBy));
+    }
+
+    /// <summary>
+    /// Removes a Metaverse Object as a static member of a Role. API-key initiator overload.
+    /// </summary>
+    public async Task RemoveObjectFromRoleAsync(Guid objectId, int roleId, ApiKey initiatedByApiKey, string? changeReason = null)
+    {
+        await RemoveObjectFromRoleCoreAsync(objectId, roleId, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey));
+    }
+
+    private async Task RemoveObjectFromRoleCoreAsync(Guid objectId, int roleId, string? changeReason, Func<Activity, Task> createActivityAsync)
+    {
+        var roleName = await ResolveRoleNameAsync(roleId);
+        var memberName = await ResolveMemberNameAsync(objectId);
+
+        var activity = new Activity
+        {
+            TargetName = roleName,
+            TargetType = ActivityTargetType.Role,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            Message = $"Removing '{memberName}' from Role '{roleName}'"
+        };
+        await createActivityAsync(activity);
+
+        try
+        {
+            Log.Information("Removing '{MemberName}' from Role '{RoleName}' (ID: {RoleId})", LogSanitiser.Sanitise(memberName), LogSanitiser.Sanitise(roleName), roleId);
+            await Application.Repository.Security.RemoveObjectFromRoleAsync(objectId, roleId);
+
+            await CaptureRoleConfigurationChangeAsync(activity, roleId, changeReason);
+            activity.Message = $"Removed '{memberName}' from Role '{roleName}'";
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Resolves a Role's name for use in an Activity's target/message, falling back to a placeholder when the Role
+    /// cannot be found (the subsequent repository mutation call still surfaces the real failure via its own
+    /// exception, which fails the Activity).
+    /// </summary>
+    private async Task<string> ResolveRoleNameAsync(int roleId)
+    {
+        var role = await Application.Repository.Security.GetRoleByIdAsync(roleId);
+        return role?.Name ?? $"Unknown (ID: {roleId})";
+    }
+
+    /// <summary>
+    /// Resolves a Metaverse Object's display name for use in a Role membership Activity's message, falling back to a
+    /// placeholder when the object cannot be found. See <see cref="ResolveRoleNameAsync"/> for why a fallback (not a
+    /// thrown exception) is used here.
+    /// </summary>
+    private async Task<string> ResolveMemberNameAsync(Guid objectId)
+    {
+        var member = await Application.Metaverse.GetMetaverseObjectAsync(objectId);
+        return member?.DisplayName ?? $"Unknown (ID: {objectId})";
+    }
+
+    /// <summary>
+    /// Creates the audit Activity for a Role change attributed to <paramref name="initiatedBy"/>, or to the System
+    /// principal when no user is supplied. Role creation happens exclusively through seeding today, and a membership
+    /// change can originate from the AuthServer initial-admin bootstrap/retention path, neither of which has a
+    /// distinct initiator to attribute the change to; the same rationale as <c>CreateApiKeyActivityAsync</c> below.
+    /// </summary>
+    private Task CreateRoleActivityAsync(Activity activity, MetaverseObject? initiatedBy) =>
+        initiatedBy == null
+            ? Application.Activities.CreateSystemActivityAsync(activity)
+            : Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+    /// <summary>
+    /// Stamps Created audit fields for a Role, falling back to system attribution when no user is supplied. See
+    /// <see cref="CreateRoleActivityAsync"/> for why the fallback is needed here.
+    /// </summary>
+    private static void SetRoleCreated(Role role, MetaverseObject? initiatedBy)
+    {
+        if (initiatedBy == null)
+            AuditHelper.SetCreatedBySystem(role);
+        else
+            AuditHelper.SetCreated(role, initiatedBy);
+    }
+
+    /// <summary>
+    /// Captures a versioned, metadata-only configuration snapshot of a Role (its definition and static membership)
+    /// onto its audit Activity via the shared ConfigurationChangeCaptureService. The Role is reloaded so the snapshot
+    /// reflects persisted truth, including current membership; call it after the change has been persisted. Shared
+    /// by Role definition creation and Role membership changes, since both are configuration changes to the same
+    /// Role.
+    /// </summary>
+    private async Task CaptureRoleConfigurationChangeAsync(Activity activity, int roleId, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+            ActivityTargetType.Role, roleId,
+            async hashKey =>
+            {
+                var persisted = await Application.Repository.Security.GetRoleByIdAsync(roleId);
+                return persisted == null ? null : Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
+            },
+            $"Role {roleId}");
+    }
+
+    #endregion
 
     #region API Keys
 

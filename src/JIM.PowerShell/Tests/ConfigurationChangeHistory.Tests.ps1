@@ -45,6 +45,7 @@ Describe 'Get-JIMConfigurationChangeHistory' {
             $validateSet.ValidValues | Should -Contain 'MetaverseAttribute'
             $validateSet.ValidValues | Should -Contain 'TrustedCertificate'
             $validateSet.ValidValues | Should -Contain 'ApiKey'
+            $validateSet.ValidValues | Should -Contain 'Role'
         }
 
         It 'Accepts Id from the pipeline by property name' {
@@ -64,7 +65,7 @@ Describe 'Get-JIMConfigurationChangeHistory' {
             { Get-JIMConfigurationChangeHistory -Type SynchronisationRule -Id ([Guid]::NewGuid().ToString()) -ErrorAction Stop } | Should -Throw '*integer*'
         }
 
-        It 'Rejects a non-integer Id for -Type <_>' -ForEach @('MetaverseObjectType', 'MetaverseAttribute') {
+        It 'Rejects a non-integer Id for -Type <_>' -ForEach @('MetaverseObjectType', 'MetaverseAttribute', 'Role') {
             { Get-JIMConfigurationChangeHistory -Type $_ -Id ([Guid]::NewGuid().ToString()) -ErrorAction Stop } | Should -Throw '*integer*'
         }
 
@@ -114,7 +115,8 @@ Describe 'ChangeReason on configuration write cmdlets' {
         'New-JIMMetaverseObjectType', 'Set-JIMMetaverseObjectType',
         'New-JIMMetaverseAttribute', 'Set-JIMMetaverseAttribute', 'Remove-JIMMetaverseAttribute',
         'Add-JIMCertificate', 'Set-JIMCertificate', 'Remove-JIMCertificate',
-        'New-JIMApiKey', 'Set-JIMApiKey', 'Remove-JIMApiKey'
+        'New-JIMApiKey', 'Set-JIMApiKey', 'Remove-JIMApiKey',
+        'Add-JIMRoleMember', 'Remove-JIMRoleMember'
     ) {
         $param = (Get-Command $_).Parameters['ChangeReason']
         $param | Should -Not -BeNullOrEmpty

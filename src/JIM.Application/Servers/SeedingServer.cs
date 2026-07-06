@@ -52,7 +52,6 @@ internal class SeedingServer
         var attributesToCreate = new List<MetaverseAttribute>();
         var objectTypesToCreate = new List<MetaverseObjectType>();
         var predefinedSearchesToCreate = new List<PredefinedSearch>();
-        var rolesToCreate = new List<Role>();
         var exampleDataSetsToCreate = new List<ExampleDataSet>();
         var dataGenerationTemplatesToCreate = new List<ExampleDataTemplate>();
         var connectorDefinitions = new List<ConnectorDefinition>();
@@ -476,22 +475,6 @@ internal class SeedingServer
         }
         #endregion
 
-        #region Roles
-        // create the built-in roles
-        var administratorRole = await Application.Security.GetRoleAsync(Constants.BuiltInRoles.Administrator);
-        if (administratorRole == null)
-        {
-            administratorRole = new Role
-            {
-                BuiltIn = true,
-                Name = Constants.BuiltInRoles.Administrator
-            };
-            AuditHelper.SetCreatedBySystem(administratorRole);
-            rolesToCreate.Add(administratorRole);
-            Log.Information($"SeedAsync: Preparing Role: {Constants.BuiltInRoles.Administrator}");
-        }
-        #endregion
-
         #region ExampleDataSets
         var companiesEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Companies, "en", Properties.Resources.Companies_en);
         if (companiesEnDataSet != null)
@@ -567,13 +550,14 @@ internal class SeedingServer
             connectorDefinitions.Add(fileConnectorDefinition);
         #endregion
 
-        // submit all the preparations to the repository for creation
+        // submit all the preparations to the repository for creation. Roles are not seeded here: built-in Roles
+        // carry configuration change history, so they are seeded through the audited create path instead
+        // (see SeedBuiltInRolesAsync), matching the Temporal Scope Reconciliation schedule precedent.
         await Application.Repository.Seeding.SeedDataAsync(
-            attributesToCreate, 
-            objectTypesToCreate, 
+            attributesToCreate,
+            objectTypesToCreate,
             predefinedSearchesToCreate,
-            rolesToCreate, 
-            exampleDataSetsToCreate, 
+            exampleDataSetsToCreate,
             dataGenerationTemplatesToCreate,
             connectorDefinitions);
         stopwatch.Stop();
@@ -637,6 +621,36 @@ internal class SeedingServer
         await Application.Scheduler.CreateScheduleAsync(schedule, ActivityInitiatorType.System, null, "System",
             changeReason: "Built-in schedule created automatically by JIM.");
         Log.Information("SeedBuiltInSchedulesAsync: Created built-in Temporal Scope Reconciliation schedule {ScheduleId} (hourly).", schedule.Id);
+    }
+
+    /// <summary>
+    /// Seeds the built-in Administrator Role that JIM provides, through the audited create path
+    /// (<see cref="SecurityServer.CreateRoleAsync(Role, MetaverseObject?, string?)"/>) so its change history begins
+    /// with a System-attributed Create Activity and a version-1 configuration change snapshot, rather than starting
+    /// blank the first time an administrator touches its membership. Idempotent: does nothing if the built-in Role
+    /// already exists. Runs at every application startup, mirroring <see cref="SeedBuiltInSchedulesAsync"/>.
+    /// </summary>
+    internal async Task SeedBuiltInRolesAsync()
+    {
+        var administratorRole = await Application.Security.GetRoleAsync(Constants.BuiltInRoles.Administrator);
+        if (administratorRole != null)
+        {
+            Log.Verbose("SeedBuiltInRolesAsync: Administrator Role already present; skipping.");
+            return;
+        }
+
+        var role = new Role
+        {
+            BuiltIn = true,
+            Name = Constants.BuiltInRoles.Administrator
+        };
+
+        // Create through the audited path, not the repository, so the Role's origin is visible in the portal: a
+        // Create Activity attributed to System and a version-1 configuration change snapshot. A repository-direct
+        // seed leaves no audit trace, so the change history would start at whichever principal touched the Role
+        // next, misattributing its origin.
+        await Application.Security.CreateRoleAsync(role, changeReason: "Built-in Role created automatically by JIM.");
+        Log.Information("SeedBuiltInRolesAsync: Created built-in Role {RoleName} (ID: {RoleId}).", role.Name, role.Id);
     }
 
     /// <summary>

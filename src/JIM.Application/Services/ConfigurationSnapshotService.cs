@@ -49,6 +49,9 @@ public class ConfigurationSnapshotService
     /// <summary>The object-type discriminator stored on an API Key snapshot.</summary>
     public const string ApiKeyObjectType = "ApiKey";
 
+    /// <summary>The object-type discriminator stored on a Role snapshot.</summary>
+    public const string RoleObjectType = "Role";
+
     private JimApplication Application { get; }
 
     private static readonly JsonSerializerOptions SerialiserOptions = new()
@@ -707,6 +710,47 @@ public class ConfigurationSnapshotService
             items.Add(node);
         }
         return ConfigurationSnapshotNode.CollectionNode("roles", items, "Roles");
+    }
+
+    // -- Role ------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a scoped snapshot of a Role: its identity, built-in flag, and static membership. Roles carry no secrets;
+    /// <paramref name="hashKey"/> keeps the signature uniform with the other builders. Load the Role with its static
+    /// members (see <c>ISecurityRepository.GetRoleByIdAsync</c>) so the membership list reflects persisted truth.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(Role role, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(role);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", role.Name, "Name");
+        Add(children, "builtIn", Render(role.BuiltIn), "Built-in");
+        children.Add(BuildRoleMembers(role.StaticMembers));
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = RoleObjectType,
+            ObjectId = role.Id,
+            ObjectName = role.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("role", children, "Role")
+        };
+    }
+
+    private static ConfigurationSnapshotNode BuildRoleMembers(List<MetaverseObject>? members)
+    {
+        // A Role's static members are Guid-keyed Metaverse Objects, so each item uses ItemGuidId (not ItemId) as its
+        // stable identity, matching the Schedule Step precedent for Guid-keyed collection items. The member's display
+        // name is recorded as the human-friendly display value; renaming the member itself is that Metaverse Object's
+        // own change, not this Role's, so only membership (who is present) is captured here.
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var member in (members ?? []).OrderBy(m => m.Id))
+        {
+            var node = ConfigurationSnapshotNode.Scalar("memberId", member.Id.ToString("D"), "Member", member.DisplayName);
+            node.ItemGuidId = member.Id;
+            items.Add(node);
+        }
+        return ConfigurationSnapshotNode.CollectionNode("members", items, "Members");
     }
 
     // -- value rendering -----------------------------------------------------------------------------------------------
