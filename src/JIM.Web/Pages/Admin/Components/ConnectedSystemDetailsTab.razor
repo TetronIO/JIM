@@ -27,7 +27,7 @@
         <PrefilledFormValidator />
         <MudTextField T="string" Label="Connector" @bind-Value="ConnectedSystem.ConnectorDefinition.Name" Disabled="true" Variant="Variant.Outlined" />
         <MudTextField T="string" Label="Name" @bind-Value="ConnectedSystem.Name" Required="true" RequiredError="A name is required" Immediate="true" Variant="Variant.Outlined" Class="mt-5" />
-        <MudTextField T="string" Label="Description" Required="false" @bind-Value="ConnectedSystem.Description" Lines="5" Variant="Variant.Outlined" Class="mt-5" />
+        <MudTextField T="string" Label="Description" Required="false" @bind-Value="ConnectedSystem.Description" Lines="5" MaxLines="10" Sizing="InputSizing.Auto" Variant="Variant.Outlined" Class="mt-5" />
     </MudForm>
 </MudPaper>
 <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!IsDetailsFormValid)" Class="mt-5" OnClick="HandleValidDetailsSubmitAsync" DropShadow="false">Save Changes</MudButton>

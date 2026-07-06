@@ -155,7 +155,7 @@ namespace JIM.Application.Servers
         {
             var existing = await GetSettingValueAsync<string>(Constants.SettingKeys.ConfigurationChangeHashKey);
             if (!string.IsNullOrEmpty(existing))
-                return Convert.FromBase64String(existing);
+                return DecodeHashKey(existing);
 
             // Generate a 256-bit key and persist it encrypted at rest. GetOrCreateSettingAsync is race-safe, so a
             // concurrent first use returns the persisted winner rather than throwing.
@@ -183,7 +183,30 @@ namespace JIM.Application.Servers
             if (string.IsNullOrEmpty(effectiveValue))
                 throw new InvalidOperationException("Failed to generate or retrieve the configuration change hash key.");
 
-            return Convert.FromBase64String(effectiveValue);
+            return DecodeHashKey(effectiveValue);
+        }
+
+        /// <summary>
+        /// Decodes the base64 configuration change hash key, translating the cryptic <see cref="FormatException"/> that
+        /// results from feeding a still-encrypted value to the decoder into a clear diagnostic. This happens when the
+        /// stored key is encrypted at rest but no credential protection service was available to decrypt it, so the
+        /// ciphertext is returned in place of the key; the change-capture path swallows the failure as best-effort, so
+        /// a clear message here is the difference between a diagnosable log line and an unexplained missing snapshot.
+        /// </summary>
+        private static byte[] DecodeHashKey(string value)
+        {
+            try
+            {
+                return Convert.FromBase64String(value);
+            }
+            catch (FormatException ex)
+            {
+                throw new InvalidOperationException(
+                    "The configuration change hash key could not be decoded from its stored value. This usually means " +
+                    "the credential protection service was unavailable when the encrypted key was read, so its ciphertext " +
+                    "was returned instead of the key. Ensure JimApplication.CredentialProtection is set wherever " +
+                    "configuration change capture runs.", ex);
+            }
         }
 
         /// <summary>
@@ -265,53 +288,75 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
-        /// Updates a service setting value and creates an Activity for audit purposes.
+        /// Updates a service setting value and creates an Activity for audit purposes, carrying a redacted, versioned
+        /// configuration snapshot (and the optional change reason) in the setting's change history.
         /// Encrypted string values are automatically encrypted before storage.
         /// </summary>
-        public async Task UpdateSettingValueAsync(string key, string? newValue, MetaverseObject? initiatedBy)
+        public async Task UpdateSettingValueAsync(string key, string? newValue, MetaverseObject? initiatedBy, string? changeReason = null)
         {
             var (setting, activity) = await PrepareUpdateAsync(key, newValue);
             AuditHelper.SetUpdated(setting, initiatedBy);
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             await Application.Repository.ServiceSettings.UpdateSettingAsync(setting);
+            await CaptureConfigurationChangeAsync(activity, setting, changeReason);
             await Application.Activities.CompleteActivityAsync(activity);
         }
 
         /// <summary>
-        /// Updates a service setting value (API key initiated) and creates an Activity for audit purposes.
+        /// Updates a service setting value (API key initiated) and creates an Activity for audit purposes, carrying a
+        /// redacted, versioned configuration snapshot (and the optional change reason) in the setting's change history.
         /// Encrypted string values are automatically encrypted before storage.
         /// </summary>
-        public async Task UpdateSettingValueAsync(string key, string? newValue, ApiKey initiatedByApiKey)
+        public async Task UpdateSettingValueAsync(string key, string? newValue, ApiKey initiatedByApiKey, string? changeReason = null)
         {
             var (setting, activity) = await PrepareUpdateAsync(key, newValue);
             AuditHelper.SetUpdated(setting, initiatedByApiKey);
             await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
             await Application.Repository.ServiceSettings.UpdateSettingAsync(setting);
+            await CaptureConfigurationChangeAsync(activity, setting, changeReason);
             await Application.Activities.CompleteActivityAsync(activity);
         }
 
         /// <summary>
-        /// Reverts a service setting to its default value and creates an Activity for audit purposes.
+        /// Reverts a service setting to its default value and creates an Activity for audit purposes, carrying a
+        /// versioned configuration snapshot whose diff shows the override being removed.
         /// </summary>
-        public async Task RevertSettingToDefaultAsync(string key, MetaverseObject? initiatedBy)
+        public async Task RevertSettingToDefaultAsync(string key, MetaverseObject? initiatedBy, string? changeReason = null)
         {
             var (setting, activity) = await PrepareRevertAsync(key);
             AuditHelper.SetUpdated(setting, initiatedBy);
             await Application.Activities.CreateActivityAsync(activity, initiatedBy);
             await Application.Repository.ServiceSettings.UpdateSettingAsync(setting);
+            await CaptureConfigurationChangeAsync(activity, setting, changeReason);
             await Application.Activities.CompleteActivityAsync(activity);
         }
 
         /// <summary>
-        /// Reverts a service setting to its default value (API key initiated) and creates an Activity for audit purposes.
+        /// Reverts a service setting to its default value (API key initiated) and creates an Activity for audit
+        /// purposes, carrying a versioned configuration snapshot whose diff shows the override being removed.
         /// </summary>
-        public async Task RevertSettingToDefaultAsync(string key, ApiKey initiatedByApiKey)
+        public async Task RevertSettingToDefaultAsync(string key, ApiKey initiatedByApiKey, string? changeReason = null)
         {
             var (setting, activity) = await PrepareRevertAsync(key);
             AuditHelper.SetUpdated(setting, initiatedByApiKey);
             await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
             await Application.Repository.ServiceSettings.UpdateSettingAsync(setting);
+            await CaptureConfigurationChangeAsync(activity, setting, changeReason);
             await Application.Activities.CompleteActivityAsync(activity);
+        }
+
+        /// <summary>
+        /// Captures a redacted, versioned configuration snapshot of a Service Setting onto its audit Activity via the
+        /// shared ConfigurationChangeCaptureService (which owns the toggle, dedupe-guard, versioning and best-effort
+        /// behaviours). The just-persisted entity is snapshotted directly: the update paths mutate the instance they
+        /// persist, so it is the persisted truth.
+        /// </summary>
+        private async Task CaptureConfigurationChangeAsync(Activity activity, ServiceSetting setting, string? changeReason)
+        {
+            await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+                ActivityTargetType.ServiceSetting, setting.Key,
+                hashKey => Task.FromResult<ConfigurationSnapshot?>(Application.ConfigurationSnapshots.CreateSnapshot(setting, hashKey)),
+                $"Service Setting {setting.Key}");
         }
 
         private async Task<(ServiceSetting setting, Activity activity)> PrepareUpdateAsync(string key, string? newValue)

@@ -31,6 +31,10 @@ function Set-JIMApiKey {
     .PARAMETER Disable
         Disable the API Key.
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the API Key's
+        configuration change history.
+
     .PARAMETER PassThru
         If specified, returns the updated API Key object.
 
@@ -80,6 +84,9 @@ function Set-JIMApiKey {
 
         [switch]$Disable,
 
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -122,6 +129,10 @@ function Set-JIMApiKey {
                 $body.isEnabled = $true
             } elseif ($Disable) {
                 $body.isEnabled = $false
+            }
+
+            if ($ChangeReason) {
+                $body.changeReason = $ChangeReason
             }
 
             try {

@@ -40,83 +40,25 @@ public class ConnectedSystemServer
     // Configuration change capture
     // Captures a redacted, versioned configuration snapshot onto a configuration-change Activity. Called after the
     // entity has been persisted (so its id and graph are current) and before the Activity is completed, so the snapshot
-    // fields are saved as part of the existing CompleteActivityAsync update. Honours the ChangeTracking setting; the
-    // optional change reason is recorded independently of the snapshot toggle.
+    // fields are saved as part of the existing CompleteActivityAsync update. The toggle, dedupe-guard, versioning and
+    // best-effort behaviours are owned by the shared ConfigurationChangeCaptureService; these wrappers supply only the
+    // type-specific snapshot builders.
     // -----------------------------------------------------------------------------------------------------------------
 
     private async Task CaptureConfigurationChangeAsync(Activity activity, ConnectedSystem connectedSystem, string? changeReason)
     {
-        // The reason is recorded independently of the snapshot toggle and has no external dependencies, so it is set
-        // outside the best-effort block below.
-        if (!string.IsNullOrWhiteSpace(changeReason))
-            activity.ChangeReason = changeReason.Trim();
-
-        try
-        {
-            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
-                return;
-
-            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
-            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey);
-            activity.ConnectedSystemId ??= connectedSystem.Id;
-
-            // Idempotent capture guard: skip when nothing changed versus the latest stored snapshot, so no-change
-            // saves (e.g. worker paths that persist after every import) do not consume versions and drown real changes
-            // in noise. The comparison must be semantic (via the diff engine), not textual: snapshots are stored in a
-            // jsonb column, and PostgreSQL normalises the text (key ordering, spacing) so the string read back never
-            // equals a fresh serialisation.
-            var latest = ConfigurationSnapshotService.Deserialise(
-                await Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.ConnectedSystem, connectedSystem.Id));
-            if (latest != null && !Application.ConfigurationDiffs.Diff(latest, snapshot).HasChanges)
-            {
-                Log.Debug("CaptureConfigurationChangeAsync: configuration of Connected System {ConnectedSystemId} is unchanged from its latest snapshot; no new version recorded.", connectedSystem.Id);
-                return;
-            }
-
-            activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.ConnectedSystem, connectedSystem.Id);
-            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
-        {
-            // Configuration change capture is best-effort secondary metadata recorded after the entity has already been
-            // persisted; it must never fail or roll back the configuration operation that succeeded. On failure the
-            // change history simply misses this snapshot. The failure is logged (never silent) so the gap is diagnosable.
-            Log.Warning(ex, "CaptureConfigurationChangeAsync: failed to capture configuration snapshot for Connected System {ConnectedSystemId}; the change was saved but its history snapshot was not recorded.", connectedSystem.Id);
-        }
+        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+            ActivityTargetType.ConnectedSystem, connectedSystem.Id,
+            hashKey => Task.FromResult<ConfigurationSnapshot?>(Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey)),
+            $"Connected System {connectedSystem.Id}");
     }
 
     private async Task CaptureConfigurationChangeAsync(Activity activity, SyncRule syncRule, string? changeReason)
     {
-        if (!string.IsNullOrWhiteSpace(changeReason))
-            activity.ChangeReason = changeReason.Trim();
-
-        try
-        {
-            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
-                return;
-
-            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
-            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey);
-            activity.SyncRuleId ??= syncRule.Id;
-
-            // Idempotent capture guard, compared semantically: see the Connected System overload above.
-            var latest = ConfigurationSnapshotService.Deserialise(
-                await Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SyncRule, syncRule.Id));
-            if (latest != null && !Application.ConfigurationDiffs.Diff(latest, snapshot).HasChanges)
-            {
-                Log.Debug("CaptureConfigurationChangeAsync: configuration of Synchronisation Rule {SyncRuleId} is unchanged from its latest snapshot; no new version recorded.", syncRule.Id);
-                return;
-            }
-
-            activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.SyncRule, syncRule.Id);
-            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
-        {
-            // Best-effort: see the Connected System overload above. A capture failure must never fail the configuration
-            // operation that already succeeded; the miss is logged rather than surfaced to the caller.
-            Log.Warning(ex, "CaptureConfigurationChangeAsync: failed to capture configuration snapshot for Synchronisation Rule {SyncRuleId}; the change was saved but its history snapshot was not recorded.", syncRule.Id);
-        }
+        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+            ActivityTargetType.SyncRule, syncRule.Id,
+            hashKey => Task.FromResult<ConfigurationSnapshot?>(Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey)),
+            $"Synchronisation Rule {syncRule.Id}");
     }
 
     // Captures a versioned configuration snapshot for a Synchronisation Rule whose change was made through a granular
@@ -179,23 +121,9 @@ public class ConnectedSystemServer
     /// </summary>
     private async Task CaptureConfigurationDeletionAsync(Activity activity, SyncRule syncRule, string? changeReason)
     {
-        if (!string.IsNullOrWhiteSpace(changeReason))
-            activity.ChangeReason = changeReason.Trim();
-
-        try
-        {
-            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
-                return;
-
-            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
-            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey);
-            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
-        {
-            // Best-effort: a capture failure must never fail the deletion that is about to proceed; the miss is logged.
-            Log.Warning(ex, "CaptureConfigurationDeletionAsync: failed to capture deletion snapshot for Synchronisation Rule {SyncRuleId}; the deletion proceeded but its history snapshot was not recorded.", syncRule.Id);
-        }
+        await Application.ConfigurationChangeCapture.CaptureDeletionAsync(activity, changeReason,
+            hashKey => Task.FromResult<ConfigurationSnapshot?>(Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey)),
+            $"Synchronisation Rule {syncRule.Id}");
     }
 
     #region Connector Definitions
@@ -5078,6 +5006,22 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Retrieves the count of Pending Export objects for a Connected System with optional filtering
+    /// by change type and status. Optimised for fast counting without loading entity data.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System.</param>
+    /// <param name="changeType">Optional change type to filter by (Create, Update, Delete).</param>
+    /// <param name="status">Optional status to filter by (Pending, Failed, etc.).</param>
+    /// <returns>The count of matching Pending Export objects.</returns>
+    public async Task<int> GetPendingExportsFilteredCountAsync(
+        int connectedSystemId,
+        PendingExportChangeType? changeType = null,
+        PendingExportStatus? status = null)
+    {
+        return await Application.Repository.ConnectedSystems.GetPendingExportsFilteredCountAsync(connectedSystemId, changeType, status);
+    }
+
+    /// <summary>
     /// Deletes a Pending Export object.
     /// </summary>
     /// <param name="pendingExport">The Pending Export to delete.</param>
@@ -5257,6 +5201,39 @@ public class ConnectedSystemServer
             .SetTag("page", page)
             .SetTag("pageSize", pageSize);
         return await Application.Repository.ConnectedSystems.GetCsoChangeHistoryAsync(connectedSystemObjectId, page, pageSize);
+    }
+
+    /// <summary>
+    /// Gets CSO changes where the CSO has been deleted (ChangeType = Deleted and ConnectedSystemObject is null).
+    /// Used for the deleted objects browser.
+    /// </summary>
+    /// <param name="connectedSystemId">Optional filter by Connected System ID.</param>
+    /// <param name="fromDate">Optional filter for changes on or after this date.</param>
+    /// <param name="toDate">Optional filter for changes on or before this date.</param>
+    /// <param name="externalIdSearch">Optional search term for external ID.</param>
+    /// <param name="page">Page number (1-based).</param>
+    /// <param name="pageSize">Number of items per page.</param>
+    /// <returns>Paginated list of deleted CSO changes ordered by ChangeTime descending.</returns>
+    public async Task<(List<ConnectedSystemObjectChange> Items, int TotalCount)> GetDeletedCsoChangesAsync(
+        int? connectedSystemId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? externalIdSearch = null,
+        int page = 1,
+        int pageSize = 50)
+    {
+        return await Application.Repository.ConnectedSystems.GetDeletedCsoChangesAsync(
+            connectedSystemId, fromDate, toDate, externalIdSearch, page, pageSize);
+    }
+
+    /// <summary>
+    /// Gets the full change history for a deleted CSO by its change ID.
+    /// </summary>
+    /// <param name="changeId">The ID of the CSO change record.</param>
+    /// <returns>List of all changes for that CSO ordered by ChangeTime descending.</returns>
+    public async Task<List<ConnectedSystemObjectChange>> GetDeletedCsoChangeHistoryAsync(Guid changeId)
+    {
+        return await Application.Repository.ConnectedSystems.GetDeletedCsoChangeHistoryAsync(changeId);
     }
     #endregion
 

@@ -76,7 +76,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
 
             // Hash the provided key to look it up
             var keyHash = HashApiKey(providedKey);
-            var apiKey = await jim.Repository.ApiKeys.GetByHashAsync(keyHash);
+            var apiKey = await jim.Security.GetApiKeyByHashAsync(keyHash);
 
             if (apiKey == null)
             {
@@ -112,7 +112,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
                     // Create a new scope for the background task since the original scope will be disposed
                     using var usageScope = _serviceProvider.CreateScope();
                     var usageJim = usageScope.ServiceProvider.GetRequiredService<JimApplication>();
-                    await usageJim.Repository.ApiKeys.RecordUsageAsync(apiKeyId, ipAddress);
+                    await usageJim.Security.RecordApiKeyUsageAsync(apiKeyId, ipAddress);
                 }
                 catch (Exception ex)
                 {

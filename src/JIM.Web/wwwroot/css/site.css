@@ -1109,6 +1109,12 @@ html[lang] .mud-dialog .mud-paper-outlined {
     background-color: var(--jim-dialog-inner-surface, transparent) !important;
 }
 
+/* Timeline arrow triangle inside dialogs: outlined cards here are tinted with jim-dialog-inner-surface
+   (above), not jim-inner-surface, so the triangle needs to match that variable instead. */
+html[lang] .mud-dialog .mud-card.mud-paper-outlined::after {
+    border-right-color: var(--jim-dialog-inner-surface, var(--mud-palette-surface)) !important;
+}
+
 /* Fix double scrollbar on MudSelect dropdown popovers.
    Both the popover container and the inner mud-list have overflow-y: auto by default,
    producing two nested scrollbars. Let the popover handle scrolling alone. */

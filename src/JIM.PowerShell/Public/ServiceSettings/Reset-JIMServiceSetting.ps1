@@ -15,6 +15,9 @@ function Reset-JIMServiceSetting {
     .PARAMETER Key
         The unique setting key using dot notation (e.g., "ChangeTracking.CsoChanges.Enabled").
 
+    .PARAMETER ChangeReason
+        An optional reason for the revert, recorded against the setting's configuration change history.
+
     .PARAMETER PassThru
         If specified, returns the reverted service setting object.
 
@@ -43,6 +46,9 @@ function Reset-JIMServiceSetting {
         [Parameter(Mandatory, Position = 0)]
         [string]$Key,
 
+        [Parameter()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -57,7 +63,11 @@ function Reset-JIMServiceSetting {
             Write-Verbose "Reverting service setting to default: $Key"
 
             try {
-                $response = Invoke-JIMApi -Endpoint "/api/v1/service-settings/$Key" -Method 'DELETE'
+                $endpoint = "/api/v1/service-settings/$Key"
+                if ($ChangeReason) {
+                    $endpoint += "?changeReason=$([uri]::EscapeDataString($ChangeReason))"
+                }
+                $response = Invoke-JIMApi -Endpoint $endpoint -Method 'DELETE'
 
                 Write-Verbose "Reverted service setting: $Key"
 

@@ -163,7 +163,7 @@ public class Scheduler : BackgroundService
                 if (nextRunTime.HasValue)
                 {
                     schedule.NextRunTime = nextRunTime.Value;
-                    await jim.Repository.Scheduling.UpdateScheduleAsync(schedule);
+                    await jim.Scheduler.UpdateScheduleRunTimesAsync(schedule);
                 }
             }
             catch (Exception ex)
@@ -195,7 +195,7 @@ public class Scheduler : BackgroundService
                         continue;
 
                     // Check if there are any active (Queued/Processing) tasks for this execution
-                    var allTasks = await jim.Repository.Tasking.GetWorkerTasksByScheduleExecutionAsync(execution.Id);
+                    var allTasks = await jim.Tasking.GetWorkerTasksByScheduleExecutionAsync(execution.Id);
                     var hasActiveTasks = allTasks.Any(t =>
                         t.Status == WorkerTaskStatus.Queued || t.Status == WorkerTaskStatus.Processing);
 

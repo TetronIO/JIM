@@ -26,6 +26,10 @@ function Add-JIMCertificate {
     .PARAMETER Notes
         Optional notes about the certificate.
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the certificate's
+        configuration change history.
+
     .PARAMETER PassThru
         If specified, returns the created certificate object.
 
@@ -72,6 +76,9 @@ function Add-JIMCertificate {
 
         [string]$Notes,
 
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -95,6 +102,7 @@ function Add-JIMCertificate {
                             filePath = $Path
                         }
                         if ($Notes) { $body.notes = $Notes }
+                        if ($ChangeReason) { $body.changeReason = $ChangeReason }
 
                         $response = Invoke-JIMApi -Endpoint "/api/v1/certificates/file" -Method 'POST' -Body $body
                     }
@@ -106,6 +114,7 @@ function Add-JIMCertificate {
                             certificateDataBase64 = $base64
                         }
                         if ($Notes) { $body.notes = $Notes }
+                        if ($ChangeReason) { $body.changeReason = $ChangeReason }
 
                         $response = Invoke-JIMApi -Endpoint "/api/v1/certificates/upload" -Method 'POST' -Body $body
                     }
@@ -116,6 +125,7 @@ function Add-JIMCertificate {
                             certificateDataBase64 = $CertificateBase64
                         }
                         if ($Notes) { $body.notes = $Notes }
+                        if ($ChangeReason) { $body.changeReason = $ChangeReason }
 
                         $response = Invoke-JIMApi -Endpoint "/api/v1/certificates/upload" -Method 'POST' -Body $body
                     }

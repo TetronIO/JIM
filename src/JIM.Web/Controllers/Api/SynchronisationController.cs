@@ -634,7 +634,7 @@ public class SynchronisationController(
     {
         _logger.LogDebug("Getting Pending Exports count for Connected System {ConnectedSystemId} (ChangeType: {ChangeType}, Status: {Status})",
             connectedSystemId, changeType, status);
-        var count = await _application.Repository.ConnectedSystems.GetPendingExportsFilteredCountAsync(
+        var count = await _application.ConnectedSystems.GetPendingExportsFilteredCountAsync(
             connectedSystemId, changeType, status);
         return Ok(count);
     }
@@ -2813,7 +2813,7 @@ public class SynchronisationController(
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
+        var rule = await _application.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
             return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
@@ -2970,7 +2970,7 @@ public class SynchronisationController(
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
+        var rule = await _application.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
             return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
@@ -3099,7 +3099,7 @@ public class SynchronisationController(
         if (connectedSystem == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
-        var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
+        var rule = await _application.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
             return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
@@ -3310,7 +3310,7 @@ public class SynchronisationController(
         if (syncRule == null)
             return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
-        var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
+        var rule = await _application.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
             return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 
@@ -3426,7 +3426,7 @@ public class SynchronisationController(
         if (syncRule == null)
             return NotFound(ApiErrorResponse.NotFound($"Synchronisation Rule with ID {syncRuleId} not found."));
 
-        var rule = await _application.Repository.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
+        var rule = await _application.ConnectedSystems.GetObjectMatchingRuleAsync(ruleId);
         if (rule == null)
             return NotFound(ApiErrorResponse.NotFound($"Object Matching Rule with ID {ruleId} not found."));
 

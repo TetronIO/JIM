@@ -102,16 +102,33 @@ public class SystemServer
 
         var result = await Application.Repository.System.ResetSystemAsync(includeAdministrators);
 
-        // Restore the built-in example data template. The wipe's TRUNCATE ... CASCADE removes its attributes as
-        // collateral (they share a foreign-key graph with the Connected System schema), even though built-in data is
-        // meant to survive a reset. Recreating it here keeps the out-of-box schema intact without a restart.
-        await Application.Seeding.EnsureBuiltInExampleDataTemplateAsync();
+        try
+        {
+            // Restore the built-in example data template. The wipe's TRUNCATE ... CASCADE removes its attributes as
+            // collateral (they share a foreign-key graph with the Connected System schema), even though built-in data is
+            // meant to survive a reset. Recreating it here keeps the out-of-box schema intact without a restart.
+            await Application.Seeding.EnsureBuiltInExampleDataTemplateAsync();
 
-        // Restore the built-in Temporal Scope Reconciliation schedule. The wipe truncates the Schedules
-        // table, and built-in data is meant to survive a reset; without an immediate re-seed the schedule
-        // would only reappear on the next worker restart, leaving date-based scope reconciliation silently
-        // inoperative until then.
-        await Application.Seeding.SeedBuiltInSchedulesAsync();
+            // Restore the built-in Temporal Scope Reconciliation schedule. The wipe truncates the Schedules
+            // table, and built-in data is meant to survive a reset; without an immediate re-seed the schedule
+            // would only reappear on the next worker restart, leaving date-based scope reconciliation silently
+            // inoperative until then.
+            await Application.Seeding.SeedBuiltInSchedulesAsync();
+
+            // The reseed lazily creates the "System Initialisation" parent Activity that groups seeded objects.
+            // Complete it here, exactly as JimApplication.InitialiseDatabaseAsync does after startup seeding;
+            // leaving it InProgress would misreport the reseed as unfinished and block any subsequent reset via
+            // the in-progress guard above.
+            await Application.Seeding.CompleteSeedingActivityAsync();
+        }
+        catch (Exception ex)
+        {
+            // Catch-all is deliberate: this is an Activity execution boundary (the seeding parent Activity, if
+            // one was created), and any reseed failure must be recorded on it rather than escape silently, then
+            // rethrown so the reset still fails loudly.
+            await Application.Seeding.FailSeedingActivityAsync(ex);
+            throw;
+        }
 
         // Record the reset as an Activity AFTER the wipe so it survives it. This is the auditable
         // record of who initiated the reset; it is never optional.

@@ -132,10 +132,16 @@ if ($stats.ErrorCount -gt 0) {
 
 Retrieves child activities spawned by a parent activity. For example, a schedule execution activity creates child activities for each individual Run Profile step within that schedule. This cmdlet is useful for drilling into multi-step operations to inspect each step independently.
 
+The underlying API returns a paginated response envelope, but this cmdlet unwraps it internally and still emits one object per child activity to the pipeline, so existing scripts that pipe its output are unaffected by the paginated response shape.
+
 ### Syntax
 
 ```powershell
-Get-JIMActivityChildren -Id <guid>
+# Get a page of child activities (default)
+Get-JIMActivityChildren -Id <guid> [-Page <int>] [-PageSize <int>]
+
+# Get every child activity, paginating automatically
+Get-JIMActivityChildren -Id <guid> -All [-PageSize <int>]
 ```
 
 ### Parameters
@@ -143,6 +149,9 @@ Get-JIMActivityChildren -Id <guid>
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `guid` | Yes | | ID of the parent activity whose children to retrieve. Accepts pipeline input by property name. |
+| `Page` | `int` | No (Page set) | `1` | Page number for the child activity list. Cannot be used with `-All`. |
+| `PageSize` | `int` | No | `50` | Number of child activities per page. Maximum is 100. |
+| `All` | `switch` | Yes (All set) | | Automatically paginates through all child activities and returns every one. Cannot be used with `-Page`. |
 
 ### Output
 
@@ -150,8 +159,12 @@ Returns one or more `PSCustomObject` instances representing child activities, ea
 
 ### Examples
 
-```powershell title="Get child activities by parent ID"
+```powershell title="Get the first page of child activities by parent ID"
 Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+
+```powershell title="Get every child activity, paginating automatically"
+Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -All
 ```
 
 ```powershell title="Pipeline from Get-JIMActivity"
@@ -162,17 +175,17 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" |
 ```powershell title="Inspect each step of a schedule execution"
 Get-JIMActivity -Search "Nightly Sync Schedule" |
     Select-Object -First 1 |
-    Get-JIMActivityChildren |
+    Get-JIMActivityChildren -All |
     Format-Table Name, Status, StartTime, EndTime
 ```
 
 ```powershell title="Find failed child activities"
-Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" |
+Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -All |
     Where-Object { $_.Status -eq "Failed" }
 ```
 
 ```powershell title="Get statistics for each child activity"
-Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" |
+Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -All |
     ForEach-Object { Get-JIMActivityStats -Id $_.Id }
 ```
 

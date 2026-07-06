@@ -37,6 +37,13 @@ public class ConfigurationSnapshot
     public Guid? ObjectGuidId { get; set; }
 
     /// <summary>
+    /// The string database identifier of the configuration object, for string-keyed objects (e.g. a Service Setting,
+    /// keyed by its setting key). Null for integer- and Guid-keyed objects. Kept as a separate nullable field for the
+    /// same backwards-compatibility reason as <see cref="ObjectGuidId"/>.
+    /// </summary>
+    public string? ObjectKey { get; set; }
+
+    /// <summary>
     /// The display name of the configuration object at capture time.
     /// </summary>
     public string? ObjectName { get; set; }

@@ -15,6 +15,10 @@ function Remove-JIMCertificate {
     .PARAMETER InputObject
         Certificate object to delete (from pipeline).
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the certificate's
+        configuration change history.
+
     .PARAMETER Force
         Suppresses confirmation prompts.
 
@@ -53,6 +57,9 @@ function Remove-JIMCertificate {
         [Parameter(Mandatory, ParameterSetName = 'ByInputObject', ValueFromPipeline)]
         [PSCustomObject]$InputObject,
 
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$Force,
 
         [switch]$PassThru
@@ -81,7 +88,11 @@ function Remove-JIMCertificate {
             Write-Verbose "Deleting certificate: $certId"
 
             try {
-                Invoke-JIMApi -Endpoint "/api/v1/certificates/$certId" -Method 'DELETE'
+                $endpoint = "/api/v1/certificates/$certId"
+                if ($ChangeReason) {
+                    $endpoint += "?changeReason=$([uri]::EscapeDataString($ChangeReason))"
+                }
+                Invoke-JIMApi -Endpoint $endpoint -Method 'DELETE'
 
                 Write-Verbose "Deleted certificate: $certId"
 

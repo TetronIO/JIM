@@ -16,6 +16,10 @@ function Remove-JIMApiKey {
     .PARAMETER InputObject
         API Key object to delete (from pipeline).
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the API Key's
+        configuration change history.
+
     .PARAMETER Force
         Suppresses confirmation prompts.
 
@@ -54,6 +58,9 @@ function Remove-JIMApiKey {
         [Parameter(Mandatory, ParameterSetName = 'ByInputObject', ValueFromPipeline)]
         [PSCustomObject]$InputObject,
 
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$Force,
 
         [switch]$PassThru
@@ -84,7 +91,11 @@ function Remove-JIMApiKey {
             Write-Verbose "Deleting API Key: $keyId"
 
             try {
-                Invoke-JIMApi -Endpoint "/api/v1/apikeys/$keyId" -Method 'DELETE'
+                $endpoint = "/api/v1/apikeys/$keyId"
+                if ($ChangeReason) {
+                    $endpoint += "?changeReason=$([uri]::EscapeDataString($ChangeReason))"
+                }
+                Invoke-JIMApi -Endpoint $endpoint -Method 'DELETE'
 
                 Write-Verbose "Deleted API Key: $keyId"
 

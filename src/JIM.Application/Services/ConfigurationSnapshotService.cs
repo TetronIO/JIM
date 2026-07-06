@@ -7,8 +7,10 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Scheduling;
+using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Utilities;
 
@@ -31,6 +33,24 @@ public class ConfigurationSnapshotService
 
     /// <summary>The object-type discriminator stored on a Schedule snapshot.</summary>
     public const string ScheduleObjectType = "Schedule";
+
+    /// <summary>The object-type discriminator stored on a Service Setting snapshot.</summary>
+    public const string ServiceSettingObjectType = "ServiceSetting";
+
+    /// <summary>The object-type discriminator stored on a Metaverse Object Type snapshot.</summary>
+    public const string MetaverseObjectTypeObjectType = "MetaverseObjectType";
+
+    /// <summary>The object-type discriminator stored on a Metaverse Attribute snapshot.</summary>
+    public const string MetaverseAttributeObjectType = "MetaverseAttribute";
+
+    /// <summary>The object-type discriminator stored on a Trusted Certificate snapshot.</summary>
+    public const string TrustedCertificateObjectType = "TrustedCertificate";
+
+    /// <summary>The object-type discriminator stored on an API Key snapshot.</summary>
+    public const string ApiKeyObjectType = "ApiKey";
+
+    /// <summary>The object-type discriminator stored on a Role snapshot.</summary>
+    public const string RoleObjectType = "Role";
 
     private JimApplication Application { get; }
 
@@ -462,6 +482,276 @@ public class ConfigurationSnapshotService
             items.Add(ConfigurationSnapshotNode.ObjectNode("step", children, label, step.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("steps", items, "Steps");
+    }
+
+    // -- Service Setting -----------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a scoped snapshot of a Service Setting: its identity and typing metadata, the current (override) value,
+    /// the default value, and the override-vs-default flag, so a revert diffs as the override being removed. For
+    /// <see cref="ServiceSettingValueType.StringEncrypted"/> settings the value and default are never stored in any
+    /// recoverable form; each is represented by a keyed hash so a rotation is detectable without disclosure.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(ServiceSetting setting, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(setting);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "key", setting.Key, "Key");
+        Add(children, "displayName", setting.DisplayName, "Name");
+        AddEnum(children, "category", setting.Category, "Category");
+        AddEnum(children, "valueType", setting.ValueType, "Value type");
+
+        if (setting.ValueType == ServiceSettingValueType.StringEncrypted)
+        {
+            // An unset secret is not configuration; skip it rather than record an empty hash, matching the
+            // Connected System setting-value treatment.
+            if (!string.IsNullOrEmpty(setting.Value))
+                children.Add(ConfigurationSnapshotNode.Secret("value", ComputeSecretHash(setting.Value, hashKey), "Value"));
+            if (!string.IsNullOrEmpty(setting.DefaultValue))
+                children.Add(ConfigurationSnapshotNode.Secret("defaultValue", ComputeSecretHash(setting.DefaultValue, hashKey), "Default value"));
+        }
+        else
+        {
+            Add(children, "value", setting.Value, "Value");
+            Add(children, "defaultValue", setting.DefaultValue, "Default value");
+        }
+
+        Add(children, "overridden", Render(setting.IsOverridden), "Overridden");
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = ServiceSettingObjectType,
+            ObjectKey = setting.Key,
+            ObjectName = setting.DisplayName,
+            Root = ConfigurationSnapshotNode.ObjectNode("serviceSetting", children, "Service Setting")
+        };
+    }
+
+    // -- Metaverse Object Type -----------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a scoped snapshot of a Metaverse Object Type: its identity, its deletion-rule configuration (rule, grace
+    /// period and trigger Connected Systems) and its attribute associations. Metaverse Object Types carry no secrets;
+    /// <paramref name="hashKey"/> keeps the signature uniform with the other builders. Load the object type with its
+    /// attributes so the association list reflects persisted truth.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(MetaverseObjectType objectType, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(objectType);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", objectType.Name, "Name");
+        Add(children, "pluralName", objectType.PluralName, "Plural name");
+        Add(children, "builtIn", Render(objectType.BuiltIn), "Built-in");
+        Add(children, "icon", objectType.Icon, "Icon");
+        AddEnum(children, "deletionRule", objectType.DeletionRule, "Deletion rule");
+        Add(children, "deletionGracePeriod", Render(objectType.DeletionGracePeriod), "Deletion grace period");
+        children.Add(BuildDeletionTriggerSystems(objectType.DeletionTriggerConnectedSystemIds));
+        children.Add(BuildAttributeAssociations(objectType.Attributes));
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = MetaverseObjectTypeObjectType,
+            ObjectId = objectType.Id,
+            ObjectName = objectType.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("metaverseObjectType", children, "Metaverse Object Type")
+        };
+    }
+
+    private static ConfigurationSnapshotNode BuildDeletionTriggerSystems(List<int>? connectedSystemIds)
+    {
+        // Only the ids are held on the entity; they are recorded as the stable diffable value (matching AddReference's
+        // id-first treatment) so a re-point is always detected.
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var id in (connectedSystemIds ?? []).OrderBy(id => id))
+        {
+            var node = ConfigurationSnapshotNode.Scalar("connectedSystemId", Render(id), "Connected System");
+            node.ItemId = id;
+            items.Add(node);
+        }
+        return ConfigurationSnapshotNode.CollectionNode("deletionTriggerConnectedSystemIds", items, "Deletion trigger Connected Systems");
+    }
+
+    private static ConfigurationSnapshotNode BuildAttributeAssociations(List<MetaverseAttribute>? attributes)
+    {
+        // Associations are captured as references (stable id value, name as the display form): binding or unbinding an
+        // attribute is this object type's configuration change; the attribute's own definition has its own history.
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var attribute in (attributes ?? []).OrderBy(a => a.Id))
+        {
+            var node = ConfigurationSnapshotNode.Scalar("attributeId", Render(attribute.Id), "Attribute", attribute.Name);
+            node.ItemId = attribute.Id;
+            items.Add(node);
+        }
+        return ConfigurationSnapshotNode.CollectionNode("attributes", items, "Attributes");
+    }
+
+    // -- Metaverse Attribute -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a scoped snapshot of a Metaverse Attribute: its definition (data type, plurality, rendering hint) and its
+    /// Metaverse Object Type associations. Metaverse Attributes carry no secrets; <paramref name="hashKey"/> keeps the
+    /// signature uniform with the other builders. Load the attribute with its object types so the association list
+    /// reflects persisted truth.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(MetaverseAttribute attribute, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(attribute);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", attribute.Name, "Name");
+        AddEnum(children, "type", attribute.Type, "Type");
+        AddEnum(children, "attributePlurality", attribute.AttributePlurality, "Plurality");
+        Add(children, "builtIn", Render(attribute.BuiltIn), "Built-in");
+        AddEnum(children, "renderingHint", attribute.RenderingHint, "Rendering hint");
+        children.Add(BuildObjectTypeAssociations(attribute.MetaverseObjectTypes));
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = MetaverseAttributeObjectType,
+            ObjectId = attribute.Id,
+            ObjectName = attribute.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("metaverseAttribute", children, "Metaverse Attribute")
+        };
+    }
+
+    private static ConfigurationSnapshotNode BuildObjectTypeAssociations(List<MetaverseObjectType>? objectTypes)
+    {
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var objectType in (objectTypes ?? []).OrderBy(ot => ot.Id))
+        {
+            var node = ConfigurationSnapshotNode.Scalar("metaverseObjectTypeId", Render(objectType.Id), "Metaverse Object Type", objectType.Name);
+            node.ItemId = objectType.Id;
+            items.Add(node);
+        }
+        return ConfigurationSnapshotNode.CollectionNode("metaverseObjectTypes", items, "Metaverse Object Types");
+    }
+
+    // -- Trusted Certificate -------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a metadata-only snapshot of a Trusted Certificate (a Guid-keyed configuration object): its name, the
+    /// public X.509 identity fields (thumbprint, subject, issuer, serial number, validity window), its source, enabled
+    /// state and notes. The raw certificate material (DER/PEM bytes) is never captured in any form; the thumbprint
+    /// already identifies the exact certificate, so a swap is always detectable from metadata alone. Trusted
+    /// Certificates carry no secrets; <paramref name="hashKey"/> keeps the signature uniform with the other builders.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(TrustedCertificate certificate, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", certificate.Name, "Name");
+        Add(children, "thumbprint", certificate.Thumbprint, "Thumbprint");
+        Add(children, "subject", certificate.Subject, "Subject");
+        Add(children, "issuer", certificate.Issuer, "Issuer");
+        Add(children, "serialNumber", certificate.SerialNumber, "Serial number");
+        Add(children, "validFrom", Render((DateTime?)certificate.ValidFrom), "Valid from");
+        Add(children, "validTo", Render((DateTime?)certificate.ValidTo), "Valid to");
+        AddEnum(children, "sourceType", certificate.SourceType, "Source");
+        Add(children, "filePath", certificate.FilePath, "File path");
+        Add(children, "enabled", Render(certificate.IsEnabled), "Enabled");
+        Add(children, "notes", certificate.Notes, "Notes");
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = TrustedCertificateObjectType,
+            ObjectGuidId = certificate.Id,
+            ObjectName = certificate.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("trustedCertificate", children, "Trusted Certificate")
+        };
+    }
+
+    // -- API Key ---------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a metadata-only snapshot of an API Key (a Guid-keyed configuration object): its name, description, key
+    /// prefix, expiry, enabled state, whether it is an infrastructure key, and its Role assignments. The key's secret
+    /// material (<see cref="ApiKey.KeyHash"/>) is never captured in any form, not even a keyed hash: unlike a
+    /// Connected System credential there is no legitimate "did it change" question for it, since a key is deleted and
+    /// replaced rather than edited in place, so recording even a hash would serve no purpose beyond risk.
+    /// <see cref="ApiKey.LastUsedAt"/> and <see cref="ApiKey.LastUsedFromIp"/> are operational state, not
+    /// configuration, and are excluded so authentication traffic does not churn the semantic dedupe. API Keys carry
+    /// no other secrets; <paramref name="hashKey"/> keeps the signature uniform with the other builders.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(ApiKey apiKey, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(apiKey);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", apiKey.Name, "Name");
+        Add(children, "description", apiKey.Description, "Description");
+        Add(children, "keyPrefix", apiKey.KeyPrefix, "Key prefix");
+        Add(children, "expiresAt", Render(apiKey.ExpiresAt), "Expires");
+        Add(children, "enabled", Render(apiKey.IsEnabled), "Enabled");
+        Add(children, "infrastructureKey", Render(apiKey.IsInfrastructureKey), "Infrastructure key");
+        children.Add(BuildRoleAssociations(apiKey.Roles));
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = ApiKeyObjectType,
+            ObjectGuidId = apiKey.Id,
+            ObjectName = apiKey.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("apiKey", children, "API Key")
+        };
+    }
+
+    private static ConfigurationSnapshotNode BuildRoleAssociations(List<Role>? roles)
+    {
+        // Associations are captured as references (stable id value, name as the display form), mirroring
+        // BuildAttributeAssociations: binding or unbinding a Role to this key is this key's configuration change;
+        // renaming the Role itself is that Role's own configuration history, so it must not register as a change
+        // here.
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var role in (roles ?? []).OrderBy(r => r.Id))
+        {
+            var node = ConfigurationSnapshotNode.Scalar("roleId", Render(role.Id), "Role", role.Name);
+            node.ItemId = role.Id;
+            items.Add(node);
+        }
+        return ConfigurationSnapshotNode.CollectionNode("roles", items, "Roles");
+    }
+
+    // -- Role ------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a scoped snapshot of a Role: its identity, built-in flag, and static membership. Roles carry no secrets;
+    /// <paramref name="hashKey"/> keeps the signature uniform with the other builders. Load the Role with its static
+    /// members (see <c>ISecurityRepository.GetRoleByIdAsync</c>) so the membership list reflects persisted truth.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(Role role, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(role);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", role.Name, "Name");
+        Add(children, "builtIn", Render(role.BuiltIn), "Built-in");
+        children.Add(BuildRoleMembers(role.StaticMembers));
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = RoleObjectType,
+            ObjectId = role.Id,
+            ObjectName = role.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("role", children, "Role")
+        };
+    }
+
+    private static ConfigurationSnapshotNode BuildRoleMembers(List<MetaverseObject>? members)
+    {
+        // A Role's static members are Guid-keyed Metaverse Objects, so each item uses ItemGuidId (not ItemId) as its
+        // stable identity, matching the Schedule Step precedent for Guid-keyed collection items. The member's display
+        // name is recorded as the human-friendly display value; renaming the member itself is that Metaverse Object's
+        // own change, not this Role's, so only membership (who is present) is captured here.
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var member in (members ?? []).OrderBy(m => m.Id))
+        {
+            var node = ConfigurationSnapshotNode.Scalar("memberId", member.Id.ToString("D"), "Member", member.DisplayName);
+            node.ItemGuidId = member.Id;
+            items.Add(node);
+        }
+        return ConfigurationSnapshotNode.CollectionNode("members", items, "Members");
     }
 
     // -- value rendering -----------------------------------------------------------------------------------------------

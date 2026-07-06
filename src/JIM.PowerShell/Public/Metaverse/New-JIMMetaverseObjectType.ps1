@@ -38,6 +38,10 @@ function New-JIMMetaverseObjectType {
         Required when DeletionRule is WhenAuthoritativeSourceDisconnected: the connected
         system IDs whose disconnect should trigger deletion.
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the object's
+        configuration change history.
+
     .OUTPUTS
         PSCustomObject representing the created Object Type (id, name, pluralName, etc.).
 
@@ -89,6 +93,10 @@ function New-JIMMetaverseObjectType {
         [TimeSpan]$DeletionGracePeriod,
 
         [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
+        [Parameter()]
         [int[]]$DeletionTriggerConnectedSystemIds
     )
 
@@ -132,6 +140,10 @@ function New-JIMMetaverseObjectType {
 
         if ($DeletionTriggerConnectedSystemIds) {
             $body.deletionTriggerConnectedSystemIds = $DeletionTriggerConnectedSystemIds
+        }
+
+        if ($ChangeReason) {
+            $body.changeReason = $ChangeReason
         }
 
         if ($PSCmdlet.ShouldProcess($Name, "Create Metaverse Object Type")) {

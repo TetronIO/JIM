@@ -135,7 +135,7 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
         }
 
-        var count = await _application.Repository.ChangeHistory.GetCsoChangeCountAsync(connectedSystemId);
+        var count = await _application.ChangeHistory.GetCsoChangeCountAsync(connectedSystemId);
 
         var response = new HistoryCountResponse
         {
@@ -180,7 +180,7 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
         pageSize = Math.Clamp(pageSize, 1, 1000);
         page = Math.Max(page, 1);
 
-        var (items, totalCount) = await _application.Repository.ConnectedSystems.GetDeletedCsoChangesAsync(
+        var (items, totalCount) = await _application.ConnectedSystems.GetDeletedCsoChangesAsync(
             connectedSystemId: connectedSystemId,
             fromDate: fromDate,
             toDate: toDate,
@@ -247,7 +247,7 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
         pageSize = Math.Clamp(pageSize, 1, 1000);
         page = Math.Max(page, 1);
 
-        var (items, totalCount) = await _application.Repository.Metaverse.GetDeletedMvoChangesAsync(
+        var (items, totalCount) = await _application.Metaverse.GetDeletedMvoChangesAsync(
             objectTypeId: objectTypeId,
             fromDate: fromDate,
             toDate: toDate,

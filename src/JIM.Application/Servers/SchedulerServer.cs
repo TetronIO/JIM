@@ -59,7 +59,7 @@ public class SchedulerServer
         return await Application.Repository.Scheduling.GetSchedulesAsync(page, pageSize, searchQuery, sortBy, sortDescending);
     }
 
-    public async Task CreateScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
+    public async Task CreateScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null, Guid? parentActivityId = null)
     {
         // Every configuration change is tracked with an immutable Activity, the same as Connected Systems and
         // Synchronisation Rules. Internal run-time bookkeeping (NextRunTime / LastRunTime) bypasses this method
@@ -68,7 +68,8 @@ public class SchedulerServer
         {
             TargetName = schedule.Name,
             TargetType = ActivityTargetType.Schedule,
-            TargetOperationType = ActivityTargetOperationType.Create
+            TargetOperationType = ActivityTargetOperationType.Create,
+            ParentActivityId = parentActivityId
         };
         await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         await Application.Repository.Scheduling.CreateScheduleAsync(schedule);
@@ -111,51 +112,22 @@ public class SchedulerServer
     }
 
     /// <summary>
-    /// Captures a redacted, versioned configuration snapshot of a Schedule onto its audit Activity, mirroring
-    /// ConnectedSystemServer.CaptureConfigurationChangeAsync. The schedule is reloaded with its steps so the
-    /// snapshot reflects persisted truth rather than the caller's partial in-memory graph; call it after the
-    /// change has been persisted and, at a call site that also reconciles steps, after the step changes too.
-    /// Best-effort: a capture failure is logged but never fails the configuration operation that succeeded.
+    /// Captures a redacted, versioned configuration snapshot of a Schedule onto its audit Activity via the shared
+    /// ConfigurationChangeCaptureService (which owns the toggle, dedupe-guard, versioning and best-effort
+    /// behaviours). The schedule is reloaded with its steps so the snapshot reflects persisted truth rather than
+    /// the caller's partial in-memory graph; call it after the change has been persisted and, at a call site that
+    /// also reconciles steps, after the step changes too.
     /// </summary>
     private async Task CaptureConfigurationChangeAsync(Activity activity, Guid scheduleId, string? changeReason)
     {
-        // The reason is recorded independently of the snapshot toggle and has no external dependencies, so it is
-        // set outside the best-effort block below.
-        if (!string.IsNullOrWhiteSpace(changeReason))
-            activity.ChangeReason = changeReason.Trim();
-
-        try
-        {
-            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
-                return;
-
-            var schedule = await Application.Repository.Scheduling.GetScheduleWithStepsAsync(scheduleId);
-            if (schedule == null)
-                return;
-
-            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
-            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(schedule, hashKey);
-            activity.ScheduleId ??= schedule.Id;
-
-            // Idempotent capture guard, compared semantically: see ConnectedSystemServer.CaptureConfigurationChangeAsync.
-            // A no-change save must not consume a version or drown real changes in noise.
-            var latest = ConfigurationSnapshotService.Deserialise(
-                await Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.Schedule, schedule.Id));
-            if (latest != null && !Application.ConfigurationDiffs.Diff(latest, snapshot).HasChanges)
+        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+            ActivityTargetType.Schedule, scheduleId,
+            async hashKey =>
             {
-                Log.Debug("CaptureConfigurationChangeAsync: configuration of Schedule {ScheduleId} is unchanged from its latest snapshot; no new version recorded.", schedule.Id);
-                return;
-            }
-
-            activity.ConfigurationChangeVersion = await Application.Activities.GetNextConfigurationChangeVersionAsync(ActivityTargetType.Schedule, schedule.Id);
-            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
-        {
-            // Best-effort secondary metadata recorded after the entity has already been persisted; it must never
-            // fail or roll back the configuration operation that succeeded. The miss is logged, never silent.
-            Log.Warning(ex, "CaptureConfigurationChangeAsync: failed to capture configuration snapshot for Schedule {ScheduleId}; the change was saved but its history snapshot was not recorded.", scheduleId);
-        }
+                var schedule = await Application.Repository.Scheduling.GetScheduleWithStepsAsync(scheduleId);
+                return schedule == null ? null : Application.ConfigurationSnapshots.CreateSnapshot(schedule, hashKey);
+            },
+            $"Schedule {scheduleId}");
     }
 
     /// <summary>
@@ -166,26 +138,14 @@ public class SchedulerServer
     /// </summary>
     private async Task CaptureConfigurationDeletionAsync(Activity activity, Schedule schedule, string? changeReason)
     {
-        // See CaptureConfigurationChangeAsync: the reason is recorded independently of the snapshot toggle.
-        if (!string.IsNullOrWhiteSpace(changeReason))
-            activity.ChangeReason = changeReason.Trim();
-
-        try
-        {
-            if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
-                return;
-
-            // Reload with steps for a complete tombstone; fall back to the caller's entity if already gone.
-            var persisted = await Application.Repository.Scheduling.GetScheduleWithStepsAsync(schedule.Id) ?? schedule;
-            var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
-            var snapshot = Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
-            activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
-        {
-            // Best-effort: a capture failure must never fail the deletion that is about to proceed; the miss is logged.
-            Log.Warning(ex, "CaptureConfigurationDeletionAsync: failed to capture deletion snapshot for Schedule {ScheduleId}; the deletion proceeded but its history snapshot was not recorded.", schedule.Id);
-        }
+        await Application.ConfigurationChangeCapture.CaptureDeletionAsync(activity, changeReason,
+            async hashKey =>
+            {
+                // Reload with steps for a complete tombstone; fall back to the caller's entity if already gone.
+                var persisted = await Application.Repository.Scheduling.GetScheduleWithStepsAsync(schedule.Id) ?? schedule;
+                return Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
+            },
+            $"Schedule {schedule.Id}");
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -202,18 +162,34 @@ public class SchedulerServer
         return await Application.Repository.Scheduling.GetScheduleStepAsync(stepId);
     }
 
+    /// <summary>
+    /// Persists a new Schedule step. Deliberately records no Activity or configuration snapshot itself: step
+    /// mutations only occur as part of a whole-Schedule save, and every caller (the Schedule editor dialog and the
+    /// REST update endpoint) reconciles steps first and then calls
+    /// <see cref="UpdateScheduleAsync(Schedule,ActivityInitiatorType,Guid?,string?,string?)"/>, whose capture
+    /// records the step changes in exactly one new version. Any new caller MUST follow the same pattern (reconcile,
+    /// then audited whole-Schedule update), or the Schedule's change history will silently drift from reality.
+    /// </summary>
     public async Task CreateScheduleStepAsync(ScheduleStep step)
     {
         await GuardStepScheduleNotBuiltInAsync(step, "added to");
         await Application.Repository.Scheduling.CreateScheduleStepAsync(step);
     }
 
+    /// <summary>
+    /// Persists a change to a Schedule step. See <see cref="CreateScheduleStepAsync"/> for the caller contract:
+    /// step mutations must be followed by an audited whole-Schedule update, which captures them.
+    /// </summary>
     public async Task UpdateScheduleStepAsync(ScheduleStep step)
     {
         await GuardStepScheduleNotBuiltInAsync(step, "changed on");
         await Application.Repository.Scheduling.UpdateScheduleStepAsync(step);
     }
 
+    /// <summary>
+    /// Deletes a Schedule step. See <see cref="CreateScheduleStepAsync"/> for the caller contract:
+    /// step mutations must be followed by an audited whole-Schedule update, which captures them.
+    /// </summary>
     public async Task DeleteScheduleStepAsync(ScheduleStep step)
     {
         await GuardStepScheduleNotBuiltInAsync(step, "removed from");
@@ -243,6 +219,43 @@ public class SchedulerServer
     public async Task<List<Schedule>> GetDueSchedulesAsync()
     {
         return await Application.Repository.Scheduling.GetDueSchedulesAsync(DateTime.UtcNow);
+    }
+
+    /// <summary>
+    /// Gets a paginated list of Schedule Executions, optionally filtered by schedule.
+    /// </summary>
+    /// <param name="scheduleId">Optional filter by schedule ID.</param>
+    /// <param name="page">The page number (1-based).</param>
+    /// <param name="pageSize">The number of items per page.</param>
+    /// <param name="sortBy">Optional field to sort by (queuedAt, startedAt, completedAt, status).</param>
+    /// <param name="sortDescending">Whether to sort in descending order (default: true for newest first).</param>
+    /// <returns>A paged result set of Schedule Executions.</returns>
+    public async Task<PagedResultSet<ScheduleExecution>> GetScheduleExecutionsAsync(
+        Guid? scheduleId,
+        int page,
+        int pageSize,
+        string? sortBy = null,
+        bool sortDescending = true)
+    {
+        return await Application.Repository.Scheduling.GetScheduleExecutionsAsync(scheduleId, page, pageSize, sortBy, sortDescending);
+    }
+
+    /// <summary>
+    /// Gets a Schedule Execution by ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the execution.</param>
+    public async Task<ScheduleExecution?> GetScheduleExecutionAsync(Guid id)
+    {
+        return await Application.Repository.Scheduling.GetScheduleExecutionAsync(id);
+    }
+
+    /// <summary>
+    /// Gets a Schedule Execution by ID, with its parent Schedule included.
+    /// </summary>
+    /// <param name="id">The unique identifier of the execution.</param>
+    public async Task<ScheduleExecution?> GetScheduleExecutionWithScheduleAsync(Guid id)
+    {
+        return await Application.Repository.Scheduling.GetScheduleExecutionWithScheduleAsync(id);
     }
 
     /// <summary>
@@ -581,6 +594,18 @@ public class SchedulerServer
                 schedule.CronExpression, schedule.Id);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Persists run-time bookkeeping (NextRunTime/LastRunTime) only. Deliberately records no Activity or
+    /// configuration change: these ticks are operational state produced by the scheduler loop, not a configuration
+    /// change made by a principal, mirroring the rationale documented on <see cref="CreateScheduleAsync"/>. Callers
+    /// must not use this for configuration changes; use
+    /// <see cref="UpdateScheduleAsync(Schedule,ActivityInitiatorType,Guid?,string?,string?)"/> for that.
+    /// </summary>
+    public async Task UpdateScheduleRunTimesAsync(Schedule schedule)
+    {
+        await Application.Repository.Scheduling.UpdateScheduleAsync(schedule);
     }
 
     // -----------------------------------------------------------------------------------------------------------------

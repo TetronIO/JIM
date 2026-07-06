@@ -64,7 +64,7 @@ public class MetaverseServer
     /// </summary>
     /// <param name="objectType">The object type to create. Name and PluralName must be unique.</param>
     /// <param name="initiatedBy">The Metaverse Object that initiated the creation (may be null for system-initiated).</param>
-    public async Task CreateMetaverseObjectTypeAsync(MetaverseObjectType objectType, MetaverseObject? initiatedBy)
+    public async Task CreateMetaverseObjectTypeAsync(MetaverseObjectType objectType, MetaverseObject? initiatedBy, string? changeReason = null)
     {
         if (objectType == null)
             throw new ArgumentNullException(nameof(objectType));
@@ -82,6 +82,7 @@ public class MetaverseServer
         AuditHelper.SetCreated(objectType, initiatedBy);
         await Application.Repository.Metaverse.CreateMetaverseObjectTypeAsync(objectType);
 
+        await CaptureObjectTypeConfigurationChangeAsync(activity, objectType.Id, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -90,7 +91,7 @@ public class MetaverseServer
     /// </summary>
     /// <param name="objectType">The object type to create. Name and PluralName must be unique.</param>
     /// <param name="initiatedByApiKey">The API key that initiated the creation.</param>
-    public async Task CreateMetaverseObjectTypeAsync(MetaverseObjectType objectType, ApiKey initiatedByApiKey)
+    public async Task CreateMetaverseObjectTypeAsync(MetaverseObjectType objectType, ApiKey initiatedByApiKey, string? changeReason = null)
     {
         if (objectType == null)
             throw new ArgumentNullException(nameof(objectType));
@@ -108,20 +109,64 @@ public class MetaverseServer
         AuditHelper.SetCreated(objectType, initiatedByApiKey);
         await Application.Repository.Metaverse.CreateMetaverseObjectTypeAsync(objectType);
 
+        await CaptureObjectTypeConfigurationChangeAsync(activity, objectType.Id, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
     /// <summary>
-    /// Updates an existing Metaverse Object Type.
+    /// Updates an existing Metaverse Object Type, audited and tracked as an Activity.
     /// </summary>
     /// <param name="objectType">The object type to update.</param>
-    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType)
+    /// <param name="initiatedBy">The Metaverse Object that initiated the update (may be null for system-initiated).</param>
+    /// <param name="changeReason">Optional reason for the change, recorded on the audit Activity.</param>
+    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType, MetaverseObject? initiatedBy, string? changeReason = null)
     {
         if (objectType == null)
             throw new ArgumentNullException(nameof(objectType));
 
         Log.Debug("UpdateMetaverseObjectTypeAsync() called for {ObjectType}", objectType.Name);
+
+        var activity = new Activity
+        {
+            TargetName = objectType.Name,
+            TargetType = ActivityTargetType.MetaverseObjectType,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
+
+        AuditHelper.SetUpdated(objectType, initiatedBy);
         await Application.Repository.Metaverse.UpdateMetaverseObjectTypeAsync(objectType);
+
+        await CaptureObjectTypeConfigurationChangeAsync(activity, objectType.Id, changeReason);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Updates an existing Metaverse Object Type, audited and tracked as an Activity. API-key initiator overload.
+    /// </summary>
+    /// <param name="objectType">The object type to update.</param>
+    /// <param name="initiatedByApiKey">The API key that initiated the update.</param>
+    /// <param name="changeReason">Optional reason for the change, recorded on the audit Activity.</param>
+    public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType objectType, ApiKey initiatedByApiKey, string? changeReason = null)
+    {
+        if (objectType == null)
+            throw new ArgumentNullException(nameof(objectType));
+
+        Log.Debug("UpdateMetaverseObjectTypeAsync() called for {ObjectType} (API key initiated)", objectType.Name);
+
+        var activity = new Activity
+        {
+            TargetName = objectType.Name,
+            TargetType = ActivityTargetType.MetaverseObjectType,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        AuditHelper.SetUpdated(objectType, initiatedByApiKey);
+        await Application.Repository.Metaverse.UpdateMetaverseObjectTypeAsync(objectType);
+
+        await CaptureObjectTypeConfigurationChangeAsync(activity, objectType.Id, changeReason);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
     #endregion
 
@@ -167,7 +212,7 @@ public class MetaverseServer
     /// </summary>
     /// <param name="attribute">The attribute to create.</param>
     /// <param name="initiatedBy">The user who initiated the creation.</param>
-    public async Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute, MetaverseObject? initiatedBy)
+    public async Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute, MetaverseObject? initiatedBy, string? changeReason = null)
     {
         if (attribute == null)
             throw new ArgumentNullException(nameof(attribute));
@@ -185,6 +230,7 @@ public class MetaverseServer
         AuditHelper.SetCreated(attribute, initiatedBy);
         await Application.Repository.Metaverse.CreateMetaverseAttributeAsync(attribute);
 
+        await CaptureAttributeConfigurationChangeAsync(activity, attribute.Id, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -193,7 +239,7 @@ public class MetaverseServer
     /// </summary>
     /// <param name="attribute">The attribute to update.</param>
     /// <param name="initiatedBy">The user who initiated the update.</param>
-    public async Task UpdateMetaverseAttributeAsync(MetaverseAttribute attribute, MetaverseObject? initiatedBy)
+    public async Task UpdateMetaverseAttributeAsync(MetaverseAttribute attribute, MetaverseObject? initiatedBy, string? changeReason = null)
     {
         if (attribute == null)
             throw new ArgumentNullException(nameof(attribute));
@@ -211,6 +257,7 @@ public class MetaverseServer
         AuditHelper.SetUpdated(attribute, initiatedBy);
         await Application.Repository.Metaverse.UpdateMetaverseAttributeAsync(attribute);
 
+        await CaptureAttributeConfigurationChangeAsync(activity, attribute.Id, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -222,7 +269,7 @@ public class MetaverseServer
     /// <exception cref="MetaverseAttributeInUseException">
     /// Thrown if the attribute is referenced by Synchronisation Rules or has stored values on Metaverse Objects.
     /// </exception>
-    public async Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute, MetaverseObject? initiatedBy)
+    public async Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute, MetaverseObject? initiatedBy, string? changeReason = null)
     {
         if (attribute == null)
             throw new ArgumentNullException(nameof(attribute));
@@ -239,6 +286,7 @@ public class MetaverseServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
+        await CaptureAttributeConfigurationDeletionAsync(activity, attribute, changeReason);
         await Application.Repository.Metaverse.DeleteMetaverseAttributeAsync(attribute);
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -249,7 +297,7 @@ public class MetaverseServer
     /// </summary>
     /// <param name="attribute">The attribute to create.</param>
     /// <param name="initiatedByApiKey">The API key that initiated the creation.</param>
-    public async Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute, ApiKey initiatedByApiKey)
+    public async Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute, ApiKey initiatedByApiKey, string? changeReason = null)
     {
         if (attribute == null)
             throw new ArgumentNullException(nameof(attribute));
@@ -267,6 +315,7 @@ public class MetaverseServer
         AuditHelper.SetCreated(attribute, initiatedByApiKey);
         await Application.Repository.Metaverse.CreateMetaverseAttributeAsync(attribute);
 
+        await CaptureAttributeConfigurationChangeAsync(activity, attribute.Id, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -275,7 +324,7 @@ public class MetaverseServer
     /// </summary>
     /// <param name="attribute">The attribute to update.</param>
     /// <param name="initiatedByApiKey">The API key that initiated the update.</param>
-    public async Task UpdateMetaverseAttributeAsync(MetaverseAttribute attribute, ApiKey initiatedByApiKey)
+    public async Task UpdateMetaverseAttributeAsync(MetaverseAttribute attribute, ApiKey initiatedByApiKey, string? changeReason = null)
     {
         if (attribute == null)
             throw new ArgumentNullException(nameof(attribute));
@@ -293,6 +342,7 @@ public class MetaverseServer
         AuditHelper.SetUpdated(attribute, initiatedByApiKey);
         await Application.Repository.Metaverse.UpdateMetaverseAttributeAsync(attribute);
 
+        await CaptureAttributeConfigurationChangeAsync(activity, attribute.Id, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
 
@@ -304,7 +354,7 @@ public class MetaverseServer
     /// <exception cref="MetaverseAttributeInUseException">
     /// Thrown if the attribute is referenced by Synchronisation Rules or has stored values on Metaverse Objects.
     /// </exception>
-    public async Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute, ApiKey initiatedByApiKey)
+    public async Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute, ApiKey initiatedByApiKey, string? changeReason = null)
     {
         if (attribute == null)
             throw new ArgumentNullException(nameof(attribute));
@@ -321,6 +371,7 @@ public class MetaverseServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
+        await CaptureAttributeConfigurationDeletionAsync(activity, attribute, changeReason);
         await Application.Repository.Metaverse.DeleteMetaverseAttributeAsync(attribute);
 
         await Application.Activities.CompleteActivityAsync(activity);
@@ -377,6 +428,60 @@ public class MetaverseServer
                 $"Cannot delete attribute '{attribute.Name}': {objectCount:N0} Metaverse Object(s) have values stored for this attribute. Remove the values first.",
                 objectCount);
         }
+    }
+
+    /// <summary>
+    /// Captures a versioned configuration snapshot of a Metaverse Object Type onto its audit Activity via the shared
+    /// ConfigurationChangeCaptureService (which owns the toggle, dedupe-guard, versioning and best-effort behaviours).
+    /// The object type is reloaded with its attributes so the snapshot reflects persisted truth rather than the
+    /// caller's partial in-memory graph; call it after the change has been persisted.
+    /// </summary>
+    private async Task CaptureObjectTypeConfigurationChangeAsync(Activity activity, int objectTypeId, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+            ActivityTargetType.MetaverseObjectType, objectTypeId,
+            async hashKey =>
+            {
+                var persisted = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectTypeId, includeChildObjects: true);
+                return persisted == null ? null : Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
+            },
+            $"Metaverse Object Type {objectTypeId}");
+    }
+
+    /// <summary>
+    /// Captures a versioned configuration snapshot of a Metaverse Attribute onto its audit Activity via the shared
+    /// ConfigurationChangeCaptureService. The attribute is reloaded with its object type associations so the snapshot
+    /// reflects persisted truth; call it after the change has been persisted.
+    /// </summary>
+    private async Task CaptureAttributeConfigurationChangeAsync(Activity activity, int attributeId, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+            ActivityTargetType.MetaverseAttribute, attributeId,
+            async hashKey =>
+            {
+                var persisted = await Application.Repository.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(attributeId);
+                return persisted == null ? null : Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
+            },
+            $"Metaverse Attribute {attributeId}");
+    }
+
+    /// <summary>
+    /// Captures a tombstone snapshot of a Metaverse Attribute onto its delete Activity, before the attribute is
+    /// removed. Matching the Synchronisation Rule and Schedule deletion behaviour, this does not set
+    /// <see cref="Activity.MetaverseAttributeId"/> or a version: the attribute is deleted before the Activity
+    /// completes, so the Activity is left unlinked and the snapshot is surfaced via the Activity itself rather than
+    /// the object's history.
+    /// </summary>
+    private async Task CaptureAttributeConfigurationDeletionAsync(Activity activity, MetaverseAttribute attribute, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureDeletionAsync(activity, changeReason,
+            async hashKey =>
+            {
+                // Reload with associations for a complete tombstone; fall back to the caller's entity if already gone.
+                var persisted = await Application.Repository.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(attribute.Id) ?? attribute;
+                return Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
+            },
+            $"Metaverse Attribute {attribute.Id}");
     }
     #endregion
 
@@ -768,6 +873,25 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Gets the count of Metaverse Objects with optional filtering by type, search query, or specific attribute value.
+    /// Optimised for fast counting without loading entity data.
+    /// </summary>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <param name="searchQuery">Optional search query to filter by display name (partial match, case-insensitive).</param>
+    /// <param name="filterAttributeName">Optional attribute name to filter by (must be used with filterAttributeValue).</param>
+    /// <param name="filterAttributeValue">Optional attribute value to filter by (exact match, case-insensitive).</param>
+    /// <returns>The count of matching Metaverse Objects.</returns>
+    public async Task<int> GetMetaverseObjectsCountAsync(
+        int? objectTypeId = null,
+        string? searchQuery = null,
+        string? filterAttributeName = null,
+        string? filterAttributeValue = null)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectsCountAsync(
+            objectTypeId, searchQuery, filterAttributeName, filterAttributeValue);
+    }
+
+    /// <summary>
     /// Attempts to find a single Metaverse Object using criteria from a SyncRuleMapping object and attribute values from a Connected System Object.
     /// This is to help the process of joining a CSO to an MVO.
     /// </summary>
@@ -830,6 +954,65 @@ public class MetaverseServer
         Log.Information("MarkOrphanedMvosForDeletionAsync: Marked {Count} MVOs for deletion for Connected System {Id}", markedCount, connectedSystemId);
 
         return markedCount;
+    }
+
+    /// <summary>
+    /// Gets MVOs that are pending deletion (have LastConnectorDisconnectedDate set but haven't been deleted yet).
+    /// These are MVOs awaiting their grace period to expire before automatic deletion.
+    /// </summary>
+    /// <param name="page">The page number (1-based).</param>
+    /// <param name="pageSize">The number of items per page.</param>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <returns>A paged result set of MVOs pending deletion.</returns>
+    public async Task<PagedResultSet<MetaverseObject>> GetMetaverseObjectsPendingDeletionAsync(
+        int page,
+        int pageSize,
+        int? objectTypeId = null)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(page, pageSize, objectTypeId);
+    }
+
+    /// <summary>
+    /// Gets the count of MVOs that are pending deletion.
+    /// </summary>
+    /// <param name="objectTypeId">Optional object type ID to filter by.</param>
+    /// <returns>The count of MVOs pending deletion.</returns>
+    public async Task<int> GetMetaverseObjectsPendingDeletionCountAsync(int? objectTypeId = null)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(objectTypeId);
+    }
+
+    /// <summary>
+    /// Gets MVO changes where the MVO has been deleted (ChangeType = Deleted and MetaverseObject is null).
+    /// Used for the deleted objects browser.
+    /// </summary>
+    /// <param name="objectTypeId">Optional filter by object type ID.</param>
+    /// <param name="fromDate">Optional filter for changes on or after this date.</param>
+    /// <param name="toDate">Optional filter for changes on or before this date.</param>
+    /// <param name="displayNameSearch">Optional search term for display name.</param>
+    /// <param name="page">Page number (1-based).</param>
+    /// <param name="pageSize">Number of items per page.</param>
+    /// <returns>Paginated list of deleted MVO changes ordered by ChangeTime descending.</returns>
+    public async Task<(List<MetaverseObjectChange> Items, int TotalCount)> GetDeletedMvoChangesAsync(
+        int? objectTypeId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        string? displayNameSearch = null,
+        int page = 1,
+        int pageSize = 50)
+    {
+        return await Application.Repository.Metaverse.GetDeletedMvoChangesAsync(
+            objectTypeId, fromDate, toDate, displayNameSearch, page, pageSize);
+    }
+
+    /// <summary>
+    /// Gets the full change history for a deleted MVO by its change ID.
+    /// </summary>
+    /// <param name="changeId">The ID of the MVO change record.</param>
+    /// <returns>List of all changes for that MVO ordered by ChangeTime descending.</returns>
+    public async Task<List<MetaverseObjectChange>> GetDeletedMvoChangeHistoryAsync(Guid changeId)
+    {
+        return await Application.Repository.Metaverse.GetDeletedMvoChangeHistoryAsync(changeId);
     }
     #endregion
 }

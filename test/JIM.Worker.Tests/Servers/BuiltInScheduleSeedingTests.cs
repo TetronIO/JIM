@@ -34,6 +34,7 @@ public class BuiltInScheduleSeedingTests
     private Schedule? _createdSchedule;
     private Activity? _createdActivity;
     private Activity? _completedActivity;
+    private List<Activity> _createdActivities = null!;
 
     [SetUp]
     public void SetUp()
@@ -51,9 +52,14 @@ public class BuiltInScheduleSeedingTests
         _createdSchedule = null;
         _createdActivity = null;
         _completedActivity = null;
+        _createdActivities = new List<Activity>();
 
         _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))
-            .Callback<Activity>(a => _createdActivity = a)
+            .Callback<Activity>(a =>
+            {
+                _createdActivities.Add(a);
+                _createdActivity = a;
+            })
             .Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>()))
             .Callback<Activity>(a => _completedActivity = a)
@@ -103,6 +109,14 @@ public class BuiltInScheduleSeedingTests
         Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"Schedule\""));
         Assert.That(_completedActivity.ChangeReason, Is.Not.Null.And.Not.Empty,
             "the seeded creation should explain its provenance in the change history");
+
+        // The seeded creation must be grouped under a single System Initialisation parent Activity, so a fresh
+        // deployment's built-in configuration appears as one top-level Activity, not one row per seeded object.
+        var scheduleActivity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.Schedule);
+        var parentActivity = _createdActivities.SingleOrDefault(a => a.TargetType == ActivityTargetType.SystemInitialisation);
+        Assert.That(parentActivity, Is.Not.Null,
+            "seeding must record a parent System Initialisation Activity when it creates the built-in schedule");
+        Assert.That(scheduleActivity.ParentActivityId, Is.EqualTo(parentActivity!.Id));
     }
 
     [Test]

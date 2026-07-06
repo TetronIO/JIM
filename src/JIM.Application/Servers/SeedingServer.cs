@@ -21,6 +21,16 @@ internal class SeedingServer
 {
     #region accessors
     private JimApplication Application { get; }
+
+    /// <summary>
+    /// The parent Activity for the current seeding pass, created lazily by
+    /// <see cref="GetOrCreateSeedingActivityAsync"/> the first time a seed step is about to create something.
+    /// Null until then, and cleared once <see cref="CompleteSeedingActivityAsync"/> or
+    /// <see cref="FailSeedingActivityAsync"/> has run, so every application startup that actually seeds
+    /// something groups all of it under exactly one "System Initialisation" Activity, while a startup where
+    /// every seed step no-ops (the normal case after the first deployment) records nothing at all.
+    /// </summary>
+    private JIM.Models.Activities.Activity? _seedingActivity;
     #endregion
 
     #region constructors
@@ -52,7 +62,6 @@ internal class SeedingServer
         var attributesToCreate = new List<MetaverseAttribute>();
         var objectTypesToCreate = new List<MetaverseObjectType>();
         var predefinedSearchesToCreate = new List<PredefinedSearch>();
-        var rolesToCreate = new List<Role>();
         var exampleDataSetsToCreate = new List<ExampleDataSet>();
         var dataGenerationTemplatesToCreate = new List<ExampleDataTemplate>();
         var connectorDefinitions = new List<ConnectorDefinition>();
@@ -476,22 +485,6 @@ internal class SeedingServer
         }
         #endregion
 
-        #region Roles
-        // create the built-in roles
-        var administratorRole = await Application.Security.GetRoleAsync(Constants.BuiltInRoles.Administrator);
-        if (administratorRole == null)
-        {
-            administratorRole = new Role
-            {
-                BuiltIn = true,
-                Name = Constants.BuiltInRoles.Administrator
-            };
-            AuditHelper.SetCreatedBySystem(administratorRole);
-            rolesToCreate.Add(administratorRole);
-            Log.Information($"SeedAsync: Preparing Role: {Constants.BuiltInRoles.Administrator}");
-        }
-        #endregion
-
         #region ExampleDataSets
         var companiesEnDataSet = await PrepareExampleDataSetAsync(Constants.BuiltInExampleDataSets.Companies, "en", Properties.Resources.Companies_en);
         if (companiesEnDataSet != null)
@@ -567,13 +560,14 @@ internal class SeedingServer
             connectorDefinitions.Add(fileConnectorDefinition);
         #endregion
 
-        // submit all the preparations to the repository for creation
+        // submit all the preparations to the repository for creation. Roles are not seeded here: built-in Roles
+        // carry configuration change history, so they are seeded through the audited create path instead
+        // (see SeedBuiltInRolesAsync), matching the Temporal Scope Reconciliation schedule precedent.
         await Application.Repository.Seeding.SeedDataAsync(
-            attributesToCreate, 
-            objectTypesToCreate, 
+            attributesToCreate,
+            objectTypesToCreate,
             predefinedSearchesToCreate,
-            rolesToCreate, 
-            exampleDataSetsToCreate, 
+            exampleDataSetsToCreate,
             dataGenerationTemplatesToCreate,
             connectorDefinitions);
         stopwatch.Stop();
@@ -634,9 +628,94 @@ internal class SeedingServer
         // portal: a Create Activity attributed to System and a version-1 configuration change snapshot.
         // A repository-direct seed leaves no audit trace, so the change history would start at whichever
         // principal touched the schedule next, misattributing its origin.
+        var parentActivityId = await GetOrCreateSeedingActivityAsync();
         await Application.Scheduler.CreateScheduleAsync(schedule, ActivityInitiatorType.System, null, "System",
-            changeReason: "Built-in schedule created automatically by JIM.");
+            changeReason: "Built-in schedule created automatically by JIM.", parentActivityId: parentActivityId);
         Log.Information("SeedBuiltInSchedulesAsync: Created built-in Temporal Scope Reconciliation schedule {ScheduleId} (hourly).", schedule.Id);
+    }
+
+    /// <summary>
+    /// Seeds the built-in Administrator Role that JIM provides, through the audited create path
+    /// (<see cref="SecurityServer.CreateRoleAsync(Role, MetaverseObject?, string?)"/>) so its change history begins
+    /// with a System-attributed Create Activity and a version-1 configuration change snapshot, rather than starting
+    /// blank the first time an administrator touches its membership. Idempotent: does nothing if the built-in Role
+    /// already exists. Runs at every application startup, mirroring <see cref="SeedBuiltInSchedulesAsync"/>.
+    /// </summary>
+    internal async Task SeedBuiltInRolesAsync()
+    {
+        var administratorRole = await Application.Security.GetRoleAsync(Constants.BuiltInRoles.Administrator);
+        if (administratorRole != null)
+        {
+            Log.Verbose("SeedBuiltInRolesAsync: Administrator Role already present; skipping.");
+            return;
+        }
+
+        var role = new Role
+        {
+            BuiltIn = true,
+            Name = Constants.BuiltInRoles.Administrator
+        };
+
+        // Create through the audited path, not the repository, so the Role's origin is visible in the portal: a
+        // Create Activity attributed to System and a version-1 configuration change snapshot. A repository-direct
+        // seed leaves no audit trace, so the change history would start at whichever principal touched the Role
+        // next, misattributing its origin.
+        var parentActivityId = await GetOrCreateSeedingActivityAsync();
+        await Application.Security.CreateRoleAsync(role, changeReason: "Built-in Role created automatically by JIM.", parentActivityId: parentActivityId);
+        Log.Information("SeedBuiltInRolesAsync: Created built-in Role {RoleName} (ID: {RoleId}).", role.Name, role.Id);
+    }
+
+    /// <summary>
+    /// Returns the id of the current seeding pass's parent "System Initialisation" Activity, creating it on
+    /// first call. Deliberately lazy: the parent is only created the first time a seed step is actually about to
+    /// create something, so a startup where every seed step no-ops never records an Activity at all. Subsequent
+    /// calls within the same pass return the same id, so every built-in object created during one startup groups
+    /// under a single parent, and each becomes a child via <see cref="Activity.ParentActivityId"/>.
+    /// </summary>
+    private async Task<Guid> GetOrCreateSeedingActivityAsync()
+    {
+        if (_seedingActivity != null)
+            return _seedingActivity.Id;
+
+        var activity = new JIM.Models.Activities.Activity
+        {
+            TargetType = ActivityTargetType.SystemInitialisation,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            TargetName = "Built-in configuration",
+            Message = "Applying built-in configuration"
+        };
+        await Application.Activities.CreateSystemActivityAsync(activity);
+        _seedingActivity = activity;
+        return activity.Id;
+    }
+
+    /// <summary>
+    /// Completes the current seeding pass's parent Activity, if one was created (i.e. if at least one built-in
+    /// object was actually seeded this startup). A no-op when nothing needed seeding, so a normal restart that
+    /// changes nothing records, and touches, no Activity at all. Call once, after every seed step has run.
+    /// </summary>
+    internal async Task CompleteSeedingActivityAsync()
+    {
+        if (_seedingActivity == null)
+            return;
+
+        _seedingActivity.Message = "Applied built-in configuration";
+        await Application.Activities.CompleteActivityAsync(_seedingActivity);
+        _seedingActivity = null;
+    }
+
+    /// <summary>
+    /// Fails the current seeding pass's parent Activity with the given exception, if one was created. A no-op
+    /// when nothing had been seeded yet this startup (the failure occurred before any seed step needed to create
+    /// the parent).
+    /// </summary>
+    internal async Task FailSeedingActivityAsync(Exception ex)
+    {
+        if (_seedingActivity == null)
+            return;
+
+        await Application.Activities.FailActivityWithErrorAsync(_seedingActivity, ex);
+        _seedingActivity = null;
     }
 
     /// <summary>
