@@ -1,6 +1,6 @@
 # Configuration Change History Coverage - Implementation Plan
 
-- **Status:** Doing (Phases 1-6 complete)
+- **Status:** Doing (Phases 1-7 complete)
 - **Issue:** [#14](https://github.com/TetronIO/JIM/issues/14) *(sub-task of the parent change-history issue)*
 - **PRD:** [`engineering/prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md`](../../prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md)
 - **Note (2026-07-05):** Phase 1 verification disproved the presumed Schedule step capture gap: there are no step REST endpoints (`Add-JIMScheduleStep` performs a whole-Schedule PUT), and both step-mutation surfaces (the editor dialog and the REST update endpoint) reconcile steps and then call the audited `UpdateScheduleAsync`, which captures the step changes in exactly one version per save. Making the bare step methods capture unconditionally would have double-recorded on every editor/REST save, so Phase 1 instead documented the caller contract on those methods. The durable fix (consolidating step reconciliation into `UpdateScheduleAsync` and making the bare methods private, which also removes the duplicated reconcile logic in the dialog and controller) is proposed as a follow-up slice.
@@ -210,11 +210,13 @@ Added after Phase 6, prompted by a user sanity check: audited seed-time creates 
 
 Phases 8-9's seed captures MUST pass the seeding parent id through their create paths (obtain via `SeedingServer.GetOrCreateSeedingActivityAsync`).
 
-### Phase 7: Predefined Searches
-1. Snapshot builder with criteria groups/criteria as nested children; every `SearchServer` mutator (root update + the six criteria/group methods) sets the parent `PredefinedSearchId` FK and captures the owning search's snapshot (granular roll-up precedent).
-2. Activity plumbing (`ActivityTargetType.PredefinedSearch`) with principal-attributed overloads.
-3. REST routes on `PredefinedSearchesController` + `ChangeReason` on writes; `-ChangeReason` on `Set-JIMPredefinedSearch` and criteria variants; `-Type PredefinedSearch`.
-4. UI: Changes tab on `PredefinedSearchDetail` (a detail page exists, so the tab wins over per-row); reason prompt on the list and detail main saves; criteria micro-edits promptless by design.
+### Phase 7: Predefined Searches ✅
+1. Snapshot builder with criteria groups/criteria as nested children; every `SearchServer` mutator (root update + the six criteria/group methods) sets the parent `PredefinedSearchId` FK and captures the owning search's snapshot (granular roll-up precedent). ✅
+2. Activity plumbing (`ActivityTargetType.PredefinedSearch`) with principal-attributed overloads. ✅
+3. REST routes on `PredefinedSearchesController` + `ChangeReason` on writes; `-ChangeReason` on `Set-JIMPredefinedSearch` and criteria variants; `-Type PredefinedSearch`. ✅
+4. UI: Changes tab on `PredefinedSearchDetail` (a detail page exists, so the tab wins over per-row); reason prompt on the main saves; criteria micro-edits promptless by design. ✅
+
+Delivery notes (2026-07-06): the owning-search FK a granular criteria/group edit rolls up to is resolved by walking the parent-group chain (`GetOwningPredefinedSearchIdFor{Group,Criterion}Async`), reading the `PredefinedSearchId`/`ParentGroupId`/`PredefinedSearchCriteriaGroupId` FK scalars (newly exposed on the two criteria models; they map onto pre-existing shadow-FK columns, so no migration). Delete paths resolve the owning id before the row is removed. A not-found group/criterion skips Activity creation entirely (pass-through to the repository's null/false result), so a missing target does not spam the Activity list. The parent-chain walk is proven against real PostgreSQL (`PredefinedSearchCriteriaDatabaseTests`), since the shadow-FK mapping cannot be reproduced on the EF in-memory provider. The only UI mutation path that today calls `UpdatePredefinedSearchAsync` is the enable/disable toggle, so that is where the detail and list pages gained the reason prompt (which also fixed their previously-absent principal attribution); the criteria editor stays promptless by design. All seven write cmdlets gained `-ChangeReason` (not just the two named in the plan).
 
 ### Phase 8: Connector Definitions
 1. Snapshot builder (metadata + files as name/size/SHA-256); Activity plumbing on the five `ConnectedSystemServer` connector-definition methods, System-attributed where no principal exists (seeding).

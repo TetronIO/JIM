@@ -95,7 +95,7 @@ Applies a partial update to a Predefined Search. Only parameters explicitly prov
 ### Syntax
 
 ```powershell
-Set-JIMPredefinedSearch [-Id] <int> [-IsEnabled <bool>] [-PassThru]
+Set-JIMPredefinedSearch [-Id] <int> [-IsEnabled <bool>] [-ChangeReason <string>] [-PassThru]
     [-WhatIf] [-Confirm]
 ```
 
@@ -105,6 +105,7 @@ Set-JIMPredefinedSearch [-Id] <int> [-IsEnabled <bool>] [-PassThru]
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes | | Unique identifier of the search to update. Accepts pipeline input by property name. |
 | `IsEnabled` | `bool` | No | | When specified, sets whether the search is visible to end users. Pass `$true` to enable, `$false` to disable. Omit to leave unchanged. |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded on the audit Activity and shown in the search's [configuration change history](history.md). |
 | `PassThru` | `switch` | No | `$false` | If specified, emits the updated search header after the update. |
 
 ### Output
@@ -129,10 +130,15 @@ Set-JIMPredefinedSearch -Id 3 -IsEnabled $true -PassThru
 Set-JIMPredefinedSearch -Id 3 -IsEnabled $false -WhatIf
 ```
 
+```powershell title="Disable a search and record why, for the configuration change history"
+Set-JIMPredefinedSearch -Id 3 -IsEnabled $false -ChangeReason "Retiring in favour of new search (CHG0128)"
+```
+
 ### Notes
 
 - The cmdlet distinguishes between `-IsEnabled $false` (intentional disable) and omitting `-IsEnabled` (leave state unchanged). This is essential for future expansion as new toggle fields are added.
 - Disabling a search does not affect administrator visibility in the admin UI or to this module; it only hides the search from end users, the sidebar, and the `Search-JIMMetaverseObject` cmdlet.
+- Retrieve the recorded changes, including any `-ChangeReason` given, with `Get-JIMConfigurationChangeHistory -Type PredefinedSearch` (see [History](history.md)).
 
 ---
 
@@ -147,9 +153,11 @@ All the write cmdlets support `ShouldProcess`; use `-WhatIf` or `-Confirm` to pr
 | Cmdlet | Purpose |
 |--------|---------|
 | `Get-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int>` | List the criteria groups (and their criteria) for a search. |
-| `New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> [-ParentGroupId <int>] [-Type All\|Any] [-Position <int>] [-PassThru]` | Create a criteria group; pass `-ParentGroupId` to nest it under an existing group. |
+| `New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> [-ParentGroupId <int>] [-Type All\|Any] [-Position <int>] [-ChangeReason <string>] [-PassThru]` | Create a criteria group; pass `-ParentGroupId` to nest it under an existing group. |
 | `Set-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> -GroupId <int> [-Type All\|Any] [-Position <int>] [-PassThru]` | Update a group's logic type or position. |
 | `Remove-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId <int> -GroupId <int>` | Delete a group and everything in it. |
+
+Each criteria group or criterion edit is captured as its own version rolled up into the owning Predefined Search's [configuration change history](history.md); every group and criterion cmdlet (create, update, and delete) accepts an optional `-ChangeReason` recorded against that version.
 
 ### Criterion cmdlets
 
@@ -207,3 +215,4 @@ Get-JIMPredefinedSearch -Uri people | Get-JIMPredefinedSearchCriteriaGroup
 
 - [Search-JIMMetaverseObject](metaverse.md): run a Predefined Search to return matching objects
 - [Metaverse](metaverse.md): related cmdlets for querying Metaverse Objects and schema
+- [History](history.md): retrieve a Predefined Search's configuration change history with `Get-JIMConfigurationChangeHistory -Type PredefinedSearch`

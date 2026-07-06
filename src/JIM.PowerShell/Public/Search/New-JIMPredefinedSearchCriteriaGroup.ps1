@@ -28,6 +28,10 @@ function New-JIMPredefinedSearchCriteriaGroup {
     .PARAMETER Position
         Optional position/order for this group. Defaults to 0.
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the owning Predefined
+        Search's configuration change history.
+
     .PARAMETER PassThru
         If specified, returns the created group object.
 
@@ -67,6 +71,9 @@ function New-JIMPredefinedSearchCriteriaGroup {
         [Parameter()]
         [int]$Position = 0,
 
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -79,6 +86,9 @@ function New-JIMPredefinedSearchCriteriaGroup {
         $body = @{
             type = $Type
             position = $Position
+        }
+        if ($ChangeReason) {
+            $body.changeReason = $ChangeReason
         }
 
         $endpoint = if ($PSBoundParameters.ContainsKey('ParentGroupId')) {

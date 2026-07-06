@@ -3,6 +3,8 @@
 
 using Asp.Versioning;
 using JIM.Application;
+using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Search;
 using JIM.Models.Search.DTOs;
@@ -27,7 +29,7 @@ namespace JIM.Web.Controllers.Api;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrator")]
 [Produces("application/json")]
-public class PredefinedSearchesController(ILogger<PredefinedSearchesController> logger, JimApplication application) : ControllerBase
+public class PredefinedSearchesController(ILogger<PredefinedSearchesController> logger, JimApplication application) : ApiControllerBase(application, logger)
 {
     private readonly ILogger<PredefinedSearchesController> _logger = logger;
     private readonly JimApplication _application = application;
@@ -133,7 +135,12 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
         if (request.IsEnabled.HasValue)
             existing.IsEnabled = request.IsEnabled.Value;
 
-        await _application.Search.UpdatePredefinedSearchAsync(existing);
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (apiKey != null)
+            await _application.Search.UpdatePredefinedSearchAsync(existing, apiKey, request.ChangeReason);
+        else
+            await _application.Search.UpdatePredefinedSearchAsync(existing, await GetCurrentUserAsync(), request.ChangeReason);
+
         return NoContent();
     }
 
@@ -189,7 +196,11 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
         if (!Enum.TryParse<SearchGroupType>(request.Type, true, out var groupType))
             return BadRequest(ApiErrorResponse.BadRequest($"Invalid group type '{request.Type}'. Use 'All' or 'Any'."));
 
-        var created = await _application.Search.CreatePredefinedSearchCriteriaGroupAsync(id, null, groupType, request.Position);
+        var apiKey = await GetCurrentApiKeyAsync();
+        var created = apiKey != null
+            ? await _application.Search.CreatePredefinedSearchCriteriaGroupAsync(id, null, groupType, request.Position, apiKey, request.ChangeReason)
+            : await _application.Search.CreatePredefinedSearchCriteriaGroupAsync(id, null, groupType, request.Position, await GetCurrentUserAsync(), request.ChangeReason);
+
         return CreatedAtRoute("GetPredefinedSearchCriteriaGroups", new { id }, PredefinedSearchCriteriaGroupDto.FromEntity(created));
     }
 
@@ -224,7 +235,11 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
         if (!Enum.TryParse<SearchGroupType>(request.Type, true, out var groupType))
             return BadRequest(ApiErrorResponse.BadRequest($"Invalid group type '{request.Type}'. Use 'All' or 'Any'."));
 
-        var created = await _application.Search.CreatePredefinedSearchCriteriaGroupAsync(id, groupId, groupType, request.Position);
+        var apiKey = await GetCurrentApiKeyAsync();
+        var created = apiKey != null
+            ? await _application.Search.CreatePredefinedSearchCriteriaGroupAsync(id, groupId, groupType, request.Position, apiKey, request.ChangeReason)
+            : await _application.Search.CreatePredefinedSearchCriteriaGroupAsync(id, groupId, groupType, request.Position, await GetCurrentUserAsync(), request.ChangeReason);
+
         return CreatedAtRoute("GetPredefinedSearchCriteriaGroups", new { id }, PredefinedSearchCriteriaGroupDto.FromEntity(created));
     }
 
@@ -259,7 +274,10 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
 
         var position = request.Position ?? group.Position;
 
-        var updated = await _application.Search.UpdatePredefinedSearchCriteriaGroupAsync(groupId, groupType, position);
+        var apiKey = await GetCurrentApiKeyAsync();
+        var updated = apiKey != null
+            ? await _application.Search.UpdatePredefinedSearchCriteriaGroupAsync(groupId, groupType, position, apiKey, request.ChangeReason)
+            : await _application.Search.UpdatePredefinedSearchCriteriaGroupAsync(groupId, groupType, position, await GetCurrentUserAsync(), request.ChangeReason);
         if (updated == null)
             return NotFound(ApiErrorResponse.NotFound($"Criteria group with ID {groupId} not found."));
 
@@ -271,13 +289,14 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
     /// </summary>
     /// <param name="id">The unique identifier of the predefined search.</param>
     /// <param name="groupId">The unique identifier of the criteria group.</param>
+    /// <param name="changeReason">Optional reason for the deletion, recorded on the audit Activity.</param>
     /// <returns>No content on success; 404 Not Found if the search or group does not exist.</returns>
     [HttpDelete("{id:int}/criteria-groups/{groupId:int}", Name = "DeletePredefinedSearchCriteriaGroup")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> DeleteCriteriaGroupAsync([FromRoute] int id, [FromRoute] int groupId)
+    public async Task<IActionResult> DeleteCriteriaGroupAsync([FromRoute] int id, [FromRoute] int groupId, [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Deleting criteria group {GroupId} from predefined search {Id}", groupId, id);
 
@@ -288,7 +307,10 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
         if (FindCriteriaGroup(search, groupId) == null)
             return NotFound(ApiErrorResponse.NotFound($"Criteria group with ID {groupId} not found on predefined search {id}."));
 
-        var deleted = await _application.Search.DeletePredefinedSearchCriteriaGroupAsync(groupId);
+        var apiKey = await GetCurrentApiKeyAsync();
+        var deleted = apiKey != null
+            ? await _application.Search.DeletePredefinedSearchCriteriaGroupAsync(groupId, apiKey, changeReason)
+            : await _application.Search.DeletePredefinedSearchCriteriaGroupAsync(groupId, await GetCurrentUserAsync(), changeReason);
         if (!deleted)
             return NotFound(ApiErrorResponse.NotFound($"Criteria group with ID {groupId} not found."));
 
@@ -333,7 +355,10 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
         if (criterion == null)
             return BadRequest(ApiErrorResponse.BadRequest(validationError!));
 
-        var created = await _application.Search.CreatePredefinedSearchCriterionAsync(groupId, criterion);
+        var apiKey = await GetCurrentApiKeyAsync();
+        var created = apiKey != null
+            ? await _application.Search.CreatePredefinedSearchCriterionAsync(groupId, criterion, apiKey, request.ChangeReason)
+            : await _application.Search.CreatePredefinedSearchCriterionAsync(groupId, criterion, await GetCurrentUserAsync(), request.ChangeReason);
         if (created == null)
             return NotFound(ApiErrorResponse.NotFound($"Criteria group with ID {groupId} not found."));
 
@@ -379,7 +404,10 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
             return BadRequest(ApiErrorResponse.BadRequest(validationError!));
 
         criterion.Id = criterionId;
-        var updated = await _application.Search.UpdatePredefinedSearchCriterionAsync(criterion);
+        var apiKey = await GetCurrentApiKeyAsync();
+        var updated = apiKey != null
+            ? await _application.Search.UpdatePredefinedSearchCriterionAsync(criterion, apiKey, request.ChangeReason)
+            : await _application.Search.UpdatePredefinedSearchCriterionAsync(criterion, await GetCurrentUserAsync(), request.ChangeReason);
         if (updated == null)
             return NotFound(ApiErrorResponse.NotFound($"Criterion with ID {criterionId} not found."));
 
@@ -393,13 +421,14 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
     /// <param name="id">The unique identifier of the predefined search.</param>
     /// <param name="groupId">The unique identifier of the criteria group.</param>
     /// <param name="criterionId">The unique identifier of the criterion.</param>
+    /// <param name="changeReason">Optional reason for the deletion, recorded on the audit Activity.</param>
     /// <returns>No content on success; 404 Not Found if the search, group or criterion does not exist.</returns>
     [HttpDelete("{id:int}/criteria-groups/{groupId:int}/criteria/{criterionId:int}", Name = "DeletePredefinedSearchCriterion")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> DeleteCriterionAsync([FromRoute] int id, [FromRoute] int groupId, [FromRoute] int criterionId)
+    public async Task<IActionResult> DeleteCriterionAsync([FromRoute] int id, [FromRoute] int groupId, [FromRoute] int criterionId, [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Deleting criterion {CriterionId} from group {GroupId} for predefined search {Id}", criterionId, groupId, id);
 
@@ -414,12 +443,83 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
         if (group.Criteria.All(c => c.Id != criterionId))
             return NotFound(ApiErrorResponse.NotFound($"Criterion with ID {criterionId} not found in group {groupId}."));
 
-        var deleted = await _application.Search.DeletePredefinedSearchCriterionAsync(criterionId);
+        var apiKey = await GetCurrentApiKeyAsync();
+        var deleted = apiKey != null
+            ? await _application.Search.DeletePredefinedSearchCriterionAsync(criterionId, apiKey, changeReason)
+            : await _application.Search.DeletePredefinedSearchCriterionAsync(criterionId, await GetCurrentUserAsync(), changeReason);
         if (!deleted)
             return NotFound(ApiErrorResponse.NotFound($"Criterion with ID {criterionId} not found."));
 
         return NoContent();
     }
+
+    #region Configuration Change History
+
+    /// <summary>
+    /// List the change history for a Predefined Search.
+    /// </summary>
+    /// <remarks>
+    /// Covers changes to the search's own definition (e.g. enabled/disabled) as well as every criteria-group
+    /// and criterion mutation, since those roll up into the same search's configuration change history.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the predefined search.</param>
+    /// <param name="pagination">Pagination parameters.</param>
+    /// <returns>A paged list of change-history entries, newest version first, each with a one-line summary.</returns>
+    /// <response code="200">Change history returned (empty if the search has no recorded configuration changes).</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("{id:int}/change-history", Name = "GetPredefinedSearchChangeHistory")]
+    [ProducesResponseType(typeof(PaginatedResponse<ConfigurationChangeHistoryItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPredefinedSearchChangeHistoryAsync([FromRoute] int id, [FromQuery] PaginationRequest pagination)
+    {
+        var result = await _application.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.PredefinedSearch, id, pagination.Page, pagination.PageSize);
+        return Ok(PaginatedResponse<ConfigurationChangeHistoryItem>.Create(result.Results, result.TotalResults, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
+    /// Get a single version of a Predefined Search's change history, with its snapshot and the diff against the previous version.
+    /// </summary>
+    /// <param name="id">The unique identifier of the predefined search.</param>
+    /// <param name="changeVersion">The per-object change version to retrieve.</param>
+    /// <returns>The change detail: metadata, the snapshot, and the diff against the previous version.</returns>
+    /// <response code="200">The change detail.</response>
+    /// <response code="404">No change with that version was found for the Predefined Search.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("{id:int}/change-history/{changeVersion:int}", Name = "GetPredefinedSearchChange")]
+    [ProducesResponseType(typeof(ConfigurationChangeDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetPredefinedSearchChangeAsync([FromRoute] int id, [FromRoute] int changeVersion)
+    {
+        var detail = await _application.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.PredefinedSearch, id, changeVersion);
+        if (detail == null)
+            return NotFound(ApiErrorResponse.NotFound($"No change history found for Predefined Search {id} version {changeVersion}."));
+        return Ok(detail);
+    }
+
+    /// <summary>
+    /// Compare two versions of a Predefined Search's configuration.
+    /// </summary>
+    /// <param name="id">The unique identifier of the predefined search.</param>
+    /// <param name="fromVersion">The earlier version to compare from.</param>
+    /// <param name="toVersion">The later version to compare to.</param>
+    /// <returns>The structured diff of the later version against the earlier.</returns>
+    /// <response code="200">The diff.</response>
+    /// <response code="404">One of the requested versions was not found for the Predefined Search.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("{id:int}/change-history/compare", Name = "ComparePredefinedSearchChanges")]
+    [ProducesResponseType(typeof(ConfigurationDiff), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ComparePredefinedSearchChangesAsync([FromRoute] int id, [FromQuery] int fromVersion, [FromQuery] int toVersion)
+    {
+        var diff = await _application.ChangeHistory.CompareConfigurationChangesAsync(ActivityTargetType.PredefinedSearch, id, fromVersion, toVersion);
+        if (diff == null)
+            return NotFound(ApiErrorResponse.NotFound($"Could not compare versions {fromVersion} and {toVersion} for Predefined Search {id}."));
+        return Ok(diff);
+    }
+
+    #endregion
 
     // ─── Helpers ───
 

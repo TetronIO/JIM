@@ -6,6 +6,7 @@
 @inject NavigationManager NavManager
 @inject IUserPreferenceService PreferenceService
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -109,6 +110,9 @@
 </MudTable>
 
 @code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
     private IList<PredefinedSearchHeader>? _predefinedSearchHeaders;
     private string _searchString = "";
     private bool _loading = true;
@@ -158,6 +162,11 @@
 
     private async Task ToggleEnabledAsync(PredefinedSearchHeader header, bool isEnabled)
     {
+        // offer an optional reason for the configuration change history; cancelling aborts the save
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+        if (cancelled)
+            return;
+
         try
         {
             using var jim = JimFactory.Create();
@@ -169,7 +178,8 @@
             }
 
             core.IsEnabled = isEnabled;
-            await jim.Search.UpdatePredefinedSearchAsync(core);
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            await jim.Search.UpdatePredefinedSearchAsync(core, user, changeReason);
             header.IsEnabled = isEnabled;
             Snackbar.Add($"Predefined search '{header.Name}' {(isEnabled ? "enabled" : "disabled")}.", Severity.Success);
         }

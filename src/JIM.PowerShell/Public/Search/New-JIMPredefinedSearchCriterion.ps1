@@ -66,6 +66,10 @@ function New-JIMPredefinedSearchCriterion {
     .PARAMETER RelativeDirection
         The relative offset direction: Ago (past) or FromNow (future).
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the owning Predefined
+        Search's configuration change history.
+
     .PARAMETER PassThru
         If specified, returns the created criterion object.
 
@@ -143,6 +147,9 @@ function New-JIMPredefinedSearchCriterion {
         [ValidateSet('Ago', 'FromNow')]
         [string]$RelativeDirection,
 
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -193,6 +200,10 @@ function New-JIMPredefinedSearchCriterion {
             $body.relativeCount = $RelativeCount
             $body.relativeUnit = $RelativeUnit
             $body.relativeDirection = $RelativeDirection
+        }
+
+        if ($ChangeReason) {
+            $body.changeReason = $ChangeReason
         }
 
         if ($PSCmdlet.ShouldProcess("Criteria Group $GroupId on Predefined Search $PredefinedSearchId", "Add Criterion (Attribute $attributeId $ComparisonType)")) {

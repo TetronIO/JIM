@@ -12,6 +12,14 @@ public class PredefinedSearchCriteriaGroup
     public int Id { get; set; }
 
     /// <summary>
+    /// The foreign key scalar for the owning <see cref="PredefinedSearch"/>, populated only for a top-level group
+    /// (attached directly to the search, as opposed to nested under another group, which instead carries
+    /// <see cref="ParentGroupId"/>). Maps to the existing EF shadow FK column, so exposing this scalar changes no
+    /// schema. Prefer this over navigation-based existence checks under AsNoTracking (see src/CLAUDE.md).
+    /// </summary>
+    public int? PredefinedSearchId { get; set; }
+
+    /// <summary>
     /// Determines how criteria within this group are combined: All (AND) or Any (OR).
     /// </summary>
     public SearchGroupType Type { get; set; }
@@ -35,4 +43,12 @@ public class PredefinedSearchCriteriaGroup
     /// Navigation property for child groups
     /// </summary>
     public PredefinedSearchCriteriaGroup? ParentGroup { get; set; }
+
+    /// <summary>
+    /// The foreign key scalar for <see cref="ParentGroup"/>, populated only for a nested group (as opposed to a
+    /// top-level group, which instead carries <see cref="PredefinedSearchId"/>). Maps to the existing EF shadow FK
+    /// column, so exposing this scalar changes no schema. Prefer this over navigation-based existence checks under
+    /// AsNoTracking (see src/CLAUDE.md).
+    /// </summary>
+    public int? ParentGroupId { get; set; }
 }
