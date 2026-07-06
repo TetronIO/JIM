@@ -64,13 +64,14 @@
                         <MudText Typo="Typo.button" Class="mud-text-secondary">Expires:</MudText>
                         @if (_apiKey.ExpiresAt.HasValue)
                         {
-                            @if (_apiKey.ExpiresAt.Value < DateTime.UtcNow)
+                            var expiresAt = _apiKey.ExpiresAt.Value;
+                            @if (expiresAt < DateTime.UtcNow)
                             {
-                                <br /><MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="ml-0">Expired (@_apiKey.ExpiresAt.Value.ToLocalTime().ToFriendlyDate())</MudChip>
+                                <br /><MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="ml-0">Expired (@expiresAt.ToLocalTime().ToFriendlyDate())</MudChip>
                             }
                             else
                             {
-                                <MudText>@_apiKey.ExpiresAt.Value.ToLocalTime().ToFriendlyDate()</MudText>
+                                <MudText>@expiresAt.ToLocalTime().ToFriendlyDate()</MudText>
                             }
                         }
                         else

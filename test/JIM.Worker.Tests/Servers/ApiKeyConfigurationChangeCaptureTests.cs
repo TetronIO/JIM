@@ -91,12 +91,12 @@ public class ApiKeyConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.ApiKey));
-        Assert.That(_completedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Create));
-        Assert.That(_completedActivity.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
-        Assert.That(_completedActivity.ApiKeyId, Is.EqualTo(apiKey.Id), "the activity must carry the key id so history is queryable");
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1));
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("new CI pipeline key"));
-        var snapshot = _completedActivity.ConfigurationChangeSnapshot;
+        Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Create));
+        Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
+        Assert.That(_completedActivity!.ApiKeyId, Is.EqualTo(apiKey.Id), "the activity must carry the key id so history is queryable");
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("new CI pipeline key"));
+        var snapshot = _completedActivity!.ConfigurationChangeSnapshot;
         Assert.That(snapshot, Is.Not.Null);
         Assert.That(snapshot, Does.Contain("\"objectType\":\"ApiKey\""));
     }
@@ -120,9 +120,9 @@ public class ApiKeyConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.ApiKey));
-        Assert.That(_completedActivity.InitiatedById, Is.EqualTo(initiatingKey.Id));
-        Assert.That(_completedActivity.ApiKeyId, Is.EqualTo(apiKey.Id));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.InitiatedById, Is.EqualTo(initiatingKey.Id));
+        Assert.That(_completedActivity!.ApiKeyId, Is.EqualTo(apiKey.Id));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
     }
 
     [Test]
@@ -144,9 +144,9 @@ public class ApiKeyConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
-        Assert.That(_completedActivity.InitiatedByName, Is.EqualTo("System"));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1));
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Is.Not.Null);
+        Assert.That(_completedActivity!.InitiatedByName, Is.EqualTo("System"));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Not.Null);
     }
 
     [Test]
@@ -193,9 +193,9 @@ public class ApiKeyConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
-        Assert.That(_completedActivity.ApiKeyId, Is.EqualTo(ApiKeyId));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(2), "version is the existing maximum (1) + 1");
-        var snapshot = _completedActivity.ConfigurationChangeSnapshot;
+        Assert.That(_completedActivity!.ApiKeyId, Is.EqualTo(ApiKeyId));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(2), "version is the existing maximum (1) + 1");
+        var snapshot = _completedActivity!.ConfigurationChangeSnapshot;
         Assert.That(snapshot, Is.Not.Null);
         Assert.That(snapshot, Does.Contain("CI Pipeline Key (renewed)"));
         Assert.That(snapshot, Does.Contain("Read Only"));
@@ -212,8 +212,8 @@ public class ApiKeyConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Null);
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.Null);
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("no tracking"));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null);
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("no tracking"));
     }
 
     [Test]
@@ -228,7 +228,7 @@ public class ApiKeyConfigurationChangeCaptureTests
         await _jim.Security.UpdateApiKeyAsync(apiKey, NewUser(), changeReason: "first save");
         var storedSnapshot = _completedActivity!.ConfigurationChangeSnapshot;
         Assert.That(storedSnapshot, Is.Not.Null);
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(4));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(4));
         _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.ApiKey, ApiKeyId))
             .ReturnsAsync(storedSnapshot);
         _completedActivity = null;
@@ -237,9 +237,9 @@ public class ApiKeyConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null, "an unchanged API key must not consume a version");
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Is.Null);
-        Assert.That(_completedActivity.ApiKeyId, Is.EqualTo(ApiKeyId), "the activity still deep-links to the key when the capture is skipped");
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("resave, nothing changed"));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Null);
+        Assert.That(_completedActivity!.ApiKeyId, Is.EqualTo(ApiKeyId), "the activity still deep-links to the key when the capture is skipped");
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("resave, nothing changed"));
     }
 
     [Test]
@@ -254,11 +254,11 @@ public class ApiKeyConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Delete));
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Is.Not.Null, "the tombstone preserves the deleted key's metadata");
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Contain($"\"objectName\":\"{apiKey.Name}\""));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.Null, "deletion tombstones are unversioned");
-        Assert.That(_completedActivity.ApiKeyId, Is.Null, "deletion tombstones are unlinked; the key no longer exists");
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("superseded"));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Not.Null, "the tombstone preserves the deleted key's metadata");
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain($"\"objectName\":\"{apiKey.Name}\""));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null, "deletion tombstones are unversioned");
+        Assert.That(_completedActivity!.ApiKeyId, Is.Null, "deletion tombstones are unlinked; the key no longer exists");
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("superseded"));
     }
 
     [Test]

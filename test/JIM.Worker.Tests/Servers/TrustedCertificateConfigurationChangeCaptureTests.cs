@@ -82,12 +82,12 @@ public class TrustedCertificateConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.TrustedCertificate));
-        Assert.That(_completedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Create));
+        Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Create));
         Assert.That(persisted, Is.Not.Null);
-        Assert.That(_completedActivity.TrustedCertificateId, Is.EqualTo(persisted!.Id), "the activity must carry the certificate id so history is queryable");
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1));
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("new corp PKI"));
-        var snapshot = _completedActivity.ConfigurationChangeSnapshot;
+        Assert.That(_completedActivity!.TrustedCertificateId, Is.EqualTo(persisted!.Id), "the activity must carry the certificate id so history is queryable");
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("new corp PKI"));
+        var snapshot = _completedActivity!.ConfigurationChangeSnapshot;
         Assert.That(snapshot, Is.Not.Null);
         Assert.That(snapshot, Does.Contain("\"objectType\":\"TrustedCertificate\""));
         Assert.That(snapshot, Does.Contain(persisted.Thumbprint), "the thumbprint is public metadata and identifies the certificate");
@@ -108,11 +108,11 @@ public class TrustedCertificateConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
-        Assert.That(_completedActivity.TrustedCertificateId, Is.EqualTo(CertificateId));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(3), "version is the existing maximum (2) + 1");
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("rotation"));
+        Assert.That(_completedActivity!.TrustedCertificateId, Is.EqualTo(CertificateId));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(3), "version is the existing maximum (2) + 1");
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("rotation"));
         Assert.That(certificate.Name, Is.EqualTo("Corp Root CA (renewed)"));
-        var snapshot = _completedActivity.ConfigurationChangeSnapshot;
+        var snapshot = _completedActivity!.ConfigurationChangeSnapshot;
         Assert.That(snapshot, Is.Not.Null);
         Assert.That(snapshot, Does.Contain("Corp Root CA (renewed)"));
         Assert.That(snapshot, Does.Contain("\"enabled\""));
@@ -131,8 +131,8 @@ public class TrustedCertificateConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TrustedCertificateId, Is.EqualTo(CertificateId));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1));
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("via API"));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("via API"));
     }
 
     [Test]
@@ -145,8 +145,8 @@ public class TrustedCertificateConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Null);
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.Null);
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("no tracking"));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null);
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("no tracking"));
     }
 
     [Test]
@@ -160,7 +160,7 @@ public class TrustedCertificateConfigurationChangeCaptureTests
         await _jim.Certificates.UpdateAsync(CertificateId, NewUser(), name: "Corp Root CA (renewed)");
         var storedSnapshot = _completedActivity!.ConfigurationChangeSnapshot;
         Assert.That(storedSnapshot, Is.Not.Null);
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(5));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(5));
         _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.TrustedCertificate, CertificateId))
             .ReturnsAsync(storedSnapshot);
         _completedActivity = null;
@@ -169,8 +169,8 @@ public class TrustedCertificateConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null, "an unchanged Trusted Certificate must not consume a version");
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Is.Null);
-        Assert.That(_completedActivity.TrustedCertificateId, Is.EqualTo(CertificateId), "the activity still deep-links to the certificate when the capture is skipped");
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Null);
+        Assert.That(_completedActivity!.TrustedCertificateId, Is.EqualTo(CertificateId), "the activity still deep-links to the certificate when the capture is skipped");
     }
 
     [Test]
@@ -184,11 +184,11 @@ public class TrustedCertificateConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Delete));
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Is.Not.Null, "the tombstone preserves the deleted certificate's metadata");
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Contain("\"objectName\":\"Corp Root CA\""));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.Null, "deletion tombstones are unversioned");
-        Assert.That(_completedActivity.TrustedCertificateId, Is.Null, "deletion tombstones are unlinked; the certificate no longer exists");
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("superseded"));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Not.Null, "the tombstone preserves the deleted certificate's metadata");
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"objectName\":\"Corp Root CA\""));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null, "deletion tombstones are unversioned");
+        Assert.That(_completedActivity!.TrustedCertificateId, Is.Null, "deletion tombstones are unlinked; the certificate no longer exists");
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("superseded"));
     }
 
     // -- helpers -------------------------------------------------------------------------------------------------------

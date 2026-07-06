@@ -72,10 +72,10 @@ public class ServiceSettingConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.ServiceSettingKey, Is.EqualTo(SettingKey), "the activity must carry the setting key so history is queryable");
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(7), "version is the existing maximum (6) + 1");
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Is.Not.Null);
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"ServiceSetting\""));
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Contain("30.00:00:00"), "the snapshot reflects the newly persisted value");
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(7), "version is the existing maximum (6) + 1");
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Not.Null);
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"ServiceSetting\""));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("30.00:00:00"), "the snapshot reflects the newly persisted value");
         Assert.That(setting.Value, Is.EqualTo("30.00:00:00"));
     }
 
@@ -91,7 +91,7 @@ public class ServiceSettingConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"overridden\""), "the snapshot must represent override-vs-default semantics");
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Contain("90.00:00:00"), "the default value provides the diff context for overrides and reverts");
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("90.00:00:00"), "the default value provides the diff context for overrides and reverts");
     }
 
     [Test]
@@ -136,7 +136,7 @@ public class ServiceSettingConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Not.Null, "a rotated secret is a real change and must capture");
-        Assert.That(SecretValueNode(_completedActivity.ConfigurationChangeSnapshot!).Value, Is.EqualTo(ExpectedKeyedHash("correct-horse")));
+        Assert.That(SecretValueNode(_completedActivity!.ConfigurationChangeSnapshot!).Value, Is.EqualTo(ExpectedKeyedHash("correct-horse")));
         Assert.That(ExpectedKeyedHash("correct-horse"), Is.Not.EqualTo(ExpectedKeyedHash("hunter2")));
     }
 
@@ -161,8 +161,8 @@ public class ServiceSettingConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Null, "no snapshot is captured when tracking is disabled");
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.Null);
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("no tracking"), "the reason is recorded independently of the snapshot toggle");
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null);
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("no tracking"), "the reason is recorded independently of the snapshot toggle");
     }
 
     [Test]
@@ -177,7 +177,7 @@ public class ServiceSettingConfigurationChangeCaptureTests
         await _jim.ServiceSettings.UpdateSettingValueAsync(SettingKey, "30.00:00:00", NewUser());
         var storedSnapshot = _completedActivity!.ConfigurationChangeSnapshot;
         Assert.That(storedSnapshot, Is.Not.Null);
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(4));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(4));
         _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.ServiceSetting, SettingKey))
             .ReturnsAsync(storedSnapshot);
         _completedActivity = null;
@@ -186,8 +186,8 @@ public class ServiceSettingConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null, "an unchanged Service Setting must not consume a version");
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Is.Null);
-        Assert.That(_completedActivity.ServiceSettingKey, Is.EqualTo(SettingKey), "the activity still deep-links to the setting when the capture is skipped");
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Null);
+        Assert.That(_completedActivity!.ServiceSettingKey, Is.EqualTo(SettingKey), "the activity still deep-links to the setting when the capture is skipped");
     }
 
     [Test]
@@ -203,11 +203,11 @@ public class ServiceSettingConfigurationChangeCaptureTests
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(setting.Value, Is.Null, "revert clears the override");
         Assert.That(_completedActivity!.ServiceSettingKey, Is.EqualTo(SettingKey));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(5));
-        Assert.That(_completedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Revert));
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("back to default"));
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Contain("\"overridden\""));
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Not.Contain("30.00:00:00"),
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(5));
+        Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Revert));
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("back to default"));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"overridden\""));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Not.Contain("30.00:00:00"),
             "the reverted snapshot no longer carries the removed override value");
     }
 
@@ -224,8 +224,8 @@ public class ServiceSettingConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.ServiceSettingKey, Is.EqualTo(SettingKey));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1));
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("via API"));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("via API"));
     }
 
     // -- helpers -------------------------------------------------------------------------------------------------------

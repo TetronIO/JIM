@@ -81,11 +81,11 @@ public class MetaverseConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null, "the update must record an Activity; it previously recorded nothing");
         Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.MetaverseObjectType));
-        Assert.That(_completedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
-        Assert.That(_completedActivity.MetaverseObjectTypeId, Is.EqualTo(ObjectTypeId), "the activity must carry the object type id so history is queryable");
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(3), "version is the existing maximum (2) + 1");
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("tighten deletion rules"));
-        var snapshot = _completedActivity.ConfigurationChangeSnapshot;
+        Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
+        Assert.That(_completedActivity!.MetaverseObjectTypeId, Is.EqualTo(ObjectTypeId), "the activity must carry the object type id so history is queryable");
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(3), "version is the existing maximum (2) + 1");
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("tighten deletion rules"));
+        var snapshot = _completedActivity!.ConfigurationChangeSnapshot;
         Assert.That(snapshot, Is.Not.Null);
         Assert.That(snapshot, Does.Contain("\"objectType\":\"MetaverseObjectType\""));
         Assert.That(snapshot, Does.Contain("WhenAuthoritativeSourceDisconnected"), "the deletion rule is configuration");
@@ -106,8 +106,8 @@ public class MetaverseConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.MetaverseObjectTypeId, Is.EqualTo(ObjectTypeId));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1));
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("via API"));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("via API"));
     }
 
     [Test]
@@ -120,8 +120,8 @@ public class MetaverseConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null, "the audit Activity is recorded independently of the snapshot toggle");
         Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Null);
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.Null);
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("no tracking"));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null);
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("no tracking"));
     }
 
     [Test]
@@ -135,7 +135,7 @@ public class MetaverseConfigurationChangeCaptureTests
         await _jim.Metaverse.UpdateMetaverseObjectTypeAsync(objectType, NewUser());
         var storedSnapshot = _completedActivity!.ConfigurationChangeSnapshot;
         Assert.That(storedSnapshot, Is.Not.Null);
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(4));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(4));
         _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.MetaverseObjectType, ObjectTypeId))
             .ReturnsAsync(storedSnapshot);
         _completedActivity = null;
@@ -144,8 +144,8 @@ public class MetaverseConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null, "an unchanged Metaverse Object Type must not consume a version");
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Is.Null);
-        Assert.That(_completedActivity.MetaverseObjectTypeId, Is.EqualTo(ObjectTypeId), "the activity still deep-links to the object type when the capture is skipped");
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Null);
+        Assert.That(_completedActivity!.MetaverseObjectTypeId, Is.EqualTo(ObjectTypeId), "the activity still deep-links to the object type when the capture is skipped");
     }
 
     [Test]
@@ -161,10 +161,10 @@ public class MetaverseConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Create));
-        Assert.That(_completedActivity.MetaverseObjectTypeId, Is.EqualTo(ObjectTypeId));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1));
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("new schema type"));
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Contain("\"objectName\":\"Robot\""));
+        Assert.That(_completedActivity!.MetaverseObjectTypeId, Is.EqualTo(ObjectTypeId));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("new schema type"));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"objectName\":\"Robot\""));
     }
 
     [Test]
@@ -180,10 +180,10 @@ public class MetaverseConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.MetaverseAttribute));
-        Assert.That(_completedActivity.MetaverseAttributeId, Is.EqualTo(AttributeId), "the activity must carry the attribute id so history is queryable");
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(2));
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("widen to groups"));
-        var snapshot = _completedActivity.ConfigurationChangeSnapshot;
+        Assert.That(_completedActivity!.MetaverseAttributeId, Is.EqualTo(AttributeId), "the activity must carry the attribute id so history is queryable");
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(2));
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("widen to groups"));
+        var snapshot = _completedActivity!.ConfigurationChangeSnapshot;
         Assert.That(snapshot, Is.Not.Null);
         Assert.That(snapshot, Does.Contain("\"objectType\":\"MetaverseAttribute\""));
         Assert.That(snapshot, Does.Contain("Text"), "the data type is configuration");
@@ -205,9 +205,9 @@ public class MetaverseConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Create));
-        Assert.That(_completedActivity.MetaverseAttributeId, Is.EqualTo(AttributeId));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1));
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Contain("\"objectName\":\"Serial Number\""));
+        Assert.That(_completedActivity!.MetaverseAttributeId, Is.EqualTo(AttributeId));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"objectName\":\"Serial Number\""));
     }
 
     [Test]
@@ -221,11 +221,11 @@ public class MetaverseConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Delete));
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Is.Not.Null, "the tombstone preserves the deleted attribute's configuration");
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Contain("\"objectName\":\"Serial Number\""));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.Null, "deletion tombstones are unversioned");
-        Assert.That(_completedActivity.MetaverseAttributeId, Is.Null, "deletion tombstones are unlinked; the attribute no longer exists");
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("no longer needed"));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Not.Null, "the tombstone preserves the deleted attribute's configuration");
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"objectName\":\"Serial Number\""));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null, "deletion tombstones are unversioned");
+        Assert.That(_completedActivity!.MetaverseAttributeId, Is.Null, "deletion tombstones are unlinked; the attribute no longer exists");
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("no longer needed"));
     }
 
     // -- helpers -------------------------------------------------------------------------------------------------------

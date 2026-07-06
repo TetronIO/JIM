@@ -484,10 +484,10 @@ public class ActivitiesControllerTests
 
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.TotalCount, Is.EqualTo(1));
-        Assert.That(response.Page, Is.EqualTo(1));
-        Assert.That(response.PageSize, Is.EqualTo(20));
-        Assert.That(response.Items.Count(), Is.EqualTo(1));
-        Assert.That(response.Items.Single().TargetName, Is.EqualTo("Child Activity"));
+        Assert.That(response!.Page, Is.EqualTo(1));
+        Assert.That(response!.PageSize, Is.EqualTo(20));
+        Assert.That(response!.Items.Count(), Is.EqualTo(1));
+        Assert.That(response!.Items.Single().TargetName, Is.EqualTo("Child Activity"));
     }
 
     [Test]
@@ -527,8 +527,8 @@ public class ActivitiesControllerTests
 
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.Page, Is.EqualTo(2));
-        Assert.That(response.TotalCount, Is.EqualTo(15));
-        Assert.That(response.Items.Single().TargetName, Is.EqualTo("Second Page Child"));
+        Assert.That(response!.TotalCount, Is.EqualTo(15));
+        Assert.That(response!.Items.Single().TargetName, Is.EqualTo("Second Page Child"));
         _mockActivityRepo.Verify(r => r.GetChildActivitiesAsync(parentId, 2, 10), Times.Once);
     }
 
@@ -574,7 +574,7 @@ public class ActivitiesControllerTests
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.TotalCount, Is.EqualTo(0));
-        Assert.That(response.Items, Is.Empty);
+        Assert.That(response!.Items, Is.Empty);
     }
 
     #endregion

@@ -92,12 +92,12 @@ public class RoleConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.Role));
-        Assert.That(_completedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Create));
-        Assert.That(_completedActivity.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
-        Assert.That(_completedActivity.InitiatedByName, Is.EqualTo("System"));
-        Assert.That(_completedActivity.RoleId, Is.EqualTo(RoleId), "the activity must carry the Role id so history is queryable");
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1));
-        var snapshot = _completedActivity.ConfigurationChangeSnapshot;
+        Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Create));
+        Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
+        Assert.That(_completedActivity!.InitiatedByName, Is.EqualTo("System"));
+        Assert.That(_completedActivity!.RoleId, Is.EqualTo(RoleId), "the activity must carry the Role id so history is queryable");
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        var snapshot = _completedActivity!.ConfigurationChangeSnapshot;
         Assert.That(snapshot, Is.Not.Null);
         Assert.That(snapshot, Does.Contain("\"objectType\":\"Role\""));
     }
@@ -117,9 +117,9 @@ public class RoleConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
-        Assert.That(_completedActivity.RoleId, Is.EqualTo(RoleId));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1));
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("new custom role"));
+        Assert.That(_completedActivity!.RoleId, Is.EqualTo(RoleId));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("new custom role"));
     }
 
     [Test]
@@ -138,9 +138,9 @@ public class RoleConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.ApiKey));
-        Assert.That(_completedActivity.InitiatedById, Is.EqualTo(initiatingKey.Id));
-        Assert.That(_completedActivity.RoleId, Is.EqualTo(RoleId));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.InitiatedById, Is.EqualTo(initiatingKey.Id));
+        Assert.That(_completedActivity!.RoleId, Is.EqualTo(RoleId));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
     }
 
     // -- AddObjectToRoleByIdAsync ----------------------------------------------------------------------------------
@@ -161,14 +161,14 @@ public class RoleConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.Role));
-        Assert.That(_completedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
-        Assert.That(_completedActivity.TargetName, Is.EqualTo("Administrator"));
-        Assert.That(_completedActivity.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
-        Assert.That(_completedActivity.RoleId, Is.EqualTo(RoleId));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1));
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("granting access"));
-        Assert.That(_completedActivity.Message, Does.Contain("Jane Smith").And.Contain("Administrator"));
-        var snapshot = _completedActivity.ConfigurationChangeSnapshot;
+        Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
+        Assert.That(_completedActivity!.TargetName, Is.EqualTo("Administrator"));
+        Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.User));
+        Assert.That(_completedActivity!.RoleId, Is.EqualTo(RoleId));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("granting access"));
+        Assert.That(_completedActivity!.Message, Does.Contain("Jane Smith").And.Contain("Administrator"));
+        var snapshot = _completedActivity!.ConfigurationChangeSnapshot;
         Assert.That(snapshot, Is.Not.Null);
         Assert.That(snapshot, Does.Contain("Jane Smith"));
         Assert.That(snapshot, Does.Contain(member.Id.ToString("D")));
@@ -191,8 +191,8 @@ public class RoleConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.ApiKey));
-        Assert.That(_completedActivity.InitiatedById, Is.EqualTo(initiatingKey.Id));
-        Assert.That(_completedActivity.RoleId, Is.EqualTo(RoleId));
+        Assert.That(_completedActivity!.InitiatedById, Is.EqualTo(initiatingKey.Id));
+        Assert.That(_completedActivity!.RoleId, Is.EqualTo(RoleId));
     }
 
     [Test]
@@ -211,9 +211,9 @@ public class RoleConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.Role));
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Is.Null);
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.Null);
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("no tracking"));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Null);
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null);
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("no tracking"));
     }
 
     [Test]
@@ -239,7 +239,7 @@ public class RoleConfigurationChangeCaptureTests
         await _jim.Security.AddObjectToRoleByIdAsync(member.Id, RoleId, NewUser(), changeReason: "first add");
         var storedSnapshot = _completedActivity!.ConfigurationChangeSnapshot;
         Assert.That(storedSnapshot, Is.Not.Null);
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
         _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.Role, RoleId))
             .ReturnsAsync(storedSnapshot);
         _completedActivity = null;
@@ -248,9 +248,9 @@ public class RoleConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.Null, "an unchanged membership must not consume a version");
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Is.Null);
-        Assert.That(_completedActivity.RoleId, Is.EqualTo(RoleId), "the activity still deep-links to the Role when the capture is skipped");
-        Assert.That(_completedActivity.ChangeReason, Is.EqualTo("resend, already a member"));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Null);
+        Assert.That(_completedActivity!.RoleId, Is.EqualTo(RoleId), "the activity still deep-links to the Role when the capture is skipped");
+        Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("resend, already a member"));
     }
 
     // -- RemoveObjectFromRoleAsync ----------------------------------------------------------------------------------
@@ -272,11 +272,11 @@ public class RoleConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.Role));
-        Assert.That(_completedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
-        Assert.That(_completedActivity.RoleId, Is.EqualTo(RoleId));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(2), "version is the existing maximum (1) + 1");
-        Assert.That(_completedActivity.Message, Does.Contain("Jane Smith").And.Contain("Administrator"));
-        var snapshot = _completedActivity.ConfigurationChangeSnapshot;
+        Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
+        Assert.That(_completedActivity!.RoleId, Is.EqualTo(RoleId));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(2), "version is the existing maximum (1) + 1");
+        Assert.That(_completedActivity!.Message, Does.Contain("Jane Smith").And.Contain("Administrator"));
+        var snapshot = _completedActivity!.ConfigurationChangeSnapshot;
         Assert.That(snapshot, Is.Not.Null);
         Assert.That(snapshot, Does.Contain("Bob Jones"));
         Assert.That(snapshot, Does.Not.Contain("Jane Smith"), "the removed member must not still appear in the new version");
@@ -302,10 +302,10 @@ public class RoleConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.Role));
-        Assert.That(_completedActivity.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
-        Assert.That(_completedActivity.RoleId, Is.EqualTo(RoleId));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1));
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Contain("Jay Admin"));
+        Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
+        Assert.That(_completedActivity!.RoleId, Is.EqualTo(RoleId));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("Jay Admin"));
     }
 
     // -- SeedBuiltInRolesAsync --------------------------------------------------------------------------------------
@@ -330,12 +330,12 @@ public class RoleConfigurationChangeCaptureTests
 
         Assert.That(_completedActivity, Is.Not.Null, "seeding must record a Create Activity for the built-in Role");
         Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.Role));
-        Assert.That(_completedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Create));
-        Assert.That(_completedActivity.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
-        Assert.That(_completedActivity.ConfigurationChangeVersion, Is.EqualTo(1),
+        Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Create));
+        Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1),
             "the seeded creation must be version 1 of the Role's configuration change history");
-        Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"Role\""));
-        Assert.That(_completedActivity.ChangeReason, Is.Not.Null.And.Not.Empty,
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"Role\""));
+        Assert.That(_completedActivity!.ChangeReason, Is.Not.Null.And.Not.Empty,
             "the seeded creation should explain its provenance in the change history");
 
         // The seeded creation must be grouped under a single System Initialisation parent Activity, so a fresh
