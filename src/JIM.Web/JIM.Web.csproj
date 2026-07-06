@@ -28,7 +28,7 @@
          Microsoft.AspNetCore.OpenApi 10.0.9. 2.7.5 is the first patched release for GHSA-v5pm-xwqc-g5wc
          ("Circular schema references may terminate OpenAPI parsing", high). Remove once the parent
          package references a patched version. -->
-    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
+    <PackageReference Include="Microsoft.OpenApi" Version="2.9.0" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.16.6" />
     <PackageReference Include="MudBlazor" Version="9.6.0" />
   </ItemGroup>
