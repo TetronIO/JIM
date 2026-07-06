@@ -46,6 +46,7 @@ Describe 'Get-JIMConfigurationChangeHistory' {
             $validateSet.ValidValues | Should -Contain 'TrustedCertificate'
             $validateSet.ValidValues | Should -Contain 'ApiKey'
             $validateSet.ValidValues | Should -Contain 'Role'
+            $validateSet.ValidValues | Should -Contain 'PredefinedSearch'
         }
 
         It 'Accepts Id from the pipeline by property name' {
@@ -65,7 +66,7 @@ Describe 'Get-JIMConfigurationChangeHistory' {
             { Get-JIMConfigurationChangeHistory -Type SynchronisationRule -Id ([Guid]::NewGuid().ToString()) -ErrorAction Stop } | Should -Throw '*integer*'
         }
 
-        It 'Rejects a non-integer Id for -Type <_>' -ForEach @('MetaverseObjectType', 'MetaverseAttribute', 'Role') {
+        It 'Rejects a non-integer Id for -Type <_>' -ForEach @('MetaverseObjectType', 'MetaverseAttribute', 'Role', 'PredefinedSearch') {
             { Get-JIMConfigurationChangeHistory -Type $_ -Id ([Guid]::NewGuid().ToString()) -ErrorAction Stop } | Should -Throw '*integer*'
         }
 
@@ -116,7 +117,10 @@ Describe 'ChangeReason on configuration write cmdlets' {
         'New-JIMMetaverseAttribute', 'Set-JIMMetaverseAttribute', 'Remove-JIMMetaverseAttribute',
         'Add-JIMCertificate', 'Set-JIMCertificate', 'Remove-JIMCertificate',
         'New-JIMApiKey', 'Set-JIMApiKey', 'Remove-JIMApiKey',
-        'Add-JIMRoleMember', 'Remove-JIMRoleMember'
+        'Add-JIMRoleMember', 'Remove-JIMRoleMember',
+        'Set-JIMPredefinedSearch',
+        'New-JIMPredefinedSearchCriteriaGroup', 'Set-JIMPredefinedSearchCriteriaGroup', 'Remove-JIMPredefinedSearchCriteriaGroup',
+        'New-JIMPredefinedSearchCriterion', 'Set-JIMPredefinedSearchCriterion', 'Remove-JIMPredefinedSearchCriterion'
     ) {
         $param = (Get-Command $_).Parameters['ChangeReason']
         $param | Should -Not -BeNullOrEmpty

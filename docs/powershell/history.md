@@ -10,7 +10,7 @@ Cmdlets for querying configuration change history, querying deleted objects, and
 
 ## Get-JIMConfigurationChangeHistory
 
-Retrieves the recorded configuration changes for a Synchronisation Rule, Connected System, Schedule, Service Setting, Metaverse Object Type, Metaverse Attribute, Trusted Certificate, API Key, or Role. Every create, update, and delete is captured as a complete, versioned snapshot carried on its Activity, so you can see exactly what changed, when, and who changed it. Three retrieval modes are supported: a paged summary list (default), a single version with its diff against the previous version (`-Version`), and a comparison of any two versions (`-CompareFrom` / `-CompareTo`). Sensitive values (for example encrypted Connected System settings) are never returned; a changed secret is reported only as changed, never by value. An API Key's history stores only its metadata and Role assignments; the key secret is never returned in any form, not even as a hash. A Role's history covers both its definition and its static membership, so each member add or remove appears as its own version.
+Retrieves the recorded configuration changes for a Synchronisation Rule, Connected System, Schedule, Service Setting, Metaverse Object Type, Metaverse Attribute, Trusted Certificate, API Key, Role, or Predefined Search. Every create, update, and delete is captured as a complete, versioned snapshot carried on its Activity, so you can see exactly what changed, when, and who changed it. Three retrieval modes are supported: a paged summary list (default), a single version with its diff against the previous version (`-Version`), and a comparison of any two versions (`-CompareFrom` / `-CompareTo`). Sensitive values (for example encrypted Connected System settings) are never returned; a changed secret is reported only as changed, never by value. An API Key's history stores only its metadata and Role assignments; the key secret is never returned in any form, not even as a hash. A Role's history covers both its definition and its static membership, so each member add or remove appears as its own version. A Predefined Search's history also covers its criteria groups and criteria: each add, edit, or removal rolls up into a version on the owning search.
 
 ### Syntax
 
@@ -34,8 +34,8 @@ Get-JIMConfigurationChangeHistory -Type <string> -Id <int|guid|string>
 
 | Name | Type | Required | Default | Parameter Set | Description |
 |------|------|----------|---------|---------------|-------------|
-| `Type` | `string` | Yes | | All | The configuration object kind. Valid values: `SynchronisationRule`, `ConnectedSystem`, `Schedule`, `ServiceSetting`, `MetaverseObjectType`, `MetaverseAttribute`, `TrustedCertificate`, `ApiKey`, `Role`. |
-| `Id` | `int`, `guid` or `string` | Yes | | All | The ID of the configuration object: an integer for a Synchronisation Rule, Connected System, Metaverse Object Type, Metaverse Attribute, or Role; a GUID for a Schedule, Trusted Certificate, or API Key; the dot-notation setting key for a Service Setting. Accepts the `id` property from the pipeline, so a piped object binds automatically. |
+| `Type` | `string` | Yes | | All | The configuration object kind. Valid values: `SynchronisationRule`, `ConnectedSystem`, `Schedule`, `ServiceSetting`, `MetaverseObjectType`, `MetaverseAttribute`, `TrustedCertificate`, `ApiKey`, `Role`, `PredefinedSearch`. |
+| `Id` | `int`, `guid` or `string` | Yes | | All | The ID of the configuration object: an integer for a Synchronisation Rule, Connected System, Metaverse Object Type, Metaverse Attribute, Role, or Predefined Search; a GUID for a Schedule, Trusted Certificate, or API Key; the dot-notation setting key for a Service Setting. Accepts the `id` property from the pipeline, so a piped object binds automatically. |
 | `Page` | `int` | No | `1` | Page | Page number for the summary list. |
 | `PageSize` | `int` | No | `50` | Page, All | Items per page. Maximum: `100`. |
 | `All` | `switch` | No | | All | Automatically paginate through, and return, every change-history entry. |
@@ -96,8 +96,12 @@ Get-JIMApiKey | Get-JIMConfigurationChangeHistory -Type ApiKey
 Get-JIMRole -Name "Administrator" | Get-JIMConfigurationChangeHistory -Type Role
 ```
 
+```powershell title="List the recorded changes for a Predefined Search (int-keyed), covering the search and its criteria"
+Get-JIMPredefinedSearch -Uri people | Get-JIMConfigurationChangeHistory -Type PredefinedSearch
+```
+
 !!! note "Recording a reason"
-    To attach a reason to a change so it appears in this history, pass `-ChangeReason` to the write cmdlets: `New-JIMSyncRule`, `Set-JIMSyncRule`, `Remove-JIMSyncRule`, `New-JIMConnectedSystem`, `Set-JIMConnectedSystem`, `Set-JIMServiceSetting`, `Reset-JIMServiceSetting`, `New-JIMMetaverseObjectType`, `Set-JIMMetaverseObjectType`, `New-JIMMetaverseAttribute`, `Set-JIMMetaverseAttribute`, `Remove-JIMMetaverseAttribute`, `Add-JIMCertificate`, `Set-JIMCertificate`, `Remove-JIMCertificate`, `New-JIMApiKey`, `Set-JIMApiKey`, `Remove-JIMApiKey`, `Add-JIMRoleMember`, and `Remove-JIMRoleMember`.
+    To attach a reason to a change so it appears in this history, pass `-ChangeReason` to the write cmdlets: `New-JIMSyncRule`, `Set-JIMSyncRule`, `Remove-JIMSyncRule`, `New-JIMConnectedSystem`, `Set-JIMConnectedSystem`, `Set-JIMServiceSetting`, `Reset-JIMServiceSetting`, `New-JIMMetaverseObjectType`, `Set-JIMMetaverseObjectType`, `New-JIMMetaverseAttribute`, `Set-JIMMetaverseAttribute`, `Remove-JIMMetaverseAttribute`, `Add-JIMCertificate`, `Set-JIMCertificate`, `Remove-JIMCertificate`, `New-JIMApiKey`, `Set-JIMApiKey`, `Remove-JIMApiKey`, `Add-JIMRoleMember`, `Remove-JIMRoleMember`, `Set-JIMPredefinedSearch`, and `New-JIMPredefinedSearchCriteriaGroup`.
 
 ---
 

@@ -14,4 +14,9 @@ public class UpdatePredefinedSearchRequest
     /// search API. Disabled searches remain visible in the admin UI.
     /// </summary>
     public bool? IsEnabled { get; set; }
+
+    /// <summary>
+    /// Optional reason for the change, recorded on the audit Activity and configuration change history.
+    /// </summary>
+    public string? ChangeReason { get; set; }
 }

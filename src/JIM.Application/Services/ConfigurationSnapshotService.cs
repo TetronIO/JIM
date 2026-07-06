@@ -10,6 +10,7 @@ using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Scheduling;
+using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Utilities;
@@ -51,6 +52,9 @@ public class ConfigurationSnapshotService
 
     /// <summary>The object-type discriminator stored on a Role snapshot.</summary>
     public const string RoleObjectType = "Role";
+
+    /// <summary>The object-type discriminator stored on a Predefined Search snapshot.</summary>
+    public const string PredefinedSearchObjectType = "PredefinedSearch";
 
     private JimApplication Application { get; }
 
@@ -752,6 +756,97 @@ public class ConfigurationSnapshotService
             items.Add(node);
         }
         return ConfigurationSnapshotNode.CollectionNode("members", items, "Members");
+    }
+
+    // -- Predefined Search -----------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a scoped snapshot of a Predefined Search: its identity, targeting, result-column attribute selections
+    /// and its full criteria graph (nested groups and their criteria). Predefined Searches carry no secrets;
+    /// <paramref name="hashKey"/> keeps the signature uniform with the other builders. Load the search with its
+    /// attributes and full criteria graph (see <c>ISearchRepository.GetPredefinedSearchAsync(int)</c>) so the
+    /// snapshot reflects persisted truth.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(PredefinedSearch search, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(search);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", search.Name, "Name");
+        Add(children, "uri", search.Uri, "URI");
+        Add(children, "builtIn", Render(search.BuiltIn), "Built-in");
+        Add(children, "enabled", Render(search.IsEnabled), "Enabled");
+        Add(children, "isDefaultForMetaverseObjectType", Render(search.IsDefaultForMetaverseObjectType), "Default for Metaverse Object Type");
+        AddReference(children, "metaverseObjectTypeId", search.MetaverseObjectType?.Id, search.MetaverseObjectType?.Name, "Metaverse Object Type");
+        children.Add(BuildPredefinedSearchResultAttributes(search.Attributes));
+        children.Add(BuildPredefinedSearchCriteriaGroups(search.CriteriaGroups));
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = PredefinedSearchObjectType,
+            ObjectId = search.Id,
+            ObjectName = search.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("predefinedSearch", children, "Predefined Search")
+        };
+    }
+
+    private static ConfigurationSnapshotNode BuildPredefinedSearchResultAttributes(List<PredefinedSearchAttribute> attributes)
+    {
+        // Mirrors BuildAttributeAssociations: a reference (stable id, name as display) per selected result column.
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var attribute in attributes.OrderBy(a => a.Position).ThenBy(a => a.Id))
+        {
+            var node = ConfigurationSnapshotNode.Scalar("attributeId", Render(attribute.MetaverseAttribute.Id), "Attribute", attribute.MetaverseAttribute.Name);
+            node.ItemId = attribute.MetaverseAttribute.Id;
+            items.Add(node);
+        }
+        return ConfigurationSnapshotNode.CollectionNode("resultAttributes", items, "Result Attributes");
+    }
+
+    private ConfigurationSnapshotNode BuildPredefinedSearchCriteriaGroups(List<PredefinedSearchCriteriaGroup> groups)
+    {
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var group in groups.OrderBy(g => g.Position).ThenBy(g => g.Id))
+        {
+            var children = new List<ConfigurationSnapshotNode>();
+            AddEnum(children, "type", group.Type, "Match");
+            Add(children, "position", Render(group.Position), "Position");
+            children.Add(BuildPredefinedSearchCriteria(group.Criteria));
+            children.Add(BuildPredefinedSearchCriteriaGroups(group.ChildGroups));
+            items.Add(ConfigurationSnapshotNode.ObjectNode("group", children, "Group", group.Id));
+        }
+        return ConfigurationSnapshotNode.CollectionNode("criteriaGroups", items, "Criteria");
+    }
+
+    private static ConfigurationSnapshotNode BuildPredefinedSearchCriteria(List<PredefinedSearchCriteria> criteria)
+    {
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var criterion in criteria.OrderBy(c => c.Id))
+        {
+            var children = new List<ConfigurationSnapshotNode>();
+            AddReference(children, "metaverseAttributeId", criterion.MetaverseAttributeId, criterion.MetaverseAttribute?.Name, "Metaverse Attribute");
+            AddEnum(children, "comparisonType", criterion.ComparisonType, "Comparison");
+            Add(children, "stringValue", criterion.StringValue, "Value");
+            Add(children, "intValue", Render(criterion.IntValue), "Value");
+            Add(children, "longValue", Render(criterion.LongValue), "Value");
+            Add(children, "dateTimeValue", Render(criterion.DateTimeValue), "Value");
+            Add(children, "boolValue", Render(criterion.BoolValue), "Value");
+            Add(children, "guidValue", Render(criterion.GuidValue), "Value");
+            Add(children, "caseSensitive", Render(criterion.CaseSensitive), "Case sensitive");
+
+            // The relative-date fields are only meaningful (and only ever populated) when ValueMode is Relative;
+            // recording them unconditionally would show meaningless nulls against an Absolute criterion.
+            if (criterion.ValueMode == DateCriteriaValueMode.Relative)
+            {
+                AddEnum(children, "valueMode", criterion.ValueMode, "Value mode");
+                Add(children, "relativeCount", Render(criterion.RelativeCount), "Relative count");
+                AddEnum(children, "relativeUnit", criterion.RelativeUnit, "Relative unit");
+                AddEnum(children, "relativeDirection", criterion.RelativeDirection, "Relative direction");
+            }
+
+            items.Add(ConfigurationSnapshotNode.ObjectNode("criterion", children, "Criterion", criterion.Id));
+        }
+        return ConfigurationSnapshotNode.CollectionNode("criteria", items, "Criteria");
     }
 
     // -- value rendering -----------------------------------------------------------------------------------------------
