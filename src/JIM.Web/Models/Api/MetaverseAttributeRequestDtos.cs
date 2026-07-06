@@ -33,6 +33,11 @@ public class CreateMetaverseAttributeRequest
     /// Optional list of object type IDs to associate this attribute with.
     /// </summary>
     public List<int>? ObjectTypeIds { get; set; }
+
+    /// <summary>
+    /// Optional reason for the change, recorded on the audit Activity and configuration change history.
+    /// </summary>
+    public string? ChangeReason { get; set; }
 }
 
 /// <summary>
@@ -61,4 +66,9 @@ public class UpdateMetaverseAttributeRequest
     /// This will replace the existing associations.
     /// </summary>
     public List<int>? ObjectTypeIds { get; set; }
+
+    /// <summary>
+    /// Optional reason for the change, recorded on the audit Activity and configuration change history.
+    /// </summary>
+    public string? ChangeReason { get; set; }
 }

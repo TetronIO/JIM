@@ -640,7 +640,7 @@ public class SchedulesController(ILogger<SchedulesController> logger, JimApplica
         // Check for API key authentication
         if (HttpContext.Items.TryGetValue("ApiKeyId", out var apiKeyIdObj) && apiKeyIdObj is Guid apiKeyId)
         {
-            var apiKey = await _application.Repository.ApiKeys.GetByIdAsync(apiKeyId);
+            var apiKey = await _application.Security.GetApiKeyAsync(apiKeyId);
             return (ActivityInitiatorType.ApiKey, apiKeyId, apiKey?.Name ?? "API Key");
         }
 

@@ -105,6 +105,7 @@
 
         # Activities
         'Get-JIMActivity',
+        'Get-JIMActivityChildren',
         'Get-JIMActivityStats',
 
         # Predefined Searches

@@ -145,6 +145,77 @@ public class ConfigurationChangeHistoryApiTests
         Assert.That(payload.Items.Single().Summary, Is.EqualTo("Created"));
     }
 
+    [Test]
+    public async Task GetConnectorDefinitionChangeHistoryAsync_ReturnsPaginatedItemsAsync()
+    {
+        var rows = new List<ConfigurationChangeActivityData>
+        {
+            Data(2, ActivityTargetOperationType.Update, ConnectorDefinitionSnapJson("v2")),
+            Data(1, ActivityTargetOperationType.Create, ConnectorDefinitionSnapJson("v1"))
+        };
+        _activityRepo.Setup(r => r.GetConfigurationChangeCountAsync(ActivityTargetType.ConnectorDefinition, 4)).ReturnsAsync(2);
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivitiesAsync(ActivityTargetType.ConnectorDefinition, 4, 0, It.IsAny<int>())).ReturnsAsync(rows);
+
+        var payload = await OkPayload<PaginatedResponse<ConfigurationChangeHistoryItem>>(
+            _controller.GetConnectorDefinitionChangeHistoryAsync(4, new PaginationRequest()));
+
+        Assert.That(payload.TotalCount, Is.EqualTo(2));
+        Assert.That(payload.Items.Count(), Is.EqualTo(2));
+        Assert.That(payload.Items.First().Summary, Is.EqualTo("Description"), "v2 changed the description versus v1");
+    }
+
+    [Test]
+    public async Task GetConnectorDefinitionChangeAsync_ReturnsDetailWithDiffAsync()
+    {
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivityByVersionAsync(ActivityTargetType.ConnectorDefinition, 4, 2))
+            .ReturnsAsync(Data(2, ActivityTargetOperationType.Update, ConnectorDefinitionSnapJson("v2")));
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivityBeforeVersionAsync(ActivityTargetType.ConnectorDefinition, 4, 2))
+            .ReturnsAsync(Data(1, ActivityTargetOperationType.Create, ConnectorDefinitionSnapJson("v1")));
+
+        var detail = await OkPayload<ConfigurationChangeDetail>(_controller.GetConnectorDefinitionChangeAsync(4, 2));
+
+        Assert.That(detail.Version, Is.EqualTo(2));
+        Assert.That(detail.Snapshot.ObjectName, Is.EqualTo("LDAP"));
+        Assert.That(detail.Diff.ModifiedCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetConnectorDefinitionChangeAsync_ReturnsNotFoundWhenVersionAbsentAsync()
+    {
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivityByVersionAsync(It.IsAny<ActivityTargetType>(), It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync((ConfigurationChangeActivityData?)null);
+
+        var result = await _controller.GetConnectorDefinitionChangeAsync(4, 99);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task CompareConnectorDefinitionChangesAsync_ReturnsDiffAsync()
+    {
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivityByVersionAsync(ActivityTargetType.ConnectorDefinition, 4, 1))
+            .ReturnsAsync(Data(1, ActivityTargetOperationType.Create, ConnectorDefinitionSnapJson("a")));
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivityByVersionAsync(ActivityTargetType.ConnectorDefinition, 4, 3))
+            .ReturnsAsync(Data(3, ActivityTargetOperationType.Update, ConnectorDefinitionSnapJson("c")));
+
+        var diff = await OkPayload<ConfigurationDiff>(_controller.CompareConnectorDefinitionChangesAsync(4, 1, 3));
+
+        Assert.That(diff.OldVersion, Is.EqualTo(1));
+        Assert.That(diff.NewVersion, Is.EqualTo(3));
+        Assert.That(diff.ModifiedCount, Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task CompareConnectorDefinitionChangesAsync_ReturnsNotFoundWhenVersionAbsentAsync()
+    {
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivityByVersionAsync(It.IsAny<ActivityTargetType>(), It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync((ConfigurationChangeActivityData?)null);
+
+        var result = await _controller.CompareConnectorDefinitionChangesAsync(4, 1, 3);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private static async Task<T> OkPayload<T>(Task<IActionResult> action) where T : class
@@ -163,6 +234,10 @@ public class ConfigurationChangeHistoryApiTests
     private string SyncRuleSnapJson(string name) =>
         ConfigurationSnapshotService.Serialise(_application.ConfigurationSnapshots.CreateSnapshot(
             new SyncRule { Id = 55, Name = name, Direction = SyncRuleDirection.Export }, HashKey));
+
+    private string ConnectorDefinitionSnapJson(string description) =>
+        ConfigurationSnapshotService.Serialise(_application.ConfigurationSnapshots.CreateSnapshot(
+            new ConnectorDefinition { Id = 4, Name = "LDAP", Description = description }, HashKey));
 
     private static ConfigurationChangeActivityData Data(int version, ActivityTargetOperationType operation, string snapshotJson) => new()
     {

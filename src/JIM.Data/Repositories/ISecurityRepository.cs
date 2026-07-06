@@ -8,6 +8,11 @@ namespace JIM.Data.Repositories;
 
 public interface ISecurityRepository
 {
+    /// <summary>
+    /// Creates a new Role definition.
+    /// </summary>
+    public Task<Role> CreateRoleAsync(Role role);
+
     public Task<List<Role>> GetRolesAsync();
 
     /// <summary>

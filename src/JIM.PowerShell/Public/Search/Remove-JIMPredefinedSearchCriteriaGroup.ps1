@@ -16,6 +16,10 @@ function Remove-JIMPredefinedSearchCriteriaGroup {
     .PARAMETER GroupId
         The unique identifier of the criteria group to remove.
 
+    .PARAMETER ChangeReason
+        Optional reason for the removal, recorded on the audit Activity and shown in the owning Predefined
+        Search's configuration change history.
+
     .OUTPUTS
         None
 
@@ -23,6 +27,11 @@ function Remove-JIMPredefinedSearchCriteriaGroup {
         Remove-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -GroupId 10
 
         Removes criteria group 10 and everything within it.
+
+    .EXAMPLE
+        Remove-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -GroupId 10 -ChangeReason "Consolidating filters (CHG0129)"
+
+        Removes the group and records the reason on its configuration change history.
 
     .LINK
         Get-JIMPredefinedSearchCriteriaGroup
@@ -35,7 +44,10 @@ function Remove-JIMPredefinedSearchCriteriaGroup {
 
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]
-        [int]$GroupId
+        [int]$GroupId,
+
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason
     )
 
     process {
@@ -47,7 +59,11 @@ function Remove-JIMPredefinedSearchCriteriaGroup {
         if ($PSCmdlet.ShouldProcess("Criteria Group $GroupId on Predefined Search $PredefinedSearchId", "Remove")) {
             Write-Verbose "Removing criteria group $GroupId from Predefined Search $PredefinedSearchId"
             try {
-                Invoke-JIMApi -Endpoint "/api/v1/predefined-searches/$PredefinedSearchId/criteria-groups/$GroupId" -Method 'DELETE'
+                $endpoint = "/api/v1/predefined-searches/$PredefinedSearchId/criteria-groups/$GroupId"
+                if ($ChangeReason) {
+                    $endpoint += "?changeReason=$([uri]::EscapeDataString($ChangeReason))"
+                }
+                Invoke-JIMApi -Endpoint $endpoint -Method 'DELETE'
                 Write-Verbose "Removed criteria group $GroupId"
             }
             catch {

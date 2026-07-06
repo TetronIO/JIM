@@ -26,7 +26,7 @@
         else if (_schedule != null)
         {
             <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pt-4" @bind-ActivePanelIndex="_activeTab">
-                <MudTabPanel Text="General" Icon="@Icons.Material.Filled.Settings">
+                <MudTabPanel Text="Details" Icon="@Icons.Material.Filled.Settings">
                     <MudStack Spacing="3">
                         @if (_schedule.BuiltIn)
                         {
@@ -40,12 +40,17 @@
                                       HelperText="@(_schedule.BuiltIn ? "This is a built-in schedule; its name cannot be changed." : "A descriptive name for this schedule")" />
 
                         <MudTextField @bind-Value="_schedule.Description" Label="Description" Variant="Variant.Outlined"
-                                      Lines="2" HelperText="Optional description of what this schedule does" />
+                                      Lines="2" MaxLines="6" Sizing="InputSizing.Auto"
+                                      HelperText="Optional description of what this schedule does" />
 
                         <MudDivider Class="my-2" />
 
-                        <MudText Typo="Typo.subtitle2">Trigger</MudText>
+                        <MudSwitch @bind-Value="_schedule.IsEnabled" Color="Color.Primary" Label="@(_schedule.IsEnabled ? "Schedule is Enabled" : "Schedule is Disabled")" />
+                    </MudStack>
+                </MudTabPanel>
 
+                <MudTabPanel Text="Trigger" Icon="@Icons.Material.Filled.Bolt">
+                    <MudStack Spacing="3">
                         <MudRadioGroup @bind-Value="_schedule.TriggerType">
                             <MudRadio Value="ScheduleTriggerType.Cron" Color="Color.Primary">
                                 <MudText>Scheduled</MudText>
@@ -182,10 +187,6 @@
                                 </MudStack>
                             </MudPaper>
                         }
-
-                        <MudDivider Class="my-2" />
-
-                        <MudSwitch @bind-Value="_schedule.IsEnabled" Color="Color.Primary" Label="@(_schedule.IsEnabled ? "Schedule is Enabled" : "Schedule is Disabled")" />
                     </MudStack>
                 </MudTabPanel>
 
@@ -411,10 +412,10 @@
                     }
                 </MudTabPanel>
 
-                @* History is only meaningful for an existing Schedule; a new one has no recorded configuration changes. *@
+                @* Changes is only meaningful for an existing Schedule; a new one has no recorded configuration changes. *@
                 @if (ScheduleId.HasValue)
                 {
-                    <MudTabPanel Text="History" Icon="@Icons.Material.Filled.History">
+                    <MudTabPanel Text="Changes" Icon="@Icons.Material.Filled.History">
                         <ConfigurationChangesTab TargetType="ActivityTargetType.Schedule" ObjectGuidId="ScheduleId" ObjectTypeLabel="Schedule" />
                     </MudTabPanel>
                 }

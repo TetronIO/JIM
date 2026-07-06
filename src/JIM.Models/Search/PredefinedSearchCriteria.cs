@@ -12,6 +12,14 @@ public class PredefinedSearchCriteria : ICriterionValues
     public int Id { get; set; }
 
     /// <summary>
+    /// The foreign key scalar for the owning <see cref="PredefinedSearchCriteriaGroup"/>. Maps to the existing EF
+    /// shadow FK column, so exposing this scalar changes no schema. Prefer this over navigation-based existence
+    /// checks under AsNoTracking (see src/CLAUDE.md); there is no navigation property to the owning group, so this
+    /// scalar is the only way to resolve it without a query.
+    /// </summary>
+    public int? PredefinedSearchCriteriaGroupId { get; set; }
+
+    /// <summary>
     /// The comparison operator to apply (e.g. Equals, Contains, StartsWith, GreaterThan).
     /// </summary>
     public SearchComparisonType ComparisonType { get; set; }

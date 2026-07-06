@@ -26,6 +26,10 @@ function New-JIMMetaverseAttribute {
         Optional array of Object Type IDs to associate this attribute with.
         If not specified, the attribute can be associated with object types later.
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the object's
+        configuration change history.
+
     .OUTPUTS
         PSCustomObject representing the created Attribute.
 
@@ -70,7 +74,11 @@ function New-JIMMetaverseAttribute {
         [string]$AttributePlurality = 'SingleValued',
 
         [Parameter()]
-        [int[]]$ObjectTypeIds
+        [int[]]$ObjectTypeIds,
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason
     )
 
     process {
@@ -114,6 +122,10 @@ function New-JIMMetaverseAttribute {
 
         if ($ObjectTypeIds) {
             $body.objectTypeIds = $ObjectTypeIds
+        }
+
+        if ($ChangeReason) {
+            $body.changeReason = $ChangeReason
         }
 
         if ($PSCmdlet.ShouldProcess($Name, "Create Metaverse Attribute")) {

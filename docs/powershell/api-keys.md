@@ -60,7 +60,7 @@ Creates a new API key for non-interactive authentication. Supports `ShouldProces
 
 ```powershell
 New-JIMApiKey [-Name] <string> [-Description <string>] [-RoleIds <int[]>]
-    [-ExpiresAt <datetime>] [-PassThru] [-WhatIf] [-Confirm]
+    [-ExpiresAt <datetime>] [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -71,6 +71,7 @@ New-JIMApiKey [-Name] <string> [-Description <string>] [-RoleIds <int[]>]
 | `Description` | `string` | No | | Optional description of the key's purpose |
 | `RoleIds` | `int[]` | No | `@()` | Role IDs to assign to the key. If omitted, the key has no role assignments. |
 | `ExpiresAt` | `DateTime` | No | | Optional expiry date and time. If omitted, the key does not expire. |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the key's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 | `PassThru` | `switch` | No | `$false` | Returns the created API key object, including the full key value |
 
 ### Output
@@ -110,7 +111,7 @@ Updates an existing API key's name, description, roles, expiry, or enabled statu
 ```powershell
 Set-JIMApiKey -Id <guid> [-Name <string>] [-Description <string>]
     [-RoleIds <int[]>] [-ExpiresAt <datetime?>] [-Enable] [-Disable]
-    [-PassThru] [-WhatIf] [-Confirm]
+    [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -124,6 +125,7 @@ Set-JIMApiKey -Id <guid> [-Name <string>] [-Description <string>]
 | `ExpiresAt` | `DateTime?` | No | | New expiry date and time. Pass `$null` to remove the expiry entirely. |
 | `Enable` | `switch` | No | `$false` | Enables the API key |
 | `Disable` | `switch` | No | `$false` | Disables the API key. Disabled keys reject all authentication attempts. |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the key's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 | `PassThru` | `switch` | No | `$false` | Returns the updated API key object |
 
 ### Output
@@ -166,10 +168,10 @@ Permanently deletes an API key. Any requests using this key will fail immediatel
 
 ```powershell
 # ById (default)
-Remove-JIMApiKey -Id <guid> [-Force] [-PassThru] [-WhatIf] [-Confirm]
+Remove-JIMApiKey -Id <guid> [-ChangeReason <string>] [-Force] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByInputObject
-Remove-JIMApiKey -InputObject <PSCustomObject> [-Force] [-PassThru] [-WhatIf] [-Confirm]
+Remove-JIMApiKey -InputObject <PSCustomObject> [-ChangeReason <string>] [-Force] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -178,6 +180,7 @@ Remove-JIMApiKey -InputObject <PSCustomObject> [-Force] [-PassThru] [-WhatIf] [-
 |------|------|----------|---------|-------------|
 | `Id` | `Guid` | Yes (ById) | | Unique identifier of the API key to delete. Accepts pipeline input by property name. |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject) | | API key object from the pipeline, as returned by `Get-JIMApiKey`. |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the key's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 | `Force` | `switch` | No | `$false` | Suppresses the confirmation prompt |
 | `PassThru` | `switch` | No | `$false` | Returns the deleted API key object |
 

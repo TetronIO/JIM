@@ -6,6 +6,8 @@ using JIM.Web.Extensions.Api;
 using JIM.Web.Models.Api;
 using JIM.Application;
 using JIM.Application.Exceptions;
+using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Core.DTOs;
 using JIM.Utilities;
@@ -155,9 +157,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
-            await _application.Metaverse.CreateMetaverseObjectTypeAsync(objectType, apiKey);
+            await _application.Metaverse.CreateMetaverseObjectTypeAsync(objectType, apiKey, request.ChangeReason);
         else
-            await _application.Metaverse.CreateMetaverseObjectTypeAsync(objectType, (MetaverseObject?)null);
+            await _application.Metaverse.CreateMetaverseObjectTypeAsync(objectType, await GetCurrentUserAsync(), request.ChangeReason);
 
         _logger.LogInformation("Created Metaverse Object Type: {Id} ({Name})", objectType.Id, LogSanitiser.Sanitise(objectType.Name));
 
@@ -220,7 +222,11 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return BadRequest(ApiErrorResponse.BadRequest("WhenAuthoritativeSourceDisconnected deletion rule requires at least one authoritative source to be specified in DeletionTriggerConnectedSystemIds."));
         }
 
-        await _application.Metaverse.UpdateMetaverseObjectTypeAsync(objectType);
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (apiKey != null)
+            await _application.Metaverse.UpdateMetaverseObjectTypeAsync(objectType, apiKey, request.ChangeReason);
+        else
+            await _application.Metaverse.UpdateMetaverseObjectTypeAsync(objectType, await GetCurrentUserAsync(), request.ChangeReason);
 
         _logger.LogInformation("Updated Metaverse Object Type: {Id} ({Name}) - DeletionRule: {DeletionRule}, GracePeriod: {GracePeriod}",
             objectType.Id, LogSanitiser.Sanitise(objectType.Name), objectType.DeletionRule.ToString(), objectType.DeletionGracePeriod?.ToString());
@@ -315,9 +321,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         // Get the current API key for Activity attribution
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
-            await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, apiKey);
+            await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, apiKey, request.ChangeReason);
         else
-            await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, (MetaverseObject?)null);
+            await _application.Metaverse.CreateMetaverseAttributeAsync(attribute, await GetCurrentUserAsync(), request.ChangeReason);
 
         _logger.LogInformation("Created metaverse attribute: {Id} ({Name})", attribute.Id, LogSanitiser.Sanitise(attribute.Name));
 
@@ -402,9 +408,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         // Get the current API key for Activity attribution
         var apiKey = await GetCurrentApiKeyAsync();
         if (apiKey != null)
-            await _application.Metaverse.UpdateMetaverseAttributeAsync(attribute, apiKey);
+            await _application.Metaverse.UpdateMetaverseAttributeAsync(attribute, apiKey, request.ChangeReason);
         else
-            await _application.Metaverse.UpdateMetaverseAttributeAsync(attribute, (MetaverseObject?)null);
+            await _application.Metaverse.UpdateMetaverseAttributeAsync(attribute, await GetCurrentUserAsync(), request.ChangeReason);
 
         _logger.LogInformation("Updated metaverse attribute: {Id} ({Name})", attribute.Id, LogSanitiser.Sanitise(attribute.Name));
 
@@ -416,6 +422,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// Delete a Metaverse Attribute
     /// </summary>
     /// <param name="id">The unique identifier of the Attribute to delete.</param>
+    /// <param name="changeReason">Optional reason for the deletion, recorded on the audit Activity.</param>
     /// <returns>No content on success.</returns>
     /// <response code="204">Attribute deleted successfully.</response>
     /// <response code="400">Cannot delete built-in or in-use Attribute.</response>
@@ -426,7 +433,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> DeleteAttributeAsync(int id)
+    public async Task<IActionResult> DeleteAttributeAsync(int id, [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Deleting metaverse attribute: {Id}", id);
 
@@ -442,9 +449,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             // Get the current API key for Activity attribution
             var apiKey = await GetCurrentApiKeyAsync();
             if (apiKey != null)
-                await _application.Metaverse.DeleteMetaverseAttributeAsync(attribute, apiKey);
+                await _application.Metaverse.DeleteMetaverseAttributeAsync(attribute, apiKey, changeReason);
             else
-                await _application.Metaverse.DeleteMetaverseAttributeAsync(attribute, (MetaverseObject?)null);
+                await _application.Metaverse.DeleteMetaverseAttributeAsync(attribute, await GetCurrentUserAsync(), changeReason);
         }
         catch (MetaverseAttributeInUseException ex)
         {
@@ -459,6 +466,130 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         return NoContent();
     }
+
+    #region Configuration Change History
+
+    /// <summary>
+    /// List the change history for a Metaverse Object Type.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Object Type.</param>
+    /// <param name="pagination">Pagination parameters.</param>
+    /// <returns>A paged list of change-history entries, newest version first, each with a one-line summary.</returns>
+    /// <response code="200">Change history returned (empty if the Object Type has no recorded configuration changes).</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("object-types/{id:int}/change-history", Name = "GetObjectTypeChangeHistory")]
+    [ProducesResponseType(typeof(PaginatedResponse<ConfigurationChangeHistoryItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetObjectTypeChangeHistoryAsync(int id, [FromQuery] PaginationRequest pagination)
+    {
+        var result = await _application.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.MetaverseObjectType, id, pagination.Page, pagination.PageSize);
+        return Ok(PaginatedResponse<ConfigurationChangeHistoryItem>.Create(result.Results, result.TotalResults, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
+    /// Get a single version of a Metaverse Object Type's change history, with its snapshot and the diff against the previous version.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Object Type.</param>
+    /// <param name="changeVersion">The per-object change version to retrieve.</param>
+    /// <returns>The change detail: metadata, the snapshot, and the diff against the previous version.</returns>
+    /// <response code="200">The change detail.</response>
+    /// <response code="404">No change with that version was found for the Object Type.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("object-types/{id:int}/change-history/{changeVersion:int}", Name = "GetObjectTypeChange")]
+    [ProducesResponseType(typeof(ConfigurationChangeDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetObjectTypeChangeAsync(int id, int changeVersion)
+    {
+        var detail = await _application.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.MetaverseObjectType, id, changeVersion);
+        if (detail == null)
+            return NotFound(ApiErrorResponse.NotFound($"No change history found for Metaverse Object Type {id} version {changeVersion}."));
+        return Ok(detail);
+    }
+
+    /// <summary>
+    /// Compare two versions of a Metaverse Object Type's configuration.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Object Type.</param>
+    /// <param name="fromVersion">The earlier version to compare from.</param>
+    /// <param name="toVersion">The later version to compare to.</param>
+    /// <returns>The structured diff of the later version against the earlier.</returns>
+    /// <response code="200">The diff.</response>
+    /// <response code="404">One of the requested versions was not found for the Object Type.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("object-types/{id:int}/change-history/compare", Name = "CompareObjectTypeChanges")]
+    [ProducesResponseType(typeof(ConfigurationDiff), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CompareObjectTypeChangesAsync(int id, [FromQuery] int fromVersion, [FromQuery] int toVersion)
+    {
+        var diff = await _application.ChangeHistory.CompareConfigurationChangesAsync(ActivityTargetType.MetaverseObjectType, id, fromVersion, toVersion);
+        if (diff == null)
+            return NotFound(ApiErrorResponse.NotFound($"Could not compare versions {fromVersion} and {toVersion} for Metaverse Object Type {id}."));
+        return Ok(diff);
+    }
+
+    /// <summary>
+    /// List the change history for a Metaverse Attribute.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Attribute.</param>
+    /// <param name="pagination">Pagination parameters.</param>
+    /// <returns>A paged list of change-history entries, newest version first, each with a one-line summary.</returns>
+    /// <response code="200">Change history returned (empty if the Attribute has no recorded configuration changes).</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("attributes/{id:int}/change-history", Name = "GetAttributeChangeHistory")]
+    [ProducesResponseType(typeof(PaginatedResponse<ConfigurationChangeHistoryItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetAttributeChangeHistoryAsync(int id, [FromQuery] PaginationRequest pagination)
+    {
+        var result = await _application.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.MetaverseAttribute, id, pagination.Page, pagination.PageSize);
+        return Ok(PaginatedResponse<ConfigurationChangeHistoryItem>.Create(result.Results, result.TotalResults, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
+    /// Get a single version of a Metaverse Attribute's change history, with its snapshot and the diff against the previous version.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Attribute.</param>
+    /// <param name="changeVersion">The per-object change version to retrieve.</param>
+    /// <returns>The change detail: metadata, the snapshot, and the diff against the previous version.</returns>
+    /// <response code="200">The change detail.</response>
+    /// <response code="404">No change with that version was found for the Attribute.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("attributes/{id:int}/change-history/{changeVersion:int}", Name = "GetAttributeChange")]
+    [ProducesResponseType(typeof(ConfigurationChangeDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetAttributeChangeAsync(int id, int changeVersion)
+    {
+        var detail = await _application.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.MetaverseAttribute, id, changeVersion);
+        if (detail == null)
+            return NotFound(ApiErrorResponse.NotFound($"No change history found for Metaverse Attribute {id} version {changeVersion}."));
+        return Ok(detail);
+    }
+
+    /// <summary>
+    /// Compare two versions of a Metaverse Attribute's configuration.
+    /// </summary>
+    /// <param name="id">The unique identifier of the Attribute.</param>
+    /// <param name="fromVersion">The earlier version to compare from.</param>
+    /// <param name="toVersion">The later version to compare to.</param>
+    /// <returns>The structured diff of the later version against the earlier.</returns>
+    /// <response code="200">The diff.</response>
+    /// <response code="404">One of the requested versions was not found for the Attribute.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("attributes/{id:int}/change-history/compare", Name = "CompareAttributeChanges")]
+    [ProducesResponseType(typeof(ConfigurationDiff), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CompareAttributeChangesAsync(int id, [FromQuery] int fromVersion, [FromQuery] int toVersion)
+    {
+        var diff = await _application.ChangeHistory.CompareConfigurationChangesAsync(ActivityTargetType.MetaverseAttribute, id, fromVersion, toVersion);
+        if (diff == null)
+            return NotFound(ApiErrorResponse.NotFound($"Could not compare versions {fromVersion} and {toVersion} for Metaverse Attribute {id}."));
+        return Ok(diff);
+    }
+
+    #endregion
 
     #region Attribute Priority
 
@@ -685,7 +816,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         _logger.LogDebug("Getting Metaverse Objects count (TypeId: {TypeId}, Search: {Search}, FilterAttr: {FilterAttr}={FilterValue})",
             objectTypeId, LogSanitiser.Sanitise(search), LogSanitiser.Sanitise(filterAttributeName), LogSanitiser.Sanitise(filterAttributeValue));
 
-        var count = await _application.Repository.Metaverse.GetMetaverseObjectsCountAsync(
+        var count = await _application.Metaverse.GetMetaverseObjectsCountAsync(
             objectTypeId, search, filterAttributeName, filterAttributeValue);
         return Ok(count);
     }
@@ -807,7 +938,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         _logger.LogDebug("Getting pending deletions (Page: {Page}, PageSize: {PageSize}, TypeId: {TypeId})",
             pagination.Page, pagination.PageSize, objectTypeId);
 
-        var result = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
+        var result = await _application.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
             page: pagination.Page,
             pageSize: pagination.PageSize,
             objectTypeId: objectTypeId);
@@ -836,7 +967,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     public async Task<IActionResult> GetPendingDeletionsCountAsync([FromQuery] int? objectTypeId = null)
     {
         _logger.LogDebug("Getting pending deletions count (TypeId: {TypeId})", objectTypeId);
-        var count = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(objectTypeId);
+        var count = await _application.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync(objectTypeId);
         return Ok(count);
     }
 
@@ -858,7 +989,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         _logger.LogDebug("Getting pending deletions summary");
 
         // Get all pending deletions to calculate summary
-        var result = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
+        var result = await _application.Metaverse.GetMetaverseObjectsPendingDeletionAsync(
             page: 1,
             pageSize: 100,
             objectTypeId: null);
@@ -867,7 +998,7 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         var allPending = result.Results;
 
         // Get total count (may be more than 100)
-        var totalCount = await _application.Repository.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync();
+        var totalCount = await _application.Metaverse.GetMetaverseObjectsPendingDeletionCountAsync();
 
         // Calculate status counts
         var deprovisioningCount = allPending.Count(m => m.ConnectedSystemObjects.Any());

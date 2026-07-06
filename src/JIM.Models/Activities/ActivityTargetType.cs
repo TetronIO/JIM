@@ -32,5 +32,42 @@ public enum ActivityTargetType
     /// The Temporal Scope Reconciler sweep (issue #892), which re-evaluates relative-date scoping across all
     /// enabled Synchronisation Rules that carry a relative-date criterion.
     /// </summary>
-    TemporalScopeReconciliation = 14
+    TemporalScopeReconciliation = 14,
+
+    /// <summary>
+    /// An API Key. Guid-keyed, so its configuration-change history is associated via
+    /// <see cref="Activity.ApiKeyId"/>.
+    /// </summary>
+    ApiKey = 15,
+
+    /// <summary>
+    /// A Role: covers both changes to a Role's definition and changes to its membership (an object being added to
+    /// or removed from the Role). Integer-keyed via <see cref="Activity.RoleId"/>.
+    /// </summary>
+    Role = 16,
+
+    /// <summary>
+    /// A Predefined Search, including its criteria groups and criteria, which roll up into the owning search's
+    /// configuration history. Integer-keyed via <see cref="Activity.PredefinedSearchId"/>.
+    /// </summary>
+    PredefinedSearch = 17,
+
+    /// <summary>
+    /// A Connector Definition, including its file set (recorded as metadata, never binary content).
+    /// Integer-keyed via <see cref="Activity.ConnectorDefinitionId"/>.
+    /// </summary>
+    ConnectorDefinition = 18,
+
+    /// <summary>
+    /// An Example Data Set. Integer-keyed via <see cref="Activity.ExampleDataSetId"/>.
+    /// </summary>
+    ExampleDataSet = 19,
+
+    /// <summary>
+    /// The parent Activity grouping every built-in configuration object JIM seeds itself during a single
+    /// application startup (Roles, Schedules, and similar), with each seeded object's own Create Activity as a
+    /// child via <see cref="Activity.ParentActivityId"/>. Created lazily, only when a seed step is about to
+    /// create something, so a startup where seeding no-ops records no Activity of this type at all.
+    /// </summary>
+    SystemInitialisation = 20
 }

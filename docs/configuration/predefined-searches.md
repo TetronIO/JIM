@@ -96,6 +96,12 @@ Each group has a **logic type**:
 
 On the Predefined Search detail page in the portal, the **Criteria** panel lets you add a criteria group, then add criteria to it, each with the attribute, operator and value controls above. Within a group you can also add a nested child group (with its own All / Any logic). Removing a group removes everything within it. The same operations are available through the [PowerShell cmdlets](../powershell/predefined-searches.md) and the REST API.
 
+## Change history
+
+Changes to a Predefined Search, including its criteria groups and criteria, are tracked as versioned [configuration change history](activities.md#configuration-change-history): who changed what, and when. A **Changes** tab on the Predefined Search detail page shows each change as an audit-style field history, and lets you compare any two versions.
+
+Retrieve the same history with `Get-JIMConfigurationChangeHistory -Type PredefinedSearch` or the equivalent `change-history` endpoint in the [interactive API reference](../../api/reference/). Enabling or disabling a search from the admin portal offers an optional "Reason for change" prompt; automation can pass the same reason with `-ChangeReason` on `Set-JIMPredefinedSearch` or the corresponding REST request field. Adding, editing, or removing a criteria group or criterion is captured as its own version rolled up into the owning search's history, without prompting for a reason on each edit.
+
 ## Manage Predefined Searches
 
 - **JIM portal**<br /> Predefined Searches area of the admin UI

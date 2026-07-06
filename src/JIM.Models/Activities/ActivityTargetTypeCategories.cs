@@ -20,11 +20,20 @@ public static class ActivityTargetTypeCategories
         { ActivityTargetType.ServiceSetting, ActivityTargetCategory.Configuration },
         { ActivityTargetType.Schedule, ActivityTargetCategory.Configuration },
         { ActivityTargetType.TrustedCertificate, ActivityTargetCategory.Configuration },
+        { ActivityTargetType.ApiKey, ActivityTargetCategory.Configuration },
+        { ActivityTargetType.Role, ActivityTargetCategory.Configuration },
+        { ActivityTargetType.PredefinedSearch, ActivityTargetCategory.Configuration },
+        { ActivityTargetType.ConnectorDefinition, ActivityTargetCategory.Configuration },
+        // Example Data Sets are admin-managed configuration. Their sibling ExampleDataTemplate stays under System
+        // for now because its existing activities are template-generation runs, not configuration changes; the
+        // Example Data change-history increment (PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md) revisits that.
+        { ActivityTargetType.ExampleDataSet, ActivityTargetCategory.Configuration },
         { ActivityTargetType.MetaverseObject, ActivityTargetCategory.IdentityData },
         { ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.TemporalScopeReconciliation, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.HistoryRetentionCleanup, ActivityTargetCategory.System },
         { ActivityTargetType.System, ActivityTargetCategory.System },
+        { ActivityTargetType.SystemInitialisation, ActivityTargetCategory.System },
         { ActivityTargetType.ExampleDataTemplate, ActivityTargetCategory.System },
         { ActivityTargetType.NotSet, ActivityTargetCategory.System }
     };

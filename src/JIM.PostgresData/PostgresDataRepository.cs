@@ -33,6 +33,11 @@ public class PostgresDataRepository : IRepository
     public ITaskingRepository Tasking { get; }
     public ITrustedCertificateRepository TrustedCertificates { get; }
 
+    /// <summary>
+    /// The synchronisation engine's raw-SQL hot-path repository, sharing this repository's database session.
+    /// </summary>
+    public ISyncRepository Sync { get; }
+
     internal JimDbContext Database { get; }
 
     public PostgresDataRepository(JimDbContext jimDbContext)
@@ -78,6 +83,7 @@ public class PostgresDataRepository : IRepository
         System = new SystemRepository(this);
         Tasking = new TaskingRepository(this);
         TrustedCertificates = new TrustedCertificateRepository(this);
+        Sync = new SyncRepository(this);
     }
 
     public async Task InitialiseDatabaseAsync()

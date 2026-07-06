@@ -91,6 +91,11 @@ public class CreateMetaverseObjectTypeRequest
     /// Required when DeletionRule is WhenAuthoritativeSourceDisconnected.
     /// </summary>
     public List<int>? DeletionTriggerConnectedSystemIds { get; set; }
+
+    /// <summary>
+    /// Optional reason for the change, recorded on the audit Activity and configuration change history.
+    /// </summary>
+    public string? ChangeReason { get; set; }
 }
 
 /// <summary>
@@ -116,6 +121,11 @@ public class UpdateMetaverseObjectTypeRequest
     /// Ignored when DeletionRule is Manual or WhenLastConnectorDisconnected.
     /// </summary>
     public List<int>? DeletionTriggerConnectedSystemIds { get; set; }
+
+    /// <summary>
+    /// Optional reason for the change, recorded on the audit Activity and configuration change history.
+    /// </summary>
+    public string? ChangeReason { get; set; }
 }
 
 /// <summary>

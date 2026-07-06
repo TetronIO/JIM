@@ -21,6 +21,10 @@ function Set-JIMPredefinedSearch {
         When specified, sets whether the search is available to end users. Pass $true to
         enable, $false to disable. Omit to leave the current state unchanged.
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the Predefined
+        Search's configuration change history.
+
     .PARAMETER PassThru
         If specified, emits the updated Predefined Search header.
 
@@ -39,6 +43,11 @@ function Set-JIMPredefinedSearch {
 
         Enables the search and returns the updated header.
 
+    .EXAMPLE
+        Set-JIMPredefinedSearch -Id 3 -IsEnabled $false -ChangeReason "Retiring in favour of new search (CHG0128)"
+
+        Disables the search and records the reason on its configuration change history.
+
     .LINK
         Get-JIMPredefinedSearch
         Search-JIMMetaverseObject
@@ -51,6 +60,9 @@ function Set-JIMPredefinedSearch {
 
         [Parameter()]
         [bool]$IsEnabled,
+
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
 
         [switch]$PassThru
     )
@@ -67,6 +79,9 @@ function Set-JIMPredefinedSearch {
         $body = @{}
         if ($PSBoundParameters.ContainsKey('IsEnabled')) {
             $body.isEnabled = $IsEnabled
+        }
+        if ($ChangeReason) {
+            $body.changeReason = $ChangeReason
         }
 
         if ($body.Count -eq 0) {

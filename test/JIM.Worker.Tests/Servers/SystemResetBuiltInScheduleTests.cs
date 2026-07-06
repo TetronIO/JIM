@@ -102,4 +102,25 @@ public class SystemResetBuiltInScheduleTests
             Times.Once,
             "a factory reset must restore the built-in Temporal Scope Reconciliation schedule immediately, not on the next worker restart");
     }
+
+    [Test]
+    public async Task ResetSystemAsync_ReseedCreatesSeedingParentActivity_ParentIsCompletedAsync()
+    {
+        // The reseed of the built-in schedule lazily creates the "System Initialisation" parent Activity that
+        // groups seeded objects. Track every activity the reset path completes so we can prove the parent does
+        // not get left permanently InProgress (an in-flight activity would also block any subsequent reset via
+        // the in-progress guard).
+        var completedActivities = new List<Activity>();
+        _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>()))
+            .Callback<Activity>(a => completedActivities.Add(a))
+            .Returns(Task.CompletedTask);
+
+        await _jim.System.ResetSystemAsync(
+            ActivityInitiatorType.ApiKey, Guid.NewGuid(), "Infrastructure Key", includeAdministrators: false);
+
+        var seedingParent = completedActivities.SingleOrDefault(a => a.TargetType == ActivityTargetType.SystemInitialisation);
+        Assert.That(seedingParent, Is.Not.Null,
+            "the reseed's System Initialisation parent Activity must be completed by the reset path, not left permanently InProgress");
+        Assert.That(seedingParent!.Status, Is.EqualTo(ActivityStatus.Complete));
+    }
 }

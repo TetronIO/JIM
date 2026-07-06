@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations;
 using JIM.Models.Security;
 
 namespace JIM.Web.Models.Api;
@@ -118,6 +119,12 @@ public class ApiKeyCreateRequestDto
     /// Optional expiry date. Null means the key never expires.
     /// </summary>
     public DateTime? ExpiresAt { get; set; }
+
+    /// <summary>
+    /// Optional reason for the change, recorded on the audit Activity and configuration change history.
+    /// </summary>
+    [StringLength(1000, ErrorMessage = "Change reason must not exceed 1000 characters.")]
+    public string? ChangeReason { get; set; }
 }
 
 /// <summary>
@@ -149,4 +156,10 @@ public class ApiKeyUpdateRequestDto
     /// Whether the API key is currently enabled.
     /// </summary>
     public bool IsEnabled { get; set; }
+
+    /// <summary>
+    /// Optional reason for the change, recorded on the audit Activity and configuration change history.
+    /// </summary>
+    [StringLength(1000, ErrorMessage = "Change reason must not exceed 1000 characters.")]
+    public string? ChangeReason { get; set; }
 }

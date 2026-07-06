@@ -29,4 +29,10 @@ public class AddCertificateFromFileRequest
     /// </summary>
     [StringLength(2000, ErrorMessage = "Notes must not exceed 2000 characters.")]
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// Optional reason for the change, recorded on the audit Activity and configuration change history.
+    /// </summary>
+    [StringLength(1000, ErrorMessage = "Change reason must not exceed 1000 characters.")]
+    public string? ChangeReason { get; set; }
 }

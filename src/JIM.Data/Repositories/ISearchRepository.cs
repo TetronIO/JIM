@@ -81,4 +81,24 @@ public interface ISearchRepository
     public Task<bool> DeletePredefinedSearchCriterionAsync(int criterionId);
 
     #endregion
+
+    #region owning search resolution
+
+    /// <summary>
+    /// Resolves the id of the Predefined Search that owns a given criteria group. A top-level group carries its
+    /// owning search's id directly; a nested group carries only its parent group's id, so this walks up the
+    /// <see cref="PredefinedSearchCriteriaGroup.ParentGroup"/> chain until a group with a
+    /// <see cref="PredefinedSearchCriteriaGroup.PredefinedSearchId"/> is found. Used to roll up a nested criteria
+    /// group/criterion change to the owning search's configuration change history. Returns null if the group does
+    /// not exist.
+    /// </summary>
+    public Task<int?> GetOwningPredefinedSearchIdForGroupAsync(int groupId);
+
+    /// <summary>
+    /// Resolves the id of the Predefined Search that owns a given criterion, by resolving its containing group via
+    /// <see cref="GetOwningPredefinedSearchIdForGroupAsync"/>. Returns null if the criterion does not exist.
+    /// </summary>
+    public Task<int?> GetOwningPredefinedSearchIdForCriterionAsync(int criterionId);
+
+    #endregion
 }
