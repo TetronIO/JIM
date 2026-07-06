@@ -751,7 +751,10 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     public async Task<IActionResult> GetObjectAsync(Guid id)
     {
         _logger.LogTrace("Requested Metaverse Object: {Id}", id);
-        var obj = await _application.Metaverse.GetMetaverseObjectAsync(id);
+        // Provenance-loading retrieval so the DTO can surface each value's contributing Connected System
+        // and Synchronisation Rule (#931); the lean GetMetaverseObjectAsync is reserved for the sync join
+        // hot path and does not load those navigations.
+        var obj = await _application.Metaverse.GetMetaverseObjectWithProvenanceAsync(id);
         if (obj == null)
             return NotFound(ApiErrorResponse.NotFound($"Metaverse Object with ID {id} not found."));
 
