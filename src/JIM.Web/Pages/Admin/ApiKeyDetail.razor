@@ -84,8 +84,9 @@
                         <MudText Typo="Typo.button" Class="mud-text-secondary">Last Used:</MudText>
                         @if (_apiKey.LastUsedAt.HasValue)
                         {
+                            var lastUsedAt = _apiKey.LastUsedAt.Value;
                             <MudText>
-                                @_apiKey.LastUsedAt.Value.ToLocalTime().ToFriendlyDate()
+                                @lastUsedAt.ToLocalTime().ToFriendlyDate()
                                 @if (!string.IsNullOrEmpty(_apiKey.LastUsedFromIp))
                                 {
                                     <span> from <span class="jim-text-code">@_apiKey.LastUsedFromIp</span></span>
