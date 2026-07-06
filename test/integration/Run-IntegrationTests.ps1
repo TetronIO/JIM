@@ -2880,8 +2880,15 @@ $scenarioParams = @{
     DirectoryConfig = $script:DirectoryConfig
 }
 
-# Skip population if using snapshot images (Samba AD or OpenLDAP)
-if ($script:UsingSnapshots -or $script:UsingOpenLDAPSnapshots) {
+# Skip population if using snapshot images (Samba AD or OpenLDAP).
+# Scenario 14 is excluded: it self-populates its own bespoke six-user-per-suffix OpenLDAP dataset
+# (Populate-OpenLDAP-Scenario14.ps1) and has no snapshot of its own, so it must ALWAYS populate.
+# Without this guard, an "All" regression that snapshots an unrelated scenario earlier in the same
+# process leaves $script:UsingSnapshots set when Scenario 14's turn comes (the "*Scenario1*" pattern
+# also substring-matches "Scenario14"), which would wrongly pass SkipPopulate to the scenario and
+# leave its directory empty, so the Employee ID join finds nothing. Mirrors the Scenario 14
+# exclusions already on the snapshot-detection and general-population guards above.
+if (($script:UsingSnapshots -or $script:UsingOpenLDAPSnapshots) -and $Scenario -notlike "*Scenario14*") {
     $scenarioParams.SkipPopulate = $true
 }
 
