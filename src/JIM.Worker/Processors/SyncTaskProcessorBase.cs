@@ -1627,6 +1627,27 @@ public abstract class SyncTaskProcessorBase
         // pick up the newly assigned MVO IDs (set via EF relationship fixup during AddRange).
         if (_pendingCsoJoinUpdates.Count > 0)
         {
+            // Release-before-claim: obsolete CSOs that were disconnected in-memory this page (their
+            // MetaverseObjectId set to null during Pass 1) still hold their old MetaverseObjectId in the
+            // database until FlushObsoleteCsoOperationsAsync deletes them later in the flush sequence. The
+            // filtered unique index IX_ConnectedSystemObjects_ConnectedSystemId_MetaverseObjectId_Unique
+            // rejects the new join written below if an obsolete CSO still occupies the same
+            // (Connected System, Metaverse Object) slot when that join commits; each flush step
+            // auto-commits separately, so the duplicate is a committed state, not a within-transaction
+            // transient the index would tolerate. Persist the null join state the engine already holds in
+            // memory for those CSOs first, vacating the slot so a re-matching join has somewhere to land.
+            // Only CSOs whose in-memory FK is already null are released here, so a CSO kept joined under
+            // "once managed, always managed" (InboundOutOfScopeAction=RemainJoined) is left untouched.
+            var obsoleteSlotsToRelease = _obsoleteCsosToDelete
+                .Select(x => x.Cso)
+                .Where(cso => cso.MetaverseObjectId == null)
+                .ToList();
+            if (obsoleteSlotsToRelease.Count > 0)
+            {
+                await _syncRepo.UpdateConnectedSystemObjectJoinStatesAsync(obsoleteSlotsToRelease);
+                Log.Verbose("PersistPendingMetaverseObjectsAsync: Released {Count} obsolete CSO join slot(s) before writing new joins", obsoleteSlotsToRelease.Count);
+            }
+
             // For projected CSOs, MetaverseObjectId was not set at projection time (MVO had
             // no ID yet). Now that CreateMetaverseObjectsAsync has persisted the MVOs, EF has
             // assigned IDs and relationship fixup has set MetaverseObjectId on the CSOs.
@@ -2977,6 +2998,24 @@ public abstract class SyncTaskProcessorBase
             throw new SyncJoinException(
                 ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin,
                 $"Cannot join this Connected System Object to Metaverse Object ({mvo}) - it already has a connector from this Connected System. " +
+                $"Check for duplicate data in your source system, or review your Object Matching Rules for uniqueness.");
+        }
+
+        // Also reject if another CSO has already been queued to join this MVO earlier in this same page
+        // (same Connected System) but not yet flushed to the database. The count query above round-trips
+        // to the database, which in production cannot see an in-memory pending join, so without this check
+        // two brand-new same-system CSOs that both match one MVO in a single page each read a count of zero,
+        // both pass, and their join writes then collide on the filtered unique index as a raw 23505 at the
+        // batch flush. That input is genuinely ambiguous (two source records claim one identity) and must
+        // fail cleanly here. This is kept as a separate check rather than folded into existingCsoJoinCount
+        // so it never double-counts: the in-memory test repository already reflects the pending join in the
+        // count above and is caught by the == 1 branch, whereas production is caught here. The current CSO
+        // is not added to _pendingCsoJoinUpdates until after this guard passes, so no self-exclusion applies.
+        if (_pendingCsoJoinUpdates.Any(cso => cso.MetaverseObjectId == mvo.Id))
+        {
+            throw new SyncJoinException(
+                ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin,
+                $"Cannot join this Connected System Object to Metaverse Object ({mvo}) - another Connected System Object from this Connected System has already matched it in the same synchronisation page. " +
                 $"Check for duplicate data in your source system, or review your Object Matching Rules for uniqueness.");
         }
 
