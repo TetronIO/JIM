@@ -22,6 +22,12 @@ public class CreateExampleDataSetRequest
     public string Culture { get; set; } = null!;
 
     public List<string>? Values { get; set; }
+
+    /// <summary>
+    /// An optional reason for the change, recorded against this Example Data Set's change history.
+    /// </summary>
+    [StringLength(2000)]
+    public string? ChangeReason { get; set; }
 }
 
 /// <summary>
@@ -39,4 +45,10 @@ public class UpdateExampleDataSetRequest
     /// When supplied, replaces the entire set of values.
     /// </summary>
     public List<string>? Values { get; set; }
+
+    /// <summary>
+    /// An optional reason for the change, recorded against this Example Data Set's change history.
+    /// </summary>
+    [StringLength(2000)]
+    public string? ChangeReason { get; set; }
 }

@@ -20,6 +20,10 @@ function New-JIMExampleDataSet {
     .PARAMETER Values
         The string values that make up this Example Data Set.
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the Example Data Set's
+        configuration change history.
+
     .PARAMETER PassThru
         If specified, returns the created Example Data Set object.
 
@@ -30,6 +34,11 @@ function New-JIMExampleDataSet {
         New-JIMExampleDataSet -Name "UK Cities" -Culture "en-GB" -Values "London", "Manchester", "Bristol" -PassThru
 
         Creates a new Example Data Set of UK city names.
+
+    .EXAMPLE
+        New-JIMExampleDataSet -Name "UK Cities" -Culture "en-GB" -Values "London", "Bristol" -ChangeReason "Seeding UK test data (CHG0100)"
+
+        Creates the Example Data Set and records the reason on its configuration change history.
 
     .LINK
         Get-JIMExampleDataSet
@@ -50,6 +59,9 @@ function New-JIMExampleDataSet {
         [Parameter()]
         [string[]]$Values,
 
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -69,6 +81,9 @@ function New-JIMExampleDataSet {
             }
             if ($Values) {
                 $body.values = @($Values)
+            }
+            if ($ChangeReason) {
+                $body.changeReason = $ChangeReason
             }
 
             try {

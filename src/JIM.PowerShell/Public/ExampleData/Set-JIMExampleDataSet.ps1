@@ -22,6 +22,10 @@ function Set-JIMExampleDataSet {
     .PARAMETER Values
         When specified, replaces the entire set of values.
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the Example Data Set's
+        configuration change history.
+
     .PARAMETER PassThru
         If specified, returns the updated Example Data Set object.
 
@@ -37,6 +41,11 @@ function Set-JIMExampleDataSet {
         Set-JIMExampleDataSet -Id 5 -Values "London", "Manchester", "Bristol", "Leeds" -PassThru
 
         Replaces the values in the Example Data Set.
+
+    .EXAMPLE
+        Set-JIMExampleDataSet -Id 5 -Name "UK Cities (Extended)" -ChangeReason "Added new regional cities (CHG0101)"
+
+        Renames the Example Data Set and records the reason on its configuration change history.
 
     .LINK
         Get-JIMExampleDataSet
@@ -58,6 +67,9 @@ function Set-JIMExampleDataSet {
         [Parameter()]
         [string[]]$Values,
 
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -75,6 +87,7 @@ function Set-JIMExampleDataSet {
             if ($Name) { $body.name = $Name }
             if ($Culture) { $body.culture = $Culture }
             if ($PSBoundParameters.ContainsKey('Values')) { $body.values = @($Values) }
+            if ($ChangeReason) { $body.changeReason = $ChangeReason }
 
             try {
                 $response = Invoke-JIMApi -Endpoint "/api/v1/example-data/example-data-sets/$Id" -Method 'PUT' -Body $body

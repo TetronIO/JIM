@@ -1,6 +1,6 @@
 # Configuration Change History Coverage - Implementation Plan
 
-- **Status:** Doing (Phases 1-8 complete)
+- **Status:** Doing (Phases 1-9 complete)
 - **Issue:** [#14](https://github.com/TetronIO/JIM/issues/14) *(sub-task of the parent change-history issue)*
 - **PRD:** [`engineering/prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md`](../../prd/PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md)
 - **Note (2026-07-05):** Phase 1 verification disproved the presumed Schedule step capture gap: there are no step REST endpoints (`Add-JIMScheduleStep` performs a whole-Schedule PUT), and both step-mutation surfaces (the editor dialog and the REST update endpoint) reconcile steps and then call the audited `UpdateScheduleAsync`, which captures the step changes in exactly one version per save. Making the bare step methods capture unconditionally would have double-recorded on every editor/REST save, so Phase 1 instead documented the caller contract on those methods. The durable fix (consolidating step reconciliation into `UpdateScheduleAsync` and making the bare methods private, which also removes the duplicated reconcile logic in the dialog and controller) is proposed as a follow-up slice.
@@ -36,7 +36,7 @@ Closes the two-tier audit posture: today an auditor can reconstruct what changed
 | Role assignment | int (Role) | ❌ | ❌ | `SecurityServer.cs:53/58/63` pass-through; first-admin path `AuthServer.cs:75/148` | None |
 | Predefined Search | int | ❌ | ❌ | `SearchServer.cs:74` (update) + criteria/groups :98-148; no root create/delete (seeded) | `PredefinedSearchList.razor` (save :172) + `PredefinedSearchDetail.razor` |
 | Connector Definition | int | ✅ | ✅ | `ConnectedSystemServer.cs` connector-definition methods (create/update/delete + files) | Detail page + Changes tab |
-| Example Data Template / Set | int | ❌ | ❌ | `ExampleDataServer.cs:99/104/109` and :57/62/67 | Read-only lists + detail pages |
+| Example Data Template / Set | int | ✅ | ✅ | `ExampleDataServer.cs` Set + Template create/update/delete | Detail pages + Changes tab |
 
 ### What exists (reuse, not rebuild)
 
@@ -235,11 +235,17 @@ The built-in LDAP and File Connector Definitions are seeded in the shared `SeedD
 
 **Known still-open by decision (unchanged from Phase 7):** factory reset (`SystemRepository.ResetSystemAsync`) truncates the `Activities` table but preserves the built-in Connector Definitions, Predefined Searches, and Metaverse Object Types/Attributes (they are not customer data). `SeedAsync` then no-ops on the next startup because `ServiceSettings` survive the reset, so those preserved objects lose their v1 baseline Activity and it is not recreated. This is a pre-existing, consistent gap across every batch-seeded type (the Schedule and Role baselines, seeded individually and re-seeded by the reset path, do not have it); closing it (for example by re-baselining preserved seed objects after a reset, or re-running the seeding pipeline per #916) is a cross-type follow-up, deliberately not tackled in this phase alone.
 
-### Phase 9: Example Data Templates and Sets
-1. `ExampleDataSet` gains `IAuditable` (+ migration); `ActivityTargetType.ExampleDataSet`; `ExampleDataSetId` FK (templates reuse `ExampleDataTemplateId`).
-2. Snapshot builders and capture across the six `ExampleDataServer` mutators; seed-time creates capture System-initiated v1 baselines, with the dedupe guard preventing version churn on restart re-seeding.
-3. REST routes on `ExampleDataController` + `ChangeReason`; `-ChangeReason` on `Set-JIMExampleDataSet`; both `-Type` values.
-4. UI: Changes tabs on `ExampleDataTemplateDetail` and `ExampleDataSetDetail` (full parity per PRD decision 3, ahead of the anticipated customer CRUD UI).
+### Phase 9: Example Data Templates and Sets ✅
+1. `ExampleDataSet` gains `IAuditable` (+ migration); `ActivityTargetType.ExampleDataSet`; `ExampleDataSetId` FK (templates reuse `ExampleDataTemplateId`). ✅
+2. Snapshot builders and capture across the six `ExampleDataServer` mutators; seed-time creates capture System-initiated v1 baselines, with the dedupe guard preventing version churn on restart re-seeding. ✅
+3. REST routes on `ExampleDataController` + `ChangeReason`; `-ChangeReason` on `Set-JIMExampleDataSet`; both `-Type` values. ✅
+4. UI: Changes tabs on `ExampleDataTemplateDetail` and `ExampleDataSetDetail` (full parity per PRD decision 3, ahead of the anticipated customer CRUD UI). ✅
+
+Delivery notes (2026-07-06): the Phase 1 note left the `ExampleDataTemplate` Activity category "under System until Phase 9, because its existing activities are template-generation runs". Resolved here by **splitting the generation run onto its own target type**: a new `ActivityTargetType.DataGeneration` (categorised System) now carries a template *execution* (the run), created by `TaskingServer` with `TargetOperationType.Execute` and still linking to its template via `ExampleDataTemplateId`; `ExampleDataTemplate` is reclassified to Configuration and now denotes only the template *definition*'s change history. This keeps the Activities Configuration filter free of generation-run noise while surfacing template edits correctly (chosen over leaving the template under System, or reclassifying without the split which would have pulled generation runs into the Configuration filter). The migration includes a data migration reclassifying existing `ExampleDataTemplate` + `Execute` rows to `DataGeneration` (all pre-existing rows of that target type were runs, since template config capture did not exist before). Four UI touchpoints followed the split: the ActivityList generation-stats chip and type-filter, the ActivityDetail target deep-link (both `ExampleDataTemplate` and `DataGeneration` link to the template), and the OperationsHistoryTab run rendering.
+
+`ExampleDataSet` gained `IAuditable` (seven audit columns, one migration); the snapshot is metadata-only (name, culture, built-in, **value count** only, never the individual values, which for a built-in set run to thousands of strings; asserted by test). The template snapshot captures its object types, generation attributes (pattern, expression, number/date config, percentages) and referenced Example Data Sets (by id reference, never the set's values). The Set mutators gained user/ApiKey overloads and `ExampleDataController` moved onto `ApiControllerBase` so REST edits attribute to the calling principal (previously the controller resolved none); the template mutators are System-attributed via the initiator triad (no user-facing template CRUD exists yet; the REST controller mutates only data sets). Built-in Example Data Sets and the built-in template record their System-attributed Create + v1 baseline after the seed batch (`RecordSeededExampleDataSetBaselineAsync` / `RecordSeededExampleDataTemplateBaselineAsync`), matching the Predefined Search / Connector Definition pattern; `SeedAsync`'s `ServiceSettingsExistAsync` guard means every set in the pass is genuinely new, so no re-baseline on restart.
+
+**Known still-open by decision (unchanged across Phases 7-9):** factory reset truncates `Activities` but preserves the built-in Example Data Sets/Template (and the other batch-seeded types), and `EnsureBuiltInExampleDataTemplateAsync` rebuilds the template via a repository-direct repair path without capture, so their v1 baselines are lost on reset and not recreated. This is the same cross-type reset gap documented in Phases 7 and 8; closing it (re-baselining preserved seed objects after a reset, or re-running the seeding pipeline per #916) remains a deliberate follow-up.
 
 ### Phase 10: Close-out
 1. `docs/configuration/activities.md` coverage note updated to enumerate full coverage; per-type doc pages already updated in their phases.

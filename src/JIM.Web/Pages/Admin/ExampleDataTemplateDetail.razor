@@ -1,8 +1,10 @@
 ﻿@page "/admin/example-data/templates/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities
 @using JIM.Models.ExampleData
 @using JIM.Models.Core
 @using JIM.Models.Tasking
+@using JIM.Web.Pages.Admin.Components
 @using System.Diagnostics
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
@@ -22,7 +24,11 @@
 
 @if (_template != null)
 {
-    foreach (var objectType in _template.ObjectTypes)
+    <div class="mt-6">
+    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-6">
+
+        <MudTabPanel Text="Details">
+    @foreach (var objectType in _template.ObjectTypes)
     {
         <MudTable Items="@objectType.TemplateAttributes" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mt-3 mb-5" SortLabel="Sort By" Outlined="true" Elevation="0">
             <ToolBarContent>
@@ -159,9 +165,8 @@
             </NoRecordsContent>
         </MudTable>
     }
-}
 
-<MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
     <MudText Typo="Typo.h6">Warning</MudText>
     <MudText>
         Executing this template will cause example data to be inserted into the Metaverse. It's not recommended to do this on a system with Connectors and that is already initialised.
@@ -187,7 +192,16 @@
             <text>Execute Template</text>
         }
     </MudButton>
-</MudAlert>
+    </MudAlert>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
+            <ConfigurationChangesTab TargetType="ActivityTargetType.ExampleDataTemplate" ObjectId="@_template.Id" ObjectTypeLabel="Example Data Template" />
+        </MudTabPanel>
+
+    </NavigableMudTabs>
+    </div>
+}
 
 @code {
     [Parameter]
@@ -199,6 +213,7 @@
     private WorkerTaskStatus? _status;
     private bool _isExecuting;
     private List<BreadcrumbItem> _breadcrumbs = null!;
+    private int _changeCount;
 
     protected override async Task OnInitializedAsync()
     {
@@ -218,6 +233,8 @@
             new("Example Data", href: "/admin/example-data/"),
             new(_template.Name, href: null, disabled: true)
         };
+
+        _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ExampleDataTemplate, _template.Id, 1, 1)).TotalResults;
 
         // has this template already been scheduled, or is already being processed on the service queue?
         // continuously update the UI to show any change in status

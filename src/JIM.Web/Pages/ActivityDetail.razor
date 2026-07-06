@@ -37,6 +37,8 @@
                     @switch (_activity.TargetType)
                     {
                         case ActivityTargetType.ExampleDataTemplate:
+                        case ActivityTargetType.DataGeneration:
+                            @* Both template config-changes and data-generation runs carry ExampleDataTemplateId; deep-link to the template. *@
                             <MudLink Href="@($"/admin/example-data/templates/{_activity.ExampleDataTemplateId}")">@_activity.TargetName</MudLink>
                             break;
                         case ActivityTargetType.ConnectedSystem when Helpers.GetConnectedSystemActivityHref(_activity.ConnectedSystemId, _activity.TargetOperationType) is { } connectedSystemHref:

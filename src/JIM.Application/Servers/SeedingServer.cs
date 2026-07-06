@@ -593,6 +593,24 @@ internal class SeedingServer
                 await Application.ConnectedSystems.RecordSeededConnectorDefinitionBaselineAsync(connectorDefinition.Id, connectorDefinition.Name, parentActivityId);
         }
 
+        // Record baselines for the built-in Example Data Sets and the built-in Example Data Template created this pass.
+        // Both are batch-seeded (like the Predefined Searches and Connector Definitions), so their baseline is recorded
+        // after the batch persists; PrepareExampleDataSetAsync / PrepareUsersAndGroupsExampleDataTemplateAsync only add
+        // objects that did not already exist, so a restart re-baselines nothing.
+        if (exampleDataSetsToCreate.Count > 0)
+        {
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            foreach (var exampleDataSet in exampleDataSetsToCreate)
+                await Application.ExampleData.RecordSeededExampleDataSetBaselineAsync(exampleDataSet.Id, exampleDataSet.Name, parentActivityId);
+        }
+
+        if (dataGenerationTemplatesToCreate.Count > 0)
+        {
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            foreach (var exampleDataTemplate in dataGenerationTemplatesToCreate)
+                await Application.ExampleData.RecordSeededExampleDataTemplateBaselineAsync(exampleDataTemplate.Id, exampleDataTemplate.Name, parentActivityId);
+        }
+
         stopwatch.Stop();
         Log.Verbose($"SeedAsync: Completed in: {stopwatch.Elapsed}");
     }
@@ -1351,6 +1369,7 @@ internal class SeedingServer
                 Culture = culture,
                 BuiltIn = true
             };
+            AuditHelper.SetCreatedBySystem(exampleDataSet);
             changes = true;
         }
 
