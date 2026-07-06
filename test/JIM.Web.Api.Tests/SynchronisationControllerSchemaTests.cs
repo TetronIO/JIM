@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using JIM.Application;
@@ -267,6 +268,85 @@ public class SynchronisationControllerSchemaTests
         Assert.That(dto!.Id, Is.EqualTo(objectTypeId));
         Assert.That(dto.Name, Is.EqualTo("User"));
         Assert.That(dto.Selected, Is.True);
+    }
+
+    #endregion
+
+    #region GetConnectedSystemObjectTypeAsync tests
+
+    [Test]
+    public async Task GetObjectTypeAsync_WithValidRequest_ReturnsOkWithAttributes()
+    {
+        var connectedSystemId = 1;
+        var objectTypeId = 5;
+        var connectedSystem = new ConnectedSystem { Id = connectedSystemId, Name = "Test System" };
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = objectTypeId,
+            Name = "User",
+            ConnectedSystemId = connectedSystemId,
+            Attributes = new List<ConnectedSystemObjectTypeAttribute>
+            {
+                new ConnectedSystemObjectTypeAttribute { Id = 100, Name = "employeeNumber" },
+                new ConnectedSystemObjectTypeAttribute { Id = 101, Name = "displayName" }
+            }
+        };
+
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(connectedSystemId, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(objectTypeId))
+            .ReturnsAsync(objectType);
+
+        var result = await _controller.GetConnectedSystemObjectTypeAsync(connectedSystemId, objectTypeId);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var ok = result as OkObjectResult;
+        var dto = ok?.Value as ConnectedSystemObjectTypeDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.Id, Is.EqualTo(objectTypeId));
+        Assert.That(dto!.Attributes, Is.Not.Null);
+        Assert.That(dto!.Attributes!.Count, Is.EqualTo(2));
+        Assert.That(dto!.Attributes!.Any(a => a.Name == "employeeNumber" && a.Id == 100), Is.True);
+    }
+
+    [Test]
+    public async Task GetObjectTypeAsync_WithNonExistentConnectedSystem_ReturnsNotFound()
+    {
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(It.IsAny<int>(), It.IsAny<bool>()))
+            .ReturnsAsync((ConnectedSystem?)null);
+
+        var result = await _controller.GetConnectedSystemObjectTypeAsync(1, 5);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task GetObjectTypeAsync_WithNonExistentObjectType_ReturnsNotFound()
+    {
+        var connectedSystem = new ConnectedSystem { Id = 1, Name = "Test System" };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(It.IsAny<int>()))
+            .ReturnsAsync((ConnectedSystemObjectType?)null);
+
+        var result = await _controller.GetConnectedSystemObjectTypeAsync(1, 999);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task GetObjectTypeAsync_WithObjectTypeFromDifferentSystem_ReturnsNotFound()
+    {
+        var connectedSystem = new ConnectedSystem { Id = 1, Name = "Test System" };
+        var objectType = new ConnectedSystemObjectType { Id = 5, Name = "User", ConnectedSystemId = 2 };
+        _mockConnectedSystemRepo.Setup(r => r.GetConnectedSystemCoreAsync(1, It.IsAny<bool>()))
+            .ReturnsAsync(connectedSystem);
+        _mockConnectedSystemRepo.Setup(r => r.GetObjectTypeAsync(5))
+            .ReturnsAsync(objectType);
+
+        var result = await _controller.GetConnectedSystemObjectTypeAsync(1, 5);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
     }
 
     #endregion

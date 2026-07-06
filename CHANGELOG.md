@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ Example Data Sets now support full create, update, and delete via the REST API and the new `New-`, `Set-`, and `Remove-JIMExampleDataSet` cmdlets, in addition to the existing read access.
 - ✨ Queued and in-progress background operations can now be listed, inspected, and cancelled remotely via a new Worker Tasks REST endpoint and the `Get-JIMWorkerTask` / `Stop-JIMWorkerTask` cmdlets.
 - ✨ File system browsing, log viewing, and Metaverse Attribute priority management (previously UI-only) are now available as PowerShell cmdlets, giving the module full parity with the REST API.
+- ✨ A single Connected System Object Type can now be retrieved by id from the REST API (`GET /api/v1/synchronisation/connected-systems/{connectedSystemId}/object-types/{objectTypeId}`), returning the object type with its attributes; previously only the full list of object types could be read, with no id-addressable single-type endpoint to match the existing update endpoint. (#930)
 
 #### PowerShell Log Streaming (#466)
 
