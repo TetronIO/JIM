@@ -266,6 +266,55 @@ public class ServiceSettingConfigurationChangeCaptureTests
         Assert.That(_completedActivity, Is.Null, "a missing setting must not create an Activity");
     }
 
+    // -- RecordSeededServiceSettingUpdateIfChangedAsync (env-driven read-only setting updates) ------------------------
+
+    [Test]
+    public async Task RecordSeededServiceSettingUpdateIfChangedAsync_WhenChanged_RecordsSystemUpdateAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupHashKeySetting();
+        SetupSetting(BuildSetting(value: "30.00:00:00"));
+        SetupMaxVersion(1);
+        // No latest snapshot stored (e.g. first env change after the baseline was recorded elsewhere), so this is a change.
+        _completedActivity = null;
+        var parentActivityId = Guid.NewGuid();
+
+        await _jim.ServiceSettings.RecordSeededServiceSettingUpdateIfChangedAsync(SettingKey, "History retention period", () => Task.FromResult(parentActivityId));
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.ServiceSetting));
+        Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update), "an env-driven change to a persisted setting is an update");
+        Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
+        Assert.That(_completedActivity!.ParentActivityId, Is.EqualTo(parentActivityId));
+        Assert.That(_completedActivity!.ServiceSettingKey, Is.EqualTo(SettingKey));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task RecordSeededServiceSettingUpdateIfChangedAsync_WhenUnchanged_RecordsNothingAndDoesNotMaterialiseParentAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupHashKeySetting();
+        SetupSetting(BuildSetting(value: "30.00:00:00"));
+        SetupMaxVersion(1);
+
+        // First call establishes the stored snapshot for this setting's current state.
+        await _jim.ServiceSettings.RecordSeededServiceSettingUpdateIfChangedAsync(SettingKey, "History retention period", () => Task.FromResult(Guid.NewGuid()));
+        var storedSnapshot = _completedActivity!.ConfigurationChangeSnapshot;
+        Assert.That(storedSnapshot, Is.Not.Null);
+        _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.ServiceSetting, SettingKey))
+            .ReturnsAsync(storedSnapshot);
+        _completedActivity = null;
+        var parentRequested = false;
+
+        // Second call with the same persisted state must not churn: no Activity, and the seeding parent is never materialised.
+        await _jim.ServiceSettings.RecordSeededServiceSettingUpdateIfChangedAsync(SettingKey, "History retention period",
+            () => { parentRequested = true; return Task.FromResult(Guid.NewGuid()); });
+
+        Assert.That(_completedActivity, Is.Null, "an unchanged read-only setting must record no Activity");
+        Assert.That(parentRequested, Is.False, "the seeding parent must not be materialised when nothing changed");
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private static readonly byte[] HashKeyBytes = new byte[32];

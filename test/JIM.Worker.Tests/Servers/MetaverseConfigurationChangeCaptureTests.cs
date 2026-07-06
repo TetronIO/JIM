@@ -273,6 +273,28 @@ public class MetaverseConfigurationChangeCaptureTests
         Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"MetaverseAttribute\""));
     }
 
+    [Test]
+    public async Task RecordSeededMetaverseAttributeUpdateAsync_RecordsSystemUpdateChildWithSnapshotAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupHashKeySetting();
+        SetupAttribute(BuildAttribute());
+        _activityRepo.Setup(r => r.GetMaxConfigurationChangeVersionAsync(ActivityTargetType.MetaverseAttribute, It.IsAny<int>()))
+            .ReturnsAsync(1);
+        var parentActivityId = Guid.NewGuid();
+
+        await _jim.Metaverse.RecordSeededMetaverseAttributeUpdateAsync(AttributeId, "Serial Number", parentActivityId);
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.MetaverseAttribute));
+        Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update), "an upgrade-time drift correction is an update, not a create");
+        Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
+        Assert.That(_completedActivity!.ParentActivityId, Is.EqualTo(parentActivityId));
+        Assert.That(_completedActivity!.MetaverseAttributeId, Is.EqualTo(AttributeId));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(2), "the update versions on top of the existing baseline");
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"MetaverseAttribute\""));
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private static readonly byte[] HashKeyBytes = new byte[32];

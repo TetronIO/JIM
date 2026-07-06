@@ -841,7 +841,10 @@ internal class SeedingServer
             { Constants.BuiltInAttributes.UserCertificates, AttributeRenderingHint.List },
         };
 
-        var updatedCount = 0;
+        // Collect the attributes actually changed this pass so their drift correction can be audited after the loop.
+        // On a fresh install this is empty (attributes are created with their hints), so the common path is unaffected;
+        // it only populates when a JIM upgrade ships a changed hint for an attribute created by an older version.
+        var updatedAttributes = new List<(int Id, string Name)>();
         foreach (var (name, hint) in renderingHints)
         {
             var attribute = await Application.Metaverse.GetMetaverseAttributeAsync(name, withChangeTracking: true);
@@ -849,14 +852,24 @@ internal class SeedingServer
             {
                 attribute.RenderingHint = hint;
                 await Application.Repository.Metaverse.UpdateMetaverseAttributeAsync(attribute);
-                updatedCount++;
+                updatedAttributes.Add((attribute.Id, attribute.Name));
                 Log.Debug("SyncBuiltInAttributeRenderingHintsAsync: Set {Name} to {Hint}", name, hint);
             }
         }
 
+        // Audit each drift correction as a System-attributed Update under the seeding parent, so an upgrade that
+        // changes a built-in attribute's rendering hint is not a silent configuration change (the repository-direct
+        // update above records no Activity by itself). No drift means no parent Activity and nothing recorded.
+        if (updatedAttributes.Count > 0)
+        {
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            foreach (var (id, name) in updatedAttributes)
+                await Application.Metaverse.RecordSeededMetaverseAttributeUpdateAsync(id, name, parentActivityId);
+        }
+
         stopwatch.Stop();
         Log.Information("SyncBuiltInAttributeRenderingHintsAsync: Completed in {Elapsed}. Updated {Count} attributes.",
-            stopwatch.Elapsed, updatedCount);
+            stopwatch.Elapsed, updatedAttributes.Count);
     }
 
     /// <summary>
@@ -1177,15 +1190,22 @@ internal class SeedingServer
         // no parent Activity; a single new setting shipped in an upgrade appears under its own System Initialisation
         // entry. Recording here, after the full loop, guarantees the toggle and hash-key settings the capture depends
         // on already exist.
-        var createdSettings = (await Application.ServiceSettings.GetAllSettingsAsync())
-            .Where(s => !existingSettingKeys.Contains(s.Key))
-            .ToList();
+        var settingsAfterSync = await Application.ServiceSettings.GetAllSettingsAsync();
+        var createdSettings = settingsAfterSync.Where(s => !existingSettingKeys.Contains(s.Key)).ToList();
         if (createdSettings.Count > 0)
         {
             var parentActivityId = await GetOrCreateSeedingActivityAsync();
             foreach (var setting in createdSettings)
                 await Application.ServiceSettings.RecordSeededServiceSettingBaselineAsync(setting.Key, setting.DisplayName, parentActivityId);
         }
+
+        // Audit environment-driven changes to pre-existing read-only settings (SSO endpoints, secrets, encryption key
+        // path, ...): when an operator changes the deployment's .env and restarts, SyncServiceSettingsAsync rewrites
+        // these repository-direct, which by itself records nothing. Capture a System-attributed Update for each one
+        // whose value actually changed; the method is churn-free (no Activity, and no parent Activity, when the value
+        // is unchanged), so an ordinary restart records nothing.
+        foreach (var setting in settingsAfterSync.Where(s => existingSettingKeys.Contains(s.Key) && s.IsReadOnly))
+            await Application.ServiceSettings.RecordSeededServiceSettingUpdateIfChangedAsync(setting.Key, setting.DisplayName, GetOrCreateSeedingActivityAsync);
 
         stopwatch.Stop();
         Log.Information($"SyncServiceSettingsAsync: Completed in: {stopwatch.Elapsed}");
