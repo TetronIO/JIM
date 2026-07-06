@@ -454,6 +454,95 @@ public class ConfigurationSnapshotServiceTests
         Assert.That(json, Does.Not.Contain("createdBy"));
     }
 
+    // -- Connector Definition scope ------------------------------------------------------------------------------------
+
+    [Test]
+    public void CreateSnapshot_ConnectorDefinition_CapturesMetadataCapabilitiesSettingsAndFiles()
+    {
+        var definition = new ConnectorDefinition
+        {
+            Id = 7,
+            Name = "LDAP",
+            Description = "Directory connector",
+            Url = "https://example.test/ldap",
+            BuiltIn = true,
+            SupportsFullImport = true,
+            SupportsExport = true,
+            SupportsPaging = true,
+            Settings =
+            {
+                new ConnectorDefinitionSetting
+                {
+                    Id = 3,
+                    Name = "Server",
+                    Category = ConnectedSystemSettingCategory.Connectivity,
+                    Type = ConnectedSystemSettingType.String,
+                    Required = true,
+                    DefaultStringValue = "ldaps://dc1"
+                }
+            }
+        };
+        definition.Files.Add(new ConnectorDefinitionFile { Id = 5, Filename = "Ldap.dll", FileSizeBytes = 2048, Version = "1.2.3", File = [1, 2, 3, 4] });
+
+        var snapshot = _service.CreateSnapshot(definition, HashKey);
+
+        Assert.That(snapshot.ObjectType, Is.EqualTo("ConnectorDefinition"));
+        Assert.That(snapshot.ObjectId, Is.EqualTo(7));
+        Assert.That(snapshot.ObjectName, Is.EqualTo("LDAP"));
+
+        Assert.That(Child(snapshot.Root, "name")!.Value, Is.EqualTo("LDAP"));
+        Assert.That(Child(snapshot.Root, "description")!.Value, Is.EqualTo("Directory connector"));
+        Assert.That(Child(snapshot.Root, "builtIn")!.Value, Is.EqualTo("true"));
+
+        var capabilities = Child(snapshot.Root, "capabilities")!;
+        Assert.That(Child(capabilities, "supportsFullImport")!.Value, Is.EqualTo("true"));
+        Assert.That(Child(capabilities, "supportsDeltaImport")!.Value, Is.EqualTo("false"));
+        Assert.That(Child(capabilities, "supportsPaging")!.Value, Is.EqualTo("true"));
+
+        var settings = Child(snapshot.Root, "settings")!;
+        var setting = settings.Children!.Single();
+        Assert.That(setting.ItemId, Is.EqualTo(3));
+        Assert.That(Child(setting, "name")!.Value, Is.EqualTo("Server"));
+        Assert.That(Child(setting, "required")!.Value, Is.EqualTo("true"));
+        Assert.That(Child(setting, "defaultStringValue")!.Value, Is.EqualTo("ldaps://dc1"));
+
+        var files = Child(snapshot.Root, "files")!;
+        var file = files.Children!.Single();
+        Assert.That(file.ItemId, Is.EqualTo(5));
+        Assert.That(Child(file, "filename")!.Value, Is.EqualTo("Ldap.dll"));
+        Assert.That(Child(file, "fileSizeBytes")!.Value, Is.EqualTo("2048"));
+        Assert.That(Child(file, "version")!.Value, Is.EqualTo("1.2.3"));
+        Assert.That(Child(file, "sha256")!.Value, Is.EqualTo(Convert.ToHexString(SHA256.HashData([1, 2, 3, 4])).ToLowerInvariant()));
+    }
+
+    [Test]
+    public void CreateSnapshot_ConnectorDefinition_NeverSerialisesFileBinaryContent()
+    {
+        var definition = new ConnectorDefinition { Id = 7, Name = "File" };
+        // A recognisable byte sequence whose Base64 would appear in the JSON if the binary were serialised.
+        definition.Files.Add(new ConnectorDefinitionFile { Id = 5, Filename = "File.dll", FileSizeBytes = 4, Version = "1.0.0", File = Encoding.UTF8.GetBytes("SECRETBINARY") });
+
+        var json = ConfigurationSnapshotService.Serialise(_service.CreateSnapshot(definition, HashKey));
+
+        Assert.That(json, Does.Not.Contain(Convert.ToBase64String(Encoding.UTF8.GetBytes("SECRETBINARY"))));
+        Assert.That(json, Does.Not.Contain("SECRETBINARY"));
+        // The file's metadata and content hash are captured; only the raw bytes are excluded.
+        Assert.That(json, Does.Contain("sha256"));
+    }
+
+    [Test]
+    public void CreateSnapshot_ConnectorDefinition_FileHashChangesWhenBytesChange()
+    {
+        string HashFor(byte[] bytes)
+        {
+            var definition = new ConnectorDefinition { Id = 7, Name = "File" };
+            definition.Files.Add(new ConnectorDefinitionFile { Id = 5, Filename = "File.dll", FileSizeBytes = bytes.Length, Version = "1.0.0", File = bytes });
+            return Child(Child(_service.CreateSnapshot(definition, HashKey).Root, "files")!.Children!.Single(), "sha256")!.Value!;
+        }
+
+        Assert.That(HashFor([1, 2, 3]), Is.Not.EqualTo(HashFor([1, 2, 4])));
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private static ConfigurationSnapshotNode? Child(ConfigurationSnapshotNode node, string key) =>

@@ -583,6 +583,16 @@ internal class SeedingServer
                 await Application.Search.RecordSeededPredefinedSearchBaselineAsync(predefinedSearch.Id, predefinedSearch.Name, parentActivityId);
         }
 
+        // Record the same System-attributed Create Activity and version-1 baseline for each built-in Connector
+        // Definition created this pass. PrepareConnectorDefinitionAsync only returns non-null for definitions that did
+        // not already exist, so the list holds only this pass's creations and a restart re-baselines nothing.
+        if (connectorDefinitions.Count > 0)
+        {
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            foreach (var connectorDefinition in connectorDefinitions)
+                await Application.ConnectedSystems.RecordSeededConnectorDefinitionBaselineAsync(connectorDefinition.Id, connectorDefinition.Name, parentActivityId);
+        }
+
         stopwatch.Stop();
         Log.Verbose($"SeedAsync: Completed in: {stopwatch.Elapsed}");
     }
@@ -1282,7 +1292,14 @@ internal class SeedingServer
 
         if (hasChanges)
         {
-            await Application.ConnectedSystems.UpdateConnectorDefinitionAsync(existingDefinition);
+            // Audit the drift-sync as a System-attributed configuration change grouped under the seeding pass's parent,
+            // so capability/setting changes shipped in new connector code are visible in the definition's history. The
+            // parent is created lazily here (only when there is actually drift to record), matching the other seed steps.
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            await Application.ConnectedSystems.UpdateConnectorDefinitionAsync(existingDefinition,
+                ActivityInitiatorType.System, null, "System",
+                changeReason: "Connector Definition updated automatically by JIM to match the latest connector.",
+                parentActivityId: parentActivityId);
             Log.Information($"SyncConnectorDefinitionAsync: Saved changes for '{connector.Name}'");
         }
         else

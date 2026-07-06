@@ -56,6 +56,9 @@ public class ConfigurationSnapshotService
     /// <summary>The object-type discriminator stored on a Predefined Search snapshot.</summary>
     public const string PredefinedSearchObjectType = "PredefinedSearch";
 
+    /// <summary>The object-type discriminator stored on a Connector Definition snapshot.</summary>
+    public const string ConnectorDefinitionObjectType = "ConnectorDefinition";
+
     private JimApplication Application { get; }
 
     private static readonly JsonSerializerOptions SerialiserOptions = new()
@@ -847,6 +850,107 @@ public class ConfigurationSnapshotService
             items.Add(ConfigurationSnapshotNode.ObjectNode("criterion", children, "Criterion", criterion.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("criteria", items, "Criteria");
+    }
+
+    // -- Connector Definition --------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a scoped snapshot of a Connector Definition: its identity, the connector capability flags, its setting
+    /// definitions (the schema an administrator must supply values for, not any supplied values), and its files as
+    /// name/size/version/content-hash. The raw file binary (<see cref="ConnectorDefinitionFile.File"/>) is never
+    /// captured in any form; the SHA-256 content hash already detects a re-upload of changed bytes without embedding
+    /// the assembly. Connector Definitions carry no secrets; <paramref name="hashKey"/> keeps the signature uniform
+    /// with the other builders. Load the definition with its files and settings
+    /// (see <c>IConnectedSystemRepository.GetConnectorDefinitionAsync(int)</c>) so the snapshot reflects persisted truth.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(ConnectorDefinition definition, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", definition.Name, "Name");
+        Add(children, "description", definition.Description, "Description");
+        Add(children, "url", definition.Url, "URL");
+        Add(children, "builtIn", Render(definition.BuiltIn), "Built-in");
+        children.Add(BuildConnectorDefinitionCapabilities(definition));
+        children.Add(BuildConnectorDefinitionSettings(definition.Settings, hashKey));
+        children.Add(BuildConnectorDefinitionFiles(definition.Files));
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = ConnectorDefinitionObjectType,
+            ObjectId = definition.Id,
+            ObjectName = definition.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("connectorDefinition", children, "Connector Definition")
+        };
+    }
+
+    private static ConfigurationSnapshotNode BuildConnectorDefinitionCapabilities(ConnectorDefinition definition)
+    {
+        // The capability flags drive Run Profile availability and export behaviour, so a change to any of them is a
+        // material configuration change; group them under one object node so a diff reads as "Capabilities > Export: ...".
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "supportsFullImport", Render(definition.SupportsFullImport), "Full import");
+        Add(children, "supportsDeltaImport", Render(definition.SupportsDeltaImport), "Delta import");
+        Add(children, "supportsExport", Render(definition.SupportsExport), "Export");
+        Add(children, "supportsPartitions", Render(definition.SupportsPartitions), "Partitions");
+        Add(children, "supportsPartitionContainers", Render(definition.SupportsPartitionContainers), "Partition containers");
+        Add(children, "supportsSecondaryExternalId", Render(definition.SupportsSecondaryExternalId), "Secondary external ID");
+        Add(children, "supportsUserSelectedExternalId", Render(definition.SupportsUserSelectedExternalId), "User-selected external ID");
+        Add(children, "supportsUserSelectedAttributeTypes", Render(definition.SupportsUserSelectedAttributeTypes), "User-selected attribute types");
+        Add(children, "supportsAutoConfirmExport", Render(definition.SupportsAutoConfirmExport), "Auto-confirm export");
+        Add(children, "supportsParallelExport", Render(definition.SupportsParallelExport), "Parallel export");
+        Add(children, "supportsPaging", Render(definition.SupportsPaging), "Paging");
+        Add(children, "supportsFilePaths", Render(definition.SupportsFilePaths), "File paths");
+        return ConfigurationSnapshotNode.ObjectNode("capabilities", children, "Capabilities");
+    }
+
+    private static ConfigurationSnapshotNode BuildConnectorDefinitionSettings(List<ConnectorDefinitionSetting> settings, byte[] hashKey)
+    {
+        // Each setting definition is an ItemId-matched object so re-ordering does not diff and an added/removed setting
+        // reads cleanly. These are setting *definitions* (the schema JIM asks the administrator to fill in), never
+        // supplied values, so they carry no Connected System secrets. Belt-and-braces: an encrypted-typed default value
+        // (never populated in practice) would be redacted, not stored plaintext.
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var setting in (settings ?? []).OrderBy(s => s.Id))
+        {
+            var children = new List<ConfigurationSnapshotNode>();
+            Add(children, "name", setting.Name, "Name");
+            AddEnum(children, "category", setting.Category, "Category");
+            AddEnum(children, "type", setting.Type, "Type");
+            Add(children, "description", setting.Description, "Description");
+            Add(children, "required", Render(setting.Required), "Required");
+            if (setting.Type == ConnectedSystemSettingType.StringEncrypted && !string.IsNullOrEmpty(setting.DefaultStringValue))
+                children.Add(ConfigurationSnapshotNode.Secret("defaultStringValue", ComputePlaintextHash(setting.DefaultStringValue, hashKey), "Default value"));
+            else
+                Add(children, "defaultStringValue", setting.DefaultStringValue, "Default value");
+            Add(children, "defaultIntValue", Render(setting.DefaultIntValue), "Default value");
+            Add(children, "defaultCheckboxValue", Render(setting.DefaultCheckboxValue), "Default value");
+            Add(children, "dropDownValues", setting.DropDownValues is { Count: > 0 } ? string.Join(", ", setting.DropDownValues) : null, "Options");
+            Add(children, "requiredGroup", setting.RequiredGroup, "Required group");
+            AddEnum(children, "requiredGroupCardinality", setting.RequiredGroupCardinality, "Required group cardinality");
+            Add(children, "requiredWhenSetting", setting.RequiredWhenSetting, "Required when setting");
+            Add(children, "requiredWhenValue", setting.RequiredWhenValue, "Required when value");
+            items.Add(ConfigurationSnapshotNode.ObjectNode("setting", children, "Setting", setting.Id));
+        }
+        return ConfigurationSnapshotNode.CollectionNode("settings", items, "Settings");
+    }
+
+    private static ConfigurationSnapshotNode BuildConnectorDefinitionFiles(List<ConnectorDefinitionFile> files)
+    {
+        // Files are ItemId-matched by their database id. The raw assembly bytes are never captured; the SHA-256 content
+        // hash fingerprints the file so a re-upload of changed bytes diffs without embedding (or disclosing) the binary.
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var file in (files ?? []).OrderBy(f => f.Id))
+        {
+            var children = new List<ConfigurationSnapshotNode>();
+            Add(children, "filename", file.Filename, "Filename");
+            Add(children, "fileSizeBytes", Render(file.FileSizeBytes), "File size (bytes)");
+            Add(children, "version", file.Version, "Version");
+            Add(children, "sha256", file.File is { Length: > 0 } ? Convert.ToHexString(SHA256.HashData(file.File)).ToLowerInvariant() : null, "Content hash (SHA-256)");
+            items.Add(ConfigurationSnapshotNode.ObjectNode("file", children, "File", file.Id));
+        }
+        return ConfigurationSnapshotNode.CollectionNode("files", items, "Files");
     }
 
     // -- value rendering -----------------------------------------------------------------------------------------------

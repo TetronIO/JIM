@@ -47,6 +47,7 @@ Describe 'Get-JIMConfigurationChangeHistory' {
             $validateSet.ValidValues | Should -Contain 'ApiKey'
             $validateSet.ValidValues | Should -Contain 'Role'
             $validateSet.ValidValues | Should -Contain 'PredefinedSearch'
+            $validateSet.ValidValues | Should -Contain 'ConnectorDefinition'
         }
 
         It 'Accepts Id from the pipeline by property name' {
@@ -66,7 +67,7 @@ Describe 'Get-JIMConfigurationChangeHistory' {
             { Get-JIMConfigurationChangeHistory -Type SynchronisationRule -Id ([Guid]::NewGuid().ToString()) -ErrorAction Stop } | Should -Throw '*integer*'
         }
 
-        It 'Rejects a non-integer Id for -Type <_>' -ForEach @('MetaverseObjectType', 'MetaverseAttribute', 'Role', 'PredefinedSearch') {
+        It 'Rejects a non-integer Id for -Type <_>' -ForEach @('MetaverseObjectType', 'MetaverseAttribute', 'Role', 'PredefinedSearch', 'ConnectorDefinition') {
             { Get-JIMConfigurationChangeHistory -Type $_ -Id ([Guid]::NewGuid().ToString()) -ErrorAction Stop } | Should -Throw '*integer*'
         }
 
@@ -91,6 +92,21 @@ Describe 'Get-JIMConfigurationChangeHistory' {
 
         It 'Throws a connect-first error when not connected' {
             { Get-JIMConfigurationChangeHistory -Type SynchronisationRule -Id 1 -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Endpoint mapping' {
+        It 'Maps -Type ConnectorDefinition -Id 3 to the connector-definitions change-history route' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false } }
+
+                Get-JIMConfigurationChangeHistory -Type ConnectorDefinition -Id 3 | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -like '/api/v1/synchronisation/connector-definitions/3/change-history*'
+                }
+            }
         }
     }
 
