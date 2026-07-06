@@ -533,5 +533,42 @@ public class SearchServer
             $"Predefined Search {predefinedSearchId}");
     }
 
+    /// <summary>
+    /// Records a System-attributed Create Activity and version-1 baseline snapshot for a built-in Predefined Search
+    /// that has just been seeded, grouping it under the seeding pass's parent Activity. Unlike Roles and Schedules
+    /// (which are created individually through their server's audited create path), the built-in Predefined Searches
+    /// are persisted together in one cross-referencing repository batch; re-routing that batch through individual
+    /// audited creates would risk the reference resolution (the searches share the just-seeded Metaverse Object Types
+    /// and Attributes). Recording the baseline after the batch keeps that persistence untouched while still giving each
+    /// built-in search a visible, System-attributed origin in its change history and under System Initialisation.
+    /// Idempotency is the caller's responsibility: <see cref="SeedingServer"/> only calls this for searches it created
+    /// in the current pass (a restart where they already exist creates none), so it is safe even when configuration
+    /// change tracking is disabled and no snapshot is recorded.
+    /// </summary>
+    internal async Task RecordSeededPredefinedSearchBaselineAsync(int predefinedSearchId, string searchName, Guid parentActivityId)
+    {
+        var activity = new Activity
+        {
+            TargetName = searchName,
+            TargetType = ActivityTargetType.PredefinedSearch,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            ParentActivityId = parentActivityId,
+            Message = $"Created built-in Predefined Search '{searchName}'"
+        };
+        await Application.Activities.CreateSystemActivityAsync(activity);
+
+        try
+        {
+            await CapturePredefinedSearchConfigurationChangeAsync(activity, predefinedSearchId,
+                "Built-in Predefined Search created automatically by JIM.");
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
     #endregion
 }

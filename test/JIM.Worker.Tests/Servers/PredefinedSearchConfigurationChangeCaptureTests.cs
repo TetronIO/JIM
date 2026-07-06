@@ -136,6 +136,32 @@ public class PredefinedSearchConfigurationChangeCaptureTests
         Assert.That(_completedActivity!.PredefinedSearchId, Is.EqualTo(SearchId));
     }
 
+    // -- RecordSeededPredefinedSearchBaselineAsync -------------------------------------------------------------------
+
+    [Test]
+    public async Task RecordSeededPredefinedSearchBaselineAsync_RecordsSystemCreateChildWithVersionOneBaselineAsync()
+    {
+        // A built-in Predefined Search seeded via the repository batch gets a System-attributed Create Activity, grouped
+        // under the seeding parent, carrying a version-1 baseline snapshot; this is what surfaces it under System
+        // Initialisation with a visible origin, mirroring the built-in Role and Schedule.
+        var search = BuildSearch(id: SearchId, name: "Users");
+        _searchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(search);
+        SetupMaxVersion(0);
+        var parentActivityId = Guid.NewGuid();
+
+        await _jim.Search.RecordSeededPredefinedSearchBaselineAsync(SearchId, "Users", parentActivityId);
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.PredefinedSearch));
+        Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Create));
+        Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
+        Assert.That(_completedActivity!.ParentActivityId, Is.EqualTo(parentActivityId), "the baseline must be grouped under the seeding parent Activity");
+        Assert.That(_completedActivity!.PredefinedSearchId, Is.EqualTo(SearchId));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Is.Not.Null);
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"PredefinedSearch\""));
+    }
+
     [Test]
     public async Task UpdatePredefinedSearchAsync_WhenTrackingDisabled_RecordsActivityButNoSnapshotAsync()
     {

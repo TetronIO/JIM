@@ -570,6 +570,19 @@ internal class SeedingServer
             exampleDataSetsToCreate,
             dataGenerationTemplatesToCreate,
             connectorDefinitions);
+
+        // Record a System-attributed Create Activity and version-1 baseline snapshot for each built-in Predefined
+        // Search created above, grouped under the seeding pass's parent Activity, so their origin is visible in the
+        // change history and under System Initialisation (matching the built-in Role and Schedule). The list holds
+        // only searches created in this pass (SeedDataAsync populated their ids), so a restart where they already
+        // exist records nothing and creates no parent Activity.
+        if (predefinedSearchesToCreate.Count > 0)
+        {
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            foreach (var predefinedSearch in predefinedSearchesToCreate)
+                await Application.Search.RecordSeededPredefinedSearchBaselineAsync(predefinedSearch.Id, predefinedSearch.Name, parentActivityId);
+        }
+
         stopwatch.Stop();
         Log.Verbose($"SeedAsync: Completed in: {stopwatch.Elapsed}");
     }
