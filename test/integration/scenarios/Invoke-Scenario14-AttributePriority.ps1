@@ -1629,9 +1629,22 @@ userPassword: Test@123!
             # covering any user added afterwards; NotEquals on the excluded subject's own key scales
             # without maintenance and is the only one of the two that does.
             Write-Host "Scoping Erin (S14-4) out of the Primary import rule (employeeNumber NotEquals 'S14-4')..." -ForegroundColor Gray
+
+            # Resolve the employeeNumber attribute id from the Primary system's schema and pass
+            # -ConnectedSystemAttributeId, per the Scenario 10 precedent. The cmdlet's
+            # -ConnectedSystemAttributeName resolution path depends on the object-types API endpoint
+            # returning attribute collections, which it does not, so name resolution fails with
+            # "Could not find object type attributes.".
+            $primaryObjectTypes = @(Get-JIMConnectedSystem -Id $primarySystem.id -ObjectTypes)
+            $primaryUserType = $primaryObjectTypes | Where-Object { $_.name -eq "inetOrgPerson" }
+            $employeeNumberAttr = $primaryUserType.attributes | Where-Object { $_.name -eq "employeeNumber" }
+            if (-not $employeeNumberAttr) {
+                throw "'employeeNumber' attribute not found on the Primary system's inetOrgPerson object type."
+            }
+
             $scopeGroup = New-JIMScopingCriteriaGroup -SyncRuleId $primaryImportRule.id -Type All -PassThru
             New-JIMScopingCriterion -SyncRuleId $primaryImportRule.id -GroupId $scopeGroup.id `
-                -ConnectedSystemAttributeName "employeeNumber" -ComparisonType NotEquals -StringValue "S14-4" | Out-Null
+                -ConnectedSystemAttributeId $employeeNumberAttr.id -ComparisonType NotEquals -StringValue "S14-4" | Out-Null
 
             $persistedCriteria = @(Get-JIMScopingCriteria -SyncRuleId $primaryImportRule.id)
             if ($persistedCriteria.Count -ne 1 -or @($persistedCriteria[0].criteria).Count -ne 1) {
