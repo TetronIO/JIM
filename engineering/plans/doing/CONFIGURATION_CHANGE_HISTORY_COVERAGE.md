@@ -208,7 +208,11 @@ Added after Phase 6, prompted by a user sanity check: audited seed-time creates 
 2. `JimApplication.InitialiseDatabaseAsync` and the factory reset's reseed path (`SystemServer.ResetSystemAsync`) both complete the parent on success and fail it on error, so it can never sit permanently InProgress (which would also block subsequent resets via the in-progress guard). ✅
 3. Out of scope by decision: the infrastructure API Key creation stays a standalone Activity (operator-triggered via environment variable, security-notable), and AuthServer's first-admin activities are unchanged. ✅
 
-Phases 8-9's seed captures MUST pass the seeding parent id through their create paths (obtain via `SeedingServer.GetOrCreateSeedingActivityAsync`).
+**Requirement for every phase that adds a configuration type, not only Phases 8-9: if the type is seeded, its built-in objects MUST appear as System Initialisation children** (a System-attributed Create Activity plus a version-1 baseline snapshot, grouped via `SeedingServer.GetOrCreateSeedingActivityAsync`). Two shapes:
+- Types seeded individually pass the parent id through their server's audited create path (`SeedBuiltInSchedulesAsync`, `SeedBuiltInRolesAsync`).
+- Types seeded in a shared cross-referencing batch (where re-routing each object through an individual audited create would break the reference resolution) record the baseline *after* the batch persists, over the "created this pass" list (`SearchServer.RecordSeededPredefinedSearchBaselineAsync`, Phase 7).
+
+This was originally written as "Phases 8-9" and was consequently missed for Phase 7's Predefined Searches (which are seeded but were not in that list); the gap was caught in review and fixed. Do not re-scope this to a subset of phases: every seeded configuration type gets a baseline child, or the omission is called out explicitly with a reason. **Known still-open by decision:** seeded Metaverse Object Types and Attributes (Phase 3) have this same gap and were scoped out; close them if/when that scope is picked up.
 
 ### Phase 7: Predefined Searches ✅
 1. Snapshot builder with criteria groups/criteria as nested children; every `SearchServer` mutator (root update + the six criteria/group methods) sets the parent `PredefinedSearchId` FK and captures the owning search's snapshot (granular roll-up precedent). ✅
