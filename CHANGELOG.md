@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Attribute values written when a Metaverse Object is first projected now record which Synchronisation Rule contributed them, so Attribute Priority resolution holds from the first synchronisation onwards. Previously a lower-priority source could silently overwrite a higher-priority source's values on newly created objects, and a "Null is a value" assertion made at projection time lost its marker.
 - 🐛 The Schedules links on the home page (the getting-started checklist, the schedule summary rows, and the Create a Schedule button) now open the Schedules tab on the Operations page directly, instead of landing on the default Queue tab.
 - 🐛 The built-in Temporal Scope Reconciliation schedule's creation is now recorded in its configuration change history, attributed to System. Previously the seeded creation left no audit trace, so the schedule's history began with whichever principal next modified it, misattributing its origin.
 - 🐛 A factory reset now restores the built-in Temporal Scope Reconciliation schedule immediately. Previously the wipe removed it and it only reappeared when the worker service next restarted, leaving date-based scope reconciliation silently inoperative until then.
