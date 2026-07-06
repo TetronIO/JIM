@@ -35,6 +35,12 @@ The category is mostly a UI grouping; it does not change semantics.
 
 Removing the override (resetting the value back to null so the effective value reverts to the default) is a separate operation from updating. It conveys intent (return to default) more clearly than an update with a null body would, and is also useful for backing out a configuration change without needing to remember the original default.
 
+## Change history
+
+Every update and revert records a versioned entry in the setting's [configuration change history](activities.md#configuration-change-history): who changed it, when, the value before and after, and whether the setting is overridden or back on its default. Open a setting's history from the history button on its row in the Service Settings area, or retrieve it with `Get-JIMConfigurationChangeHistory -Type ServiceSetting -Id '<setting key>'` or the REST API.
+
+When you save or revert a setting in the admin portal, an optional "Reason for change" prompt lets you record why (a change ticket number, for example); automation can pass the same reason via `-ChangeReason` or the REST request. Encrypted setting values are never stored in the history: a changed secret is shown as changed, never by value.
+
 ## Value types
 
 Settings are typed: string, boolean, integer, or timespan. The type is enforced on update.

@@ -181,6 +181,11 @@ public class CreatePredefinedSearchCriteriaGroupRequest
     /// The position/order of this group (optional, defaults to 0).
     /// </summary>
     public int Position { get; set; } = 0;
+
+    /// <summary>
+    /// Optional reason for the change, recorded on the audit Activity and configuration change history.
+    /// </summary>
+    public string? ChangeReason { get; set; }
 }
 
 /// <summary>
@@ -197,6 +202,11 @@ public class UpdatePredefinedSearchCriteriaGroupRequest
     /// The position/order of this group.
     /// </summary>
     public int? Position { get; set; }
+
+    /// <summary>
+    /// Optional reason for the change, recorded on the audit Activity and configuration change history.
+    /// </summary>
+    public string? ChangeReason { get; set; }
 }
 
 /// <summary>
@@ -275,4 +285,9 @@ public class PredefinedSearchCriterionRequest
     /// The relative offset direction: Ago or FromNow (required when ValueMode is Relative).
     /// </summary>
     public string? RelativeDirection { get; set; }
+
+    /// <summary>
+    /// Optional reason for the change, recorded on the audit Activity and configuration change history.
+    /// </summary>
+    public string? ChangeReason { get; set; }
 }

@@ -22,6 +22,10 @@ function Remove-JIMRoleMember {
     .PARAMETER Force
         Suppresses confirmation prompts.
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the Role's configuration
+        change history.
+
     .OUTPUTS
         None.
 
@@ -34,6 +38,11 @@ function Remove-JIMRoleMember {
         Remove-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-..." -Force
 
         Removes the member without confirmation.
+
+    .EXAMPLE
+        Remove-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-..." -Force -ChangeReason "Offboarding (CHG0128)"
+
+        Removes a member without confirmation and records a reason with the change.
 
     .EXAMPLE
         Get-JIMRoleMember -RoleId 2 | Where-Object { $_.displayName -eq "Bob" } | Remove-JIMRoleMember -RoleId 2 -Force
@@ -57,7 +66,10 @@ function Remove-JIMRoleMember {
         [Parameter(Mandatory, ParameterSetName = 'ByInputObject', ValueFromPipeline)]
         [PSCustomObject]$InputObject,
 
-        [switch]$Force
+        [switch]$Force,
+
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason
     )
 
     process {
@@ -73,7 +85,11 @@ function Remove-JIMRoleMember {
             Write-Verbose "Removing metaverse object $objectId from role $RoleId"
 
             try {
-                $null = Invoke-JIMApi -Endpoint "/api/v1/security/roles/$RoleId/members/$objectId" -Method 'DELETE'
+                $endpoint = "/api/v1/security/roles/$RoleId/members/$objectId"
+                if ($ChangeReason) {
+                    $endpoint += "?changeReason=$([uri]::EscapeDataString($ChangeReason))"
+                }
+                $null = Invoke-JIMApi -Endpoint $endpoint -Method 'DELETE'
                 Write-Verbose "Removed metaverse object $objectId from role $RoleId"
             }
             catch {

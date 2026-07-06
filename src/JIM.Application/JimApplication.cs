@@ -14,7 +14,23 @@ namespace JIM.Application;
 
 public class JimApplication : IDisposable
 {
-    public IRepository Repository { get; }
+    /// <summary>
+    /// The data access layer. Internal by design: JIM's N-tier rule says presentation (JIM.Web) and the service
+    /// hosts (JIM.Worker, JIM.Scheduler) must only call the application-layer servers on this facade, never
+    /// repositories directly, so that business rules and audit capture cannot be bypassed. Keeping this internal
+    /// makes a bypass a compile error rather than a review catch. If a caller needs data the facade does not
+    /// expose, add a method to the owning server; do not widen this accessor.
+    /// </summary>
+    internal IRepository Repository { get; }
+
+    /// <summary>
+    /// The synchronisation engine's raw-SQL hot-path repository, sharing this instance's database session.
+    /// This is the single sanctioned exception to the internal <see cref="Repository"/> accessor: the sync
+    /// engine's bulk operations are deliberately repository-direct for performance (see the worker hot-path
+    /// rules in src/CLAUDE.md). Use it only from sync task processing; every other caller goes through the
+    /// application servers on this facade.
+    /// </summary>
+    public JIM.Data.Repositories.ISyncRepository SyncRepository => Repository.Sync;
 
     /// <summary>
     /// The credential protection service for encrypting/decrypting connector passwords.
@@ -41,6 +57,7 @@ public class JimApplication : IDisposable
     public AuthServer Auth { get; }
     public CertificateServer Certificates { get; }
     public ChangeHistoryServer ChangeHistory { get; }
+    public ConfigurationChangeCaptureService ConfigurationChangeCapture { get; }
     public ConfigurationDiffService ConfigurationDiffs { get; }
     public ConfigurationSnapshotService ConfigurationSnapshots { get; }
     public ConnectedSystemServer ConnectedSystems { get; }
@@ -66,6 +83,7 @@ public class JimApplication : IDisposable
         Auth = new AuthServer(this);
         Certificates = new CertificateServer(this);
         ChangeHistory = new ChangeHistoryServer(this);
+        ConfigurationChangeCapture = new ConfigurationChangeCaptureService(this);
         ConfigurationDiffs = new ConfigurationDiffService();
         ConfigurationSnapshots = new ConfigurationSnapshotService(this);
         ConnectedSystems = new ConnectedSystemServer(this);
@@ -101,15 +119,28 @@ public class JimApplication : IDisposable
     public async Task InitialiseDatabaseAsync()
     {
         await Repository.InitialiseDatabaseAsync();
-        await Seeding.SeedAsync();
-        await Seeding.SeedBuiltInSchedulesAsync();
-        await Seeding.SyncBuiltInConnectorDefinitionsAsync();
-        await Seeding.SyncBuiltInAttributeRenderingHintsAsync();
-        await Seeding.SyncServiceSettingsAsync();
-        // Repair the built-in example data template if a previous factory reset stripped its attributes (its rows are
-        // collateral of the reset's TRUNCATE ... CASCADE). SeedAsync skips an already-present template, so this runs
-        // separately; it is a cheap no-op when the template is intact.
-        await Seeding.EnsureBuiltInExampleDataTemplateAsync();
+        try
+        {
+            await Seeding.SeedAsync();
+            await Seeding.SeedBuiltInSchedulesAsync();
+            await Seeding.SeedBuiltInRolesAsync();
+            await Seeding.SyncBuiltInConnectorDefinitionsAsync();
+            await Seeding.SyncBuiltInAttributeRenderingHintsAsync();
+            await Seeding.SyncServiceSettingsAsync();
+            // Repair the built-in example data template if a previous factory reset stripped its attributes (its rows are
+            // collateral of the reset's TRUNCATE ... CASCADE). SeedAsync skips an already-present template, so this runs
+            // separately; it is a cheap no-op when the template is intact.
+            await Seeding.EnsureBuiltInExampleDataTemplateAsync();
+            await Seeding.CompleteSeedingActivityAsync();
+        }
+        catch (Exception ex)
+        {
+            // Catch-all is deliberate: this is an Activity execution boundary (the "System Initialisation" parent
+            // Activity, if one was created), and any failure here must be recorded on it via
+            // FailSeedingActivityAsync rather than escape silently, then rethrown so startup still fails loudly.
+            await Seeding.FailSeedingActivityAsync(ex);
+            throw;
+        }
         await Repository.InitialisationCompleteAsync();
     }
 

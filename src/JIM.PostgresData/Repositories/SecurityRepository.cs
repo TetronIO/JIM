@@ -17,6 +17,13 @@ public class SecurityRepository : ISecurityRepository
         Repository = dataRepository;
     }
 
+    public async Task<Role> CreateRoleAsync(Role role)
+    {
+        Repository.Database.Roles.Add(role);
+        await Repository.Database.SaveChangesAsync();
+        return role;
+    }
+
     public async Task<List<Role>> GetRolesAsync()
     {
         return await Repository.Database.Roles.OrderBy(q => q.Name).ToListAsync();

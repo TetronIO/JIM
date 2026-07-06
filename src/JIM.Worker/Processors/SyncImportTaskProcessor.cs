@@ -165,8 +165,7 @@ public class SyncImportTaskProcessor
             {
                 using var bgContext = await _dbContextFactory.CreateDbContextAsync();
                 var bgRepo = new JIM.PostgresData.PostgresDataRepository(bgContext);
-                var bgSyncRepo = new JIM.PostgresData.Repositories.SyncRepository(bgRepo);
-                return await bgSyncRepo.GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId);
+                return await bgRepo.Sync.GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId);
             });
         }
 

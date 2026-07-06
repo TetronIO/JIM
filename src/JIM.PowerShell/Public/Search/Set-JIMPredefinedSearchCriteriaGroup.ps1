@@ -21,6 +21,10 @@ function Set-JIMPredefinedSearchCriteriaGroup {
     .PARAMETER Position
         The position/order for this group.
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the owning Predefined
+        Search's configuration change history.
+
     .PARAMETER PassThru
         If specified, returns the updated group object.
 
@@ -54,6 +58,9 @@ function Set-JIMPredefinedSearchCriteriaGroup {
         [Parameter()]
         [int]$Position,
 
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -66,6 +73,7 @@ function Set-JIMPredefinedSearchCriteriaGroup {
         $body = @{}
         if ($PSBoundParameters.ContainsKey('Type')) { $body.type = $Type }
         if ($PSBoundParameters.ContainsKey('Position')) { $body.position = $Position }
+        if ($ChangeReason) { $body.changeReason = $ChangeReason }
 
         if ($PSCmdlet.ShouldProcess("Criteria Group $GroupId on Predefined Search $PredefinedSearchId", "Update")) {
             Write-Verbose "Updating criteria group $GroupId on Predefined Search $PredefinedSearchId"

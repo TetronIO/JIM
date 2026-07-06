@@ -387,7 +387,7 @@
         try
         {
             using var jim = JimFactory.Create();
-            var (items, _) = await jim.Repository.ConnectedSystems.GetDeletedCsoChangesAsync(
+            var (items, _) = await jim.ConnectedSystems.GetDeletedCsoChangesAsync(
                 connectedSystemId: _csoFilterConnectedSystemId,
                 fromDate: _csoFromDate?.ToUniversalTime(),
                 toDate: _csoToDate?.ToUniversalTime().AddDays(1), // Include the entire day
@@ -412,7 +412,7 @@
         try
         {
             using var jim = JimFactory.Create();
-            var (items, _) = await jim.Repository.Metaverse.GetDeletedMvoChangesAsync(
+            var (items, _) = await jim.Metaverse.GetDeletedMvoChangesAsync(
                 objectTypeId: _mvoFilterObjectTypeId,
                 fromDate: _mvoFromDate?.ToUniversalTime(),
                 toDate: _mvoToDate?.ToUniversalTime().AddDays(1),
@@ -439,7 +439,7 @@
         try
         {
             using var jim = JimFactory.Create();
-            _selectedCsoHistory = await jim.Repository.ConnectedSystems.GetDeletedCsoChangeHistoryAsync(change.Id);
+            _selectedCsoHistory = await jim.ConnectedSystems.GetDeletedCsoChangeHistoryAsync(change.Id);
         }
         finally
         {
@@ -459,7 +459,7 @@
         try
         {
             using var jim = JimFactory.Create();
-            _selectedMvoHistory = await jim.Repository.Metaverse.GetDeletedMvoChangeHistoryAsync(change.Id);
+            _selectedMvoHistory = await jim.Metaverse.GetDeletedMvoChangeHistoryAsync(change.Id);
         }
         finally
         {

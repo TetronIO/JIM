@@ -56,7 +56,7 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddTransient<JimApplication>(sp =>
         {
             var repo = sp.GetRequiredService<IRepository>();
-            var syncRepo = new JIM.PostgresData.Repositories.SyncRepository((JIM.PostgresData.PostgresDataRepository)repo);
+            var syncRepo = repo.Sync;
             var jim = new JimApplication(repo, syncRepository: syncRepo);
             jim.CredentialProtection = sp.GetService<ICredentialProtectionService>();
             return jim;

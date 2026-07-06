@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.Web.Controllers.Api;
@@ -27,6 +28,9 @@ public class SecurityControllerTests
     private Mock<IRepository> _mockRepository = null!;
     private Mock<ISecurityRepository> _mockSecurityRepo = null!;
     private Mock<IMetaverseRepository> _mockMetaverseRepo = null!;
+    private Mock<IActivityRepository> _mockActivityRepo = null!;
+    private Mock<IApiKeyRepository> _mockApiKeyRepo = null!;
+    private Mock<IServiceSettingsRepository> _mockServiceSettingsRepo = null!;
     private Mock<ILogger<SecurityController>> _mockLogger = null!;
     private JimApplication _application = null!;
     private SecurityController _controller = null!;
@@ -38,10 +42,21 @@ public class SecurityControllerTests
         _mockRepository = new Mock<IRepository>();
         _mockSecurityRepo = new Mock<ISecurityRepository>();
         _mockMetaverseRepo = new Mock<IMetaverseRepository>();
+        _mockActivityRepo = new Mock<IActivityRepository>();
+        _mockApiKeyRepo = new Mock<IApiKeyRepository>();
+        _mockServiceSettingsRepo = new Mock<IServiceSettingsRepository>();
         _mockLogger = new Mock<ILogger<SecurityController>>();
 
         _mockRepository.Setup(r => r.Security).Returns(_mockSecurityRepo.Object);
         _mockRepository.Setup(r => r.Metaverse).Returns(_mockMetaverseRepo.Object);
+        // Role membership changes now write an audit Activity through the application layer.
+        _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
+        // The controller now resolves the calling principal (ApiKeysController pattern) to attribute membership
+        // changes, so ApiKeys/ServiceSettings must be wired even though most tests use SSO user context: an
+        // unmocked property dereferences to null and the caller-resolution helpers are not exception-guarded.
+        _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
+        _mockRepository.Setup(r => r.ServiceSettings).Returns(_mockServiceSettingsRepo.Object);
+        _mockServiceSettingsRepo.Setup(r => r.GetServiceSettingsAsync()).ReturnsAsync((ServiceSettings?)null);
 
         _application = new JimApplication(_mockRepository.Object);
         _controller = new SecurityController(_mockLogger.Object, _application);
@@ -290,6 +305,34 @@ public class SecurityControllerTests
         Assert.That(result, Is.InstanceOf<ConflictObjectResult>());
     }
 
+    [Test]
+    public async Task AddRoleMemberAsync_WithChangeReason_RecordsReasonOnAuditActivityAsync()
+    {
+        // Arrange
+        var role = new Role { Id = 1, Name = "Administrator", BuiltIn = true };
+        var objectId = Guid.NewGuid();
+
+        _mockSecurityRepo.Setup(r => r.GetRoleByIdAsync(1)).ReturnsAsync(role);
+        _mockSecurityRepo.Setup(r => r.AddObjectToRoleByIdAsync(objectId, 1)).Returns(Task.CompletedTask);
+
+        Activity? capturedActivity = null;
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))
+            .Callback<Activity>(a => capturedActivity = a)
+            .Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _controller.AddRoleMemberAsync(1, objectId, "Granting temporary access for audit (CHG0125)");
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<NoContentResult>());
+        Assert.That(capturedActivity, Is.Not.Null);
+        Assert.That(capturedActivity!.ChangeReason, Is.EqualTo("Granting temporary access for audit (CHG0125)"));
+        Assert.That(capturedActivity.TargetType, Is.EqualTo(ActivityTargetType.Role));
+        Assert.That(capturedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
+    }
+
     // ──────────────────────────────────────────────
     // DELETE /api/v1/security/roles/{roleId}/members/{metaverseObjectId}
     // ──────────────────────────────────────────────
@@ -495,5 +538,33 @@ public class SecurityControllerTests
 
         // Assert
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    [Test]
+    public async Task RemoveRoleMemberAsync_WithChangeReason_RecordsReasonOnAuditActivityAsync()
+    {
+        // Arrange - non-Administrator role so the lockout safety checks don't interfere
+        var role = new Role { Id = 2, Name = "User", BuiltIn = true };
+        var objectId = Guid.NewGuid();
+
+        _mockSecurityRepo.Setup(r => r.GetRoleByIdAsync(2)).ReturnsAsync(role);
+        _mockSecurityRepo.Setup(r => r.RemoveObjectFromRoleAsync(objectId, 2)).Returns(Task.CompletedTask);
+
+        Activity? capturedActivity = null;
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))
+            .Callback<Activity>(a => capturedActivity = a)
+            .Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>()))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _controller.RemoveRoleMemberAsync(2, objectId, "Offboarding: role no longer required (CHG0126)");
+
+        // Assert
+        Assert.That(result, Is.InstanceOf<NoContentResult>());
+        Assert.That(capturedActivity, Is.Not.Null);
+        Assert.That(capturedActivity!.ChangeReason, Is.EqualTo("Offboarding: role no longer required (CHG0126)"));
+        Assert.That(capturedActivity.TargetType, Is.EqualTo(ActivityTargetType.Role));
+        Assert.That(capturedActivity.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Update));
     }
 }

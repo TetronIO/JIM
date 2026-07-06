@@ -223,4 +223,58 @@ public class PredefinedSearchCriteriaDatabaseTests
         Assert.That(persisted.Type, Is.EqualTo(SearchGroupType.Any), "Editing a group's logic type must persist.");
         Assert.That(persisted.Position, Is.EqualTo(3));
     }
+
+    [Test]
+    public async Task GetOwningPredefinedSearchIdForGroupAsync_NestedGroup_WalksToOwningSearchAsync()
+    {
+        // Proves the owning-search resolution walk (the FK a configuration-change Activity is keyed to) against real
+        // PostgreSQL: only the top-level group carries PredefinedSearchId; nested groups carry ParentGroupId, so a
+        // deep group resolves to the owning search only by walking up the parent chain. This is the integrity-critical
+        // logic the Worker-layer capture tests mock; here it runs against the real shadow-FK columns.
+        var ids = await SeedAsync();
+
+        int deepGroupId;
+        await using (var ctx = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            var top = await jim.Search.CreatePredefinedSearchCriteriaGroupAsync(ids.PredefinedSearchId, null, SearchGroupType.All, 0);
+            var nested = await jim.Search.CreatePredefinedSearchCriteriaGroupAsync(ids.PredefinedSearchId, top.Id, SearchGroupType.Any, 0);
+            var deep = await jim.Search.CreatePredefinedSearchCriteriaGroupAsync(ids.PredefinedSearchId, nested.Id, SearchGroupType.All, 0);
+            deepGroupId = deep.Id;
+        }
+
+        await using var verify = NewContext();
+        var repository = new PostgresDataRepository(verify);
+        var owningSearchId = await repository.Search.GetOwningPredefinedSearchIdForGroupAsync(deepGroupId);
+        Assert.That(owningSearchId, Is.EqualTo(ids.PredefinedSearchId), "A deeply nested group must resolve to its owning Predefined Search by walking the parent chain.");
+    }
+
+    [Test]
+    public async Task GetOwningPredefinedSearchIdForCriterionAsync_InNestedGroup_WalksToOwningSearchAsync()
+    {
+        var ids = await SeedAsync();
+
+        int criterionId;
+        await using (var ctx = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(ctx));
+            var top = await jim.Search.CreatePredefinedSearchCriteriaGroupAsync(ids.PredefinedSearchId, null, SearchGroupType.All, 0);
+            var nested = await jim.Search.CreatePredefinedSearchCriteriaGroupAsync(ids.PredefinedSearchId, top.Id, SearchGroupType.Any, 0);
+            var criterion = await jim.Search.CreatePredefinedSearchCriterionAsync(nested.Id, new PredefinedSearchCriteria
+            {
+                MetaverseAttributeId = ids.MetaverseAttributeId,
+                ComparisonType = SearchComparisonType.LessThanOrEquals,
+                ValueMode = DateCriteriaValueMode.Relative,
+                RelativeCount = 7,
+                RelativeUnit = RelativeDateUnit.Days,
+                RelativeDirection = RelativeDateDirection.FromNow
+            });
+            criterionId = criterion!.Id;
+        }
+
+        await using var verify = NewContext();
+        var repository = new PostgresDataRepository(verify);
+        var owningSearchId = await repository.Search.GetOwningPredefinedSearchIdForCriterionAsync(criterionId);
+        Assert.That(owningSearchId, Is.EqualTo(ids.PredefinedSearchId), "A criterion in a nested group must resolve to its owning Predefined Search.");
+    }
 }

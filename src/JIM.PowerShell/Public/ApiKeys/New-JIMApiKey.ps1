@@ -23,6 +23,10 @@ function New-JIMApiKey {
     .PARAMETER ExpiresAt
         Optional expiry date for the API Key.
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the API Key's
+        configuration change history.
+
     .PARAMETER PassThru
         If specified, returns the created API Key object (including the full key value).
 
@@ -62,6 +66,9 @@ function New-JIMApiKey {
 
         [datetime]$ExpiresAt,
 
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -86,6 +93,10 @@ function New-JIMApiKey {
 
             if ($PSBoundParameters.ContainsKey('ExpiresAt')) {
                 $body.expiresAt = $ExpiresAt.ToUniversalTime().ToString('o')
+            }
+
+            if ($ChangeReason) {
+                $body.changeReason = $ChangeReason
             }
 
             try {

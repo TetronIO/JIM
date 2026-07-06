@@ -36,6 +36,10 @@ function Set-JIMMetaverseObjectType {
         When set, the MVO is deleted if ANY of these systems disconnect.
         Ignored when DeletionRule is Manual or WhenLastConnectorDisconnected.
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the object's
+        configuration change history.
+
     .PARAMETER PassThru
         If specified, returns the updated Object Type object.
 
@@ -94,6 +98,10 @@ function Set-JIMMetaverseObjectType {
         [Parameter()]
         [int[]]$DeletionTriggerConnectedSystemIds,
 
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -145,6 +153,10 @@ function Set-JIMMetaverseObjectType {
         if ($body.Count -eq 0) {
             Write-Warning "No updates specified."
             return
+        }
+
+        if ($ChangeReason) {
+            $body.changeReason = $ChangeReason
         }
 
         $displayName = $Name ?? "ID $Id"

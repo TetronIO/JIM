@@ -156,6 +156,30 @@ public class ConfigurationChangeCaptureTests
         Assert.That(_protection.IsProtected(created.Value), Is.True, "the key is stored encrypted at rest, never as raw base64");
     }
 
+    [Test]
+    public void GetOrCreateConfigurationChangeHashKeyAsync_WhenStoredKeyEncryptedButNoProtectionService_ThrowsClearErrorAsync()
+    {
+        // Reproduces the JIM.Web bootstrap bug: a JimApplication constructed without a credential protection service
+        // reads the hash key that another instance stored encrypted at rest. GetSettingValueAsync cannot decrypt it,
+        // so it returns the ciphertext, which is not valid base64. Previously this surfaced as a cryptic FormatException
+        // that the best-effort capture path swallowed, silently dropping the snapshot; it must now be a clear,
+        // diagnosable InvalidOperationException naming the missing protection service.
+        using var jimWithoutProtection = new JimApplication(_repo.Object);
+        _settingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.ConfigurationChangeHashKey))
+            .ReturnsAsync(new ServiceSetting
+            {
+                Key = Constants.SettingKeys.ConfigurationChangeHashKey,
+                DisplayName = "Configuration change hash key",
+                ValueType = ServiceSettingValueType.StringEncrypted,
+                Value = _protection.Protect(Convert.ToBase64String(new byte[32])) // an encrypted, non-base64 value
+            });
+
+        var ex = Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await jimWithoutProtection.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync());
+        Assert.That(ex!.Message, Does.Contain("CredentialProtection"), "the error must name the missing protection service");
+        Assert.That(ex.InnerException, Is.TypeOf<FormatException>(), "the cryptic base64 decode failure is preserved as the inner cause");
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private void SetupTrackingSetting(bool enabled) =>

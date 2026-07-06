@@ -1,6 +1,7 @@
 @page "/admin/settings"
 @attribute [Authorize(Roles = "Administrator")]
 @using JIM.Application.Services
+@using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Web
 @inject IJimApplicationFactory JimFactory
@@ -144,6 +145,9 @@
                             </MudTooltip>
                         }
                     }
+                    <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
+                        <MudIconButton Icon="@Icons.Material.Outlined.History" Variant="Variant.Filled" Size="Size.Small" OnClick="_ => ShowHistoryDialogAsync(settingContext)" />
+                    </MudTooltip>
                 </div>
             </MudTd>
         }
@@ -321,11 +325,16 @@
 
         if (result is { Canceled: false, Data: string newValue })
         {
+            // offer an optional reason for the configuration change history; cancelling aborts the save
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+            if (cancelled)
+                return;
+
             try
             {
                 using var jim = JimFactory.Create();
                 var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-                await jim.ServiceSettings.UpdateSettingValueAsync(setting.Key, newValue, user);
+                await jim.ServiceSettings.UpdateSettingValueAsync(setting.Key, newValue, user, changeReason);
                 await LoadSettingsAsync();
                 Snackbar.Add($"Setting '{setting.DisplayName}' updated.", Severity.Success);
             }
@@ -345,11 +354,16 @@
 
         if (confirm == true)
         {
+            // offer an optional reason for the configuration change history; cancelling aborts the revert
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Revert");
+            if (cancelled)
+                return;
+
             try
             {
                 using var jim = JimFactory.Create();
                 var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-                await jim.ServiceSettings.RevertSettingToDefaultAsync(setting.Key, user);
+                await jim.ServiceSettings.RevertSettingToDefaultAsync(setting.Key, user, changeReason);
                 await LoadSettingsAsync();
                 Snackbar.Add($"Setting '{setting.DisplayName}' reverted to default.", Severity.Success);
             }
@@ -358,6 +372,12 @@
                 Snackbar.Add($"Failed to revert setting: {ex.Message}", Severity.Error);
             }
         }
+    }
+
+    private async Task ShowHistoryDialogAsync(ServiceSetting setting)
+    {
+        await ConfigurationChangeHistoryDialog.ShowAsync(DialogService, ActivityTargetType.ServiceSetting,
+            setting.Key, "Service Setting", setting.DisplayName);
     }
 
     private async Task CopyToClipboardAsync(string value)

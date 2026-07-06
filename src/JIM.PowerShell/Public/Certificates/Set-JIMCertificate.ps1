@@ -25,6 +25,10 @@ function Set-JIMCertificate {
     .PARAMETER Disable
         Disable the certificate.
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the certificate's
+        configuration change history.
+
     .PARAMETER PassThru
         If specified, returns the updated certificate object.
 
@@ -66,6 +70,9 @@ function Set-JIMCertificate {
 
         [switch]$Disable,
 
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
+
         [switch]$PassThru
     )
 
@@ -98,6 +105,10 @@ function Set-JIMCertificate {
                 $body.isEnabled = $true
             } elseif ($Disable) {
                 $body.isEnabled = $false
+            }
+
+            if ($ChangeReason) {
+                $body.changeReason = $ChangeReason
             }
 
             try {

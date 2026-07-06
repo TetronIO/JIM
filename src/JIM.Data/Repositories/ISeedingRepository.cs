@@ -19,7 +19,6 @@ public interface ISeedingRepository
         List<MetaverseAttribute> metaverseAttributes,
         List<MetaverseObjectType> metaverseObjectTypes,
         List<PredefinedSearch> predefinedSearches,
-        List<Role> roles,
         List<ExampleDataSet> exampleDataSets,
         List<ExampleDataTemplate> dataGenerationTemplates,
         List<ConnectorDefinition> connectorDefinitions);

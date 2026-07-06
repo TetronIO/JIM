@@ -18,6 +18,10 @@ function Remove-JIMPredefinedSearchCriterion {
     .PARAMETER CriterionId
         The unique identifier of the criterion to remove.
 
+    .PARAMETER ChangeReason
+        Optional reason for the removal, recorded on the audit Activity and shown in the owning Predefined
+        Search's configuration change history.
+
     .OUTPUTS
         None
 
@@ -25,6 +29,11 @@ function Remove-JIMPredefinedSearchCriterion {
         Remove-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 -CriterionId 15
 
         Removes the criterion with ID 15 from group 10.
+
+    .EXAMPLE
+        Remove-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 -CriterionId 15 -ChangeReason "No longer required (CHG0130)"
+
+        Removes the criterion and records the reason on its owning search's configuration change history.
 
     .LINK
         Get-JIMPredefinedSearchCriteriaGroup
@@ -40,7 +49,10 @@ function Remove-JIMPredefinedSearchCriterion {
 
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [Alias('Id')]
-        [int]$CriterionId
+        [int]$CriterionId,
+
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason
     )
 
     process {
@@ -52,7 +64,11 @@ function Remove-JIMPredefinedSearchCriterion {
         if ($PSCmdlet.ShouldProcess("Criterion $CriterionId in Group $GroupId on Predefined Search $PredefinedSearchId", "Remove")) {
             Write-Verbose "Removing criterion $CriterionId from group $GroupId in Predefined Search $PredefinedSearchId"
             try {
-                Invoke-JIMApi -Endpoint "/api/v1/predefined-searches/$PredefinedSearchId/criteria-groups/$GroupId/criteria/$CriterionId" -Method 'DELETE'
+                $endpoint = "/api/v1/predefined-searches/$PredefinedSearchId/criteria-groups/$GroupId/criteria/$CriterionId"
+                if ($ChangeReason) {
+                    $endpoint += "?changeReason=$([uri]::EscapeDataString($ChangeReason))"
+                }
+                Invoke-JIMApi -Endpoint $endpoint -Method 'DELETE'
                 Write-Verbose "Removed criterion $CriterionId"
             }
             catch {

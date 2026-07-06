@@ -64,15 +64,15 @@ Modifies an existing Metaverse Object Type. Use this cmdlet to configure automat
 ```powershell
 # ById (default)
 Set-JIMMetaverseObjectType -Id <int> [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>] [-PassThru]
+    [-DeletionTriggerConnectedSystemIds <int[]>] [-ChangeReason <string>] [-PassThru]
 
 # ByName
 Set-JIMMetaverseObjectType -Name <string> [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>] [-PassThru]
+    [-DeletionTriggerConnectedSystemIds <int[]>] [-ChangeReason <string>] [-PassThru]
 
 # ByInputObject
 Set-JIMMetaverseObjectType -InputObject <object> [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>] [-PassThru]
+    [-DeletionTriggerConnectedSystemIds <int[]>] [-ChangeReason <string>] [-PassThru]
 ```
 
 #### Parameters
@@ -85,6 +85,7 @@ Set-JIMMetaverseObjectType -InputObject <object> [-DeletionRule <string>] [-Dele
 | `DeletionRule` | `string` | No | | The deletion rule to apply. Valid values: `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected` |
 | `DeletionGracePeriod` | `TimeSpan` | No | | Grace period before a pending deletion is executed |
 | `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Connected System IDs that trigger deletion when disconnected |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 | `PassThru` | `switch` | No | `false` | Return the updated object type |
 
 !!! info "ShouldProcess"
@@ -127,7 +128,7 @@ Creates a new Metaverse Object Type. Use this when the built-in `User`, `Group`,
 New-JIMMetaverseObjectType -Name <string> -PluralName <string>
     [-Icon <string>] [-AttributeIds <int[]>]
     [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
-    [-DeletionTriggerConnectedSystemIds <int[]>]
+    [-DeletionTriggerConnectedSystemIds <int[]>] [-ChangeReason <string>]
 ```
 
 #### Parameters
@@ -141,6 +142,7 @@ New-JIMMetaverseObjectType -Name <string> -PluralName <string>
 | `DeletionRule` | `string` | No | `Manual` | Controls when objects of this type are automatically deleted. Valid values: `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected`. |
 | `DeletionGracePeriod` | `TimeSpan` | No | | Grace period before deletion is executed. Use `[TimeSpan]::Zero` for immediate deletion. Ignored when `DeletionRule` is `Manual`. |
 | `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Required when `DeletionRule` is `WhenAuthoritativeSourceDisconnected`. The Connected System IDs whose disconnect triggers deletion. |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 
 !!! info "ShouldProcess"
     This cmdlet supports `ShouldProcess` with a **Medium** impact level. Use `-WhatIf` to preview changes or `-Confirm` to require confirmation.
@@ -224,7 +226,7 @@ Creates a new metaverse attribute definition.
 
 ```powershell
 New-JIMMetaverseAttribute -Name <string> -Type <string> [-AttributePlurality <string>]
-    [-ObjectTypeIds <int[]>]
+    [-ObjectTypeIds <int[]>] [-ChangeReason <string>]
 ```
 
 #### Parameters
@@ -235,6 +237,7 @@ New-JIMMetaverseAttribute -Name <string> -Type <string> [-AttributePlurality <st
 | `Type` | `string` | Yes | | The data type. Valid values: `Text`, `Integer`, `LongNumber`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
 | `AttributePlurality` | `string` | No | `SingleValued` | Whether the attribute holds one or many values. Valid values: `SingleValued`, `MultiValued` |
 | `ObjectTypeIds` | `int[]` | No | | Object type IDs to associate the attribute with |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 
 !!! info "ShouldProcess"
     This cmdlet supports `ShouldProcess` with a **Medium** impact level. Use `-WhatIf` to preview changes or `-Confirm` to require confirmation.
@@ -270,11 +273,11 @@ Modifies an existing metaverse attribute definition.
 ```powershell
 # ById (default)
 Set-JIMMetaverseAttribute -Id <int> [-Name <string>] [-Type <string>] [-AttributePlurality <string>]
-    [-ObjectTypeIds <int[]>] [-PassThru]
+    [-ObjectTypeIds <int[]>] [-ChangeReason <string>] [-PassThru]
 
 # ByInputObject
 Set-JIMMetaverseAttribute -InputObject <object> [-Name <string>] [-Type <string>]
-    [-AttributePlurality <string>] [-ObjectTypeIds <int[]>] [-PassThru]
+    [-AttributePlurality <string>] [-ObjectTypeIds <int[]>] [-ChangeReason <string>] [-PassThru]
 ```
 
 #### Parameters
@@ -287,6 +290,7 @@ Set-JIMMetaverseAttribute -InputObject <object> [-Name <string>] [-Type <string>
 | `Type` | `string` | No | | The new data type. Valid values: `Text`, `Integer`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
 | `AttributePlurality` | `string` | No | | The new plurality. Valid values: `SingleValued`, `MultiValued` |
 | `ObjectTypeIds` | `int[]` | No | | Object type IDs to associate with; replaces existing associations |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 | `PassThru` | `switch` | No | `false` | Return the updated attribute definition |
 
 !!! info "ShouldProcess"
@@ -320,10 +324,10 @@ Deletes a metaverse attribute definition. Built-in attributes cannot be deleted.
 
 ```powershell
 # ById (default)
-Remove-JIMMetaverseAttribute -Id <int> [-Force]
+Remove-JIMMetaverseAttribute -Id <int> [-ChangeReason <string>] [-Force]
 
 # ByInputObject
-Remove-JIMMetaverseAttribute -InputObject <object> [-Force]
+Remove-JIMMetaverseAttribute -InputObject <object> [-ChangeReason <string>] [-Force]
 ```
 
 #### Parameters
@@ -332,6 +336,7 @@ Remove-JIMMetaverseAttribute -InputObject <object> [-Force]
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes (ById) | | The ID of the attribute to delete. Accepts pipeline input. |
 | `InputObject` | `object` | Yes (ByInputObject) | | An attribute object from the pipeline |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 | `Force` | `switch` | No | `false` | Suppress confirmation prompts |
 
 !!! warning "ShouldProcess"

@@ -1,12 +1,15 @@
 ﻿@page "/admin/predefined-searches/{Uri}"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Search
 @using JIM.Utilities
 @using JIM.Web.Models
+@using JIM.Web.Pages.Admin.Components
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -23,6 +26,10 @@
 
 @if (_predefinedSearch != null)
 {
+    <div class="mt-6">
+    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-6">
+
+        <MudTabPanel Text="Details">
     <MudPaper Class="pa-4" Outlined="true">
         <MudText Typo="Typo.h5" Class="mb-3">Details</MudText>
         <MudGrid Spacing="4">
@@ -104,6 +111,14 @@
             </MudStack>
         }
     </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
+            <ConfigurationChangesTab TargetType="ActivityTargetType.PredefinedSearch" ObjectId="@_predefinedSearch.Id" ObjectTypeLabel="Predefined Search" />
+        </MudTabPanel>
+
+    </NavigableMudTabs>
+    </div>
 
     @* ─── Add Criteria Group dialog ─── *@
     <MudDialog @bind-Visible="_addGroupDialogVisible" Options="_dialogOptions">
@@ -177,8 +192,12 @@
     [Parameter]
     public string? Uri { get; set; }
 
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
     private PredefinedSearch? _predefinedSearch;
     private List<BreadcrumbItem> _breadcrumbs = null!;
+    private int _changeCount;
 
     // Attributes of the search's Metaverse Object Type, for the criterion attribute picker.
     private List<MetaverseAttribute> _objectTypeAttributes = new();
@@ -274,6 +293,8 @@
             new("Predefined Searches", href: "/admin/predefined-searches/"),
             new(_predefinedSearch.Name, href: null, disabled: true)
         };
+
+        _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.PredefinedSearch, _predefinedSearch.Id, 1, 1)).TotalResults;
     }
 
     private async Task ReloadAsync()
@@ -283,6 +304,12 @@
 
         using var jim = JimFactory.Create();
         _predefinedSearch = await jim.Search.GetPredefinedSearchAsync(Uri);
+        if (_predefinedSearch != null)
+        {
+            // Criteria group/criterion edits roll up into the owning search's configuration history too, so refresh
+            // the Changes tab badge whenever the search is reloaded, not just after the main Save.
+            _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.PredefinedSearch, _predefinedSearch.Id, 1, 1)).TotalResults;
+        }
     }
 
     // ─── Criteria group operations ───
@@ -490,6 +517,11 @@
         if (_predefinedSearch == null)
             return;
 
+        // offer an optional reason for the configuration change history; cancelling aborts the save
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+        if (cancelled)
+            return;
+
         try
         {
             using var jim = JimFactory.Create();
@@ -501,8 +533,10 @@
             }
 
             core.IsEnabled = isEnabled;
-            await jim.Search.UpdatePredefinedSearchAsync(core);
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            await jim.Search.UpdatePredefinedSearchAsync(core, user, changeReason);
             _predefinedSearch.IsEnabled = isEnabled;
+            _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.PredefinedSearch, _predefinedSearch.Id, 1, 1)).TotalResults;
             Snackbar.Add($"Predefined search '{_predefinedSearch.Name}' {(isEnabled ? "enabled" : "disabled")}.", Severity.Success);
         }
         catch (InvalidOperationException ex)

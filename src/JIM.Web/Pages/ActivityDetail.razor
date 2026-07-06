@@ -148,11 +148,22 @@
 
             @if (_activity.ParentActivityId.HasValue)
             {
+                var parentActivityId = _activity.ParentActivityId.Value;
+                var parentActivityHref = $"/activity/{parentActivityId}{(_fromOperations ? "?from=operations" : "")}";
                 <MudItem xs="12" sm="6" md="4">
                     <MudText Typo="Typo.button" Class="mud-text-secondary">Parent Activity:</MudText>
                     <MudText>
                         <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="mr-1" Style="vertical-align: middle;" />
-                        <MudLink Href="@($"/activity/{_activity.ParentActivityId.Value}{(_fromOperations ? "?from=operations" : "")}")">View parent activity</MudLink>
+                        @if (_parentActivity != null)
+                        {
+                            var parentTargetName = !string.IsNullOrEmpty(_parentActivity.TargetName) ? _parentActivity.TargetName : "(no name)";
+                            <MudChip T="string" Variant="Variant.Text" Class="mr-2">@_parentActivity.TargetType.ToString().SplitOnCapitalLetters()</MudChip>
+                            <MudLink Href="@parentActivityHref">@parentTargetName</MudLink>
+                        }
+                        else
+                        {
+                            <MudLink Href="@parentActivityHref">View parent activity</MudLink>
+                        }
                     </MudText>
                 </MudItem>
             }
@@ -566,14 +577,15 @@
                   RowsPerPage="@_rowsPerPage"
                   RowsPerPageChanged="OnRowsPerPageChanged"
                   Hover="true"
-                  Dense="true"
+                  Dense="@_dense"
                   Breakpoint="Breakpoint.Sm"
-                  Class="mt-3 mb-5"
+                  Class="@(_dense ? "mt-3 mb-5 dense-body-only" : "mt-3 mb-5")"
                   Outlined="true"
                   Elevation="0"
                   Loading="@_loading"
                   LoadingProgressColor="Color.Primary">
             <ToolBarContent>
+                <TableDensityToggle @bind-Dense="_dense" />
                 <MudSpacer />
                 <MudTextField T="string"
                               ValueChanged="@(s => OnSearch(s))"
@@ -670,10 +682,24 @@
         </MudTable>
     }
 
-    @if (_childActivities.Count > 0)
+    @if (_childActivityCount > 0 && _preferencesLoaded)
     {
         <MudText Typo="Typo.h5" Class="mt-5">Child Activities</MudText>
-        <MudTable T="Activity" Items="_childActivities" Hover="true" Class="mt-3" Outlined="true" Elevation="0">
+        <MudTable @ref="_childActivitiesTable"
+                  T="Activity"
+                  ServerData="ChildActivitiesServerReload"
+                  RowsPerPage="@_rowsPerPage"
+                  RowsPerPageChanged="OnRowsPerPageChanged"
+                  Hover="true"
+                  Dense="@_dense"
+                  Class="@(_dense ? "mt-3 dense-body-only" : "mt-3")"
+                  Outlined="true"
+                  Elevation="0"
+                  Loading="@_childActivitiesLoading"
+                  LoadingProgressColor="Color.Primary">
+            <ToolBarContent>
+                <TableDensityToggle @bind-Dense="_dense" />
+            </ToolBarContent>
             <HeaderContent>
                 <MudTh></MudTh>
                 <MudTh>Type</MudTh>
@@ -737,6 +763,9 @@
             <NoRecordsContent>
                 <MudText>No child activities found.</MudText>
             </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
         </MudTable>
     }
 }
@@ -751,9 +780,12 @@
     private Guid _loadedId;
     private MudTable<ActivityRunProfileExecutionItemHeader>? _table;
     private Activity? _activity;
+    private Activity? _parentActivity;
     private ConfigurationChangeDetail? _configChangeDetail;
     private bool _isAdministrator;
-    private List<Activity> _childActivities = new();
+    private MudTable<Activity>? _childActivitiesTable;
+    private int _childActivityCount;
+    private bool _childActivitiesLoading;
     private ConnectedSystemHeader? _connectedSystemHeader;
     private MetaverseObjectHeader? _metaverseObjectHeader;
     private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
@@ -764,6 +796,7 @@
     private CancellationTokenSource? _pollCts;
     private bool _preferencesLoaded;
     private bool _initialisationComplete;
+    private bool _dense;
 
     // Object type filter - when chips are selected, the table reloads with the filter applied
     private IReadOnlyCollection<string> _selectedObjectTypes = new List<string>();
@@ -793,9 +826,10 @@
         _connectedSystemHeader = null;
         _metaverseObjectHeader = null;
         _initiatorMetaverseObjectHeader = null;
+        _parentActivity = null;
         _activityRunProfileExecutionStats = null;
         _configChangeDetail = null;
-        _childActivities = new();
+        _childActivityCount = 0;
         _searchString = "";
         _selectedObjectTypes = new List<string>();
         _selectedErrorTypes = new List<ActivityRunProfileExecutionItemErrorType>();
@@ -839,10 +873,15 @@
         if (_activity.InitiatedByType == ActivityInitiatorType.User && _activity.InitiatedById.HasValue)
             _initiatorMetaverseObjectHeader = await jim.Metaverse.GetMetaverseObjectHeaderAsync(_activity.InitiatedById.Value);
 
+        // Load the parent activity (if any) so the Summary can render its type and target name rather than a bare link.
+        if (_activity.ParentActivityId.HasValue)
+            _parentActivity = await jim.Activities.GetActivityAsync(_activity.ParentActivityId.Value);
+
         if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute)
             _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
 
-        _childActivities = await jim.Activities.GetChildActivitiesAsync(_activity.Id);
+        // Only the count is loaded here; the Child Activities table pages its rows from the data layer on demand.
+        _childActivityCount = (await jim.Activities.GetChildActivityCountsAsync([_activity.Id])).GetValueOrDefault(_activity.Id);
 
         // Configuration-change activities carry a versioned snapshot; for administrators, load the diff against the
         // previous version so it renders inline with the shared renderer. Gated to Administrators to match the
@@ -854,15 +893,39 @@
         // TargetType: granular endpoints record activities typed for the child (an Object Matching Rule, a Run
         // Profile) whose versioned snapshot belongs to the owning Synchronisation Rule or Connected System. The
         // Synchronisation Rule FK is checked first: a rule-scoped capture may sit on an activity that also carries a
-        // Connected System id for context, but its version was assigned against the rule.
+        // Connected System id for context, but its version was assigned against the rule. The remaining branches
+        // cover every other captured configuration type; their order does not matter since no two of them are ever
+        // set on the same activity.
         if (_isAdministrator && _activity.ConfigurationChangeVersion.HasValue)
         {
+            var configurationChangeVersion = _activity.ConfigurationChangeVersion.Value;
+
             if (_activity.SyncRuleId.HasValue)
-                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.SyncRule, _activity.SyncRuleId.Value, _activity.ConfigurationChangeVersion.Value);
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.SyncRule, _activity.SyncRuleId.Value, configurationChangeVersion);
             else if (_activity.ConnectedSystemId.HasValue)
-                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ConnectedSystem, _activity.ConnectedSystemId.Value, _activity.ConfigurationChangeVersion.Value);
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ConnectedSystem, _activity.ConnectedSystemId.Value, configurationChangeVersion);
             else if (_activity.ScheduleId.HasValue)
-                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.Schedule, _activity.ScheduleId.Value, _activity.ConfigurationChangeVersion.Value);
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.Schedule, _activity.ScheduleId.Value, configurationChangeVersion);
+            else if (_activity.TrustedCertificateId.HasValue)
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.TrustedCertificate, _activity.TrustedCertificateId.Value, configurationChangeVersion);
+            else if (_activity.ApiKeyId.HasValue)
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ApiKey, _activity.ApiKeyId.Value, configurationChangeVersion);
+            else if (_activity.MetaverseObjectTypeId.HasValue)
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.MetaverseObjectType, _activity.MetaverseObjectTypeId.Value, configurationChangeVersion);
+            else if (_activity.MetaverseAttributeId.HasValue)
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.MetaverseAttribute, _activity.MetaverseAttributeId.Value, configurationChangeVersion);
+            else if (_activity.RoleId.HasValue)
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.Role, _activity.RoleId.Value, configurationChangeVersion);
+            else if (_activity.PredefinedSearchId.HasValue)
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.PredefinedSearch, _activity.PredefinedSearchId.Value, configurationChangeVersion);
+            else if (_activity.ConnectorDefinitionId.HasValue)
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ConnectorDefinition, _activity.ConnectorDefinitionId.Value, configurationChangeVersion);
+            else if (_activity.ExampleDataTemplateId.HasValue)
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ExampleDataTemplate, _activity.ExampleDataTemplateId.Value, configurationChangeVersion);
+            else if (_activity.ExampleDataSetId.HasValue)
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ExampleDataSet, _activity.ExampleDataSetId.Value, configurationChangeVersion);
+            else if (_activity.ServiceSettingKey != null)
+                _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ServiceSetting, _activity.ServiceSettingKey, configurationChangeVersion);
         }
 
         _loadedId = Id;
@@ -873,15 +936,21 @@
     }
 
     // Whether to show the "no configuration snapshot was captured" notice: an administrator is viewing a completed,
-    // configuration-changing activity (create/update/import of a Connected System, Synchronisation Rule or Schedule,
-    // or one of their granular sub-entities) that carries no snapshot. Deletes are excluded: they record unversioned
-    // tombstones surfaced elsewhere, and an in-progress activity may simply not have captured yet.
+    // configuration-changing activity (create/update/import of a Connected System, Synchronisation Rule, Schedule,
+    // Service Setting, Metaverse Object Type, Metaverse Attribute, Trusted Certificate, API Key or Role, or one of
+    // their granular sub-entities) that carries no snapshot. Deletes are excluded: they record unversioned
+    // tombstones surfaced elsewhere, and an in-progress activity may simply not have captured yet. Target types
+    // whose capture has not shipped yet (Predefined Search, Connector Definition, Example Data Template/Set -
+    // Phases 7-9) are deliberately excluded: every one of their existing activities lacks a snapshot, so the notice
+    // would fire as a false alarm rather than flag a genuine gap.
     private bool ShowNoSnapshotNotice =>
         _isAdministrator
         && _activity != null
         && !_activity.ConfigurationChangeVersion.HasValue
         && _activity.TargetType is ActivityTargetType.ConnectedSystem or ActivityTargetType.SyncRule or ActivityTargetType.Schedule
-            or ActivityTargetType.ObjectMatchingRule or ActivityTargetType.ConnectedSystemRunProfile
+            or ActivityTargetType.ObjectMatchingRule or ActivityTargetType.ConnectedSystemRunProfile or ActivityTargetType.ServiceSetting
+            or ActivityTargetType.MetaverseObjectType or ActivityTargetType.MetaverseAttribute or ActivityTargetType.TrustedCertificate
+            or ActivityTargetType.ApiKey or ActivityTargetType.Role
         && _activity.TargetOperationType is ActivityTargetOperationType.Create or ActivityTargetOperationType.Update
             or ActivityTargetOperationType.ImportSchema or ActivityTargetOperationType.ImportHierarchy
         && _activity.Status is ActivityStatus.Complete or ActivityStatus.CompleteWithWarning;
@@ -894,6 +963,7 @@
             {
                 var preferredSize = await PreferenceService.GetRowsPerPageAsync();
                 _rowsPerPage = preferredSize;
+                _dense = await PreferenceService.GetTableDenseAsync() == true;
                 _preferencesLoaded = true;
                 StateHasChanged(); // Re-render to show the table now that preference is loaded
             }
@@ -951,6 +1021,32 @@
         finally
         {
             _loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task<TableData<Activity>> ChildActivitiesServerReload(TableState state, CancellationToken token)
+    {
+        _childActivitiesLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Convert MudBlazor's 0-indexed page to our 1-indexed page
+            var page = state.Page + 1;
+
+            using var jim = JimFactory.Create();
+            var result = await jim.Activities.GetChildActivitiesAsync(Id, page, state.PageSize);
+
+            return new TableData<Activity>
+            {
+                TotalItems = result.TotalResults,
+                Items = result.Results
+            };
+        }
+        finally
+        {
+            _childActivitiesLoading = false;
             StateHasChanged();
         }
     }
@@ -1216,23 +1312,29 @@
                     _activity = updated;
 
                     // Refresh child activities and stats while in progress
-                    _childActivities = await jim.Activities.GetChildActivitiesAsync(_activity.Id);
+                    _childActivityCount = (await jim.Activities.GetChildActivityCountsAsync([_activity.Id])).GetValueOrDefault(_activity.Id);
                     if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute)
                         _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
 
                     await InvokeAsync(StateHasChanged);
 
+                    // The Child Activities table is server-paged; ask it to re-fetch its current page.
+                    if (_childActivitiesTable != null)
+                        await InvokeAsync(() => _childActivitiesTable.ReloadServerData());
+
                     // Stop polling once the activity has completed
                     if (updated.Status != ActivityStatus.InProgress)
                         break;
                 }
-                catch (TaskCanceledException)
+                catch (OperationCanceledException)
                 {
+                    // Polling was cancelled (navigation away or page dispose); exit quietly.
                     break;
                 }
-                catch
+                catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException or ObjectDisposedException)
                 {
-                    // Ignore transient errors during polling
+                    // Transient failure reading the activity: a database error, an EF Core operation in a bad state,
+                    // or the application scope disposed mid-poll during navigation. Skip this tick and keep polling.
                 }
             }
         }, token);

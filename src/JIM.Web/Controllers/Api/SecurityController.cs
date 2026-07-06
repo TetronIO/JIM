@@ -4,6 +4,8 @@
 using System.Security.Claims;
 using Asp.Versioning;
 using JIM.Application;
+using JIM.Models.Activities;
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Core;
 using JIM.Models.Security.DTOs;
 using JIM.Web.Models.Api;
@@ -25,7 +27,7 @@ namespace JIM.Web.Controllers.Api;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrator")]
 [Produces("application/json")]
-public class SecurityController(ILogger<SecurityController> logger, JimApplication application) : ControllerBase
+public class SecurityController(ILogger<SecurityController> logger, JimApplication application) : ApiControllerBase(application, logger)
 {
     private readonly ILogger<SecurityController> _logger = logger;
     private readonly JimApplication _application = application;
@@ -149,6 +151,7 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
     /// </remarks>
     /// <param name="roleId">The unique identifier of the Role.</param>
     /// <param name="metaverseObjectId">The unique identifier of the Metaverse Object to add.</param>
+    /// <param name="changeReason">Optional reason for the change, recorded on the audit Activity.</param>
     /// <returns>No content on success.</returns>
     /// <response code="204">The Metaverse Object was added to the Role.</response>
     /// <response code="400">If the Metaverse Object does not exist.</response>
@@ -163,7 +166,7 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> AddRoleMemberAsync(int roleId, Guid metaverseObjectId)
+    public async Task<IActionResult> AddRoleMemberAsync(int roleId, Guid metaverseObjectId, [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Adding Metaverse Object {MetaverseObjectId} to role {RoleId}", metaverseObjectId, roleId);
 
@@ -175,7 +178,11 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
 
         try
         {
-            await _application.Security.AddObjectToRoleByIdAsync(metaverseObjectId, roleId);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.Security.AddObjectToRoleByIdAsync(metaverseObjectId, roleId, apiKey, changeReason);
+            else
+                await _application.Security.AddObjectToRoleByIdAsync(metaverseObjectId, roleId, await GetCurrentUserAsync(), changeReason);
         }
         catch (ArgumentException ex) when (ex.Message.Contains("already in that role"))
         {
@@ -200,6 +207,7 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
     /// </remarks>
     /// <param name="roleId">The unique identifier of the Role.</param>
     /// <param name="metaverseObjectId">The unique identifier of the Metaverse Object to remove.</param>
+    /// <param name="changeReason">Optional reason for the change, recorded on the audit Activity.</param>
     /// <returns>No content on success.</returns>
     /// <response code="204">The Metaverse Object was removed from the Role.</response>
     /// <response code="400">If the removal would cause a lockout (self-removal or last administrator) or the object is not a member.</response>
@@ -212,7 +220,7 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RemoveRoleMemberAsync(int roleId, Guid metaverseObjectId)
+    public async Task<IActionResult> RemoveRoleMemberAsync(int roleId, Guid metaverseObjectId, [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Removing Metaverse Object {MetaverseObjectId} from role {RoleId}", metaverseObjectId, roleId);
 
@@ -244,7 +252,11 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
 
         try
         {
-            await _application.Security.RemoveObjectFromRoleAsync(metaverseObjectId, roleId);
+            var apiKey = await GetCurrentApiKeyAsync();
+            if (apiKey != null)
+                await _application.Security.RemoveObjectFromRoleAsync(metaverseObjectId, roleId, apiKey, changeReason);
+            else
+                await _application.Security.RemoveObjectFromRoleAsync(metaverseObjectId, roleId, await GetCurrentUserAsync(), changeReason);
         }
         catch (ArgumentException ex)
         {
@@ -254,6 +266,70 @@ public class SecurityController(ILogger<SecurityController> logger, JimApplicati
         _logger.LogInformation("Removed Metaverse Object {MetaverseObjectId} from role {RoleId} ({RoleName})", metaverseObjectId, roleId, role.Name);
         return NoContent();
     }
+
+    #region Configuration Change History
+
+    /// <summary>
+    /// List the change history for a Role.
+    /// </summary>
+    /// <param name="roleId">The unique identifier of the Role.</param>
+    /// <param name="pagination">Pagination parameters.</param>
+    /// <returns>A paged list of change-history entries, newest version first, each with a one-line summary.</returns>
+    /// <response code="200">Change history returned (empty if the Role has no recorded configuration changes).</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("roles/{roleId:int}/change-history", Name = "GetRoleChangeHistory")]
+    [ProducesResponseType(typeof(PaginatedResponse<ConfigurationChangeHistoryItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetRoleChangeHistoryAsync(int roleId, [FromQuery] PaginationRequest pagination)
+    {
+        var result = await _application.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.Role, roleId, pagination.Page, pagination.PageSize);
+        return Ok(PaginatedResponse<ConfigurationChangeHistoryItem>.Create(result.Results, result.TotalResults, pagination.Page, pagination.PageSize));
+    }
+
+    /// <summary>
+    /// Get a single version of a Role's change history, with its snapshot and the diff against the previous version.
+    /// </summary>
+    /// <param name="roleId">The unique identifier of the Role.</param>
+    /// <param name="changeVersion">The per-object change version to retrieve.</param>
+    /// <returns>The change detail: metadata, the snapshot, and the diff against the previous version.</returns>
+    /// <response code="200">The change detail.</response>
+    /// <response code="404">No change with that version was found for the Role.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("roles/{roleId:int}/change-history/{changeVersion:int}", Name = "GetRoleChange")]
+    [ProducesResponseType(typeof(ConfigurationChangeDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetRoleChangeAsync(int roleId, int changeVersion)
+    {
+        var detail = await _application.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.Role, roleId, changeVersion);
+        if (detail == null)
+            return NotFound(ApiErrorResponse.NotFound($"No change history found for Role {roleId} version {changeVersion}."));
+        return Ok(detail);
+    }
+
+    /// <summary>
+    /// Compare two versions of a Role's configuration.
+    /// </summary>
+    /// <param name="roleId">The unique identifier of the Role.</param>
+    /// <param name="fromVersion">The earlier version to compare from.</param>
+    /// <param name="toVersion">The later version to compare to.</param>
+    /// <returns>The structured diff of the later version against the earlier.</returns>
+    /// <response code="200">The diff.</response>
+    /// <response code="404">One of the requested versions was not found for the Role.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("roles/{roleId:int}/change-history/compare", Name = "CompareRoleChanges")]
+    [ProducesResponseType(typeof(ConfigurationDiff), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CompareRoleChangesAsync(int roleId, [FromQuery] int fromVersion, [FromQuery] int toVersion)
+    {
+        var diff = await _application.ChangeHistory.CompareConfigurationChangesAsync(ActivityTargetType.Role, roleId, fromVersion, toVersion);
+        if (diff == null)
+            return NotFound(ApiErrorResponse.NotFound($"Could not compare versions {fromVersion} and {toVersion} for Role {roleId}."));
+        return Ok(diff);
+    }
+
+    #endregion
 
     /// <summary>
     /// Gets the caller's Metaverse Object ID from their authentication claims.

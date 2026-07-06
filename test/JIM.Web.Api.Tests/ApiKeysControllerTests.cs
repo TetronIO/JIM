@@ -11,6 +11,7 @@ using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Security;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -24,6 +25,7 @@ public class ApiKeysControllerTests
     private Mock<IRepository> _mockRepository = null!;
     private Mock<IApiKeyRepository> _mockApiKeyRepository = null!;
     private Mock<ISecurityRepository> _mockSecurityRepository = null!;
+    private Mock<IActivityRepository> _mockActivityRepository = null!;
     private Mock<ILogger<ApiKeysController>> _mockLogger = null!;
     private JimApplication _application = null!;
     private ApiKeysController _controller = null!;
@@ -34,13 +36,22 @@ public class ApiKeysControllerTests
         _mockRepository = new Mock<IRepository>();
         _mockApiKeyRepository = new Mock<IApiKeyRepository>();
         _mockSecurityRepository = new Mock<ISecurityRepository>();
+        _mockActivityRepository = new Mock<IActivityRepository>();
         _mockLogger = new Mock<ILogger<ApiKeysController>>();
 
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepository.Object);
         _mockRepository.Setup(r => r.Security).Returns(_mockSecurityRepository.Object);
+        // API key CRUD now writes an audit Activity through the application layer.
+        _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepository.Object);
 
         _application = new JimApplication(_mockRepository.Object);
         _controller = new ApiKeysController(_mockLogger.Object, _application);
+
+        // The controller resolves the calling principal from the request, so it needs an HTTP context.
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext()
+        };
     }
 
     #region GetAllAsync tests
