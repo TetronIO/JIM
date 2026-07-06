@@ -5,8 +5,8 @@ function Get-JIMConfigurationChangeHistory {
     <#
     .SYNOPSIS
         Gets the configuration change history for a Synchronisation Rule, Connected System, Schedule, Service
-        Setting, Metaverse Object Type, Metaverse Attribute, Trusted Certificate, API Key, Role, or Predefined
-        Search in JIM.
+        Setting, Metaverse Object Type, Metaverse Attribute, Trusted Certificate, API Key, Role, Predefined
+        Search, or Connector Definition in JIM.
 
     .DESCRIPTION
         Retrieves the recorded configuration changes for a configuration object. Three modes are supported:
@@ -24,7 +24,7 @@ function Get-JIMConfigurationChangeHistory {
     .PARAMETER Type
         The kind of configuration object: 'SynchronisationRule', 'ConnectedSystem', 'Schedule',
         'ServiceSetting', 'MetaverseObjectType', 'MetaverseAttribute', 'TrustedCertificate', 'ApiKey', 'Role',
-        or 'PredefinedSearch'.
+        'PredefinedSearch', or 'ConnectorDefinition'.
 
     .PARAMETER Id
         The unique identifier of the configuration object: an integer for a Synchronisation Rule, Connected
@@ -125,6 +125,11 @@ function Get-JIMConfigurationChangeHistory {
         Pipes a Predefined Search in (binding its integer id) and lists its recorded configuration changes,
         covering its own definition as well as every criteria-group and criterion change.
 
+    .EXAMPLE
+        Get-JIMConfigurationChangeHistory -Type ConnectorDefinition -Id 3
+
+        Lists the most recent configuration changes for Connector Definition 3.
+
     .LINK
         Get-JIMSyncRule
 
@@ -138,7 +143,7 @@ function Get-JIMConfigurationChangeHistory {
     [OutputType([PSCustomObject])]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('SynchronisationRule', 'ConnectedSystem', 'Schedule', 'ServiceSetting', 'MetaverseObjectType', 'MetaverseAttribute', 'TrustedCertificate', 'ApiKey', 'Role', 'PredefinedSearch')]
+        [ValidateSet('SynchronisationRule', 'ConnectedSystem', 'Schedule', 'ServiceSetting', 'MetaverseObjectType', 'MetaverseAttribute', 'TrustedCertificate', 'ApiKey', 'Role', 'PredefinedSearch', 'ConnectorDefinition')]
         [string]$Type,
 
         # A string rather than [int] so it can carry an integer (Synchronisation Rule / Connected System), a GUID
@@ -182,9 +187,9 @@ function Get-JIMConfigurationChangeHistory {
 
     process {
         # Validate the id shape per object type before anything else (so a bad id fails fast, even offline):
-        # Synchronisation Rules, Connected Systems, Metaverse Object Types, Metaverse Attributes, Roles and
-        # Predefined Searches are integer-keyed, Schedules, Trusted Certificates and API Keys are GUID-keyed,
-        # and Service Settings are keyed by their dot-notation setting key.
+        # Synchronisation Rules, Connected Systems, Metaverse Object Types, Metaverse Attributes, Roles,
+        # Predefined Searches and Connector Definitions are integer-keyed, Schedules, Trusted Certificates and
+        # API Keys are GUID-keyed, and Service Settings are keyed by their dot-notation setting key.
         if ($Type -in 'Schedule', 'TrustedCertificate', 'ApiKey') {
             $parsedGuid = [Guid]::Empty
             if (-not [Guid]::TryParse($Id, [ref]$parsedGuid)) {
@@ -214,6 +219,7 @@ function Get-JIMConfigurationChangeHistory {
                 'MetaverseAttribute' { "/api/v1/metaverse/attributes/$Id/change-history" }
                 'Role' { "/api/v1/security/roles/$Id/change-history" }
                 'PredefinedSearch' { "/api/v1/predefined-searches/$Id/change-history" }
+                'ConnectorDefinition' { "/api/v1/synchronisation/connector-definitions/$Id/change-history" }
             }
         }
 

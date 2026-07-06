@@ -126,6 +126,72 @@ public class ConnectedSystemServer
             $"Synchronisation Rule {syncRule.Id}");
     }
 
+    // Captures a redacted, versioned snapshot of a Connector Definition onto its audit Activity via the shared
+    // ConfigurationChangeCaptureService. The definition is reloaded with its files and settings so the snapshot
+    // reflects persisted truth rather than the caller's partial in-memory graph; call it after the change has been
+    // persisted and before the Activity is completed. A file change rolls up here too (the file methods reload the
+    // owning definition), matching the granular sub-entity precedent used for Synchronisation Rules and Schedules.
+    private async Task CaptureConnectorDefinitionConfigurationChangeAsync(Activity activity, int connectorDefinitionId, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+            ActivityTargetType.ConnectorDefinition, connectorDefinitionId,
+            async hashKey =>
+            {
+                var definition = await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(connectorDefinitionId);
+                return definition == null ? null : Application.ConfigurationSnapshots.CreateSnapshot(definition, hashKey);
+            },
+            $"Connector Definition {connectorDefinitionId}");
+    }
+
+    // Captures a tombstone snapshot of a Connector Definition onto its delete Activity, before it is removed. Matching
+    // the Synchronisation Rule and Schedule deletion behaviour, this sets neither the Activity's target column nor a
+    // version; the snapshot is surfaced via the Activity itself rather than the object's history.
+    private async Task CaptureConnectorDefinitionDeletionAsync(Activity activity, ConnectorDefinition connectorDefinition, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureDeletionAsync(activity, changeReason,
+            async hashKey =>
+            {
+                // Reload with files and settings for a complete tombstone; fall back to the caller's entity if already gone.
+                var persisted = await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(connectorDefinition.Id) ?? connectorDefinition;
+                return Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
+            },
+            $"Connector Definition {connectorDefinition.Id}");
+    }
+
+    /// <summary>
+    /// Records a System-attributed Create Activity and version-1 baseline snapshot for a built-in Connector Definition
+    /// that has just been seeded, grouping it under the seeding pass's parent Activity. Like the built-in Predefined
+    /// Searches, the built-in Connector Definitions are persisted together in one seeding repository batch, so the
+    /// baseline is recorded after the batch rather than by re-routing each through
+    /// <see cref="CreateConnectorDefinitionAsync"/>. Idempotency is the caller's responsibility:
+    /// <see cref="SeedingServer"/> only calls this for definitions it created in the current pass, so it is safe even
+    /// when configuration change tracking is disabled and no snapshot is recorded.
+    /// </summary>
+    internal async Task RecordSeededConnectorDefinitionBaselineAsync(int connectorDefinitionId, string connectorName, Guid parentActivityId)
+    {
+        var activity = new Activity
+        {
+            TargetName = connectorName,
+            TargetType = ActivityTargetType.ConnectorDefinition,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            ParentActivityId = parentActivityId,
+            Message = $"Created built-in Connector Definition '{connectorName}'"
+        };
+        await Application.Activities.CreateSystemActivityAsync(activity);
+
+        try
+        {
+            await CaptureConnectorDefinitionConfigurationChangeAsync(activity, connectorDefinitionId,
+                "Built-in Connector Definition created automatically by JIM.");
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
     #region Connector Definitions
     public async Task<IList<ConnectorDefinitionHeader>> GetConnectorDefinitionHeadersAsync()
     {
@@ -142,29 +208,101 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetConnectorDefinitionAsync(name, withChangeTracking);
     }
 
-    public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
+    /// <summary>
+    /// Creates a Connector Definition, recording a Create Activity and version-1 configuration snapshot. Attributed via
+    /// the initiator triad, so seeding and any future upload UI/API share one audited path. No principal-carrying caller
+    /// exists yet (built-in definitions are seeded); the triad lets that caller arrive without a signature change.
+    /// </summary>
+    public async Task CreateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null, Guid? parentActivityId = null)
     {
+        var activity = new Activity
+        {
+            TargetName = connectorDefinition.Name,
+            TargetType = ActivityTargetType.ConnectorDefinition,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            ParentActivityId = parentActivityId
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         await Application.Repository.ConnectedSystems.CreateConnectorDefinitionAsync(connectorDefinition);
+        await CaptureConnectorDefinitionConfigurationChangeAsync(activity, connectorDefinition.Id, changeReason);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
+    /// <summary>
+    /// Updates a Connector Definition, recording an Update Activity and versioned configuration snapshot. Used today by
+    /// the startup drift-sync (<see cref="SeedingServer"/>), which passes <see cref="ActivityInitiatorType.System"/> and
+    /// the seeding parent so capability/setting changes shipped in new connector code are audited under System
+    /// Initialisation; the semantic dedupe guard means a no-change sync records no new version.
+    /// </summary>
+    public async Task UpdateConnectorDefinitionAsync(ConnectorDefinition connectorDefinition, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null, Guid? parentActivityId = null)
     {
+        var activity = new Activity
+        {
+            TargetName = connectorDefinition.Name,
+            TargetType = ActivityTargetType.ConnectorDefinition,
+            TargetOperationType = ActivityTargetOperationType.Update,
+            ParentActivityId = parentActivityId
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         await Application.Repository.ConnectedSystems.UpdateConnectorDefinitionAsync(connectorDefinition);
+        await CaptureConnectorDefinitionConfigurationChangeAsync(activity, connectorDefinition.Id, changeReason);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
+    /// <summary>
+    /// Deletes a Connector Definition, recording a Delete Activity and an unversioned tombstone snapshot before removal.
+    /// </summary>
+    public async Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
+        var activity = new Activity
+        {
+            TargetName = connectorDefinition.Name,
+            TargetType = ActivityTargetType.ConnectorDefinition,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
+        await CaptureConnectorDefinitionDeletionAsync(activity, connectorDefinition, changeReason);
         await Application.Repository.ConnectedSystems.DeleteConnectorDefinitionAsync(connectorDefinition);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile)
+    /// <summary>
+    /// Adds a file to a Connector Definition. The change rolls up into the owning definition's configuration history (an
+    /// Update Activity targeting the definition), matching the granular sub-entity precedent; the owning definition must
+    /// be populated on <see cref="ConnectorDefinitionFile.ConnectorDefinition"/> so the roll-up target can be resolved.
+    /// </summary>
+    public async Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
-        await Application.Repository.ConnectedSystems.CreateConnectorDefinitionFileAsync(connectorDefinitionFile);
+        await PersistConnectorDefinitionFileChangeAsync(connectorDefinitionFile, initiatorType, initiatorId, initiatorName, changeReason,
+            () => Application.Repository.ConnectedSystems.CreateConnectorDefinitionFileAsync(connectorDefinitionFile));
     }
 
-    public async Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile)
+    /// <summary>
+    /// Removes a file from a Connector Definition. Rolls up into the owning definition's configuration history, as
+    /// <see cref="CreateConnectorDefinitionFileAsync"/>.
+    /// </summary>
+    public async Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
-        await Application.Repository.ConnectedSystems.DeleteConnectorDefinitionFileAsync(connectorDefinitionFile);
+        await PersistConnectorDefinitionFileChangeAsync(connectorDefinitionFile, initiatorType, initiatorId, initiatorName, changeReason,
+            () => Application.Repository.ConnectedSystems.DeleteConnectorDefinitionFileAsync(connectorDefinitionFile));
+    }
+
+    // Shared core for the two file mutators: resolve the owning definition, record an Update Activity against it,
+    // persist the file change, then capture the definition's post-change snapshot so the file change versions once.
+    private async Task PersistConnectorDefinitionFileChangeAsync(ConnectorDefinitionFile connectorDefinitionFile, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason, Func<Task> persistAsync)
+    {
+        var owningDefinitionId = connectorDefinitionFile.ConnectorDefinition?.Id;
+        var activity = new Activity
+        {
+            TargetName = connectorDefinitionFile.ConnectorDefinition?.Name ?? connectorDefinitionFile.Filename,
+            TargetType = ActivityTargetType.ConnectorDefinition,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
+        await persistAsync();
+        if (owningDefinitionId is > 0)
+            await CaptureConnectorDefinitionConfigurationChangeAsync(activity, owningDefinitionId.Value, changeReason);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
     #endregion
 
