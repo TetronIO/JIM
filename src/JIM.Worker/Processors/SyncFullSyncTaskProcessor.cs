@@ -118,20 +118,26 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         // optimisation skips Attribute Flow for objects whose SOURCE DATA has not changed since the last
         // completed sync, which is only safe while the CONFIGURATION has not changed either; otherwise a pure
         // configuration change would never re-resolve anything until the object's data happened to change.
-        // When any Synchronisation Rule or mapping changed after the watermark (across all Connected Systems,
+        // The comparison baseline is ConfigurationLastFullyAppliedAt (the start of the last completed Full
+        // Synchronisation), NOT LastSyncCompletedAt: a no-change Delta Synchronisation advances the latter
+        // without applying configuration, and must not hide a configuration change from the next full run.
+        // When any Synchronisation Rule or mapping changed after that baseline (across all Connected Systems,
         // because another system's priority affects this system's resolution), disable the optimisation for
         // this run by loading without a watermark, so every object is fully evaluated against the new
         // configuration.
+        var fullSyncStartedAt = DateTime.UtcNow;
         var csoLoadWatermark = _connectedSystem.LastSyncCompletedAt;
         if (csoLoadWatermark.HasValue)
         {
+            var configurationBaseline = _connectedSystem.ConfigurationLastFullyAppliedAt;
             var configChangedAt = await _syncRepo.GetLatestSyncRuleConfigurationChangeAsync();
-            if (configChangedAt.HasValue && configChangedAt.Value > csoLoadWatermark.Value)
+            if (configurationBaseline == null ||
+                (configChangedAt.HasValue && configChangedAt.Value > configurationBaseline.Value))
             {
                 Log.Information("PerformFullSyncAsync: Synchronisation Rule configuration changed at {ConfigChangedAt:O}, " +
-                    "after the last completed sync at {Watermark:O}. Disabling the unchanged-object optimisation for " +
+                    "after it was last fully applied at {Baseline:O}. Disabling the unchanged-object optimisation for " +
                     "this run so the new configuration is applied to every object.",
-                    configChangedAt.Value, csoLoadWatermark.Value);
+                    configChangedAt, configurationBaseline);
                 csoLoadWatermark = null;
             }
         }
@@ -345,6 +351,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
             // Ensure the activity and any pending db updates are applied after all pages are processed
             await _syncRepo.UpdateActivityAsync(_activity);
+
+            // Record that this run applied the configuration as of its start to every object; a configuration
+            // change made mid-run carries a later timestamp and is picked up by the next Full Synchronisation.
+            _connectedSystem.ConfigurationLastFullyAppliedAt = fullSyncStartedAt;
 
             // Update the delta sync watermark to establish baseline for future delta syncs
             await UpdateDeltaSyncWatermarkAsync();
