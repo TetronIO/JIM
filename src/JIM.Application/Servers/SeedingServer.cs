@@ -571,6 +571,27 @@ internal class SeedingServer
             dataGenerationTemplatesToCreate,
             connectorDefinitions);
 
+        // Record a System-attributed Create Activity and version-1 baseline for each built-in Metaverse Object Type and
+        // Metaverse Attribute created this pass, grouped under the seeding pass's parent Activity. Like the Predefined
+        // Searches and Connector Definitions below, the schema is persisted in one cross-referencing batch (attributes
+        // bind to object types), so the baseline is recorded after the batch rather than by re-routing each object
+        // through an individual audited create. The lists hold only objects created this pass (Get/PrepareMetaverse*
+        // only add when absent), so a restart re-baselines nothing. Object types are recorded before attributes so the
+        // higher-level schema entities lead the children list.
+        if (objectTypesToCreate.Count > 0)
+        {
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            foreach (var objectType in objectTypesToCreate)
+                await Application.Metaverse.RecordSeededMetaverseObjectTypeBaselineAsync(objectType.Id, objectType.Name, parentActivityId);
+        }
+
+        if (attributesToCreate.Count > 0)
+        {
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            foreach (var attribute in attributesToCreate)
+                await Application.Metaverse.RecordSeededMetaverseAttributeBaselineAsync(attribute.Id, attribute.Name, parentActivityId);
+        }
+
         // Record a System-attributed Create Activity and version-1 baseline snapshot for each built-in Predefined
         // Search created above, grouped under the seeding pass's parent Activity, so their origin is visible in the
         // change history and under System Initialisation (matching the built-in Role and Schedule). The list holds
