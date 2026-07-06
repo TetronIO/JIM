@@ -33,6 +33,7 @@ public static class ActivityTargetTypeCategories
         { ActivityTargetType.TemporalScopeReconciliation, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.HistoryRetentionCleanup, ActivityTargetCategory.System },
         { ActivityTargetType.System, ActivityTargetCategory.System },
+        { ActivityTargetType.SystemInitialisation, ActivityTargetCategory.System },
         { ActivityTargetType.ExampleDataTemplate, ActivityTargetCategory.System },
         { ActivityTargetType.NotSet, ActivityTargetCategory.System }
     };

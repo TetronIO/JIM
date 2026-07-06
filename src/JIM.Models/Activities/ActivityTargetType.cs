@@ -61,5 +61,13 @@ public enum ActivityTargetType
     /// <summary>
     /// An Example Data Set. Integer-keyed via <see cref="Activity.ExampleDataSetId"/>.
     /// </summary>
-    ExampleDataSet = 19
+    ExampleDataSet = 19,
+
+    /// <summary>
+    /// The parent Activity grouping every built-in configuration object JIM seeds itself during a single
+    /// application startup (Roles, Schedules, and similar), with each seeded object's own Create Activity as a
+    /// child via <see cref="Activity.ParentActivityId"/>. Created lazily, only when a seed step is about to
+    /// create something, so a startup where seeding no-ops records no Activity of this type at all.
+    /// </summary>
+    SystemInitialisation = 20
 }

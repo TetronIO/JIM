@@ -59,7 +59,7 @@ public class SchedulerServer
         return await Application.Repository.Scheduling.GetSchedulesAsync(page, pageSize, searchQuery, sortBy, sortDescending);
     }
 
-    public async Task CreateScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
+    public async Task CreateScheduleAsync(Schedule schedule, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null, Guid? parentActivityId = null)
     {
         // Every configuration change is tracked with an immutable Activity, the same as Connected Systems and
         // Synchronisation Rules. Internal run-time bookkeeping (NextRunTime / LastRunTime) bypasses this method
@@ -68,7 +68,8 @@ public class SchedulerServer
         {
             TargetName = schedule.Name,
             TargetType = ActivityTargetType.Schedule,
-            TargetOperationType = ActivityTargetOperationType.Create
+            TargetOperationType = ActivityTargetOperationType.Create,
+            ParentActivityId = parentActivityId
         };
         await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
         await Application.Repository.Scheduling.CreateScheduleAsync(schedule);

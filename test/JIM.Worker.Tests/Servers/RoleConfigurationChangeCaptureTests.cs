@@ -35,6 +35,7 @@ public class RoleConfigurationChangeCaptureTests
     private FakeProtection _protection = null!;
     private JimApplication _jim = null!;
     private Activity? _completedActivity;
+    private List<Activity> _createdActivities = null!;
 
     [SetUp]
     public void SetUp()
@@ -51,7 +52,10 @@ public class RoleConfigurationChangeCaptureTests
         _repo.Setup(r => r.Security).Returns(_securityRepo.Object);
         _repo.Setup(r => r.Metaverse).Returns(_metaverseRepo.Object);
 
-        _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _createdActivities = new List<Activity>();
+        _activityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))
+            .Callback<Activity>(a => _createdActivities.Add(a))
+            .Returns(Task.CompletedTask);
         _activityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>()))
             .Callback<Activity>(a => _completedActivity = a)
             .Returns(Task.CompletedTask);
@@ -333,6 +337,14 @@ public class RoleConfigurationChangeCaptureTests
         Assert.That(_completedActivity.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"Role\""));
         Assert.That(_completedActivity.ChangeReason, Is.Not.Null.And.Not.Empty,
             "the seeded creation should explain its provenance in the change history");
+
+        // The seeded creation must be grouped under a single System Initialisation parent Activity, so a fresh
+        // deployment's built-in configuration appears as one top-level Activity, not one row per seeded object.
+        var roleActivity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.Role);
+        var parentActivity = _createdActivities.SingleOrDefault(a => a.TargetType == ActivityTargetType.SystemInitialisation);
+        Assert.That(parentActivity, Is.Not.Null,
+            "seeding must record a parent System Initialisation Activity when it creates the built-in Role");
+        Assert.That(roleActivity.ParentActivityId, Is.EqualTo(parentActivity!.Id));
     }
 
     [Test]

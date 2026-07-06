@@ -66,9 +66,9 @@ public class SecurityServer
     /// Creates a new Role definition. Used by seeding today (<see cref="SeedingServer.SeedBuiltInRolesAsync"/>);
     /// admin-editable Role creation arrives with #612 and will reuse this method.
     /// </summary>
-    public async Task<Role> CreateRoleAsync(Role role, MetaverseObject? initiatedBy = null, string? changeReason = null)
+    public async Task<Role> CreateRoleAsync(Role role, MetaverseObject? initiatedBy = null, string? changeReason = null, Guid? parentActivityId = null)
     {
-        return await CreateRoleCoreAsync(role, changeReason,
+        return await CreateRoleCoreAsync(role, changeReason, parentActivityId,
             activity => CreateRoleActivityAsync(activity, initiatedBy),
             r => SetRoleCreated(r, initiatedBy));
     }
@@ -76,14 +76,14 @@ public class SecurityServer
     /// <summary>
     /// Creates a new Role definition. API-key initiator overload.
     /// </summary>
-    public async Task<Role> CreateRoleAsync(Role role, ApiKey initiatedByApiKey, string? changeReason = null)
+    public async Task<Role> CreateRoleAsync(Role role, ApiKey initiatedByApiKey, string? changeReason = null, Guid? parentActivityId = null)
     {
-        return await CreateRoleCoreAsync(role, changeReason,
+        return await CreateRoleCoreAsync(role, changeReason, parentActivityId,
             activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey),
             r => AuditHelper.SetCreated(r, initiatedByApiKey));
     }
 
-    private async Task<Role> CreateRoleCoreAsync(Role role, string? changeReason,
+    private async Task<Role> CreateRoleCoreAsync(Role role, string? changeReason, Guid? parentActivityId,
         Func<Activity, Task> createActivityAsync, Action<Role> setCreated)
     {
         var activity = new Activity
@@ -91,7 +91,8 @@ public class SecurityServer
             TargetName = role.Name,
             TargetType = ActivityTargetType.Role,
             TargetOperationType = ActivityTargetOperationType.Create,
-            Message = $"Creating Role '{role.Name}'"
+            Message = $"Creating Role '{role.Name}'",
+            ParentActivityId = parentActivityId
         };
         await createActivityAsync(activity);
 

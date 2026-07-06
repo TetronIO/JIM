@@ -200,6 +200,16 @@ Delivery notes (2026-07-05): the snapshot stores metadata plus Role assignments 
 
 Delivery notes (2026-07-06): `SecurityServer.CreateRoleAsync` added (with a new `ISecurityRepository.CreateRoleAsync`); the built-in Administrator Role's seeding relocated from `SeedAsync`'s repository-direct batch to a dedicated `SeedBuiltInRolesAsync` step creating through the audited path (System-attributed v1 baseline, mirroring the Temporal Scope Reconciliation Schedule precedent); the now-dead `roles` parameter was removed from `SeedDataAsync`. Member snapshot nodes are ItemGuidId-matched references, so renaming a member does not register in the Role's history. Membership changes are now attributed to the actual REST caller (previously anonymous); `AuthServer`'s untouched call sites become System-attributed via the null-initiator fallback, which means the initial-admin bootstrap records both its pre-existing MetaverseObject-targeted provisioning Activity and the new Role-targeted configuration change Activity (intentional: different targets, different audiences). The Role's `LastUpdated` audit stamp is deliberately not set on membership changes: the membership repository methods are id-keyed and load their own tracked Role, so a stamp applied to a separately-loaded instance has no reliable persistence path; revisit with #612's definition mutators.
 
+### Interim slice: seeding Activity grouping (added 2026-07-06) ✅
+
+Added after Phase 6, prompted by a user sanity check: audited seed-time creates (built-in Schedule, Administrator Role, and ~15 more coming in Phases 8-9) were each surfacing as a top-level System Activity, cluttering a fresh deployment's Activity list. Decision: group, don't suppress; the version-1 baselines and provenance are load-bearing (dropping them would reintroduce the misattributed-origin bug fixed for the Temporal Scope Reconciliation Schedule) and factory-state provenance is an audit feature in JIM's target market.
+
+1. New `ActivityTargetType.SystemInitialisation` (category: System); `SeedingServer` lazily creates one System-attributed parent Activity per seeding pass that actually creates something, and every audited seed create becomes its child via `ParentActivityId`. A restart where seeding no-ops records nothing. ✅
+2. `JimApplication.InitialiseDatabaseAsync` and the factory reset's reseed path (`SystemServer.ResetSystemAsync`) both complete the parent on success and fail it on error, so it can never sit permanently InProgress (which would also block subsequent resets via the in-progress guard). ✅
+3. Out of scope by decision: the infrastructure API Key creation stays a standalone Activity (operator-triggered via environment variable, security-notable), and AuthServer's first-admin activities are unchanged. ✅
+
+Phases 8-9's seed captures MUST pass the seeding parent id through their create paths (obtain via `SeedingServer.GetOrCreateSeedingActivityAsync`).
+
 ### Phase 7: Predefined Searches
 1. Snapshot builder with criteria groups/criteria as nested children; every `SearchServer` mutator (root update + the six criteria/group methods) sets the parent `PredefinedSearchId` FK and captures the owning search's snapshot (granular roll-up precedent).
 2. Activity plumbing (`ActivityTargetType.PredefinedSearch`) with principal-attributed overloads.

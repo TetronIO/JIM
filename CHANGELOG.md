@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ The Activity list is now easier to audit: a category quick-filter isolates Configuration, Identity, Synchronisation, or System activity in one click, new initiator (user, API key, or system) and created date-range filters narrow the view, and the filter state is reflected in the URL so a filtered view can be bookmarked or shared.
 - ✨ Example data generation templates can now construct a text attribute from an expression, using the same `mv["Attribute Name"]` syntax and function library as Synchronisation Rule Attribute Flows, so a generated value can be transformed from other attributes on the same object (for example an email domain derived from the assigned company). Referenced attributes are generated first, and circular references are detected up front.
 - ✨ Metaverse attributes contributed by more than one Connected System now resolve to a single winner by a configurable per-attribute priority order, so a higher-priority source is never overwritten by a lower-priority one. An advanced "Null is a value" option lets an authoritative source positively assert "no value", clearing the attribute downstream instead of falling through to a lower-priority source.
+- ✨ First-time seeding of built-in configuration now appears as a single System Initialisation Activity with the seeded objects as child activities, so a new deployment starts with one clear entry instead of a page of system rows.
 
 #### API & PowerShell Coverage (#154)
 
