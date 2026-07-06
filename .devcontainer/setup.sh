@@ -214,7 +214,7 @@ print_step "Installing Playwright MCP browser (Chromium)..."
 # .mcp.json (its --executable-path, or its pinned @playwright/mcp version). Installing via the package's own
 # bundled playwright-core guarantees the revision matches. Idempotent (skips the download when already
 # present) and non-fatal (never blocks container creation).
-PLAYWRIGHT_MCP_VERSION="0.0.76"
+PLAYWRIGHT_MCP_VERSION="0.0.77"
 if npm install -g "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" --silent 2>/dev/null \
     && PLAYWRIGHT_CORE_CLI="$(find "$(npm root -g)/@playwright/mcp" -path '*/playwright-core/cli.js' 2>/dev/null | head -1)" \
     && [ -n "$PLAYWRIGHT_CORE_CLI" ] \
