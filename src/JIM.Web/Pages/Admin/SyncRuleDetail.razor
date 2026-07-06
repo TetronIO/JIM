@@ -245,9 +245,14 @@ else if (_syncRule != null)
         var confirmationResult = await DialogService.ShowMessageBoxAsync("Warning", "Are you sure you want to delete this Synchronisation Rule?", yesText: "Delete!", cancelText: "Cancel");
         if (confirmationResult.HasValue && confirmationResult.Value)
         {
+            // offer an optional reason for the configuration change history; cancelling aborts the delete
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
+            if (cancelled)
+                return;
+
             // attribute the operation to the signed-in user; use the edit session's context
             var user = await Helpers.GetUserAsync(_jim, AuthenticationStateTask);
-            await _jim.ConnectedSystems.DeleteSyncRuleAsync(_syncRule, user);
+            await _jim.ConnectedSystems.DeleteSyncRuleAsync(_syncRule, user, changeReason);
             NavManager.NavigateTo("/admin/sync-rules");
         }
     }
