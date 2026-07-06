@@ -856,67 +856,6 @@ internal class SeedingServer
         foreach (var setting in await Application.ServiceSettings.GetAllSettingsAsync())
             await Application.ServiceSettings.RecordSeededServiceSettingBaselineAsync(setting.Key, setting.DisplayName, parentActivityId);
     }
-
-    internal async Task SyncBuiltInAttributeRenderingHintsAsync()
-    {
-        var stopwatch = new Stopwatch();
-        stopwatch.Start();
-        Log.Information("SyncBuiltInAttributeRenderingHintsAsync: Starting...");
-
-        var renderingHints = new Dictionary<string, AttributeRenderingHint>
-        {
-            // Table: large reference MVAs needing columns/search/pagination
-            { Constants.BuiltInAttributes.StaticMembers, AttributeRenderingHint.Table },
-            { Constants.BuiltInAttributes.Owners, AttributeRenderingHint.Table },
-
-            // ChipSet: short text values that display well as horizontal chips
-            { Constants.BuiltInAttributes.OtherTelephones, AttributeRenderingHint.ChipSet },
-            { Constants.BuiltInAttributes.OtherMobiles, AttributeRenderingHint.ChipSet },
-            { Constants.BuiltInAttributes.OtherIpPhones, AttributeRenderingHint.ChipSet },
-            { Constants.BuiltInAttributes.OtherPagers, AttributeRenderingHint.ChipSet },
-            { Constants.BuiltInAttributes.OtherFacsimileTelephoneNumbers, AttributeRenderingHint.ChipSet },
-            { Constants.BuiltInAttributes.PostOfficeBoxes, AttributeRenderingHint.ChipSet },
-
-            // List: long/variable-length values that need vertical stacking
-            { Constants.BuiltInAttributes.ProxyAddresses, AttributeRenderingHint.List },
-            { Constants.BuiltInAttributes.AltSecurityIdentities, AttributeRenderingHint.List },
-            { Constants.BuiltInAttributes.PostalAddresses, AttributeRenderingHint.List },
-            { Constants.BuiltInAttributes.Urls, AttributeRenderingHint.List },
-            { Constants.BuiltInAttributes.SidHistory, AttributeRenderingHint.List },
-            { Constants.BuiltInAttributes.UserCertificates, AttributeRenderingHint.List },
-        };
-
-        // Collect the attributes actually changed this pass so their drift correction can be audited after the loop.
-        // On a fresh install this is empty (attributes are created with their hints), so the common path is unaffected;
-        // it only populates when a JIM upgrade ships a changed hint for an attribute created by an older version.
-        var updatedAttributes = new List<(int Id, string Name)>();
-        foreach (var (name, hint) in renderingHints)
-        {
-            var attribute = await Application.Metaverse.GetMetaverseAttributeAsync(name, withChangeTracking: true);
-            if (attribute != null && attribute.RenderingHint != hint)
-            {
-                attribute.RenderingHint = hint;
-                await Application.Repository.Metaverse.UpdateMetaverseAttributeAsync(attribute);
-                updatedAttributes.Add((attribute.Id, attribute.Name));
-                Log.Debug("SyncBuiltInAttributeRenderingHintsAsync: Set {Name} to {Hint}", name, hint);
-            }
-        }
-
-        // Audit each drift correction as a System-attributed Update under the seeding parent, so an upgrade that
-        // changes a built-in attribute's rendering hint is not a silent configuration change (the repository-direct
-        // update above records no Activity by itself). No drift means no parent Activity and nothing recorded.
-        if (updatedAttributes.Count > 0)
-        {
-            var parentActivityId = await GetOrCreateSeedingActivityAsync();
-            foreach (var (id, name) in updatedAttributes)
-                await Application.Metaverse.RecordSeededMetaverseAttributeUpdateAsync(id, name, parentActivityId);
-        }
-
-        stopwatch.Stop();
-        Log.Information("SyncBuiltInAttributeRenderingHintsAsync: Completed in {Elapsed}. Updated {Count} attributes.",
-            stopwatch.Elapsed, updatedAttributes.Count);
-    }
-
     /// <summary>
     /// Seeds and synchronises service settings from environment variables.
     /// This should be called on every application startup to ensure settings are available.

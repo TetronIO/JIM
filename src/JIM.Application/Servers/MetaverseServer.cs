@@ -526,38 +526,22 @@ public class MetaverseServer
     /// <see cref="RecordSeededMetaverseObjectTypeBaselineAsync"/> for why the baseline is recorded after the shared seed
     /// batch rather than through an individual audited create, and for the caller's idempotency contract.
     /// </summary>
-    internal Task RecordSeededMetaverseAttributeBaselineAsync(int attributeId, string attributeName, Guid parentActivityId) =>
-        RecordSeededMetaverseAttributeActivityAsync(attributeId, attributeName, parentActivityId, ActivityTargetOperationType.Create,
-            $"Created built-in Metaverse Attribute '{attributeName}'", "Built-in Metaverse Attribute created automatically by JIM.");
-
-    /// <summary>
-    /// Records a System-attributed Update Activity and versioned snapshot for a built-in Metaverse Attribute whose
-    /// configuration JIM changed on startup (currently the rendering-hint upgrade migration in
-    /// <see cref="SeedingServer.SyncBuiltInAttributeRenderingHintsAsync"/>). The attribute's own audited update methods
-    /// require a user or API-key principal, so a System-driven upgrade correction records through this path instead;
-    /// grouping under the seeding parent and the shared dedupe-guard mean a startup that changes nothing records
-    /// nothing. Call after the change has been persisted.
-    /// </summary>
-    internal Task RecordSeededMetaverseAttributeUpdateAsync(int attributeId, string attributeName, Guid parentActivityId) =>
-        RecordSeededMetaverseAttributeActivityAsync(attributeId, attributeName, parentActivityId, ActivityTargetOperationType.Update,
-            $"Updated built-in Metaverse Attribute '{attributeName}'", "Built-in Metaverse Attribute configuration updated by JIM.");
-
-    private async Task RecordSeededMetaverseAttributeActivityAsync(int attributeId, string attributeName, Guid parentActivityId,
-        ActivityTargetOperationType operationType, string message, string changeReason)
+    internal async Task RecordSeededMetaverseAttributeBaselineAsync(int attributeId, string attributeName, Guid parentActivityId)
     {
         var activity = new Activity
         {
             TargetName = attributeName,
             TargetType = ActivityTargetType.MetaverseAttribute,
-            TargetOperationType = operationType,
+            TargetOperationType = ActivityTargetOperationType.Create,
             ParentActivityId = parentActivityId,
-            Message = message
+            Message = $"Created built-in Metaverse Attribute '{attributeName}'"
         };
         await Application.Activities.CreateSystemActivityAsync(activity);
 
         try
         {
-            await CaptureAttributeConfigurationChangeAsync(activity, attributeId, changeReason);
+            await CaptureAttributeConfigurationChangeAsync(activity, attributeId,
+                "Built-in Metaverse Attribute created automatically by JIM.");
             await Application.Activities.CompleteActivityAsync(activity);
         }
         catch (Exception ex)
