@@ -37,7 +37,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Projection", "Join", "DuplicatePrevention", "MultipleRules", "JoinConflict", "CaseSensitivity", "All")]
+    [ValidateSet("Projection", "Join", "DuplicatePrevention", "MultipleRules", "JoinConflict", "SamePageJoinConflict", "CaseSensitivity", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -826,6 +826,108 @@ try {
         Copy-CsvToConnectorFiles -SourcePath $csvPath
         $cleanupImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
         $cleanupSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Write-Host "  ✓ Reset CSV to baseline and ran cleanup import/sync for subsequent tests" -ForegroundColor Gray
+    }
+
+    # Test 5b: Same-Page Join Conflict (two brand-new same-system CSOs matching one MVO in ONE sync page)
+    # This is the intra-page sibling of Test 5. Test 5 imports and syncs the two conflicting CSOs in
+    # SEPARATE sync runs, so the first join is already flushed to the database when the second is
+    # evaluated and the database join-count guard sees it. Here BOTH conflicting CSOs are imported first
+    # and then processed in a SINGLE synchronisation page: neither join is flushed when the other is
+    # evaluated, so the database count cannot see the in-memory pending join. Without the pending-join
+    # guard, both CSOs pass validation and their join writes collide on the filtered unique index
+    # (IX_ConnectedSystemObjects_ConnectedSystemId_MetaverseObjectId_Unique) as a raw 23505 that fails the
+    # whole synchronisation; with it, the ambiguous second match fails cleanly as CouldNotJoinDueToExistingJoin
+    # and the run completes. The EF Core in-memory test provider does not enforce partial unique indexes and
+    # reflects in-memory joins in its count, so this defect only reproduces against real PostgreSQL.
+    if ($Step -eq "SamePageJoinConflict" -or $Step -eq "All") {
+        Write-TestSection "Test 5b: Same-Page Join Conflict (intra-page CouldNotJoinDueToExistingJoin)"
+
+        Write-Host "Testing: two brand-new CSOs with different hrIds but the same employeeId, imported together" -ForegroundColor Gray
+        Write-Host "  and synchronised in one page, must not collide on the unique index; the second match fails cleanly" -ForegroundColor Gray
+
+        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+
+        # Build both conflicting users up front so a single import brings in both CSOs, and a single
+        # synchronisation processes them in the same page.
+        $samePageUsers = @()
+        foreach ($spec in @(
+            @{ Index = 9022; HrId = "00009022-0000-0000-0000-000000000000"; Sam = "test.samepage1"; Display = "Test Same Page One" },
+            @{ Index = 9023; HrId = "00009023-0000-0000-0000-000000000000"; Sam = "test.samepage2"; Display = "Test Same Page Two" }
+        )) {
+            $u = New-TestUser -Index $spec.Index
+            $u.HrId = $spec.HrId
+            $u.EmployeeId = "EMP900022"  # SAME employeeId for both - both match the same MVO
+            $u.SamAccountName = $spec.Sam
+            $u.Email = "$($spec.Sam)@panoply.local"
+            $u.DisplayName = $spec.Display
+            $samePageUsers += $u
+        }
+
+        $csv = Import-Csv $csvPath
+        foreach ($u in $samePageUsers) {
+            $csv = @($csv) + [PSCustomObject]@{
+                hrId = $u.HrId
+                employeeId = $u.EmployeeId
+                firstName = $u.FirstName
+                lastName = $u.LastName
+                email = $u.Email
+                department = $u.Department
+                title = $u.Title
+                company = $u.Company
+                samAccountName = $u.SamAccountName
+                displayName = $u.DisplayName
+                status = "Active"
+                userPrincipalName = "$($u.SamAccountName)@panoply.local"
+                employeeType = $u.EmployeeType
+                employeeEndDate = ""
+            }
+        }
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
+
+        # Single import brings in BOTH CSOs; single sync processes them in one page.
+        Write-Host "  Importing both users (same EmployeeId=EMP900022, different HrIds) in one import..." -ForegroundColor Gray
+        $spImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $spImport.activityId -Name "CSV Import (SamePageJoinConflict - both users)"
+
+        Write-Host "  Synchronising both in a single page (must not crash on the unique index)..." -ForegroundColor Gray
+        $spSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        # Do not assert overall success: exactly one CSO is expected to fail with a clean join-conflict error.
+
+        $spItems = @(Get-JIMActivity -Id $spSync.activityId -ExecutionItems)
+        $spJoinConflictErrors = @($spItems | Where-Object { $_.errorType -eq "CouldNotJoinDueToExistingJoin" })
+        # A raw constraint violation would surface as a different (unexpected) error type; assert none leaked.
+        $spConstraintErrors = @($spItems | Where-Object { $_.errorMessage -match "23505|duplicate key value|IX_ConnectedSystemObjects_ConnectedSystemId_MetaverseObjectId" })
+
+        if ($spConstraintErrors.Count -gt 0) {
+            Write-Host "  ✗ Synchronisation hit a raw unique-constraint violation (23505) - release-before-claim/pending-join guard not effective" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "SamePageJoinConflict"; Success = $false; Error = "Raw 23505 constraint violation during same-page join" }
+        }
+        elseif ($spJoinConflictErrors.Count -eq 1) {
+            Write-Host "  ✓ Exactly one CSO failed cleanly with CouldNotJoinDueToExistingJoin; no raw constraint violation" -ForegroundColor Green
+
+            $spMvos = Get-JIMMetaverseObject -ObjectTypeName "User" -Search "Test Same Page" -PageSize 20 -ErrorAction SilentlyContinue
+            $spConflictMvos = @($spMvos | Where-Object { $_.displayName -match "Test Same Page" })
+            if ($spConflictMvos.Count -eq 1) {
+                Write-Host "  ✓ Exactly one MVO exists (the losing CSO neither joined nor projected)" -ForegroundColor Green
+                $testResults.Steps += @{ Name = "SamePageJoinConflict"; Success = $true }
+            }
+            else {
+                Write-Host "  ⚠ Found $($spConflictMvos.Count) MVOs (expected 1)" -ForegroundColor Yellow
+                $testResults.Steps += @{ Name = "SamePageJoinConflict"; Success = $true; Warning = "Found $($spConflictMvos.Count) MVOs" }
+            }
+        }
+        else {
+            Write-Host "  ✗ Expected exactly one CouldNotJoinDueToExistingJoin error, found $($spJoinConflictErrors.Count)" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "SamePageJoinConflict"; Success = $false; Error = "Expected 1 clean join-conflict error, found $($spJoinConflictErrors.Count)" }
+        }
+
+        # Clean up - reset CSV to baseline and run import/sync to obsolete leftover CSOs.
+        Copy-Item -Path "$scenarioDataPath/scenario5-hr-users.csv" -Destination "$testDataPath/hr-users.csv" -Force
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
+        $spCleanupImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        $spCleanupSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
         Write-Host "  ✓ Reset CSV to baseline and ran cleanup import/sync for subsequent tests" -ForegroundColor Gray
     }
 
