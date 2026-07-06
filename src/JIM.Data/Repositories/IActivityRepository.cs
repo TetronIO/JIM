@@ -20,12 +20,6 @@ public interface IActivityRepository
     public Task<Activity?> GetActivityAsync(Guid id);
 
     /// <summary>
-    /// Gets all direct child activities for a given parent activity ID.
-    /// Returns a flat list ordered by creation date ascending.
-    /// </summary>
-    public Task<List<Activity>> GetChildActivitiesAsync(Guid parentActivityId);
-
-    /// <summary>
     /// Gets a page's worth of direct child activities for a given parent activity ID,
     /// ordered by creation date ascending.
     /// </summary>

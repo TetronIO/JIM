@@ -414,4 +414,168 @@ public class ActivitiesControllerTests
     }
 
     #endregion
+
+    #region GetChildActivitiesAsync tests
+
+    [Test]
+    public async Task GetChildActivitiesAsync_WithValidParent_ReturnsOkResult()
+    {
+        var parentId = Guid.NewGuid();
+        var parent = new Activity
+        {
+            Id = parentId,
+            TargetName = "Parent Activity",
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            Created = DateTime.UtcNow,
+            Status = ActivityStatus.Complete
+        };
+        var pagedResult = new PagedResultSet<Activity>
+        {
+            Results = new List<Activity>(),
+            TotalResults = 0,
+            CurrentPage = 1,
+            PageSize = 20
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(parentId)).ReturnsAsync(parent);
+        _mockActivityRepo.Setup(r => r.GetChildActivitiesAsync(parentId, It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(pagedResult);
+
+        var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
+        var result = await _controller.GetChildActivitiesAsync(parentId, pagination);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+    }
+
+    [Test]
+    public async Task GetChildActivitiesAsync_WithChildren_ReturnsPaginatedResponse()
+    {
+        var parentId = Guid.NewGuid();
+        var parent = new Activity
+        {
+            Id = parentId,
+            TargetName = "Parent Activity",
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            Created = DateTime.UtcNow,
+            Status = ActivityStatus.Complete
+        };
+        var child = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetName = "Child Activity",
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            Created = DateTime.UtcNow,
+            Status = ActivityStatus.Complete,
+            ParentActivityId = parentId
+        };
+        var pagedResult = new PagedResultSet<Activity>
+        {
+            Results = new List<Activity> { child },
+            TotalResults = 1,
+            CurrentPage = 1,
+            PageSize = 20
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(parentId)).ReturnsAsync(parent);
+        _mockActivityRepo.Setup(r => r.GetChildActivitiesAsync(parentId, It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(pagedResult);
+
+        var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
+        var result = await _controller.GetChildActivitiesAsync(parentId, pagination) as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<ActivityHeader>;
+
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.TotalCount, Is.EqualTo(1));
+        Assert.That(response.Page, Is.EqualTo(1));
+        Assert.That(response.PageSize, Is.EqualTo(20));
+        Assert.That(response.Items.Count(), Is.EqualTo(1));
+        Assert.That(response.Items.Single().TargetName, Is.EqualTo("Child Activity"));
+    }
+
+    [Test]
+    public async Task GetChildActivitiesAsync_WithSecondPage_ReturnsSecondPageContents()
+    {
+        var parentId = Guid.NewGuid();
+        var parent = new Activity
+        {
+            Id = parentId,
+            TargetName = "Parent Activity",
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            Created = DateTime.UtcNow,
+            Status = ActivityStatus.Complete
+        };
+        var childOnPageTwo = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetName = "Second Page Child",
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            Created = DateTime.UtcNow,
+            Status = ActivityStatus.Complete,
+            ParentActivityId = parentId
+        };
+        var pagedResult = new PagedResultSet<Activity>
+        {
+            Results = new List<Activity> { childOnPageTwo },
+            TotalResults = 15,
+            CurrentPage = 2,
+            PageSize = 10
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(parentId)).ReturnsAsync(parent);
+        _mockActivityRepo.Setup(r => r.GetChildActivitiesAsync(parentId, 2, 10)).ReturnsAsync(pagedResult);
+
+        var pagination = new PaginationRequest { Page = 2, PageSize = 10 };
+        var result = await _controller.GetChildActivitiesAsync(parentId, pagination) as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<ActivityHeader>;
+
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.Page, Is.EqualTo(2));
+        Assert.That(response.TotalCount, Is.EqualTo(15));
+        Assert.That(response.Items.Single().TargetName, Is.EqualTo("Second Page Child"));
+        _mockActivityRepo.Verify(r => r.GetChildActivitiesAsync(parentId, 2, 10), Times.Once);
+    }
+
+    [Test]
+    public async Task GetChildActivitiesAsync_WithNonExistentParent_ReturnsNotFound()
+    {
+        var parentId = Guid.NewGuid();
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(parentId)).ReturnsAsync((Activity?)null);
+
+        var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
+        var result = await _controller.GetChildActivitiesAsync(parentId, pagination);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task GetChildActivitiesAsync_WithNoChildren_ReturnsEmptyPageNotNotFound()
+    {
+        var parentId = Guid.NewGuid();
+        var parent = new Activity
+        {
+            Id = parentId,
+            TargetName = "Parent Activity",
+            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            Created = DateTime.UtcNow,
+            Status = ActivityStatus.Complete
+        };
+        var pagedResult = new PagedResultSet<Activity>
+        {
+            Results = new List<Activity>(),
+            TotalResults = 0,
+            CurrentPage = 1,
+            PageSize = 20
+        };
+        _mockActivityRepo.Setup(r => r.GetActivityAsync(parentId)).ReturnsAsync(parent);
+        _mockActivityRepo.Setup(r => r.GetChildActivitiesAsync(parentId, It.IsAny<int>(), It.IsAny<int>()))
+            .ReturnsAsync(pagedResult);
+
+        var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
+        var result = await _controller.GetChildActivitiesAsync(parentId, pagination) as OkObjectResult;
+        var response = result?.Value as PaginatedResponse<ActivityHeader>;
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response!.TotalCount, Is.EqualTo(0));
+        Assert.That(response.Items, Is.Empty);
+    }
+
+    #endregion
 }

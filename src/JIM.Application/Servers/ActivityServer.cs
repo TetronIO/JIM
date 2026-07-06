@@ -298,14 +298,6 @@ public class ActivityServer
     }
 
     /// <summary>
-    /// Gets all direct child activities for a given parent activity.
-    /// </summary>
-    public async Task<List<Activity>> GetChildActivitiesAsync(Guid parentActivityId)
-    {
-        return await Application.Repository.Activity.GetChildActivitiesAsync(parentActivityId);
-    }
-
-    /// <summary>
     /// Gets a page's worth of direct child activities for a given parent activity,
     /// ordered by creation date ascending.
     /// </summary>

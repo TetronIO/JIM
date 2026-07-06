@@ -247,15 +247,6 @@ public class ActivityRepository : IActivityRepository
             .SingleOrDefaultAsync(a => a.Id == id);
     }
 
-    public async Task<List<Activity>> GetChildActivitiesAsync(Guid parentActivityId)
-    {
-        return await Repository.Database.Activities
-
-            .Where(a => a.ParentActivityId == parentActivityId)
-            .OrderBy(a => a.Created)
-            .ToListAsync();
-    }
-
     /// <summary>
     /// Gets a page's worth of direct child activities for a given parent activity ID,
     /// ordered by creation date ascending.
