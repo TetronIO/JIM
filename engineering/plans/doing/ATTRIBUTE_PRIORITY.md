@@ -803,23 +803,23 @@ Not a sub-issue: **#846** (holistic Guardrails) is deliberately *out of scope* (
 #### Phase 4: Testing
 
 - [ ] Unit tests for `AttributePriorityService`
-- [ ] Integration tests for multi-source priority resolution
-- [ ] Integration tests for NullIsValue behaviour, including the tri-state cases:
-  - [ ] Priority-1 rule has no opinion (not joined): lower-priority rule contributes fully despite NullIsValue on priority 1 (HR migration scenario)
-  - [ ] Priority-1 rule connected with null and NullIsValue: null asserted, no fallback
-  - [ ] Priority-1 rule's CSO joined but out of rule scope: treated as no opinion
-  - [ ] Priority-1 rule disabled: treated as no opinion
-  - [ ] New join to priority-1 system mid-life: its blanks clear previously contributed values
-- [ ] Integration tests for MVA winner-takes-all-values:
-  - [ ] Winning rule's full value set replaces previous contributor's values
-  - [ ] NullIsValue on an MVA asserts the empty set (e.g. group membership cleared)
+- [x] Integration tests for multi-source priority resolution (Scenario 14 `BaselineResolution`: two OpenLDAP suffixes joined on Employee ID; the priority-1 contributor wins every contested scalar, reference and MVA with correct rule provenance, verified on real PostgreSQL. Executing it surfaced and fixed two real defects the in-memory tests could not see: the bulk COPY/INSERT persistence for newly projected Metaverse Objects dropped `ContributedBySyncRuleId`/`NullValue`, collapsing resolution to last-writer-wins on new objects; and re-election survivor discovery relied on the `mvo.ConnectedSystemObjects` navigation, which real page loads never hydrate, so recalls blanked objects instead of handing over)
+- [x] Integration tests for NullIsValue behaviour, including the tri-state cases (Scenario 14, all verified on real PostgreSQL):
+  - [x] Priority-1 rule has no opinion (not joined): lower-priority rule contributes fully despite NullIsValue on priority 1 (HR migration scenario) (`NotJoinedNoOpinion`)
+  - [x] Priority-1 rule connected with null and NullIsValue: null asserted, no fallback (`AssertedNullOverridesSurvivor`, including the AssertedNull sync outcome and marker-row provenance)
+  - [x] Priority-1 rule's CSO joined but out of rule scope: treated as no opinion (`OutOfScopeNoOpinion`: scope exit hands Job Title, Manager and the full MVA to the survivor in the same run; criteria removal rejoins and Primary retakes)
+  - [x] Priority-1 rule disabled: treated as no opinion (`DisabledRuleNoOpinion`: the disabled rule vanishes from the contributor cache, the survivor takes over on its next Full Synchronisation, and re-enabling retakes)
+  - [x] New join to priority-1 system mid-life: its blanks clear previously contributed values (`MidLifeJoinBlanksClear`)
+- [x] Integration tests for MVA winner-takes-all-values (Scenario 14):
+  - [x] Winning rule's full value set replaces previous contributor's values (`BaselineResolution` and `RecallReElection` assert exact value sets)
+  - [x] NullIsValue on an MVA asserts the empty set (e.g. group membership cleared) (`MvaNullIsValueAssertsEmptySet`: persisted as the same single marker row as a scalar assertion)
 - [ ] Integration tests for fine-grained authority (worked example 2):
   - [ ] Scoped exception rule (priority 1) wins for in-scope objects; direct changes in the lower-priority system are corrected via EnforceState export
   - [ ] Non-exception objects: higher-priority system's rule wins; losing system's direct changes corrected back
-  - [ ] Object moves into/out of a scoped rule's coverage: authority transfers on next sync
-- [ ] Configuration change propagation:
-  - [ ] Priority reorder followed by delta sync: only changed CSOs re-resolve (documented apply-only behaviour)
-  - [ ] Priority reorder followed by full sync: all objects re-resolve to the new configuration
+  - [x] Object moves into/out of a scoped rule's coverage: authority transfers on next sync (scope-exit parity gaps were found and fixed in `HandleCsoOutOfScopeAsync` (#91): it never re-elected a surviving lower-priority contributor, never queued export evaluation for the recalled/re-elected values, and never emitted NoContributor outcomes, unlike the equivalent CSO-obsoletion path; fixing the export side also surfaced and fixed an obsoletion-path defect where a re-elected single-valued attribute's export staged the leaver's stale value instead of the survivor's. Unit-level workflow tests cover all of it in `AttributePriorityRecallWorkflowTests`, and Scenario 14's `OutOfScopeNoOpinion` step now proves the inbound hand-over and scope re-entry retake end-to-end on real PostgreSQL. The EnforceState export-correction legs of this block remain open with the other fine-grained authority cells)
+- [x] Configuration change propagation (Scenario 14; implementing these cells surfaced and fixed three propagation defects: the unchanged-object full-sync optimisation ignored configuration changes entirely, a no-change Delta Synchronisation advanced the shared watermark and hid a change from the next full sync (now a separate `ConfigurationLastFullyAppliedAt` baseline), and `UpdateSyncRuleMappingsAsync` silently dropped the mapping audit stamps a reorder relies on):
+  - [x] Priority reorder followed by delta sync: only changed CSOs re-resolve (documented apply-only behaviour) (`PriorityReorderPropagation`)
+  - [x] Priority reorder followed by full sync: all objects re-resolve to the new configuration (`PriorityReorderPropagation`, including restore and retake)
 - [ ] Grace period / attribute recall and next-contributor fallback (replacing the interim recall-freeze; the motivating failure was a disconnected source nulling inputs to an expression-built attribute such as an LDAP DN, producing an invalid value like `CN=,OU=,...` and a failed export):
   - [ ] Single source, grace period active: attribute frozen (not recalled) until the grace period expires, then the Delete export fires
   - [ ] Multiple sources, grace period active: primary source disconnects, the next-priority source's value flows in, exports succeed with the fallback value
@@ -831,7 +831,7 @@ Not a sub-issue: **#846** (holistic Guardrails) is deliberately *out of scope* (
 
 - [ ] Add user documentation for the attribute priority surfaces (object type detail page management home and the Data Flow page)
 - [ ] Add user documentation for NullIsValue setting
-- [ ] **Reconcile the existing expression-null docs (#844, already shipped).** `docs/concepts/expressions.md` § "Nulls, Missing Inputs, and Whitespace" (point 1) currently states a null expression result clears the target *unconditionally*, true only for a single contributor (matching today's `SyncEngine.AttributeFlow.cs:204` behaviour). Once this feature lands, a null becomes `ConnectedNoValue` and the resolver decides based on priority/`NullIsValue`, so a null from a non-winning rule no longer clears. Update that section (and the date-function note that links to it) to describe the priority/`NullIsValue` interaction rather than an unconditional clear. The point 2 (null-safe functions propagate null) and point 3 (string-concat yields malformed non-null) content stays valid.
+- [x] **Reconcile the existing expression-null docs (#844, already shipped).** Done (Jul 2026): `docs/concepts/expressions.md` § "Nulls, Missing Inputs, and Whitespace" point 1 now describes the single-contributor clear vs multi-contributor priority resolution (hand-over to the next contributor in the same run, "Null is a value" authoritative clear, a lower-priority null never disturbs the winning value), linking to `concepts/attribute-priority.md`; the date-function note and the summary table carry the same qualification. Points 2 and 3 unchanged (still valid). The maintenance comment that tracked this has been removed.
 
 ---
 

@@ -39,6 +39,14 @@ public interface IMetaverseRepository
     public Task<MetaverseObject?> GetMetaverseObjectAsync(Guid id);
 
     /// <summary>
+    /// As <see cref="GetMetaverseObjectAsync"/>, but additionally eager-loads the per-value Attribute
+    /// Priority provenance navigations (the contributing Connected System and Synchronisation Rule).
+    /// A deliberately separate, heavier retrieval for single-object read paths (REST API, Metaverse
+    /// Object views); the base overload is on the synchronisation join hot path and must stay lean.
+    /// </summary>
+    public Task<MetaverseObject?> GetMetaverseObjectWithProvenanceAsync(Guid id);
+
+    /// <summary>
     /// Batch-loads Metaverse Objects by ID with their attribute values, using <c>AsNoTracking</c>. Used by the
     /// Temporal Scope Reconciler (issue #892) to evaluate export scope in memory for outbound candidates.
     /// </summary>

@@ -217,6 +217,9 @@ internal sealed class SystemRepository : ISystemRepository
               WHERE ""ReferenceValueId"" IS NOT NULL AND ""ReferenceValueId"" <> ALL(@adminIds);", adminIdParam());
         await db.ExecuteSqlRawAsync(@"UPDATE _reset_admin_mvav SET ""UnresolvedReferenceValueId"" = NULL WHERE ""UnresolvedReferenceValueId"" IS NOT NULL;");
         await db.ExecuteSqlRawAsync(@"UPDATE _reset_admin_mvav SET ""ContributedBySystemId"" = NULL WHERE ""ContributedBySystemId"" IS NOT NULL;");
+        // Synchronisation Rules are truncated by the reset, so a preserved admin attribute value carrying
+        // rule provenance (#91) would violate the ContributedBySyncRuleId foreign key on re-insert.
+        await db.ExecuteSqlRawAsync(@"UPDATE _reset_admin_mvav SET ""ContributedBySyncRuleId"" = NULL WHERE ""ContributedBySyncRuleId"" IS NOT NULL;");
         await db.ExecuteSqlRawAsync(@"INSERT INTO ""MetaverseObjectAttributeValues"" SELECT * FROM _reset_admin_mvav;");
         await db.ExecuteSqlRawAsync(@"INSERT INTO ""MetaverseObjectRole"" SELECT * FROM _reset_admin_role;");
     }

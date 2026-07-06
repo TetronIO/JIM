@@ -2436,6 +2436,301 @@ function Assert-ActivityItemsHaveOutcomeSummary {
     }
 }
 
+function Assert-MvoAttributeValue {
+    <#
+    .SYNOPSIS
+        Assert a Metaverse Object's attribute value(s), and optionally the Synchronisation Rule
+        that won Attribute Priority resolution (#91).
+
+    .DESCRIPTION
+        Reads the Metaverse Object via the REST API (Get-JIMMetaverseObject).
+        MetaverseObjectAttributeValueDto exposes ContributedBySyncRuleId/Name and NullValue
+        (issue #931), so Attribute Priority assertions run over the wire: NullValue distinguishes
+        an asserted-null contribution from no contributor at all, and ContributedBySyncRuleId
+        names the exact winning Synchronisation Rule when a Connected System could (in later
+        scenarios) run more than one import rule into the same attribute. This helper previously
+        read the "MetaverseObjectAttributeValues" table directly via psql (the
+        Assert-ExportRpeisHaveCsoLink pattern from issue #683) because that data was not on the
+        wire; asserting via the API now also proves the DTO exposure and the repository's
+        provenance eager-loading on real PostgreSQL.
+
+        Exactly one of -ExpectedValue, -ExpectedValues, -ExpectedReferenceMvoId, -ExpectNoValue or
+        -ExpectAssertedNull must be supplied; each targets a different attribute shape (scalar,
+        multi-valued set, reference, absence/no-contributor, or a deliberate "Null is a value"
+        assertion).
+
+    .PARAMETER MvoId
+        The Metaverse Object ID (GUID) to inspect.
+
+    .PARAMETER AttributeName
+        The Metaverse Attribute name (e.g. "Job Title", "Manager").
+
+    .PARAMETER ExpectedValue
+        Expected scalar value (string-compared) for a single-valued, non-reference attribute.
+
+    .PARAMETER ExpectedValues
+        Expected full value set (order-independent) for a multi-valued attribute. Asserts both
+        that every expected value is present and that no unexpected extra value is present, so a
+        losing contributor's values being still-present (winner-takes-all-values violated) fails
+        the assertion just as surely as a missing expected value.
+
+    .PARAMETER ExpectedReferenceMvoId
+        Expected target Metaverse Object ID for a Reference-typed attribute.
+
+    .PARAMETER ExpectNoValue
+        Asserts the attribute carries no usable value for this Metaverse Object: neither a real
+        value row nor an asserted-null marker row (NullValue = true) is required to be absent by
+        this switch alone, both collapse to "nothing to show the caller". Use -ExpectAssertedNull
+        instead when the test needs to distinguish a deliberate "Null is a value" assertion (a row
+        exists, with provenance) from this "nothing at all, no contributor" case.
+
+    .PARAMETER ExpectAssertedNull
+        Asserts the attribute carries a deliberate "Null is a value" assertion (#91) rather than
+        either a real value or a plain absence: exactly one row exists for the attribute, that row
+        has NullValue = true, and none of its real value columns (StringValue, IntValue, LongValue,
+        DateTimeValue, BoolValue, GuidValue, ReferenceValueId) are populated. This holds for
+        multi-valued attributes too: an asserted-null MVA collapses to the same single marker row,
+        not an empty set of per-value markers (see SyncEngine.AttributeFlow.ApplyNoValueOutcome).
+        Combine with -ExpectedContributingSyncRuleName to also assert which Synchronisation Rule
+        made the assertion, read directly from the marker row itself (not via the
+        Test-MvoContributingSyncRuleName helper below, which deliberately filters NullValue rows
+        out for the other modes' incumbent-value provenance checks).
+
+    .PARAMETER ExpectedContributingSyncRuleName
+        When supplied, asserts the contributing row's ContributedBySyncRuleId resolves to a
+        Synchronisation Rule with this exact name. For every mode except -ExpectAssertedNull this
+        checks the (non-null-marker) value row; for -ExpectAssertedNull it checks the marker row
+        itself, since that IS the contributing row.
+
+    .PARAMETER Name
+        A friendly name for the assertion, used in diagnostics. Defaults to "<AttributeName> on <MvoId>".
+
+    .EXAMPLE
+        Assert-MvoAttributeValue -MvoId $aliceMvoId -AttributeName "Job Title" `
+            -ExpectedValue "Engineer (Primary)" -ExpectedContributingSyncRuleName "Scenario 14 Primary Import Users"
+
+    .EXAMPLE
+        Assert-MvoAttributeValue -MvoId $aliceMvoId -AttributeName "Manager" -ExpectedReferenceMvoId $bobMvoId
+
+    .EXAMPLE
+        Assert-MvoAttributeValue -MvoId $aliceMvoId -AttributeName "Other Telephones" `
+            -ExpectedValues @("+44 20 7946 1000", "+44 20 7946 1001")
+
+    .EXAMPLE
+        Assert-MvoAttributeValue -MvoId $frankMvoId -AttributeName "Job Title" `
+            -ExpectAssertedNull -ExpectedContributingSyncRuleName "Scenario 14 Primary Import Users"
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [Guid]$MvoId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$AttributeName,
+
+        [Parameter(Mandatory=$false)]
+        [string]$ExpectedValue,
+
+        [Parameter(Mandatory=$false)]
+        [string[]]$ExpectedValues,
+
+        [Parameter(Mandatory=$false)]
+        [Guid]$ExpectedReferenceMvoId,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$ExpectNoValue,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$ExpectAssertedNull,
+
+        [Parameter(Mandatory=$false)]
+        [string]$ExpectedContributingSyncRuleName,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Name
+    )
+
+    $displayName = if ($Name) { $Name } else { "$AttributeName on $MvoId" }
+
+    $modeCount = 0
+    if ($PSBoundParameters.ContainsKey('ExpectedValue')) { $modeCount++ }
+    if ($PSBoundParameters.ContainsKey('ExpectedValues')) { $modeCount++ }
+    if ($PSBoundParameters.ContainsKey('ExpectedReferenceMvoId')) { $modeCount++ }
+    if ($ExpectNoValue) { $modeCount++ }
+    if ($ExpectAssertedNull) { $modeCount++ }
+    if ($modeCount -ne 1) {
+        throw "Assert-MvoAttributeValue ($displayName): exactly one of -ExpectedValue, -ExpectedValues, -ExpectedReferenceMvoId, -ExpectNoValue, -ExpectAssertedNull must be supplied."
+    }
+
+    $mvo = Get-JIMMetaverseObject -Id $MvoId -ErrorAction Stop
+    if (-not $mvo) {
+        throw "Assert-MvoAttributeValue ($displayName): Metaverse Object $MvoId was not returned by the API."
+    }
+
+    # Project the API's attribute value DTOs into the row shape the assertion branches below
+    # consume. Attribute name matching is case-sensitive for parity with the previous direct-SQL
+    # implementation (a."Name" = '...'). Null fields stay $null, which the truthiness checks in
+    # the branches treat identically to the empty strings psql used to return.
+    $rows = @($mvo.attributeValues | Where-Object { $_.attributeName -ceq $AttributeName } | ForEach-Object {
+        [PSCustomObject]@{
+            StringValue      = $_.stringValue
+            IntValue         = $_.intValue
+            LongValue        = $_.longValue
+            DateTimeValue    = $_.dateTimeValue
+            # Rendered as 'true'/'false'/'' text for parity with the previous psql CASE expression:
+            # the asserted-null corruption check below must treat an explicit false as a populated
+            # real value column, and a bare $false would be falsy and slip through.
+            BoolValue        = if ($null -eq $_.boolValue) { '' } elseif ($_.boolValue) { 'true' } else { 'false' }
+            GuidValue        = $_.guidValue
+            ReferenceValueId = $_.referenceValueId
+            NullValue        = [bool]$_.nullValue
+            SyncRuleId       = $_.contributedBySyncRuleId
+            SyncRuleName     = $_.contributedBySyncRuleName
+            SystemId         = $_.contributedBySystemId
+            SystemName       = $_.contributedBySystemName
+        }
+    })
+
+    # Nested so the two call sites below (ExpectNoValue and every value-shape branch) share one
+    # implementation without exporting a second public function for what is an internal step.
+    function Test-MvoContributingSyncRuleName {
+        param($Rows, [string]$ExpectedRuleName)
+
+        $contributingNames = @($Rows | Where-Object { -not $_.NullValue -and $_.SyncRuleName } | Select-Object -ExpandProperty SyncRuleName -Unique)
+        if ($contributingNames.Count -eq 0) {
+            Write-Host "  ✗ $displayName - expected contributing Synchronisation Rule '$ExpectedRuleName' but no row carries ContributedBySyncRuleId" -ForegroundColor Red
+            throw "Assertion failed: $displayName expected contributing Synchronisation Rule '$ExpectedRuleName' but no row carries ContributedBySyncRuleId."
+        }
+        if ($contributingNames.Count -gt 1 -or $contributingNames[0] -ne $ExpectedRuleName) {
+            Write-Host "  ✗ $displayName - expected contributing Synchronisation Rule '$ExpectedRuleName', found: $($contributingNames -join ', ')" -ForegroundColor Red
+            throw "Assertion failed: $displayName expected contributing Synchronisation Rule '$ExpectedRuleName', found '$($contributingNames -join ', ')'"
+        }
+        Write-Host "  ✓ $displayName - contributed by Synchronisation Rule '$ExpectedRuleName'" -ForegroundColor Green
+    }
+
+    if ($ExpectAssertedNull) {
+        if ($rows.Count -ne 1) {
+            Write-Host "  ✗ $displayName - expected exactly one asserted-null marker row, found $($rows.Count)" -ForegroundColor Red
+            foreach ($r in $rows) {
+                Write-Host "    NullValue=$($r.NullValue) StringValue='$($r.StringValue)' ReferenceValueId='$($r.ReferenceValueId)' ContributedBy='$($r.SyncRuleName)'" -ForegroundColor Red
+            }
+            throw "Assertion failed: $displayName expected exactly one asserted-null marker row, found $($rows.Count)."
+        }
+
+        $markerRow = $rows[0]
+        if (-not $markerRow.NullValue) {
+            Write-Host "  ✗ $displayName - the single row present is not an asserted-null marker (NullValue=false)" -ForegroundColor Red
+            throw "Assertion failed: $displayName expected an asserted-null marker row (NullValue=true) but found NullValue=false."
+        }
+
+        # An asserted-null marker row must carry no real value in any column; a marker that also
+        # carries a real value would mean the clear-then-mark logic in ApplyNoValueOutcome regressed.
+        $populatedRealColumns = @()
+        if ($markerRow.StringValue) { $populatedRealColumns += "StringValue='$($markerRow.StringValue)'" }
+        if ($markerRow.IntValue) { $populatedRealColumns += "IntValue='$($markerRow.IntValue)'" }
+        if ($markerRow.LongValue) { $populatedRealColumns += "LongValue='$($markerRow.LongValue)'" }
+        if ($markerRow.DateTimeValue) { $populatedRealColumns += "DateTimeValue='$($markerRow.DateTimeValue)'" }
+        if ($markerRow.BoolValue) { $populatedRealColumns += "BoolValue='$($markerRow.BoolValue)'" }
+        if ($markerRow.GuidValue) { $populatedRealColumns += "GuidValue='$($markerRow.GuidValue)'" }
+        if ($markerRow.ReferenceValueId) { $populatedRealColumns += "ReferenceValueId='$($markerRow.ReferenceValueId)'" }
+        if ($populatedRealColumns.Count -gt 0) {
+            Write-Host "  ✗ $displayName - asserted-null marker row unexpectedly carries real value column(s): $($populatedRealColumns -join ', ')" -ForegroundColor Red
+            throw "Assertion failed: $displayName asserted-null marker row carries real value column(s): $($populatedRealColumns -join ', ')"
+        }
+        Write-Host "  ✓ $displayName - exactly one asserted-null marker row present, no real value columns populated" -ForegroundColor Green
+
+        if ($ExpectedContributingSyncRuleName) {
+            if ($markerRow.SyncRuleName -ne $ExpectedContributingSyncRuleName) {
+                Write-Host "  ✗ $displayName - expected asserted-null provenance '$ExpectedContributingSyncRuleName', found '$($markerRow.SyncRuleName)'" -ForegroundColor Red
+                throw "Assertion failed: $displayName expected asserted-null provenance '$ExpectedContributingSyncRuleName', found '$($markerRow.SyncRuleName)'"
+            }
+            Write-Host "  ✓ $displayName - asserted-null marker contributed by Synchronisation Rule '$ExpectedContributingSyncRuleName'" -ForegroundColor Green
+        }
+
+        return
+    }
+
+    if ($ExpectNoValue) {
+        $realRows = @($rows | Where-Object { -not $_.NullValue })
+        if ($realRows.Count -gt 0) {
+            Write-Host "  ✗ $displayName - expected no value, found $($realRows.Count) row(s)" -ForegroundColor Red
+            foreach ($r in $realRows) {
+                Write-Host "    StringValue='$($r.StringValue)' ReferenceValueId='$($r.ReferenceValueId)' ContributedBy='$($r.SyncRuleName)'" -ForegroundColor Red
+            }
+            throw "Assertion failed: $displayName expected no value but found $($realRows.Count) row(s)."
+        }
+        Write-Host "  ✓ $displayName - no value present (as expected)" -ForegroundColor Green
+
+        if ($ExpectedContributingSyncRuleName) {
+            Test-MvoContributingSyncRuleName -Rows $rows -ExpectedRuleName $ExpectedContributingSyncRuleName
+        }
+        return
+    }
+
+    if ($rows.Count -eq 0) {
+        throw "Assertion failed: $displayName has no attribute value row(s) in the Metaverse (expected a contributor)."
+    }
+
+    if ($PSBoundParameters.ContainsKey('ExpectedReferenceMvoId')) {
+        $expected = $ExpectedReferenceMvoId.ToString()
+        $actual = @($rows | Where-Object { -not $_.NullValue } | Select-Object -ExpandProperty ReferenceValueId)
+        if ($actual.Count -ne 1 -or $actual[0] -ne $expected) {
+            Write-Host "  ✗ $displayName - expected reference to $expected, found: $($actual -join ', ')" -ForegroundColor Red
+            throw "Assertion failed: $displayName expected reference MVO '$expected', found '$($actual -join ', ')'"
+        }
+        Write-Host "  ✓ $displayName - reference resolves to expected MVO ($expected)" -ForegroundColor Green
+    }
+    elseif ($PSBoundParameters.ContainsKey('ExpectedValue')) {
+        $realRows = @($rows | Where-Object { -not $_.NullValue })
+        if ($realRows.Count -ne 1) {
+            throw "Assertion failed: $displayName expected exactly one value row for a single-valued attribute, found $($realRows.Count)."
+        }
+        $r = $realRows[0]
+        $actual =
+            if ($r.StringValue) { $r.StringValue }
+            elseif ($r.IntValue) { $r.IntValue }
+            elseif ($r.LongValue) { $r.LongValue }
+            elseif ($r.DateTimeValue) { $r.DateTimeValue }
+            elseif ($r.BoolValue) { $r.BoolValue }
+            elseif ($r.GuidValue) { $r.GuidValue }
+            else { '' }
+        if ($actual -ne $ExpectedValue) {
+            Write-Host "  ✗ $displayName - expected '$ExpectedValue', got '$actual'" -ForegroundColor Red
+            throw "Assertion failed: $displayName expected '$ExpectedValue', got '$actual'"
+        }
+        Write-Host "  ✓ $displayName - value is '$actual' (as expected)" -ForegroundColor Green
+    }
+    elseif ($PSBoundParameters.ContainsKey('ExpectedValues')) {
+        $realRows = @($rows | Where-Object { -not $_.NullValue })
+        $actualValues = @($realRows | ForEach-Object {
+            if ($_.StringValue) { $_.StringValue }
+            elseif ($_.ReferenceValueId) { $_.ReferenceValueId }
+            elseif ($_.IntValue) { $_.IntValue }
+            elseif ($_.LongValue) { $_.LongValue }
+            elseif ($_.DateTimeValue) { $_.DateTimeValue }
+            elseif ($_.GuidValue) { $_.GuidValue }
+            else { $null }
+        }) | Where-Object { $null -ne $_ }
+
+        $expectedSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$ExpectedValues, [System.StringComparer]::Ordinal)
+        $actualSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$actualValues, [System.StringComparer]::Ordinal)
+
+        $missing = @($ExpectedValues | Where-Object { -not $actualSet.Contains($_) })
+        $unexpected = @($actualValues | Where-Object { -not $expectedSet.Contains($_) })
+
+        if ($missing.Count -gt 0 -or $unexpected.Count -gt 0) {
+            Write-Host "  ✗ $displayName - value set mismatch" -ForegroundColor Red
+            if ($missing.Count -gt 0) { Write-Host "    Missing: $($missing -join ', ')" -ForegroundColor Red }
+            if ($unexpected.Count -gt 0) { Write-Host "    Unexpected (should have lost priority resolution): $($unexpected -join ', ')" -ForegroundColor Red }
+            throw "Assertion failed: $displayName value set mismatch. Missing: $($missing -join ', '); Unexpected: $($unexpected -join ', ')"
+        }
+        Write-Host "  ✓ $displayName - value set matches expected ($($actualValues.Count) value(s))" -ForegroundColor Green
+    }
+
+    if ($ExpectedContributingSyncRuleName) {
+        Test-MvoContributingSyncRuleName -Rows $rows -ExpectedRuleName $ExpectedContributingSyncRuleName
+    }
+}
+
 function Get-JimErrorLinePattern {
     <#
     .SYNOPSIS

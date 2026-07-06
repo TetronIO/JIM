@@ -491,6 +491,15 @@ public class MetaverseServer
         return await Application.Repository.Metaverse.GetMetaverseObjectAsync(id);
     }
 
+    /// <summary>
+    /// As <see cref="GetMetaverseObjectAsync"/>, but additionally loads the per-value Attribute Priority
+    /// provenance (contributing Connected System and Synchronisation Rule) for single-object read paths.
+    /// </summary>
+    public async Task<MetaverseObject?> GetMetaverseObjectWithProvenanceAsync(Guid id)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectWithProvenanceAsync(id);
+    }
+
     public async Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectWithChangeHistoryAsync(id);

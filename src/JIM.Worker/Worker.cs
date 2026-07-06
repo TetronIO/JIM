@@ -1000,11 +1000,15 @@ public class Worker : BackgroundService
 
         // A persistence failure leaves the DbContext's change tracker still holding the very entities
         // that failed to save; any further SaveChanges on that context re-attempts the same doomed
-        // write and fails identically. Record the failure via a fresh context straight away instead
-        // of fighting the poisoned one. If the fresh context fails too (for example the database is
-        // down), fall through to the in-context attempts as a long shot before declaring the
-        // activity stuck.
-        if (originalException is DbUpdateException &&
+        // write and fails identically. This applies whether the failure surfaced as an EF
+        // DbUpdateException (the SaveChanges path) or as a provider DbException such as Npgsql's
+        // PostgresException (the raw bulk-SQL path used on the sync hot path): the raw statement
+        // bypasses the change tracker, but the tracked join/attribute changes it was flushing are
+        // still pending, so the next SaveChanges re-issues them and throws again. Record the failure
+        // via a fresh context straight away instead of fighting the poisoned one. If the fresh context
+        // fails too (for example the database is down), fall through to the in-context attempts as a
+        // long shot before declaring the activity stuck.
+        if (originalException is DbUpdateException or System.Data.Common.DbException &&
             await TryFailActivityOnFreshContextAsync(activity, originalException, context))
             return;
 
