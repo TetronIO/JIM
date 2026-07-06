@@ -54,6 +54,8 @@ Synchronisation Activities record notable resolution outcomes against each objec
 
 Together these distinguish the two kinds of blank an administrator may need to investigate: one that was asserted on purpose, and one that happened because every source fell away.
 
+The same provenance is visible per value: retrieving a Metaverse Object through the REST API or `Get-JIMMetaverseObject` returns, for each attribute value, the Connected System and the exact Synchronisation Rule that won resolution and contributed it. An asserted null appears as a value row flagged `nullValue` with provenance but no value, so automation can distinguish a deliberate blank from an attribute that simply has no contributor; consumers should treat such a row as "no value present", never as a value.
+
 ## 🛠️ Configuring priority
 
 Attribute priority is configured per (Metaverse Object Type, Metaverse attribute). The priority order, and the "Null is a value" flag, are managed through the REST API and PowerShell module:

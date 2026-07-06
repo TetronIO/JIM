@@ -2443,15 +2443,16 @@ function Assert-MvoAttributeValue {
         that won Attribute Priority resolution (#91).
 
     .DESCRIPTION
-        Reads directly from the "MetaverseObjectAttributeValues" table via psql rather than the
-        REST API. MetaverseObjectAttributeValueDto (JIM.Web/Models/Api/MetaverseObjectDto.cs)
-        exposes ContributedBySystemId/ContributedBySystemName but NOT ContributedBySyncRuleId or
-        NullValue, both of which Attribute Priority assertions need: NullValue distinguishes an
-        asserted-null contribution from no contributor at all, and ContributedBySyncRuleId is the
-        only way to name the exact winning Synchronisation Rule when a Connected System could
-        (in later scenarios) run more than one import rule into the same attribute. This mirrors
-        the direct-psql pattern established by Assert-ExportRpeisHaveCsoLink for the same reason
-        (issue #683): the data needed to assert against is not on the wire yet.
+        Reads the Metaverse Object via the REST API (Get-JIMMetaverseObject).
+        MetaverseObjectAttributeValueDto exposes ContributedBySyncRuleId/Name and NullValue
+        (issue #931), so Attribute Priority assertions run over the wire: NullValue distinguishes
+        an asserted-null contribution from no contributor at all, and ContributedBySyncRuleId
+        names the exact winning Synchronisation Rule when a Connected System could (in later
+        scenarios) run more than one import rule into the same attribute. This helper previously
+        read the "MetaverseObjectAttributeValues" table directly via psql (the
+        Assert-ExportRpeisHaveCsoLink pattern from issue #683) because that data was not on the
+        wire; asserting via the API now also proves the DTO exposure and the repository's
+        provenance eager-loading on real PostgreSQL.
 
         Exactly one of -ExpectedValue, -ExpectedValues, -ExpectedReferenceMvoId, -ExpectNoValue or
         -ExpectAssertedNull must be supplied; each targets a different attribute shape (scalar,
@@ -2560,55 +2561,32 @@ function Assert-MvoAttributeValue {
         throw "Assert-MvoAttributeValue ($displayName): exactly one of -ExpectedValue, -ExpectedValues, -ExpectedReferenceMvoId, -ExpectNoValue, -ExpectAssertedNull must be supplied."
     }
 
-    $safeMvoId = $MvoId.ToString()
-    $safeAttributeName = $AttributeName.Replace("'", "''")
-
-    # Boolean columns are rendered via CASE rather than a bare ::text cast: PostgreSQL's cast
-    # semantics for boolean->text are easy to get subtly wrong across versions, so this pins the
-    # exact 'true'/'false'/'' text this function parses back out below.
-    $query = @"
-SELECT
-    COALESCE(v."StringValue", '') AS string_value,
-    COALESCE(v."IntValue"::text, '') AS int_value,
-    COALESCE(v."LongValue"::text, '') AS long_value,
-    COALESCE(v."DateTimeValue"::text, '') AS datetime_value,
-    CASE WHEN v."BoolValue" IS NULL THEN '' WHEN v."BoolValue" THEN 'true' ELSE 'false' END AS bool_value,
-    COALESCE(v."GuidValue"::text, '') AS guid_value,
-    COALESCE(v."ReferenceValueId"::text, '') AS reference_value_id,
-    CASE WHEN v."NullValue" THEN 't' ELSE 'f' END AS null_value,
-    COALESCE(v."ContributedBySyncRuleId"::text, '') AS sync_rule_id,
-    COALESCE(sr."Name", '') AS sync_rule_name,
-    COALESCE(v."ContributedBySystemId"::text, '') AS system_id,
-    COALESCE(cs."Name", '') AS system_name
-FROM "MetaverseObjectAttributeValues" v
-JOIN "MetaverseAttributes" a ON a."Id" = v."AttributeId"
-LEFT JOIN "SyncRules" sr ON sr."Id" = v."ContributedBySyncRuleId"
-LEFT JOIN "ConnectedSystems" cs ON cs."Id" = v."ContributedBySystemId"
-WHERE v."MetaverseObjectId" = '$safeMvoId'
-  AND a."Name" = '$safeAttributeName'
-ORDER BY string_value, reference_value_id;
-"@
-
-    $rawRows = docker compose exec -T jim.database psql -t -A -F '|' -U jim -d jim -c $query 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "Assert-MvoAttributeValue ($displayName): psql query failed. Output: $rawRows"
+    $mvo = Get-JIMMetaverseObject -Id $MvoId -ErrorAction Stop
+    if (-not $mvo) {
+        throw "Assert-MvoAttributeValue ($displayName): Metaverse Object $MvoId was not returned by the API."
     }
 
-    $rows = @($rawRows | Where-Object { $_ -and $_.Trim() -ne '' } | ForEach-Object {
-        $fields = $_.Split('|')
+    # Project the API's attribute value DTOs into the row shape the assertion branches below
+    # consume. Attribute name matching is case-sensitive for parity with the previous direct-SQL
+    # implementation (a."Name" = '...'). Null fields stay $null, which the truthiness checks in
+    # the branches treat identically to the empty strings psql used to return.
+    $rows = @($mvo.attributeValues | Where-Object { $_.attributeName -ceq $AttributeName } | ForEach-Object {
         [PSCustomObject]@{
-            StringValue      = $fields[0]
-            IntValue         = $fields[1]
-            LongValue        = $fields[2]
-            DateTimeValue    = $fields[3]
-            BoolValue        = $fields[4]
-            GuidValue        = $fields[5]
-            ReferenceValueId = $fields[6]
-            NullValue        = ($fields[7] -eq 't')
-            SyncRuleId       = $fields[8]
-            SyncRuleName     = $fields[9]
-            SystemId         = $fields[10]
-            SystemName       = $fields[11]
+            StringValue      = $_.stringValue
+            IntValue         = $_.intValue
+            LongValue        = $_.longValue
+            DateTimeValue    = $_.dateTimeValue
+            # Rendered as 'true'/'false'/'' text for parity with the previous psql CASE expression:
+            # the asserted-null corruption check below must treat an explicit false as a populated
+            # real value column, and a bare $false would be falsy and slip through.
+            BoolValue        = if ($null -eq $_.boolValue) { '' } elseif ($_.boolValue) { 'true' } else { 'false' }
+            GuidValue        = $_.guidValue
+            ReferenceValueId = $_.referenceValueId
+            NullValue        = [bool]$_.nullValue
+            SyncRuleId       = $_.contributedBySyncRuleId
+            SyncRuleName     = $_.contributedBySyncRuleName
+            SystemId         = $_.contributedBySystemId
+            SystemName       = $_.contributedBySystemName
         }
     })
 

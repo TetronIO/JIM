@@ -565,6 +565,8 @@ Get-JIMMetaverseObject [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search
 
 Metaverse Objects including their ID, object type, and requested attributes.
 
+When retrieved by ID, each attribute value also carries its provenance: `contributedBySystemId`/`contributedBySystemName` identify the Connected System, and `contributedBySyncRuleId`/`contributedBySyncRuleName` identify the exact Synchronisation Rule that won [attribute priority resolution](../concepts/attribute-priority.md) and contributed the value. A value row with `nullValue` set to `true` is an asserted null: a deliberate, authoritative "no value" assertion carrying provenance only; treat it as no value present, distinct from the attribute having no row at all.
+
 #### Examples
 
 ```powershell title="Get a specific object by ID"

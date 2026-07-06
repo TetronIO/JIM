@@ -451,6 +451,13 @@ public class MetaverseRepository : IMetaverseRepository
             Include(mo => mo.AttributeValues).
             ThenInclude(av => av.ReferenceValue).
             ThenInclude(rv => rv!.Type).
+            // Provenance navigations: the API and Metaverse Object views surface which Connected System
+            // and Synchronisation Rule contributed each value (#931). In-memory tests auto-track these
+            // navigations, so only real PostgreSQL exercises these includes.
+            Include(mo => mo.AttributeValues).
+            ThenInclude(av => av.ContributedBySystem).
+            Include(mo => mo.AttributeValues).
+            ThenInclude(av => av.ContributedBySyncRule).
             SingleOrDefaultAsync(mo => mo.Id == id);
     }
 
