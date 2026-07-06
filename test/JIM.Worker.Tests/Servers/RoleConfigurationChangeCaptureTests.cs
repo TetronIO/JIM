@@ -77,6 +77,26 @@ public class RoleConfigurationChangeCaptureTests
     // -- CreateRoleAsync -------------------------------------------------------------------------------------------
 
     [Test]
+    public async Task RecordSeededRoleBaselineAsync_RecordsSystemCreateChildWithVersionOneBaselineAsync()
+    {
+        var role = BuildRole(id: RoleId, name: "Administrator");
+        _securityRepo.Setup(r => r.GetRoleByIdAsync(RoleId)).ReturnsAsync(() => role);
+        SetupMaxVersion(0);
+        var parentActivityId = Guid.NewGuid();
+
+        await _jim.Security.RecordSeededRoleBaselineAsync(RoleId, "Administrator", parentActivityId);
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.Role));
+        Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Create));
+        Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
+        Assert.That(_completedActivity!.ParentActivityId, Is.EqualTo(parentActivityId), "the baseline must group under the seeding parent Activity");
+        Assert.That(_completedActivity!.RoleId, Is.EqualTo(RoleId));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"Role\""));
+    }
+
+    [Test]
     public async Task CreateRoleAsync_NoInitiator_RecordsSystemAttributedActivityWithVersionOneSnapshotAsync()
     {
         Role? persisted = null;

@@ -812,6 +812,51 @@ internal class SeedingServer
     /// get rendering hints set correctly without requiring a fresh seed.
     /// Uses the repository directly to avoid creating audit Activities for system-level changes.
     /// </summary>
+    /// <summary>
+    /// Re-records System-attributed version-1 baseline Activities for every preserved built-in configuration object,
+    /// grouped under the seeding pass's parent Activity. Called after a factory reset: the reset truncates the
+    /// Activities table (so all configuration-change baselines are lost) but preserves the built-in seed objects
+    /// (BuiltIn = true rows are not customer data), and the ordinary re-seed no-ops for them because they still exist.
+    /// Without this, a factory reset would permanently strip the factory-state provenance from the change history.
+    /// Schedules are excluded: they are truncated and re-created through their audited path
+    /// (<see cref="SeedBuiltInSchedulesAsync"/>), which records their baseline. The capture dedupe-guard makes each
+    /// record idempotent, so a second call finds the just-written baseline and records nothing further.
+    /// </summary>
+    internal async Task RebaselineBuiltInConfigurationAsync()
+    {
+        // If configuration change tracking is disabled there is no change history to restore, so skip re-baselining
+        // entirely (each RecordSeeded...Baseline call would no-op inside the capture guard anyway). This also avoids
+        // enumerating every configuration type, and creating a seeding parent Activity, when there is nothing to record.
+        if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+            return;
+
+        var parentActivityId = await GetOrCreateSeedingActivityAsync();
+
+        foreach (var objectType in (await Application.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects: false)).Where(t => t.BuiltIn))
+            await Application.Metaverse.RecordSeededMetaverseObjectTypeBaselineAsync(objectType.Id, objectType.Name, parentActivityId);
+
+        foreach (var attribute in (await Application.Metaverse.GetMetaverseAttributesAsync() ?? new List<MetaverseAttribute>()).Where(a => a.BuiltIn))
+            await Application.Metaverse.RecordSeededMetaverseAttributeBaselineAsync(attribute.Id, attribute.Name, parentActivityId);
+
+        foreach (var search in (await Application.Search.GetPredefinedSearchHeadersAsync()).Where(s => s.BuiltIn))
+            await Application.Search.RecordSeededPredefinedSearchBaselineAsync(search.Id, search.Name, parentActivityId);
+
+        foreach (var connector in (await Application.ConnectedSystems.GetConnectorDefinitionHeadersAsync()).Where(c => c.BuiltIn))
+            await Application.ConnectedSystems.RecordSeededConnectorDefinitionBaselineAsync(connector.Id, connector.Name, parentActivityId);
+
+        foreach (var dataSet in (await Application.ExampleData.GetExampleDataSetsAsync()).Where(d => d.BuiltIn))
+            await Application.ExampleData.RecordSeededExampleDataSetBaselineAsync(dataSet.Id, dataSet.Name, parentActivityId);
+
+        foreach (var template in (await Application.ExampleData.GetTemplatesAsync()).Where(t => t.BuiltIn))
+            await Application.ExampleData.RecordSeededExampleDataTemplateBaselineAsync(template.Id, template.Name, parentActivityId);
+
+        foreach (var role in (await Application.Security.GetRolesAsync()).Where(r => r.BuiltIn))
+            await Application.Security.RecordSeededRoleBaselineAsync(role.Id, role.Name, parentActivityId);
+
+        foreach (var setting in await Application.ServiceSettings.GetAllSettingsAsync())
+            await Application.ServiceSettings.RecordSeededServiceSettingBaselineAsync(setting.Key, setting.DisplayName, parentActivityId);
+    }
+
     internal async Task SyncBuiltInAttributeRenderingHintsAsync()
     {
         var stopwatch = new Stopwatch();
