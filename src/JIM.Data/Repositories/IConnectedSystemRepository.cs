@@ -601,6 +601,17 @@ public interface IConnectedSystemRepository
     Task<List<SyncRuleMapping>> GetImportSyncRuleMappingsForMetaverseAttributeAsync(int metaverseObjectTypeId, int metaverseAttributeId);
 
     /// <summary>
+    /// Gets every import mapping that contributes to a Metaverse attribute for a given Metaverse Object Type,
+    /// across all of the type's attributes (#91). Used to build the per-attribute contributor counts that drive
+    /// the Surface 2 multi-contributor badge, and as the import-side source for the Data Flow discovery page.
+    /// Disabled Synchronisation Rules are included (they hold position in a priority list). The owning
+    /// <see cref="SyncRule"/>, its <see cref="ConnectedSystem"/>, and the <see cref="MetaverseAttribute"/> are
+    /// eagerly loaded for display.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type that scopes the mappings.</param>
+    Task<List<SyncRuleMapping>> GetImportSyncRuleMappingsForMetaverseObjectTypeAsync(int metaverseObjectTypeId);
+
+    /// <summary>
     /// Persists priority/null-handling changes across a set of mappings in a single transaction (one
     /// SaveChanges). Used when reordering an attribute's priority list, which inherently renumbers sibling
     /// <see cref="SyncRuleMapping.Priority"/> rows across other Synchronisation Rules (#91).

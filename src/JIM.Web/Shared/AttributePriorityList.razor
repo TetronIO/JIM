@@ -1,0 +1,249 @@
+@using JIM.Models.Logic
+@using JIM.Web.Models.Api
+@inject IJimApplicationFactory JimFactory
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Shared ordered contributor list for an attribute's priority (#91, Surface 2 management home; Surface 1 renders *@
+@* it read-only). Highest priority first. Drag to reorder; the whole list renumbers. "Null is a value" is per row. *@
+
+@if (_loading)
+{
+    <div class="d-flex justify-center pa-4">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+    </div>
+}
+else if (_contributors.Count == 0)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+        This attribute has no import contributors, so it has no priority to manage.
+    </MudAlert>
+}
+else
+{
+    @* Column headers, aligned with the item rows below. *@
+    <div class="d-flex align-center px-2 py-1 mud-text-secondary" style="font-weight: 500;">
+        @if (!ReadOnly)
+        {
+            <div style="width: 40px;"></div>
+        }
+        <div style="width: 64px;">Priority</div>
+        <div style="flex: 1 1 0;">Connected System</div>
+        <div style="flex: 1 1 0;">Synchronisation Rule</div>
+        <div style="width: 150px;">
+            <MudTooltip Text="When set, if this Synchronisation Rule is connected and in scope but supplies no value, it asserts no value (no fall-through to a lower-priority contributor)." Arrow="true" Placement="Placement.Top">
+                Null is a value
+            </MudTooltip>
+        </div>
+    </div>
+
+    @if (ReadOnly)
+    {
+        <div class="border rounded">
+            @for (var i = 0; i < _contributors.Count; i++)
+            {
+                var contributor = _contributors[i];
+                <div class="d-flex align-center px-2 py-2 @(contributor.SyncRuleEnabled ? null : "mud-text-disabled")"
+                     style="border-bottom: 1px solid var(--mud-palette-lines-default);">
+                    <div style="width: 64px;">@(i + 1)</div>
+                    <div style="flex: 1 1 0;">
+                        @if (string.IsNullOrEmpty(contributor.ConnectedSystemName))
+                        {
+                            <EmptyValue />
+                        }
+                        else
+                        {
+                            @contributor.ConnectedSystemName
+                        }
+                    </div>
+                    <div style="flex: 1 1 0;">
+                        @contributor.SyncRuleName
+                        @if (!contributor.SyncRuleEnabled)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default" Class="ml-2">Disabled</MudChip>
+                        }
+                    </div>
+                    <div style="width: 150px;">
+                        <MudIcon Icon="@(contributor.NullIsValue ? Icons.Material.Filled.CheckBox : Icons.Material.Filled.CheckBoxOutlineBlank)"
+                                 Class="mud-text-secondary" />
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <MudDropContainer T="AttributePriorityContributorDto" @ref="_dropContainer" Items="_contributors"
+                          ItemsSelector="@((item, dropzone) => true)" ItemDropped="OnItemDropped"
+                          Class="border rounded" ApplyDropClassesOnDragStarted="true">
+            <ChildContent>
+                <MudDropZone T="AttributePriorityContributorDto" AllowReorder="true" Class="pa-0"
+                             DraggingClass="mud-theme-primary" />
+            </ChildContent>
+            <ItemRenderer>
+                <div class="d-flex align-center px-2 py-2 @(context.SyncRuleEnabled ? null : "mud-text-disabled")"
+                     style="border-bottom: 1px solid var(--mud-palette-lines-default);">
+                    <div style="width: 40px; cursor: grab;">
+                        <MudTooltip Text="Drag to reorder" Arrow="true" Placement="Placement.Top">
+                            <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Class="mud-text-secondary" />
+                        </MudTooltip>
+                    </div>
+                    <div style="width: 64px;">@(_contributors.IndexOf(context) + 1)</div>
+                    <div style="flex: 1 1 0;">
+                        @if (string.IsNullOrEmpty(context.ConnectedSystemName))
+                        {
+                            <EmptyValue />
+                        }
+                        else
+                        {
+                            @context.ConnectedSystemName
+                        }
+                    </div>
+                    <div style="flex: 1 1 0;">
+                        @context.SyncRuleName
+                        @if (!context.SyncRuleEnabled)
+                        {
+                            <MudTooltip Text="This Synchronisation Rule is disabled. It holds its position but never contributes during synchronisation." Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default" Class="ml-2">Disabled</MudChip>
+                            </MudTooltip>
+                        }
+                    </div>
+                    <div style="width: 150px;">
+                        <MudCheckBox T="bool" Value="context.NullIsValue"
+                                     ValueChanged="@(v => OnNullIsValueChanged(context, v))"
+                                     Dense="true" />
+                    </div>
+                </div>
+            </ItemRenderer>
+        </MudDropContainer>
+
+        <div class="d-flex align-center gap-2 mt-3">
+            @if (_dirty)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Warning" Class="mr-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Class="mr-1" />Unsaved changes
+                </MudText>
+            }
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!_dirty || _saving)"
+                       StartIcon="@Icons.Material.Filled.Save" OnClick="SaveAsync">Save order</MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Default" Disabled="@(!_dirty || _saving)"
+                       OnClick="ResetAsync">Reset</MudButton>
+        </div>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired] public int MetaverseObjectTypeId { get; set; }
+    [Parameter, EditorRequired] public int MetaverseAttributeId { get; set; }
+
+    /// <summary>The attribute name, used in save confirmation and messages.</summary>
+    [Parameter] public string? MetaverseAttributeName { get; set; }
+
+    /// <summary>Render the list read-only (Surface 1). No reordering, no "Null is a value" editing, no Save.</summary>
+    [Parameter] public bool ReadOnly { get; set; }
+
+    /// <summary>Raised after a successful save, so a host can refresh dependent state (e.g. a contributor badge).</summary>
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private MudDropContainer<AttributePriorityContributorDto>? _dropContainer;
+    private List<AttributePriorityContributorDto> _contributors = new();
+
+    // Snapshot of the loaded order (mapping id + null-is-value), so dirty state and Reset compare against persisted truth.
+    private List<(int MappingId, bool NullIsValue)> _original = new();
+    private bool _loading = true;
+    private bool _saving;
+    private bool _dirty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        using var jim = JimFactory.Create();
+        var mappings = await jim.ConnectedSystems.GetAttributePriorityOrderAsync(MetaverseObjectTypeId, MetaverseAttributeId);
+        _contributors = mappings.Select(AttributePriorityContributorDto.FromEntity).ToList();
+        _original = _contributors.Select(c => (c.MappingId, c.NullIsValue)).ToList();
+        _dirty = false;
+        _loading = false;
+        _dropContainer?.Refresh();
+    }
+
+    // A drag-drop reorder within the single zone. IndexInZone is the target slot; move the item there and renumber.
+    private void OnItemDropped(MudItemDropInfo<AttributePriorityContributorDto> dropInfo)
+    {
+        var item = dropInfo.Item;
+        if (item == null)
+            return;
+
+        var newIndex = Math.Clamp(dropInfo.IndexInZone, 0, _contributors.Count - 1);
+        _contributors.Remove(item);
+        _contributors.Insert(newIndex, item);
+        RecomputeDirty();
+        _dropContainer?.Refresh();
+    }
+
+    private void OnNullIsValueChanged(AttributePriorityContributorDto contributor, bool value)
+    {
+        contributor.NullIsValue = value;
+        RecomputeDirty();
+    }
+
+    // Dirty when the current order or any "Null is a value" flag diverges from the loaded snapshot.
+    private void RecomputeDirty()
+    {
+        var current = _contributors.Select(c => (c.MappingId, c.NullIsValue)).ToList();
+        _dirty = !current.SequenceEqual(_original);
+    }
+
+    private async Task ResetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!_dirty || _saving)
+            return;
+
+        var attributeName = string.IsNullOrWhiteSpace(MetaverseAttributeName) ? "this attribute" : $"'{MetaverseAttributeName}'";
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Apply priority changes?",
+            $"Priority changes for {attributeName} take effect as objects are next synchronised. Metaverse Objects will not reflect the new order until a Full Synchronisation of the affected objects completes; a Delta Synchronisation applies it only to recently-changed objects. Run a Full Synchronisation to apply it everywhere.",
+            yesText: "Apply", cancelText: "Cancel");
+
+        if (confirmed != true)
+            return;
+
+        _saving = true;
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var ordered = _contributors.Select(c => (c.MappingId, c.NullIsValue)).ToList();
+            var result = await jim.ConnectedSystems.SetAttributePriorityOrderAsync(MetaverseObjectTypeId, MetaverseAttributeId, ordered, user);
+
+            _contributors = result.Select(AttributePriorityContributorDto.FromEntity).ToList();
+            _original = _contributors.Select(c => (c.MappingId, c.NullIsValue)).ToList();
+            _dirty = false;
+            Snackbar.Add("Attribute priority order saved.", Severity.Success);
+            await OnSaved.InvokeAsync();
+            _dropContainer?.Refresh();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save attribute priority order: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

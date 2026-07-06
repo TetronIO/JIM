@@ -4450,6 +4450,28 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Gets every import mapping targeting a Metaverse attribute for a given Metaverse Object Type, across all of
+    /// the type's attributes (#91). Backs the Surface 2 multi-contributor badge and the Data Flow discovery page.
+    /// Disabled Synchronisation Rules are included so they are counted as contributors (they hold position). The
+    /// owning Synchronisation Rule, its Connected System, and the target Metaverse attribute are eagerly loaded.
+    /// </summary>
+    public async Task<List<SyncRuleMapping>> GetImportSyncRuleMappingsForMetaverseObjectTypeAsync(int metaverseObjectTypeId)
+    {
+        return await Repository.Database.SyncRuleMappings
+            .AsSplitQuery()
+            .Include(m => m.SyncRule)
+                .ThenInclude(sr => sr!.ConnectedSystem)
+            .Include(m => m.TargetMetaverseAttribute)
+            .Where(m =>
+                m.TargetMetaverseAttributeId != null &&
+                m.SyncRule!.Direction == SyncRuleDirection.Import &&
+                m.SyncRule.MetaverseObjectTypeId == metaverseObjectTypeId)
+            .OrderBy(m => m.Priority)
+            .ThenBy(m => m.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
     /// Persists priority/null-handling changes across a set of mappings in a single transaction (#91).
     /// Updates the scalar columns via a tracked reload rather than UpdateRange: contributor lists are
     /// materialised with the context's default no-tracking behaviour, so sibling mappings carry separate
