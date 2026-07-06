@@ -19,11 +19,17 @@
 
 .PARAMETER IntervalSeconds
     Sample interval in seconds. Defaults to 2.
+
+.PARAMETER ParentPid
+    PID of the launching process. When supplied, the sampler exits on its own once that
+    process no longer exists, so a crashed or hard-killed runner cannot leak a sampler
+    that appends to the CSV forever (#918). 0 (the default) disables the check.
 #>
 
 param(
     [Parameter(Mandatory = $true)][string]$OutputPath,
-    [int]$IntervalSeconds = 2
+    [int]$IntervalSeconds = 2,
+    [int]$ParentPid = 0
 )
 
 $ErrorActionPreference = 'Continue'
@@ -63,7 +69,22 @@ if (-not (Test-Path $OutputPath)) {
 
 $format = '{{.Name}}|{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}|{{.NetIO}}|{{.BlockIO}}|{{.PIDs}}'
 
+# The runner signals a graceful stop by creating this file next to the CSV; it is the
+# reliable stop primitive because the Start-Process handle the runner holds only tracks
+# the .NET global-tool shim, not the dotnet child that actually runs this script (#918).
+$stopFilePath = "$OutputPath.stop"
+
 while ($true) {
+    # Self-termination checks run first so exit latency is at most one interval.
+    if (Test-Path -LiteralPath $stopFilePath) {
+        break
+    }
+    if ($ParentPid -gt 0 -and -not (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) {
+        # The launching runner has died (crash, hard kill, host shutdown); stop sampling
+        # rather than appending to a historical CSV forever.
+        break
+    }
+
     try {
         $ts = (Get-Date).ToUniversalTime().ToString('o')
         $output = docker stats --no-stream --format $format 2>$null

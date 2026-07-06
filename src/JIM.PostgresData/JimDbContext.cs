@@ -483,6 +483,18 @@ public class JimDbContext : DbContext
             .HasIndex(cso => new { cso.ConnectedSystemId, cso.Created })
             .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_Created");
 
+        // ConnectedSystemObject: filtered unique index backing the "at most one CSO per (Connected System,
+        // Metaverse Object)" join invariant. The sync engine's EstablishJoinAsync already enforces this at the
+        // application layer; this index backs the same invariant at the database level so no non-engine write
+        // path (raw SQL, a future connector, manual data fixes) can join a second CSO in the same Connected
+        // System to the same Metaverse Object. The filter excludes unjoined CSOs (MetaverseObjectId IS NULL),
+        // which must not collide with each other.
+        modelBuilder.Entity<ConnectedSystemObject>()
+            .HasIndex(cso => new { cso.ConnectedSystemId, cso.MetaverseObjectId })
+            .IsUnique()
+            .HasFilter("\"MetaverseObjectId\" IS NOT NULL")
+            .HasDatabaseName("IX_ConnectedSystemObjects_ConnectedSystemId_MetaverseObjectId_Unique");
+
         // Additional performance indexes for worker task queue processing
         // Optimises GetNextWorkerTaskAsync and GetNextWorkerTasksToProcessAsync queries
         modelBuilder.Entity<WorkerTask>()

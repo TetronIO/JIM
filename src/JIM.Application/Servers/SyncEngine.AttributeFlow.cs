@@ -186,6 +186,16 @@ public partial class SyncEngine
     }
 
     /// <summary>
+    /// The Metaverse Object's effective current values for an attribute: persisted values not already pending
+    /// removal in this run. Attribute flow must diff contributions against this set rather than the raw value list;
+    /// diffing against raw values treats a value that is about to be removed (e.g. recalled from a departing
+    /// contributor, #91) as still present, so an identical surviving contribution would neither re-add the value nor
+    /// take over its provenance, and the value would be silently cleared when the pending removals are applied.
+    /// </summary>
+    private static IEnumerable<MetaverseObjectAttributeValue> GetEffectiveAttributeValues(MetaverseObject mvo, int attributeId)
+        => mvo.AttributeValues.Where(av => av.AttributeId == attributeId && !mvo.PendingAttributeValueRemovals.Contains(av));
+
+    /// <summary>
     /// Identifies the Synchronisation Rule that currently owns a Metaverse Object attribute's value (the incumbent,
     /// for the attribute priority gate, #91). Prefers a value written earlier in this run by another mapping (a
     /// pending addition), otherwise the current persisted row value, ignoring values already pending removal. Under
@@ -198,8 +208,7 @@ public partial class SyncEngine
         if (pendingOwner != null)
             return pendingOwner.ContributedBySyncRuleId;
 
-        var current = mvo.AttributeValues.FirstOrDefault(av =>
-            av.AttributeId == attributeId && !mvo.PendingAttributeValueRemovals.Contains(av));
+        var current = GetEffectiveAttributeValues(mvo, attributeId).FirstOrDefault();
         return current?.ContributedBySyncRuleId;
     }
 
@@ -225,7 +234,7 @@ public partial class SyncEngine
         AttributePriorityContext? priorityContext)
     {
         var attributeId = syncRuleMapping.TargetMetaverseAttribute!.Id;
-        var existingValues = mvo.AttributeValues.Where(av => av.AttributeId == attributeId).ToList();
+        var existingValues = GetEffectiveAttributeValues(mvo, attributeId).ToList();
 
         // Inert without a priority context: preserve the historic clear behaviour exactly (no asserted-null markers,
         // no abstention). Markers and abstention only engage once the worker supplies a context, which it does
@@ -349,8 +358,8 @@ public partial class SyncEngine
         }
         else
         {
-            var existingMvoValue = mvo.AttributeValues.SingleOrDefault(
-                mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id);
+            var existingMvoValue = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id)
+                .SingleOrDefault();
 
             var resultString = result.ToString();
             var isTextTarget = syncRuleMapping.TargetMetaverseAttribute!.Type == AttributeDataType.Text;
@@ -479,18 +488,16 @@ public partial class SyncEngine
         int? contributingSyncRuleId)
     {
         var targetAttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id;
+        var currentValues = GetEffectiveAttributeValues(mvo, targetAttributeId).ToList();
 
         // Remove MVO values that are not present in the processed source set.
-        var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
-            mvoav.AttributeId == targetAttributeId &&
+        var mvoObsoleteAttributeValues = currentValues.Where(mvoav =>
             !effectiveValues.Any(ev => ev.Equals(mvoav.StringValue, StringComparison.Ordinal)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
         // Add processed source values not already on the MVO.
         var valuesToAdd = effectiveValues.Where(ev =>
-            !mvo.AttributeValues.Any(mvoav =>
-                mvoav.AttributeId == targetAttributeId &&
-                ev.Equals(mvoav.StringValue, StringComparison.Ordinal)));
+            !currentValues.Any(mvoav => ev.Equals(mvoav.StringValue, StringComparison.Ordinal)));
 
         foreach (var value in valuesToAdd)
         {
@@ -515,17 +522,15 @@ public partial class SyncEngine
         int? contributingSystemId,
         int? contributingSyncRuleId)
     {
-        var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
-            mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
+        var currentValues = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).ToList();
+        var mvoObsoleteAttributeValues = currentValues.Where(mvoav =>
             !csoAttributeValues.Any(csoav => csoav.IntValue != null && csoav.IntValue.Equals(mvoav.IntValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
         // Use the (possibly truncated) csoAttributeValues list rather than cso.AttributeValues
         // to respect MVA->SVA first-value selection (#435)
         var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
-            !mvo.AttributeValues.Any(mvoav =>
-                mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
-                mvoav.IntValue != null && mvoav.IntValue.Equals(csoav.IntValue)));
+            !currentValues.Any(mvoav => mvoav.IntValue != null && mvoav.IntValue.Equals(csoav.IntValue)));
 
         foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
         {
@@ -549,7 +554,7 @@ public partial class SyncEngine
         int? contributingSyncRuleId)
     {
         var csoValue = csoAttributeValues.FirstOrDefault();
-        var mvoValue = mvo.AttributeValues.SingleOrDefault(mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id);
+        var mvoValue = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).SingleOrDefault();
 
         if (mvoValue != null && csoValue == null)
         {
@@ -591,8 +596,8 @@ public partial class SyncEngine
         int? contributingSystemId,
         int? contributingSyncRuleId)
     {
-        var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
-            mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
+        var currentValues = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).ToList();
+        var mvoObsoleteAttributeValues = currentValues.Where(mvoav =>
             !csoAttributeValues.Any(csoav =>
                 csoav.ByteValue != null && JIM.Utilities.Utilities.AreByteArraysTheSame(csoav.ByteValue, mvoav.ByteValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
@@ -600,9 +605,7 @@ public partial class SyncEngine
         // Use the (possibly truncated) csoAttributeValues list rather than cso.AttributeValues
         // to respect MVA->SVA first-value selection (#435)
         var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
-            !mvo.AttributeValues.Any(mvoav =>
-                mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
-                JIM.Utilities.Utilities.AreByteArraysTheSame(mvoav.ByteValue, csoav.ByteValue)));
+            !currentValues.Any(mvoav => JIM.Utilities.Utilities.AreByteArraysTheSame(mvoav.ByteValue, csoav.ByteValue)));
 
         foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
         {
@@ -674,6 +677,8 @@ public partial class SyncEngine
         var hasUnresolvedReferences = csoAttributeValues.Any(csoav =>
             csoav.ReferenceValueId.HasValue && !IsResolved(csoav));
 
+        var currentValues = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).ToList();
+
         if (!hasUnresolvedReferences)
         {
             var resolvedMvoIds = new HashSet<Guid>(
@@ -681,8 +686,7 @@ public partial class SyncEngine
                     .Where(IsResolved)
                     .Select(csoav => GetReferencedMvoId(csoav)!.Value));
 
-            var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
-                mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
+            var mvoObsoleteAttributeValues = currentValues.Where(mvoav =>
                 (mvoav.ReferenceValueId ?? mvoav.ReferenceValue?.Id) is Guid mvoRefId &&
                 !resolvedMvoIds.Contains(mvoRefId));
             mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
@@ -696,8 +700,7 @@ public partial class SyncEngine
         }
 
         var existingMvoRefIds = new HashSet<Guid>(
-            mvo.AttributeValues
-                .Where(mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id)
+            currentValues
                 .Select(mvoav => mvoav.ReferenceValueId ?? mvoav.ReferenceValue?.Id)
                 .Where(id => id.HasValue)
                 .Select(id => id!.Value));
@@ -745,17 +748,15 @@ public partial class SyncEngine
         int? contributingSystemId,
         int? contributingSyncRuleId)
     {
-        var mvoObsoleteAttributeValues = mvo.AttributeValues.Where(mvoav =>
-            mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
+        var currentValues = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).ToList();
+        var mvoObsoleteAttributeValues = currentValues.Where(mvoav =>
             !csoAttributeValues.Any(csoav => csoav.GuidValue.HasValue && csoav.GuidValue.Equals(mvoav.GuidValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
         // Use the (possibly truncated) csoAttributeValues list rather than cso.AttributeValues
         // to respect MVA->SVA first-value selection (#435)
         var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
-            !mvo.AttributeValues.Any(mvoav =>
-                mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id &&
-                mvoav.GuidValue.HasValue && mvoav.GuidValue.Equals(csoav.GuidValue)));
+            !currentValues.Any(mvoav => mvoav.GuidValue.HasValue && mvoav.GuidValue.Equals(csoav.GuidValue)));
 
         foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
         {
@@ -779,7 +780,7 @@ public partial class SyncEngine
         int? contributingSyncRuleId)
     {
         var csoValue = csoAttributeValues.FirstOrDefault();
-        var mvoValue = mvo.AttributeValues.SingleOrDefault(mvoav => mvoav.AttributeId == syncRuleMapping.TargetMetaverseAttribute!.Id);
+        var mvoValue = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).SingleOrDefault();
 
         if (mvoValue != null && csoValue == null)
         {
@@ -881,15 +882,11 @@ public partial class SyncEngine
     {
         if (values.Length == 0)
         {
-            var mvoAttributeValuesToDelete = mvo.AttributeValues
-                .Where(q => q.AttributeId == targetAttribute.Id);
-            mvo.PendingAttributeValueRemovals.AddRange(mvoAttributeValuesToDelete);
+            mvo.PendingAttributeValueRemovals.AddRange(GetEffectiveAttributeValues(mvo, targetAttribute.Id));
             return;
         }
 
-        var existingMvoValues = mvo.AttributeValues
-            .Where(mvoav => mvoav.AttributeId == targetAttribute.Id)
-            .ToList();
+        var existingMvoValues = GetEffectiveAttributeValues(mvo, targetAttribute.Id).ToList();
 
         var valuesToRemove = existingMvoValues
             .Where(existing => !values.Contains(existing.StringValue, StringComparer.Ordinal));

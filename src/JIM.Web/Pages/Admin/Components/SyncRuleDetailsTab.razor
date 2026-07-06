@@ -14,6 +14,9 @@
         <MudTextField Label="Name" Required="true" RequiredError="A name is required" @bind-Value="SyncRule.Name"
                       @bind-Value:after="NotifyChangedAsync" Immediate="true" Variant="Variant.Outlined" />
 
+        <MudTextField T="string" Label="Description" @bind-Value="SyncRule.Description" @bind-Value:after="NotifyChangedAsync"
+                      Sizing="InputSizing.Auto" Lines="2" MaxLines="12" MaxLength="1000" Variant="Variant.Outlined" Class="mt-5" />
+
         @if (SyncRule.Id > 0 && SyncRule.ConnectedSystem != null)
         {
             <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-4" Spacing="3">

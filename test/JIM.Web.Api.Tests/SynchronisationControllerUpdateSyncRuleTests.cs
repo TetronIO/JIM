@@ -27,9 +27,10 @@ using NUnit.Framework;
 namespace JIM.Web.Api.Tests;
 
 /// <summary>
-/// Tests for the UpdateSyncRuleAsync endpoint. Focused on the scoping-related
+/// Tests for the UpdateSyncRuleAsync endpoint. Covers the scoping-related
 /// action fields (InboundOutOfScopeAction, OutboundDeprovisionAction) that
-/// integration test Scenario 10 needs to configure programmatically.
+/// integration test Scenario 10 needs to configure programmatically, and the
+/// partial-update semantics of the optional Description field.
 /// </summary>
 [TestFixture]
 public class SynchronisationControllerUpdateSyncRuleTests
@@ -192,5 +193,70 @@ public class SynchronisationControllerUpdateSyncRuleTests
             It.Is<SyncRule>(sr =>
                 sr.InboundOutOfScopeAction == InboundOutOfScopeAction.RemainJoined &&
                 sr.OutboundDeprovisionAction == OutboundDeprovisionAction.Delete)), Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleAsync_WithDescription_PersistsValue()
+    {
+        var syncRule = BuildImportRule(4);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(4)).ReturnsAsync(syncRule);
+        _mockConnectedSystemRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+
+        var request = new UpdateSyncRuleRequest
+        {
+            Description = "Flows HR user data into the Metaverse."
+        };
+
+        var result = await _controller.UpdateSyncRuleAsync(4, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.UpdateSyncRuleAsync(
+            It.Is<SyncRule>(sr => sr.Description == "Flows HR user data into the Metaverse.")), Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleAsync_WithoutDescription_PreservesExistingValue()
+    {
+        var syncRule = BuildImportRule(5);
+        syncRule.Description = "Existing description.";
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(5)).ReturnsAsync(syncRule);
+        _mockConnectedSystemRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+
+        var request = new UpdateSyncRuleRequest
+        {
+            Name = "Renamed Rule"
+        };
+
+        var result = await _controller.UpdateSyncRuleAsync(5, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.UpdateSyncRuleAsync(
+            It.Is<SyncRule>(sr => sr.Description == "Existing description.")), Times.Once);
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleAsync_WithEmptyDescription_ClearsValue()
+    {
+        var syncRule = BuildImportRule(6);
+        syncRule.Description = "Existing description.";
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(6)).ReturnsAsync(syncRule);
+        _mockConnectedSystemRepo.Setup(r => r.UpdateSyncRuleAsync(It.IsAny<SyncRule>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+
+        var request = new UpdateSyncRuleRequest
+        {
+            Description = ""
+        };
+
+        var result = await _controller.UpdateSyncRuleAsync(6, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockConnectedSystemRepo.Verify(r => r.UpdateSyncRuleAsync(
+            It.Is<SyncRule>(sr => sr.Description == null)), Times.Once);
     }
 }

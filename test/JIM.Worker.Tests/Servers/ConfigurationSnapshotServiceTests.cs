@@ -88,6 +88,38 @@ public class ConfigurationSnapshotServiceTests
     }
 
     [Test]
+    public void CreateSnapshot_SyncRule_WithDescription_CapturesDescription()
+    {
+        // The description is administrator-facing configuration, so it must be snapshotted; without it a
+        // description edit would diff as "no change".
+        var rule = new SyncRule
+        {
+            Id = 42,
+            Name = "HR Inbound",
+            Description = "Flows joiner data from HR into the Metaverse.",
+            Direction = SyncRuleDirection.Import
+        };
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        var description = Child(snapshot.Root, "description");
+        Assert.That(description, Is.Not.Null, "the Synchronisation Rule description must be snapshotted");
+        Assert.That(description!.Value, Is.EqualTo("Flows joiner data from HR into the Metaverse."));
+        Assert.That(description.Label, Is.EqualTo("Description"));
+    }
+
+    [Test]
+    public void CreateSnapshot_SyncRule_WithoutDescription_OmitsDescriptionNode()
+    {
+        // Matching Add()'s skip-empty behaviour: an unset description records nothing rather than an empty node.
+        var rule = new SyncRule { Id = 42, Name = "HR Inbound", Direction = SyncRuleDirection.Import };
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        Assert.That(Child(snapshot.Root, "description"), Is.Null);
+    }
+
+    [Test]
     public void CreateSnapshot_SyncRule_CapturesMappingPriorityAndNullIsValue()
     {
         // Priority and "Null is a value" determine which contributor wins a multi-source Metaverse attribute, so they

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260705162319_AddUniqueSameSystemJoinIndex")]
+    partial class AddUniqueSameSystemJoinIndex
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -59,9 +62,6 @@ namespace JIM.PostgresData.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("ApiKeyId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("ChangeReason")
                         .HasColumnType("text");
 
@@ -84,9 +84,6 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int?>("ConnectedSystemRunType")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("ConnectorDefinitionId")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("Created")
@@ -113,9 +110,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("ErrorStackTrace")
                         .HasColumnType("text");
 
-                    b.Property<int?>("ExampleDataSetId")
-                        .HasColumnType("integer");
-
                     b.Property<int?>("ExampleDataTemplateId")
                         .HasColumnType("integer");
 
@@ -137,14 +131,8 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("Message")
                         .HasColumnType("text");
 
-                    b.Property<int?>("MetaverseAttributeId")
-                        .HasColumnType("integer");
-
                     b.Property<Guid?>("MetaverseObjectId")
                         .HasColumnType("uuid");
-
-                    b.Property<int?>("MetaverseObjectTypeId")
-                        .HasColumnType("integer");
 
                     b.Property<int>("ObjectsProcessed")
                         .HasColumnType("integer");
@@ -158,12 +146,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("PendingExportsConfirmed")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("PredefinedSearchId")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("RoleId")
-                        .HasColumnType("integer");
-
                     b.Property<Guid?>("ScheduleExecutionId")
                         .HasColumnType("uuid");
 
@@ -172,10 +154,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("ScheduleStepIndex")
                         .HasColumnType("integer");
-
-                    b.Property<string>("ServiceSettingKey")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -245,9 +223,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("TotalUpdated")
                         .HasColumnType("integer");
-
-                    b.Property<Guid?>("TrustedCertificateId")
-                        .HasColumnType("uuid");
 
                     b.Property<string>("WarningMessage")
                         .HasColumnType("text");
@@ -1347,9 +1322,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("CreatedByType")
                         .HasColumnType("integer");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
 
                     b.Property<int>("Direction")
                         .HasColumnType("integer");

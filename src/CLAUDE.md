@@ -265,6 +265,13 @@ These rules apply across the REST API (`JIM.Web/Controllers/Api/`), the applicat
 - **List endpoints** (`GET /resource`) SHOULD return headers that include the ID, so that automation and PowerShell callers can discover IDs for subsequent PATCH/DELETE calls.
 - These rules apply to the server (`JIM.Application/Servers/`) and repository (`JIM.Data/Repositories/`) layers too: `UpdateXxxAsync` / `DeleteXxxAsync` methods take `int`/`Guid` IDs, never name strings.
 
+**Clearing optional values on partial updates (REST + PowerShell):**
+
+Optional, clearable fields (e.g. `Description`) follow one convention across both surfaces:
+
+- **REST update DTOs**: a nullable field that is omitted (or JSON `null`) means "leave unchanged"; an empty or whitespace-only string clears the stored value to `null` (normalise on the server). State these semantics in the DTO property's XML doc. Precedent: `UpdateConnectedSystemRequest.Description`, `UpdateSyncRuleRequest.Description`.
+- **PowerShell cmdlets**: both `$null` and `''` clear the value; lead documentation and examples with the more idiomatic `$null` (`Set-JIMSyncRule -Id 5 -Description $null`) and mention `''` as equivalent. The binder coerces `$null` to `''` for `[string]` parameters, so the two are indistinguishable inside the cmdlet; never add `[ValidateNotNullOrEmpty]` to a clearable field (it would reject both). Implement with a plain `[string]` parameter guarded by `$PSBoundParameters.ContainsKey('...')`, so the bound (empty) value is sent and the API clears the field. Cover both the `$null` and `''` paths with Pester tests.
+
 **Modifying Database Schema:**
 1. Update entity in `JIM.Models/`
 2. Create migration: `dotnet ef migrations add [Name] --project src/JIM.PostgresData`

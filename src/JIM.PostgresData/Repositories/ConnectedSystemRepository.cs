@@ -1438,8 +1438,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     {
         // Use a direct SQL query to get the external ID string (preferring secondary, falling
         // back to primary) for every CSO referenced by the given CSO's attribute values.
-        // This bypasses EF's AsSplitQuery() materialisation which can silently drop navigations
-        // (see dotnet/efcore#33826), providing a reliable fallback for ImportRefMatchesCsoValue.
+        // This is the primary source for resolved-reference matching during import diffing:
+        // hydration deliberately does not materialise ReferenceValue navigations (#917), so
+        // ImportRefMatchesCsoValue matches persisted references through this dictionary. It also
+        // sidesteps EF's AsSplitQuery() materialisation, which can silently drop navigations
+        // (see dotnet/efcore#33826).
         var rows = await Repository.Database.Database
             .SqlQueryRaw<ReferenceExternalIdRow>(
                 """
@@ -1932,21 +1935,30 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (idList.Count == 0)
             return new List<ConnectedSystemObject>();
 
-        // Load CSOs with AsNoTracking to prevent change tracker bloat. Schema entities (Type,
-        // Type.Attributes, AttributeValue.Attribute) are shared across all CSOs and cause O(n)
-        // identity resolution slowdown when accumulated in the tracker (317ms → 5.6s per CSO
-        // at 100K scale). AsNoTracking bypasses identity resolution entirely.
+        // Load CSOs without tracking to prevent change tracker bloat. The worker's context
+        // default is TrackAll (identity fixup for overlapping graphs), so this bulk read path
+        // must opt out per query: schema entities (Type, Type.Attributes, AttributeValue.Attribute)
+        // are shared across all CSOs and cause O(n) identity-resolution slowdown when accumulated
+        // in the tracker (317ms → 5.6s per CSO at 100K scale), and at long-tail group scale
+        // (#917: ~5k groups, ~1M membership rows) tracked graphs plus original-value snapshots
+        // account for gigabytes of peak memory. WithIdentityResolution keeps shared schema
+        // entities as single instances within this query without touching the tracker.
         // The save phase uses raw SQL for parent CSO rows and explicit add/remove for attribute
         // values, so change tracking is not required during import processing.
+        //
+        // ReferenceValue navigations are deliberately NOT included (#917): at ~5k groups x ~200
+        // members that include materialises ~1M referenced CSO entities (plus their Types) that
+        // the import diff never needs. Resolved references carry their FK in ReferenceValueId,
+        // and ImportRefMatchesCsoValue matches them via the GetReferenceExternalIdsAsync SQL
+        // dictionary, which prefers the same secondary-then-primary external id the navigation
+        // path used.
         return await Repository.Database.ConnectedSystemObjects
+            .AsNoTrackingWithIdentityResolution()
             .AsSplitQuery()
             .Include(cso => cso.Type)
             .ThenInclude(t => t.Attributes)
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
-            .Include(cso => cso.AttributeValues)
-            .ThenInclude(av => av.ReferenceValue)
-            .ThenInclude(refCso => refCso!.Type)
             .Where(cso => cso.ConnectedSystemId == connectedSystemId && idList.Contains(cso.Id))
             .ToListAsync();
     }
@@ -1963,6 +1975,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return new List<ConnectedSystemObject>();
 
         return await Repository.Database.ConnectedSystemObjects
+            .AsNoTrackingWithIdentityResolution()
             .AsSplitQuery()
             .Include(cso => cso.AttributeValues)
                 .ThenInclude(av => av.Attribute)
@@ -4033,6 +4046,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         {
             Id = sr.Id,
             Name = sr.Name,
+            Description = sr.Description,
             ConnectedSystemName = sr.ConnectedSystem.Name,
             ConnectedSystemObjectTypeName = sr.ConnectedSystemObjectType.Name,
             Created = sr.Created,

@@ -1932,6 +1932,11 @@ Write-Host ""
 # Change to repository root
 Set-Location $repoRoot
 
+# Reap monitor processes/containers leaked by a previous crashed or hard-killed runner
+# (#918). Runs for every invocation, including each -Scenario All child: between scenarios
+# no monitors are live, so anything matched is a genuine stray.
+Clear-StaleIntegrationMonitors -ResultsPath (Join-Path $scriptRoot 'results')
+
 # Step 0: Ensure Samba AD images exist
 $step0Start = Get-Date
 Write-Section "Step 0: Checking Samba AD Images"
@@ -2899,8 +2904,11 @@ if ($metricsStreamingEnabled) {
 # Start docker stats capture as a detached pwsh process so we can correlate per-container
 # memory and CPU with the scenario phases. Uses Start-Process rather than Start-Job
 # because Start-Job's runspace adds unnecessary overhead for a fire-and-forget script.
-# "pwsh" resolves via PATH to the .NET global-tool install (the devcontainer's only
-# PowerShell; see .devcontainer/setup.sh), whose apphost spawns cleanly via Start-Process.
+# NOTE (#918): "pwsh" resolves via PATH to the .NET global-tool SHIM, which spawns the real
+# `dotnet .../pwsh.dll` sampler as a child it never forwards signals to. The Process handle
+# below therefore cannot be used to stop the sampler; stopping is done via the stop-file in
+# the finally block, with -ParentPid as the crash safety net (the sampler self-exits when
+# this runner process dies).
 $dockerStatsProcess = $null
 $dockerStatsPath = $null
 if (Get-Command docker -ErrorAction SilentlyContinue) {
@@ -2908,7 +2916,8 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
     Write-Step "Starting docker stats capture -> $dockerStatsPath"
     $dockerStatsProcess = Start-Process -FilePath 'pwsh' -ArgumentList @(
         "-NoProfile", "-File", "$scriptRoot/Capture-DockerStats.ps1",
-        "-OutputPath", $dockerStatsPath, "-IntervalSeconds", "2"
+        "-OutputPath", $dockerStatsPath, "-IntervalSeconds", "2",
+        "-ParentPid", "$PID"
     ) -PassThru -RedirectStandardOutput "$dockerStatsPath.stdout.log" -RedirectStandardError "$dockerStatsPath.stderr.log"
 }
 
@@ -2949,8 +2958,25 @@ catch {
     Write-Host ""
 }
 finally {
-    if ($dockerStatsProcess -and -not $dockerStatsProcess.HasExited) {
-        Stop-Process -Id $dockerStatsProcess.Id -Force -ErrorAction SilentlyContinue
+    if ($dockerStatsPath) {
+        # Signal the sampler to exit on its own (it checks for this file every interval),
+        # then reap any survivor by command-line identity. Stop-Process on the stored PID
+        # is useless here: it only reaches the .NET global-tool shim, never the dotnet
+        # child that actually runs the sampler (#918).
+        New-Item -ItemType File -Path "$dockerStatsPath.stop" -Force | Out-Null
+        Start-Sleep -Seconds 3   # one sample interval plus margin for a graceful exit
+
+        # Scope the pattern to script name + this run's output path so the match can never
+        # hit this runner's own command line; keep the $PID guard as belt and braces.
+        $samplerPattern = [regex]::Escape('Capture-DockerStats.ps1') + '.*' + [regex]::Escape($dockerStatsPath)
+        Get-Process -ErrorAction SilentlyContinue |
+            Where-Object { $_.Id -ne $PID -and $_.CommandLine -and $_.CommandLine -match $samplerPattern } |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+        if ($dockerStatsProcess -and -not $dockerStatsProcess.HasExited) {
+            # The shim parent, if still around, is harmless but tidy it anyway.
+            Stop-Process -Id $dockerStatsProcess.Id -Force -ErrorAction SilentlyContinue
+        }
+        Remove-Item "$dockerStatsPath.stop" -Force -ErrorAction SilentlyContinue
     }
     if ($dockerStatsPath -and (Test-Path $dockerStatsPath)) {
         # Wrap with @(...) so a zero- or one-line file doesn't trip Set-StrictMode:
@@ -2958,7 +2984,17 @@ finally {
         # one-line file, neither of which expose a usable .Count property.
         $rowCount = @(Get-Content $dockerStatsPath).Count - 1
         if ($rowCount -lt 0) { $rowCount = 0 }
-        Write-Step "Docker stats capture stopped ($rowCount samples recorded)"
+        # Only claim "stopped" when no sampler for this run survives; a survivor means the
+        # CSV keeps growing and past-run data cannot be trusted (#918).
+        $samplerPattern = [regex]::Escape('Capture-DockerStats.ps1') + '.*' + [regex]::Escape($dockerStatsPath)
+        $samplerSurvivors = @(Get-Process -ErrorAction SilentlyContinue |
+            Where-Object { $_.Id -ne $PID -and $_.CommandLine -and $_.CommandLine -match $samplerPattern })
+        if ($samplerSurvivors.Count -eq 0) {
+            Write-Step "Docker stats capture stopped ($rowCount samples recorded)"
+        }
+        else {
+            Write-Warning "Docker stats sampler survived the stop (PIDs: $($samplerSurvivors.Id -join ', ')); the CSV may keep growing"
+        }
     }
 
     # Stop the connector-files volume auditor and record the line count so

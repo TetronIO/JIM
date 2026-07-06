@@ -87,6 +87,12 @@ public class Worker : BackgroundService
 
         Log.Information("Starting JIM.Worker — connection pool: Min={MinPoolSize}, Max={MaxPoolSize}",  5, 30);
 
+        // Log the effective GC configuration once at startup (#917): memory behaviour at scale
+        // depends on Server GC and dynamic adaptation (DATAS) being what we think they are, and
+        // this is the only reliable way to see the resolved values inside the container.
+        Log.Information("GC configuration: {GcConfiguration}",
+            string.Join(", ", GC.GetConfigurationVariables().Select(kvp => $"{kvp.Key}={kvp.Value}")));
+
         // as JIM.Worker is the first JimApplication client to start, it's responsible for ensuring the database is initialised.
         // other JimApplication clients will need to check if the app is ready before completing their initialisation.
         // JimApplication instances are ephemeral and should be disposed as soon as a request/batch of work is complete (for database tracking reasons).
@@ -514,6 +520,14 @@ public class Worker : BackgroundService
                             // remove from the current tasks list after locking it for thread safety
                             lock (_currentTasksLock)
                                 CurrentTasks.RemoveAll(q => q.TaskId == newWorkerTask.Id);
+
+                            // Trim the heap after memory-heavy tasks (#917). Server GC retains its
+                            // high-water committed heap between tasks (an 11.8 GiB floor was observed
+                            // after a 100k-object full synchronisation), which leaves no headroom for
+                            // the next task's spike on smaller hosts. Mirrors the in-run precedent in
+                            // SyncImportTaskProcessor's save phase. Thresholded so small, frequent
+                            // tasks do not pay for a blocking full collection.
+                            TrimHeapAfterHeavyTask(newWorkerTask.Id);
 
                         }, cancellationTokenSource.Token);
 
@@ -1083,6 +1097,32 @@ public class Worker : BackgroundService
             Log.Error(freshEx, "TryFailActivityOnFreshContextAsync: Fresh-context update failed for activity {ActivityId}", activity.Id);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Trims the managed heap after a task completes when it is holding a large committed heap (#917).
+    /// Server GC retains its high-water committed memory between tasks, so a 100k-object run leaves
+    /// gigabytes committed while the worker idles, starving the next task's spike on smaller hosts.
+    /// The threshold keeps small, frequent tasks (scheduler steps, housekeeping) from paying for a
+    /// blocking full collection they do not need.
+    /// </summary>
+    private static void TrimHeapAfterHeavyTask(Guid workerTaskId)
+    {
+        // 1 GiB: comfortably above any housekeeping task's heap, comfortably below the multi-GiB
+        // floors observed after scale synchronisation runs.
+        const long trimThresholdBytes = 1024L * 1024 * 1024;
+
+        var heapBefore = GC.GetTotalMemory(false);
+        if (heapBefore < trimThresholdBytes)
+            return;
+
+        GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+        GC.WaitForPendingFinalizers();
+        Log.Information("TrimHeapAfterHeavyTask: Trimmed heap after task {TaskId}: {BeforeMb:N0} MB -> {AfterMb:N0} MB (working set {WorkingSetMb:N0} MB)",
+            workerTaskId,
+            heapBefore / 1024 / 1024,
+            GC.GetTotalMemory(false) / 1024 / 1024,
+            Environment.WorkingSet / 1024 / 1024);
     }
 
     /// <summary>

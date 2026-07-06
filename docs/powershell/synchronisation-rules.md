@@ -82,14 +82,14 @@ Creates a new Synchronisation Rule for a Connected System. The rule defines how 
 # By Connected System ID (default)
 New-JIMSyncRule -Name <string> -ConnectedSystemId <int>
     -ConnectedSystemObjectTypeId <int> -MetaverseObjectTypeId <int>
-    -Direction <string> [-ProjectToMetaverse] [-ProvisionToConnectedSystem]
-    [-Enabled <bool>] [-ChangeReason <string>] [-PassThru]
+    -Direction <string> [-Description <string>] [-ProjectToMetaverse]
+    [-ProvisionToConnectedSystem] [-Enabled <bool>] [-ChangeReason <string>] [-PassThru]
 
 # By Connected System name
 New-JIMSyncRule -Name <string> -ConnectedSystemName <string>
     -ConnectedSystemObjectTypeId <int> -MetaverseObjectTypeId <int>
-    -Direction <string> [-ProjectToMetaverse] [-ProvisionToConnectedSystem]
-    [-Enabled <bool>] [-ChangeReason <string>] [-PassThru]
+    -Direction <string> [-Description <string>] [-ProjectToMetaverse]
+    [-ProvisionToConnectedSystem] [-Enabled <bool>] [-ChangeReason <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -102,6 +102,7 @@ New-JIMSyncRule -Name <string> -ConnectedSystemName <string>
 | `ConnectedSystemObjectTypeId` | `int` | Yes | | The object type ID on the Connected System side |
 | `MetaverseObjectTypeId` | `int` | Yes | | The object type ID on the metaverse side |
 | `Direction` | `string` | Yes | | Data flow direction. Valid values: `Import`, `Export` |
+| `Description` | `string` | No | | Optional description of what the Synchronisation Rule is for. Maximum 1000 characters. |
 | `ProjectToMetaverse` | `switch` | No | `$false` | When set, import rules will project new Metaverse Objects. Only applicable when Direction is `Import`. |
 | `ProvisionToConnectedSystem` | `switch` | No | `$false` | When set, export rules will provision new Connected System Objects. Only applicable when Direction is `Export`. |
 | `Enabled` | `bool` | No | `$true` | Whether the Synchronisation Rule is active |
@@ -118,6 +119,7 @@ With `-PassThru`, returns the created Synchronisation Rule object. Without it, r
 
 ```powershell title="Create an import Synchronisation Rule with projection"
 New-JIMSyncRule -Name "AD User Import" `
+    -Description "Imports user accounts from Active Directory and projects new joiners into the Metaverse" `
     -ConnectedSystemId 1 `
     -ConnectedSystemObjectTypeId 3 `
     -MetaverseObjectTypeId 1 `
@@ -154,9 +156,10 @@ Modifies an existing Synchronisation Rule. Supports renaming, toggling enabled s
 
 ```powershell
 # By ID (default)
-Set-JIMSyncRule -Id <int> [-Name <string>] [-ProjectToMetaverse <bool>]
-    [-ProvisionToConnectedSystem <bool>] [-InboundOutOfScopeAction <string>]
-    [-OutboundDeprovisionAction <string>] [-EnforceState <bool>] [-ChangeReason <string>] [-PassThru]
+Set-JIMSyncRule -Id <int> [-Name <string>] [-Description <string>]
+    [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>]
+    [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>]
+    [-EnforceState <bool>] [-ChangeReason <string>] [-PassThru]
 
 # Enable shortcut
 Set-JIMSyncRule -Id <int> -Enable [-ChangeReason <string>] [-PassThru]
@@ -165,7 +168,7 @@ Set-JIMSyncRule -Id <int> -Enable [-ChangeReason <string>] [-PassThru]
 Set-JIMSyncRule -Id <int> -Disable [-ChangeReason <string>] [-PassThru]
 
 # By input object
-Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>]
+Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <string>]
     [-ProjectToMetaverse <bool>] [-ProvisionToConnectedSystem <bool>]
     [-InboundOutOfScopeAction <string>] [-OutboundDeprovisionAction <string>]
     [-EnforceState <bool>] [-ChangeReason <string>] [-PassThru]
@@ -178,6 +181,7 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>]
 | `Id` | `int` | Yes (ById, Enable, Disable sets) | | The ID of the Synchronisation Rule to modify. Accepts pipeline input. |
 | `InputObject` | `PSCustomObject` | Yes (ByInputObject set) | | A Synchronisation Rule object from `Get-JIMSyncRule`. Accepts pipeline input. |
 | `Name` | `string` | No | | New display name for the Synchronisation Rule |
+| `Description` | `string` | No | | New description of what the Synchronisation Rule is for. Pass `$null` (or an empty string) to clear it. Maximum 1000 characters. |
 | `Enable` | `switch` | Yes (Enable set) | | Enables the Synchronisation Rule |
 | `Disable` | `switch` | Yes (Disable set) | | Disables the Synchronisation Rule |
 | `ProjectToMetaverse` | `bool` | No | | Controls whether the rule projects new Metaverse Objects |
@@ -198,6 +202,14 @@ With `-PassThru`, returns the updated Synchronisation Rule object. Without it, r
 
 ```powershell title="Rename a Synchronisation Rule"
 Set-JIMSyncRule -Id 5 -Name "AD User Import (Production)"
+```
+
+```powershell title="Set or update a Synchronisation Rule's description"
+Set-JIMSyncRule -Id 5 -Description "Imports production user accounts from Active Directory"
+```
+
+```powershell title="Clear a Synchronisation Rule's description"
+Set-JIMSyncRule -Id 5 -Description $null
 ```
 
 ```powershell title="Enable a Synchronisation Rule"

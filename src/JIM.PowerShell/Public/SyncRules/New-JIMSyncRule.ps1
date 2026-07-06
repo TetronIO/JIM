@@ -14,6 +14,9 @@ function New-JIMSyncRule {
     .PARAMETER Name
         The name for the Sync Rule.
 
+    .PARAMETER Description
+        An optional description of what the Synchronisation Rule does.
+
     .PARAMETER ConnectedSystemId
         The ID of the Connected System this rule applies to.
 
@@ -63,6 +66,11 @@ function New-JIMSyncRule {
 
         Creates an export sync rule that provisions users to the Connected System.
 
+    .EXAMPLE
+        New-JIMSyncRule -Name "Import Users" -ConnectedSystemId 1 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Import -Description "Imports user accounts from the HR system"
+
+        Creates an import Synchronisation Rule with a description of what the rule does.
+
     .LINK
         Get-JIMSyncRule
         Set-JIMSyncRule
@@ -74,6 +82,9 @@ function New-JIMSyncRule {
         [Parameter(Mandatory, Position = 0)]
         [ValidateNotNullOrEmpty()]
         [string]$Name,
+
+        [Parameter()]
+        [string]$Description,
 
         [Parameter(Mandatory, ParameterSetName = 'ById')]
         [int]$ConnectedSystemId,
@@ -133,6 +144,10 @@ function New-JIMSyncRule {
                 metaverseObjectTypeId = $MetaverseObjectTypeId
                 direction = $directionValue
                 enabled = $Enabled
+            }
+
+            if ($PSBoundParameters.ContainsKey('Description')) {
+                $body.description = $Description
             }
 
             if ($ProjectToMetaverse) {
