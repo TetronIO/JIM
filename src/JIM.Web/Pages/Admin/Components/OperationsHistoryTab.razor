@@ -522,9 +522,9 @@
                         </div>
                         break;
 
-                    case ActivityTargetType.ExampleDataTemplate:
+                    case ActivityTargetType.DataGeneration:
                         <div>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Example Data Template</MudText><br/>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Data Generation</MudText><br/>
                             @if (_selectedActivity.ExampleDataTemplateId.HasValue)
                             {
                                 <MudLink Typo="Typo.body1" Href="@($"/admin/example-data/templates/{_selectedActivity.ExampleDataTemplateId}")">@_selectedActivity.TargetName</MudLink>

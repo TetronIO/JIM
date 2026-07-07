@@ -37,6 +37,8 @@
                     @switch (_activity.TargetType)
                     {
                         case ActivityTargetType.ExampleDataTemplate:
+                        case ActivityTargetType.DataGeneration:
+                            @* Both template config-changes and data-generation runs carry ExampleDataTemplateId; deep-link to the template. *@
                             <MudLink Href="@($"/admin/example-data/templates/{_activity.ExampleDataTemplateId}")">@_activity.TargetName</MudLink>
                             break;
                         case ActivityTargetType.ConnectedSystem when Helpers.GetConnectedSystemActivityHref(_activity.ConnectedSystemId, _activity.TargetOperationType) is { } connectedSystemHref:
@@ -62,8 +64,9 @@
                         case ActivityTargetType.MetaverseObjectType:
                             <MudLink Href="/admin/schema">@_activity.TargetName</MudLink>
                             break;
-                        case ActivityTargetType.ServiceSetting:
-                            <MudLink Href="/admin/settings">@_activity.TargetName</MudLink>
+                        case ActivityTargetType.ServiceSetting when Helpers.GetServiceSettingActivityHref(_activity.TargetName) is { } serviceSettingHref:
+                            @* Service Settings have no page of their own; deep-link with the name pre-filled into the search box. *@
+                            <MudLink Href="@serviceSettingHref">@_activity.TargetName</MudLink>
                             break;
                         case ActivityTargetType.Schedule:
                             <MudLink Href="/admin/operations?t=schedules">@_activity.TargetName</MudLink>

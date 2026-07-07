@@ -23,6 +23,9 @@ public class SeedingServerInstanceSettingsTests
         _mockRepository = new Mock<IRepository>();
         _mockServiceSettingsRepo = new Mock<IServiceSettingsRepository>();
         _mockRepository.Setup(r => r.ServiceSettings).Returns(_mockServiceSettingsRepo.Object);
+        // SyncServiceSettingsAsync diffs the setting keys before and after its loop to baseline newly-created settings;
+        // these tests do not exercise that path, so return an empty set (no baselines recorded).
+        _mockServiceSettingsRepo.Setup(r => r.GetAllSettingsAsync()).ReturnsAsync(new List<ServiceSetting>());
         _application = new JimApplication(_mockRepository.Object);
     }
 

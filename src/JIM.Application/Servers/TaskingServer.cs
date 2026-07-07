@@ -101,11 +101,14 @@ namespace JIM.Application.Servers
                 var template = await Application.ExampleData.GetTemplateAsync(dataGenerationWorkerTask.TemplateId) ??
                     throw new InvalidDataException("CreateWorkerTaskAsync: template not found for id " + dataGenerationWorkerTask.TemplateId);
 
-                // every data generation operation requires tracking with an activity...
+                // every data generation operation requires tracking with an activity. A generation run is an
+                // operational activity, not a configuration change, so it is recorded under the DataGeneration target
+                // type (System category), distinct from the template's own configuration-change history
+                // (ExampleDataTemplate). It still links to its template via ExampleDataTemplateId for context.
                 var activity = new Activity
                 {
                     TargetName = template.Name,
-                    TargetType = ActivityTargetType.ExampleDataTemplate,
+                    TargetType = ActivityTargetType.DataGeneration,
                     TargetOperationType = ActivityTargetOperationType.Execute,
                     ExampleDataTemplateId = template.Id
                 };

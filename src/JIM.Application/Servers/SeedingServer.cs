@@ -571,6 +571,27 @@ internal class SeedingServer
             dataGenerationTemplatesToCreate,
             connectorDefinitions);
 
+        // Record a System-attributed Create Activity and version-1 baseline for each built-in Metaverse Object Type and
+        // Metaverse Attribute created this pass, grouped under the seeding pass's parent Activity. Like the Predefined
+        // Searches and Connector Definitions below, the schema is persisted in one cross-referencing batch (attributes
+        // bind to object types), so the baseline is recorded after the batch rather than by re-routing each object
+        // through an individual audited create. The lists hold only objects created this pass (Get/PrepareMetaverse*
+        // only add when absent), so a restart re-baselines nothing. Object types are recorded before attributes so the
+        // higher-level schema entities lead the children list.
+        if (objectTypesToCreate.Count > 0)
+        {
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            foreach (var objectType in objectTypesToCreate)
+                await Application.Metaverse.RecordSeededMetaverseObjectTypeBaselineAsync(objectType.Id, objectType.Name, parentActivityId);
+        }
+
+        if (attributesToCreate.Count > 0)
+        {
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            foreach (var attribute in attributesToCreate)
+                await Application.Metaverse.RecordSeededMetaverseAttributeBaselineAsync(attribute.Id, attribute.Name, parentActivityId);
+        }
+
         // Record a System-attributed Create Activity and version-1 baseline snapshot for each built-in Predefined
         // Search created above, grouped under the seeding pass's parent Activity, so their origin is visible in the
         // change history and under System Initialisation (matching the built-in Role and Schedule). The list holds
@@ -591,6 +612,24 @@ internal class SeedingServer
             var parentActivityId = await GetOrCreateSeedingActivityAsync();
             foreach (var connectorDefinition in connectorDefinitions)
                 await Application.ConnectedSystems.RecordSeededConnectorDefinitionBaselineAsync(connectorDefinition.Id, connectorDefinition.Name, parentActivityId);
+        }
+
+        // Record baselines for the built-in Example Data Sets and the built-in Example Data Template created this pass.
+        // Both are batch-seeded (like the Predefined Searches and Connector Definitions), so their baseline is recorded
+        // after the batch persists; PrepareExampleDataSetAsync / PrepareUsersAndGroupsExampleDataTemplateAsync only add
+        // objects that did not already exist, so a restart re-baselines nothing.
+        if (exampleDataSetsToCreate.Count > 0)
+        {
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            foreach (var exampleDataSet in exampleDataSetsToCreate)
+                await Application.ExampleData.RecordSeededExampleDataSetBaselineAsync(exampleDataSet.Id, exampleDataSet.Name, parentActivityId);
+        }
+
+        if (dataGenerationTemplatesToCreate.Count > 0)
+        {
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            foreach (var exampleDataTemplate in dataGenerationTemplatesToCreate)
+                await Application.ExampleData.RecordSeededExampleDataTemplateBaselineAsync(exampleDataTemplate.Id, exampleDataTemplate.Name, parentActivityId);
         }
 
         stopwatch.Stop();
@@ -773,53 +812,50 @@ internal class SeedingServer
     /// get rendering hints set correctly without requiring a fresh seed.
     /// Uses the repository directly to avoid creating audit Activities for system-level changes.
     /// </summary>
-    internal async Task SyncBuiltInAttributeRenderingHintsAsync()
+    /// <summary>
+    /// Re-records System-attributed version-1 baseline Activities for every preserved built-in configuration object,
+    /// grouped under the seeding pass's parent Activity. Called after a factory reset: the reset truncates the
+    /// Activities table (so all configuration-change baselines are lost) but preserves the built-in seed objects
+    /// (BuiltIn = true rows are not customer data), and the ordinary re-seed no-ops for them because they still exist.
+    /// Without this, a factory reset would permanently strip the factory-state provenance from the change history.
+    /// Schedules are excluded: they are truncated and re-created through their audited path
+    /// (<see cref="SeedBuiltInSchedulesAsync"/>), which records their baseline. The capture dedupe-guard makes each
+    /// record idempotent, so a second call finds the just-written baseline and records nothing further.
+    /// </summary>
+    internal async Task RebaselineBuiltInConfigurationAsync()
     {
-        var stopwatch = new Stopwatch();
-        stopwatch.Start();
-        Log.Information("SyncBuiltInAttributeRenderingHintsAsync: Starting...");
+        // If configuration change tracking is disabled there is no change history to restore, so skip re-baselining
+        // entirely (each RecordSeeded...Baseline call would no-op inside the capture guard anyway). This also avoids
+        // enumerating every configuration type, and creating a seeding parent Activity, when there is nothing to record.
+        if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+            return;
 
-        var renderingHints = new Dictionary<string, AttributeRenderingHint>
-        {
-            // Table: large reference MVAs needing columns/search/pagination
-            { Constants.BuiltInAttributes.StaticMembers, AttributeRenderingHint.Table },
-            { Constants.BuiltInAttributes.Owners, AttributeRenderingHint.Table },
+        var parentActivityId = await GetOrCreateSeedingActivityAsync();
 
-            // ChipSet: short text values that display well as horizontal chips
-            { Constants.BuiltInAttributes.OtherTelephones, AttributeRenderingHint.ChipSet },
-            { Constants.BuiltInAttributes.OtherMobiles, AttributeRenderingHint.ChipSet },
-            { Constants.BuiltInAttributes.OtherIpPhones, AttributeRenderingHint.ChipSet },
-            { Constants.BuiltInAttributes.OtherPagers, AttributeRenderingHint.ChipSet },
-            { Constants.BuiltInAttributes.OtherFacsimileTelephoneNumbers, AttributeRenderingHint.ChipSet },
-            { Constants.BuiltInAttributes.PostOfficeBoxes, AttributeRenderingHint.ChipSet },
+        foreach (var objectType in (await Application.Metaverse.GetMetaverseObjectTypesAsync(includeChildObjects: false)).Where(t => t.BuiltIn))
+            await Application.Metaverse.RecordSeededMetaverseObjectTypeBaselineAsync(objectType.Id, objectType.Name, parentActivityId);
 
-            // List: long/variable-length values that need vertical stacking
-            { Constants.BuiltInAttributes.ProxyAddresses, AttributeRenderingHint.List },
-            { Constants.BuiltInAttributes.AltSecurityIdentities, AttributeRenderingHint.List },
-            { Constants.BuiltInAttributes.PostalAddresses, AttributeRenderingHint.List },
-            { Constants.BuiltInAttributes.Urls, AttributeRenderingHint.List },
-            { Constants.BuiltInAttributes.SidHistory, AttributeRenderingHint.List },
-            { Constants.BuiltInAttributes.UserCertificates, AttributeRenderingHint.List },
-        };
+        foreach (var attribute in (await Application.Metaverse.GetMetaverseAttributesAsync() ?? new List<MetaverseAttribute>()).Where(a => a.BuiltIn))
+            await Application.Metaverse.RecordSeededMetaverseAttributeBaselineAsync(attribute.Id, attribute.Name, parentActivityId);
 
-        var updatedCount = 0;
-        foreach (var (name, hint) in renderingHints)
-        {
-            var attribute = await Application.Metaverse.GetMetaverseAttributeAsync(name, withChangeTracking: true);
-            if (attribute != null && attribute.RenderingHint != hint)
-            {
-                attribute.RenderingHint = hint;
-                await Application.Repository.Metaverse.UpdateMetaverseAttributeAsync(attribute);
-                updatedCount++;
-                Log.Debug("SyncBuiltInAttributeRenderingHintsAsync: Set {Name} to {Hint}", name, hint);
-            }
-        }
+        foreach (var search in (await Application.Search.GetPredefinedSearchHeadersAsync()).Where(s => s.BuiltIn))
+            await Application.Search.RecordSeededPredefinedSearchBaselineAsync(search.Id, search.Name, parentActivityId);
 
-        stopwatch.Stop();
-        Log.Information("SyncBuiltInAttributeRenderingHintsAsync: Completed in {Elapsed}. Updated {Count} attributes.",
-            stopwatch.Elapsed, updatedCount);
+        foreach (var connector in (await Application.ConnectedSystems.GetConnectorDefinitionHeadersAsync()).Where(c => c.BuiltIn))
+            await Application.ConnectedSystems.RecordSeededConnectorDefinitionBaselineAsync(connector.Id, connector.Name, parentActivityId);
+
+        foreach (var dataSet in (await Application.ExampleData.GetExampleDataSetsAsync()).Where(d => d.BuiltIn))
+            await Application.ExampleData.RecordSeededExampleDataSetBaselineAsync(dataSet.Id, dataSet.Name, parentActivityId);
+
+        foreach (var template in (await Application.ExampleData.GetTemplatesAsync()).Where(t => t.BuiltIn))
+            await Application.ExampleData.RecordSeededExampleDataTemplateBaselineAsync(template.Id, template.Name, parentActivityId);
+
+        foreach (var role in (await Application.Security.GetRolesAsync()).Where(r => r.BuiltIn))
+            await Application.Security.RecordSeededRoleBaselineAsync(role.Id, role.Name, parentActivityId);
+
+        foreach (var setting in await Application.ServiceSettings.GetAllSettingsAsync())
+            await Application.ServiceSettings.RecordSeededServiceSettingBaselineAsync(setting.Key, setting.DisplayName, parentActivityId);
     }
-
     /// <summary>
     /// Seeds and synchronises service settings from environment variables.
     /// This should be called on every application startup to ensure settings are available.
@@ -830,6 +866,13 @@ internal class SeedingServer
         var stopwatch = new Stopwatch();
         stopwatch.Start();
         Log.Information("SyncServiceSettingsAsync: Starting service settings synchronisation...");
+
+        // Capture the keys that already exist so that, after the sync loop, a System-attributed version-1 baseline can
+        // be recorded for only the settings genuinely created in this pass. Diffing keys before/after keeps this out of
+        // the ~20 individual SeedSettingAsync call sites; see RecordSeededServiceSettingBaselineAsync for why the
+        // baseline is deliberately recorded after the full loop (the capture reads the toggle and hash-key settings,
+        // which are themselves seeded here).
+        var existingSettingKeys = (await Application.ServiceSettings.GetAllSettingsAsync()).Select(s => s.Key).ToHashSet();
 
         // SSO Settings (read-only, from environment variables)
         await SeedSettingAsync(new ServiceSetting
@@ -1124,6 +1167,30 @@ internal class SeedingServer
             IsReadOnly = true
         }, () => Guid.NewGuid().ToString());
 
+        // Record a System-attributed Create Activity and version-1 baseline for each built-in Service Setting created
+        // this pass, grouped under the seeding parent, so their factory origin is visible in the change history and
+        // under System Initialisation (matching the other seeded configuration types). The list is diffed against the
+        // keys present before the loop, so a normal restart (all settings already present) records nothing and creates
+        // no parent Activity; a single new setting shipped in an upgrade appears under its own System Initialisation
+        // entry. Recording here, after the full loop, guarantees the toggle and hash-key settings the capture depends
+        // on already exist.
+        var settingsAfterSync = await Application.ServiceSettings.GetAllSettingsAsync();
+        var createdSettings = settingsAfterSync.Where(s => !existingSettingKeys.Contains(s.Key)).ToList();
+        if (createdSettings.Count > 0)
+        {
+            var parentActivityId = await GetOrCreateSeedingActivityAsync();
+            foreach (var setting in createdSettings)
+                await Application.ServiceSettings.RecordSeededServiceSettingBaselineAsync(setting.Key, setting.DisplayName, parentActivityId);
+        }
+
+        // Audit environment-driven changes to pre-existing read-only settings (SSO endpoints, secrets, encryption key
+        // path, ...): when an operator changes the deployment's .env and restarts, SyncServiceSettingsAsync rewrites
+        // these repository-direct, which by itself records nothing. Capture a System-attributed Update for each one
+        // whose value actually changed; the method is churn-free (no Activity, and no parent Activity, when the value
+        // is unchanged), so an ordinary restart records nothing.
+        foreach (var setting in settingsAfterSync.Where(s => existingSettingKeys.Contains(s.Key) && s.IsReadOnly))
+            await Application.ServiceSettings.RecordSeededServiceSettingUpdateIfChangedAsync(setting.Key, setting.DisplayName, GetOrCreateSeedingActivityAsync);
+
         stopwatch.Stop();
         Log.Information($"SyncServiceSettingsAsync: Completed in: {stopwatch.Elapsed}");
     }
@@ -1351,6 +1418,7 @@ internal class SeedingServer
                 Culture = culture,
                 BuiltIn = true
             };
+            AuditHelper.SetCreatedBySystem(exampleDataSet);
             changes = true;
         }
 

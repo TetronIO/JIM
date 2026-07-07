@@ -9,6 +9,7 @@ using JIM.Application.Services;
 using JIM.Data;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.ExampleData;
 using JIM.Models.Logic;
 using JIM.Models.Scheduling;
 using JIM.Models.Staging;
@@ -541,6 +542,82 @@ public class ConfigurationSnapshotServiceTests
         }
 
         Assert.That(HashFor([1, 2, 3]), Is.Not.EqualTo(HashFor([1, 2, 4])));
+    }
+
+    // -- Example Data Set scope ----------------------------------------------------------------------------------------
+
+    [Test]
+    public void CreateSnapshot_ExampleDataSet_CapturesMetadataAndValueCountNotIndividualValues()
+    {
+        var dataSet = new ExampleDataSet
+        {
+            Id = 12,
+            Name = "Job Titles",
+            Culture = "en",
+            BuiltIn = true,
+            Values =
+            {
+                new ExampleDataSetValue { Id = 1, StringValue = "UNIQUEJOBTITLEONE" },
+                new ExampleDataSetValue { Id = 2, StringValue = "UNIQUEJOBTITLETWO" }
+            }
+        };
+
+        var snapshot = _service.CreateSnapshot(dataSet, HashKey);
+        var json = ConfigurationSnapshotService.Serialise(snapshot);
+
+        Assert.That(snapshot.ObjectType, Is.EqualTo("ExampleDataSet"));
+        Assert.That(snapshot.ObjectId, Is.EqualTo(12));
+        Assert.That(Child(snapshot.Root, "name")!.Value, Is.EqualTo("Job Titles"));
+        Assert.That(Child(snapshot.Root, "culture")!.Value, Is.EqualTo("en"));
+        Assert.That(Child(snapshot.Root, "builtIn")!.Value, Is.EqualTo("true"));
+        Assert.That(Child(snapshot.Root, "valueCount")!.Value, Is.EqualTo("2"));
+        // The value collection can hold thousands of strings; only its size is captured, never the values themselves.
+        Assert.That(json, Does.Not.Contain("UNIQUEJOBTITLEONE"));
+        Assert.That(json, Does.Not.Contain("UNIQUEJOBTITLETWO"));
+    }
+
+    // -- Example Data Template scope -----------------------------------------------------------------------------------
+
+    [Test]
+    public void CreateSnapshot_ExampleDataTemplate_CapturesObjectTypesAttributesAndReferencedSets()
+    {
+        var userType = new MetaverseObjectType { Id = 1, Name = "User", PluralName = "Users" };
+        var emailAttribute = new MetaverseAttribute { Id = 5, Name = "Email" };
+        var firstnamesSet = new ExampleDataSet { Id = 7, Name = "Firstnames" };
+
+        var template = new ExampleDataTemplate { Id = 3, Name = "Users and Groups", BuiltIn = true };
+        var objectType = new ExampleDataObjectType { Id = 9, MetaverseObjectType = userType, ObjectsToCreate = 10000 };
+        objectType.TemplateAttributes.Add(new ExampleDataTemplateAttribute
+        {
+            Id = 20,
+            MetaverseAttribute = emailAttribute,
+            PopulatedValuesPercentage = 100,
+            Pattern = "{First Name}@example.io",
+            ExampleDataSetInstances = { new ExampleDataSetInstance { Id = 30, ExampleDataSet = firstnamesSet, Order = 0 } }
+        });
+        template.ObjectTypes.Add(objectType);
+
+        var snapshot = _service.CreateSnapshot(template, HashKey);
+
+        Assert.That(snapshot.ObjectType, Is.EqualTo("ExampleDataTemplate"));
+        Assert.That(snapshot.ObjectId, Is.EqualTo(3));
+        Assert.That(Child(snapshot.Root, "name")!.Value, Is.EqualTo("Users and Groups"));
+
+        var objectTypes = Child(snapshot.Root, "objectTypes")!;
+        var objectTypeNode = objectTypes.Children!.Single();
+        Assert.That(objectTypeNode.ItemId, Is.EqualTo(9));
+        Assert.That(Child(objectTypeNode, "metaverseObjectTypeId")!.Value, Is.EqualTo("1"));
+        Assert.That(Child(objectTypeNode, "objectsToCreate")!.Value, Is.EqualTo("10000"));
+
+        var attributeNode = Child(objectTypeNode, "attributes")!.Children!.Single();
+        Assert.That(attributeNode.ItemId, Is.EqualTo(20));
+        Assert.That(Child(attributeNode, "metaverseAttributeId")!.Value, Is.EqualTo("5"));
+        Assert.That(Child(attributeNode, "pattern")!.Value, Is.EqualTo("{First Name}@example.io"));
+        Assert.That(Child(attributeNode, "populatedValuesPercentage")!.Value, Is.EqualTo("100"));
+
+        var referencedSet = Child(attributeNode, "referencedDataSets")!.Children!.Single();
+        Assert.That(referencedSet.ItemId, Is.EqualTo(30));
+        Assert.That(referencedSet.Value, Is.EqualTo("7"), "a referenced data set is captured by its stable id");
     }
 
     // -- helpers -------------------------------------------------------------------------------------------------------

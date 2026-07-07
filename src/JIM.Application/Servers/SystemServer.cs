@@ -115,6 +115,13 @@ public class SystemServer
             // inoperative until then.
             await Application.Seeding.SeedBuiltInSchedulesAsync();
 
+            // Re-record the version-1 baselines for the preserved built-in configuration objects (Metaverse schema,
+            // Predefined Searches, Connector Definitions, Example Data, Roles, Service Settings). The wipe truncated the
+            // Activities table but kept these BuiltIn rows, so without this their factory-state provenance would be
+            // permanently lost; the ordinary re-seed no-ops for them because they still exist. Schedules are handled by
+            // SeedBuiltInSchedulesAsync above.
+            await Application.Seeding.RebaselineBuiltInConfigurationAsync();
+
             // The reseed lazily creates the "System Initialisation" parent Activity that groups seeded objects.
             // Complete it here, exactly as JimApplication.InitialiseDatabaseAsync does after startup seeding;
             // leaving it InProgress would misreport the reseed as unfinished and block any subsequent reset via

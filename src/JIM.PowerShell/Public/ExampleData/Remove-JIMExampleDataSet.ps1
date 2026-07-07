@@ -13,6 +13,10 @@ function Remove-JIMExampleDataSet {
     .PARAMETER Id
         The unique identifier of the Example Data Set to remove.
 
+    .PARAMETER ChangeReason
+        Optional reason for the change, recorded on the audit Activity and shown in the Example Data Set's
+        configuration change history.
+
     .PARAMETER Force
         Bypasses confirmation prompts.
 
@@ -29,6 +33,11 @@ function Remove-JIMExampleDataSet {
 
         Removes the specified Example Data Set without confirmation.
 
+    .EXAMPLE
+        Remove-JIMExampleDataSet -Id 5 -Force -ChangeReason "Retiring obsolete set (CHG0102)"
+
+        Removes the Example Data Set and records the reason on its configuration change history.
+
     .LINK
         Get-JIMExampleDataSet
         New-JIMExampleDataSet
@@ -38,6 +47,9 @@ function Remove-JIMExampleDataSet {
     param(
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$Id,
+
+        [ValidateNotNullOrEmpty()]
+        [string]$ChangeReason,
 
         [switch]$Force
     )
@@ -63,7 +75,11 @@ function Remove-JIMExampleDataSet {
             Write-Verbose "Removing Example Data Set: $Id ($dataSetName)"
 
             try {
-                Invoke-JIMApi -Endpoint "/api/v1/example-data/example-data-sets/$Id" -Method 'DELETE'
+                $endpoint = "/api/v1/example-data/example-data-sets/$Id"
+                if ($ChangeReason) {
+                    $endpoint += "?changeReason=$([uri]::EscapeDataString($ChangeReason))"
+                }
+                Invoke-JIMApi -Endpoint $endpoint -Method 'DELETE'
                 Write-Verbose "Removed Example Data Set: $Id"
             }
             catch {

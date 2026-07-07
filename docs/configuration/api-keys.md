@@ -16,6 +16,10 @@ If you lose the secret, you must delete the key and create a new one.
 
 Every key begins with `jim_` for easy identification in logs and configuration files, followed by a random secret. Only the prefix is shown after creation, so you can identify which key is in use without exposing its secret.
 
+## Name and description
+
+Unlike the prefix and secret, which are fixed at creation, the Name and Description can be edited at any time from the key's Details tab in the admin portal.
+
 ## Expiry
 
 Keys can be created with an absolute expiry date or with no expiry. Expired keys are rejected automatically and need to be replaced.
