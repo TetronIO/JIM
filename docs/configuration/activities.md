@@ -44,6 +44,10 @@ For Run Profile activities, JIM stores a per-object record of what happened (wit
 
 A schedule execution typically appears as a parent activity with one child activity per step. Use the children listing to walk down a schedule's execution tree from the top-level run into the individual operations it triggered.
 
+## Target links
+
+On an activity's detail page, the Target links to where that object is managed: a Synchronisation Rule change opens the rule's detail page, a schema import opens the Connected System's Schema tab, and so on. Service Settings have no page of their own, so their Target link opens the Service Settings page with a matching search already applied, taking you straight to that setting instead of the full list.
+
 ## Filtering the Activity list
 
 The Activity page in the admin portal filters a busy list down to what you are reviewing:
