@@ -543,6 +543,15 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     }
 }
 
+/* Higher-contrast inline code, for use on dimmed/secondary helper text over a low-contrast surface
+   (e.g. the Attribute Priority explainer on the grey expander backdrop), where the default translucent
+   background and inherited secondary colour wash out. Theme-aware via MudBlazor palette variables. */
+.jim-code-inline.jim-code-inline-strong {
+    color: var(--mud-palette-text-primary);
+    background-color: var(--mud-palette-surface);
+    border: 1px solid var(--mud-palette-lines-default);
+}
+
 .jim-drawer {
     border-right: 1px solid var(--jim-drawer-border-color);
     position: fixed !important;
