@@ -1,8 +1,8 @@
 # Attribute Priority Design Document
 
-- **Status:** Doing (Phases 1 and 2 complete: schema/model/API, engine resolution, auto-assign/densify, recall fallback incl. references, priority-aware drift, AssertedNull/NoContributor observability. Phase 3 Surface 2 (the management home) UI landed: drag-reorder + "Null is a value" on the Metaverse Object Type detail page. Phase 3 Surfaces 1 and 3, and the remaining Phase 4 matrix items, open)
+- **Status:** Doing (Phases 1 and 2 complete: schema/model/API, engine resolution, auto-assign/densify, recall fallback incl. references, priority-aware drift, AssertedNull/NoContributor observability. Phase 3 Surface 2 (the management home) UI landed: drag-reorder + "Null is a value" on the Metaverse Object Type detail page, with `AttributePriorityService` unit tests and the "Null is a value" concept doc complete. Open: Phase 3 Surface 1 (mapping-editor precedence context + NullIsValue toggle), Surface 1c (Synchronisation Rule list priority indicator) and Surface 3 (Data Flow discovery page); Phase 4 fine-grained-authority and grace-period test matrices; Phase 5 Data Flow page docs)
 - **Issue:** [#91](https://github.com/TetronIO/JIM/issues/91)
-- **Last Updated**: 2026-07-06
+- **Last Updated**: 2026-07-07
 
 ## Overview
 
@@ -804,7 +804,7 @@ Not a sub-issue: **#846** (holistic Guardrails) is deliberately *out of scope* (
 
 #### Phase 4: Testing
 
-- [ ] Unit tests for `AttributePriorityService`
+- [x] Unit tests for `AttributePriorityService` (`test/JIM.Worker.Tests/Servers/AttributePriorityServiceTests.cs`)
 - [x] Integration tests for multi-source priority resolution (Scenario 14 `BaselineResolution`: two OpenLDAP suffixes joined on Employee ID; the priority-1 contributor wins every contested scalar, reference and MVA with correct rule provenance, verified on real PostgreSQL. Executing it surfaced and fixed two real defects the in-memory tests could not see: the bulk COPY/INSERT persistence for newly projected Metaverse Objects dropped `ContributedBySyncRuleId`/`NullValue`, collapsing resolution to last-writer-wins on new objects; and re-election survivor discovery relied on the `mvo.ConnectedSystemObjects` navigation, which real page loads never hydrate, so recalls blanked objects instead of handing over)
 - [x] Integration tests for NullIsValue behaviour, including the tri-state cases (Scenario 14, all verified on real PostgreSQL):
   - [x] Priority-1 rule has no opinion (not joined): lower-priority rule contributes fully despite NullIsValue on priority 1 (HR migration scenario) (`NotJoinedNoOpinion`)
@@ -831,8 +831,8 @@ Not a sub-issue: **#846** (holistic Guardrails) is deliberately *out of scope* (
 
 #### Phase 5: Documentation
 
-- [ ] Add user documentation for the attribute priority surfaces (object type detail page management home and the Data Flow page)
-- [ ] Add user documentation for NullIsValue setting
+- [ ] Add user documentation for the attribute priority surfaces (the object type detail page management home is documented in `docs/concepts/attribute-priority.md`; the Data Flow page docs remain, pending Surface 3)
+- [x] Add user documentation for NullIsValue setting (`docs/concepts/attribute-priority.md`)
 - [x] **Reconcile the existing expression-null docs (#844, already shipped).** Done (Jul 2026): `docs/concepts/expressions.md` § "Nulls, Missing Inputs, and Whitespace" point 1 now describes the single-contributor clear vs multi-contributor priority resolution (hand-over to the next contributor in the same run, "Null is a value" authoritative clear, a lower-priority null never disturbs the winning value), linking to `concepts/attribute-priority.md`; the date-function note and the summary table carry the same qualification. Points 2 and 3 unchanged (still valid). The maintenance comment that tracked this has been removed.
 
 ---
