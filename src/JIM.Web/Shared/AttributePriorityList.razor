@@ -260,7 +260,7 @@ else
             await OnSaved.InvokeAsync();
             _dropContainer?.Refresh();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.Data.Common.DbException or ObjectDisposedException)
         {
             Snackbar.Add($"Failed to save attribute priority order: {ex.Message}", Severity.Error);
         }
