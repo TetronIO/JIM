@@ -35,104 +35,102 @@
             <MudPaper Class="pa-4" Outlined="true">
                 <MudForm @bind-IsValid="_detailsFormValid">
                     <PrefilledFormValidator />
-                    <MudGrid Spacing="4">
-                        <MudItem xs="12" sm="6" md="4">
-                            <MudText Typo="Typo.button" Class="mud-text-secondary">ID:</MudText>
-                            <MudText Class="jim-text-code">@_apiKey.Id</MudText>
-                        </MudItem>
-
-                        <MudItem xs="12" sm="6" md="4">
-                            <MudTextField T="string" @bind-Value="_apiKey.Name" Label="Name" Required="true" RequiredError="A name is required"
-                                Immediate="true" Variant="Variant.Outlined" />
-                        </MudItem>
-
-                        <MudItem xs="12" sm="6" md="4">
-                            <MudText Typo="Typo.button" Class="mud-text-secondary">Key Prefix:</MudText>
-                            <span class="jim-code-inline">@_apiKey.KeyPrefix...</span>
-                        </MudItem>
-
-                        <MudItem xs="12" sm="6" md="4">
-                            <MudText Typo="Typo.button" Class="mud-text-secondary">Status:</MudText><br />
-                            @if (_apiKey.IsEnabled)
-                            {
-                                <MudChip T="string" Variant="Variant.Text" Color="Color.Success" Class="ml-0">Enabled</MudChip>
-                            }
-                            else
-                            {
-                                <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Class="ml-0">Disabled</MudChip>
-                            }
-                        </MudItem>
-
-                        <MudItem xs="12" sm="6" md="4">
-                            <MudText Typo="Typo.button" Class="mud-text-secondary">Expires:</MudText>
-                            @if (_apiKey.ExpiresAt.HasValue)
-                            {
-                                var expiresAt = _apiKey.ExpiresAt.Value;
-                                @if (expiresAt < DateTime.UtcNow)
-                                {
-                                    <br /><MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="ml-0">Expired (@expiresAt.ToLocalTime().ToFriendlyDate())</MudChip>
-                                }
-                                else
-                                {
-                                    <MudText>@expiresAt.ToLocalTime().ToFriendlyDate()</MudText>
-                                }
-                            }
-                            else
-                            {
-                                <MudText>Never</MudText>
-                            }
-                        </MudItem>
-
-                        <MudItem xs="12" sm="6" md="4">
-                            <MudText Typo="Typo.button" Class="mud-text-secondary">Last Used:</MudText>
-                            @if (_apiKey.LastUsedAt.HasValue)
-                            {
-                                var lastUsedAt = _apiKey.LastUsedAt.Value;
-                                <MudText>
-                                    @lastUsedAt.ToLocalTime().ToFriendlyDate()
-                                    @if (!string.IsNullOrEmpty(_apiKey.LastUsedFromIp))
-                                    {
-                                        <span> from <span class="jim-text-code">@_apiKey.LastUsedFromIp</span></span>
-                                    }
-                                </MudText>
-                            }
-                            else
-                            {
-                                <MudText>Never</MudText>
-                            }
-                        </MudItem>
-
-                        <MudItem xs="12" sm="6" md="4">
-                            <MudText Typo="Typo.button" Class="mud-text-secondary">Roles:</MudText><br />
-                            @if (_apiKey.Roles.Count > 0)
-                            {
-                                @foreach (var role in _apiKey.Roles)
-                                {
-                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="mr-1">@role.Name</MudChip>
-                                }
-                            }
-                            else
-                            {
-                                <MudText>No roles assigned</MudText>
-                            }
-                        </MudItem>
-
-                        @if (_apiKey.IsInfrastructureKey)
-                        {
-                            <MudItem xs="12" sm="6" md="4">
-                                <MudText Typo="Typo.button" Class="mud-text-secondary">Type:</MudText><br />
-                                <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.Construction">Infrastructure Key</MudChip>
-                            </MudItem>
-                        }
-
-                        <MudItem xs="12">
-                            <MudTextField T="string" @bind-Value="_apiKey.Description" Label="Description" Required="false"
-                                Lines="2" MaxLines="6" Sizing="InputSizing.Auto" Variant="Variant.Outlined" />
-                        </MudItem>
-                    </MudGrid>
+                    <MudTextField T="string" @bind-Value="_apiKey.Name" Label="Name" Required="true" RequiredError="A name is required"
+                        Immediate="true" Variant="Variant.Outlined" />
+                    <MudTextField T="string" @bind-Value="_apiKey.Description" Label="Description" Required="false"
+                        Lines="2" MaxLines="6" Sizing="InputSizing.Auto" Variant="Variant.Outlined" Class="mt-5" />
                 </MudForm>
             </MudPaper>
             <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!_detailsFormValid)" Class="mt-5" OnClick="HandleSaveDetailsAsync" DropShadow="false">Save Changes</MudButton>
+
+            <MudPaper Class="pa-4 mt-6" Outlined="true">
+                <MudText Typo="Typo.h6" Class="mb-4">Metadata</MudText>
+                <MudGrid Spacing="4">
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">ID:</MudText>
+                        <MudText Class="jim-text-code">@_apiKey.Id</MudText>
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Key Prefix:</MudText><br />
+                        <span class="jim-code-inline">@_apiKey.KeyPrefix...</span>
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Status:</MudText><br />
+                        @if (_apiKey.IsEnabled)
+                        {
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Success" Class="ml-0">Enabled</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Default" Class="ml-0">Disabled</MudChip>
+                        }
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Expires:</MudText>
+                        @if (_apiKey.ExpiresAt.HasValue)
+                        {
+                            var expiresAt = _apiKey.ExpiresAt.Value;
+                            @if (expiresAt < DateTime.UtcNow)
+                            {
+                                <br /><MudChip T="string" Variant="Variant.Text" Color="Color.Error" Class="ml-0">Expired (@expiresAt.ToLocalTime().ToFriendlyDate())</MudChip>
+                            }
+                            else
+                            {
+                                <MudText>@expiresAt.ToLocalTime().ToFriendlyDate()</MudText>
+                            }
+                        }
+                        else
+                        {
+                            <MudText>Never</MudText>
+                        }
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Last Used:</MudText>
+                        @if (_apiKey.LastUsedAt.HasValue)
+                        {
+                            var lastUsedAt = _apiKey.LastUsedAt.Value;
+                            <MudText>
+                                @lastUsedAt.ToLocalTime().ToFriendlyDate()
+                                @if (!string.IsNullOrEmpty(_apiKey.LastUsedFromIp))
+                                {
+                                    <span> from <span class="jim-text-code">@_apiKey.LastUsedFromIp</span></span>
+                                }
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudText>Never</MudText>
+                        }
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Roles:</MudText><br />
+                        @if (_apiKey.Roles.Count > 0)
+                        {
+                            @foreach (var role in _apiKey.Roles)
+                            {
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Info" Class="mr-1">@role.Name</MudChip>
+                            }
+                        }
+                        else
+                        {
+                            <MudText>No roles assigned</MudText>
+                        }
+                    </MudItem>
+
+                    @if (_apiKey.IsInfrastructureKey)
+                    {
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">Type:</MudText><br />
+                            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.Construction">Infrastructure Key</MudChip>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudPaper>
         </MudTabPanel>
 
         <MudTabPanel Text="Activity">
