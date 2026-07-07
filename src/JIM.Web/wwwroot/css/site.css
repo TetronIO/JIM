@@ -1081,6 +1081,15 @@ html[lang] .mud-alert-filled-normal {
     border-radius: var(--mud-default-borderradius);
 }
 
+/* MudField content (e.g. a read-only Thumbprint or Serial Number) has no spaces to wrap at and is
+   a flex child by default, so a long unbroken value (min-width: auto) overflows past the outline
+   instead of shrinking to fit. Let it wrap and shrink to the field's own width. */
+.mud-input-control.mud-field .mud-input-slot {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+
 /* Switch/checkbox label text */
 .mud-switch .mud-switch-label,
 .mud-checkbox .mud-checkbox-label {
