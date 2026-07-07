@@ -22,13 +22,9 @@
                 <ToolBarContent>
                     <TableDensityToggle @bind-Dense="_dense" />
                     <MudSpacer />
-                    <MudTextField T="string" Value="@_searchText"
-                                  ValueChanged="@OnSearch"
-                                  Placeholder="@($"Search {AttributeName.ToLower()}...")"
-                                  Adornment="Adornment.Start"
-                                  AdornmentIcon="@Icons.Material.Filled.Search"
-                                  Immediate="true" DebounceInterval="300"
-                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <SearchField Value="@_searchText"
+                                 ValueChanged="@OnSearch"
+                                 Placeholder="@($"Search {AttributeName.ToLower()}...")" />
                 </ToolBarContent>
                 <HeaderContent>
                     <MudTh>Display Name</MudTh>
@@ -72,13 +68,9 @@
                 <ToolBarContent>
                     <TableDensityToggle @bind-Dense="_dense" />
                     <MudSpacer />
-                    <MudTextField T="string" Value="@_searchText"
-                                  ValueChanged="@OnSearch"
-                                  Placeholder="@($"Search {AttributeName.ToLower()}...")"
-                                  Adornment="Adornment.Start"
-                                  AdornmentIcon="@Icons.Material.Filled.Search"
-                                  Immediate="true" DebounceInterval="300"
-                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <SearchField Value="@_searchText"
+                                 ValueChanged="@OnSearch"
+                                 Placeholder="@($"Search {AttributeName.ToLower()}...")" />
                 </ToolBarContent>
                 <HeaderContent>
                     <MudTh>Value</MudTh>

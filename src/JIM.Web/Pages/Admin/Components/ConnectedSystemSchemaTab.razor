@@ -226,16 +226,10 @@
 
                 <MudGrid>
                     <MudItem xs="12" md="8">
-                        <MudTextField T="string"
-                                      @bind-Value="_objectTypeSearchString"
-                                      Immediate="true"
-                                      Clearable="true"
-                                      Label="Search object types"
-                                      Adornment="Adornment.Start"
-                                      AdornmentIcon="@Icons.Material.Filled.Search"
-                                      IconSize="Size.Small"
-                                      Variant="Variant.Outlined"
-                                      HelperText="Show only types whose name contains a specific value" />
+                        <SearchField @bind-Value="_objectTypeSearchString"
+                                     Label="Search object types"
+                                     IconSize="Size.Small"
+                                     HelperText="Show only types whose name contains a specific value" />
                     </MudItem>
                     <MudItem xs="12" md="4" Class="d-flex align-center justify-md-end">
                         <MudChipSet T="bool"
@@ -346,14 +340,10 @@
 
             <MudGrid Class="mt-3">
                 <MudItem xs="@(_selectedObjectTypeHasClasses ? 4 : 6)">
-                    <MudTextField
-                        T="string"
+                    <SearchField
                         @bind-Value="_schemaSearchString"
                         Label="Filter by name"
-                        Adornment="Adornment.Start"
-                        AdornmentIcon="@Icons.Material.Filled.Search"
                         IconSize="Size.Small"
-                        Variant="Variant.Outlined"
                         HelperText="Show only attributes where the name contains a specific value"
                         autocomplete="schema_search_string" />
                 </MudItem>

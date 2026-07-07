@@ -18,6 +18,7 @@ These components exist so a convention has a single source of truth. Prefer the 
 | `<EmptyValue />` | A table cell or inline value that is null/empty | "Empty values" below |
 | `<WhitespaceValue Value="@x" />` | A value that is present but consists only of whitespace (the `<EmptyValue />` sibling) | "Empty values" below |
 | `<TextValueDisplay Value="@x" />` | Any text attribute-value display: dispatches to `<EmptyValue />` / `<WhitespaceValue />` / the value | "Empty values" below |
+| `<SearchField @bind-Value="_x" />` | Any list, table or dialog search/filter box (search-as-you-type, debounced). Use `Value` + `ValueChanged` instead of `@bind-Value` when the handler drives a server reload | "Form action gating and input immediacy" below |
 
 ## Form action gating and input immediacy
 
@@ -28,6 +29,8 @@ Three interaction rules that have repeatedly regressed (multiple times each on a
 - **When a MudForm does not fit** (inline editors, or non-field state such as "at least one day selected"): gate on a small predicate (`CanSave()` / `DisableXButton()`) that mirrors *exactly* the blocking checks in the handler, so the button and the handler cannot drift. See `ScheduleEditorDialog.CanSaveStep()`, `SyncRuleDetailScopingCriteriaGroup.DisableAddCriteriaButton()`.
 
 **2. `Immediate="true"` on typed inputs that drive live UI.** `MudTextField` / `MudNumericField` commit their value on **blur** by default, so anything that reacts to the value (a gated button's `Disabled`, a live preview, inline `Required` validation) will not update until focus leaves the field. If the value drives live UI, set `Immediate="true"`. For search/filter-as-you-type, add `DebounceInterval="300"` so it does not fire every keystroke. `MudSelect`, `MudCheckBox`, `MudRadioGroup`, `MudDatePicker` and `MudSwitch` commit on click and never need this.
+
+**All admin/list/dialog search and filter boxes MUST use the shared `<SearchField>` component** (see the shared-components table above); do not hand-roll one. `<SearchField>` bakes in `Immediate="true"`, the `DebounceInterval` (300ms default; raise it for server or database backed searches), the search adornment icon, dense margin and a clear affordance, so search boxes filter as you type by default. A bare `MudTextField` search box, which commits only on blur, is **not acceptable**. Componentising the pattern is what stops new search boxes regressing to blur-only. The only sanctioned exceptions are multi-criteria forms behind an explicit **Search** button and the log filter behind an explicit **Refresh** (both deliberately not search-as-you-type, because each keystroke would fire an expensive server query); those keep a plain `MudTextField`.
 
 **3. A child value editor MUST notify its parent of edits.** A child component that mutates a by-reference model via `@bind` re-renders only itself; the parent's dependent UI (for example an Add button gated on that model) goes stale. Expose an `[Parameter] public EventCallback OnChanged`, raise it from each input via `@bind-Value:after`, and have the parent wire `OnChanged` to `StateHasChanged` (or its own handler). See `CriterionValueEditor.razor` and its hosts.
 

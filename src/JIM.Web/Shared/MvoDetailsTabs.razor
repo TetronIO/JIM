@@ -139,12 +139,9 @@
                       Elevation="0" Outlined="true"
                       RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync">
                 <ToolBarContent>
-                    <MudTextField T="string" Value="@searchText"
-                                  ValueChanged="@(v => OnMvaSearchTextChanged(group.AttributeName, v))"
-                                  Placeholder="@($"Search {group.AttributeName.ToLower()}...")"
-                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                                  Immediate="true" DebounceInterval="300"
-                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <SearchField Value="@searchText"
+                                 ValueChanged="@(v => OnMvaSearchTextChanged(group.AttributeName, v))"
+                                 Placeholder="@($"Search {group.AttributeName.ToLower()}...")" />
                 </ToolBarContent>
                 <HeaderContent>
                     <MudTh>Display Name</MudTh>
@@ -180,12 +177,9 @@
                       RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChangedAsync"
                       Filter="new Func<MetaverseObjectAttributeValue, bool>(v => FilterMvaTableValue(v, group.AttributeName))">
                 <ToolBarContent>
-                    <MudTextField T="string" Value="@searchText"
-                                  ValueChanged="@(v => OnClientSearchTextChanged(group.AttributeName, v))"
-                                  Placeholder="@($"Search {group.AttributeName.ToLower()}...")"
-                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                                  Immediate="true" DebounceInterval="300"
-                                  Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <SearchField Value="@searchText"
+                                 ValueChanged="@(v => OnClientSearchTextChanged(group.AttributeName, v))"
+                                 Placeholder="@($"Search {group.AttributeName.ToLower()}...")" />
                 </ToolBarContent>
                 <HeaderContent>
                     <MudTh>Display Name</MudTh>

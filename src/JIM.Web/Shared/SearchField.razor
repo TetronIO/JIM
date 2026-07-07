@@ -1,0 +1,79 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Search-as-you-type text field for list, table and dialog search/filter boxes. *@
+@* Wraps MudTextField with the search adornment, Immediate="true" and a debounce baked in, so the *@
+@* filter updates as the user types without a query per keystroke. Two-way bind the text with *@
+@* @bind-Value, or use Value + ValueChanged when the change handler drives a server reload. *@
+@* This is the single source of truth for search boxes; do NOT hand-roll a bare MudTextField search *@
+@* input (it would commit only on blur). See JIM.Web/CLAUDE.md "Shared UI components" and *@
+@* "Form action gating and input immediacy". *@
+<MudTextField T="string"
+              Value="@Value"
+              ValueChanged="@OnValueChangedAsync"
+              Placeholder="@EffectivePlaceholder"
+              Label="@Label"
+              Adornment="Adornment.Start"
+              AdornmentIcon="@Icons.Material.Filled.Search"
+              Clearable="@Clearable"
+              Immediate="true"
+              DebounceInterval="@DebounceInterval"
+              Variant="Variant.Outlined"
+              Margin="Margin.Dense"
+              Class="@Class"
+              @attributes="AdditionalAttributes" />
+
+@code {
+    /// <summary>
+    /// The current search text. Two-way bindable via @bind-Value.
+    /// </summary>
+    [Parameter]
+    public string? Value { get; set; }
+
+    [Parameter]
+    public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>
+    /// Placeholder shown when the field is empty. Defaults to "Search" when neither a Placeholder nor a Label is supplied.
+    /// </summary>
+    [Parameter]
+    public string? Placeholder { get; set; }
+
+    /// <summary>
+    /// Optional floating label. When set, no default placeholder is applied.
+    /// </summary>
+    [Parameter]
+    public string? Label { get; set; }
+
+    /// <summary>
+    /// Debounce interval in milliseconds before the typed value is committed. Defaults to 300ms; raise it for server or database backed searches.
+    /// </summary>
+    [Parameter]
+    public int DebounceInterval { get; set; } = 300;
+
+    /// <summary>
+    /// Whether to show the clear (x) affordance when the field has text. Defaults to true.
+    /// </summary>
+    [Parameter]
+    public bool Clearable { get; set; } = true;
+
+    /// <summary>
+    /// Additional CSS classes to apply to the underlying field.
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
+
+    /// <summary>
+    /// Any additional attributes (for example IconSize, Disabled, or OnDebounceIntervalElapsed) forwarded to the underlying MudTextField.
+    /// </summary>
+    [Parameter(CaptureUnmatchedValues = true)]
+    public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string? EffectivePlaceholder => Placeholder ?? (string.IsNullOrEmpty(Label) ? "Search" : null);
+
+    private async Task OnValueChangedAsync(string value)
+    {
+        Value = value;
+        await ValueChanged.InvokeAsync(value);
+    }
+}

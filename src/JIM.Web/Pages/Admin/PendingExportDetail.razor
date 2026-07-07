@@ -230,14 +230,9 @@
                             <ToolBarContent>
                                 <TableDensityToggle @bind-Dense="_dense" />
                                 <MudSpacer />
-                                <MudTextField @bind-Value="_searchString"
-                                              Variant="Variant.Outlined"
-                                              Placeholder="Search attribute name or value"
-                                              Margin="Margin.Dense"
-                                              Adornment="Adornment.Start"
-                                              AdornmentIcon="@Icons.Material.Filled.Search"
-                                              IconSize="Size.Medium"
-                                              Class="mt-0" />
+                                <SearchField @bind-Value="_searchString"
+                                             Placeholder="Search attribute name or value"
+                                             Class="mt-0" />
                             </ToolBarContent>
                             <HeaderContent>
                                 <MudTh Class="jim-attr-header-name"><MudText Typo="Typo.button">Attribute</MudText></MudTh>

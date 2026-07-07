@@ -31,8 +31,7 @@
         <MudButton OnClick="ShowCreateDialog" StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
             DropShadow="false">Create API Key</MudButton>
         <MudSpacer />
-        <MudTextField @bind-Value="_searchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense" Adornment="Adornment.Start"
-            AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        <SearchField @bind-Value="_searchString" Class="mt-0" />
     </ToolBarContent>
     <HeaderContent>
         <MudTh>

@@ -63,11 +63,9 @@
                 </MudSelect>
             </MudItem>
             <MudItem Class="flex-grow-1">
-                <MudTextField T="string" @bind-Value="_filterInitiatedBy" Label="Initiated By"
-                              Variant="Variant.Outlined" Clearable="true" Placeholder="Search by name..."
-                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                              Immediate="true" DebounceInterval="500"
-                              OnDebounceIntervalElapsed="OnInitiatedByFilterChanged" />
+                <SearchField Value="@_filterInitiatedBy" ValueChanged="OnInitiatedByFilterChanged" Label="Initiated By"
+                             Placeholder="Search by name..."
+                             DebounceInterval="500" />
             </MudItem>
             <MudItem Class="d-flex align-end">
                 <MudCheckBox T="bool" Value="_filterHasChildren" ValueChanged="OnHasChildrenFilterChanged"

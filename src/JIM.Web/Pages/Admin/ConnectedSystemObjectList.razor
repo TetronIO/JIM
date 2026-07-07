@@ -117,16 +117,10 @@
               LoadingProgressColor="Color.Primary">
         <ToolBarContent>
             <MudSpacer />
-            <MudTextField T="string"
-                          ValueChanged="@(s => OnSearch(s))"
-                          Variant="Variant.Outlined"
-                          Placeholder="Search external ID, secondary ID, or display name"
-                          Margin="Margin.Dense"
-                          Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.Search"
-                          IconSize="Size.Medium"
-                          Class="mt-0"
-                          Style="min-width: 350px;" />
+            <SearchField ValueChanged="@(s => OnSearch(s))"
+                         Placeholder="Search external ID, secondary ID, or display name"
+                         Class="mt-0"
+                         Style="min-width: 350px;" />
         </ToolBarContent>
         <HeaderContent>
             <MudTh Style="width: 1px;"></MudTh>

@@ -34,7 +34,7 @@
     <ToolBarContent>
         <TableDensityToggle @bind-Dense="_dense" />
         <MudSpacer />
-        <MudTextField @bind-Value="_searchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+        <SearchField @bind-Value="_searchString" Class="mt-0" />
     </ToolBarContent>
     <HeaderContent>
         <MudTh><MudTableSortLabel SortBy="new Func<ConnectedSystemHeader, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>

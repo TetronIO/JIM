@@ -32,15 +32,9 @@
     <ToolBarContent>
         <TableDensityToggle @bind-Dense="_dense" />
         <MudSpacer />
-        <MudTextField @bind-Value="_searchString"
-                      Variant="Variant.Outlined"
-                      Placeholder="Search by name or URI"
-                      Margin="Margin.Dense"
-                      Adornment="Adornment.Start"
-                      AdornmentIcon="@Icons.Material.Filled.Search"
-                      IconSize="Size.Medium"
-                      Class="mt-0"
-                      Immediate="true" />
+        <SearchField @bind-Value="_searchString"
+                     Placeholder="Search by name or URI"
+                     Class="mt-0" />
     </ToolBarContent>
     <HeaderContent>
         <MudTh>
