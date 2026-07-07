@@ -28,7 +28,7 @@ JIM is deployed in high-trust environments (healthcare, finance, government). "W
 ## Non-Goals
 
 - Rollback / restore of a prior configuration version: remains the Phase 8 fast-follow of the original PRD.
-- Connected System hard-delete tombstone capture: already deferred and earmarked to pair with rollback; unchanged here.
+- Connected System deletion tombstone capture: out of scope for this increment (has since been delivered separately; all three delete paths now record a tombstone).
 - Business/identity data (CSO and MVO) change history: delivered under #269; not touched.
 - Changes to the storage model, diff engine, retention behaviour, or Activities-list filters: the existing infrastructure is type-agnostic and is reused as-is.
 - History for runtime/operational state (worker tasks, run results, import watermarks, seeded reference data such as built-in Roles' definitions): configuration only.
