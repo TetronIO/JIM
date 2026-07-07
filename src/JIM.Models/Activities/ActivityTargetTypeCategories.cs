@@ -13,7 +13,7 @@ public static class ActivityTargetTypeCategories
     private static readonly Dictionary<ActivityTargetType, ActivityTargetCategory> Map = new()
     {
         { ActivityTargetType.ConnectedSystem, ActivityTargetCategory.Configuration },
-        { ActivityTargetType.SyncRule, ActivityTargetCategory.Configuration },
+        { ActivityTargetType.SynchronisationRule, ActivityTargetCategory.Configuration },
         { ActivityTargetType.ObjectMatchingRule, ActivityTargetCategory.Configuration },
         { ActivityTargetType.MetaverseAttribute, ActivityTargetCategory.Configuration },
         { ActivityTargetType.MetaverseObjectType, ActivityTargetCategory.Configuration },

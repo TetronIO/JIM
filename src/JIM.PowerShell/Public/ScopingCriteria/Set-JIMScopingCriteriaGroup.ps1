@@ -10,7 +10,7 @@ function Set-JIMScopingCriteriaGroup {
         Updates the type (All/Any) or position of an existing scoping criteria group.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the sync rule.
+        The unique identifier of the Synchronisation Rule.
 
     .PARAMETER GroupId
         The unique identifier of the criteria group to update.
@@ -84,7 +84,7 @@ function Set-JIMScopingCriteriaGroup {
         }
 
         if ($PSCmdlet.ShouldProcess("Scoping Criteria Group $GroupId", "Update")) {
-            Write-Verbose "Updating scoping criteria group $GroupId for sync rule $SyncRuleId"
+            Write-Verbose "Updating scoping criteria group $GroupId for Synchronisation Rule $SyncRuleId"
 
             try {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria/$GroupId" -Method 'PUT' -Body $body

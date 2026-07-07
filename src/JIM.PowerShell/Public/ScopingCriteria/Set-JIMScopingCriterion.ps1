@@ -7,13 +7,13 @@ function Set-JIMScopingCriterion {
         Updates a criterion in a scoping criteria group (full replacement).
 
     .DESCRIPTION
-        Replaces a scoping criterion's attribute, comparison operator and value. For export sync rules
-        provide a Metaverse attribute; for import sync rules a Connected System attribute. For DateTime
+        Replaces a scoping criterion's attribute, comparison operator and value. For export Synchronisation Rules
+        provide a Metaverse attribute; for import Synchronisation Rules a Connected System attribute. For DateTime
         attributes set -ValueMode Relative and supply -RelativeCount/-RelativeUnit/-RelativeDirection to
         compare against a date resolved relative to now (re-evaluated on each sync run).
 
     .PARAMETER SyncRuleId
-        The unique identifier of the sync rule.
+        The unique identifier of the Synchronisation Rule.
 
     .PARAMETER GroupId
         The unique identifier of the criteria group containing the criterion.
@@ -22,16 +22,16 @@ function Set-JIMScopingCriterion {
         The unique identifier of the criterion to update.
 
     .PARAMETER MetaverseAttributeId
-        The unique identifier of the Metaverse attribute to evaluate (for export sync rules).
+        The unique identifier of the Metaverse attribute to evaluate (for export Synchronisation Rules).
 
     .PARAMETER MetaverseAttributeName
-        Alternative to MetaverseAttributeId. The name of the Metaverse attribute to evaluate (for export sync rules).
+        Alternative to MetaverseAttributeId. The name of the Metaverse attribute to evaluate (for export Synchronisation Rules).
 
     .PARAMETER ConnectedSystemAttributeId
-        The unique identifier of the Connected System attribute to evaluate (for import sync rules).
+        The unique identifier of the Connected System attribute to evaluate (for import Synchronisation Rules).
 
     .PARAMETER ConnectedSystemAttributeName
-        Alternative to ConnectedSystemAttributeId. The name of the Connected System attribute to evaluate (for import sync rules).
+        Alternative to ConnectedSystemAttributeId. The name of the Connected System attribute to evaluate (for import Synchronisation Rules).
 
     .PARAMETER ComparisonType
         The comparison operator.
@@ -183,11 +183,11 @@ function Set-JIMScopingCriterion {
         elseif ($PSCmdlet.ParameterSetName -eq 'ByCsName') {
             $syncRule = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId"
             if (-not $syncRule) {
-                Write-Error "Sync rule $SyncRuleId not found."
+                Write-Error "Synchronisation Rule $SyncRuleId not found."
                 return
             }
             if ($syncRule.direction -ne 'Import') {
-                Write-Error "Connected System attributes can only be used with import sync rules. This sync rule is an export rule."
+                Write-Error "Connected System attributes can only be used with import Synchronisation Rules. This Synchronisation Rule is an export rule."
                 return
             }
             $connectedSystemId = $syncRule.connectedSystemId

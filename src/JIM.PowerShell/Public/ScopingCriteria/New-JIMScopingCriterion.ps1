@@ -8,26 +8,26 @@ function New-JIMScopingCriterion {
 
     .DESCRIPTION
         Creates a new scoping criterion within a criteria group.
-        For export sync rules, criteria evaluate Metaverse attribute values.
-        For import sync rules, criteria evaluate Connected System attribute values.
+        For export Synchronisation Rules, criteria evaluate Metaverse attribute values.
+        For import Synchronisation Rules, criteria evaluate Connected System attribute values.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the sync rule.
+        The unique identifier of the Synchronisation Rule.
 
     .PARAMETER GroupId
         The unique identifier of the criteria group to add the criterion to.
 
     .PARAMETER MetaverseAttributeId
-        The unique identifier of the Metaverse attribute to evaluate (for export sync rules).
+        The unique identifier of the Metaverse attribute to evaluate (for export Synchronisation Rules).
 
     .PARAMETER MetaverseAttributeName
-        Alternative to MetaverseAttributeId. The name of the Metaverse attribute to evaluate (for export sync rules).
+        Alternative to MetaverseAttributeId. The name of the Metaverse attribute to evaluate (for export Synchronisation Rules).
 
     .PARAMETER ConnectedSystemAttributeId
-        The unique identifier of the Connected System attribute to evaluate (for import sync rules).
+        The unique identifier of the Connected System attribute to evaluate (for import Synchronisation Rules).
 
     .PARAMETER ConnectedSystemAttributeName
-        Alternative to ConnectedSystemAttributeId. The name of the Connected System attribute to evaluate (for import sync rules).
+        Alternative to ConnectedSystemAttributeId. The name of the Connected System attribute to evaluate (for import Synchronisation Rules).
 
     .PARAMETER ComparisonType
         The comparison operator. Valid values:
@@ -79,12 +79,12 @@ function New-JIMScopingCriterion {
     .EXAMPLE
         New-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 -MetaverseAttributeName 'Department' -ComparisonType Equals -StringValue 'IT'
 
-        Creates a criterion for an export sync rule that filters for Department = 'IT'.
+        Creates a criterion for an export Synchronisation Rule that filters for Department = 'IT'.
 
     .EXAMPLE
         New-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 -ConnectedSystemAttributeName 'ou' -ComparisonType Equals -StringValue 'Finance'
 
-        Creates a criterion for an import sync rule that filters for ou = 'Finance'.
+        Creates a criterion for an import Synchronisation Rule that filters for ou = 'Finance'.
 
     .EXAMPLE
         New-JIMScopingCriterion -SyncRuleId 5 -GroupId 10 -MetaverseAttributeId 15 -ComparisonType StartsWith -StringValue 'Emp' -PassThru
@@ -176,7 +176,7 @@ function New-JIMScopingCriterion {
             comparisonType = $ComparisonType
         }
 
-        # Handle Metaverse attribute (for export sync rules)
+        # Handle Metaverse attribute (for export Synchronisation Rules)
         if ($PSCmdlet.ParameterSetName -eq 'ByMvId') {
             $body.metaverseAttributeId = $MetaverseAttributeId
             $attrDisplay = "MV Attribute ID $MetaverseAttributeId"
@@ -195,23 +195,23 @@ function New-JIMScopingCriterion {
             $attrDisplay = "MV Attribute '$MetaverseAttributeName'"
             Write-Verbose "Resolved '$MetaverseAttributeName' to attribute ID $($attribute.id)"
         }
-        # Handle Connected System attribute (for import sync rules)
+        # Handle Connected System attribute (for import Synchronisation Rules)
         elseif ($PSCmdlet.ParameterSetName -eq 'ByCsId') {
             $body.connectedSystemAttributeId = $ConnectedSystemAttributeId
             $attrDisplay = "CS Attribute ID $ConnectedSystemAttributeId"
         }
         elseif ($PSCmdlet.ParameterSetName -eq 'ByCsName') {
-            # Get the sync rule to find the connected system and object type
-            Write-Verbose "Looking up sync rule $SyncRuleId to find Connected System attribute"
+            # Get the Synchronisation Rule to find the connected system and object type
+            Write-Verbose "Looking up Synchronisation Rule $SyncRuleId to find Connected System attribute"
             $syncRule = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId"
 
             if (-not $syncRule) {
-                Write-Error "Sync rule $SyncRuleId not found."
+                Write-Error "Synchronisation Rule $SyncRuleId not found."
                 return
             }
 
             if ($syncRule.direction -ne 'Import') {
-                Write-Error "Connected System attributes can only be used with import sync rules. This sync rule is an export rule."
+                Write-Error "Connected System attributes can only be used with import Synchronisation Rules. This Synchronisation Rule is an export rule."
                 return
             }
 
@@ -280,7 +280,7 @@ function New-JIMScopingCriterion {
         }
 
         if ($PSCmdlet.ShouldProcess("Scoping Criteria Group $GroupId", "Add Criterion ($attrDisplay $ComparisonType)")) {
-            Write-Verbose "Creating criterion in group $GroupId for sync rule $SyncRuleId"
+            Write-Verbose "Creating criterion in group $GroupId for Synchronisation Rule $SyncRuleId"
 
             try {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria/$GroupId/criteria" -Method 'POST' -Body $body

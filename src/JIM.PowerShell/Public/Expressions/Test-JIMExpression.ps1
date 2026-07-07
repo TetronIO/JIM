@@ -8,7 +8,7 @@ function Test-JIMExpression {
 
     .DESCRIPTION
         Tests a JIM expression with sample Metaverse and Connected System attribute values
-        to verify syntax and see the expected output before deploying to a sync rule mapping.
+        to verify syntax and see the expected output before deploying to a Synchronisation Rule mapping.
 
         Expressions use DynamicExpresso syntax with mv["AttributeName"] and cs["AttributeName"]
         for attribute access.

@@ -7,12 +7,12 @@ function New-JIMSyncRule {
         Creates a new Synchronisation Rule in JIM.
 
     .DESCRIPTION
-        Creates a sync rule that defines how data flows between a Connected System and the Metaverse.
+        Creates a Synchronisation Rule that defines how data flows between a Connected System and the Metaverse.
         For Import rules, set -ProjectToMetaverse to create Metaverse objects from imported data.
         For Export rules, set -ProvisionToConnectedSystem to create Connected System objects.
 
     .PARAMETER Name
-        The name for the Sync Rule.
+        The name for the Synchronisation Rule.
 
     .PARAMETER Description
         An optional description of what the Synchronisation Rule does.
@@ -30,7 +30,7 @@ function New-JIMSyncRule {
         The ID of the Metaverse Object Type.
 
     .PARAMETER Direction
-        The direction of the sync rule: Import (from Connected System to Metaverse) or
+        The direction of the Synchronisation Rule: Import (from Connected System to Metaverse) or
         Export (from Metaverse to Connected System).
 
     .PARAMETER ProjectToMetaverse
@@ -40,31 +40,31 @@ function New-JIMSyncRule {
         For Export rules, if specified, objects will be provisioned (created) in the Connected System.
 
     .PARAMETER Enabled
-        Whether the sync rule is enabled. Defaults to $true.
+        Whether the Synchronisation Rule is enabled. Defaults to $true.
 
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Synchronisation Rule's change history.
 
     .PARAMETER PassThru
-        If specified, returns the created Sync Rule object.
+        If specified, returns the created Synchronisation Rule object.
 
     .OUTPUTS
-        If -PassThru is specified, returns the created Sync Rule object.
+        If -PassThru is specified, returns the created Synchronisation Rule object.
 
     .EXAMPLE
         New-JIMSyncRule -Name "Import Users" -ConnectedSystemId 1 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Import -ProjectToMetaverse
 
-        Creates an import sync rule that projects users to the Metaverse.
+        Creates an import Synchronisation Rule that projects users to the Metaverse.
 
     .EXAMPLE
         New-JIMSyncRule -Name "Import Users" -ConnectedSystemName 'Contoso AD' -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Import -ProjectToMetaverse
 
-        Creates an import sync rule using the Connected System name.
+        Creates an import Synchronisation Rule using the Connected System name.
 
     .EXAMPLE
         New-JIMSyncRule -Name "Export Users to AD" -ConnectedSystemId 2 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Export -ProvisionToConnectedSystem -PassThru
 
-        Creates an export sync rule that provisions users to the Connected System.
+        Creates an export Synchronisation Rule that provisions users to the Connected System.
 
     .EXAMPLE
         New-JIMSyncRule -Name "Import Users" -ConnectedSystemId 1 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Import -Description "Imports user accounts from the HR system"
@@ -128,8 +128,8 @@ function New-JIMSyncRule {
             $ConnectedSystemId = $connectedSystem.id
         }
 
-        if ($PSCmdlet.ShouldProcess($Name, "Create Sync Rule")) {
-            Write-Verbose "Creating Sync Rule: $Name"
+        if ($PSCmdlet.ShouldProcess($Name, "Create Synchronisation Rule")) {
+            Write-Verbose "Creating Synchronisation Rule: $Name"
 
             # Map direction string to API enum value
             $directionValue = switch ($Direction) {
@@ -165,14 +165,14 @@ function New-JIMSyncRule {
             try {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules" -Method 'POST' -Body $body
 
-                Write-Verbose "Created Sync Rule: $($result.id) ($($result.name))"
+                Write-Verbose "Created Synchronisation Rule: $($result.id) ($($result.name))"
 
                 if ($PassThru) {
                     $result
                 }
             }
             catch {
-                Write-Error "Failed to create Sync Rule: $_"
+                Write-Error "Failed to create Synchronisation Rule: $_"
             }
         }
     }

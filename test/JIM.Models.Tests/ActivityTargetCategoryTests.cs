@@ -32,7 +32,7 @@ public class ActivityTargetCategoryTests
         Assert.Multiple(() =>
         {
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ConnectedSystem), Is.EqualTo(ActivityTargetCategory.Configuration));
-            Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.SyncRule), Is.EqualTo(ActivityTargetCategory.Configuration));
+            Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.SynchronisationRule), Is.EqualTo(ActivityTargetCategory.Configuration));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ObjectMatchingRule), Is.EqualTo(ActivityTargetCategory.Configuration));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.MetaverseAttribute), Is.EqualTo(ActivityTargetCategory.Configuration));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.MetaverseObjectType), Is.EqualTo(ActivityTargetCategory.Configuration));
