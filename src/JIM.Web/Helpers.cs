@@ -11,6 +11,7 @@ using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Logic;
 using JIM.Utilities;
+using JIM.Web.Models;
 using Microsoft.AspNetCore.Components.Authorization;
 using MudBlazor;
 namespace JIM.Web;
@@ -677,6 +678,238 @@ public static class Helpers
                 return i;
         }
         return text.Length - 1; // unclosed string — return end
+    }
+
+    #endregion
+
+    #region Shell Syntax Highlighting
+
+    // Keyword sets are deliberately small; highlighting targets JIM-authored example snippets
+    // (curl / Invoke-RestMethod and similar), not arbitrary user scripts.
+    private static readonly HashSet<string> BashKeywords = new(StringComparer.Ordinal)
+    {
+        "if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done",
+        "case", "esac", "in", "function", "select", "return", "export", "local", "declare", "readonly"
+    };
+
+    private static readonly HashSet<string> PowerShellKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "if", "else", "elseif", "for", "foreach", "while", "do", "switch", "function", "filter",
+        "param", "begin", "process", "end", "try", "catch", "finally", "return", "throw", "break",
+        "continue", "in", "trap", "class", "enum", "using"
+    };
+
+    /// <summary>
+    /// Highlights a bash or PowerShell command snippet with HTML span elements for syntax colouring.
+    /// Intended for JIM-authored example snippets, not arbitrary user scripts; it is a pragmatic
+    /// tokeniser, not a full shell grammar. Returns an HTML markup string for use with
+    /// <c>@((MarkupString)...)</c>. All emitted content is HTML-encoded, so it is safe to render raw.
+    /// </summary>
+    public static string HighlightShell(string code, ShellLanguage language)
+    {
+        if (string.IsNullOrEmpty(code))
+            return string.Empty;
+
+        var keywords = language == ShellLanguage.PowerShell ? PowerShellKeywords : BashKeywords;
+        var result = new StringBuilder();
+        var atCommandPosition = true; // the next word is a command (start of snippet, or after a pipe/separator)
+        var i = 0;
+
+        while (i < code.Length)
+        {
+            var c = code[i];
+
+            // Line continuation: a backslash immediately before a newline continues the command,
+            // so the next line must NOT be treated as a fresh command position.
+            if (c == '\\' && i + 1 < code.Length && code[i + 1] == '\n')
+            {
+                result.Append("\\\n");
+                i += 2;
+                continue;
+            }
+
+            // Newlines reset command position; other whitespace is emitted verbatim.
+            if (c == '\n')
+            {
+                result.Append('\n');
+                atCommandPosition = true;
+                i++;
+                continue;
+            }
+            if (char.IsWhiteSpace(c))
+            {
+                result.Append(c);
+                i++;
+                continue;
+            }
+
+            // PowerShell block comment: <# ... #>
+            if (language == ShellLanguage.PowerShell && c == '<' && i + 1 < code.Length && code[i + 1] == '#')
+            {
+                var end = code.IndexOf("#>", i + 2, StringComparison.Ordinal);
+                var stop = end < 0 ? code.Length : end + 2;
+                AppendShellSpan(result, "jim-code-comment", code[i..stop]);
+                i = stop;
+                atCommandPosition = false;
+                continue;
+            }
+
+            // Line comment '#': only when it starts a token (line start or after whitespace), so a '#'
+            // inside a URL fragment or word is left untouched.
+            if (c == '#' && (i == 0 || char.IsWhiteSpace(code[i - 1])))
+            {
+                var end = code.IndexOf('\n', i);
+                var stop = end < 0 ? code.Length : end;
+                AppendShellSpan(result, "jim-code-comment", code[i..stop]);
+                i = stop;
+                continue;
+            }
+
+            // Strings (single or double quoted)
+            if (c is '"' or '\'')
+            {
+                var end = FindClosingShellQuote(code, i, c, language);
+                AppendShellSpan(result, "jim-code-string", code[i..(end + 1)]);
+                i = end + 1;
+                atCommandPosition = false;
+                continue;
+            }
+
+            // Variables: $NAME, ${NAME}, $env:NAME, $_
+            if (c == '$')
+            {
+                var start = i;
+                i++;
+                if (i < code.Length && code[i] == '{')
+                {
+                    while (i < code.Length && code[i] != '}') i++;
+                    if (i < code.Length) i++; // consume closing brace
+                }
+                else if (i < code.Length && code[i] == '_')
+                {
+                    i++; // $_
+                }
+                else
+                {
+                    while (i < code.Length && (char.IsLetterOrDigit(code[i]) || code[i] == '_' || code[i] == ':')) i++;
+                }
+                AppendShellSpan(result, "jim-code-variable", code[start..i]);
+                atCommandPosition = false;
+                continue;
+            }
+
+            // Flags / parameters: -x, --long, -Path (only at a token boundary, and followed by a letter or '-')
+            if (c == '-' && (i == 0 || char.IsWhiteSpace(code[i - 1])) &&
+                i + 1 < code.Length && (char.IsLetter(code[i + 1]) || code[i + 1] == '-'))
+            {
+                var start = i;
+                i++;
+                if (i < code.Length && code[i] == '-') i++;
+                while (i < code.Length && (char.IsLetterOrDigit(code[i]) || code[i] == '-' || code[i] == '_')) i++;
+                AppendShellSpan(result, "jim-code-flag", code[start..i]);
+                atCommandPosition = false;
+                continue;
+            }
+
+            // Operators / pipes
+            if (c is '|' or '&' or ';' or '>' or '<')
+            {
+                if (i + 1 < code.Length)
+                {
+                    var two = code.Substring(i, 2);
+                    if (two is "&&" or "||" or ">>" or "<<")
+                    {
+                        AppendShellSpan(result, "jim-code-operator", two);
+                        i += 2;
+                        atCommandPosition = true;
+                        continue;
+                    }
+                }
+                AppendShellSpan(result, "jim-code-operator", c.ToString());
+                i++;
+                if (c is '|' or ';' or '&') atCommandPosition = true;
+                continue;
+            }
+
+            // Words: commands, keywords, numbers, or bare arguments (paths, URLs, values)
+            if (!IsShellWordBreak(c))
+            {
+                var start = i;
+                while (i < code.Length && !char.IsWhiteSpace(code[i]) && !IsShellWordBreak(code[i]))
+                    i++;
+                var word = code[start..i];
+
+                if (IsNumericWord(word))
+                    AppendShellSpan(result, "jim-code-number", word);
+                else if (keywords.Contains(word))
+                    AppendShellSpan(result, "jim-code-keyword", word);
+                else if (atCommandPosition && LooksLikeCommand(word))
+                    AppendShellSpan(result, "jim-code-command", word);
+                else
+                    result.Append(WebUtility.HtmlEncode(word));
+
+                atCommandPosition = false;
+                continue;
+            }
+
+            // Any other single character: emit encoded.
+            result.Append(WebUtility.HtmlEncode(c.ToString()));
+            i++;
+        }
+
+        return result.ToString();
+    }
+
+    private static void AppendShellSpan(StringBuilder builder, string cssClass, string content) =>
+        builder.Append($"<span class=\"{cssClass}\">{WebUtility.HtmlEncode(content)}</span>");
+
+    // Characters that end a bare word and (except whitespace) begin a distinct token type.
+    // '#' and '-' are intentionally excluded: they are context-sensitive (comment/flag only at a
+    // token boundary) and are valid mid-word (e.g. URL fragments, Verb-Noun cmdlets).
+    private static bool IsShellWordBreak(char c) =>
+        c is '"' or '\'' or '$' or '|' or '&' or ';' or '<' or '>';
+
+    private static bool LooksLikeCommand(string word) =>
+        word.Length > 0 && (char.IsLetter(word[0]) || word[0] is '_' or '.' or '/');
+
+    private static bool IsNumericWord(string word)
+    {
+        if (word.Length == 0)
+            return false;
+
+        var seenDot = false;
+        foreach (var ch in word)
+        {
+            if (ch == '.')
+            {
+                if (seenDot) return false;
+                seenDot = true;
+            }
+            else if (!char.IsDigit(ch))
+            {
+                return false;
+            }
+        }
+
+        return word != ".";
+    }
+
+    private static int FindClosingShellQuote(string text, int openIndex, char quote, ShellLanguage language)
+    {
+        // Single quotes are literal in both shells (no escapes). Double quotes escape with a
+        // backslash in bash and a backtick in PowerShell.
+        var escape = quote == '"' ? (language == ShellLanguage.PowerShell ? '`' : '\\') : '\0';
+        for (var i = openIndex + 1; i < text.Length; i++)
+        {
+            if (escape != '\0' && text[i] == escape && i + 1 < text.Length)
+            {
+                i++; // skip the escaped character
+                continue;
+            }
+            if (text[i] == quote)
+                return i;
+        }
+        return text.Length - 1; // unclosed — extend to end of input
     }
 
     #endregion
