@@ -228,6 +228,51 @@ public class MetaverseConfigurationChangeCaptureTests
         Assert.That(_completedActivity!.ChangeReason, Is.EqualTo("no longer needed"));
     }
 
+    // -- RecordSeededMetaverseObjectTypeBaselineAsync / RecordSeededMetaverseAttributeBaselineAsync --------------------
+
+    [Test]
+    public async Task RecordSeededMetaverseObjectTypeBaselineAsync_RecordsSystemCreateChildWithVersionOneBaselineAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupHashKeySetting();
+        SetupObjectType(BuildObjectType());
+        SetupObjectTypeMaxVersion(0);
+        var parentActivityId = Guid.NewGuid();
+
+        await _jim.Metaverse.RecordSeededMetaverseObjectTypeBaselineAsync(ObjectTypeId, "User", parentActivityId);
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.MetaverseObjectType));
+        Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Create));
+        Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
+        Assert.That(_completedActivity!.ParentActivityId, Is.EqualTo(parentActivityId), "the baseline must group under the seeding parent Activity");
+        Assert.That(_completedActivity!.MetaverseObjectTypeId, Is.EqualTo(ObjectTypeId));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"MetaverseObjectType\""));
+    }
+
+    [Test]
+    public async Task RecordSeededMetaverseAttributeBaselineAsync_RecordsSystemCreateChildWithVersionOneBaselineAsync()
+    {
+        SetupTrackingSetting(enabled: true);
+        SetupHashKeySetting();
+        SetupAttribute(BuildAttribute());
+        _activityRepo.Setup(r => r.GetMaxConfigurationChangeVersionAsync(ActivityTargetType.MetaverseAttribute, It.IsAny<int>()))
+            .ReturnsAsync(0);
+        var parentActivityId = Guid.NewGuid();
+
+        await _jim.Metaverse.RecordSeededMetaverseAttributeBaselineAsync(AttributeId, "Serial Number", parentActivityId);
+
+        Assert.That(_completedActivity, Is.Not.Null);
+        Assert.That(_completedActivity!.TargetType, Is.EqualTo(ActivityTargetType.MetaverseAttribute));
+        Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Create));
+        Assert.That(_completedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.System));
+        Assert.That(_completedActivity!.ParentActivityId, Is.EqualTo(parentActivityId), "the baseline must group under the seeding parent Activity");
+        Assert.That(_completedActivity!.MetaverseAttributeId, Is.EqualTo(AttributeId));
+        Assert.That(_completedActivity!.ConfigurationChangeVersion, Is.EqualTo(1));
+        Assert.That(_completedActivity!.ConfigurationChangeSnapshot, Does.Contain("\"objectType\":\"MetaverseAttribute\""));
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private static readonly byte[] HashKeyBytes = new byte[32];

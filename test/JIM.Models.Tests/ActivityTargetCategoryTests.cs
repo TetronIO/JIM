@@ -44,6 +44,7 @@ public class ActivityTargetCategoryTests
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.PredefinedSearch), Is.EqualTo(ActivityTargetCategory.Configuration));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ConnectorDefinition), Is.EqualTo(ActivityTargetCategory.Configuration));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ExampleDataSet), Is.EqualTo(ActivityTargetCategory.Configuration));
+            Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ExampleDataTemplate), Is.EqualTo(ActivityTargetCategory.Configuration));
         });
     }
 
@@ -58,7 +59,7 @@ public class ActivityTargetCategoryTests
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.HistoryRetentionCleanup), Is.EqualTo(ActivityTargetCategory.System));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.System), Is.EqualTo(ActivityTargetCategory.System));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.NotSet), Is.EqualTo(ActivityTargetCategory.System));
-            Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.ExampleDataTemplate), Is.EqualTo(ActivityTargetCategory.System));
+            Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.DataGeneration), Is.EqualTo(ActivityTargetCategory.System));
         });
     }
 

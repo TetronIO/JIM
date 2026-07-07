@@ -11,6 +11,7 @@
 @inject NavigationManager NavManager
 @inject ISnackbar Snackbar
 @inject IUserPreferenceService PreferenceService
+@inject IDialogService DialogService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -32,6 +33,18 @@
 
         <MudTabPanel Text="Details">
             <MudPaper Class="pa-4" Outlined="true">
+                <MudForm @bind-IsValid="_detailsFormValid">
+                    <PrefilledFormValidator />
+                    <MudTextField T="string" @bind-Value="_apiKey.Name" Label="Name" Required="true" RequiredError="A name is required"
+                        Immediate="true" Variant="Variant.Outlined" />
+                    <MudTextField T="string" @bind-Value="_apiKey.Description" Label="Description" Required="false"
+                        Lines="2" MaxLines="6" Sizing="InputSizing.Auto" Variant="Variant.Outlined" Class="mt-5" />
+                </MudForm>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!_detailsFormValid)" Class="mt-5" OnClick="HandleSaveDetailsAsync" DropShadow="false">Save Changes</MudButton>
+            </MudPaper>
+
+            <MudPaper Class="pa-4 mt-6" Outlined="true">
+                <MudText Typo="Typo.h6" Class="mb-4">Metadata</MudText>
                 <MudGrid Spacing="4">
                     <MudItem xs="12" sm="6" md="4">
                         <MudText Typo="Typo.button" Class="mud-text-secondary">ID:</MudText>
@@ -39,13 +52,10 @@
                     </MudItem>
 
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Name:</MudText>
-                        <MudText>@_apiKey.Name</MudText>
-                    </MudItem>
-
-                    <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Key Prefix:</MudText>
-                        <MudText Class="jim-text-code">@_apiKey.KeyPrefix...</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Key Prefix:</MudText><br />
+                        <MudTooltip Text="Only the key's prefix is stored, for security. The full key is shown once at creation and cannot be retrieved again." Arrow="true" Placement="Placement.Top">
+                            <span class="jim-code-inline">@_apiKey.KeyPrefix...</span>
+                        </MudTooltip>
                     </MudItem>
 
                     <MudItem xs="12" sm="6" md="4">
@@ -89,7 +99,11 @@
                                 @lastUsedAt.ToLocalTime().ToFriendlyDate()
                                 @if (!string.IsNullOrEmpty(_apiKey.LastUsedFromIp))
                                 {
-                                    <span> from <span class="jim-text-code">@_apiKey.LastUsedFromIp</span></span>
+                                    <span> from
+                                        <MudTooltip Text="The IP address the most recent request authenticated with this key came from." Arrow="true" Placement="Placement.Top">
+                                            <span class="jim-code-inline">@_apiKey.LastUsedFromIp</span>
+                                        </MudTooltip>
+                                    </span>
                                 }
                             </MudText>
                         }
@@ -119,14 +133,6 @@
                         <MudItem xs="12" sm="6" md="4">
                             <MudText Typo="Typo.button" Class="mud-text-secondary">Type:</MudText><br />
                             <MudChip T="string" Variant="Variant.Text" Color="Color.Warning" Icon="@Icons.Material.Filled.Construction">Infrastructure Key</MudChip>
-                        </MudItem>
-                    }
-
-                    @if (!string.IsNullOrEmpty(_apiKey.Description))
-                    {
-                        <MudItem xs="12">
-                            <MudText Typo="Typo.button" Class="mud-text-secondary">Description:</MudText>
-                            <MudText>@_apiKey.Description</MudText>
                         </MudItem>
                     }
                 </MudGrid>
@@ -228,6 +234,9 @@ else if (!_loading)
     [Parameter]
     public Guid Id { get; set; }
 
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
     private ApiKey? _apiKey;
     private MudTable<Activity>? _table;
     private string _searchString = "";
@@ -235,6 +244,7 @@ else if (!_loading)
     private int _rowsPerPage = 10;
     private bool _preferencesLoaded;
     private int _changeCount;
+    private bool _detailsFormValid;
 
     private List<BreadcrumbItem> _breadcrumbs = new();
 
@@ -253,6 +263,22 @@ else if (!_loading)
             new("API Keys", href: "/admin/apikeys"),
             new(_apiKey?.Name ?? "Not Found", href: null, disabled: true)
         };
+    }
+
+    private async Task HandleSaveDetailsAsync()
+    {
+        if (_apiKey == null)
+            return;
+
+        // offer an optional reason for the configuration change history; cancelling aborts the save
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+        if (cancelled)
+            return;
+
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        await jim.Security.UpdateApiKeyAsync(_apiKey, user, changeReason);
+        Snackbar.Add("API key updated successfully.", Severity.Success);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

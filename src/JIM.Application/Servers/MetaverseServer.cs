@@ -483,6 +483,73 @@ public class MetaverseServer
             },
             $"Metaverse Attribute {attribute.Id}");
     }
+
+    /// <summary>
+    /// Records a System-attributed Create Activity and version-1 baseline snapshot for a built-in Metaverse Object Type
+    /// seeded in the current pass, grouped under the seeding pass's parent Activity. The built-in Metaverse Object Types
+    /// and Attributes are persisted together in one cross-referencing repository batch (attributes are bound to object
+    /// types), so re-routing that batch through individual audited creates would risk the reference resolution;
+    /// recording the baseline after the batch keeps the persistence untouched while still giving each built-in object
+    /// type a visible, System-attributed origin in its change history and under System Initialisation (matching the
+    /// built-in Predefined Searches and Connector Definitions). Idempotency is the caller's responsibility:
+    /// <see cref="SeedingServer"/> only calls this for object types it created this pass, so a restart where they already
+    /// exist records nothing and it is safe even when configuration change tracking is disabled.
+    /// </summary>
+    internal async Task RecordSeededMetaverseObjectTypeBaselineAsync(int objectTypeId, string objectTypeName, Guid parentActivityId)
+    {
+        var activity = new Activity
+        {
+            TargetName = objectTypeName,
+            TargetType = ActivityTargetType.MetaverseObjectType,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            ParentActivityId = parentActivityId,
+            Message = $"Created built-in Metaverse Object Type '{objectTypeName}'"
+        };
+        await Application.Activities.CreateSystemActivityAsync(activity);
+
+        try
+        {
+            await CaptureObjectTypeConfigurationChangeAsync(activity, objectTypeId,
+                "Built-in Metaverse Object Type created automatically by JIM.");
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Records a System-attributed Create Activity and version-1 baseline snapshot for a built-in Metaverse Attribute
+    /// seeded in the current pass, grouped under the seeding pass's parent Activity. See
+    /// <see cref="RecordSeededMetaverseObjectTypeBaselineAsync"/> for why the baseline is recorded after the shared seed
+    /// batch rather than through an individual audited create, and for the caller's idempotency contract.
+    /// </summary>
+    internal async Task RecordSeededMetaverseAttributeBaselineAsync(int attributeId, string attributeName, Guid parentActivityId)
+    {
+        var activity = new Activity
+        {
+            TargetName = attributeName,
+            TargetType = ActivityTargetType.MetaverseAttribute,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            ParentActivityId = parentActivityId,
+            Message = $"Created built-in Metaverse Attribute '{attributeName}'"
+        };
+        await Application.Activities.CreateSystemActivityAsync(activity);
+
+        try
+        {
+            await CaptureAttributeConfigurationChangeAsync(activity, attributeId,
+                "Built-in Metaverse Attribute created automatically by JIM.");
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
     #endregion
 
     #region Metaverse Objects

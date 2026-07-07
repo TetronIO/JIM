@@ -44,6 +44,10 @@ For Run Profile activities, JIM stores a per-object record of what happened (wit
 
 A schedule execution typically appears as a parent activity with one child activity per step. Use the children listing to walk down a schedule's execution tree from the top-level run into the individual operations it triggered.
 
+## Target links
+
+On an activity's detail page, the Target links to where that object is managed: a Synchronisation Rule change opens the rule's detail page, a schema import opens the Connected System's Schema tab, and so on. Service Settings have no page of their own, so their Target link opens the Service Settings page with a matching search already applied, taking you straight to that setting instead of the full list.
+
 ## Filtering the Activity list
 
 The Activity page in the admin portal filters a busy list down to what you are reviewing:
@@ -54,7 +58,7 @@ The Activity page in the admin portal filters a busy list down to what you are r
 
 ## Configuration change history
 
-Changes to configuration objects are recorded on the Activity itself. When you create, update, or delete a Synchronisation Rule, Connected System, Schedule, Metaverse Object Type, Metaverse Attribute, Trusted Certificate, API Key, Role, Predefined Search (including its criteria groups and criteria), or Connector Definition (its capabilities, setting definitions, and files), or update or revert a Service Setting, JIM captures a complete, versioned snapshot of the object's post-change state and carries it on the originating Activity, alongside who made the change, when, and an optional reason. This is how JIM answers "what did this rule look like last week, and who changed it" without a separate audit store.
+Changes to configuration objects are recorded on the Activity itself. When you create, update, or delete a Synchronisation Rule, Connected System, Schedule, Metaverse Object Type, Metaverse Attribute, Trusted Certificate, API Key, Role, Predefined Search (including its criteria groups and criteria), Connector Definition (its capabilities, setting definitions, and files), Example Data Set, or Example Data Template, or update or revert a Service Setting, JIM captures a complete, versioned snapshot of the object's post-change state and carries it on the originating Activity, alongside who made the change, when, and an optional reason. This is how JIM answers "what did this rule look like last week, and who changed it" without a separate audit store.
 
 A few properties of this model:
 
@@ -64,7 +68,7 @@ A few properties of this model:
 - **Retained on its own schedule**<br /> Configuration change history is kept for the `History.ConfigurationChangeRetentionPeriod` [Service Setting](../administration/configuration.md#service-settings) (default ~10 years), independently of, and typically much longer than, the general history retention period. The routine history cleanup never touches it; only its own retention period removes it.
 
 !!! note "Coverage"
-    Configuration change history covers Synchronisation Rules, Connected Systems, Schedules, Service Settings, Metaverse Object Types, Metaverse Attributes, Trusted Certificates, API Keys, Roles, Predefined Searches (including their criteria groups and criteria), and Connector Definitions, and is enabled by default (set the `ChangeTracking.ConfigurationChanges.Enabled` [Service Setting](../powershell/service-settings.md) to disable it; disabling does not delete existing history). Connected System Object and Metaverse Object change history is a separate, related capability.
+    Configuration change history now covers **every** administrator-mutable configuration type: Synchronisation Rules, Connected Systems, Schedules (including their steps), Service Settings, Metaverse Object Types, Metaverse Attributes, Trusted Certificates, API Keys, Roles (definitions and assignments), Predefined Searches (including their criteria groups and criteria), Connector Definitions, Example Data Sets, and Example Data Templates. It is enabled by default (set the `ChangeTracking.ConfigurationChanges.Enabled` [Service Setting](../powershell/service-settings.md) to disable it; disabling does not delete existing history). Connected System Object and Metaverse Object change history is a separate, related capability.
 
 JIM's own seeding of built-in configuration (built-in Roles, Schedules, and similar) is recorded under a single System Initialisation Activity per startup that applies changes, with each seeded object appearing as a child Activity carrying its version-1 snapshot. A normal restart that changes nothing records nothing.
 

@@ -383,9 +383,14 @@
         if (confirmed != true)
             return;
 
+        // offer an optional reason for the configuration change history; cancelling aborts the delete
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
+        if (cancelled)
+            return;
+
         using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        await jim.Scheduler.DeleteScheduleAsync(schedule, ActivityInitiatorType.User, user.Id, user.DisplayName);
+        await jim.Scheduler.DeleteScheduleAsync(schedule, ActivityInitiatorType.User, user.Id, user.DisplayName, changeReason);
         Snackbar.Add($"Schedule '{schedule.Name}' has been deleted.", Severity.Success);
         _table?.ReloadServerData();
     }

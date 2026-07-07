@@ -4,6 +4,7 @@
 - **Created:** 2026-06-25
 - **Author:** JayVDZ
 - **Issue:** [#14](https://github.com/TetronIO/JIM/issues/14)
+- **Coverage increment (2026-07-06):** The direction here to enable the remaining configuration types incrementally is fully delivered under [`PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md`](PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md) (Done): every admin-mutable configuration type now carries versioned, redacted change history. The only remaining #14 work is rollback (this PRD's deferred fast-follow).
 
 ## Problem Statement
 

@@ -48,6 +48,8 @@ Describe 'Get-JIMConfigurationChangeHistory' {
             $validateSet.ValidValues | Should -Contain 'Role'
             $validateSet.ValidValues | Should -Contain 'PredefinedSearch'
             $validateSet.ValidValues | Should -Contain 'ConnectorDefinition'
+            $validateSet.ValidValues | Should -Contain 'ExampleDataTemplate'
+            $validateSet.ValidValues | Should -Contain 'ExampleDataSet'
         }
 
         It 'Accepts Id from the pipeline by property name' {
@@ -67,7 +69,7 @@ Describe 'Get-JIMConfigurationChangeHistory' {
             { Get-JIMConfigurationChangeHistory -Type SynchronisationRule -Id ([Guid]::NewGuid().ToString()) -ErrorAction Stop } | Should -Throw '*integer*'
         }
 
-        It 'Rejects a non-integer Id for -Type <_>' -ForEach @('MetaverseObjectType', 'MetaverseAttribute', 'Role', 'PredefinedSearch', 'ConnectorDefinition') {
+        It 'Rejects a non-integer Id for -Type <_>' -ForEach @('MetaverseObjectType', 'MetaverseAttribute', 'Role', 'PredefinedSearch', 'ConnectorDefinition', 'ExampleDataTemplate', 'ExampleDataSet') {
             { Get-JIMConfigurationChangeHistory -Type $_ -Id ([Guid]::NewGuid().ToString()) -ErrorAction Stop } | Should -Throw '*integer*'
         }
 
@@ -108,6 +110,32 @@ Describe 'Get-JIMConfigurationChangeHistory' {
                 }
             }
         }
+
+        It 'Maps -Type ExampleDataSet -Id 5 to the example-data-sets change-history route' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false } }
+
+                Get-JIMConfigurationChangeHistory -Type ExampleDataSet -Id 5 | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -like '/api/v1/example-data/example-data-sets/5/change-history*'
+                }
+            }
+        }
+
+        It 'Maps -Type ExampleDataTemplate -Id 1 to the templates change-history route' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false } }
+
+                Get-JIMConfigurationChangeHistory -Type ExampleDataTemplate -Id 1 | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -like '/api/v1/example-data/templates/1/change-history*'
+                }
+            }
+        }
     }
 
     Context 'Help documentation' {
@@ -136,7 +164,8 @@ Describe 'ChangeReason on configuration write cmdlets' {
         'Add-JIMRoleMember', 'Remove-JIMRoleMember',
         'Set-JIMPredefinedSearch',
         'New-JIMPredefinedSearchCriteriaGroup', 'Set-JIMPredefinedSearchCriteriaGroup', 'Remove-JIMPredefinedSearchCriteriaGroup',
-        'New-JIMPredefinedSearchCriterion', 'Set-JIMPredefinedSearchCriterion', 'Remove-JIMPredefinedSearchCriterion'
+        'New-JIMPredefinedSearchCriterion', 'Set-JIMPredefinedSearchCriterion', 'Remove-JIMPredefinedSearchCriterion',
+        'New-JIMExampleDataSet', 'Set-JIMExampleDataSet', 'Remove-JIMExampleDataSet'
     ) {
         $param = (Get-Command $_).Parameters['ChangeReason']
         $param | Should -Not -BeNullOrEmpty

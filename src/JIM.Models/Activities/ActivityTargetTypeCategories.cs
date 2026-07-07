@@ -24,17 +24,19 @@ public static class ActivityTargetTypeCategories
         { ActivityTargetType.Role, ActivityTargetCategory.Configuration },
         { ActivityTargetType.PredefinedSearch, ActivityTargetCategory.Configuration },
         { ActivityTargetType.ConnectorDefinition, ActivityTargetCategory.Configuration },
-        // Example Data Sets are admin-managed configuration. Their sibling ExampleDataTemplate stays under System
-        // for now because its existing activities are template-generation runs, not configuration changes; the
-        // Example Data change-history increment (PRD_CONFIGURATION_CHANGE_HISTORY_COVERAGE.md) revisits that.
+        // Example Data Sets and Templates are admin-managed configuration; their change history is captured like any
+        // other configuration object. A template's data-generation *runs* are a separate operational concern, recorded
+        // under the distinct DataGeneration target type (System), so the Configuration filter shows template edits
+        // without being polluted by generation runs.
         { ActivityTargetType.ExampleDataSet, ActivityTargetCategory.Configuration },
+        { ActivityTargetType.ExampleDataTemplate, ActivityTargetCategory.Configuration },
         { ActivityTargetType.MetaverseObject, ActivityTargetCategory.IdentityData },
         { ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.TemporalScopeReconciliation, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.HistoryRetentionCleanup, ActivityTargetCategory.System },
         { ActivityTargetType.System, ActivityTargetCategory.System },
         { ActivityTargetType.SystemInitialisation, ActivityTargetCategory.System },
-        { ActivityTargetType.ExampleDataTemplate, ActivityTargetCategory.System },
+        { ActivityTargetType.DataGeneration, ActivityTargetCategory.System },
         { ActivityTargetType.NotSet, ActivityTargetCategory.System }
     };
 
