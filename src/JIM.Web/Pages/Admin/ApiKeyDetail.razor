@@ -52,7 +52,12 @@
                     </MudItem>
 
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Key Prefix:</MudText><br />
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">Key Prefix:</MudText>
+                            <MudTooltip Text="Only the key's prefix is stored, for security. The full key is shown once at creation and cannot be retrieved again." Arrow="true" Placement="Placement.Top">
+                                <MudIcon Icon="@Icons.Material.Outlined.Info" Color="Color.Info" Size="Size.Small" />
+                            </MudTooltip>
+                        </MudStack>
                         <span class="jim-code-inline">@_apiKey.KeyPrefix...</span>
                     </MudItem>
 
