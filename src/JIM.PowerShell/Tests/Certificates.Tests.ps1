@@ -66,6 +66,35 @@ Describe 'Get-JIMCertificate' {
         }
     }
 
+    Context 'List behaviour' {
+
+        It 'Emits nothing when the store is empty (does not leak the pagination envelope)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); totalCount = 0; page = 1; pageSize = 100 } }
+
+                $result = @(Get-JIMCertificate)
+
+                $result.Count | Should -Be 0
+            }
+        }
+
+        It 'Emits each certificate from the response envelope, unwrapped' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $cert1 = [PSCustomObject]@{ id = [guid]::NewGuid(); name = 'Contoso Root CA' }
+                $cert2 = [PSCustomObject]@{ id = [guid]::NewGuid(); name = 'Fabrikam Issuing CA' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @($cert1, $cert2); totalCount = 2; page = 1; pageSize = 100 } }
+
+                $result = @(Get-JIMCertificate)
+
+                $result.Count | Should -Be 2
+                $result[0].name | Should -Be 'Contoso Root CA'
+                $result[1].name | Should -Be 'Fabrikam Issuing CA'
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {

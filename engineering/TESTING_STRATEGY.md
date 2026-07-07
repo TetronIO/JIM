@@ -2,15 +2,19 @@
 
 ## Overview
 
-JIM employs a three-tier testing approach to ensure quality at different levels of the application:
+JIM employs a four-tier testing approach to ensure quality at different levels of the application:
 
 ```
-Integration Tests (Full System)
+Integration Tests (Full System, Docker stack + external directories)
          ^
-   Workflow Tests (Multi-Component)
+Database-Backed Component Tests (real PostgreSQL, .NET test host)
          ^
-    Unit Tests (Single Component)
+   Workflow Tests (Multi-Component, in-memory)
+         ^
+    Unit Tests (Single Component, mocked)
 ```
+
+The middle two tiers both run under `dotnet test`; they differ in the database provider. Workflow tests use the EF Core in-memory provider (fast, no infrastructure), while Database-Backed Component tests run against a real PostgreSQL instance so they catch provider-specific and raw-SQL behaviour the in-memory provider cannot reproduce (see tier 3 and the in-memory limitation section below).
 
 ## 1. Unit Tests
 
@@ -107,7 +111,64 @@ Total: 40 tests.
 - Keep workflows focused (test one business process per test)
 - Choose `WorkflowTestBase` for processor-level tests, `WorkflowTestHarness` for full-cycle scenarios
 
-## 3. Integration Tests
+## 3. Database-Backed Component Tests
+
+**Location**: `test/JIM.Worker.Tests/Servers/*DatabaseTests.cs`
+
+**Purpose**: Verify repository and server behaviour against a **real PostgreSQL** database, in the .NET test host, with no other external systems. This tier exists to catch the class of bug the EF Core in-memory provider structurally hides: provider-specific behaviour (query-tracking semantics, shadow foreign keys) and hand-written raw SQL the in-memory provider cannot execute.
+
+**Characteristics**:
+- Fast (the Predefined Search suite runs in ~30s); much faster than the Docker Integration tier
+- Real PostgreSQL, not in-memory: matches the production provider and the production `NoTracking` default
+- No Docker stack, no Samba AD / OpenLDAP / SCIM, not driven by the PowerShell integration runner
+- Each fixture migrates the schema once (`[OneTimeSetUp]`) and `TRUNCATE`s every table between tests (`[SetUp]`), so it needs a **dedicated throwaway database** it may freely wipe
+
+**Gating**: Every fixture carries `[Category("RequiresPostgres")]` and, in `[OneTimeSetUp]`, calls `Assert.Ignore` unless `JIM_TEST_RESET_DB` is set. So a normal `dotnet test` / `jim-test` run (in-memory tiers only) skips them, and they run only when explicitly pointed at a throwaway database.
+
+**Configuration (environment variables)**:
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `JIM_TEST_RESET_DB` | Name of the throwaway database; **also the opt-in switch** (unset = skip) | (none; required to run) |
+| `JIM_TEST_RESET_HOST` | PostgreSQL host | `localhost` |
+| `JIM_TEST_RESET_PORT` | PostgreSQL port | `5432` |
+| `JIM_TEST_RESET_USER` | Username | `postgres` |
+| `JIM_TEST_RESET_PASSWORD` | Password | `postgres` |
+
+**When to write a Database-Backed Component test**:
+- The behaviour depends on the real provider: a write path whose persistence turns on tracking vs. no-tracking, a query using raw SQL, a shadow-FK relationship walk
+- A workflow/unit test would pass against in-memory but cannot prove the production database behaves the same (the trigger for #849/#850: creating a Predefined Search Criteria Group was a silent no-op that every in-memory test passed)
+- You are adding repository/server coverage that asserts against real SQL rather than orchestrating a full sync cycle (that is the Workflow tier) or the whole stack (Integration tier)
+
+**Running locally**:
+
+Use the `jim-test-db` alias, which spins up a disposable PostgreSQL container on port 5433 (so it never collides with your dev `jim-db` on 5432), runs the tier, and tears the container down:
+
+```bash
+jim-test-db
+```
+
+Or point the tier at any throwaway database yourself:
+
+```bash
+JIM_TEST_RESET_DB=jim_test JIM_TEST_RESET_HOST=localhost JIM_TEST_RESET_PORT=5432 \
+  JIM_TEST_RESET_USER=postgres JIM_TEST_RESET_PASSWORD=postgres \
+  dotnet test JIM.sln --filter "Category=RequiresPostgres"
+```
+
+**Running in CI**: The `database-tests` job in `.github/workflows/ci.yml` stands up a PostgreSQL service container, points `JIM_TEST_RESET_*` at a throwaway `jim_test` database, and runs `dotnet test JIM.sln --filter "Category=RequiresPostgres"` on every PR. It runs alongside the in-memory `build-and-test` job, so the two tiers give independent feedback and a failure here blocks the PR.
+
+**What Database-Backed Component Tests Are Good At**:
+- ✅ Catching persistence bugs the in-memory provider's auto-tracking masks (silent no-op writes)
+- ✅ Exercising hand-written raw PostgreSQL (query translators, criteria group All/Any semantics)
+- ✅ Verifying shadow foreign keys and parent-chain walks against real columns
+
+**What Database-Backed Component Tests Miss**:
+- ❌ End-to-end system behaviour with real directories/connectors (that is the Integration tier)
+- ❌ UI and API-surface behaviour
+- ❌ Performance at scale
+
+## 4. Integration Tests
 
 **Location**: `test/integration/`
 
@@ -165,6 +226,7 @@ Total: 40 tests.
 |----------|----------------|-------------|
 | Unit Tests | 80%+ of business logic | On every commit (pre-commit hook) |
 | Workflow Tests | Critical workflows (sync, provisioning, deletion) | On every commit |
+| Database-Backed Component Tests | Provider-specific / raw-SQL repository behaviour | On every PR (CI `database-tests` job); locally via `jim-test-db` |
 | Integration Tests | Key scenarios (Scenarios 1-5) | On PR, nightly, before release |
 
 ## Best Practices
@@ -309,12 +371,13 @@ var cso = await context.ConnectedSystemObjects.FirstAsync(c => c.Id == id);
 |-----------|----------------------------------|-------------------------------------|
 | Unit Tests (mocked) | ❌ No - mocks return whatever you configure | ❌ No |
 | Workflow Tests (in-memory) | ❌ No - auto-tracking masks the bug | ❌ No |
+| Database-Backed Component Tests (PostgreSQL) | ✅ Yes - real database behaviour | ✅ Yes |
 | Integration Tests (PostgreSQL) | ✅ Yes - real database behaviour | ✅ Yes |
 
 ### What This Means
 
 1. **Unit and workflow tests CANNOT validate that repository queries load required navigation properties**
-2. **Integration tests are the ONLY reliable way to verify `.Include()` chains are correct**
+2. **Only real-PostgreSQL tests can verify `.Include()` chains are correct**; this means the Database-Backed Component tier (tier 3) or the Integration tier (tier 4). The Database-Backed tier is the cheaper of the two and runs on every PR, so reach for it first
 3. **Any bug involving missing navigation property loading will pass all unit/workflow tests**
 
 ### Defensive Measures
@@ -346,16 +409,17 @@ Because we cannot rely on unit/workflow tests to catch these bugs, we employ:
 
 ### Summary
 
-**Integration tests are the ONLY proof of correct navigation property loading.** Unit and workflow tests provide value for logic correctness, but they fundamentally cannot detect missing `.Include()` statements due to EF Core in-memory provider behaviour. Always run integration tests before releasing changes that modify repository queries.
+**Only real-PostgreSQL tests prove correct navigation property loading** (the Database-Backed Component tier or the Integration tier). Unit and workflow tests provide value for logic correctness, but they fundamentally cannot detect missing `.Include()` statements due to EF Core in-memory provider behaviour. Always run a real-PostgreSQL tier before releasing changes that modify repository queries.
 
 ---
 
 ## Summary
 
-- **Unit Tests**: Fast, isolated, test individual components
-- **Workflow Tests**: Moderate speed, test multi-component workflows, catch integration bugs
-- **Integration Tests**: Slow, test full system, validate production-like behaviour
+- **Unit Tests**: Fast, isolated, test individual components (mocked)
+- **Workflow Tests**: Moderate speed, test multi-component workflows in-memory, catch integration bugs
+- **Database-Backed Component Tests**: Real PostgreSQL in the .NET test host, catch provider-specific and raw-SQL bugs the in-memory provider hides; fast enough to run on every PR
+- **Integration Tests**: Slow, test full system with Docker + external directories, validate production-like behaviour
 
-The three tiers complement each other. The watermark bug demonstrates why we need all three levels - unit tests verify components work individually, workflow tests verify they work together, and integration tests verify the complete system works at scale.
+The four tiers complement each other. The watermark bug demonstrates why unit and workflow tests are not enough on their own; the Predefined Search silent-no-op bug (#849/#850) demonstrates why a real-PostgreSQL tier below the heavy Integration stack is worth having - it caught a persistence bug in ~30s that every in-memory test passed.
 
-**⚠️ Critical Caveat**: Due to EF Core in-memory database limitations (see above), integration tests are the ONLY reliable way to verify navigation property loading. Unit and workflow tests will PASS even when `.Include()` statements are missing.
+**⚠️ Critical Caveat**: Due to EF Core in-memory database limitations (see above), a real-PostgreSQL tier (Database-Backed Component or Integration) is the only reliable way to verify navigation property loading. Unit and workflow tests will PASS even when `.Include()` statements are missing.

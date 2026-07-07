@@ -23,6 +23,7 @@
 - `jim` - List all available jim aliases
 - `jim-compile` - Build entire solution (dotnet build)
 - `jim-test` - Run unit + workflow tests (excludes Explicit)
+- `jim-test-db` - Run the database-backed (real-PostgreSQL) test tier against a throwaway container (see `engineering/TESTING_STRATEGY.md`)
 - `jim-test-all` - Run ALL tests (incl. Explicit + Pester)
 - `jim-db` - Start PostgreSQL (for local debugging)
 - `jim-db-stop` - Stop PostgreSQL

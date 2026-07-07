@@ -13,6 +13,7 @@ alias jim='echo "JIM Development Aliases:
 .NET Local Development:
   jim-compile        - dotnet build JIM.sln
   jim-test           - Run unit + workflow tests (excludes Explicit)
+  jim-test-db        - Run database-backed (real-PostgreSQL) tests in a throwaway container
   jim-test-all       - Run ALL tests (incl. Explicit + Pester)
   jim-test-ps        - Run PowerShell Pester tests
   jim-clean          - dotnet clean && build
@@ -166,6 +167,40 @@ jim-unlock-signing() {
 # .NET local development
 alias jim-compile='dotnet build JIM.sln'
 alias jim-test='dotnet test JIM.sln'
+# Run the database-backed (real-PostgreSQL) test tier against a throwaway database.
+# These fixtures are gated by JIM_TEST_RESET_DB and self-skip in a normal `jim-test`
+# run. This spins up a disposable PostgreSQL container, points the tier at it, runs
+# `Category=RequiresPostgres`, then tears the container down. Needs `jim-db` NOT to be
+# using the same container name; it uses a dedicated `jim-test-db` container on port 5433
+# so it never collides with your dev database. See engineering/TESTING_STRATEGY.md.
+jim-test-db() {
+  local container='jim-test-db'
+  local image='postgres:18.4@sha256:4aabea78cf39b90e834caf3af7d602a18565f6fe2508705c8d01aa63245c2e20'
+  echo "Starting throwaway PostgreSQL ($container) on port 5433..."
+  docker rm -f "$container" >/dev/null 2>&1 || true
+  docker run -d --name "$container" \
+    -e POSTGRES_USER=postgres \
+    -e POSTGRES_PASSWORD=postgres \
+    -e POSTGRES_DB=jim_test \
+    -p 5433:5432 "$image" >/dev/null || { echo "Failed to start $container"; return 1; }
+
+  echo "Waiting for PostgreSQL to accept connections..."
+  local ready=''
+  for _ in $(seq 1 30); do
+    if docker exec "$container" pg_isready -U postgres >/dev/null 2>&1; then ready=1; break; fi
+    sleep 1
+  done
+  if [ -z "$ready" ]; then echo "PostgreSQL did not become ready"; docker rm -f "$container" >/dev/null 2>&1; return 1; fi
+
+  JIM_TEST_RESET_HOST=localhost JIM_TEST_RESET_PORT=5433 JIM_TEST_RESET_USER=postgres \
+    JIM_TEST_RESET_PASSWORD=postgres JIM_TEST_RESET_DB=jim_test \
+    dotnet test JIM.sln --filter "Category=RequiresPostgres" --verbosity normal
+  local rc=$?
+
+  echo "Removing throwaway PostgreSQL ($container)..."
+  docker rm -f "$container" >/dev/null 2>&1 || true
+  return $rc
+}
 # Kill cached MSBuild worker nodes that stack up across build/test iterations.
 # `dotnet` spawns these with `/nodemode:1 /nodeReuse:true` and they hang around holding
 # 150-220 MB each; `dotnet build-server shutdown` doesn't touch them. Safe to run at any

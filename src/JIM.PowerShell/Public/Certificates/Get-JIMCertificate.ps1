@@ -118,8 +118,10 @@ function Get-JIMCertificate {
                 $queryString = $queryParams -join '&'
                 $response = Invoke-JIMApi -Endpoint "/api/v1/certificates?$queryString"
 
-                # Handle paginated response
-                $certs = if ($response.items) { $response.items } else { $response }
+                # Handle paginated response. Test for the 'items' property, not its truthiness:
+                # an empty page has items = @() (falsy), and falling through to $response would
+                # emit the pagination envelope itself as if it were a certificate.
+                $certs = if ($response.PSObject.Properties.Name -contains 'items') { $response.items } else { $response }
 
                 # Filter by name if specified
                 if ($Name) {
