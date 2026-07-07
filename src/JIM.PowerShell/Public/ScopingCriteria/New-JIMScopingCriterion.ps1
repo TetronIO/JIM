@@ -220,9 +220,10 @@ function New-JIMScopingCriterion {
             $objectTypeId = $syncRule.connectedSystemObjectTypeId
             Write-Verbose "Looking up Connected System $connectedSystemId object type $objectTypeId attributes"
 
-            $objectType = Invoke-JIMApi -Endpoint "/api/v1/connected-systems/$connectedSystemId/object-types/$objectTypeId"
-            if (-not $objectType -or -not $objectType.attributes) {
-                Write-Error "Could not find object type attributes."
+            $objectTypes = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$connectedSystemId/object-types"
+            $objectType = $objectTypes | Where-Object { $_.id -eq $objectTypeId } | Select-Object -First 1
+            if (-not $objectType) {
+                Write-Error "Could not find object type $objectTypeId on Connected System $connectedSystemId."
                 return
             }
 
