@@ -10,6 +10,7 @@
 @* Shared ordered contributor list for an attribute's priority (#91, Surface 2 management home; Surface 1 renders *@
 @* it read-only). Highest priority first. Drag to reorder; the whole list renumbers. "Null is a value" is per row. *@
 
+<div class="apt-priority-list">
 @if (_loading)
 {
     <div class="d-flex justify-center pa-4">
@@ -42,12 +43,11 @@ else
 
     @if (ReadOnly)
     {
-        <div class="border rounded">
+        <div class="apt-list-frame rounded">
             @for (var i = 0; i < _contributors.Count; i++)
             {
                 var contributor = _contributors[i];
-                <div class="d-flex align-center px-2 py-2 @(contributor.SyncRuleEnabled ? null : "mud-text-disabled")"
-                     style="border-bottom: 1px solid var(--mud-palette-lines-default);">
+                <div class="apt-row d-flex align-center px-2 py-2 @(contributor.SyncRuleEnabled ? null : "mud-text-disabled")">
                     <div style="width: 64px;">@(i + 1)</div>
                     <div style="flex: 1 1 0;">
                         @if (string.IsNullOrEmpty(contributor.ConnectedSystemName))
@@ -78,15 +78,14 @@ else
     {
         <MudDropContainer T="AttributePriorityContributorDto" @ref="_dropContainer" Items="_contributors"
                           ItemsSelector="@((item, dropzone) => true)" ItemDropped="OnItemDropped"
-                          Class="border rounded" ApplyDropClassesOnDragStarted="true">
+                          Class="apt-list-frame rounded">
             <ChildContent>
                 <MudDropZone T="AttributePriorityContributorDto" AllowReorder="true" Class="pa-0"
-                             DraggingClass="mud-theme-primary" />
+                             ItemDraggingClass="apt-row-dragging" />
             </ChildContent>
             <ItemRenderer>
-                <div class="d-flex align-center px-2 py-2 @(context.SyncRuleEnabled ? null : "mud-text-disabled")"
-                     style="border-bottom: 1px solid var(--mud-palette-lines-default);">
-                    <div style="width: 40px; cursor: grab;">
+                <div class="apt-row d-flex align-center px-2 py-2 @(context.SyncRuleEnabled ? null : "mud-text-disabled")">
+                    <div class="apt-drag-handle" style="width: 40px;">
                         <MudTooltip Text="Drag to reorder" Arrow="true" Placement="Placement.Top">
                             <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Class="mud-text-secondary" />
                         </MudTooltip>
@@ -111,7 +110,8 @@ else
                             </MudTooltip>
                         }
                     </div>
-                    <div style="width: 150px;">
+                    @* Stop a mousedown on the checkbox from starting a row drag, so toggling never begins a reorder. *@
+                    <div style="width: 150px;" @onmousedown:stopPropagation="true">
                         <MudCheckBox T="bool" Value="context.NullIsValue"
                                      ValueChanged="@(v => OnNullIsValueChanged(context, v))"
                                      Dense="true" />
@@ -134,6 +134,7 @@ else
         </div>
     }
 }
+</div>
 
 @code {
     [Parameter, EditorRequired] public int MetaverseObjectTypeId { get; set; }
