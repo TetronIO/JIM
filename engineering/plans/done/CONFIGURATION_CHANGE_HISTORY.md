@@ -1,7 +1,7 @@
 # Configuration Change History - Implementation Plan
 
 - **Status:** Done
-- **Note:** Phases 1-7 delivered. Phase 8 (rollback / restore of a prior configuration version), and the paired capture of a terminal snapshot when a Connected System is deleted, are deferred until there is demand and now tracked under their own issue [#942](https://github.com/TetronIO/JIM/issues/942).
+- **Note:** Phases 1-7 delivered. Capturing a terminal snapshot when a Connected System is deleted (the last uncovered mutation path; originally earmarked to travel with rollback) has since been implemented, so every configuration delete now records a tombstone. Phase 8 (rollback / restore of a prior configuration version) remains deferred until there is demand, tracked under its own issue [#942](https://github.com/TetronIO/JIM/issues/942).
 - **Issue:** [#14](https://github.com/TetronIO/JIM/issues/14)
 - **PRD:** [`engineering/prd/PRD_CONFIGURATION_CHANGE_HISTORY.md`](../../prd/PRD_CONFIGURATION_CHANGE_HISTORY.md)
 - **Coverage increment (2026-07-06):** This plan's direction to "enable the remaining configuration types incrementally" is now fully delivered under [`CONFIGURATION_CHANGE_HISTORY_COVERAGE.md`](CONFIGURATION_CHANGE_HISTORY_COVERAGE.md) (Done): every admin-mutable configuration type now carries versioned, redacted change history.
@@ -350,7 +350,7 @@ In `-AsDiff`, `+` lines render green and `-` lines red via `$PSStyle` (git-style
 **Files:** `JIM.Worker/Worker.cs`; `ChangeHistoryServer.cs` / repository; `ServiceSettingsServer.cs`; `JIM.Web/Pages/Admin/Settings.razor`.
 
 ### Phase 8: Rollback (Deferred - tracked under [#942](https://github.com/TetronIO/JIM/issues/942))
-Out of scope here; designed for, and now spun out to its own issue, deferred until there is demand. Full snapshots make restore tractable; `ActivityTargetOperationType.Revert` already exists. When delivered, ships with UI, REST API, and a `Restore-JIM...` cmdlet, plus careful handling of references to since-deleted dependencies. Capturing a terminal snapshot when a Connected System is deleted (Synchronisation Rule deletes already do this; Connected System deletes do not, and their asynchronous/cascading delete paths must be wired in before a deleted Connected System can be restored) travels with this work.
+Out of scope here; designed for, and now spun out to its own issue, deferred until there is demand. Full snapshots make restore tractable; `ActivityTargetOperationType.Revert` already exists. When delivered, ships with UI, REST API, and a `Restore-JIM...` cmdlet, plus careful handling of references to since-deleted dependencies. (Capturing a terminal snapshot when a Connected System is deleted, once earmarked to travel with this rollback work as a prerequisite for restoring a deleted system, has since been implemented separately: all three delete paths, synchronous and worker, now record a tombstone.)
 
 ## Design Decisions
 

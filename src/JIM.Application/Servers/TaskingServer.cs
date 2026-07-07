@@ -147,6 +147,12 @@ namespace JIM.Application.Servers
                     TargetOperationType = ActivityTargetOperationType.Delete,
                     ConnectedSystemId = deleteConnectedSystemTask.ConnectedSystemId,
                 };
+
+                // Carry the optional deletion reason onto the queued Activity now, so it survives to when the worker
+                // runs the deletion (the reason is transient on the task and never persisted there).
+                if (!string.IsNullOrWhiteSpace(deleteConnectedSystemTask.ChangeReason))
+                    activity.ChangeReason = deleteConnectedSystemTask.ChangeReason.Trim();
+
                 await CreateActivityFromWorkerTaskAsync(activity, workerTask);
 
                 // associate the activity with the worker task so the worker task processor can complete the activity when done.

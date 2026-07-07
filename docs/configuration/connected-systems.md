@@ -87,7 +87,9 @@ Changes destined for the Connected System that have been computed by synchronisa
 **Removing a Connected System:**
 
 1. Run a deletion preview to understand the impact (which Metaverse Objects become disconnected, which Synchronisation Rules become invalid)
-2. Delete the Connected System. The operation is asynchronous and runs as a background activity.
+2. Delete the Connected System. Small systems are removed immediately; larger systems, or a system with a running sync, are queued and run as a background activity.
+
+Deleting a Connected System records a final snapshot of its configuration in the [configuration change history](activities.md#configuration-change-history), so a decommissioned system's last-known state, and who removed it, remain auditable after it is gone. You can attach an optional reason in the admin portal delete dialog, with `Remove-JIMConnectedSystem -ChangeReason`, or via the REST API. As with all such snapshots, connector secrets are recorded as changed but never stored.
 
 ## Manage Connected Systems
 

@@ -126,6 +126,22 @@ public class ConnectedSystemServer
             $"Synchronisation Rule {syncRule.Id}");
     }
 
+    // Captures a tombstone snapshot of a Connected System onto its delete Activity, before the system is removed. The
+    // system is reloaded in full (its Run Profiles, object types, partitions and setting values, secrets redacted) so
+    // the snapshot reflects persisted truth; if it has already gone (null reload) capture is skipped. Matching the
+    // Synchronisation Rule and Connector Definition deletion behaviour, this sets neither the Activity's target column
+    // nor a version; the snapshot is surfaced via the Activity itself rather than the object's history.
+    private async Task CaptureConnectedSystemDeletionAsync(Activity activity, int connectedSystemId, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureDeletionAsync(activity, changeReason,
+            async hashKey =>
+            {
+                var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemAsync(connectedSystemId);
+                return connectedSystem == null ? null : Application.ConfigurationSnapshots.CreateSnapshot(connectedSystem, hashKey);
+            },
+            $"Connected System {connectedSystemId}");
+    }
+
     // Captures a redacted, versioned snapshot of a Connector Definition onto its audit Activity via the shared
     // ConfigurationChangeCaptureService. The definition is reloaded with its files and settings so the snapshot
     // reflects persisted truth rather than the caller's partial in-memory graph; call it after the change has been
@@ -1006,7 +1022,7 @@ public class ConnectedSystemServer
     /// <param name="initiatedBy">The user who initiated the deletion.</param>
     /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
     /// <returns>The result of the deletion request.</returns>
-    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject? initiatedBy, bool deleteChangeHistory = false)
+    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject? initiatedBy, bool deleteChangeHistory = false, string? changeReason = null)
     {
         Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by {User}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, initiatedBy?.DisplayName ?? "System", deleteChangeHistory);
@@ -1042,6 +1058,7 @@ public class ConnectedSystemServer
             var deleteTask = initiatedBy != null
                 ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.DisplayName ?? "Unknown", evaluateMvoDeletionRules: true, deleteChangeHistory)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
+            deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
@@ -1059,6 +1076,7 @@ public class ConnectedSystemServer
             var deleteTask = initiatedBy != null
                 ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.DisplayName ?? "Unknown", evaluateMvoDeletionRules: true, deleteChangeHistory)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
+            deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id);
@@ -1082,12 +1100,9 @@ public class ConnectedSystemServer
 
         try
         {
-            // Mark orphaned MVOs for deletion before deleting the Connected System
-            // This sets LastConnectorDisconnectedDate so housekeeping will delete them after grace period
-            await Application.Metaverse.MarkOrphanedMvosForDeletionAsync(connectedSystemId);
-
-            // Perform the deletion
-            await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId, deleteChangeHistory);
+            // Capture the tombstone, mark orphaned MVOs, and delete, via the shared delete implementation so the
+            // synchronous and worker paths cannot drift.
+            await ExecuteDeletionAsync(connectedSystemId, activity, changeReason, evaluateMvoDeletionRules: true, deleteChangeHistory);
 
             // Complete the activity
             await Application.Activities.CompleteActivityAsync(activity);
@@ -1116,7 +1131,7 @@ public class ConnectedSystemServer
     /// <summary>
     /// Deletes a Connected System (initiated by API key).
     /// </summary>
-    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, ApiKey initiatedByApiKey, bool deleteChangeHistory = false)
+    public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, ApiKey initiatedByApiKey, bool deleteChangeHistory = false, string? changeReason = null)
     {
         Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by API key {ApiKeyName}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, initiatedByApiKey.Name, deleteChangeHistory);
@@ -1149,6 +1164,7 @@ public class ConnectedSystemServer
                 runningSyncTask.Id, connectedSystemId);
 
             var deleteTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory);
+            deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAfterSync(deleteTask.Id, deleteTask.Activity!.Id);
@@ -1163,6 +1179,7 @@ public class ConnectedSystemServer
                 connectedSystemId, csoCount, BackgroundDeletionThreshold);
 
             var deleteTask = DeleteConnectedSystemWorkerTask.ForApiKey(connectedSystemId, initiatedByApiKey.Id, initiatedByApiKey.Name, evaluateMvoDeletionRules: true, deleteChangeHistory);
+            deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
 
             return ConnectedSystemDeletionResult.QueuedAsBackgroundJob(deleteTask.Id, deleteTask.Activity!.Id);
@@ -1182,8 +1199,9 @@ public class ConnectedSystemServer
 
         try
         {
-            await Application.Metaverse.MarkOrphanedMvosForDeletionAsync(connectedSystemId);
-            await Application.Repository.ConnectedSystems.DeleteConnectedSystemAsync(connectedSystemId, deleteChangeHistory);
+            // Capture the tombstone, mark orphaned MVOs, and delete, via the shared delete implementation so the
+            // synchronous and worker paths cannot drift.
+            await ExecuteDeletionAsync(connectedSystemId, activity, changeReason, evaluateMvoDeletionRules: true, deleteChangeHistory);
             await Application.Activities.CompleteActivityAsync(activity);
 
             Log.Information("DeleteAsync: Connected System {Id} deleted successfully", connectedSystemId);
@@ -1204,15 +1222,25 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Executes the deletion of a Connected System. Called by the worker service for background deletions.
+    /// Executes the deletion of a Connected System. This is the single delete implementation shared by the worker
+    /// service (for queued and background deletions) and the synchronous small-system path. It captures a tombstone
+    /// configuration snapshot onto the supplied delete Activity before the system is removed, so a deleted Connected
+    /// System's final state remains in configuration change history.
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System to delete.</param>
+    /// <param name="activity">The in-flight delete Activity; the tombstone snapshot is recorded on it (the caller
+    /// completes it after this returns).</param>
+    /// <param name="changeReason">Optional reason for the deletion. Null on the worker path, where the reason is
+    /// already carried on the queued Activity from request time.</param>
     /// <param name="evaluateMvoDeletionRules">Whether to mark orphaned MVOs for deletion before deleting the Connected System.</param>
     /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
-    public async Task ExecuteDeletionAsync(int connectedSystemId, bool evaluateMvoDeletionRules = true, bool deleteChangeHistory = false)
+    public async Task ExecuteDeletionAsync(int connectedSystemId, Activity activity, string? changeReason = null, bool evaluateMvoDeletionRules = true, bool deleteChangeHistory = false)
     {
         Log.Information("ExecuteDeletionAsync: Starting for Connected System {Id}, EvaluateMvoDeletionRules={EvaluateMvo}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, evaluateMvoDeletionRules, deleteChangeHistory);
+
+        // Capture the tombstone before anything is removed, while the full system graph is still readable.
+        await CaptureConnectedSystemDeletionAsync(activity, connectedSystemId, changeReason);
 
         if (evaluateMvoDeletionRules)
         {

@@ -128,6 +128,16 @@
 
             <MudTextField
                 T="string"
+                @bind-Value="_changeReason"
+                Label="Reason (optional)"
+                Variant="Variant.Outlined"
+                Class="mt-4"
+                FullWidth="true"
+                Lines="2"
+                MaxLines="6" />
+
+            <MudTextField
+                T="string"
                 @bind-Value="_deleteConfirmationText"
                 Label="@($"Type \"{ConnectedSystem.Name}\" to confirm")"
                 Variant="Variant.Outlined"
@@ -177,11 +187,13 @@
     private bool _deletionPreviewLoading;
     private bool _deletionInProgress;
     private string? _deleteConfirmationText;
+    private string? _changeReason;
     private bool _deleteChangeHistory;
 
     private async Task HandleShowDeleteConfirmationAsync()
     {
         _deleteConfirmationText = string.Empty;
+        _changeReason = null;
         _deletionPreview = null;
         _deletionPreviewLoading = true;
         _deleteConfirmationDialogVisible = true;
@@ -217,7 +229,7 @@
         {
             using var jim = JimFactory.Create();
             var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-            var result = await jim.ConnectedSystems.DeleteAsync(ConnectedSystem.Id, user, _deleteChangeHistory);
+            var result = await jim.ConnectedSystems.DeleteAsync(ConnectedSystem.Id, user, _deleteChangeHistory, _changeReason);
 
             _deleteConfirmationDialogVisible = false;
             _deletionInProgress = false;
