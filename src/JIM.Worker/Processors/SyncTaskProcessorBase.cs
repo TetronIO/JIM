@@ -477,11 +477,18 @@ public abstract class SyncTaskProcessorBase
                         existingRpei.AttributeFlowCount = changeResult.AttributeFlowCount;
                     }
 
-                    // Capture recalled attribute values for MVO change tracking (enables attribute change table in RPEI detail)
+                    // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
+                    // attribute change table in RPEI detail). Re-elected additions ride alongside the removals
+                    // so the change record shows a handover to the surviving contributor, not just a blank.
                     if (changeResult.RecalledAttributeValues != null && changeResult.DisconnectedMvo != null)
                     {
-                        _pendingMvoChanges.Add((changeResult.DisconnectedMvo, new List<MetaverseObjectAttributeValue>(),
+                        _pendingMvoChanges.Add((changeResult.DisconnectedMvo, changeResult.RecalledAttributeAdditions ?? [],
                             changeResult.RecalledAttributeValues, ObjectChangeType.DisconnectedOutOfScope, existingRpei, null));
+
+                        // Defensive parity with the new-RPEI branch below: surface genuine scope-exit clears as a
+                        // NoContributor outcome when this RPEI already carries an outcome tree to attach to.
+                        AddNoContributorOutcomeForScopeExit(existingRpei,
+                            existingRpei.SyncOutcomes.FirstOrDefault(o => o.ParentSyncOutcome == null), changeResult);
                     }
                 }
                 else
@@ -498,10 +505,12 @@ public abstract class SyncTaskProcessorBase
                         runProfileExecutionItem.AttributeFlowCount = changeResult.AttributeFlowCount;
                     }
 
-                    // Capture recalled attribute values for MVO change tracking (enables attribute change table in RPEI detail)
+                    // Capture recalled (and any re-elected) attribute values for MVO change tracking (enables
+                    // attribute change table in RPEI detail). Re-elected additions ride alongside the removals
+                    // so the change record shows a handover to the surviving contributor, not just a blank.
                     if (changeResult.RecalledAttributeValues != null && changeResult.DisconnectedMvo != null)
                     {
-                        _pendingMvoChanges.Add((changeResult.DisconnectedMvo, new List<MetaverseObjectAttributeValue>(),
+                        _pendingMvoChanges.Add((changeResult.DisconnectedMvo, changeResult.RecalledAttributeAdditions ?? [],
                             changeResult.RecalledAttributeValues, ObjectChangeType.DisconnectedOutOfScope, runProfileExecutionItem, null));
                     }
 
@@ -539,6 +548,11 @@ public abstract class SyncTaskProcessorBase
                                 ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
                                 detailCount: changeResult.AttributeFlowCount);
                         }
+
+                        // In Detailed mode, surface scope-exit clears with no surviving contributor (#91), mirroring
+                        // the NoContributor emission on the obsoletion path's Disconnected RPEI.
+                        if (changeResult.ChangeType == ObjectChangeType.DisconnectedOutOfScope)
+                            AddNoContributorOutcomeForScopeExit(runProfileExecutionItem, rootOutcome, changeResult);
 
                         // Add MVO deletion fate outcome for DisconnectedOutOfScope when the deletion rule was triggered
                         if (changeResult.ChangeType == ObjectChangeType.DisconnectedOutOfScope
@@ -608,6 +622,38 @@ public abstract class SyncTaskProcessorBase
 
             Log.Error(e, "ProcessActiveConnectedSystemObjectAsync: Unhandled error during pass 2 for {Cso}.",
                 connectedSystemObject);
+        }
+    }
+
+    /// <summary>
+    /// Emits a NoContributor child outcome for a scope-exit disconnection when recalled attributes were genuinely
+    /// cleared: not re-elected to a surviving contributor, no other value remaining, and not frozen under a grace
+    /// period (frozen values are unmarked from the removals before capture, so they never reach this count).
+    /// Mirrors <see cref="ProcessObsoleteConnectedSystemObjectAsync"/>'s NoContributor emission on the obsoletion
+    /// Disconnected RPEI (#91). A no-op outside Detailed tracking, when no root outcome exists to attach to, when
+    /// no recall occurred, or when nothing was genuinely cleared.
+    /// </summary>
+    private void AddNoContributorOutcomeForScopeExit(
+        ActivityRunProfileExecutionItem rpei,
+        ActivityRunProfileExecutionItemSyncOutcome? rootOutcome,
+        MetaverseObjectChangeResult changeResult)
+    {
+        if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
+            || rootOutcome == null
+            || changeResult.RecalledAttributeValues == null
+            || changeResult.DisconnectedMvo == null)
+            return;
+
+        var clearedAttributeCount = CountClearedAttributes(
+            changeResult.DisconnectedMvo,
+            changeResult.RecalledAttributeAdditions ?? [],
+            changeResult.RecalledAttributeValues);
+        if (clearedAttributeCount > 0)
+        {
+            SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
+                ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor,
+                targetEntityDescription: changeResult.DisconnectedMvo.DisplayName,
+                detailCount: clearedAttributeCount);
         }
     }
 
@@ -786,15 +832,19 @@ public abstract class SyncTaskProcessorBase
             // notified of the recalled (and any re-elected) attributes via Pending Exports.
             if (mvo.PendingAttributeValueRemovals.Count > 0 || mvo.PendingAttributeValueAdditions.Count > 0)
             {
-                // Capture pending changes BEFORE applying (which clears the pending lists). Re-elected values appear
-                // as additions; an attribute re-elected to a surviving source is a change-to-new-value (present in
-                // additions), not a clear, so it is excluded from removedAttributes (only genuinely cleared
-                // attributes, with no surviving contributor, are reported as removed to export evaluation).
+                // Capture pending changes BEFORE applying (which clears the pending lists), using the same
+                // construction as the normal Attribute Flow path (ProcessMetaverseObjectChangesAsync): additions
+                // FIRST in changedAttributes, and every removal in removedAttributes. Both orderings matter to
+                // export evaluation (CreateAttributeValueChanges): a single-valued attribute exports its FIRST
+                // matching changed value, so the re-elected survivor's addition must precede the leaver's removal
+                // or the target would be staged with the stale value (then dropped by no-net-change detection,
+                // leaving the target stale forever); and a removal only null-clears (single-valued) or stages a
+                // Remove (multi-valued) when present in removedAttributes, so a re-elected attribute exports as a
+                // change-of-value (the addition wins) while a genuinely cleared one exports as a clear.
                 var additions = mvo.PendingAttributeValueAdditions.ToList();
                 var removals = mvo.PendingAttributeValueRemovals.ToList();
-                var reElectedAttributeIds = additions.Select(a => a.AttributeId).ToHashSet();
-                var changedAttributes = removals.Concat(additions).ToList();
-                var removedAttributes = removals.Where(r => !reElectedAttributeIds.Contains(r.AttributeId)).ToHashSet();
+                var changedAttributes = additions.Concat(removals).ToList();
+                var removedAttributes = removals.ToHashSet();
 
                 // Tally the attributes genuinely cleared (recalled with no surviving contributor re-elected and no
                 // other value remaining) for the NoContributor observability outcome (#91), built further below.
@@ -1577,6 +1627,27 @@ public abstract class SyncTaskProcessorBase
         // pick up the newly assigned MVO IDs (set via EF relationship fixup during AddRange).
         if (_pendingCsoJoinUpdates.Count > 0)
         {
+            // Release-before-claim: obsolete CSOs that were disconnected in-memory this page (their
+            // MetaverseObjectId set to null during Pass 1) still hold their old MetaverseObjectId in the
+            // database until FlushObsoleteCsoOperationsAsync deletes them later in the flush sequence. The
+            // filtered unique index IX_ConnectedSystemObjects_ConnectedSystemId_MetaverseObjectId_Unique
+            // rejects the new join written below if an obsolete CSO still occupies the same
+            // (Connected System, Metaverse Object) slot when that join commits; each flush step
+            // auto-commits separately, so the duplicate is a committed state, not a within-transaction
+            // transient the index would tolerate. Persist the null join state the engine already holds in
+            // memory for those CSOs first, vacating the slot so a re-matching join has somewhere to land.
+            // Only CSOs whose in-memory FK is already null are released here, so a CSO kept joined under
+            // "once managed, always managed" (InboundOutOfScopeAction=RemainJoined) is left untouched.
+            var obsoleteSlotsToRelease = _obsoleteCsosToDelete
+                .Select(x => x.Cso)
+                .Where(cso => cso.MetaverseObjectId == null)
+                .ToList();
+            if (obsoleteSlotsToRelease.Count > 0)
+            {
+                await _syncRepo.UpdateConnectedSystemObjectJoinStatesAsync(obsoleteSlotsToRelease);
+                Log.Verbose("PersistPendingMetaverseObjectsAsync: Released {Count} obsolete CSO join slot(s) before writing new joins", obsoleteSlotsToRelease.Count);
+            }
+
             // For projected CSOs, MetaverseObjectId was not set at projection time (MVO had
             // no ID yet). Now that CreateMetaverseObjectsAsync has persisted the MVOs, EF has
             // assigned IDs and relationship fixup has set MetaverseObjectId on the CSOs.
@@ -2930,6 +3001,24 @@ public abstract class SyncTaskProcessorBase
                 $"Check for duplicate data in your source system, or review your Object Matching Rules for uniqueness.");
         }
 
+        // Also reject if another CSO has already been queued to join this MVO earlier in this same page
+        // (same Connected System) but not yet flushed to the database. The count query above round-trips
+        // to the database, which in production cannot see an in-memory pending join, so without this check
+        // two brand-new same-system CSOs that both match one MVO in a single page each read a count of zero,
+        // both pass, and their join writes then collide on the filtered unique index as a raw 23505 at the
+        // batch flush. That input is genuinely ambiguous (two source records claim one identity) and must
+        // fail cleanly here. This is kept as a separate check rather than folded into existingCsoJoinCount
+        // so it never double-counts: the in-memory test repository already reflects the pending join in the
+        // count above and is caught by the == 1 branch, whereas production is caught here. The current CSO
+        // is not added to _pendingCsoJoinUpdates until after this guard passes, so no self-exclusion applies.
+        if (_pendingCsoJoinUpdates.Any(cso => cso.MetaverseObjectId == mvo.Id))
+        {
+            throw new SyncJoinException(
+                ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin,
+                $"Cannot join this Connected System Object to Metaverse Object ({mvo}) - another Connected System Object from this Connected System has already matched it in the same synchronisation page. " +
+                $"Check for duplicate data in your source system, or review your Object Matching Rules for uniqueness.");
+        }
+
         // Establish join! First rule to match, wins.
         connectedSystemObject.MetaverseObject = mvo;
         connectedSystemObject.MetaverseObjectId = mvo.Id;
@@ -3238,12 +3327,26 @@ public abstract class SyncTaskProcessorBase
         var objectTypeId = mvo.Type.Id;
         var recalledAttributeIds = recalledValues.Select(av => av.AttributeId).Distinct().ToList();
 
+        var contestedAttributeIds = recalledAttributeIds
+            .Where(id => priorityContext.GetContributorCount(objectTypeId, id) > 1)
+            .ToList();
+        if (contestedAttributeIds.Count == 0)
+            return;
+
+        // Survivor discovery must query the repository, not the mvo.ConnectedSystemObjects navigation: the sync
+        // page loads hydrate the Metaverse Object with Type and AttributeValues only, so on PostgreSQL that
+        // navigation holds just the sibling CSOs EF happens to be tracking in this run (typically only the leaving
+        // system's own page), and survivors joined via other Connected Systems are invisible, silently disabling
+        // re-election. The in-memory test database auto-fixes the navigation up and masks this; only a
+        // real-database run can catch a regression here.
+        var joinedCsos = await _syncRepo.GetConnectedSystemObjectsByMetaverseObjectIdAsync(mvo.Id);
+
         // Gather the distinct (surviving CSO, contributing rule) pairs to re-flow, highest priority first so the
         // strongest surviving contributor is written first and the gate skips the rest.
         var survivorsToReflow = new List<(ConnectedSystemObject Cso, SyncRule Rule)>();
         var seen = new HashSet<(Guid CsoId, int RuleId)>();
 
-        foreach (var attributeId in recalledAttributeIds.Where(id => priorityContext.GetContributorCount(objectTypeId, id) > 1))
+        foreach (var attributeId in contestedAttributeIds)
         {
             // Contributing rules other than the leaver's own (whose contribution is gone). Project to the rule and
             // filter in one pipeline so the leaver's rule and any rule-less mapping are excluded before the body.
@@ -3252,7 +3355,7 @@ public abstract class SyncTaskProcessorBase
                          .Where(r => r != null && r.ConnectedSystemId != leaver.ConnectedSystemId)
                          .Select(r => r!))
             {
-                foreach (var survivor in mvo.ConnectedSystemObjects.Where(c =>
+                foreach (var survivor in joinedCsos.Where(c =>
                              c.ConnectedSystemId == rule.ConnectedSystemId &&
                              c.Id != leaver.Id &&
                              c.Status != ConnectedSystemObjectStatus.Obsolete))
@@ -3268,10 +3371,13 @@ public abstract class SyncTaskProcessorBase
 
         foreach (var (survivor, rule) in survivorsToReflow)
         {
-            // The obsoletion load does not eagerly fetch sibling CSO attribute values or type; load them explicitly
-            // so the re-flow evaluates real values on PostgreSQL (the in-memory test database auto-tracks navigations
-            // and would mask a missing load).
-            if (survivor.AttributeValues.Count == 0)
+            // The discovery load does not eagerly fetch the survivor's object type or reference-value navigations;
+            // load the full Connected System Object so the re-flow evaluates real values, can resolve the
+            // survivor's type, and can resolve its reference attributes on PostgreSQL (the in-memory test database
+            // auto-tracks navigations and would mask a missing load). A tracked survivor resolves to the same
+            // instance, now fully hydrated.
+            if (survivor.Type == null || survivor.AttributeValues.Count == 0 ||
+                survivor.AttributeValues.Any(av => av.ReferenceValueId.HasValue && av.ReferenceValue == null))
             {
                 var loaded = await _syncRepo.GetConnectedSystemObjectAsync(survivor.ConnectedSystemId, survivor.Id);
                 if (loaded != null)
@@ -3395,6 +3501,12 @@ public abstract class SyncTaskProcessorBase
     /// <summary>
     /// Handles a CSO that has fallen out of scope for all import Synchronisation Rules.
     /// If the CSO is currently joined to an MVO, applies the InboundOutOfScopeAction.
+    /// Mirrors <see cref="ProcessObsoleteConnectedSystemObjectAsync"/>'s attribute recall semantics for the
+    /// Disconnect action (#91): a scope exit is just another way a contributing CSO stops contributing, so it
+    /// re-elects a still-joined lower-priority contributor for the recalled attributes rather than blanking them,
+    /// a configured deletion grace period hands over re-elected attributes while freezing only those with no
+    /// surviving contributor, and the recalled/re-elected values are queued for export evaluation so target
+    /// systems receive Pending Exports for the handover or clear.
     /// </summary>
     /// <returns>A result indicating what happened (DisconnectedOutOfScope, OutOfScopeRetainJoin, or NoChanges).</returns>
     protected async Task<MetaverseObjectChangeResult> HandleCsoOutOfScopeAsync(
@@ -3444,14 +3556,19 @@ public abstract class SyncTaskProcessorBase
                 var mvoDeletionFate = await ProcessMvoDeletionRuleAsync(mvo, _connectedSystem.Id, remainingCsoCount);
 
                 // Check if we should remove contributed attributes based on the object type setting.
-                // Skip recall when a grace period is configured (see ProcessObsoleteConnectedSystemObjectAsync).
-                // Also skip recall when the MVO will be deleted immediately — the recall work (MVO update,
-                // export evaluation queueing) would be discarded when the MVO is deleted (#390).
-                int attributeRemovalCount = 0;
+                // A configured deletion grace period no longer skips recall wholesale: an attribute with another
+                // contributor is handed to the survivor below (a safe change-of-value, not a clear), while an
+                // attribute with no other contributor is frozen (preserved) for the grace window, so identity-
+                // critical single-source values are not cleared mid-grace (mirrors
+                // ProcessObsoleteConnectedSystemObjectAsync). Recall is still skipped entirely when the MVO will
+                // be deleted immediately, since the work would be discarded when the MVO is deleted moments later
+                // (#390).
+                int attributeChangeCount = 0;
                 List<MetaverseObjectAttributeValue>? recalledAttributeValues = null;
+                List<MetaverseObjectAttributeValue>? recalledAttributeAdditions = null;
                 var hasGracePeriod = mvo.Type?.DeletionGracePeriod is { } gracePeriod && gracePeriod > TimeSpan.Zero;
                 var skipRecallForImmediateDeletion = mvoDeletionFate == MvoDeletionFate.DeletedImmediately;
-                if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !hasGracePeriod && !skipRecallForImmediateDeletion)
+                if (connectedSystemObject.Type.RemoveContributedAttributesOnObsoletion && !skipRecallForImmediateDeletion)
                 {
                     var contributedAttributes = mvo.AttributeValues
                         .Where(av => av.ContributedBySystemId == _connectedSystem.Id)
@@ -3464,14 +3581,48 @@ public abstract class SyncTaskProcessorBase
                             attributeValue.Attribute?.Name, mvo.Id);
                     }
 
-                    attributeRemovalCount = contributedAttributes.Count;
+                    // Next-contributor recall fallback (#91): before clearing, re-elect any still-joined
+                    // lower-priority contributor for the recalled attributes so a source falling out of scope
+                    // hands the attribute to the next source rather than blanking it. See
+                    // ReElectSurvivingContributorsAsync for the election mechanics; an attribute with no other
+                    // contributor is still cleared (the survivor re-flow adds nothing for it).
+                    await ReElectSurvivingContributorsAsync(mvo, contributedAttributes, connectedSystemObject);
 
-                    // Capture recalled attribute values BEFORE applying (which clears the pending lists).
-                    // These are passed back in the result so the caller can add them to _pendingMvoChanges
-                    // for MVO change tracking, enabling the RPEI detail page to show recalled attribute values.
-                    if (mvo.PendingAttributeValueRemovals.Count > 0)
+                    if (hasGracePeriod)
+                    {
+                        // A deletion grace period is active: an attribute with no surviving contributor must be
+                        // frozen (preserved) until the grace window resolves, not cleared. Re-elected attributes
+                        // are still replaced (their leaver value stays marked for removal); only the leaver's
+                        // non-re-elected values are unmarked.
+                        var reElectedDuringGrace = mvo.PendingAttributeValueAdditions.Select(a => a.AttributeId).ToHashSet();
+                        foreach (var frozen in contributedAttributes.Where(av => !reElectedDuringGrace.Contains(av.AttributeId)))
+                            mvo.PendingAttributeValueRemovals.Remove(frozen);
+                    }
+
+                    attributeChangeCount = mvo.PendingAttributeValueRemovals.Count + mvo.PendingAttributeValueAdditions.Count;
+
+                    // Capture recalled (and any re-elected) attribute values BEFORE applying (which clears the
+                    // pending lists). These are passed back in the result so the caller can add them to
+                    // _pendingMvoChanges for MVO change tracking, enabling the RPEI detail page to show both the
+                    // recalled and re-elected values in the causality tree. Mirrors
+                    // ProcessObsoleteConnectedSystemObjectAsync: the full removals list (genuinely-cleared and
+                    // re-elected alike) is recorded so the change record reflects the whole handover, not just
+                    // the blank.
+                    if (mvo.PendingAttributeValueRemovals.Count > 0 || mvo.PendingAttributeValueAdditions.Count > 0)
                     {
                         recalledAttributeValues = mvo.PendingAttributeValueRemovals.ToList();
+                        recalledAttributeAdditions = mvo.PendingAttributeValueAdditions.ToList();
+
+                        // Queue for export evaluation so target systems receive Pending Exports for the recalled
+                        // (and any re-elected) attribute values; without this, downstream Connected Systems keep
+                        // the departed source's stale values forever. Same construction as the obsoletion path
+                        // and the normal Attribute Flow path: additions FIRST (a single-valued attribute exports
+                        // its first matching changed value, so the re-elected survivor's value must precede the
+                        // leaver's removal), with every removal in removedAttributes (so a genuine clear
+                        // null-clears the target while a re-elected attribute exports as a change-of-value).
+                        var changedAttributes = recalledAttributeAdditions.Concat(recalledAttributeValues).ToList();
+                        var removedAttributes = recalledAttributeValues.ToHashSet();
+                        MergeOrAddPendingExportEvaluation(mvo, changedAttributes, removedAttributes);
                     }
                 }
                 else if (skipRecallForImmediateDeletion)
@@ -3498,9 +3649,10 @@ public abstract class SyncTaskProcessorBase
                 }
 
                 return MetaverseObjectChangeResult.DisconnectedOutOfScope(
-                    attributeFlowCount: attributeRemovalCount > 0 ? attributeRemovalCount : null,
+                    attributeFlowCount: attributeChangeCount > 0 ? attributeChangeCount : null,
                     mvoDeletionFate: mvoDeletionFate,
                     recalledAttributeValues: recalledAttributeValues,
+                    recalledAttributeAdditions: recalledAttributeAdditions,
                     disconnectedMvo: recalledAttributeValues != null ? mvo : null);
         }
     }

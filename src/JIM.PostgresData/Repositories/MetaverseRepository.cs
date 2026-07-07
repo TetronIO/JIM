@@ -454,6 +454,36 @@ public class MetaverseRepository : IMetaverseRepository
             SingleOrDefaultAsync(mo => mo.Id == id);
     }
 
+    /// <summary>
+    /// As <see cref="GetMetaverseObjectAsync"/>, but additionally eager-loads the per-value Attribute
+    /// Priority provenance navigations (the contributing Connected System and Synchronisation Rule).
+    /// This is a deliberately separate, heavier retrieval for the single-object read paths (the REST
+    /// API and Metaverse Object views) that surface provenance. The base <see cref="GetMetaverseObjectAsync"/>
+    /// is on the synchronisation join hot path (FindMetaverseObjectUsingMatchingRuleAsync, per-CSO
+    /// during sync); the sync engine reads provenance via the FK scalars (ContributedBySyncRuleId), never
+    /// these navigations, so it must not pay for the two extra split-query round-trips these includes add.
+    /// </summary>
+    public async Task<MetaverseObject?> GetMetaverseObjectWithProvenanceAsync(Guid id)
+    {
+        return await Repository.Database.MetaverseObjects.
+            AsSplitQuery(). // Use split query to avoid cartesian explosion from multiple collection includes
+            Include(mo => mo.Type).
+            Include(mo => mo.AttributeValues).
+            ThenInclude(av => av.Attribute).
+            Include(mo => mo.AttributeValues).
+            ThenInclude(av => av.ReferenceValue).
+            ThenInclude(rv => rv!.AttributeValues.Where(rvav => rvav.Attribute.Name == Constants.BuiltInAttributes.DisplayName)).
+            ThenInclude(rvav => rvav.Attribute).
+            Include(mo => mo.AttributeValues).
+            ThenInclude(av => av.ReferenceValue).
+            ThenInclude(rv => rv!.Type).
+            Include(mo => mo.AttributeValues).
+            ThenInclude(av => av.ContributedBySystem).
+            Include(mo => mo.AttributeValues).
+            ThenInclude(av => av.ContributedBySyncRule).
+            SingleOrDefaultAsync(mo => mo.Id == id);
+    }
+
     public async Task<MetaverseObject?> GetMetaverseObjectWithChangeHistoryAsync(Guid id)
     {
         return await Repository.Database.MetaverseObjects.

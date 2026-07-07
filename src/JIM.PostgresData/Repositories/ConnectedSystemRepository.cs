@@ -4470,6 +4470,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             var source = changesById[mapping.Id];
             mapping.Priority = source.Priority;
             mapping.NullIsValue = source.NullIsValue;
+            // The caller stamps AuditHelper.SetUpdated on the detached source before persisting; the stamp is
+            // the mapping's configuration change trail and feeds the Full Synchronisation configuration
+            // watermark (GetLatestSyncRuleConfigurationChangeAsync), so it must be copied across too.
+            mapping.LastUpdated = source.LastUpdated;
+            mapping.LastUpdatedByType = source.LastUpdatedByType;
+            mapping.LastUpdatedById = source.LastUpdatedById;
+            mapping.LastUpdatedByName = source.LastUpdatedByName;
         }
 
         await Repository.Database.SaveChangesAsync();

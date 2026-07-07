@@ -37,7 +37,7 @@ When you add a new import mapping to an attribute that already has contributors,
 
 ## 🔁 When the winning source disconnects or withdraws
 
-If the source that currently provides an attribute's value disconnects (its object is removed from that Connected System), JIM does not simply blank the attribute. It re-elects the next contributor: a still-connected, in-scope lower-priority source takes over, and its value flows into the Metaverse in place of the departed one. Only when no other source contributes is the attribute cleared.
+If the source that currently provides an attribute's value disconnects (its object is removed from that Connected System) or falls out of its Synchronisation Rule's scope, JIM does not simply blank the attribute. It re-elects the next contributor: a still-connected, in-scope lower-priority source takes over, and its value flows into the Metaverse in place of the departed one. Only when no other source contributes is the attribute cleared.
 
 This means an authoritative source leaving hands an attribute down to the next source rather than dropping it, so downstream systems receive the fallback value instead of an unintended clear. The next contributor is resolved exactly as in normal flow, so if it has **"Null is a value"** set and supplies no value, the attribute is asserted null rather than handed further down.
 
@@ -53,6 +53,8 @@ Synchronisation Activities record notable resolution outcomes against each objec
 - **MVO No Contributor**<br /> An attribute value was cleared because no contributor supplied a replacement: the last contributing source withdrew its value, or disconnected with no surviving contributor to re-elect. An attribute that was already blank is never reported, so these outcomes only appear when a run actually removed something.
 
 Together these distinguish the two kinds of blank an administrator may need to investigate: one that was asserted on purpose, and one that happened because every source fell away.
+
+The same provenance is visible per value: retrieving a Metaverse Object through the REST API or `Get-JIMMetaverseObject` returns, for each attribute value, the Connected System and the exact Synchronisation Rule that won resolution and contributed it. An asserted null appears as a value row flagged `nullValue` with provenance but no value, so automation can distinguish a deliberate blank from an attribute that simply has no contributor; consumers should treat such a row as "no value present", never as a value.
 
 ## 🛠️ Configuring priority
 

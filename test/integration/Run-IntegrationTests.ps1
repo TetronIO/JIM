@@ -314,6 +314,15 @@ function Test-LongTailTemplateCompatibility {
 Test-LongTailTemplateCompatibility -Template $Template -DirectoryType $DirectoryType `
     -TemplateSambaAD $TemplateSambaAD -TemplateOpenLDAP $TemplateOpenLDAP
 
+# Hard-fail: Scenario 14 (Attribute Priority) depends on two LDAP suffixes hosted on a single
+# OpenLDAP container (docker/openldap/scripts/01-add-second-suffix.sh); Samba AD has no
+# equivalent multi-suffix mechanism. Reject early rather than failing deep into setup.
+# -DirectoryType All is exempt: its handler below runs the OpenLDAP leg and skips the
+# Samba AD leg for this scenario, and the -Scenario All loop likewise skips it on Samba AD.
+if ($Scenario -like "*Scenario14*" -and $DirectoryType -eq "SambaAD") {
+    throw "Scenario 14 (Attribute Priority) requires two LDAP suffixes on a single OpenLDAP container and is OpenLDAP only. Rejected -DirectoryType $DirectoryType. Use -DirectoryType OpenLDAP."
+}
+
 # Resolve directory configuration (used throughout for Docker profiles, population, setup)
 # Skip for "All" — the DirectoryType All handler orchestrates multiple runs with specific types.
 if ($DirectoryType -ne "All") {
@@ -573,6 +582,7 @@ function Show-ScenarioMenu {
                 "*Scenario11*" { "Sync rule scoping criteria evaluation matrix" }
                 "*Scenario12*" { "Relative-date inbound scoping (joiner / leaver)" }
                 "*Scenario13*" { "Relative-date outbound scoping (staged provisioning)" }
+                "*Scenario14*" { "Attribute priority (multi-source winner resolution)" }
                 default { "Integration test scenario" }
             }
         }
@@ -1195,7 +1205,8 @@ $templateIrrelevantScenarios = @(
     "*Scenario10*",  # Sync Rule Scoping - template-independent, only a handful of explicit test users
     "*Scenario11*",  # Scoping Criteria Matrix - bespoke deterministic seed, template informational
     "*Scenario12*",  # Relative-Date Scoping - fixed test users positioned relative to "now"
-    "*Scenario13*"   # Relative-Date Outbound Scoping - fixed test users positioned relative to "now"
+    "*Scenario13*",  # Relative-Date Outbound Scoping - fixed test users positioned relative to "now"
+    "*Scenario14*"   # Attribute Priority - fixed six-user dataset per suffix, no template scaling
 )
 
 function Test-TemplateRelevant {
@@ -1282,6 +1293,13 @@ if (-not $Scenario) {
 if ($DirectoryType -eq "All") {
     $selfScript = Join-Path $PSScriptRoot "Run-IntegrationTests.ps1"
     $directoryTypesToRun = @("SambaAD", "OpenLDAP")
+
+    # Scenario 14 (Attribute Priority) is OpenLDAP only (two-suffix topology); run just the
+    # OpenLDAP leg rather than failing the Samba AD leg.
+    if ($Scenario -like "*Scenario14*") {
+        Write-Host "${YELLOW}Scenario 14 is OpenLDAP only; skipping the Samba AD leg.${NC}"
+        $directoryTypesToRun = @("OpenLDAP")
+    }
 
     # Build common parameters to pass through (excluding DirectoryType and Template)
     $passThruParams = @{}
@@ -1559,6 +1577,16 @@ if ($Scenario -eq "All") {
             continue
         }
         $implementedScenarios += ($file.BaseName -replace '^Invoke-', '')
+    }
+
+    # Scenario 14 (Attribute Priority) is OpenLDAP only (two-suffix topology); skip it on a
+    # Samba AD sweep rather than recording a guaranteed failure.
+    if ($DirectoryType -eq "SambaAD") {
+        $openLdapOnly = @($implementedScenarios | Where-Object { $_ -like "*Scenario14*" })
+        if ($openLdapOnly.Count -gt 0) {
+            Write-Host "${YELLOW}Skipping OpenLDAP-only scenario(s) on Samba AD: $($openLdapOnly -join ', ')${NC}"
+            $implementedScenarios = @($implementedScenarios | Where-Object { $_ -notlike "*Scenario14*" })
+        }
     }
 
     if ($implementedScenarios.Count -eq 0) {
@@ -2234,7 +2262,9 @@ if (Get-Command socat -ErrorAction SilentlyContinue) {
 Start-Sleep -Seconds 2
 
 # Check for pre-populated snapshot images (Scenario 1 / primary)
-if (-not $IgnoreSnapshots -and $Scenario -like "*Scenario1*") {
+# Note: "*Scenario1*" also substring-matches "Scenario14-...", so it must be excluded explicitly;
+# Scenario 14 is OpenLDAP only (enforced above) and has no Samba AD snapshot of its own.
+if (-not $IgnoreSnapshots -and $Scenario -like "*Scenario1*" -and $Scenario -notlike "*Scenario14*") {
     $s1Hash = Get-PopulateScriptHash -ScenarioName "Scenario1"
     $s1Tag = Get-SnapshotImageTag -Role "primary" -Size $Template
     if (Test-SnapshotAvailable -ImageTag $s1Tag -ExpectedHash $s1Hash) {
@@ -2280,7 +2310,10 @@ if ($DirectoryType -eq "OpenLDAP") {
 
     # Check for pre-populated OpenLDAP snapshot images
     # S1 does not need pre-populated data — the target directory starts empty
-    if (-not $IgnoreSnapshots -and $Scenario -notlike "*Scenario1*") {
+    # S14 has its own tiny, bespoke six-user-per-suffix dataset (Populate-OpenLDAP-Scenario14.ps1)
+    # populated by Invoke-Scenario14 itself; it is fast enough that snapshotting would add
+    # complexity for negligible benefit, so it is excluded from snapshot handling entirely.
+    if (-not $IgnoreSnapshots -and $Scenario -notlike "*Scenario1*" -and $Scenario -notlike "*Scenario14*") {
         $olSnapshotScenario = if ($Scenario -like "*Scenario8*") { "Scenario8" } else { "General" }
         $olSnapshotRole = if ($Scenario -like "*Scenario8*") { "s8" } else { "general" }
         $olHash = Get-OpenLDAPPopulateScriptHash -ScenarioName $olSnapshotScenario
@@ -2569,7 +2602,10 @@ if ($Scenario -like "*Scenario1*" -and -not $script:UsingSnapshots -and $Directo
 # Skip for S8 — it has its own population script (Populate-OpenLDAP-Scenario8.ps1) that only
 # populates Source. The base script populates both suffixes, which would create pre-existing
 # objects in Target and cause CouldNotJoinDueToExistingJoin errors during initial sync.
-if ($DirectoryType -eq "OpenLDAP" -and $Scenario -notlike "*Scenario1*" -and $Scenario -notlike "*Scenario8*" -and -not $script:UsingOpenLDAPSnapshots) {
+# Skip for S14 — it has its own population script (Populate-OpenLDAP-Scenario14.ps1), called by
+# Invoke-Scenario14-AttributePriority.ps1 itself (self-populating, like S8), which seeds both
+# suffixes with its own small deterministic six-user set sharing Employee IDs so they join.
+if ($DirectoryType -eq "OpenLDAP" -and $Scenario -notlike "*Scenario1*" -and $Scenario -notlike "*Scenario8*" -and $Scenario -notlike "*Scenario14*" -and -not $script:UsingOpenLDAPSnapshots) {
     Write-Section "Step 4c: Populating OpenLDAP with Test Data"
     Write-Step "Running Populate-OpenLDAP.ps1 -Template $Template..."
     $populateScript = Join-Path $scriptRoot "Populate-OpenLDAP.ps1"
@@ -2844,8 +2880,15 @@ $scenarioParams = @{
     DirectoryConfig = $script:DirectoryConfig
 }
 
-# Skip population if using snapshot images (Samba AD or OpenLDAP)
-if ($script:UsingSnapshots -or $script:UsingOpenLDAPSnapshots) {
+# Skip population if using snapshot images (Samba AD or OpenLDAP).
+# Scenario 14 is excluded: it self-populates its own bespoke six-user-per-suffix OpenLDAP dataset
+# (Populate-OpenLDAP-Scenario14.ps1) and has no snapshot of its own, so it must ALWAYS populate.
+# Without this guard, an "All" regression that snapshots an unrelated scenario earlier in the same
+# process leaves $script:UsingSnapshots set when Scenario 14's turn comes (the "*Scenario1*" pattern
+# also substring-matches "Scenario14"), which would wrongly pass SkipPopulate to the scenario and
+# leave its directory empty, so the Employee ID join finds nothing. Mirrors the Scenario 14
+# exclusions already on the snapshot-detection and general-population guards above.
+if (($script:UsingSnapshots -or $script:UsingOpenLDAPSnapshots) -and $Scenario -notlike "*Scenario14*") {
     $scenarioParams.SkipPopulate = $true
 }
 

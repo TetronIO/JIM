@@ -200,13 +200,7 @@ public partial class SyncRepository
         IReadOnlyList<MetaverseObject> objects)
     {
         await using var writer = await connection.BeginBinaryImportAsync(
-            """
-            COPY "MetaverseObjects" (
-                "Id", "Created", "LastUpdated", "TypeId", "Status", "Origin",
-                "LastConnectorDisconnectedDate", "DeletionInitiatedByType",
-                "DeletionInitiatedById", "DeletionInitiatedByName", "CachedDisplayName"
-            ) FROM STDIN (FORMAT binary)
-            """);
+            $"""COPY "MetaverseObjects" ({MvoBulkInsertColumns.ToQuotedList(MvoBulkInsertColumns.MetaverseObjects)}) FROM STDIN (FORMAT binary)""");
 
         foreach (var mvo in objects)
         {
@@ -237,6 +231,11 @@ public partial class SyncRepository
                 await writer.WriteAsync(mvo.CachedDisplayName, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
+            await writer.WriteAsync(mvo.ScopeReviewPending, NpgsqlTypes.NpgsqlDbType.Boolean);
+            if (mvo.LastScopeEvaluatedAt.HasValue)
+                await writer.WriteAsync(mvo.LastScopeEvaluatedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();
@@ -254,14 +253,7 @@ public partial class SyncRepository
         List<(Guid MvoId, MetaverseObjectAttributeValue Value)> attributeValues)
     {
         await using var writer = await connection.BeginBinaryImportAsync(
-            """
-            COPY "MetaverseObjectAttributeValues" (
-                "Id", "MetaverseObjectId", "AttributeId", "StringValue",
-                "DateTimeValue", "IntValue", "LongValue", "ByteValue",
-                "GuidValue", "BoolValue", "ReferenceValueId",
-                "UnresolvedReferenceValueId", "ContributedBySystemId"
-            ) FROM STDIN (FORMAT binary)
-            """);
+            $"""COPY "MetaverseObjectAttributeValues" ({MvoBulkInsertColumns.ToQuotedList(MvoBulkInsertColumns.MetaverseObjectAttributeValues)}) FROM STDIN (FORMAT binary)""");
 
         foreach (var (mvoId, av) in attributeValues)
         {
@@ -309,6 +301,11 @@ public partial class SyncRepository
                 await writer.WriteAsync(av.ContributedBySystemId.Value, NpgsqlTypes.NpgsqlDbType.Integer);
             else
                 await writer.WriteNullAsync();
+            if (av.ContributedBySyncRuleId.HasValue)
+                await writer.WriteAsync(av.ContributedBySyncRuleId.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            await writer.WriteAsync(av.NullValue, NpgsqlTypes.NpgsqlDbType.Boolean);
         }
 
         await writer.CompleteAsync();
@@ -319,20 +316,20 @@ public partial class SyncRepository
     /// </summary>
     private async Task BulkInsertMvosViaEfAsync(List<MetaverseObject> objects)
     {
-        const int columnsPerRow = 11;
+        var columnsPerRow = MvoBulkInsertColumns.MetaverseObjects.Length;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
         {
             var sql = new StringBuilder();
-            sql.Append(@"INSERT INTO ""MetaverseObjects"" (""Id"", ""Created"", ""LastUpdated"", ""TypeId"", ""Status"", ""Origin"", ""LastConnectorDisconnectedDate"", ""DeletionInitiatedByType"", ""DeletionInitiatedById"", ""DeletionInitiatedByName"", ""CachedDisplayName"") VALUES ");
+            sql.Append($@"INSERT INTO ""MetaverseObjects"" ({MvoBulkInsertColumns.ToQuotedList(MvoBulkInsertColumns.MetaverseObjects)}) VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}})");
+                sql.Append('(').Append(string.Join(", ", Enumerable.Range(offset, columnsPerRow).Select(n => $"{{{n}}}"))).Append(')');
 
                 var mvo = chunk[i];
                 parameters.Add(mvo.Id);
@@ -346,6 +343,8 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionInitiatedById, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.DeletionInitiatedByName, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(mvo.CachedDisplayName, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(mvo.ScopeReviewPending);
+                parameters.Add(BulkSqlHelpers.NullableParam(mvo.LastScopeEvaluatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -358,20 +357,20 @@ public partial class SyncRepository
     private async Task BulkInsertMvoAttributeValuesViaEfAsync(
         List<(Guid MvoId, MetaverseObjectAttributeValue Value)> attributeValues)
     {
-        const int columnsPerRow = 13;
+        var columnsPerRow = MvoBulkInsertColumns.MetaverseObjectAttributeValues.Length;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(attributeValues, chunkSize))
         {
             var sql = new StringBuilder();
-            sql.Append(@"INSERT INTO ""MetaverseObjectAttributeValues"" (""Id"", ""MetaverseObjectId"", ""AttributeId"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""ByteValue"", ""GuidValue"", ""BoolValue"", ""ReferenceValueId"", ""UnresolvedReferenceValueId"", ""ContributedBySystemId"") VALUES ");
+            sql.Append($@"INSERT INTO ""MetaverseObjectAttributeValues"" ({MvoBulkInsertColumns.ToQuotedList(MvoBulkInsertColumns.MetaverseObjectAttributeValues)}) VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}}, {{{offset + 12}}})");
+                sql.Append('(').Append(string.Join(", ", Enumerable.Range(offset, columnsPerRow).Select(n => $"{{{n}}}"))).Append(')');
 
                 var (mvoId, av) = chunk[i];
                 parameters.Add(av.Id);
@@ -387,6 +386,8 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(av.ReferenceValueId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.UnresolvedReferenceValueId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.ContributedBySystemId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(av.ContributedBySyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(av.NullValue);
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());

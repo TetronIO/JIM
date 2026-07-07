@@ -461,4 +461,43 @@ public class MetaverseControllerObjectsTests
     }
 
     #endregion
+
+    #region GetObjectAsync tests
+
+    [Test]
+    public async Task GetObjectAsync_UsesProvenanceLoadingRetrieval_NotTheLeanSyncPathAsync()
+    {
+        // Guards the #931 performance split: the single-object GET must load provenance via
+        // GetMetaverseObjectWithProvenanceAsync so the DTO can surface contributing system/rule names,
+        // and must NOT use the lean GetMetaverseObjectAsync, which is reserved for the sync join hot path
+        // and deliberately omits the provenance navigations. If a future refactor points this endpoint
+        // back at the lean overload, provenance names would silently go null; this test fails first.
+        var id = Guid.NewGuid();
+        var mvo = new MetaverseObject
+        {
+            Id = id,
+            Type = new MetaverseObjectType { Id = 1, Name = "User" },
+            AttributeValues = new List<MetaverseObjectAttributeValue>()
+        };
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectWithProvenanceAsync(id)).ReturnsAsync(mvo);
+
+        var result = await _controller.GetObjectAsync(id);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectWithProvenanceAsync(id), Times.Once);
+        _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectAsync(It.IsAny<Guid>()), Times.Never);
+    }
+
+    [Test]
+    public async Task GetObjectAsync_NotFound_ReturnsNotFoundAsync()
+    {
+        var id = Guid.NewGuid();
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseObjectWithProvenanceAsync(id)).ReturnsAsync((MetaverseObject?)null);
+
+        var result = await _controller.GetObjectAsync(id);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    #endregion
 }

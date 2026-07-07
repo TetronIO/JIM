@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
@@ -75,6 +76,55 @@ public class SyncRuleMappingUpdateTests : WorkflowTestBase
         Assert.That(persistedA.Priority, Is.EqualTo(1), "mapping A's renumbered priority must persist");
         Assert.That(persistedB.Priority, Is.EqualTo(2), "mapping B's renumbered priority must persist");
         Assert.That(persistedB.NullIsValue, Is.True, "mapping B's null-handling change must persist");
+    }
+
+    [Test]
+    public async Task UpdateSyncRuleMappings_SourceCarriesAuditStamp_PersistsAuditFieldsAsync()
+    {
+        // An attribute priority reorder or "Null is a value" change stamps AuditHelper.SetUpdated on the
+        // detached mapping before persistence. The audit stamp must reach the database: it is the mapping's
+        // configuration change trail, and Full Synchronisation compares the newest rule/mapping change
+        // against ConfigurationLastFullyAppliedAt to decide whether the unchanged-object optimisation must
+        // be disabled so the new configuration reaches every object. Dropping the stamp silently hides a
+        // reorder from that comparison.
+        var system = await CreateConnectedSystemAsync("HR");
+        var externalIdAttr = new ConnectedSystemObjectTypeAttribute { Name = "ExternalId", Type = AttributeDataType.Guid, IsExternalId = true, Selected = true };
+        var displayNameAttr = new ConnectedSystemObjectTypeAttribute { Name = "DisplayName", Type = AttributeDataType.Text, Selected = true };
+        var csoType = await CreateCsoTypeAsync(system.Id, "User",
+            new List<ConnectedSystemObjectTypeAttribute> { externalIdAttr, displayNameAttr });
+        var mvType = await CreateMvObjectTypeAsync("Person");
+        var mvDisplayNameAttr = mvType.Attributes.First(a => a.Name == "DisplayName");
+
+        var rule = await CreateImportSyncRuleAsync(system.Id, csoType, mvType, "Rule A");
+        var mapping = new SyncRuleMapping
+        {
+            SyncRule = rule,
+            SyncRuleId = rule.Id,
+            Priority = int.MaxValue,
+            TargetMetaverseAttribute = mvDisplayNameAttr,
+            TargetMetaverseAttributeId = mvDisplayNameAttr.Id
+        };
+        rule.AttributeFlowRules.Add(mapping);
+        await DbContext.SaveChangesAsync();
+
+        var updatedAt = new DateTime(2026, 7, 6, 12, 0, 0, DateTimeKind.Utc);
+        var initiatorId = Guid.NewGuid();
+        var detached = BuildDetachedMapping(mapping, priority: 1, mvDisplayNameAttr.Id);
+        detached.LastUpdated = updatedAt;
+        detached.LastUpdatedByType = ActivityInitiatorType.User;
+        detached.LastUpdatedById = initiatorId;
+        detached.LastUpdatedByName = "Test Administrator";
+
+        await Repository.ConnectedSystems.UpdateSyncRuleMappingsAsync(new[] { detached });
+
+        var persisted = await DbContext.SyncRuleMappings.AsNoTracking().SingleAsync(m => m.Id == mapping.Id);
+        Assert.Multiple(() =>
+        {
+            Assert.That(persisted.LastUpdated, Is.EqualTo(updatedAt), "the audit timestamp must persist");
+            Assert.That(persisted.LastUpdatedByType, Is.EqualTo(ActivityInitiatorType.User), "the initiator type must persist");
+            Assert.That(persisted.LastUpdatedById, Is.EqualTo(initiatorId), "the initiator id must persist");
+            Assert.That(persisted.LastUpdatedByName, Is.EqualTo("Test Administrator"), "the initiator name must persist");
+        });
     }
 
     private static SyncRuleMapping BuildDetachedMapping(SyncRuleMapping persisted, int priority, int targetAttributeId)

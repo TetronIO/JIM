@@ -292,6 +292,20 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false)
         => _repo.ConnectedSystems.GetSyncRulesAsync(withChangeTracking);
 
+    public async Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync()
+    {
+        var latestRuleChange = await _context.SyncRules
+            .MaxAsync(r => (DateTime?)(r.LastUpdated ?? r.Created));
+        var latestMappingChange = await _context.SyncRuleMappings
+            .MaxAsync(m => (DateTime?)(m.LastUpdated ?? m.Created));
+
+        if (latestRuleChange == null)
+            return latestMappingChange;
+        if (latestMappingChange == null)
+            return latestRuleChange;
+        return latestRuleChange > latestMappingChange ? latestRuleChange : latestMappingChange;
+    }
+
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
 

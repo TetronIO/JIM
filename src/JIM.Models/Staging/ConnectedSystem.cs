@@ -80,6 +80,19 @@ public class ConnectedSystem : IAuditable
     public DateTime? LastSyncCompletedAt { get; set; }
 
     /// <summary>
+    /// The start instant of the last successfully completed Full Synchronisation, i.e. the moment up to which
+    /// Synchronisation Rule configuration is known to have been applied to every object of this system.
+    /// Full Synchronisation compares the newest rule/mapping configuration change against this to decide whether
+    /// the unchanged-object optimisation must be disabled for the run (a configuration change must reach every
+    /// object, not just objects whose source data changed). Distinct from <see cref="LastSyncCompletedAt"/>,
+    /// which ANY completed synchronisation advances and which tracks source data staleness only: a no-change
+    /// Delta Synchronisation advances that watermark without applying configuration, so it must not advance this.
+    /// The run's START time is recorded (not its completion) so a configuration change made mid-run is still
+    /// detected as newer and re-applied by the next Full Synchronisation.
+    /// </summary>
+    public DateTime? ConfigurationLastFullyAppliedAt { get; set; }
+
+    /// <summary>
     /// Maximum number of export batches to process concurrently.
     /// Only applicable when the connector supports parallel export (SupportsParallelExport).
     /// Null or 1 means sequential processing (default). Higher values enable parallel batch export

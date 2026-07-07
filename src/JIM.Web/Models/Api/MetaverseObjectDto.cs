@@ -81,12 +81,29 @@ public class MetaverseObjectAttributeValueDto
     public string? StringValue { get; set; }
     public DateTime? DateTimeValue { get; set; }
     public int? IntValue { get; set; }
+    public long? LongValue { get; set; }
     public Guid? GuidValue { get; set; }
     public bool? BoolValue { get; set; }
     public Guid? ReferenceValueId { get; set; }
     public string? ReferenceValueDisplayName { get; set; }
     public int? ContributedBySystemId { get; set; }
     public string? ContributedBySystemName { get; set; }
+
+    /// <summary>
+    /// The Synchronisation Rule whose mapping won attribute priority resolution and contributed this value.
+    /// Null when the value is managed internally, or when the contributing rule has since been deleted
+    /// (ContributedBySystemId/Name remain as the denormalised record).
+    /// </summary>
+    public int? ContributedBySyncRuleId { get; set; }
+    public string? ContributedBySyncRuleName { get; set; }
+
+    /// <summary>
+    /// When true, this row is an asserted null: a connected, in-scope contributor positively asserted
+    /// "no value" for this attribute. All value fields are null and the row carries provenance only.
+    /// Consumers must treat such a row as "no value present", not as a value; it exists so a deliberate
+    /// assertion is distinguishable from a plain absence (no row at all).
+    /// </summary>
+    public bool NullValue { get; set; }
 
     public static MetaverseObjectAttributeValueDto FromEntity(MetaverseObjectAttributeValue entity)
     {
@@ -100,12 +117,16 @@ public class MetaverseObjectAttributeValueDto
             StringValue = entity.StringValue,
             DateTimeValue = entity.DateTimeValue,
             IntValue = entity.IntValue,
+            LongValue = entity.LongValue,
             GuidValue = entity.GuidValue,
             BoolValue = entity.BoolValue,
             ReferenceValueId = entity.ReferenceValueId,
             ReferenceValueDisplayName = entity.ReferenceValue?.DisplayName,
             ContributedBySystemId = entity.ContributedBySystemId,
-            ContributedBySystemName = entity.ContributedBySystem?.Name
+            ContributedBySystemName = entity.ContributedBySystem?.Name,
+            ContributedBySyncRuleId = entity.ContributedBySyncRuleId,
+            ContributedBySyncRuleName = entity.ContributedBySyncRule?.Name,
+            NullValue = entity.NullValue
         };
     }
 }

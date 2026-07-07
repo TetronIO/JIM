@@ -37,7 +37,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Projection", "Join", "DuplicatePrevention", "MultipleRules", "JoinConflict", "CaseSensitivity", "All")]
+    [ValidateSet("Projection", "Join", "DuplicatePrevention", "MultipleRules", "JoinConflict", "SamePageJoinConflict", "CaseSensitivity", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -826,6 +826,128 @@ try {
         Copy-CsvToConnectorFiles -SourcePath $csvPath
         $cleanupImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
         $cleanupSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Write-Host "  ✓ Reset CSV to baseline and ran cleanup import/sync for subsequent tests" -ForegroundColor Gray
+    }
+
+    # Test 5b: Same-Page Join Conflict (a second same-system CSO matching an MVO already claimed by a
+    # PENDING join in ONE sync page). This is the intra-page sibling of Test 5. Test 5 imports and syncs
+    # the two conflicting CSOs in SEPARATE sync runs, so the first join is already flushed to the database
+    # when the second is evaluated and the database join-count guard sees it.
+    #
+    # Two BRAND-NEW same-key CSOs alone do NOT reproduce the defect: object matching runs against committed
+    # database state, which cannot see an unflushed same-page projection, so each new CSO simply projects its
+    # own MVO and they never contend for one. The defect needs a pre-existing, committed MVO that BOTH new
+    # CSOs match. We create that by re-keying: seed one CSO/MVO first, then in a single later page obsolete
+    # the seed CSO and introduce TWO new CSOs that both match the seeded MVO on employeeId.
+    #
+    # In that one page: the obsolete seed CSO releases its join slot (Defect A), the first new CSO claims the
+    # slot as a pending (unflushed) join, and the second new CSO matches the same MVO. The database join-count
+    # cannot see the first CSO's pending join, so without the pending-join guard both new CSOs pass validation
+    # and their join writes collide on the filtered unique index
+    # (IX_ConnectedSystemObjects_ConnectedSystemId_MetaverseObjectId_Unique) as a raw 23505 that fails the
+    # whole synchronisation. With the guard, the second match fails cleanly as CouldNotJoinDueToExistingJoin
+    # and the run completes. The EF Core in-memory test provider does not enforce partial unique indexes and
+    # reflects in-memory joins in its count, so this defect only reproduces against real PostgreSQL.
+    if ($Step -eq "SamePageJoinConflict" -or $Step -eq "All") {
+        Write-TestSection "Test 5b: Same-Page Join Conflict (intra-page CouldNotJoinDueToExistingJoin)"
+
+        Write-Host "Testing: after a seed MVO exists, re-keying it so two new same-system CSOs both match it in" -ForegroundColor Gray
+        Write-Host "  ONE sync page must not collide on the unique index; the second match fails cleanly" -ForegroundColor Gray
+
+        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+        $spEmployeeId = "EMP900022"  # shared matching key: the seed and both re-keyed CSOs all carry it
+
+        # Local helper: append a fully-populated HR CSV row for the given identifiers.
+        $addSpRow = {
+            param($rows, $index, $hrId, $sam, $display)
+            $u = New-TestUser -Index $index
+            $u.HrId = $hrId
+            $u.EmployeeId = $spEmployeeId
+            $u.SamAccountName = $sam
+            $u.Email = "$sam@panoply.local"
+            $u.DisplayName = $display
+            return @($rows) + [PSCustomObject]@{
+                hrId = $u.HrId; employeeId = $u.EmployeeId; firstName = $u.FirstName; lastName = $u.LastName
+                email = $u.Email; department = $u.Department; title = $u.Title; company = $u.Company
+                samAccountName = $u.SamAccountName; displayName = $u.DisplayName; status = "Active"
+                userPrincipalName = "$($u.SamAccountName)@panoply.local"; employeeType = $u.EmployeeType; employeeEndDate = ""
+            }
+        }
+
+        # Phase 1 (seed): baseline + a single seed user. Import + sync projects one committed MVO carrying the
+        # shared employeeId, joined to the seed CSO.
+        Copy-Item -Path "$scenarioDataPath/scenario5-hr-users.csv" -Destination $csvPath -Force
+        $csv = & $addSpRow (Import-Csv $csvPath) 9021 "00009021-0000-0000-0000-000000000000" "test.samepage.seed" "SamePageRekey Seed"
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
+
+        Write-Host "  Seeding the pre-existing MVO (user 9021, EmployeeId=$spEmployeeId)..." -ForegroundColor Gray
+        $spSeedImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $spSeedImport.activityId -Name "CSV Import (SamePageJoinConflict - seed)"
+        $spSeedSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $spSeedSync.activityId -Name "CSV Full Sync (SamePageJoinConflict - seed)"
+
+        # Phase 2 (re-key): baseline WITHOUT the seed user (so it obsoletes) + two new users that both match
+        # the seeded MVO on employeeId. A single import brings both new CSOs; a single sync processes the
+        # obsolete + both new joins in one page.
+        Copy-Item -Path "$scenarioDataPath/scenario5-hr-users.csv" -Destination $csvPath -Force
+        $csv = Import-Csv $csvPath
+        $csv = & $addSpRow $csv 9022 "00009022-0000-0000-0000-000000000000" "test.samepage.win"  "SamePageRekey Winner"
+        $csv = & $addSpRow $csv 9023 "00009023-0000-0000-0000-000000000000" "test.samepage.lose" "SamePageRekey Loser"
+        $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
+
+        Write-Host "  Re-keying: obsolete the seed and introduce two new matching CSOs in one import..." -ForegroundColor Gray
+        $spImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $spImport.activityId -Name "CSV Import (SamePageJoinConflict - re-key)"
+
+        Write-Host "  Synchronising the obsolete + two joins in a single page (must not crash on the unique index)..." -ForegroundColor Gray
+        # Do not assert overall success: exactly one CSO is expected to fail with a clean join-conflict error.
+        # A raw 23505 (defect present) aborts the whole page; -Wait may surface that as a thrown failure, which
+        # we translate into an explicit red result rather than letting it escape as an unhandled error.
+        $spSyncFailed = $false
+        try {
+            $spSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+        }
+        catch {
+            $spSyncFailed = $true
+            Write-Host "  ✗ Synchronisation aborted: $($_.Exception.Message)" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "SamePageJoinConflict"; Success = $false; Error = "Sync aborted (likely raw 23505): $($_.Exception.Message)" }
+        }
+
+        if (-not $spSyncFailed) {
+            $spItems = @(Get-JIMActivity -Id $spSync.activityId -ExecutionItems)
+            # errorType is always present on execution items (enum serialised as its name, "NotSet" when clean),
+            # so this is safe under Set-StrictMode. errorMessage is omitted when null, so we never touch it.
+            $spJoinConflictErrors = @($spItems | Where-Object { $_.errorType -eq "CouldNotJoinDueToExistingJoin" })
+            $spUnexpectedErrors   = @($spItems | Where-Object { $_.errorType -and $_.errorType -ne "NotSet" -and $_.errorType -ne "CouldNotJoinDueToExistingJoin" })
+
+            # Count MVOs carrying the shared employeeId: exactly one must survive (the seeded MVO, now owned by
+            # the winning CSO); the losing CSO neither joined nor projected.
+            $spMvos = @(Get-JIMMetaverseObject -ObjectTypeName "User" -Search "SamePageRekey" -PageSize 20 -ErrorAction SilentlyContinue)
+            $spRekeyMvos = @($spMvos | Where-Object { $_.displayName -match "SamePageRekey" })
+
+            if ($spUnexpectedErrors.Count -gt 0) {
+                $types = ($spUnexpectedErrors | ForEach-Object { $_.errorType }) -join ", "
+                Write-Host "  ✗ Synchronisation recorded an unexpected error type ($types) - a raw constraint violation may have leaked" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "SamePageJoinConflict"; Success = $false; Error = "Unexpected error type(s) during same-page join: $types" }
+            }
+            elseif ($spJoinConflictErrors.Count -eq 1 -and $spRekeyMvos.Count -eq 1) {
+                Write-Host "  ✓ Exactly one CSO failed cleanly with CouldNotJoinDueToExistingJoin; no raw constraint violation" -ForegroundColor Green
+                Write-Host "  ✓ Exactly one MVO survives (the losing CSO neither joined nor projected)" -ForegroundColor Green
+                $testResults.Steps += @{ Name = "SamePageJoinConflict"; Success = $true }
+            }
+            else {
+                Write-Host "  ✗ Expected 1 CouldNotJoinDueToExistingJoin and 1 surviving MVO; found $($spJoinConflictErrors.Count) conflict error(s), $($spRekeyMvos.Count) MVO(s)" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "SamePageJoinConflict"; Success = $false; Error = "Found $($spJoinConflictErrors.Count) conflict error(s), $($spRekeyMvos.Count) MVO(s)" }
+            }
+        }
+
+        # Clean up - reset CSV to baseline and run import/sync to obsolete leftover CSOs.
+        Copy-Item -Path "$scenarioDataPath/scenario5-hr-users.csv" -Destination $csvPath -Force
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
+        $spCleanupImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        $spCleanupSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
         Write-Host "  ✓ Reset CSV to baseline and ran cleanup import/sync for subsequent tests" -ForegroundColor Gray
     }
 
