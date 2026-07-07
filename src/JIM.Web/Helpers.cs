@@ -506,6 +506,21 @@ public static class Helpers
     }
 
     /// <summary>
+    /// Gets the in-app link for a Service Setting activity target, deep-linking to the Service Settings page with
+    /// the setting's display name pre-filled into the search box, or null when the target name is unknown. Service
+    /// Settings have no page of their own and no numeric/GUID id used by the UI, so the display name recorded on
+    /// the activity (see <c>ServiceSettingsServer</c>, which always sets <c>TargetName</c> to the setting's
+    /// <c>DisplayName</c>) doubles as the search term, matching <see cref="ServiceSetting.DisplayName"/> filtering
+    /// on the settings table.
+    /// </summary>
+    public static string? GetServiceSettingActivityHref(string? targetName)
+    {
+        return string.IsNullOrEmpty(targetName)
+            ? null
+            : $"/admin/settings?search={Uri.EscapeDataString(targetName)}";
+    }
+
+    /// <summary>
     /// Gets the MudBlazor icon for an initiator type string.
     /// Accepts "User", "ApiKey", "Import", or other values.
     /// </summary>
