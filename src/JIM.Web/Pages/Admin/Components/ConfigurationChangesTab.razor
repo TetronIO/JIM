@@ -9,6 +9,15 @@
    timeline of configuration changes, each shown as an audit-style field history ("before → after"), plus a
    compare-any-two-versions control. Read-only; reads run on their own short-lived context. *@
 
+@* Attribute Priority is stored on the contributing Synchronisation Rules, not on the attribute, so its changes
+   do not appear in this attribute's history. Point the admin at where they are recorded (#91). *@
+@if (TargetType == ActivityTargetType.MetaverseAttribute)
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-4">
+        Attribute Priority changes are not shown here; priority is stored on the contributing Synchronisation Rules. Find them on the <MudLink Href="/activity">Activities</MudLink> page, listed as "Attribute priority order for ...".
+    </MudAlert>
+}
+
 @if (_loading)
 {
     <div class="d-flex justify-center my-8">
