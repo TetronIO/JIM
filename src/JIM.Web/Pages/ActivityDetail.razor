@@ -930,6 +930,13 @@
             else if (_activity.ServiceSettingKey != null)
                 _configChangeDetail = await jim.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.ServiceSetting, _activity.ServiceSettingKey, configurationChangeVersion);
         }
+        else if (_isAdministrator && !string.IsNullOrEmpty(_activity.ConfigurationChangeSnapshot))
+        {
+            // A deletion tombstone: the delete recorded an unversioned snapshot on this Activity itself (there is no
+            // surviving object or version to look up), so render the deleted object's final captured state directly
+            // from it as a whole-object removal.
+            _configChangeDetail = jim.ChangeHistory.BuildConfigurationChangeDetailFromDeletionSnapshot(_activity.ConfigurationChangeSnapshot);
+        }
 
         _loadedId = Id;
         _initialisationComplete = true;
@@ -939,13 +946,14 @@
     }
 
     // Whether to show the "no configuration snapshot was captured" notice: an administrator is viewing a completed,
-    // configuration-changing activity (create/update/import of a Connected System, Synchronisation Rule, Schedule,
-    // Service Setting, Metaverse Object Type, Metaverse Attribute, Trusted Certificate, API Key or Role, or one of
-    // their granular sub-entities) that carries no snapshot. Deletes are excluded: they record unversioned
-    // tombstones surfaced elsewhere, and an in-progress activity may simply not have captured yet. Target types
-    // whose capture has not shipped yet (Predefined Search, Connector Definition, Example Data Template/Set -
-    // Phases 7-9) are deliberately excluded: every one of their existing activities lacks a snapshot, so the notice
-    // would fire as a false alarm rather than flag a genuine gap.
+    // configuration-changing activity (create, update, import or delete of a Connected System, Synchronisation Rule,
+    // Schedule, Service Setting, Metaverse Object Type, Metaverse Attribute, Trusted Certificate, API Key or Role, or
+    // one of their granular sub-entities) that carries no snapshot. This branch is only reached when the diff above did
+    // not render, so a captured delete shows its tombstone as a whole-object removal above and never falls through to
+    // here; the notice covers a delete (or any change) made while tracking was disabled or before it was introduced.
+    // An in-progress activity is excluded (it may simply not have captured yet). Predefined Search, Connector
+    // Definition and Example Data Template/Set are deliberately excluded: many of their activities predate capture and
+    // legitimately lack a snapshot, so the notice would misfire on that legacy data rather than flag a genuine gap.
     private bool ShowNoSnapshotNotice =>
         _isAdministrator
         && _activity != null
@@ -956,6 +964,7 @@
             or ActivityTargetType.ApiKey or ActivityTargetType.Role
         && _activity.TargetOperationType is ActivityTargetOperationType.Create or ActivityTargetOperationType.Update
             or ActivityTargetOperationType.ImportSchema or ActivityTargetOperationType.ImportHierarchy
+            or ActivityTargetOperationType.Delete
         && _activity.Status is ActivityStatus.Complete or ActivityStatus.CompleteWithWarning;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

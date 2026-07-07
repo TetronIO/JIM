@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Activities;
 namespace JIM.Models.Tasking;
 
@@ -27,6 +28,14 @@ public class DeleteConnectedSystemWorkerTask : WorkerTask
     /// Default: false (preserves audit trail).
     /// </summary>
     public bool DeleteChangeHistory { get; set; } = false;
+
+    /// <summary>
+    /// Optional reason for the deletion, entered at request time. Transient (never persisted on the task): it is
+    /// copied onto the task's delete Activity when the task is created, so it survives to when the worker runs
+    /// without needing a column of its own. Null when no reason was supplied.
+    /// </summary>
+    [NotMapped]
+    public string? ChangeReason { get; set; }
 
     public DeleteConnectedSystemWorkerTask()
     {

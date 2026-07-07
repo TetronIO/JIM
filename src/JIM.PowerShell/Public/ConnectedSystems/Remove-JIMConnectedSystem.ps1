@@ -30,6 +30,9 @@ function Remove-JIMConnectedSystem {
     .PARAMETER Force
         Suppresses confirmation prompts.
 
+    .PARAMETER ChangeReason
+        Optional reason for the deletion, recorded on the audit Activity and the configuration change history tombstone.
+
     .OUTPUTS
         If -PassThru is specified, returns the deletion result with outcome and tracking IDs.
 
@@ -53,6 +56,11 @@ function Remove-JIMConnectedSystem {
 
         Deletes the Connected System and returns the deletion result.
 
+    .EXAMPLE
+        Remove-JIMConnectedSystem -Id 1 -Force -ChangeReason "Decommissioned (CHG0123)"
+
+        Deletes the Connected System, recording the reason on the deletion's change history tombstone.
+
     .LINK
         Get-JIMConnectedSystem
         New-JIMConnectedSystem
@@ -68,7 +76,9 @@ function Remove-JIMConnectedSystem {
 
         [switch]$PassThru,
 
-        [switch]$Force
+        [switch]$Force,
+
+        [string]$ChangeReason
     )
 
     process {
@@ -102,7 +112,13 @@ function Remove-JIMConnectedSystem {
             Write-Verbose "Deleting Connected System: $systemName (ID: $systemId)"
 
             try {
-                $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$systemId" -Method 'DELETE'
+                # The reason is supplied as a query parameter because HTTP DELETE bodies are awkward for clients.
+                $deleteEndpoint = "/api/v1/synchronisation/connected-systems/$systemId"
+                if ($PSBoundParameters.ContainsKey('ChangeReason')) {
+                    $deleteEndpoint += "?changeReason=$([System.Uri]::EscapeDataString($ChangeReason))"
+                }
+
+                $result = Invoke-JIMApi -Endpoint $deleteEndpoint -Method 'DELETE'
 
                 Write-Verbose "Deletion result: $($result.outcome)"
 

@@ -155,7 +155,7 @@ Describe 'Get-JIMConfigurationChangeHistory' {
 
 Describe 'ChangeReason on configuration write cmdlets' {
     It '<_> exposes an optional ChangeReason parameter' -ForEach @(
-        'New-JIMSyncRule', 'Set-JIMSyncRule', 'Remove-JIMSyncRule', 'New-JIMConnectedSystem', 'Set-JIMConnectedSystem',
+        'New-JIMSyncRule', 'Set-JIMSyncRule', 'Remove-JIMSyncRule', 'New-JIMConnectedSystem', 'Set-JIMConnectedSystem', 'Remove-JIMConnectedSystem',
         'Set-JIMServiceSetting', 'Reset-JIMServiceSetting',
         'New-JIMMetaverseObjectType', 'Set-JIMMetaverseObjectType',
         'New-JIMMetaverseAttribute', 'Set-JIMMetaverseAttribute', 'Remove-JIMMetaverseAttribute',
@@ -171,10 +171,6 @@ Describe 'ChangeReason on configuration write cmdlets' {
         $param | Should -Not -BeNullOrEmpty
         # Optional in every parameter set.
         ($param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory }) | Should -BeNullOrEmpty
-    }
-
-    It 'Remove-JIMConnectedSystem does not expose ChangeReason (Connected System delete capture is deferred)' {
-        (Get-Command Remove-JIMConnectedSystem).Parameters.ContainsKey('ChangeReason') | Should -BeFalse
     }
 }
 
