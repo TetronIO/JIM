@@ -321,8 +321,11 @@ function New-SelfSignedCertificateBase64 {
 # ─────────────────────────────────────────────────────────────────────────────
 Write-Step "Seeding Trusted Certificates"
 
-# Snapshot existing certificate names once, for idempotency.
-$existingNames = @(Get-JIMCertificate | ForEach-Object { $_.name })
+# Snapshot existing certificates once, for idempotency. Guard against the pagination
+# wrapper object that Get-JIMCertificate yields when the store is empty (it exposes
+# 'items'/'totalCount', not 'name'), which would otherwise trip StrictMode below.
+$existingCerts = @(Get-JIMCertificate | Where-Object { $_.PSObject.Properties.Name -contains 'name' })
+$existingNames = @($existingCerts | ForEach-Object { $_.name })
 
 $created = 0
 $skipped = 0
@@ -338,7 +341,7 @@ foreach ($seed in $seedCertificates) {
     }
 
     if ($alreadyPresent -and $Force) {
-        Get-JIMCertificate |
+        $existingCerts |
             Where-Object { $_.name -eq $seed.Name } |
             ForEach-Object {
                 Remove-JIMCertificate -Id $_.id -Force | Out-Null
