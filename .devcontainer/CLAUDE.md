@@ -36,11 +36,11 @@
 - `jim-restart` - Restart stack (re-reads .env, no rebuild)
 
 **Docker Builds (rebuild and start services):**
-- `jim-build` - Build all services + start
+- `jim-build` - Build all services and start the whole stack together. Use this to bring the stack up from zero (first boot, after `jim-stack-down`, or after `jim-reset`) and whenever you want a reliable full rebuild before verifying a change at runtime.
 - `jim-build-light` - Start db + Keycloak containers, run JIM.Web natively
-- `jim-build-web` - Build jim.web + start
-- `jim-build-worker` - Build jim.worker + start
-- `jim-build-scheduler` - Build jim.scheduler + start
+- `jim-build-web` - Rebuild and restart only jim.web. Incremental: use ONLY when the full stack is already running healthy. Not for starting from zero.
+- `jim-build-worker` - Rebuild and restart only jim.worker. Incremental (same caveat as `jim-build-web`).
+- `jim-build-scheduler` - Rebuild and restart only jim.scheduler. Incremental (same caveat as `jim-build-web`).
 
 **Reset:**
 - `jim-reset` - Reset JIM (delete database & logs volumes)
@@ -61,11 +61,14 @@
 - `docker compose logs [service]` - View service logs
 
 **IMPORTANT - Rebuilding Containers After Code Changes:**
-When running the Docker stack and you make code changes to JIM.Web, JIM.Worker, or JIM.Scheduler, you MUST rebuild the affected container(s) for changes to take effect:
+First decide whether the full stack is already up. **Starting from zero (no stack running, or after `jim-reset` / `jim-stack-down`): use `jim-build`**, which builds and starts every service together. It is the reliable way to get a healthy stack for runtime verification.
+
+Only once the full stack is already running healthy, and you then change JIM.Web, JIM.Worker, or JIM.Scheduler, rebuild just the affected container(s) with the incremental commands:
 - `jim-build-web` - Rebuild and restart jim.web service
 - `jim-build-worker` - Rebuild and restart jim.worker service
 - `jim-build-scheduler` - Rebuild and restart jim.scheduler service
-- `jim-build` - Rebuild and restart all services
+
+These targeted commands assume the rest of the stack is already up; they are not a way to start from zero. If a targeted rebuild leaves its service unhealthy or not serving, do not keep restarting that one container: run `jim-build` to rebuild and start the whole stack together.
 
 Blazor pages, API controllers, and other compiled code require container rebuilds. Simply refreshing the browser will not show changes.
 
