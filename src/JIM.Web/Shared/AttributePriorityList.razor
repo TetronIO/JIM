@@ -214,12 +214,34 @@ else
         if (!_dirty || _saving)
             return;
 
-        var attributeName = string.IsNullOrWhiteSpace(MetaverseAttributeName) ? "this attribute" : $"'{MetaverseAttributeName}'";
-        var confirmed = await DialogService.ShowMessageBoxAsync(
-            "Apply priority changes?",
-            $"Priority changes for {attributeName} take effect as objects are next synchronised. Metaverse Objects will not reflect the new order until a Full Synchronisation of the affected objects completes; a Delta Synchronisation applies it only to recently-changed objects. Run a Full Synchronisation to apply it everywhere.",
-            yesText: "Apply", cancelText: "Cancel");
+        // HTML-encode interpolated names: they go into a MarkupString, which bypasses Razor's auto-encoding.
+        var encodedAttribute = System.Net.WebUtility.HtmlEncode(
+            string.IsNullOrWhiteSpace(MetaverseAttributeName) ? "this attribute" : MetaverseAttributeName);
 
+        // Name the Connected Systems the admin must synchronise to apply the new order: the (enabled)
+        // contributors to this attribute. A newbie will not otherwise know where to run the synchronisation.
+        var contributingSystems = _contributors
+            .Where(c => c.SyncRuleEnabled)
+            .Select(c => c.ConnectedSystemName)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var systemsPhrase = contributingSystems.Count > 0
+            ? "each of these Connected Systems: " + string.Join(", ", contributingSystems.Select(n => $"<strong>{System.Net.WebUtility.HtmlEncode(n)}</strong>"))
+            : "each Connected System that contributes this attribute";
+
+        var options = new MessageBoxOptions
+        {
+            Title = "Apply priority changes?",
+            MarkupMessage = (MarkupString)(
+                $"Priority changes for <code class=\"jim-code-inline\">{encodedAttribute}</code> take effect as the contributing systems next synchronise; existing Metaverse Objects keep their current values until then." +
+                "<br /><br />" +
+                $"To apply the new order to your existing objects, run a <strong>Full Synchronisation</strong> Run Profile on {systemsPhrase}. A Delta Synchronisation only re-resolves recently-changed objects."),
+            YesText = "Apply",
+            CancelText = "Cancel"
+        };
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(options);
         if (confirmed != true)
             return;
 

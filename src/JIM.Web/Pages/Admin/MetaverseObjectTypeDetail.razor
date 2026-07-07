@@ -267,7 +267,7 @@
                             <td colspan="7" class="pa-4" style="background-color: var(--mud-palette-background-grey);">
                                 <MudText Typo="Typo.subtitle2" Class="mb-1">Attribute Priority: @context.Name</MudText>
                                 <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-                                    Multiple Synchronisation Rules contribute this attribute. Drag to set which wins when more than one supplies a value; the highest priority is at the top. Disabled rules hold their position but never contribute.
+                                    Multiple Synchronisation Rules can contribute this attribute. Drag to set which wins when more than one supplies a value; the highest priority is at the top. The first to supply a value wins (unless <code class="jim-code-inline">Null is a value</code> is selected). Disabled rules hold their position but never contribute.
                                 </MudText>
                                 <AttributePriorityList MetaverseObjectTypeId="Id" MetaverseAttributeId="context.Id" MetaverseAttributeName="@context.Name" />
                             </td>
