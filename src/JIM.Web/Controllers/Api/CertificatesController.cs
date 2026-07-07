@@ -126,7 +126,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
                 ? await _application.Certificates.AddFromDataAsync(request.Name, certificateData, apiKey, request.Notes, request.ChangeReason)
                 : await _application.Certificates.AddFromDataAsync(request.Name, certificateData, await GetCurrentUserAsync(), request.Notes, request.ChangeReason);
 
-            return CreatedAtAction(nameof(GetByIdAsync), new { id = certificate.Id }, TrustedCertificateDetailDto.FromEntity(certificate));
+            return CreatedAtRoute("GetCertificate", new { id = certificate.Id }, TrustedCertificateDetailDto.FromEntity(certificate));
         }
         catch (InvalidOperationException ex)
         {
@@ -170,7 +170,7 @@ public class CertificatesController(ILogger<CertificatesController> logger, JimA
                 ? await _application.Certificates.AddFromFilePathAsync(request.Name, request.FilePath, apiKey, request.Notes, request.ChangeReason)
                 : await _application.Certificates.AddFromFilePathAsync(request.Name, request.FilePath, await GetCurrentUserAsync(), request.Notes, request.ChangeReason);
 
-            return CreatedAtAction(nameof(GetByIdAsync), new { id = certificate.Id }, TrustedCertificateDetailDto.FromEntity(certificate));
+            return CreatedAtRoute("GetCertificate", new { id = certificate.Id }, TrustedCertificateDetailDto.FromEntity(certificate));
         }
         catch (FileNotFoundException ex)
         {
