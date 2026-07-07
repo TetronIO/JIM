@@ -196,9 +196,11 @@
                     <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
                     <MudTh>
-                        <MudTooltip Text="The number of Synchronisation Rules that contribute this attribute inbound. More than one means an Attribute Priority order determines which wins." Arrow="true" Placement="Placement.Top">
-                            <MudText Typo="Typo.button">Contributors</MudText>
-                        </MudTooltip>
+                        <MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => _contributorCounts.GetValueOrDefault(x.Id, 0))">
+                            <MudTooltip Text="The number of Synchronisation Rules that contribute this attribute inbound. More than one means an Attribute Priority order determines which wins." Arrow="true" Placement="Placement.Top">
+                                <MudText Typo="Typo.button">Contributors</MudText>
+                            </MudTooltip>
+                        </MudTableSortLabel>
                     </MudTh>
                     <MudTh></MudTh>
                 </HeaderContent>
