@@ -99,7 +99,11 @@
                                 @lastUsedAt.ToLocalTime().ToFriendlyDate()
                                 @if (!string.IsNullOrEmpty(_apiKey.LastUsedFromIp))
                                 {
-                                    <span> from <span class="jim-code-inline">@_apiKey.LastUsedFromIp</span></span>
+                                    <span> from
+                                        <MudTooltip Text="The IP address the most recent request authenticated with this key came from." Arrow="true" Placement="Placement.Top">
+                                            <span class="jim-code-inline">@_apiKey.LastUsedFromIp</span>
+                                        </MudTooltip>
+                                    </span>
                                 }
                             </MudText>
                         }
