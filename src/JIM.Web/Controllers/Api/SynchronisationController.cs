@@ -121,6 +121,36 @@ public class SynchronisationController(
     }
 
     /// <summary>
+    /// Get a single Object Type for a Connected System
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    /// <param name="objectTypeId">The unique identifier of the Object Type.</param>
+    /// <returns>The Object Type with its Attributes.</returns>
+    /// <response code="200">The Object Type was found and returned.</response>
+    /// <response code="404">Connected System or Object Type not found.</response>
+    /// <response code="401">User could not be identified from authentication token.</response>
+    [HttpGet("connected-systems/{connectedSystemId:int}/object-types/{objectTypeId:int}", Name = "GetConnectedSystemObjectType")]
+    [ProducesResponseType(typeof(ConnectedSystemObjectTypeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetConnectedSystemObjectTypeAsync(int connectedSystemId, int objectTypeId)
+    {
+        _logger.LogTrace("Requested object type {ObjectTypeId} for Connected System {SystemId}", objectTypeId, connectedSystemId);
+
+        // Verify Connected System exists (Core retrieval; we only need existence, not the full graph)
+        var connectedSystem = await _application.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
+
+        // GetObjectTypeAsync includes the Attributes and ConnectedSystem navigations
+        var objectType = await _application.ConnectedSystems.GetObjectTypeAsync(objectTypeId);
+        if (objectType == null || objectType.ConnectedSystemId != connectedSystemId)
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found in Connected System {connectedSystemId}."));
+
+        return Ok(ConnectedSystemObjectTypeDto.FromEntity(objectType));
+    }
+
+    /// <summary>
     /// Update an Object Type
     /// </summary>
     /// <remarks>

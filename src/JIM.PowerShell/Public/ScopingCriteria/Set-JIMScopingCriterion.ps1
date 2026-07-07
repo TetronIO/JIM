@@ -190,9 +190,12 @@ function Set-JIMScopingCriterion {
                 Write-Error "Connected System attributes can only be used with import sync rules. This sync rule is an export rule."
                 return
             }
-            $objectType = Invoke-JIMApi -Endpoint "/api/v1/connected-systems/$($syncRule.connectedSystemId)/object-types/$($syncRule.connectedSystemObjectTypeId)"
-            if (-not $objectType -or -not $objectType.attributes) {
-                Write-Error "Could not find object type attributes."
+            $connectedSystemId = $syncRule.connectedSystemId
+            $objectTypeId = $syncRule.connectedSystemObjectTypeId
+            $objectTypes = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/connected-systems/$connectedSystemId/object-types"
+            $objectType = $objectTypes | Where-Object { $_.id -eq $objectTypeId } | Select-Object -First 1
+            if (-not $objectType) {
+                Write-Error "Could not find object type $objectTypeId on Connected System $connectedSystemId."
                 return
             }
             $attribute = $objectType.attributes | Where-Object { $_.name -eq $ConnectedSystemAttributeName } | Select-Object -First 1
