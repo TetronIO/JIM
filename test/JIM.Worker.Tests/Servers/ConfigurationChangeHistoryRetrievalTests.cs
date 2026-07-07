@@ -225,6 +225,31 @@ public class ConfigurationChangeHistoryRetrievalTests
         Assert.That(next, Is.EqualTo(7));
     }
 
+    [Test]
+    public void BuildConfigurationChangeDetailFromDeletionSnapshot_RendersObjectAsRemovedFinalState()
+    {
+        // A delete records an unversioned tombstone on the Activity itself (no surviving object to look up). Building a
+        // detail straight from that snapshot must render the object as removed, with its final captured fields present,
+        // so the Activity detail page can show what the deleted object looked like at the moment it was removed.
+        var tombstoneJson = SnapJson(Cs("final state before deletion"));
+
+        var detail = _jim.ChangeHistory.BuildConfigurationChangeDetailFromDeletionSnapshot(tombstoneJson);
+
+        Assert.That(detail, Is.Not.Null);
+        Assert.That(detail!.Operation, Is.EqualTo(ActivityTargetOperationType.Delete));
+        Assert.That(detail.Diff.Root.ChangeType, Is.EqualTo(ConfigurationDiffChangeType.Removed),
+            "a deletion tombstone renders as a whole-object removal, giving the renderer its 'deleted' semantics");
+        Assert.That(detail.Diff.ObjectType, Is.EqualTo(ConfigurationSnapshotService.ConnectedSystemObjectType));
+        Assert.That(detail.Snapshot, Is.Not.Null, "the final captured state is carried so fields can be shown");
+    }
+
+    [Test]
+    public void BuildConfigurationChangeDetailFromDeletionSnapshot_NullOrEmptySnapshot_ReturnsNull()
+    {
+        Assert.That(_jim.ChangeHistory.BuildConfigurationChangeDetailFromDeletionSnapshot(null), Is.Null);
+        Assert.That(_jim.ChangeHistory.BuildConfigurationChangeDetailFromDeletionSnapshot(string.Empty), Is.Null);
+    }
+
     // -- helpers -------------------------------------------------------------------------------------------------------
 
     private string SnapJson(ConnectedSystem cs) => ConfigurationSnapshotService.Serialise(_jim.ConfigurationSnapshots.CreateSnapshot(cs, HashKey));
