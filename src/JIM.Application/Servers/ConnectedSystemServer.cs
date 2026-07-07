@@ -4419,6 +4419,23 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Gets the number of import contributors for each Metaverse attribute of a Metaverse Object Type (#91), keyed
+    /// by Metaverse attribute id. Only attributes with at least one contributor appear. Drives the Surface 2
+    /// multi-contributor badge: an attribute with more than one contributor has a priority order worth managing,
+    /// whereas a single-contributor attribute needs no priority. Disabled Synchronisation Rules are counted (they
+    /// hold position in a priority list), matching <see cref="GetAttributePriorityOrderAsync"/>.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The Metaverse Object Type whose attributes are counted.</param>
+    public async Task<Dictionary<int, int>> GetAttributeContributorCountsAsync(int metaverseObjectTypeId)
+    {
+        var mappings = await Application.Repository.ConnectedSystems.GetImportSyncRuleMappingsForMetaverseObjectTypeAsync(metaverseObjectTypeId);
+        return mappings
+            .Where(m => m.TargetMetaverseAttributeId.HasValue)
+            .GroupBy(m => m.TargetMetaverseAttributeId!.Value)
+            .ToDictionary(g => g.Key, g => g.Count());
+    }
+
+    /// <summary>
     /// Snapshots the current priority/null-handling of a set of mappings, keyed by mapping id, so a subsequent
     /// renumber can determine which rows actually changed (and avoid auditing/persisting no-op rows).
     /// </summary>

@@ -1,0 +1,39 @@
+/* Attribute Priority contributor list (#91, Surface 2).
+   Styles the drag-reorder so a dragged row reads as a themed dashed "ghost" marking where it will land,
+   rather than MudBlazor's default full-zone accent recolour, and keeps rows on the parent attribute
+   table's surface colour so they contrast against the darker expander backdrop behind them. */
+
+.apt-priority-list ::deep .apt-list-frame {
+    border: 1px solid var(--mud-palette-lines-default);
+    overflow: hidden;
+}
+
+/* Contributor rows on the parent table's row colour (surface), so they sit as distinct cards on the
+   darker expander backdrop. A hairline between rows keeps them legible without heavy borders. */
+.apt-priority-list ::deep .apt-row {
+    background-color: var(--mud-palette-surface);
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.apt-priority-list ::deep .mud-drop-item:last-child .apt-row,
+.apt-priority-list ::deep .apt-list-frame > .apt-row:last-child {
+    border-bottom: none;
+}
+
+/* Grab affordance for the whole-row drag. */
+.apt-priority-list ::deep .mud-drop-item-draggable {
+    cursor: grab;
+}
+
+.apt-priority-list ::deep .mud-drop-item-draggable:active {
+    cursor: grabbing;
+}
+
+/* The row being dragged: a low-opacity ghost outlined with a dashed, theme-coloured border that marks
+   where it will land. No full-accent flood; the surrounding rows keep their normal appearance. */
+.apt-priority-list ::deep .apt-row-dragging .apt-row {
+    opacity: 0.7;
+    background-color: var(--mud-palette-primary-hover);
+    outline: 2px dashed var(--mud-palette-primary);
+    outline-offset: -2px;
+}

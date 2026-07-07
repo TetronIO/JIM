@@ -1,8 +1,8 @@
 # Attribute Priority Design Document
 
-- **Status:** Doing (Phases 1 and 2 complete: schema/model/API, engine resolution, auto-assign/densify, recall fallback incl. references, priority-aware drift, AssertedNull/NoContributor observability; Phase 3 UI and the Phase 4 integration test matrix open)
+- **Status:** Doing (Phases 1 and 2 complete: schema/model/API, engine resolution, auto-assign/densify, recall fallback incl. references, priority-aware drift, AssertedNull/NoContributor observability. Phase 3 Surface 2 (the management home) UI landed: drag-reorder + "Null is a value" on the Metaverse Object Type detail page, with `AttributePriorityService` unit tests and the "Null is a value" concept doc complete. Open: Phase 3 Surface 1 (mapping-editor precedence context + NullIsValue toggle), Surface 1c (Synchronisation Rule list priority indicator) and Surface 3 (Data Flow discovery page); Phase 4 fine-grained-authority and grace-period test matrices; Phase 5 Data Flow page docs)
 - **Issue:** [#91](https://github.com/TetronIO/JIM/issues/91)
-- **Last Updated**: 2026-06-26
+- **Last Updated**: 2026-07-07
 
 ## Overview
 
@@ -791,18 +791,20 @@ Not a sub-issue: **#846** (holistic Guardrails) is deliberately *out of scope* (
 
 #### Phase 3: UI Updates
 
-- [ ] Build the ordered contributor-list Blazor component (priority, sync rule, connected system, enabled/disabled greyed state, "Null is a value", drag handle) used by Surface 2; Surface 1 renders the same list read-only
-- [ ] Add a single transactional "get/set attribute priority order" API for a (MVO object type, MVO attribute) pair that renumbers all affected `SyncRuleMapping.Priority` rows; Surface 2 calls it
-- [ ] **Surface 2 (management home):** extend the MVO object type detail page attribute table with a multi-contributor indicator and a `MudTable` `ChildRowContent` expander hosting the shared control
+> **Surface 2 (the management home) landed.** The get/set priority-order API was already delivered in Phase 1 (#868). This increment adds the admin UI that consumes it: a shared `AttributePriorityList` component (`JIM.Web/Shared`) with drag-to-reorder (`MudDropContainer`), per-row "Null is a value" toggle, pending-until-save with Reset, and a save-time apply-only acknowledgement; plus a Contributors column and `MudTable` `ChildRowContent` expander on the Metaverse Object Type detail page attribute table, driven by a new `GetAttributeContributorCountsAsync` aggregate (multi-contributor badge). **Still open:** Surface 1 (read-only precedence context + "Null is a value" in the mapping editor), Surface 3 (Data Flow discovery page), and the Surface 1c sync rule list indicator.
+
+- [x] Build the ordered contributor-list Blazor component (priority, sync rule, connected system, enabled/disabled greyed state, "Null is a value", drag handle) used by Surface 2; Surface 1 renders the same list read-only (`AttributePriorityList.razor`, with a `ReadOnly` mode for Surface 1 reuse)
+- [x] Add a single transactional "get/set attribute priority order" API for a (MVO object type, MVO attribute) pair that renumbers all affected `SyncRuleMapping.Priority` rows; Surface 2 calls it (delivered Phase 1, #868: `Get/Set/MoveAttributePriorityOrderAsync`)
+- [x] **Surface 2 (management home):** extend the MVO object type detail page attribute table with a multi-contributor indicator and a `MudTable` `ChildRowContent` expander hosting the shared control (Contributors column badge + expander; `GetAttributeContributorCountsAsync` aggregate)
 - [ ] **Surface 1 (mapping editor):** show read-only precedence context (current contributor order and where this mapping lands) with a link to Surface 2; set "Null is a value" here; new mappings persist at the safe-addition default; no reordering on this surface (initial-ordering-at-creation deferred)
 - [ ] **Surface 3 (discovery):** new Schema "Data Flow" list page showing all inbound and outbound flows, with a direction filter plus filters (connected system, CS object type, MVO object type, CS attribute, MVO attribute, free-text); pure discovery (no inline management), rows linking to the relevant sync rule mapping (and Surface 2 for import precedence); priority / "Null is a value" columns on import rows only, export rows show the export mapping and its `EnforceState`; relocatable to a future Policy area
 - [ ] Add "Advanced Options" section to the mapping editor with the "Null is a value" checkbox
-- [ ] Save-time acknowledgement messaging on priority changes (see "Configuration Change Propagation"). The persisted "configuration changed since last full synchronisation" indicator is deferred beyond the first release
+- [x] Save-time acknowledgement messaging on priority changes (see "Configuration Change Propagation"): a confirmation dialog on Save states the apply-only semantics. The persisted "configuration changed since last full synchronisation" indicator is deferred beyond the first release
 - [ ] Add a priority indicator column to the sync rule list view (Surface 1c)
 
 #### Phase 4: Testing
 
-- [ ] Unit tests for `AttributePriorityService`
+- [x] Unit tests for `AttributePriorityService` (`test/JIM.Worker.Tests/Servers/AttributePriorityServiceTests.cs`)
 - [x] Integration tests for multi-source priority resolution (Scenario 14 `BaselineResolution`: two OpenLDAP suffixes joined on Employee ID; the priority-1 contributor wins every contested scalar, reference and MVA with correct rule provenance, verified on real PostgreSQL. Executing it surfaced and fixed two real defects the in-memory tests could not see: the bulk COPY/INSERT persistence for newly projected Metaverse Objects dropped `ContributedBySyncRuleId`/`NullValue`, collapsing resolution to last-writer-wins on new objects; and re-election survivor discovery relied on the `mvo.ConnectedSystemObjects` navigation, which real page loads never hydrate, so recalls blanked objects instead of handing over)
 - [x] Integration tests for NullIsValue behaviour, including the tri-state cases (Scenario 14, all verified on real PostgreSQL):
   - [x] Priority-1 rule has no opinion (not joined): lower-priority rule contributes fully despite NullIsValue on priority 1 (HR migration scenario) (`NotJoinedNoOpinion`)
@@ -829,8 +831,8 @@ Not a sub-issue: **#846** (holistic Guardrails) is deliberately *out of scope* (
 
 #### Phase 5: Documentation
 
-- [ ] Add user documentation for the attribute priority surfaces (object type detail page management home and the Data Flow page)
-- [ ] Add user documentation for NullIsValue setting
+- [ ] Add user documentation for the attribute priority surfaces (the object type detail page management home is documented in `docs/concepts/attribute-priority.md`; the Data Flow page docs remain, pending Surface 3)
+- [x] Add user documentation for NullIsValue setting (`docs/concepts/attribute-priority.md`)
 - [x] **Reconcile the existing expression-null docs (#844, already shipped).** Done (Jul 2026): `docs/concepts/expressions.md` § "Nulls, Missing Inputs, and Whitespace" point 1 now describes the single-contributor clear vs multi-contributor priority resolution (hand-over to the next contributor in the same run, "Null is a value" authoritative clear, a lower-priority null never disturbs the winning value), linking to `concepts/attribute-priority.md`; the date-function note and the summary table carry the same qualification. Points 2 and 3 unchanged (still valid). The maintenance comment that tracked this has been removed.
 
 ---
