@@ -40,8 +40,8 @@
                     <MudTextField T="string" @bind-Value="_apiKey.Description" Label="Description" Required="false"
                         Lines="2" MaxLines="6" Sizing="InputSizing.Auto" Variant="Variant.Outlined" Class="mt-5" />
                 </MudForm>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!_detailsFormValid)" Class="mt-5" OnClick="HandleSaveDetailsAsync" DropShadow="false">Save Changes</MudButton>
             </MudPaper>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!_detailsFormValid)" Class="mt-5" OnClick="HandleSaveDetailsAsync" DropShadow="false">Save Changes</MudButton>
 
             <MudPaper Class="pa-4 mt-6" Outlined="true">
                 <MudText Typo="Typo.h6" Class="mb-4">Metadata</MudText>
