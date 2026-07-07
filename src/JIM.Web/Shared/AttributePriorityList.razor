@@ -227,8 +227,8 @@ else
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         var systemsPhrase = contributingSystems.Count > 0
-            ? "each of these Connected Systems: " + string.Join(", ", contributingSystems.Select(n => $"<strong>{System.Net.WebUtility.HtmlEncode(n)}</strong>"))
-            : "each Connected System that contributes this attribute";
+            ? "each of these Connected Systems (in any order): " + string.Join(", ", contributingSystems.Select(n => $"<strong>{System.Net.WebUtility.HtmlEncode(n)}</strong>"))
+            : "each Connected System that contributes this attribute (in any order)";
 
         var options = new MessageBoxOptions
         {
