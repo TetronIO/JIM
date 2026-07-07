@@ -53,6 +53,57 @@ jobs:
         name: pester-test-results
         path: ./TestResults/pester-results.xml
 
+  database-tests:
+    # Runs the RequiresPostgres NUnit tier (the "Database-backed component tests"
+    # tier in engineering/TESTING_STRATEGY.md) against a real PostgreSQL service.
+    # These fixtures self-skip in the in-memory build-and-test job (JIM_TEST_RESET_DB
+    # unset); here they execute, guarding provider-specific and raw-SQL behaviour the
+    # EF Core in-memory provider cannot reproduce (the class of bug behind #849/#850).
+    # See issue #861. Runs on every PR so a failure blocks the merge.
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # Pinned to match the production database image in docker-compose.yml; bump
+        # both together. Dependabot's docker ecosystem does not scan workflow service
+        # images, so this digest pin is maintained by hand.
+        image: postgres:18.4@sha256:4aabea78cf39b90e834caf3af7d602a18565f6fe2508705c8d01aa63245c2e20
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: jim_test
+        ports:
+          - 5432:5432
+        # Hold the job's steps until PostgreSQL is accepting connections.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    # The RequiresPostgres fixtures read these to build the connection string and to
+    # opt in (JIM_TEST_RESET_DB being set is what flips them from Assert.Ignore to run).
+    # jim_test is a throwaway database: each fixture migrates the schema once and
+    # TRUNCATEs every table between tests.
+    env:
+      JIM_TEST_RESET_HOST: localhost
+      JIM_TEST_RESET_USER: postgres
+      JIM_TEST_RESET_PASSWORD: postgres
+      JIM_TEST_RESET_DB: jim_test
+
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+    - name: Setup .NET
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+      with:
+        dotnet-version: 10.0.x
+    - name: Restore dependencies
+      run: dotnet restore JIM.sln
+    - name: Build
+      run: dotnet build JIM.sln --no-restore
+    - name: Run database-backed tests (RequiresPostgres)
+      run: dotnet test JIM.sln --no-build --filter "Category=RequiresPostgres" --verbosity normal
+
   discover-base-images:
     # Discover production Dockerfiles and enforce the digest-pinning policy.
     # Production Dockerfiles are identified by the "# jim-compliance: production-image"
