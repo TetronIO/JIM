@@ -24,7 +24,7 @@
                 <MudExpansionPanel Expanded="@GetCategoryExpanded(categoryKey)"
                                    ExpandedChanged="@(expanded => OnCategoryExpandedChanged(categoryKey, expanded))">
                     <TitleContent>
-                        <MudText Typo="Typo.subtitle1">@categoryKey</MudText>
+                        <MudText Typo="Typo.h5">@categoryKey</MudText>
                     </TitleContent>
                     <ChildContent>
                         @{
@@ -111,7 +111,7 @@
             <MudExpansionPanel Expanded="@GetCategoryExpanded("Export Performance")"
                                ExpandedChanged="@(expanded => OnCategoryExpandedChanged("Export Performance", expanded))">
                 <TitleContent>
-                    <MudText Typo="Typo.subtitle1">Export Performance</MudText>
+                    <MudText Typo="Typo.h5">Export Performance</MudText>
                 </TitleContent>
                 <ChildContent>
                     <MudText Class="mud-text-secondary mb-5">

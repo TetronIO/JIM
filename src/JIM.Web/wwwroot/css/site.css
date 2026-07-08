@@ -4,6 +4,18 @@
     --jim-instance-bar-height: 28px;
 }
 
+/* App.razor's <FocusOnNavigate Selector="h1" /> (standard Blazor Web App template
+   scaffolding) programmatically focuses the page's <h1> after every navigation, so
+   screen readers announce the new page. The stock template pairs that with this
+   exact rule in its default app.css to suppress the resulting browser focus ring,
+   since the focus is not a real keyboard interaction and doesn't need a visible
+   ring for sighted users; it was dropped when JIM's own site.css replaced that
+   file. Restored here so any page using a real <h1> for its title behaves
+   correctly. */
+h1:focus {
+    outline: none;
+}
+
 /* MUDBLAZOR CUSTOMISATIONS */
 /* Note: Colour palettes are defined in css/themes/ files, not here. */
 

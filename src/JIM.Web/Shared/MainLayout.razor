@@ -142,18 +142,40 @@ else
                 FontWeight = "400",
                 FontSize = "16px"
             },
-            // MudBlazor 9 defaults (from Material Design 1.0) ship H5 at weight
-            // 400 and H6 at weight 500 - so H6 reads visually heavier than H5,
-            // which inverts the natural document hierarchy. Override so H5 sits
-            // clearly above H6 in both size (inherited 1.5rem vs 1.25rem) and
-            // weight, while H6 stays heavier than body text (400) so it remains
-            // distinguishable from regular paragraphs.
+            // MudBlazor 9 defaults (from Material Design 1.0) mix weights 300-500
+            // across H1-H6 with large, uneven size jumps between levels (H1 alone
+            // ships at 96px). Override the whole scale with a uniform 2px step,
+            // starting from H6 at 2px above body text size (16px), so it stays
+            // visually close to surrounding text while remaining distinguishable
+            // via weight alone.
+            H1 = new H1Typography()
+            {
+                FontSize = "28px",
+                FontWeight = "450"
+            },
+            H2 = new H2Typography()
+            {
+                FontSize = "26px",
+                FontWeight = "450"
+            },
+            H3 = new H3Typography()
+            {
+                FontSize = "24px",
+                FontWeight = "450"
+            },
+            H4 = new H4Typography()
+            {
+                FontSize = "22px",
+                FontWeight = "500"
+            },
             H5 = new H5Typography()
             {
-                FontWeight = "600"
+                FontSize = "20px",
+                FontWeight = "500"
             },
             H6 = new H6Typography()
             {
+                FontSize = "18px",
                 FontWeight = "500"
             }
         },
