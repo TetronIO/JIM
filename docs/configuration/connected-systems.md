@@ -10,7 +10,7 @@ Every Connected System is associated with a [connector](../connectors/index.md) 
 
 ## What a Connected System contains
 
-- **Connection details**<br /> How to reach the external system: server address, credentials, file path, and other connector-specific settings.
+- **Connection details**<br /> How to reach the external system: server address, credentials, file path, and other connector-specific settings. The Settings tab groups these into a collapsible accordion by category (Connectivity, General, Export, and so on) so dense connector configuration stays easy to scan.
 - **Discovered schema**<br /> The object types and attributes available in the external system, populated on first contact.
 - **Connector space**<br /> A staging area that holds JIM's local copy of the external system's data.
 - **Run Profiles**<br /> Configured operations (import, sync, export) that can be executed against the system.

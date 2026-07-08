@@ -17,7 +17,7 @@
 
 @if (_pendingExport != null)
 {
-    <MudText Typo="Typo.h4">
+    <MudText Typo="Typo.h3">
         <span>Pending Export:</span>
         <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(_pendingExport.ChangeType)" Class="ml-2">
             @_pendingExport.ChangeType
