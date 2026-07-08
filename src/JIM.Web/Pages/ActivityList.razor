@@ -125,8 +125,11 @@
             <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.System">System</MudSelectItem>
         </MudSelect>
     </MudItem>
-    <MudItem Class="flex-grow-1">
-        @* No dense margin: matches the height of the neighbouring filter selects. *@
+    <MudItem Class="flex-grow-1" Style="max-width: 280px;">
+        @* No dense margin: matches the height of the neighbouring filter selects.
+           Max-width caps MudDateRangePicker's much wider default (~2x a select),
+           which otherwise starves the trailing checkbox and pause button of row
+           space and pushes them onto their own line. *@
         <MudDateRangePicker Label="Created between" Variant="Variant.Outlined"
                             DateRange="_filterDateRange" DateRangeChanged="OnDateRangeChanged"
                             Clearable="true" AutoClose="true" />
