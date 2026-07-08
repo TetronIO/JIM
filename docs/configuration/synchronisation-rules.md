@@ -164,20 +164,44 @@ Four controls are available:
 - **Collapse internal whitespace**<br /> Reduces runs of consecutive whitespace inside the value to a single space, so multiple spaces or tabs between words collapse to one. For example, `John···Smith` becomes `John Smith` (each `·` represents a space).
 - **Case normalisation**<br /> Converts the value to `Upper`, `Lower`, or `Title` case, or leaves it unchanged (`None`). Useful for folding usernames or email addresses to a consistent case.
 
-The transforms run in a fixed order: **trim, then collapse, then case normalisation, then the whitespace-as-no-value decision**. Because the whitespace decision runs last, a value that trims down to nothing is correctly treated as no value. Value processing is *normalisation*; it runs before [priority](#priority) resolves which rule's value wins.
+The transforms run in a fixed order: **trim, then collapse, then case normalisation, then the whitespace-as-no-value decision**. Because the whitespace decision runs last, a value that trims down to nothing is correctly treated as no value. Value processing is *normalisation*; it runs before [Attribute Priority](#attribute-priority) resolves which rule's value wins.
 
 When **Treat whitespace as no value** is switched off and a whitespace-only value is therefore stored, the portal flags it with a `(whitespace)` indicator rather than rendering a misleading blank cell, so administrators can tell a real-but-invisible value apart from an absent one.
 
-## Priority
+## Attribute Priority
 
-When multiple import rules write to the same MVO attribute, **priority** determines which rule's value wins. Each Synchronisation Rule has a priority level, and the rule with the highest priority wins.
+When more than one import rule maps to the same Metaverse Object attribute, **Attribute Priority** decides which contributor wins, so the result never depends on the order your synchronisations happen to run in. It is an inbound concern: it governs how values flow from Connected Systems into the metaverse, and does not change how the metaverse is exported back out.
 
-This matters when an identity has data flowing from multiple source systems. For example:
+Priority is held **per attribute, per contributing rule**, not as a single level on the whole Synchronisation Rule. The same Connected System can therefore rank first for one attribute and second for another, and a single system can even contribute through several differently-scoped rules at different priorities.
 
-- HR system provides `First Name` and `Last Name` (high priority: authoritative)
-- Badge system also provides `First Name` (lower priority: secondary)
+### How a winner is chosen
 
-The HR system's values win because its Synchronisation Rule has a higher priority.
+For a given Metaverse attribute, JIM evaluates every contributing import rule in priority order (1 is highest):
+
+- **The first contributor with a value wins.**<br /> Lower-priority contributors are not consulted.
+- **A rule with no opinion is skipped.**<br /> If a rule does not apply to the object (it is disabled, no object from its Connected System is joined, or the joined object is out of the rule's scope), it is passed over and the next priority is considered.
+- **If nobody contributes, the attribute is left unset.**
+
+For example, an identity drawing data from two source systems:
+
+- HR system provides `First Name` and `Last Name` (priority 1: authoritative)
+- Badge system also provides `First Name` (priority 2: secondary)
+
+The HR system's `First Name` wins because its contribution ranks higher; the badge system only fills in where HR has no opinion.
+
+### Null is a value
+
+By default, if the highest-priority source has **no** value for an attribute, JIM falls through to the next source. That is usually right, but not always: when the authoritative source deliberately *clears* a value, you want the clear to propagate, not to be back-filled from a stale secondary copy that still holds the old value.
+
+Enabling **Null is a value** on a contributor changes that. If the contributor is connected and in scope but supplies no value, JIM stops there and asserts "no value": the attribute is cleared downstream, and lower-priority sources are not consulted. This is distinct from a rule simply having no opinion; a rule that does not apply to the object is still skipped regardless of this setting.
+
+Typical uses are a manager or department cleared at the authoritative source that must propagate as a clear, and a primary-system migration where the new system is authoritative for the people it knows about (including their blanks). It is deliberately powerful: a misbehaving priority-1 import (an empty file, a truncated delta) becomes a mass-clearing event rather than a harmless no-op, so treat Null is a value as an authoritative, considered choice.
+
+### Configuring priority
+
+Attribute Priority is configured per (Metaverse Object Type, attribute), not on the Synchronisation Rule editor. Open the Metaverse Object Type (**Administration → Schema → Object Types**), select the **Attributes** tab, and expand the **contributors** list for any attribute that has more than one contributor. From there you drag contributors to reorder them and toggle **Null is a value** per contributor. A newly added import mapping joins at the **lowest** priority, so a new source never silently takes over an attribute until you promote it explicitly. The same configuration is available via the [PowerShell cmdlets](../powershell/metaverse.md) and the REST API.
+
+> **Full detail:** [Attribute Priority](../concepts/attribute-priority.md) covers re-election when a winning source disconnects or withdraws, multi-valued attribute semantics, per-value provenance, and how to see resolution decisions in [Synchronisation Activities](activities.md).
 
 ## Common workflows
 
@@ -226,6 +250,7 @@ This rule imports full-time employees from the HR system, joins them to existing
 
 - [Connected Systems](connected-systems.md) -- the systems a Synchronisation Rule connects to
 - [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md) -- where Synchronisation Rules fit in the import/sync/export flow
+- [Concepts: Attribute Priority](../concepts/attribute-priority.md) -- how JIM resolves which source wins when several rules feed the same attribute, and the "Null is a value" setting
 - [Concepts: JML Lifecycle](../concepts/jml-lifecycle.md) -- how scoping and provisioning drive joiner/mover/leaver behaviour
 - [Concepts: Expressions](../concepts/expressions.md) -- the expression language used in scoping criteria and attribute mappings
 - [Concepts: Case Sensitivity](../concepts/case-sensitivity.md) -- where matching and scoping are exact, and how to make them case-insensitive
