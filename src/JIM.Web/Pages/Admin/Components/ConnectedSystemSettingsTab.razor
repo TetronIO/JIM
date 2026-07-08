@@ -14,94 +14,119 @@
 
 <MudForm @ref="_settingsForm" @bind-IsValid="@IsSettingsFormValid" @bind-Errors="@SettingsFormErrors">
     <PrefilledFormValidator />
-    @if (SettingCategories != null)
-    {
-        @for (var i = 0; i < SettingCategories.Count; i++)
+    <MudExpansionPanels MultiExpansion="true" Elevation="0" Class="mt-5 jim-expansion-panel">
+        @if (SettingCategories != null)
         {
-            var settingCategory = SettingCategories[i];
-            <MudPaper Class="pa-5 mt-5" Outlined="true">
-                <MudText Typo="Typo.h5" Class="mb-5">@settingCategory.ToString()</MudText>
-                @{
-                    // settings whose RequiredWhen condition is not met are irrelevant; hide them entirely
-                    var categorySettings = ConnectedSystem.SettingValues
-                        .Where(sv => sv.Setting.Category == settingCategory)
-                        .Where(sv => ConnectorSettingValidator.IsConditionMet(ConnectedSystem.SettingValues, sv.Setting))
-                        .OrderBy(sv => sv.Setting.Id)
-                        .ToList();
-                    var j = 0;
-                }
-                @while (j < categorySettings.Count)
-                {
-                    var settingValue = categorySettings[j];
-                    var requiredGroup = settingValue.Setting.RequiredGroup;
-
-                    if (!string.IsNullOrEmpty(requiredGroup))
-                    {
-                        // consecutive settings sharing a RequiredGroup render together: at least one of them must be supplied
-                        var groupMembers = new List<ConnectedSystemSettingValue>();
-                        while (j < categorySettings.Count && categorySettings[j].Setting.RequiredGroup == requiredGroup)
-                        {
-                            groupMembers.Add(categorySettings[j]);
-                            j++;
+            @for (var i = 0; i < SettingCategories.Count; i++)
+            {
+                var settingCategory = SettingCategories[i];
+                var categoryKey = settingCategory.ToString();
+                <MudExpansionPanel Expanded="@GetCategoryExpanded(categoryKey)"
+                                   ExpandedChanged="@(expanded => OnCategoryExpandedChanged(categoryKey, expanded))">
+                    <TitleContent>
+                        <MudText Typo="Typo.subtitle1">@categoryKey</MudText>
+                    </TitleContent>
+                    <ChildContent>
+                        @{
+                            // settings whose RequiredWhen condition is not met are irrelevant; hide them entirely
+                            var categorySettings = ConnectedSystem.SettingValues
+                                .Where(sv => sv.Setting.Category == settingCategory)
+                                .Where(sv => ConnectorSettingValidator.IsConditionMet(ConnectedSystem.SettingValues, sv.Setting))
+                                .OrderBy(sv => sv.Setting.Id)
+                                .ToList();
+                            var headingCount = categorySettings.Count(sv => sv.Setting.Type == ConnectedSystemSettingType.Heading);
+                            var headingsRendered = 0;
+                            var j = 0;
                         }
-                        var groupSpacingClass = j >= categorySettings.Count ? "pa-4" : "pa-4 mb-5";
-                        var groupSatisfied = ConnectorSettingValidator.IsGroupSatisfied(ConnectedSystem.SettingValues, requiredGroup);
-                        var groupCardinality = ConnectorSettingValidator.GetGroupCardinality(groupMembers);
-                        var groupCaption = groupCardinality == ConnectorSettingRequiredGroupCardinality.ExactlyOne
-                            ? "Provide a value for exactly one of the following settings:"
-                            : "Provide a value for at least one of the following settings:";
-                        <MudPaper Outlined="true" Class="@groupSpacingClass">
-                            <MudText Typo="Typo.h6">@requiredGroup</MudText>
-                            @if (groupSatisfied)
+                        @while (j < categorySettings.Count)
+                        {
+                            var settingValue = categorySettings[j];
+                            var requiredGroup = settingValue.Setting.RequiredGroup;
+
+                            if (!string.IsNullOrEmpty(requiredGroup))
                             {
-                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">@groupCaption</MudText>
+                                // consecutive settings sharing a RequiredGroup render together: at least one of them must be supplied
+                                var groupMembers = new List<ConnectedSystemSettingValue>();
+                                while (j < categorySettings.Count && categorySettings[j].Setting.RequiredGroup == requiredGroup)
+                                {
+                                    groupMembers.Add(categorySettings[j]);
+                                    j++;
+                                }
+                                var groupSpacingClass = j >= categorySettings.Count ? "pa-4" : "pa-4 mb-5";
+                                var groupSatisfied = ConnectorSettingValidator.IsGroupSatisfied(ConnectedSystem.SettingValues, requiredGroup);
+                                var groupCardinality = ConnectorSettingValidator.GetGroupCardinality(groupMembers);
+                                var groupCaption = groupCardinality == ConnectorSettingRequiredGroupCardinality.ExactlyOne
+                                    ? "Provide a value for exactly one of the following settings:"
+                                    : "Provide a value for at least one of the following settings:";
+                                <MudPaper Outlined="true" Class="@groupSpacingClass">
+                                    <MudText Typo="Typo.h6">@requiredGroup</MudText>
+                                    @if (groupSatisfied)
+                                    {
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">@groupCaption</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Error" Class="mb-4">@groupCaption</MudText>
+                                    }
+                                    @for (var k = 0; k < groupMembers.Count; k++)
+                                    {
+                                        <ConnectedSystemSettingField SettingValue="@groupMembers[k]"
+                                                                     CssClass="@(k == groupMembers.Count - 1 ? "" : "mb-5")"
+                                                                     Immediate="true"
+                                                                     IsExportOnlyMode="@ConnectedSystem.IsExportOnlyMode()"
+                                                                     ValueChanged="OnSettingValueChanged"
+                                                                     FileSelected="OnFileSelectedAsync" />
+                                    }
+                                </MudPaper>
                             }
                             else
                             {
-                                <MudText Typo="Typo.body2" Color="Color.Error" Class="mb-4">@groupCaption</MudText>
-                            }
-                            @for (var k = 0; k < groupMembers.Count; k++)
-                            {
-                                <ConnectedSystemSettingField SettingValue="@groupMembers[k]"
-                                                             CssClass="@(k == groupMembers.Count - 1 ? "" : "mb-5")"
+                                if (settingValue.Setting.Type == ConnectedSystemSettingType.Heading)
+                                {
+                                    // separate second-level setting headings from each other when a category has more than one
+                                    if (headingsRendered > 0 && headingCount > 1)
+                                    {
+                                        <MudDivider Class="my-4" />
+                                    }
+                                    headingsRendered++;
+                                }
+
+                                <ConnectedSystemSettingField SettingValue="@settingValue"
+                                                             CssClass="@(j == categorySettings.Count - 1 ? "" : "mb-5")"
+                                                             IsRequired="@ConnectorSettingValidator.IsSettingRequired(ConnectedSystem.SettingValues, settingValue.Setting)"
                                                              Immediate="true"
                                                              IsExportOnlyMode="@ConnectedSystem.IsExportOnlyMode()"
                                                              ValueChanged="OnSettingValueChanged"
                                                              FileSelected="OnFileSelectedAsync" />
+                                j++;
                             }
-                        </MudPaper>
-                    }
-                    else
-                    {
-                        <ConnectedSystemSettingField SettingValue="@settingValue"
-                                                     CssClass="@(j == categorySettings.Count - 1 ? "" : "mb-5")"
-                                                     IsRequired="@ConnectorSettingValidator.IsSettingRequired(ConnectedSystem.SettingValues, settingValue.Setting)"
-                                                     Immediate="true"
-                                                     IsExportOnlyMode="@ConnectedSystem.IsExportOnlyMode()"
-                                                     ValueChanged="OnSettingValueChanged"
-                                                     FileSelected="OnFileSelectedAsync" />
-                        j++;
-                    }
-                }
-            </MudPaper>
+                        }
+                    </ChildContent>
+                </MudExpansionPanel>
+            }
         }
-    }
 
-    @if (ConnectedSystem.ConnectorDefinition is { SupportsExport: true, SupportsParallelExport: true })
-    {
-        <MudPaper Class="pa-5 mt-5" Outlined="true">
-            <MudText Typo="Typo.h5" Class="mb-2">Export Performance</MudText>
-            <MudText Class="mud-text-secondary mb-5">
-                These settings control how JIM processes exports, independently of connector-specific settings above.
-            </MudText>
-            <MudTextField T="int?"
-                          Label="Max Export Parallelism"
-                          @bind-Value="ConnectedSystem.MaxExportParallelism"
-                          HelperText="Number of export batches to process concurrently (1 = sequential). Each parallel batch uses its own database connection and connector instance."
-                          InputType="InputType.Number"
-                          Variant="Variant.Outlined" />
-        </MudPaper>
-    }
+        @if (ConnectedSystem.ConnectorDefinition is { SupportsExport: true, SupportsParallelExport: true })
+        {
+            <MudExpansionPanel Expanded="@GetCategoryExpanded("Export Performance")"
+                               ExpandedChanged="@(expanded => OnCategoryExpandedChanged("Export Performance", expanded))">
+                <TitleContent>
+                    <MudText Typo="Typo.subtitle1">Export Performance</MudText>
+                </TitleContent>
+                <ChildContent>
+                    <MudText Class="mud-text-secondary mb-5">
+                        These settings control how JIM processes exports, independently of connector-specific settings above.
+                    </MudText>
+                    <MudTextField T="int?"
+                                  Label="Max Export Parallelism"
+                                  @bind-Value="ConnectedSystem.MaxExportParallelism"
+                                  HelperText="Number of export batches to process concurrently (1 = sequential). Each parallel batch uses its own database connection and connector instance."
+                                  InputType="InputType.Number"
+                                  Variant="Variant.Outlined" />
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+    </MudExpansionPanels>
 
     @if (SettingsFormCustomErrors.Count > 0)
     {
@@ -146,6 +171,16 @@
     private Dictionary<string, string> SettingsFormCustomErrors { get; } = new();
     private bool _settingsBeingSaved;
     private MudForm? _settingsForm;
+
+    /// <summary>
+    /// Per-category (and Export Performance) expanded state for the settings accordion.
+    /// Not persisted; defaults to expanded so settings remain visible without extra clicks.
+    /// </summary>
+    private readonly Dictionary<string, bool> _categoryExpandedStates = new();
+
+    private bool GetCategoryExpanded(string categoryKey) => _categoryExpandedStates.GetValueOrDefault(categoryKey, true);
+
+    private void OnCategoryExpandedChanged(string categoryKey, bool expanded) => _categoryExpandedStates[categoryKey] = expanded;
 
     private async Task HandleValidSettingsSubmitAsync()
     {
