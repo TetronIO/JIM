@@ -1,6 +1,6 @@
 # Configuration Change History: Full Coverage of Configuration Object Types
 
-- **Status:** Planned
+- **Status:** Done
 - **Created:** 2026-07-05
 - **Author:** JayVDZ
 - **Issue:** [#14](https://github.com/TetronIO/JIM/issues/14) *(tracked as a sub-task of the parent change-history issue)*
@@ -28,7 +28,7 @@ JIM is deployed in high-trust environments (healthcare, finance, government). "W
 ## Non-Goals
 
 - Rollback / restore of a prior configuration version: remains the Phase 8 fast-follow of the original PRD.
-- Connected System hard-delete tombstone capture: already deferred and earmarked to pair with rollback; unchanged here.
+- Connected System deletion tombstone capture: out of scope for this increment (has since been delivered separately; all three delete paths now record a tombstone).
 - Business/identity data (CSO and MVO) change history: delivered under #269; not touched.
 - Changes to the storage model, diff engine, retention behaviour, or Activities-list filters: the existing infrastructure is type-agnostic and is reused as-is.
 - History for runtime/operational state (worker tasks, run results, import watermarks, seeded reference data such as built-in Roles' definitions): configuration only.
@@ -142,15 +142,15 @@ Resolved from the draft's open questions:
 
 ## Acceptance Criteria
 
-- [ ] Every mutation path for Service Setting, Metaverse Attribute, Metaverse Object Type, and Trusted Certificate records an Activity carrying a versioned snapshot; the Metaverse Object Type update path's missing Activity is fixed.
-- [ ] Every mutation path for API Key, Role (definition and assignment), Predefined Search (including criteria and groups), Connector Definition, and Example Data Template/Set records an Activity carrying a versioned snapshot.
-- [ ] API Key mutations no longer bypass the application layer; the Blazor page calls new server methods.
-- [ ] Encrypted Service Setting values and API key secrets never appear in stored or rendered history; redaction is covered by tests.
-- [ ] No Schedule step mutation path bypasses capture: every step change records exactly one versioned snapshot of the owning Schedule per save.
-- [ ] Each newly covered type's history is retrievable via the REST API and `Get-JIMConfigurationChangeHistory` with diff and compare parity, and viewable in the admin portal where the object is managed.
-- [ ] The reason prompt, `-ChangeReason`, and REST reason field work for the newly covered types' mutations.
-- [ ] The enable toggle, semantic no-change dedupe, best-effort capture, and configuration-change retention apply to all new capture paths, covered by tests per path.
-- [ ] `docs/configuration/activities.md` coverage note updated to enumerate full coverage.
+- [x] Every mutation path for Service Setting, Metaverse Attribute, Metaverse Object Type, and Trusted Certificate records an Activity carrying a versioned snapshot; the Metaverse Object Type update path's missing Activity is fixed. *(Phases 2-4)*
+- [x] Every mutation path for API Key, Role (definition and assignment), Predefined Search (including criteria and groups), Connector Definition, and Example Data Template/Set records an Activity carrying a versioned snapshot. *(Phases 5-9)*
+- [x] API Key mutations no longer bypass the application layer; the Blazor page calls new server methods. *(N-tier enforcement interim slice + Phase 5)*
+- [x] Encrypted Service Setting values and API key secrets never appear in stored or rendered history; redaction is covered by tests. *(the API key secret is excluded in every form, not even a hash; Trusted Certificate key material, Connector Definition file binaries, and Example Data Set values are likewise excluded)*
+- [x] No Schedule step mutation path bypasses capture: every step change records exactly one versioned snapshot of the owning Schedule per save. *(Phase 1: verified every step path reconciles then calls the audited whole-Schedule update; the presumed gap was disproved)*
+- [x] Each newly covered type's history is retrievable via the REST API and `Get-JIMConfigurationChangeHistory` with diff and compare parity, and viewable in the admin portal where the object is managed.
+- [x] The reason prompt, `-ChangeReason`, and REST reason field work for the newly covered types' mutations.
+- [x] The enable toggle, semantic no-change dedupe, best-effort capture, and configuration-change retention apply to all new capture paths, covered by tests per path.
+- [x] `docs/configuration/activities.md` coverage note updated to enumerate full coverage.
 
 ## Additional Context
 

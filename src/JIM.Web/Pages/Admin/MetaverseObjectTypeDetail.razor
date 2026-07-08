@@ -16,7 +16,7 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Metaverse Object Type: @_metaverseObjectType?.Name</PageTitle>
-<MudText Typo="Typo.h4"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(_metaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Metaverse Object Type:</span> <span class="mud-primary-text">@_metaverseObjectType?.Name</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(_metaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Metaverse Object Type:</span> <span class="mud-primary-text">@_metaverseObjectType?.Name</span></MudText>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_metaverseObjectType != null)
@@ -195,6 +195,13 @@
                     <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.AttributePlurality)"><MudText Typo="Typo.button">Plurality</MudText></MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
+                    <MudTh>
+                        <MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => _contributorCounts.GetValueOrDefault(x.Id, 0))">
+                            <MudTooltip Text="The number of Synchronisation Rules that contribute this attribute inbound. More than one means an Attribute Priority order determines which wins." Arrow="true" Placement="Placement.Top">
+                                <MudText Typo="Typo.button">Contributors</MudText>
+                            </MudTooltip>
+                        </MudTableSortLabel>
+                    </MudTh>
                     <MudTh></MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -226,12 +233,49 @@
                             @context.Created.ToLocalTime().ToRelativeTime()
                         </MudTooltip>
                     </MudTd>
+                    <MudTd DataLabel="Contributors">
+                        @{
+                            var contributorCount = _contributorCounts.GetValueOrDefault(context.Id, 0);
+                        }
+                        @if (contributorCount > 1)
+                        {
+                            <MudTooltip Text="Multiple contributors. Click to manage the Attribute Priority order." Arrow="true" Placement="Placement.Top">
+                                <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary"
+                                           EndIcon="@(_expandedAttributeIds.Contains(context.Id) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                           OnClick="@(() => ToggleAttributeExpanded(context.Id))">
+                                    @contributorCount contributors
+                                </MudButton>
+                            </MudTooltip>
+                        }
+                        else if (contributorCount == 1)
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">1</MudText>
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
+                    </MudTd>
                     <MudTd DataLabel="">
                         <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
                             <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowAttributeHistoryDialogAsync(context))" />
                         </MudTooltip>
                     </MudTd>
                 </RowTemplate>
+                <ChildRowContent>
+                    @if (_expandedAttributeIds.Contains(context.Id))
+                    {
+                        <MudTr>
+                            <td colspan="7" class="pa-4" style="background-color: var(--mud-palette-background-grey);">
+                                <MudText Typo="Typo.subtitle2" Class="mb-1">Attribute Priority: @context.Name</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                                    Multiple Synchronisation Rules can contribute this attribute. Drag to set which wins when more than one supplies a value; the highest priority is at the top. The first to supply a value wins (unless <code class="jim-code-inline jim-code-inline-strong">Null is a value</code> is selected). Disabled rules hold their position but never contribute.
+                                </MudText>
+                                <AttributePriorityList MetaverseObjectTypeId="Id" MetaverseAttributeId="context.Id" MetaverseAttributeName="@context.Name" />
+                            </td>
+                        </MudTr>
+                    }
+                </ChildRowContent>
                 <PagerContent>
                     <MudTablePager />
                 </PagerContent>
@@ -258,6 +302,11 @@
     private string _attributeSearchString = "";
     private int _rowsPerPage = 10;
     private int _changeCount;
+
+    // Attribute Priority (#91, Surface 2): per-attribute import contributor counts (drives the multi-contributor
+    // badge) and the set of attribute rows whose priority expander is open.
+    private Dictionary<int, int> _contributorCounts = new();
+    private readonly HashSet<int> _expandedAttributeIds = new();
 
     // Attribute filter state
     private IReadOnlyCollection<AttributeDataType> _selectedTypes = new List<AttributeDataType>();
@@ -299,6 +348,9 @@
         };
 
         _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.MetaverseObjectType, Id, 1, 1)).TotalResults;
+
+        // Attribute Priority (#91): import contributor count per attribute, for the multi-contributor badge.
+        _contributorCounts = await jim.ConnectedSystems.GetAttributeContributorCountsAsync(Id);
 
         // Load contributing systems (systems with inbound Synchronisation Rules for this object type)
         await LoadContributingSystemsAsync();
@@ -434,6 +486,12 @@
         {
             Snackbar.Add($"Failed to save deletion rules: {ex.Message}", Severity.Error);
         }
+    }
+
+    private void ToggleAttributeExpanded(int attributeId)
+    {
+        if (!_expandedAttributeIds.Remove(attributeId))
+            _expandedAttributeIds.Add(attributeId);
     }
 
     private async Task ShowAttributeHistoryDialogAsync(MetaverseAttribute attribute)

@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.ExampleData;
 using JIM.Models.Logic;
 using JIM.Models.Scheduling;
 using JIM.Models.Search;
@@ -58,6 +59,12 @@ public class ConfigurationSnapshotService
 
     /// <summary>The object-type discriminator stored on a Connector Definition snapshot.</summary>
     public const string ConnectorDefinitionObjectType = "ConnectorDefinition";
+
+    /// <summary>The object-type discriminator stored on an Example Data Set snapshot.</summary>
+    public const string ExampleDataSetObjectType = "ExampleDataSet";
+
+    /// <summary>The object-type discriminator stored on an Example Data Template snapshot.</summary>
+    public const string ExampleDataTemplateObjectType = "ExampleDataTemplate";
 
     private JimApplication Application { get; }
 
@@ -951,6 +958,120 @@ public class ConfigurationSnapshotService
             items.Add(ConfigurationSnapshotNode.ObjectNode("file", children, "File", file.Id));
         }
         return ConfigurationSnapshotNode.CollectionNode("files", items, "Files");
+    }
+
+    // -- Example Data Set ----------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a metadata-only snapshot of an Example Data Set: its name, culture, built-in flag, and the number of
+    /// values it holds. The individual values are deliberately not captured (a built-in set can hold thousands of
+    /// strings; embedding them would bloat every version and add nothing an auditor needs). A change to the value
+    /// count is enough to show that the set's contents changed. Example Data Sets carry no secrets;
+    /// <paramref name="hashKey"/> keeps the signature uniform with the other builders.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(ExampleDataSet dataSet, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(dataSet);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", dataSet.Name, "Name");
+        Add(children, "culture", dataSet.Culture, "Culture");
+        Add(children, "builtIn", Render(dataSet.BuiltIn), "Built-in");
+        Add(children, "valueCount", Render(dataSet.Values?.Count ?? 0), "Value count");
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = ExampleDataSetObjectType,
+            ObjectId = dataSet.Id,
+            ObjectName = dataSet.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("exampleDataSet", children, "Example Data Set")
+        };
+    }
+
+    // -- Example Data Template -----------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds a scoped snapshot of an Example Data (generation) Template: its identity and its object-type/attribute
+    /// configuration, with each object type's generation attributes and their referenced Example Data Sets as nested
+    /// children (stable DB ids). Referenced Example Data Sets are captured by id reference only, never their values, so
+    /// the (potentially very large) set contents are not duplicated into the template's history. Templates carry no
+    /// secrets; <paramref name="hashKey"/> keeps the signature uniform with the other builders. Load the template with
+    /// its object types, template attributes and their associations (see
+    /// <c>IExampleDataRepository.GetTemplateAsync(int)</c>) so the snapshot reflects persisted truth.
+    /// </summary>
+    public ConfigurationSnapshot CreateSnapshot(ExampleDataTemplate template, byte[] hashKey)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+
+        var children = new List<ConfigurationSnapshotNode>();
+        Add(children, "name", template.Name, "Name");
+        Add(children, "builtIn", Render(template.BuiltIn), "Built-in");
+        children.Add(BuildExampleDataObjectTypes(template.ObjectTypes));
+
+        return new ConfigurationSnapshot
+        {
+            ObjectType = ExampleDataTemplateObjectType,
+            ObjectId = template.Id,
+            ObjectName = template.Name,
+            Root = ConfigurationSnapshotNode.ObjectNode("exampleDataTemplate", children, "Example Data Template")
+        };
+    }
+
+    private static ConfigurationSnapshotNode BuildExampleDataObjectTypes(List<ExampleDataObjectType> objectTypes)
+    {
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var objectType in (objectTypes ?? []).OrderBy(o => o.Id))
+        {
+            var children = new List<ConfigurationSnapshotNode>();
+            AddReference(children, "metaverseObjectTypeId", objectType.MetaverseObjectType?.Id, objectType.MetaverseObjectType?.Name, "Metaverse Object Type");
+            Add(children, "objectsToCreate", Render(objectType.ObjectsToCreate), "Objects to create");
+            children.Add(BuildExampleDataTemplateAttributes(objectType.TemplateAttributes));
+            items.Add(ConfigurationSnapshotNode.ObjectNode("objectType", children, "Object Type", objectType.Id));
+        }
+        return ConfigurationSnapshotNode.CollectionNode("objectTypes", items, "Object Types");
+    }
+
+    private static ConfigurationSnapshotNode BuildExampleDataTemplateAttributes(List<ExampleDataTemplateAttribute> attributes)
+    {
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var attribute in (attributes ?? []).OrderBy(a => a.Id))
+        {
+            var children = new List<ConfigurationSnapshotNode>();
+            AddReference(children, "metaverseAttributeId", attribute.MetaverseAttribute?.Id, attribute.MetaverseAttribute?.Name, "Metaverse Attribute");
+            AddReference(children, "connectedSystemObjectTypeAttributeId", attribute.ConnectedSystemObjectTypeAttribute?.Id, attribute.ConnectedSystemObjectTypeAttribute?.Name, "Connected System Attribute");
+            Add(children, "populatedValuesPercentage", Render(attribute.PopulatedValuesPercentage), "Populated values (%)");
+            Add(children, "pattern", attribute.Pattern, "Pattern");
+            Add(children, "expression", attribute.Expression, "Expression");
+            Add(children, "minNumber", Render(attribute.MinNumber), "Minimum number");
+            Add(children, "maxNumber", Render(attribute.MaxNumber), "Maximum number");
+            Add(children, "sequentialNumbers", Render(attribute.SequentialNumbers), "Sequential numbers");
+            Add(children, "randomNumbers", Render(attribute.RandomNumbers), "Random numbers");
+            Add(children, "minDate", Render(attribute.MinDate), "Minimum date");
+            Add(children, "maxDate", Render(attribute.MaxDate), "Maximum date");
+            Add(children, "boolTrueDistribution", Render(attribute.BoolTrueDistribution), "Boolean true distribution");
+            Add(children, "boolShouldBeRandom", Render(attribute.BoolShouldBeRandom), "Boolean random");
+            Add(children, "managerDepthPercentage", Render(attribute.ManagerDepthPercentage), "Manager depth (%)");
+            Add(children, "mvaRefMinAssignments", Render(attribute.MvaRefMinAssignments), "Min reference assignments");
+            Add(children, "mvaRefMaxAssignments", Render(attribute.MvaRefMaxAssignments), "Max reference assignments");
+            children.Add(BuildExampleDataReferencedSets(attribute.ExampleDataSetInstances));
+            items.Add(ConfigurationSnapshotNode.ObjectNode("attribute", children, "Attribute", attribute.Id));
+        }
+        return ConfigurationSnapshotNode.CollectionNode("attributes", items, "Attributes");
+    }
+
+    private static ConfigurationSnapshotNode BuildExampleDataReferencedSets(List<ExampleDataSetInstance> instances)
+    {
+        // Each referenced Example Data Set is captured as a reference (the set's stable id as the value, its name as the
+        // display form) keyed by the instance id, so re-ordering or swapping a referenced set diffs cleanly. The set's
+        // own values are never embedded here; they live in that set's own configuration history.
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var instance in (instances ?? []).OrderBy(i => i.Order).ThenBy(i => i.Id))
+        {
+            var node = ConfigurationSnapshotNode.Scalar("exampleDataSetId", Render(instance.ExampleDataSet?.Id), "Example Data Set", instance.ExampleDataSet?.Name);
+            node.ItemId = instance.Id;
+            items.Add(node);
+        }
+        return ConfigurationSnapshotNode.CollectionNode("referencedDataSets", items, "Referenced Data Sets");
     }
 
     // -- value rendering -----------------------------------------------------------------------------------------------

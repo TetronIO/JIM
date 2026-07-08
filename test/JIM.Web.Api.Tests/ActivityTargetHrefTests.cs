@@ -71,4 +71,21 @@ public class ActivityTargetHrefTests
 
         Assert.That(href, Is.Null);
     }
+
+    [Test]
+    public void GetServiceSettingActivityHref_HasTargetName_DeepLinksWithSearchQuery()
+    {
+        var href = Helpers.GetServiceSettingActivityHref("SSO Client ID");
+
+        Assert.That(href, Is.EqualTo("/admin/settings?search=SSO%20Client%20ID"),
+            "Service Settings have no page of their own; the name doubles as the search term that filters the settings table down to the matching row");
+    }
+
+    [Test]
+    public void GetServiceSettingActivityHref_NoTargetName_ReturnsNull()
+    {
+        var href = Helpers.GetServiceSettingActivityHref(null);
+
+        Assert.That(href, Is.Null, "without a target name there is nothing to search for; the caller falls back to plain text");
+    }
 }

@@ -441,9 +441,14 @@ public class Worker : BackgroundService
 
                                     try
                                     {
-                                        // Execute the deletion (marks orphaned MVOs for deletion before deleting CS)
+                                        // Execute the deletion (captures the tombstone snapshot onto the task's
+                                        // Activity, then marks orphaned MVOs for deletion before deleting the CS).
+                                        // changeReason is null here: any reason was recorded on the Activity when the
+                                        // task was queued.
                                         await taskJim.ConnectedSystems.ExecuteDeletionAsync(
                                             deleteConnectedSystemTask.ConnectedSystemId,
+                                            newWorkerTask.Activity,
+                                            changeReason: null,
                                             deleteConnectedSystemTask.EvaluateMvoDeletionRules,
                                             deleteConnectedSystemTask.DeleteChangeHistory);
 

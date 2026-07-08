@@ -3,6 +3,7 @@
 @using JIM.Models.Security
 @using JIM.Web
 @using JIM.Web.Middleware.Api
+@using JIM.Web.Models
 @using JIM.Web.Services
 @using Humanizer
 @inject IJimApplicationFactory JimFactory
@@ -16,7 +17,7 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>API Keys</PageTitle>
-<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Api" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />API Keys</MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Api" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />API Keys</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     Manage API keys for non-interactive authentication. API keys can be used for CI/CD pipelines,
@@ -211,7 +212,7 @@
     </TitleContent>
     <DialogContent>
         <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-4">
-            Copy this API key now. You won't be able to see it again!
+            Copy this API key now. It will not be possible to show it again.
         </MudAlert>
         <MudTextField T="string" Value="@_createdFullKey" Label="API Key" ReadOnly="true" Variant="Variant.Outlined"
             Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.ContentCopy"
@@ -222,11 +223,7 @@
         <MudText Typo="Typo.body2" Class="mt-4">
             <strong>Example usage:</strong>
         </MudText>
-        <MudPaper Elevation="0" Class="pa-3 mt-2" Style="background-color: var(--mud-palette-background-gray);">
-            <MudText Typo="Typo.body2" Class="mud-text-code" Style="white-space: pre-wrap; word-break: break-all;">
-                curl -H "X-API-Key: @_createdFullKey" \
-                https://your-jim-server/api/v1/metaverse/objects</MudText>
-        </MudPaper>
+        <pre class="jim-code-block mt-2"><code>@((MarkupString)Helpers.HighlightShell(ExampleCurlCommand, ShellLanguage.Bash))</code></pre>
     </DialogContent>
     <DialogActions>
         <MudButton Color="Color.Primary" Variant="Variant.Filled" DropShadow="false"
@@ -303,6 +300,11 @@
     // Created key dialog
     private bool _createdKeyDialogVisible;
     private string _createdFullKey = "";
+
+    // The example request shown (syntax-highlighted) in the created-key dialog. '\' before the
+    // newline is a bash line continuation.
+    private string ExampleCurlCommand =>
+        $"curl -H \"X-API-Key: {_createdFullKey}\" \\\n  https://your-jim-server/api/v1/metaverse/objects";
 
     // Edit dialog
     private bool _editDialogVisible;

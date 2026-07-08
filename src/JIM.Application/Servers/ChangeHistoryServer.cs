@@ -243,6 +243,27 @@ public class ChangeHistoryServer
         return BuildChangeDetail(current, predecessor);
     }
 
+    /// <summary>
+    /// Builds a change detail directly from a deletion tombstone's snapshot, as carried on the delete Activity itself.
+    /// A delete records an unversioned tombstone (no surviving object and no version to look up), so it cannot go
+    /// through the version-based <see cref="GetConfigurationChangeAsync(ActivityTargetType,int,int)"/> path. The result
+    /// renders the deleted object's final captured state as a whole-object removal, letting the Activity detail page
+    /// show what was deleted. Returns null when the Activity carries no snapshot (e.g. tracking was disabled).
+    /// </summary>
+    public ConfigurationChangeDetail? BuildConfigurationChangeDetailFromDeletionSnapshot(string? snapshotJson)
+    {
+        var snapshot = ConfigurationSnapshotService.Deserialise(snapshotJson);
+        if (snapshot == null)
+            return null;
+
+        return new ConfigurationChangeDetail
+        {
+            Operation = ActivityTargetOperationType.Delete,
+            Snapshot = snapshot,
+            Diff = _application.ConfigurationDiffs.DiffDeletion(snapshot)
+        };
+    }
+
     // Builds the change detail from the fetched version and its predecessor. Shared by the int-, Guid- and
     // string-keyed overloads.
     private ConfigurationChangeDetail? BuildChangeDetail(ConfigurationChangeActivityData? current, ConfigurationChangeActivityData? predecessor)

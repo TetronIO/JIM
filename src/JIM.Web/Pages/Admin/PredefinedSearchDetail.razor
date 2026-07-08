@@ -15,7 +15,7 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Predefined Search: @_predefinedSearch?.Name</PageTitle>
-<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.SavedSearch" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Predefined Search:</span> <span class="mud-primary-text">@_predefinedSearch?.Name</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.SavedSearch" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Predefined Search:</span> <span class="mud-primary-text">@_predefinedSearch?.Name</span></MudText>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_predefinedSearch != null)
@@ -26,8 +26,11 @@
 
 @if (_predefinedSearch != null)
 {
-    <div class="mt-6">
-    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-6">
+    // Captured once here (rather than dereferencing _predefinedSearch again inside RenderGroupHeader/RenderCriteria
+    // below) because nullable-flow narrowing on a field does not survive an intervening method call.
+    var predefinedSearchBuiltIn = _predefinedSearch.BuiltIn;
+
+    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" Class="mt-2" TabPanelsClass="pt-5">
 
         <MudTabPanel Text="Details">
     <MudPaper Class="pa-4" Outlined="true">
@@ -73,8 +76,10 @@
                 <MudText Typo="Typo.h5">Criteria</MudText>
                 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Criteria filter the objects this search returns. All criteria are combined with AND.</MudText>
             </div>
-            <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
-                       OnClick="HandleOpenAddGroupDialog" DropShadow="false">Add Criteria Group</MudButton>
+            <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!predefinedSearchBuiltIn">
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Color="Color.Primary"
+                           OnClick="HandleOpenAddGroupDialog" DropShadow="false" Disabled="predefinedSearchBuiltIn">Add Criteria Group</MudButton>
+            </MudTooltip>
         </div>
 
         @if (_predefinedSearch.CriteriaGroups.Count == 0)
@@ -87,23 +92,29 @@
                 @foreach (var criteriaGroup in _predefinedSearch.CriteriaGroups.OrderBy(g => g.Position))
                 {
                     <MudPaper Class="pa-5" Outlined="true">
-                        @RenderGroupHeader(criteriaGroup)
-                        @RenderCriteria(criteriaGroup)
+                        @RenderGroupHeader(criteriaGroup, predefinedSearchBuiltIn)
+                        @RenderCriteria(criteriaGroup, predefinedSearchBuiltIn)
 
                         <div class="mt-4">
-                            <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Class="me-3"
-                                       OnClick="@(() => HandleOpenAddCriteriaDialog(criteriaGroup.Id))" DropShadow="false">Add Criteria</MudButton>
-                            <MudButton StartIcon="@Icons.Material.Filled.AccountTree" Variant="Variant.Filled"
-                                       OnClick="@(() => HandleOpenAddChildGroupDialog(criteriaGroup.Id))" DropShadow="false">Add Criteria Group</MudButton>
+                            <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!predefinedSearchBuiltIn">
+                                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Class="me-3"
+                                           OnClick="@(() => HandleOpenAddCriteriaDialog(criteriaGroup.Id))" DropShadow="false" Disabled="predefinedSearchBuiltIn">Add Criteria</MudButton>
+                            </MudTooltip>
+                            <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!predefinedSearchBuiltIn">
+                                <MudButton StartIcon="@Icons.Material.Filled.AccountTree" Variant="Variant.Filled"
+                                           OnClick="@(() => HandleOpenAddChildGroupDialog(criteriaGroup.Id))" DropShadow="false" Disabled="predefinedSearchBuiltIn">Add Criteria Group</MudButton>
+                            </MudTooltip>
                         </div>
 
                         @foreach (var childGroup in criteriaGroup.ChildGroups.OrderBy(g => g.Position))
                         {
                             <MudPaper Class="pa-5 mt-4 ml-6" Outlined="true">
-                                @RenderGroupHeader(childGroup)
-                                @RenderCriteria(childGroup)
-                                <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Class="mt-4"
-                                           OnClick="@(() => HandleOpenAddCriteriaDialog(childGroup.Id))" DropShadow="false">Add Criteria</MudButton>
+                                @RenderGroupHeader(childGroup, predefinedSearchBuiltIn)
+                                @RenderCriteria(childGroup, predefinedSearchBuiltIn)
+                                <MudTooltip Text="@BuiltInCriteriaTooltipText" Arrow="true" Placement="Placement.Top" Disabled="!predefinedSearchBuiltIn">
+                                    <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Class="mt-4"
+                                               OnClick="@(() => HandleOpenAddCriteriaDialog(childGroup.Id))" DropShadow="false" Disabled="predefinedSearchBuiltIn">Add Criteria</MudButton>
+                                </MudTooltip>
                             </MudPaper>
                         }
                     </MudPaper>
@@ -118,7 +129,6 @@
         </MudTabPanel>
 
     </NavigableMudTabs>
-    </div>
 
     @* ─── Add Criteria Group dialog ─── *@
     <MudDialog @bind-Visible="_addGroupDialogVisible" Options="_dialogOptions">
@@ -189,6 +199,8 @@
 }
 
 @code {
+    private const string BuiltInCriteriaTooltipText = "Built-in Predefined Searches cannot be modified";
+
     [Parameter]
     public string? Uri { get; set; }
 
@@ -226,15 +238,15 @@
 
     // ─── Render helpers (shared by top-level and nested groups) ───
 
-    private RenderFragment RenderGroupHeader(PredefinedSearchCriteriaGroup group) =>@<div class="d-flex justify-space-between align-center">
+    private RenderFragment RenderGroupHeader(PredefinedSearchCriteriaGroup group, bool builtIn) =>@<div class="d-flex justify-space-between align-center">
         <MudText Typo="Typo.overline"><span class="mud-text-secondary">CRITERIA GROUP. LOGIC TYPE:</span> @group.Type.ToString().SplitOnCapitalLetters().ToUpper()</MudText>
-        <MudTooltip Text="Delete group" Arrow="true" Placement="Placement.Top">
+        <MudTooltip Text="@(builtIn ? BuiltInCriteriaTooltipText : "Delete group")" Arrow="true" Placement="Placement.Top">
             <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error" Size="Size.Small" DropShadow="false"
-                           aria-label="delete group" OnClick="@(() => HandleDeleteGroupAsync(group.Id))" />
+                           aria-label="delete group" OnClick="@(() => HandleDeleteGroupAsync(group.Id))" Disabled="builtIn" />
         </MudTooltip>
     </div>;
 
-    private RenderFragment RenderCriteria(PredefinedSearchCriteriaGroup group) =>@<text>
+    private RenderFragment RenderCriteria(PredefinedSearchCriteriaGroup group, bool builtIn) =>@<text>
         @if (group.Criteria.Count == 0)
         {
             <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">No criteria in this group yet.</MudAlert>
@@ -252,12 +264,12 @@
                 </MudChip>
                 <MudChip T="string">@FriendlyComparison(criteria)</MudChip>
                 <MudChip T="string">@criteria.ToString()</MudChip>
-                <MudTooltip Text="Edit criteria" Arrow="true" Placement="Placement.Top">
+                <MudTooltip Text="@(builtIn ? BuiltInCriteriaTooltipText : "Edit criteria")" Arrow="true" Placement="Placement.Top">
                     <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" DropShadow="false"
-                                   aria-label="edit criteria" OnClick="@(() => HandleOpenEditCriteriaDialog(criteria))" />
+                                   aria-label="edit criteria" OnClick="@(() => HandleOpenEditCriteriaDialog(criteria))" Disabled="builtIn" />
                 </MudTooltip>
-                <MudTooltip Text="Delete criteria" Arrow="true" Placement="Placement.Top">
-                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" DropShadow="false"
+                <MudTooltip Text="@(builtIn ? BuiltInCriteriaTooltipText : "Delete criteria")" Arrow="true" Placement="Placement.Top">
+                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" DropShadow="false" Disabled="builtIn"
                                    aria-label="delete criteria" OnClick="@(() => HandleDeleteCriterionAsync(criteria.Id))" />
                 </MudTooltip>
             </div>

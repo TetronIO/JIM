@@ -15,7 +15,7 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Trusted Certificates</PageTitle>
-<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.EnhancedEncryption" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Trusted Certificates</MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.EnhancedEncryption" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Trusted Certificates</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     Manage trusted CA certificates used by connectors for secure communications (LDAPS, HTTPS, etc.).
@@ -204,9 +204,15 @@
 @* Details Dialog *@
 <MudDialog @bind-Visible="_detailsDialogVisible" Options="_dialogOptions">
     <TitleContent>
-        <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.Security" Class="mr-3" /> Certificate Details
-        </MudText>
+        <div class="d-flex justify-space-between align-center">
+            <MudText Typo="Typo.h6">
+                <MudIcon Icon="@Icons.Material.Filled.Security" Class="mr-3" /> Certificate Details
+            </MudText>
+            @if (_selectedCertificate != null)
+            {
+                <AuditInfo Entity="@_selectedCertificate" />
+            }
+        </div>
     </TitleContent>
     <DialogContent>
         @if (_selectedCertificate != null)
@@ -244,9 +250,6 @@
                         <MudField Label="File Path" Variant="Variant.Outlined">@_selectedCertificate.FilePath</MudField>
                     </MudItem>
                 }
-                <MudItem xs="12">
-                    <AuditInfo Entity="@_selectedCertificate" />
-                </MudItem>
                 @if (!string.IsNullOrEmpty(_selectedCertificate.Notes))
                 {
                     <MudItem xs="12">

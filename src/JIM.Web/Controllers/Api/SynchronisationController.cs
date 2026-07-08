@@ -1175,6 +1175,7 @@ public class SynchronisationController(
     /// </remarks>
     /// <param name="connectedSystemId">The unique identifier of the Connected System to delete.</param>
     /// <param name="deleteChangeHistory">Whether to delete change history for the deleted CSOs. Default: false (preserves audit trail).</param>
+    /// <param name="changeReason">Optional reason for the deletion, recorded on the audit Activity and the configuration change history tombstone. Supplied as a query parameter because HTTP DELETE bodies are awkward for clients.</param>
     /// <returns>The result of the deletion request including outcome and tracking IDs.</returns>
     /// <response code="200">Deletion completed immediately.</response>
     /// <response code="202">Deletion has been queued as a background job.</response>
@@ -1187,7 +1188,8 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteConnectedSystemAsync(
         int connectedSystemId,
-        [FromQuery] bool deleteChangeHistory = false)
+        [FromQuery] bool deleteChangeHistory = false,
+        [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Deletion requested for Connected System: {Id}, deleteChangeHistory={DeleteHistory}",
             connectedSystemId, deleteChangeHistory);
@@ -1202,8 +1204,8 @@ public class SynchronisationController(
 
         var apiKey = await GetCurrentApiKeyAsync();
         var result = apiKey != null
-            ? await _application.ConnectedSystems.DeleteAsync(connectedSystemId, apiKey, deleteChangeHistory)
-            : await _application.ConnectedSystems.DeleteAsync(connectedSystemId, initiatedBy, deleteChangeHistory);
+            ? await _application.ConnectedSystems.DeleteAsync(connectedSystemId, apiKey, deleteChangeHistory, changeReason)
+            : await _application.ConnectedSystems.DeleteAsync(connectedSystemId, initiatedBy, deleteChangeHistory, changeReason);
 
         if (!result.Success)
             return BadRequest(ApiErrorResponse.BadRequest(result.ErrorMessage ?? "Deletion failed."));

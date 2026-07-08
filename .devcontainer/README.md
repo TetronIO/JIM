@@ -177,6 +177,7 @@ The setup creates these handy aliases:
 ```bash
 jim-compile        # Build entire solution (dotnet build)
 jim-test           # Run unit + workflow tests (excludes Explicit)
+jim-test-db        # Run database-backed (real-PostgreSQL) tests in a throwaway container
 jim-test-all       # Run ALL tests (incl. Explicit + Pester)
 jim-test-ps        # Run PowerShell Pester tests
 jim-clean          # Clean and rebuild

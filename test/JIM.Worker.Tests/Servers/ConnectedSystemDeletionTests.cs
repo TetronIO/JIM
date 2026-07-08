@@ -609,7 +609,7 @@ public class ConnectedSystemDeletionTests
         _mockCsRepo.Setup(r => r.DeleteConnectedSystemAsync(1, It.IsAny<bool>())).Returns(Task.CompletedTask);
 
         // Act
-        await _jim.ConnectedSystems.ExecuteDeletionAsync(1);
+        await _jim.ConnectedSystems.ExecuteDeletionAsync(1, new Activity());
 
         // Assert
         _mockCsRepo.Verify(r => r.DeleteConnectedSystemAsync(1, It.IsAny<bool>()), Times.Once);
@@ -630,7 +630,7 @@ public class ConnectedSystemDeletionTests
         _mockCsRepo.Setup(r => r.DeleteConnectedSystemAsync(1, It.IsAny<bool>())).Returns(Task.CompletedTask);
 
         // Act
-        await _jim.ConnectedSystems.ExecuteDeletionAsync(1, evaluateMvoDeletionRules: true);
+        await _jim.ConnectedSystems.ExecuteDeletionAsync(1, new Activity(), evaluateMvoDeletionRules: true);
 
         // Assert
         _mockMvRepo.Verify(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1), Times.Once);
@@ -647,7 +647,7 @@ public class ConnectedSystemDeletionTests
         _mockCsRepo.Setup(r => r.DeleteConnectedSystemAsync(1, It.IsAny<bool>())).Returns(Task.CompletedTask);
 
         // Act
-        await _jim.ConnectedSystems.ExecuteDeletionAsync(1, evaluateMvoDeletionRules: false);
+        await _jim.ConnectedSystems.ExecuteDeletionAsync(1, new Activity(), evaluateMvoDeletionRules: false);
 
         // Assert
         _mockMvRepo.Verify(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(It.IsAny<int>()), Times.Never);
@@ -664,7 +664,7 @@ public class ConnectedSystemDeletionTests
         _mockCsRepo.Setup(r => r.DeleteConnectedSystemAsync(1, It.IsAny<bool>())).Returns(Task.CompletedTask);
 
         // Act
-        await _jim.ConnectedSystems.ExecuteDeletionAsync(1, evaluateMvoDeletionRules: true);
+        await _jim.ConnectedSystems.ExecuteDeletionAsync(1, new Activity(), evaluateMvoDeletionRules: true);
 
         // Assert
         _mockMvRepo.Verify(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1), Times.Once);
@@ -681,7 +681,7 @@ public class ConnectedSystemDeletionTests
         _mockCsRepo.Setup(r => r.DeleteConnectedSystemAsync(1, It.IsAny<bool>())).Returns(Task.CompletedTask);
 
         // Act - call without the parameter to test default behaviour
-        await _jim.ConnectedSystems.ExecuteDeletionAsync(1);
+        await _jim.ConnectedSystems.ExecuteDeletionAsync(1, new Activity());
 
         // Assert - should call orphan detection by default
         _mockMvRepo.Verify(r => r.GetMvosOrphanedByConnectedSystemDeletionAsync(1), Times.Once);

@@ -125,7 +125,6 @@ public class JimApplication : IDisposable
             await Seeding.SeedBuiltInSchedulesAsync();
             await Seeding.SeedBuiltInRolesAsync();
             await Seeding.SyncBuiltInConnectorDefinitionsAsync();
-            await Seeding.SyncBuiltInAttributeRenderingHintsAsync();
             await Seeding.SyncServiceSettingsAsync();
             // Repair the built-in example data template if a previous factory reset stripped its attributes (its rows are
             // collateral of the reset's TRUNCATE ... CASCADE). SeedAsync skips an already-present template, so this runs

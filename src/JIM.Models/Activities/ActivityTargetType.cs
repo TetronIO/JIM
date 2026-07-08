@@ -6,6 +6,12 @@ namespace JIM.Models.Activities;
 public enum ActivityTargetType
 {
     NotSet = 0,
+    /// <summary>
+    /// An Example Data (generation) Template: its configuration, object types, template attributes and referenced
+    /// Example Data Sets. Covers create, update and delete of the template definition; its configuration-change
+    /// history is associated via <see cref="Activity.ExampleDataTemplateId"/>. A template's data-generation *runs*
+    /// are a separate operational concern, recorded under <see cref="DataGeneration"/>, not here.
+    /// </summary>
     ExampleDataTemplate = 1,
     ConnectedSystem = 2,
     ConnectedSystemRunProfile = 3,
@@ -69,5 +75,13 @@ public enum ActivityTargetType
     /// child via <see cref="Activity.ParentActivityId"/>. Created lazily, only when a seed step is about to
     /// create something, so a startup where seeding no-ops records no Activity of this type at all.
     /// </summary>
-    SystemInitialisation = 20
+    SystemInitialisation = 20,
+
+    /// <summary>
+    /// A data-generation run: executing an Example Data (generation) Template to create Metaverse Objects. This is an
+    /// operational activity, not a configuration change, so it is categorised under System, kept distinct from the
+    /// template's own configuration-change history (<see cref="ExampleDataTemplate"/>). The run still links to its
+    /// template via <see cref="Activity.ExampleDataTemplateId"/> for context and deep-linking.
+    /// </summary>
+    DataGeneration = 21
 }

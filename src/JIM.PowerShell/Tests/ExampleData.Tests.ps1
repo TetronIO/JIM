@@ -125,6 +125,42 @@ Describe 'New-JIMExampleDataSet' {
         }
     }
 
+    Context 'Request body composition' {
+
+        It 'Should have an optional ChangeReason parameter' {
+            $command = Get-Command New-JIMExampleDataSet
+            $param = $command.Parameters['ChangeReason']
+            $param | Should -Not -BeNullOrEmpty
+            ($param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory }) | Should -BeNullOrEmpty
+        }
+
+        It 'Sends changeReason in the POST body when -ChangeReason is specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMExampleDataSet -Name 'Test' -Culture 'en-GB' -ChangeReason 'Seeding test data (CHG0100)' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.changeReason -eq 'Seeding test data (CHG0100)'
+                }
+            }
+        }
+
+        It 'Omits changeReason from the POST body when -ChangeReason is not specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMExampleDataSet -Name 'Test' -Culture 'en-GB' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('changeReason')
+                }
+            }
+        }
+    }
+
     Context 'Requires Connection' {
 
         BeforeEach {
@@ -184,6 +220,42 @@ Describe 'Set-JIMExampleDataSet' {
         }
     }
 
+    Context 'Request body composition' {
+
+        It 'Should have an optional ChangeReason parameter' {
+            $command = Get-Command Set-JIMExampleDataSet
+            $param = $command.Parameters['ChangeReason']
+            $param | Should -Not -BeNullOrEmpty
+            ($param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory }) | Should -BeNullOrEmpty
+        }
+
+        It 'Sends changeReason in the PUT body when -ChangeReason is specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 5; name = 'Test' } }
+
+                Set-JIMExampleDataSet -Id 5 -Name 'New Name' -ChangeReason 'Corrected city list (CHG0101)' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.changeReason -eq 'Corrected city list (CHG0101)'
+                }
+            }
+        }
+
+        It 'Omits changeReason from the PUT body when -ChangeReason is not specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 5; name = 'Test' } }
+
+                Set-JIMExampleDataSet -Id 5 -Name 'New Name' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('changeReason')
+                }
+            }
+        }
+    }
+
     Context 'Requires Connection' {
 
         BeforeEach {
@@ -235,6 +307,42 @@ Describe 'Remove-JIMExampleDataSet' {
         It 'Should support ShouldProcess' {
             $command.Parameters['WhatIf'] | Should -Not -BeNullOrEmpty
             $command.Parameters['Confirm'] | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Request composition' {
+
+        It 'Should have an optional ChangeReason parameter' {
+            $command = Get-Command Remove-JIMExampleDataSet
+            $param = $command.Parameters['ChangeReason']
+            $param | Should -Not -BeNullOrEmpty
+            ($param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.Mandatory }) | Should -BeNullOrEmpty
+        }
+
+        It 'Sends changeReason as a query-string parameter on the DELETE when -ChangeReason is specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 5; name = 'Test' } }
+
+                Remove-JIMExampleDataSet -Id 5 -Force -ChangeReason 'Retiring obsolete set (CHG0102)' | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and $Endpoint -like '*changeReason=Retiring*'
+                }
+            }
+        }
+
+        It 'Omits the changeReason query-string parameter on the DELETE when -ChangeReason is not specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 5; name = 'Test' } }
+
+                Remove-JIMExampleDataSet -Id 5 -Force | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and $Endpoint -notlike '*changeReason*'
+                }
+            }
         }
     }
 

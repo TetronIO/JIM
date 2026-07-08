@@ -8,7 +8,9 @@ using System.Threading.Tasks;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.ExampleData;
+using JIM.Models.Security;
 using JIM.Web.Controllers.Api;
 using JIM.Web.Models.Api;
 using Microsoft.AspNetCore.Http;
@@ -27,6 +29,8 @@ public class ExampleDataControllerExampleDataSetCrudTests
 {
     private Mock<IRepository> _mockRepository = null!;
     private Mock<IExampleDataRepository> _mockExampleDataRepo = null!;
+    private Mock<IActivityRepository> _mockActivityRepo = null!;
+    private Mock<IApiKeyRepository> _mockApiKeyRepo = null!;
     private Mock<ILogger<ExampleDataController>> _mockLogger = null!;
     private JimApplication _application = null!;
     private ExampleDataController _controller = null!;
@@ -36,22 +40,46 @@ public class ExampleDataControllerExampleDataSetCrudTests
     {
         _mockRepository = new Mock<IRepository>();
         _mockExampleDataRepo = new Mock<IExampleDataRepository>();
+        _mockActivityRepo = new Mock<IActivityRepository>();
+        _mockApiKeyRepo = new Mock<IApiKeyRepository>();
         _mockRepository.Setup(r => r.ExampleData).Returns(_mockExampleDataRepo.Object);
+        _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
+        _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
+        // Every write path now records a configuration-change Activity (see ExampleDataServer); stub the two calls it
+        // always makes so these CRUD tests keep exercising just the repository mutation they assert on, without
+        // asserting on Activity attribution themselves. The dedicated change-history read tests live in
+        // ExampleDataChangeHistoryApiTests.
+        _mockActivityRepo.Setup(r => r.CreateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
+        _mockActivityRepo.Setup(r => r.UpdateActivityAsync(It.IsAny<Activity>())).Returns(Task.CompletedTask);
         _mockLogger = new Mock<ILogger<ExampleDataController>>();
         _application = new JimApplication(_mockRepository.Object);
         _controller = new ExampleDataController(_mockLogger.Object, _application);
 
+        // Authenticate as an API key so the base controller resolves a non-null principal for Activity attribution.
+        // The write mutators attribute the recorded Activity to this principal; a null principal would fail the
+        // Activity's mandatory-attribution validation. Mirrors SynchronisationControllerUpdateSyncRuleTests.
+        var apiKeyId = Guid.NewGuid();
+        var apiKey = new ApiKey
+        {
+            Id = apiKeyId,
+            Name = "TestApiKey",
+            KeyHash = "test-hash",
+            KeyPrefix = "test",
+            IsEnabled = true,
+            Created = DateTime.UtcNow
+        };
+        _mockApiKeyRepo.Setup(r => r.GetByIdAsync(apiKeyId)).ReturnsAsync(apiKey);
+
         var claims = new List<Claim>
         {
-            new("sub", Guid.NewGuid().ToString()),
-            new(ClaimTypes.Role, "Administrator")
+            new("auth_method", "api_key"),
+            new(ClaimTypes.NameIdentifier, apiKeyId.ToString()),
+            new(ClaimTypes.Name, "TestApiKey")
         };
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "ApiKey"));
         _controller.ControllerContext = new ControllerContext
         {
-            HttpContext = new DefaultHttpContext
-            {
-                User = new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuth"))
-            }
+            HttpContext = new DefaultHttpContext { User = principal }
         };
     }
 

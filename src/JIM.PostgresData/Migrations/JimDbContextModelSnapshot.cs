@@ -993,9 +993,30 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime>("Created")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CreatedByType")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Culture")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastUpdated")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastUpdatedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastUpdatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LastUpdatedByType")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()

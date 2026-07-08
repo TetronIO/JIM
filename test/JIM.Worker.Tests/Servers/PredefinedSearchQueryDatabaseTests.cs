@@ -53,7 +53,8 @@ public class PredefinedSearchQueryDatabaseTests
         var host = Environment.GetEnvironmentVariable("JIM_TEST_RESET_HOST") ?? "localhost";
         var user = Environment.GetEnvironmentVariable("JIM_TEST_RESET_USER") ?? "postgres";
         var pass = Environment.GetEnvironmentVariable("JIM_TEST_RESET_PASSWORD") ?? "postgres";
-        _connectionString = $"Host={host};Database={dbName};Username={user};Password={pass}";
+        var port = Environment.GetEnvironmentVariable("JIM_TEST_RESET_PORT") ?? "5432";
+        _connectionString = $"Host={host};Port={port};Database={dbName};Username={user};Password={pass}";
 
         using var ctx = NewContext();
         ctx.Database.Migrate();

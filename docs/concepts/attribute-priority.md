@@ -58,12 +58,32 @@ The same provenance is visible per value: retrieving a Metaverse Object through 
 
 ## 🛠️ Configuring priority
 
-Attribute priority is configured per (Metaverse Object Type, Metaverse attribute). The priority order, and the "Null is a value" flag, are managed through the REST API and PowerShell module:
+Attribute priority is configured per (Metaverse Object Type, Metaverse attribute).
+
+### 🖥️ In the admin portal
+
+Open the Metaverse Object Type (**Administration → Schema → Object Types → _type_**) and select the **Attributes** tab. The **Contributors** column shows how many inbound Synchronisation Rules contribute each attribute:
+
+- A single contributor needs no priority (nothing to resolve).
+- An attribute with more than one contributor shows a **contributors** button. Click it to expand the priority list beneath the row.
+
+In the expanded list (highest priority at the top):
+
+- **Drag** a contributor by its handle to reorder it; JIM renumbers the whole list so it is never left inconsistent.
+- Toggle **Null is a value** per contributor.
+- **Disabled Synchronisation Rules** stay in the list, greyed out, holding their position but never contributing.
+- Changes are held until you click **Save order**, and you can **Reset** to discard them.
+
+### 🔧 Via the REST API and PowerShell
+
+The same configuration is available for automation:
 
 - Read the ordered contributor list for an attribute.
 - Replace the whole order, or move a single contributor to a position (JIM renumbers the others for you, so the list is never left in an inconsistent state).
 
-A change to priority configuration takes effect as objects are next synchronised; it does not, by itself, re-synchronise existing objects. After a significant change, run a full synchronisation of the affected objects so the Metaverse reflects the new order everywhere.
+### When changes take effect
+
+A change to priority configuration takes effect as objects are next synchronised; it does not, by itself, re-synchronise existing objects. A Delta Synchronisation applies it only to recently-changed objects, so after a significant change run a Full Synchronisation of the affected objects so the Metaverse reflects the new order everywhere.
 
 ## Related
 

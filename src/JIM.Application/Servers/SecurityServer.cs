@@ -329,6 +329,37 @@ public class SecurityServer
             $"Role {roleId}");
     }
 
+    /// <summary>
+    /// Records a System-attributed Create Activity and version-1 baseline snapshot for a built-in Role, grouped under
+    /// the seeding pass's parent Activity. Used to restore the built-in Roles' baselines after a factory reset, which
+    /// truncates the Activities table but preserves the built-in Roles (so their creation baseline is otherwise lost);
+    /// see <see cref="SeedingServer.RebaselineBuiltInConfigurationAsync"/>. A missing Role is a safe no-op via the
+    /// capture guard (the snapshot builder returns null).
+    /// </summary>
+    internal async Task RecordSeededRoleBaselineAsync(int roleId, string roleName, Guid parentActivityId)
+    {
+        var activity = new Activity
+        {
+            TargetName = roleName,
+            TargetType = ActivityTargetType.Role,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            ParentActivityId = parentActivityId,
+            Message = $"Created built-in Role '{roleName}'"
+        };
+        await Application.Activities.CreateSystemActivityAsync(activity);
+
+        try
+        {
+            await CaptureRoleConfigurationChangeAsync(activity, roleId, "Built-in Role created automatically by JIM.");
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
     #endregion
 
     #region API Keys

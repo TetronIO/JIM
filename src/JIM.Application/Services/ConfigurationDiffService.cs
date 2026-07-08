@@ -46,6 +46,37 @@ public class ConfigurationDiffService
     }
 
     /// <summary>
+    /// Produces a whole-object "removed" diff for a deletion tombstone: the object's final captured state, rendered as
+    /// deleted (every field present and marked removed), with no successor to compare against. A delete records an
+    /// unversioned tombstone snapshot on its Activity rather than a versioned entry against the object, so this lets the
+    /// Activity detail page surface what the deleted object looked like. The public <see cref="Diff"/> requires a
+    /// non-null new snapshot (it models creation, old-null, but not deletion), so this is a dedicated entry point.
+    /// </summary>
+    public ConfigurationDiff DiffDeletion(ConfigurationSnapshot deletedSnapshot)
+    {
+        ArgumentNullException.ThrowIfNull(deletedSnapshot);
+
+        // Old side present, new side absent => the whole subtree is Removed.
+        var root = DiffNode(deletedSnapshot.Root, null);
+        var counts = new DiffCounts();
+        Tally(root, counts);
+
+        return new ConfigurationDiff
+        {
+            ObjectType = deletedSnapshot.ObjectType,
+            ObjectId = deletedSnapshot.ObjectId,
+            ObjectGuidId = deletedSnapshot.ObjectGuidId,
+            ObjectName = deletedSnapshot.ObjectName,
+            OldVersion = null,
+            NewVersion = null,
+            Root = root,
+            AddedCount = counts.Added,
+            RemovedCount = counts.Removed,
+            ModifiedCount = counts.Modified
+        };
+    }
+
+    /// <summary>
     /// Produces a short, human-readable one-line summary of a diff (for change-history list rows). Reports "Created" or
     /// "Deleted" for whole-object additions/removals, otherwise the changed top-level sections, or "No changes".
     /// </summary>

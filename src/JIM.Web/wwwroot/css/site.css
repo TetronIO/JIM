@@ -4,6 +4,18 @@
     --jim-instance-bar-height: 28px;
 }
 
+/* App.razor's <FocusOnNavigate Selector="h1" /> (standard Blazor Web App template
+   scaffolding) programmatically focuses the page's <h1> after every navigation, so
+   screen readers announce the new page. The stock template pairs that with this
+   exact rule in its default app.css to suppress the resulting browser focus ring,
+   since the focus is not a real keyboard interaction and doesn't need a visible
+   ring for sighted users; it was dropped when JIM's own site.css replaced that
+   file. Restored here so any page using a real <h1> for its title behaves
+   correctly. */
+h1:focus {
+    outline: none;
+}
+
 /* MUDBLAZOR CUSTOMISATIONS */
 /* Note: Colour palettes are defined in css/themes/ files, not here. */
 
@@ -543,6 +555,70 @@ html[lang] .mud-tabs-tabbar.mud-tabs-border-top {
     }
 }
 
+/* Higher-contrast inline code, for use on dimmed/secondary helper text over a low-contrast surface
+   (e.g. the Attribute Priority explainer on the grey expander backdrop), where the default translucent
+   background and inherited secondary colour wash out. Theme-aware via MudBlazor palette variables. */
+.jim-code-inline.jim-code-inline-strong {
+    color: var(--mud-palette-text-primary);
+    background-color: var(--mud-palette-surface);
+    border: 1px solid var(--mud-palette-lines-default);
+}
+
+/* Block-level code / terminal snippet (e.g. an example curl command). Mirrors the
+   recessed surface and monospace treatment of .jim-json-syntax so code blocks read
+   consistently across every theme, with a border for definition. Use on a <pre> so
+   the content renders verbatim; keep white-space: pre and let long lines scroll
+   horizontally rather than wrap (the way a terminal would). */
+.jim-code-block {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    margin: 0;
+    padding: 12px 16px;
+    color: var(--mud-palette-text-primary);
+    background: var(--jim-inner-surface, var(--mud-palette-background));
+    border: 1px solid var(--jim-paper-border-color, var(--mud-palette-lines-default));
+    border-radius: 8px;
+    overflow-x: auto;
+    white-space: pre;
+}
+
+/* Shell syntax-highlighting tokens (bash / PowerShell), emitted by Helpers.HighlightShell.
+   Colours are reused from the JSON and expression highlighters so code blocks share one
+   palette across all themes; no per-theme variables are added here. */
+.jim-code-command {
+    color: var(--jim-expr-function);
+}
+
+.jim-code-string {
+    color: var(--jim-json-string);
+}
+
+.jim-code-comment {
+    color: var(--mud-palette-text-secondary);
+    font-style: italic;
+}
+
+.jim-code-variable {
+    color: var(--jim-expr-variable);
+}
+
+.jim-code-flag {
+    color: var(--jim-json-key);
+}
+
+.jim-code-keyword {
+    color: var(--jim-expr-keyword, var(--jim-json-boolean));
+}
+
+.jim-code-operator {
+    color: var(--jim-expr-operator);
+}
+
+.jim-code-number {
+    color: var(--jim-json-number);
+}
+
 .jim-drawer {
     border-right: 1px solid var(--jim-drawer-border-color);
     position: fixed !important;
@@ -1070,6 +1146,15 @@ html[lang] .mud-alert-filled-normal {
 .mud-input.mud-input-outlined {
     background-color: var(--jim-input-bg, color-mix(in srgb, var(--mud-palette-surface) 50%, var(--mud-palette-background)));
     border-radius: var(--mud-default-borderradius);
+}
+
+/* MudField content (e.g. a read-only Thumbprint or Serial Number) has no spaces to wrap at and is
+   a flex child by default, so a long unbroken value (min-width: auto) overflows past the outline
+   instead of shrinking to fit. Let it wrap and shrink to the field's own width. */
+.mud-input-control.mud-field .mud-input-slot {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    min-width: 0;
 }
 
 /* Switch/checkbox label text */

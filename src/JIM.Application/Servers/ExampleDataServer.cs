@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Application.Expressions;
+using JIM.Application.Utilities;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.ExampleData;
@@ -9,7 +10,11 @@ using JIM.Models.ExampleData.DTOs;
 using JIM.Models.Enums;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
+using JIM.Models.Security;
 using JIM.Models.Utility;
+// Activity is ambiguous between JIM.Models.Activities.Activity and System.Diagnostics.Activity (used for Stopwatch);
+// the configuration-change capture here means the JIM Activity, so alias it explicitly.
+using Activity = JIM.Models.Activities.Activity;
 using Serilog;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
@@ -54,19 +59,141 @@ public class ExampleDataServer
         return await Application.Repository.ExampleData.GetExampleDataSetAsync(id);
     }
 
-    public async Task CreateExampleDataSetAsync(ExampleDataSet exampleDataSet)
+    public async Task CreateExampleDataSetAsync(ExampleDataSet exampleDataSet, MetaverseObject? initiatedBy, string? changeReason = null) =>
+        await CreateExampleDataSetCoreAsync(exampleDataSet, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy),
+            ds => AuditHelper.SetCreated(ds, initiatedBy));
+
+    public async Task CreateExampleDataSetAsync(ExampleDataSet exampleDataSet, ApiKey initiatedByApiKey, string? changeReason = null) =>
+        await CreateExampleDataSetCoreAsync(exampleDataSet, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey),
+            ds => AuditHelper.SetCreated(ds, initiatedByApiKey));
+
+    private async Task CreateExampleDataSetCoreAsync(ExampleDataSet exampleDataSet, string? changeReason,
+        Func<Activity, Task> createActivityAsync, Action<ExampleDataSet> setCreated)
     {
+        var activity = new Activity
+        {
+            TargetName = exampleDataSet.Name,
+            TargetType = ActivityTargetType.ExampleDataSet,
+            TargetOperationType = ActivityTargetOperationType.Create
+        };
+        await createActivityAsync(activity);
+        setCreated(exampleDataSet);
         await Application.Repository.ExampleData.CreateExampleDataSetAsync(exampleDataSet);
+        await CaptureExampleDataSetConfigurationChangeAsync(activity, exampleDataSet.Id, changeReason);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateExampleDataSetAsync(ExampleDataSet exampleDataSet)
+    public async Task UpdateExampleDataSetAsync(ExampleDataSet exampleDataSet, MetaverseObject? initiatedBy, string? changeReason = null) =>
+        await UpdateExampleDataSetCoreAsync(exampleDataSet, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy),
+            ds => AuditHelper.SetUpdated(ds, initiatedBy));
+
+    public async Task UpdateExampleDataSetAsync(ExampleDataSet exampleDataSet, ApiKey initiatedByApiKey, string? changeReason = null) =>
+        await UpdateExampleDataSetCoreAsync(exampleDataSet, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey),
+            ds => AuditHelper.SetUpdated(ds, initiatedByApiKey));
+
+    private async Task UpdateExampleDataSetCoreAsync(ExampleDataSet exampleDataSet, string? changeReason,
+        Func<Activity, Task> createActivityAsync, Action<ExampleDataSet> setUpdated)
     {
+        var activity = new Activity
+        {
+            TargetName = exampleDataSet.Name,
+            TargetType = ActivityTargetType.ExampleDataSet,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+        await createActivityAsync(activity);
+        setUpdated(exampleDataSet);
         await Application.Repository.ExampleData.UpdateExampleDataSetAsync(exampleDataSet);
+        await CaptureExampleDataSetConfigurationChangeAsync(activity, exampleDataSet.Id, changeReason);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task DeleteExampleDataSetAsync(int exampleDataSetId)
+    public async Task DeleteExampleDataSetAsync(int exampleDataSetId, MetaverseObject? initiatedBy, string? changeReason = null) =>
+        await DeleteExampleDataSetCoreAsync(exampleDataSetId, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedBy));
+
+    public async Task DeleteExampleDataSetAsync(int exampleDataSetId, ApiKey initiatedByApiKey, string? changeReason = null) =>
+        await DeleteExampleDataSetCoreAsync(exampleDataSetId, changeReason,
+            activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey));
+
+    private async Task DeleteExampleDataSetCoreAsync(int exampleDataSetId, string? changeReason, Func<Activity, Task> createActivityAsync)
     {
+        // Resolve the entity before removal so the tombstone snapshot and the Activity's target name are complete. A
+        // not-found id records no Activity (pass-through to the repository's no-op), so a missing target does not spam
+        // the Activity list.
+        var exampleDataSet = await Application.Repository.ExampleData.GetExampleDataSetAsync(exampleDataSetId);
+        if (exampleDataSet == null)
+            return;
+
+        var activity = new Activity
+        {
+            TargetName = exampleDataSet.Name,
+            TargetType = ActivityTargetType.ExampleDataSet,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await createActivityAsync(activity);
+        await CaptureExampleDataSetDeletionAsync(activity, exampleDataSet, changeReason);
         await Application.Repository.ExampleData.DeleteExampleDataSetAsync(exampleDataSetId);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    // Captures a redacted, versioned snapshot of an Example Data Set onto its audit Activity via the shared capture
+    // service; the set is reloaded (with its values) so the value count reflects persisted truth.
+    private async Task CaptureExampleDataSetConfigurationChangeAsync(Activity activity, int dataSetId, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+            ActivityTargetType.ExampleDataSet, dataSetId,
+            async hashKey =>
+            {
+                var dataSet = await Application.Repository.ExampleData.GetExampleDataSetAsync(dataSetId);
+                return dataSet == null ? null : Application.ConfigurationSnapshots.CreateSnapshot(dataSet, hashKey);
+            },
+            $"Example Data Set {dataSetId}");
+    }
+
+    // Captures a tombstone snapshot of an Example Data Set onto its delete Activity, before removal.
+    private async Task CaptureExampleDataSetDeletionAsync(Activity activity, ExampleDataSet dataSet, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureDeletionAsync(activity, changeReason,
+            async hashKey =>
+            {
+                var persisted = await Application.Repository.ExampleData.GetExampleDataSetAsync(dataSet.Id) ?? dataSet;
+                return Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
+            },
+            $"Example Data Set {dataSet.Id}");
+    }
+
+    /// <summary>
+    /// Records a System-attributed Create Activity and version-1 baseline snapshot for a built-in Example Data Set that
+    /// has just been seeded, grouped under the seeding pass's parent Activity, after the seed batch persists (mirroring
+    /// <c>SearchServer.RecordSeededPredefinedSearchBaselineAsync</c>). Idempotency is the caller's responsibility:
+    /// <see cref="SeedingServer"/> only calls this for sets it created this pass.
+    /// </summary>
+    internal async Task RecordSeededExampleDataSetBaselineAsync(int dataSetId, string name, Guid parentActivityId)
+    {
+        var activity = new Activity
+        {
+            TargetName = name,
+            TargetType = ActivityTargetType.ExampleDataSet,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            ParentActivityId = parentActivityId,
+            Message = $"Created built-in Example Data Set '{name}'"
+        };
+        await Application.Activities.CreateSystemActivityAsync(activity);
+
+        try
+        {
+            await CaptureExampleDataSetConfigurationChangeAsync(activity, dataSetId, "Built-in Example Data Set created automatically by JIM.");
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
     }
     #endregion
 
@@ -96,19 +223,109 @@ public class ExampleDataServer
         return await Application.Repository.ExampleData.GetTemplateHeaderAsync(id);
     }
 
-    public async Task CreateTemplateAsync(ExampleDataTemplate template)
+    // Example Data Templates have no user-facing CRUD surface yet (the REST controller mutates only Example Data Sets),
+    // so these mutators are attributed via the initiator triad and used by seeding today (System). The triad lets a
+    // future template-editing UI/API arrive without a signature change; each mutator records a versioned configuration
+    // snapshot like every other configuration object.
+    public async Task CreateTemplateAsync(ExampleDataTemplate template, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null, Guid? parentActivityId = null)
     {
+        var activity = new Activity
+        {
+            TargetName = template.Name,
+            TargetType = ActivityTargetType.ExampleDataTemplate,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            ParentActivityId = parentActivityId
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
+        AuditHelper.SetCreated(template, initiatorType, initiatorId, initiatorName);
         await Application.Repository.ExampleData.CreateTemplateAsync(template);
+        await CaptureExampleDataTemplateConfigurationChangeAsync(activity, template.Id, changeReason);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task UpdateTemplateAsync(ExampleDataTemplate template)
+    public async Task UpdateTemplateAsync(ExampleDataTemplate template, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
+        var activity = new Activity
+        {
+            TargetName = template.Name,
+            TargetType = ActivityTargetType.ExampleDataTemplate,
+            TargetOperationType = ActivityTargetOperationType.Update
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
+        AuditHelper.SetUpdated(template, initiatorType, initiatorId, initiatorName);
         await Application.Repository.ExampleData.UpdateTemplateAsync(template);
+        await CaptureExampleDataTemplateConfigurationChangeAsync(activity, template.Id, changeReason);
+        await Application.Activities.CompleteActivityAsync(activity);
     }
 
-    public async Task DeleteTemplateAsync(int templateId)
+    public async Task DeleteTemplateAsync(int templateId, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName, string? changeReason = null)
     {
+        var template = await Application.Repository.ExampleData.GetTemplateAsync(templateId);
+        if (template == null)
+            return;
+
+        var activity = new Activity
+        {
+            TargetName = template.Name,
+            TargetType = ActivityTargetType.ExampleDataTemplate,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await Application.Activities.CreateActivityWithTriadAsync(activity, initiatorType, initiatorId, initiatorName);
+        await CaptureExampleDataTemplateDeletionAsync(activity, template, changeReason);
         await Application.Repository.ExampleData.DeleteTemplateAsync(templateId);
+        await Application.Activities.CompleteActivityAsync(activity);
+    }
+
+    private async Task CaptureExampleDataTemplateConfigurationChangeAsync(Activity activity, int templateId, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
+            ActivityTargetType.ExampleDataTemplate, templateId,
+            async hashKey =>
+            {
+                var template = await Application.Repository.ExampleData.GetTemplateAsync(templateId);
+                return template == null ? null : Application.ConfigurationSnapshots.CreateSnapshot(template, hashKey);
+            },
+            $"Example Data Template {templateId}");
+    }
+
+    private async Task CaptureExampleDataTemplateDeletionAsync(Activity activity, ExampleDataTemplate template, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureDeletionAsync(activity, changeReason,
+            async hashKey =>
+            {
+                var persisted = await Application.Repository.ExampleData.GetTemplateAsync(template.Id) ?? template;
+                return Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
+            },
+            $"Example Data Template {template.Id}");
+    }
+
+    /// <summary>
+    /// Records a System-attributed Create Activity and version-1 baseline snapshot for a built-in Example Data Template
+    /// that has just been seeded, grouped under the seeding pass's parent Activity, after the seed batch persists
+    /// (mirroring <see cref="RecordSeededExampleDataSetBaselineAsync"/>).
+    /// </summary>
+    internal async Task RecordSeededExampleDataTemplateBaselineAsync(int templateId, string name, Guid parentActivityId)
+    {
+        var activity = new Activity
+        {
+            TargetName = name,
+            TargetType = ActivityTargetType.ExampleDataTemplate,
+            TargetOperationType = ActivityTargetOperationType.Create,
+            ParentActivityId = parentActivityId,
+            Message = $"Created built-in Example Data Template '{name}'"
+        };
+        await Application.Activities.CreateSystemActivityAsync(activity);
+
+        try
+        {
+            await CaptureExampleDataTemplateConfigurationChangeAsync(activity, templateId, "Built-in Example Data Template created automatically by JIM.");
+            await Application.Activities.CompleteActivityAsync(activity);
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
     }
 
     /// <summary>

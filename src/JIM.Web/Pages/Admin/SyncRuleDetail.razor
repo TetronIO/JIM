@@ -18,7 +18,7 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Synchronisation Rule: @_syncRuleNameOrCreate</PageTitle>
-<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Synchronisation Rule:</span> <span class="mud-primary-text">@_syncRuleNameOrCreate</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Synchronisation Rule:</span> <span class="mud-primary-text">@_syncRuleNameOrCreate</span></MudText>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_syncRule is { Id: > 0 })
@@ -245,9 +245,14 @@ else if (_syncRule != null)
         var confirmationResult = await DialogService.ShowMessageBoxAsync("Warning", "Are you sure you want to delete this Synchronisation Rule?", yesText: "Delete!", cancelText: "Cancel");
         if (confirmationResult.HasValue && confirmationResult.Value)
         {
+            // offer an optional reason for the configuration change history; cancelling aborts the delete
+            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
+            if (cancelled)
+                return;
+
             // attribute the operation to the signed-in user; use the edit session's context
             var user = await Helpers.GetUserAsync(_jim, AuthenticationStateTask);
-            await _jim.ConnectedSystems.DeleteSyncRuleAsync(_syncRule, user);
+            await _jim.ConnectedSystems.DeleteSyncRuleAsync(_syncRule, user, changeReason);
             NavManager.NavigateTo("/admin/sync-rules");
         }
     }

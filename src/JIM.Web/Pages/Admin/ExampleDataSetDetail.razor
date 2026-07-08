@@ -1,6 +1,8 @@
 ﻿@page "/admin/example-data/datasets/{Id:int}"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities
 @using JIM.Models.ExampleData
+@using JIM.Web.Pages.Admin.Components
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 
@@ -8,12 +10,21 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Example Data Set: @_exampleDataSet?.Name</PageTitle>
-<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Science" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Example Data Sets:</span> <span class="mud-primary-text">@_exampleDataSet?.Name</span></MudText>
-<MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Science" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Example Data Sets:</span> <span class="mud-primary-text">@_exampleDataSet?.Name</span></MudText>
+<div class="d-flex justify-space-between align-center">
+    <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
+    @if (_exampleDataSet != null)
+    {
+        <AuditInfo Entity="@_exampleDataSet" />
+    }
+</div>
 
 @if (_exampleDataSet != null)
 {
-    <MudText Typo="Typo.h5" Class="mt-5">Details</MudText>
+    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" Class="mt-2" TabPanelsClass="pt-5">
+
+        <MudTabPanel Text="Details">
+    <MudText Typo="Typo.h5">Details</MudText>
     <MudPaper Class="pa-4" Outlined="true">
         <MudGrid Spacing="4">
             <MudItem xs="12" sm="6" md="4">
@@ -38,6 +49,13 @@
             <MudChip T="string" Variant="Variant.Filled" Color="Color.Default">@val.StringValue</MudChip>
         }
     </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
+            <ConfigurationChangesTab TargetType="ActivityTargetType.ExampleDataSet" ObjectId="@_exampleDataSet.Id" ObjectTypeLabel="Example Data Set" />
+        </MudTabPanel>
+
+    </NavigableMudTabs>
 }
 
 @code {
@@ -46,6 +64,7 @@
 
     private ExampleDataSet? _exampleDataSet;
     private List<BreadcrumbItem> _breadcrumbs = null!;
+    private int _changeCount;
 
     protected override async Task OnInitializedAsync()
     {
@@ -66,5 +85,7 @@
             new("Datasets", href: "/admin/example-data/datasets/"),
             new(_exampleDataSet.Name, href: null, disabled: true)
         };
+
+        _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ExampleDataSet, _exampleDataSet.Id, 1, 1)).TotalResults;
     }
 }
