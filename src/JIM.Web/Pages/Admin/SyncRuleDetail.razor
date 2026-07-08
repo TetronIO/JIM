@@ -61,7 +61,7 @@ else if (_syncRule != null)
         @if (_syncRule.Id > 0)
         {
             <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
-                <ConfigurationChangesTab TargetType="ActivityTargetType.SyncRule" ObjectId="_syncRule.Id" ObjectTypeLabel="Synchronisation Rule" />
+                <ConfigurationChangesTab TargetType="ActivityTargetType.SynchronisationRule" ObjectId="_syncRule.Id" ObjectTypeLabel="Synchronisation Rule" />
             </MudTabPanel>
         }
 
@@ -182,7 +182,7 @@ else if (_syncRule != null)
             _breadcrumbs.Add(new BreadcrumbItem(_syncRule.Name, href: null, disabled: true));
 
             // lightweight count for the Changes tab badge (one row fetched; TotalResults only)
-            _changeCount = (await _jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.SyncRule, _syncRule.Id, 1, 1)).TotalResults;
+            _changeCount = (await _jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.SynchronisationRule, _syncRule.Id, 1, 1)).TotalResults;
         }
         else
         {

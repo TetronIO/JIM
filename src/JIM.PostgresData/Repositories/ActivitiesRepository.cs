@@ -518,7 +518,7 @@ public class ActivityRepository : IActivityRepository
         return targetType switch
         {
             ActivityTargetType.ConnectedSystem => query.Where(a => a.ConnectedSystemId == targetObjectId),
-            ActivityTargetType.SyncRule => query.Where(a => a.SyncRuleId == targetObjectId),
+            ActivityTargetType.SynchronisationRule => query.Where(a => a.SyncRuleId == targetObjectId),
             ActivityTargetType.MetaverseAttribute => query.Where(a => a.MetaverseAttributeId == targetObjectId),
             ActivityTargetType.MetaverseObjectType => query.Where(a => a.MetaverseObjectTypeId == targetObjectId),
             ActivityTargetType.PredefinedSearch => query.Where(a => a.PredefinedSearchId == targetObjectId),

@@ -4,15 +4,15 @@
 function Get-JIMSyncRuleMatchingRule {
     <#
     .SYNOPSIS
-        Gets Object Matching Rules from a Sync Rule (advanced mode).
+        Gets Object Matching Rules from a Synchronisation Rule (advanced mode).
 
     .DESCRIPTION
-        Retrieves Object Matching Rules defined on a specific Sync Rule.
-        This is used in advanced mode where matching rules are per-sync rule
+        Retrieves Object Matching Rules defined on a specific Synchronisation Rule.
+        This is used in advanced mode where matching rules are per-Synchronisation Rule
         rather than per-object type.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Sync Rule.
+        The unique identifier of the Synchronisation Rule.
 
     .PARAMETER Id
         The unique identifier of a specific Matching Rule to retrieve.
@@ -23,12 +23,12 @@ function Get-JIMSyncRuleMatchingRule {
     .EXAMPLE
         Get-JIMSyncRuleMatchingRule -SyncRuleId 5
 
-        Gets all Matching Rules for Sync Rule ID 5.
+        Gets all Matching Rules for Synchronisation Rule ID 5.
 
     .EXAMPLE
         Get-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 12
 
-        Gets the specific Matching Rule with ID 12 from Sync Rule ID 5.
+        Gets the specific Matching Rule with ID 12 from Synchronisation Rule ID 5.
 
     .LINK
         New-JIMSyncRuleMatchingRule
@@ -53,12 +53,12 @@ function Get-JIMSyncRuleMatchingRule {
         }
 
         if ($PSBoundParameters.ContainsKey('Id')) {
-            Write-Verbose "Getting Matching Rule ID: $Id for Sync Rule ID: $SyncRuleId"
+            Write-Verbose "Getting Matching Rule ID: $Id for Synchronisation Rule ID: $SyncRuleId"
             $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/matching-rules/$Id"
             $result | Add-Member -NotePropertyName 'SyncRuleId' -NotePropertyValue $SyncRuleId -PassThru -Force
         }
         else {
-            Write-Verbose "Getting Matching Rules for Sync Rule ID: $SyncRuleId"
+            Write-Verbose "Getting Matching Rules for Synchronisation Rule ID: $SyncRuleId"
             $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/matching-rules"
 
             # Output each rule individually for pipeline support

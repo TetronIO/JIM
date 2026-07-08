@@ -8,10 +8,10 @@ function Switch-JIMMatchingMode {
 
     .DESCRIPTION
         Switches between simple mode (matching rules on object types) and advanced mode
-        (matching rules on sync rules) for a Connected System.
+        (matching rules on Synchronisation Rules) for a Connected System.
 
-        When switching to advanced mode, matching rules are copied from object types to sync rules.
-        When switching to simple mode, matching rules are migrated from sync rules to object types.
+        When switching to advanced mode, matching rules are copied from object types to Synchronisation Rules.
+        When switching to simple mode, matching rules are migrated from Synchronisation Rules to object types.
 
     .PARAMETER ConnectedSystemId
         The unique identifier of the Connected System.
@@ -30,7 +30,7 @@ function Switch-JIMMatchingMode {
     .EXAMPLE
         Switch-JIMMatchingMode -ConnectedSystemId 1 -Mode SyncRule
 
-        Switches Connected System 1 to advanced mode (matching rules on sync rules).
+        Switches Connected System 1 to advanced mode (matching rules on Synchronisation Rules).
 
     .EXAMPLE
         Switch-JIMMatchingMode -ConnectedSystemId 1 -Mode ConnectedSystem -PassThru
@@ -71,7 +71,7 @@ function Switch-JIMMatchingMode {
             mode = $modeValue
         }
 
-        $modeDescription = if ($Mode -eq 'SyncRule') { 'Advanced (per-Sync Rule)' } else { 'Simple (per-Object Type)' }
+        $modeDescription = if ($Mode -eq 'SyncRule') { 'Advanced (per-Synchronisation Rule)' } else { 'Simple (per-Object Type)' }
 
         if ($PSCmdlet.ShouldProcess("Connected System $ConnectedSystemId", "Switch matching mode to $modeDescription")) {
             Write-Verbose "Switching matching mode for Connected System ID: $ConnectedSystemId to $modeDescription"

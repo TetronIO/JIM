@@ -8,10 +8,10 @@ function Import-JIMConnectedSystemSchema {
 
     .DESCRIPTION
         Connects to the external system and retrieves its schema (object types and attributes).
-        This is required before creating sync rules, as sync rules reference object type IDs.
+        This is required before creating Synchronisation Rules, as Synchronisation Rules reference object type IDs.
 
         Note: This operation is destructive - it will replace any existing schema configuration.
-        Any sync rules referencing removed object types/attributes will need to be updated.
+        Any Synchronisation Rules referencing removed object types/attributes will need to be updated.
 
     .PARAMETER Id
         The unique identifier of the Connected System to import schema for.
