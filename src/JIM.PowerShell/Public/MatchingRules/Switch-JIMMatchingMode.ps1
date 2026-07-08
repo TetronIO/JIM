@@ -71,7 +71,7 @@ function Switch-JIMMatchingMode {
             mode = $modeValue
         }
 
-        $modeDescription = if ($Mode -eq 'SyncRule') { 'Advanced (Synchronisation Rule)' } else { 'Simple (per-Object Type)' }
+        $modeDescription = if ($Mode -eq 'SyncRule') { 'Advanced (per-Synchronisation Rule)' } else { 'Simple (per-Object Type)' }
 
         if ($PSCmdlet.ShouldProcess("Connected System $ConnectedSystemId", "Switch matching mode to $modeDescription")) {
             Write-Verbose "Switching matching mode for Connected System ID: $ConnectedSystemId to $modeDescription"
