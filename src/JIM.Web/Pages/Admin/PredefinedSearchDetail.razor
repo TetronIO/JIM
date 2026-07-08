@@ -30,8 +30,7 @@
     // below) because nullable-flow narrowing on a field does not survive an intervening method call.
     var predefinedSearchBuiltIn = _predefinedSearch.BuiltIn;
 
-    <div class="mt-6">
-    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-6">
+    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" Class="mt-2" TabPanelsClass="pt-5">
 
         <MudTabPanel Text="Details">
     <MudPaper Class="pa-4" Outlined="true">
@@ -130,7 +129,6 @@
         </MudTabPanel>
 
     </NavigableMudTabs>
-    </div>
 
     @* ─── Add Criteria Group dialog ─── *@
     <MudDialog @bind-Visible="_addGroupDialogVisible" Options="_dialogOptions">

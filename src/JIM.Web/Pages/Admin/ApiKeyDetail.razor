@@ -28,8 +28,7 @@
 
 @if (_apiKey != null && _preferencesLoaded)
 {
-    <div class="mt-6">
-    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-6">
+    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" Class="mt-2" TabPanelsClass="pt-5">
 
         <MudTabPanel Text="Details">
             <MudPaper Class="pa-4" Outlined="true">
@@ -221,7 +220,6 @@
         </MudTabPanel>
 
     </NavigableMudTabs>
-    </div>
 }
 else if (!_loading)
 {

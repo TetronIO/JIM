@@ -88,9 +88,10 @@ For a table cell (or inline value) that is null/empty, render `<EmptyValue />` (
 ## Panel spacing (target: uniform `mt-6` visual gaps between all block-level sections)
 - Use `Class="pa-4 mt-6"` on `<MudPaper Outlined="true">` panels to ensure consistent vertical spacing between sections
 - Exception: the **first** panel on a page should omit `mt-6` (use just `Class="pa-4"`) so there is no unnecessary top margin
+- **After breadcrumbs, no intro text**: `MudBreadcrumbs` carries its own 16px bottom padding. If the first panel directly follows it with nothing in between, a bare `Class="pa-4"` (no margin) under-shoots the uniform gap (16px only); use `Class="pa-4 mt-2"` so the combined gap lands on the ~24px target, same reasoning as the "Tabs margin" rule below
 - **After intro text**: `MudText` with `Typo.subtitle1` renders as a `<p>` with its own bottom margin (~16px). The first panel after intro text should use `mt-4` (not `mt-6`) so the combined gap matches `mt-6` visually
-- **Tab content spacing**: Use `TabPanelsClass="pa-0 mt-6"` on `NavigableMudTabs` / `MudTabs` so the gap between tab headers and tab panel content matches the surrounding spacing
-- **Tabs margin**: `NavigableMudTabs` may not honour `Class` for outer margin; wrap in `<div class="mt-6">` to guarantee spacing above the tab bar
+- **Tabs margin (breadcrumb-adjacent)**: `Class` on `NavigableMudTabs`/`MudTabs` **does** reach the root element (`MudTabs.TabsClassnames` includes `.AddClass(Class)`); pass it directly, never wrap in an extra `<div>`. `MudBreadcrumbs` carries its own 16px bottom padding, so when `NavigableMudTabs` directly follows a `MudBreadcrumbs` with nothing in between, use `Class="mt-2"` (not `mt-6`) so the combined gap lands on the uniform ~24px target, mirroring the "after intro text" `mt-4` rule above. Only reach for a full `mt-6` on `NavigableMudTabs` when it follows a plain block (e.g. a `MudPaper`) with no built-in padding of its own. See `ConnectedSystemDetail.razor`.
+- **Tab content spacing**: Whether `TabPanelsClass` needs its own top spacing depends on the first tab's content. If the tab's content starts flush (e.g. a bare `MudPaper`/`MudText` with no top margin), use `TabPanelsClass="pt-5"`. If the content already supplies its own top margin (e.g. a table with `Class="mt-3"`), use `TabPanelsClass="pa-0"` and let the content's own margin stand; do not stack both, it double-counts.
 
 ## UI element sizing
 - ALWAYS use normal/default sizes for ALL UI elements when adding new components

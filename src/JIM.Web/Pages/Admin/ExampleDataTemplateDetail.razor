@@ -24,8 +24,7 @@
 
 @if (_template != null)
 {
-    <div class="mt-6">
-    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-6">
+    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" Class="mt-2" TabPanelsClass="pa-0">
 
         <MudTabPanel Text="Details">
     @foreach (var objectType in _template.ObjectTypes)
@@ -200,7 +199,6 @@
         </MudTabPanel>
 
     </NavigableMudTabs>
-    </div>
 }
 
 @code {
