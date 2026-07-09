@@ -32,6 +32,23 @@ internal static class MvoBulkInsertColumns
     ];
 
     /// <summary>
+    /// Update columns for the MetaverseObjects table: the mutable subset written by the raw-SQL
+    /// synchronisation update path (<see cref="SyncRepository.UpdateMetaverseObjectsBulkAsync"/>).
+    /// This is <see cref="MetaverseObjects"/> minus the immutable primary key (Id) and the create-only
+    /// Created timestamp (and, as with the insert list, the store-generated xmin concurrency token).
+    /// BulkInsertColumnCompletenessTests keeps it in lockstep with <see cref="MetaverseObjects"/> so a
+    /// migration that adds a mutable column fails the build's test run rather than silently dropping it
+    /// from every bulk update.
+    /// </summary>
+    internal static readonly string[] MetaverseObjectsUpdate =
+    [
+        "LastUpdated", "TypeId", "Status", "Origin",
+        "LastConnectorDisconnectedDate", "DeletionInitiatedByType",
+        "DeletionInitiatedById", "DeletionInitiatedByName", "CachedDisplayName",
+        "ScopeReviewPending", "LastScopeEvaluatedAt"
+    ];
+
+    /// <summary>
     /// Insert columns for the MetaverseObjectAttributeValues table.
     /// </summary>
     internal static readonly string[] MetaverseObjectAttributeValues =

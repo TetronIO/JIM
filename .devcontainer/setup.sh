@@ -101,10 +101,46 @@ export PATH="$PATH:$HOME/.dotnet/tools"
 echo 'export PATH="$PATH:$HOME/.dotnet/tools"' >> ~/.zshrc
 echo 'export PATH="$PATH:$HOME/.dotnet/tools"' >> ~/.bashrc
 
+# Wire JIM shell aliases into the rc files up front, alongside the PATH writes and before
+# any failure-prone step. setup.sh runs under `set -e`; this wiring used to sit near the
+# end of the script, so a transient failure in an earlier step (e.g. an unguarded
+# `dotnet restore`) would abort setup and silently skip it, leaving new shells without the
+# jim-* helpers. It only appends source lines to the rc files, so it has no dependency on
+# anything downstream and belongs here where nothing can prevent it from running.
+print_step "Creating shell aliases..."
+if ! grep -q "source.*jim-aliases.sh" ~/.zshrc; then
+    echo "" >> ~/.zshrc
+    echo "# Source JIM development aliases" >> ~/.zshrc
+    echo "if [ -f \"\$HOME/.devcontainer/jim-aliases.sh\" ]; then" >> ~/.zshrc
+    echo "    source \"\$HOME/.devcontainer/jim-aliases.sh\"" >> ~/.zshrc
+    echo "elif [ -f \"/workspaces/JIM/.devcontainer/jim-aliases.sh\" ]; then" >> ~/.zshrc
+    echo "    source \"/workspaces/JIM/.devcontainer/jim-aliases.sh\"" >> ~/.zshrc
+    echo "fi" >> ~/.zshrc
+    print_success "Shell aliases configured (restart terminal or run: source ~/.zshrc)"
+else
+    print_success "Shell aliases already configured"
+fi
+if ! grep -q "source.*jim-aliases.sh" ~/.bashrc; then
+    echo "" >> ~/.bashrc
+    echo "# Source JIM development aliases" >> ~/.bashrc
+    echo "if [ -f \"\$HOME/.devcontainer/jim-aliases.sh\" ]; then" >> ~/.bashrc
+    echo "    source \"\$HOME/.devcontainer/jim-aliases.sh\"" >> ~/.bashrc
+    echo "elif [ -f \"/workspaces/JIM/.devcontainer/jim-aliases.sh\" ]; then" >> ~/.bashrc
+    echo "    source \"/workspaces/JIM/.devcontainer/jim-aliases.sh\"" >> ~/.bashrc
+    echo "fi" >> ~/.bashrc
+fi
+
 # 2. Restore NuGet packages
 print_step "Restoring NuGet packages..."
-dotnet restore JIM.sln --verbosity quiet
-print_success "NuGet packages restored"
+# Guarded like the build step below: a transient NuGet/feed failure under `set -e` must
+# not abort the rest of setup. It previously did, silently skipping every later step
+# (including, historically, the shell-alias wiring), so jim-* commands would vanish from
+# new shells with no error shown.
+if dotnet restore JIM.sln --verbosity quiet; then
+    print_success "NuGet packages restored"
+else
+    print_warning "NuGet restore had errors. Run 'dotnet restore JIM.sln' to see details."
+fi
 
 # 3. Create .env file from .env.example (single source of truth)
 print_step "Creating .env file..."
@@ -275,34 +311,6 @@ if git -C "$WORKDIR" config --local core.hooksPath .githooks; then
     print_success "Git hooks path set to .githooks/ (pre-commit signing check active)"
 else
     print_warning "Failed to set core.hooksPath; pre-commit checks will not run"
-fi
-
-# 11. Create useful shell aliases
-print_step "Creating shell aliases..."
-
-# Add source line to .zshrc if not already present
-if ! grep -q "source.*jim-aliases.sh" ~/.zshrc; then
-    echo "" >> ~/.zshrc
-    echo "# Source JIM development aliases" >> ~/.zshrc
-    echo "if [ -f \"\$HOME/.devcontainer/jim-aliases.sh\" ]; then" >> ~/.zshrc
-    echo "    source \"\$HOME/.devcontainer/jim-aliases.sh\"" >> ~/.zshrc
-    echo "elif [ -f \"/workspaces/JIM/.devcontainer/jim-aliases.sh\" ]; then" >> ~/.zshrc
-    echo "    source \"/workspaces/JIM/.devcontainer/jim-aliases.sh\"" >> ~/.zshrc
-    echo "fi" >> ~/.zshrc
-    print_success "Shell aliases configured (restart terminal or run: source ~/.zshrc)"
-else
-    print_success "Shell aliases already configured"
-fi
-
-# Also add to .bashrc for bash users
-if ! grep -q "source.*jim-aliases.sh" ~/.bashrc; then
-    echo "" >> ~/.bashrc
-    echo "# Source JIM development aliases" >> ~/.bashrc
-    echo "if [ -f \"\$HOME/.devcontainer/jim-aliases.sh\" ]; then" >> ~/.bashrc
-    echo "    source \"\$HOME/.devcontainer/jim-aliases.sh\"" >> ~/.bashrc
-    echo "elif [ -f \"/workspaces/JIM/.devcontainer/jim-aliases.sh\" ]; then" >> ~/.bashrc
-    echo "    source \"/workspaces/JIM/.devcontainer/jim-aliases.sh\"" >> ~/.bashrc
-    echo "fi" >> ~/.bashrc
 fi
 
 # 12. Install Claude Code CLI
