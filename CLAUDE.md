@@ -23,9 +23,10 @@ Always use Context7 MCP when you need library/API documentation, code generation
 - Never commit code that has not built and tested locally; never create a PR with failing build/tests
 - If environmental constraints prevent local build/test, mark the PR as draft and state the limitation
 
-**Build/test exceptions** (no `dotnet build`/`test` required):
-- Scripts (`.ps1`, `.sh`), static assets (CSS/JS/images), `.md` docs, config (`.env.example`, compose files, Dockerfiles, `.gitignore`, `.editorconfig`), CI/CD workflows, diagrams, plan documents
-- **Partial:** UI-only Blazor/Razor changes need `dotnet build` but not `dotnet test` (no UI tests exist)
+**Build/test exceptions** (non-code changes: no local build, test, or validation tooling of any kind; just commit):
+- Applies to: `.md` docs and `mkdocs.yml`, scripts (`.ps1`, `.sh`), static assets (CSS/JS/images), config (`.env.example`, compose files, Dockerfiles, `.gitignore`, `.editorconfig`), CI/CD workflows, diagrams, plan documents.
+- Do NOT run `dotnet build`/`test` for these, and do NOT run a docs-site build (`mkdocs build`) for `.md`/`mkdocs.yml` changes. These steps slow the loop down for no benefit. Verify docs link/nav correctness by eye instead of tooling (there is no PR-time docs CI; the site deploys on merge to `main`).
+- **Partial:** UI-only Blazor/Razor changes need `dotnet build` but not `dotnet test` (no UI tests exist).
 
 **Validate behavioural changes at runtime, not just via tests:** `dotnet build`/`test` is necessary but is not the ceiling of validation. This local devcontainer runs the **full stack** (`jim.web`, `jim.worker`, `jim.scheduler`, `jim.database`, `jim.keycloak`) on an ample host; you can and should boot it and confirm a change actually behaves as intended - drive the flow, query the database, hit the API - especially for anything unit tests mock away: startup/seeding/bootstrap ordering, migrations, change capture, encryption, and integration behaviour. Do not claim you "cannot" run it here.
 - Running containers hold **stale images**: after changing `.cs`, rebuild the affected service(s) before verifying (a browser refresh shows nothing new). The full-stack and integration-test how-to (rebuild commands, `psql` access, `Run-IntegrationTests.ps1`) lives in `.devcontainer/CLAUDE.md` and `test/CLAUDE.md`; those files auto-load only under their own subtrees, so read them when validating from `src/`.

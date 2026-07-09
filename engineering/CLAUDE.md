@@ -217,11 +217,11 @@ The changelog is a **customer-facing product document**. The audience is adminis
 - Do NOT include: internal refactoring, test changes, developer tooling, CI/CD tweaks, or anything that has no user-facing impact
 - Trivial changes (renamed a CSS class, moved a file, updated a comment) do NOT belong in the changelog
 
-**Length and style — keep entries succinct:**
+**Length and style, keep entries succinct:**
 - **Target one sentence per entry; two at most.** If you cannot say it in two sentences, the entry is doing too much; trim or split it.
 - A reader should be able to scan the entry in a few seconds and know whether it affects them.
 - Lead with the customer-visible outcome ("Safari sign-in no longer fails with...", "The bundled X template now persists at production speed without..."), then optionally one short clause naming the underlying mechanism at a high level (e.g. "rewritten to use PostgreSQL `COPY` binary import"). Stop there.
-- **Do NOT include in changelog entries** (these belong in commit messages, PR descriptions, or code comments — not the changelog):
+- **Do NOT include in changelog entries** (these belong in commit messages, PR descriptions, or code comments, not the changelog):
   - Internal class, method, file, or property names (e.g. `SaveChanges`, EF change tracker, `SecurePolicy=SameAsRequest`)
   - Step-by-step explanations of what was wrong and how it was fixed
   - Browser/framework default behaviour explanations
