@@ -617,11 +617,8 @@ public partial class SyncRepository
                 avEntry.State = EntityState.Detached;
         }
 
-        foreach (var entry in metaverseObjects.Select(mvo => _context.Entry(mvo)))
-        {
-            if (entry.State != EntityState.Detached)
-                entry.State = EntityState.Detached;
-        }
+        foreach (var entry in metaverseObjects.Select(mvo => _context.Entry(mvo)).Where(entry => entry.State != EntityState.Detached))
+            entry.State = EntityState.Detached;
     }
 
     #endregion
