@@ -1648,6 +1648,61 @@ function Assert-ActivitySuccess {
     throw "Activity '$Name' did not complete successfully. Status: $status (ActivityId: $ActivityId)"
 }
 
+function Assert-ImportedObjectCount {
+    <#
+    .SYNOPSIS
+        Assert that an import Activity saw exactly the expected number of source objects.
+
+    .DESCRIPTION
+        Guards fixed-size scenarios against silent test-isolation failures. A scenario that populates a known,
+        small number of directory objects but processes far more has imported stale data left behind by an earlier
+        scenario (for example, the OpenLDAP directory is a long-lived container without a per-scenario data reset).
+        That pollution was why the "six-user" Scenario14-AttributePriority actually synchronised ~50,000 objects
+        and hit a Metaverse Object update concurrency failure. Asserting the count makes the isolation break fail
+        loudly at the point it happens, rather than surfacing hours later as an unrelated error.
+
+    .PARAMETER ActivityId
+        The Activity ID (GUID) of the import/sync run to check.
+
+    .PARAMETER Expected
+        The exact number of objects the activity is expected to have processed.
+
+    .PARAMETER Name
+        A friendly name for the operation (used in messages).
+
+    .EXAMPLE
+        Assert-ImportedObjectCount -ActivityId $importResult.activityId -Expected 6 -Name "Full Import (Primary)"
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$ActivityId,
+
+        [Parameter(Mandatory=$true)]
+        [int]$Expected,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Name
+    )
+
+    $stats = Get-JIMActivityStats -ActivityId $ActivityId
+
+    # An import records the objects it saw through the CSO change counters, NOT totalObjectsProcessed:
+    # that counter belongs to the synchronisation phase and is always 0 for an import activity. Count
+    # every source object the import presented: new (adds) + changed (updates) + unchanged. Deletes are
+    # excluded because a deleted object is no longer in the source. This stays correct whether the CSOs
+    # already existed (re-import) or not, and matches how Scenario 7/9 read import counts (totalCsoAdds).
+    $processed = [int]$stats.totalCsoAdds + [int]$stats.totalCsoUpdates + [int]$stats.totalUnchanged
+
+    if ($processed -ne $Expected) {
+        throw "Test isolation check failed: '$Name' processed $processed object(s) but exactly $Expected were expected " +
+            "(adds=$($stats.totalCsoAdds), updates=$($stats.totalCsoUpdates), unchanged=$($stats.totalUnchanged)). " +
+            "This usually means the source directory was not reset between scenarios and still holds stale objects " +
+            "from an earlier run. ActivityId: $ActivityId"
+    }
+
+    Write-Host "  ✓ $Name processed the expected $Expected object(s)" -ForegroundColor Green
+}
+
 function Assert-ExportSuccess {
     <#
     .SYNOPSIS

@@ -47,6 +47,35 @@ public class BulkInsertColumnCompletenessTests
         AssertColumnListMatchesModel(typeof(MetaverseObjectAttributeValue), "MetaverseObjectAttributeValues", MvoBulkInsertColumns.MetaverseObjectAttributeValues);
     }
 
+    /// <summary>
+    /// The raw-SQL update path (<c>SyncRepository.UpdateMetaverseObjectsBulkAsync</c>) writes the mutable subset
+    /// of the insert columns: everything except the immutable primary key (Id) and the create-only Created
+    /// timestamp. A migration that adds a mutable Metaverse Object column must extend both lists (and the update
+    /// writer) or the raw update would silently never persist it.
+    /// </summary>
+    [Test]
+    public void MetaverseObjectBulkUpdateColumns_AreTheMutableSubsetOfInsertColumns()
+    {
+        var expected = MvoBulkInsertColumns.MetaverseObjects
+            .Where(c => c is not "Id" and not "Created")
+            .ToHashSet();
+        var actual = MvoBulkInsertColumns.MetaverseObjectsUpdate.ToHashSet();
+
+        var missing = expected.Except(actual).OrderBy(c => c).ToList();
+        var unknown = actual.Except(expected).OrderBy(c => c).ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(missing, Is.Empty,
+                "Mutable column(s) in the insert list are missing from MetaverseObjectsUpdate; the raw-SQL update " +
+                "would never persist them. Extend MvoBulkInsertColumns.MetaverseObjectsUpdate AND the SET clause / " +
+                "VALUES writer in BulkUpdateMvoRowsViaEfAsync (in list order): " + string.Join(", ", missing));
+            Assert.That(unknown, Is.Empty,
+                "MetaverseObjectsUpdate contains column(s) not in the insert list (or the immutable Id/Created): " +
+                string.Join(", ", unknown));
+        });
+    }
+
     private void AssertColumnListMatchesModel(Type entityClrType, string tableName, string[] bulkInsertColumns)
     {
         var entityType = _model.FindEntityType(entityClrType);

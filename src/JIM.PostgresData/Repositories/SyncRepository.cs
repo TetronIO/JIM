@@ -202,7 +202,7 @@ public partial class SyncRepository : ISyncRepository
         => CreateMetaverseObjectsBulkAsync(metaverseObjects as List<MetaverseObject> ?? metaverseObjects.ToList());
 
     public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
-        => _repo.Metaverse.UpdateMetaverseObjectsAsync(metaverseObjects);
+        => UpdateMetaverseObjectsBulkAsync(metaverseObjects as List<MetaverseObject> ?? metaverseObjects.ToList());
 
     public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
         => _repo.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
