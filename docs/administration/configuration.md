@@ -116,6 +116,19 @@ The settings listed below are the ones most commonly adjusted; the full list is 
 
 ---
 
+## Encryption Keys
+
+JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Schedule SQL-step connection strings) with keys stored on the filesystem. All three services (`jim.web`, `jim.worker`, `jim.scheduler`) must resolve to the same key location so they can decrypt each other's data.
+
+| Variable                  | Description                                                                                                                                                                                 | Default                          | Example        |
+|---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------|----------------|
+| `JIM_ENCRYPTION_KEY_PATH` | Filesystem path where encryption keys are stored. When unset, JIM uses `/data/keys` (the `jim-keys-volume` Docker volume) if `/data` exists, otherwise the platform application-data directory. | *(unset)* -- resolves to `/data/keys` in Docker | `/data/keys`   |
+
+!!! danger "These keys must be backed up with the database"
+    The database ciphertext cannot be decrypted without these keys. A database backup restored without its matching keys leaves every stored secret unrecoverable. See [Backup & Disaster Recovery](backup-recovery.md).
+
+---
+
 ## UI Theme
 
 | Variable    | Description                                                                                                    | Default    |

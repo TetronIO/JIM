@@ -120,6 +120,7 @@ nav:
       - SSO Setup: administration/sso-setup.md
       - Configuration Reference: administration/configuration.md
       - Upgrading: administration/upgrading.md
+      - Backup & Disaster Recovery: administration/backup-recovery.md
       - Troubleshooting: administration/troubleshooting.md
   - Connectors:
       - connectors/index.md
