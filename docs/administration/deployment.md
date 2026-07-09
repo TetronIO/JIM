@@ -519,4 +519,5 @@ For air-gapped deployments, also verify:
 - [ ] File connector volumes mounted (if using File Connector)
 - [ ] Encryption key set backed up and included in the offline backup routine (see [Backup & Disaster Recovery](backup-recovery.md))
 - [ ] Initial admin user can log in
+- [ ] Logs are being written to the configured path
 - [ ] Logs are being written to configured path
