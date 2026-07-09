@@ -297,6 +297,7 @@ The Worker separates pure domain logic from I/O via two core interfaces:
 **Bulk Write Performance**:
 - **`ParallelBatchWriter`**: splits bulk writes across N concurrent PostgreSQL connections
 - **COPY binary protocol**: used for high-volume inserts (CSO creates, MVO creates, RPEIs, sync outcomes) via Npgsql's binary COPY API
+- **Metaverse Object writes are raw SQL, not EF `SaveChangesAsync`**: both creates and updates persist through the direct-SQL path (`SyncRepository.MvoOperations`), keyed by the immutable `Id`. Updates deliberately carry **no `xmin` optimistic-concurrency predicate**: during a sync the worker is the sole writer of the metaverse, so keying on `Id` is correct and the xmin check only introduced spurious `DbUpdateConcurrencyException`s when an object created earlier in the run (attached to the tracker without its store-generated xmin) was updated later in the same run. Optimistic concurrency via `xmin` remains in force for the EF-tracked write paths where a concurrent writer genuinely exists (admin portal / REST API edits). The update path detaches the persisted graph afterwards so no later `SaveChangesAsync` in the same page flush re-issues the write.
 
 **Task Processing**:
 - Poll task queue from database

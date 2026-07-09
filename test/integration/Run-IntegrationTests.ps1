@@ -1498,6 +1498,36 @@ function Reset-JIMForNextScenario {
         }
     }
 
+    # 3b. Clean OpenLDAP test data (yellowstone.local / glitterband.local), used by the OpenLDAP directory type.
+    # Unlike the JIM database (volume removed above) and Samba AD (OUs deleted above), the OpenLDAP directory has
+    # no other cross-scenario reset: it is a long-lived container whose data volume persists between scenarios.
+    # Without this, each OpenLDAP scenario imports the accumulated objects of every earlier OpenLDAP scenario;
+    # that is why the "six-user" Scenario14-AttributePriority actually synchronised ~50,000 stale objects and hit
+    # the Metaverse Object update concurrency failure. Delete the People/Groups subtrees (all users and groups) and
+    # recreate the empty base OUs the next scenario's populate expects, symmetric with the Samba AD OU cleanup above.
+    $openLdapRunning = docker ps --filter "name=openldap-primary" --format '{{.Names}}' 2>$null
+    if ($openLdapRunning) {
+        Write-Host "${GRAY}  Cleaning OpenLDAP test data...${NC}"
+        $openLdapPurge = @'
+uri="ldap://localhost:1389"
+pw="Test@123!"
+for suffix in dc=yellowstone,dc=local dc=glitterband,dc=local; do
+  admin="cn=admin,$suffix"
+  ldapdelete -r -x -H "$uri" -D "$admin" -w "$pw" "ou=People,$suffix" "ou=Groups,$suffix" >/dev/null 2>&1 || true
+  ldapadd -x -H "$uri" -D "$admin" -w "$pw" >/dev/null 2>&1 <<LDIF || true
+dn: ou=People,$suffix
+objectClass: organizationalUnit
+ou: People
+
+dn: ou=Groups,$suffix
+objectClass: organizationalUnit
+ou: Groups
+LDIF
+done
+'@
+        docker exec openldap-primary bash -c $openLdapPurge 2>&1 | Out-Null
+    }
+
     # 4. Generate new API key and update .env
     Write-Host "${GRAY}  Generating new API key...${NC}"
     $randomBytes = New-Object byte[] 32

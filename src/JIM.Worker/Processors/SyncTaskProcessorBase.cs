@@ -13,6 +13,7 @@ using JIM.Application.Services;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -1686,6 +1687,29 @@ public abstract class SyncTaskProcessorBase
         }
 
         span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Wraps a page's persistence failure in a <see cref="SyncPersistenceException"/> that carries structured
+    /// context (page, Connected System, a sample of the affected Metaverse Object ids) and logs it, so the failure
+    /// is attributable on the Activity and in the logs rather than surfacing as an anonymous unhandled exception.
+    /// A persistence failure is a hard failure: the caller rethrows so the activity fails rather than continuing
+    /// with unknown state (Synchronisation Integrity). The sample is drawn from the still-pending Metaverse Object
+    /// collections, which the persist sequence clears phase by phase, so it names the objects of the failed phase.
+    /// </summary>
+    protected SyncPersistenceException CreatePagePersistenceException(int page, int totalPages, Exception innerException)
+    {
+        var affectedIdSample = _pendingMvoUpdates
+            .Concat(_pendingMvoCreates)
+            .Select(mvo => mvo.Id)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .Take(10)
+            .ToList();
+
+        var message = SyncPersistenceException.BuildMessage(page, totalPages, _connectedSystem.Name, affectedIdSample);
+        Log.Error(innerException, "PersistSynchronisationPage: {Message}", message);
+        return new SyncPersistenceException(message, innerException, page, totalPages, _connectedSystem.Name);
     }
 
     /// <summary>
