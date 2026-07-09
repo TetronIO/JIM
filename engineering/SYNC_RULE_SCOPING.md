@@ -57,9 +57,9 @@ flowchart TD
 
 Relevant code:
 
-- `src/JIM.Application/Servers/ScopingEvaluationServer.cs` — criterion evaluation (`IsCsoInScopeForImportRule`).
-- `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` — `GetInScopeImportRulesAsync` (line 3050), the out-of-scope handler `HandleCsoOutOfScopeAsync` (line 3091).
-- `src/JIM.Models/Enums/ObjectChangeType.cs` — `DisconnectedOutOfScope`, `OutOfScopeRetainJoin`.
+- `src/JIM.Application/Servers/ScopingEvaluationServer.cs`: criterion evaluation (`IsCsoInScopeForImportRule`).
+- `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs`: `GetInScopeImportRulesAsync` (line 3050), the out-of-scope handler `HandleCsoOutOfScopeAsync` (line 3091).
+- `src/JIM.Models/Enums/ObjectChangeType.cs`: `DisconnectedOutOfScope`, `OutOfScopeRetainJoin`.
 
 ## Outbound (export rule) scope transitions
 
@@ -83,8 +83,8 @@ flowchart TD
 
 Relevant code:
 
-- `src/JIM.Application/Servers/ExportEvaluationServer.cs` — `EvaluateOutOfScopeExportsAsync` (line 180 non-cached, line 404 cached) and `HandleOutboundDeprovisioningAsync` (line 464).
-- `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` — the call site at line 1364 that performs outbound re-evaluation during inbound sync.
+- `src/JIM.Application/Servers/ExportEvaluationServer.cs`: `EvaluateOutOfScopeExportsAsync` (line 180 non-cached, line 404 cached) and `HandleOutboundDeprovisioningAsync` (line 464).
+- `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs`: the call site at line 1364 that performs outbound re-evaluation during inbound sync.
 
 ## MVO deletion cascade
 
@@ -116,10 +116,10 @@ flowchart TD
 
 Relevant code:
 
-- `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs` — `ProcessMvoDeletionRuleAsync` (line 836), `FlushPendingMvoDeletionsAsync` (line 2398).
-- `src/JIM.Application/Servers/SyncEngine.cs` — `EvaluateMvoDeletionRule` (line 151).
-- `src/JIM.Application/Servers/ExportEvaluationServer.cs` — `EvaluateMvoDeletionAsync` (line 541). The `JoinType == Provisioned` gate at line 551 is currently under review (see [issue #655](https://github.com/TetronIO/JIM/issues/655)): administrators may want to deprovision joined or matched CSOs too, not only those JIM provisioned.
-- `src/JIM.Worker/Worker.cs` — line 596, the housekeeping entry point for grace-period deletions.
+- `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs`: `ProcessMvoDeletionRuleAsync` (line 836), `FlushPendingMvoDeletionsAsync` (line 2398).
+- `src/JIM.Application/Servers/SyncEngine.cs`: `EvaluateMvoDeletionRule` (line 151).
+- `src/JIM.Application/Servers/ExportEvaluationServer.cs`: `EvaluateMvoDeletionAsync` (line 541). The `JoinType == Provisioned` gate at line 551 is currently under review (see [issue #655](https://github.com/TetronIO/JIM/issues/655)): administrators may want to deprovision joined or matched CSOs too, not only those JIM provisioned.
+- `src/JIM.Worker/Worker.cs`: line 596, the housekeeping entry point for grace-period deletions.
 
 ## Cross-system cascade
 

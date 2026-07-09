@@ -978,7 +978,7 @@ The **LeaverCohort** step (issue [#908](https://github.com/TetronIO/JIM/issues/9
 
 #### Scenario 10: Synchronisation Rule Scoping Behaviour
 
-**Purpose**: Validate the full Synchronisation Rule scoping transition matrix end-to-end — what JIM does when an object enters scope, stays in scope while attributes change, and leaves scope, on both the inbound (Import rule) and outbound (Export rule) sides; plus the cross-system inline cascade and round-trip persistence of common criteria operators.
+**Purpose**: Validate the full Synchronisation Rule scoping transition matrix end-to-end: what JIM does when an object enters scope, stays in scope while attributes change, and leaves scope, on both the inbound (Import rule) and outbound (Export rule) sides; plus the cross-system inline cascade and round-trip persistence of common criteria operators.
 
 **Systems**:
 - Source: CSV (HR system, File connector)
@@ -2298,7 +2298,7 @@ Metrics streaming is opt-in. Set these variables in `.env` (or supply via the ru
 
 For **local devcontainer use**, set both directly in `.env` (the `.env.example` template has commented-out lines ready to uncomment). The devcontainer setup script (`.devcontainer/setup.sh`) prints a pending-action reminder at the end of container creation if `JIM_BENCH_API_KEY` is empty, so you'll notice if streaming is silently disabled. Codespaces users can set the two variables as Codespaces secrets and setup.sh will propagate them into `.env` automatically.
 
-For **CI/CD use**, `scripts/Set-JIMBenchSecrets.ps1` is an interactive helper that provisions the same two values (plus `JIM_BENCH_DISPATCH_TOKEN`) as **GitHub Actions secrets** on the repo — it does not write to your local `.env`.
+For **CI/CD use**, `scripts/Set-JIMBenchSecrets.ps1` is an interactive helper that provisions the same two values (plus `JIM_BENCH_DISPATCH_TOKEN`) as **GitHub Actions secrets** on the repo; it does not write to your local `.env`.
 
 When either variable is missing the runner skips the streaming step and continues without error, so untracked local runs keep working. See `engineering/plans/done/476-integration-test-metrics-jim-side.md` and the `bench-sync.yml` workflow for end-to-end details.
 

@@ -41,7 +41,7 @@
 
 }
 
-/* Light mode — search bar styling */
+/* Light mode: search bar styling */
 [data-md-color-scheme="default"] .md-search__input {
   background-color: #ffffff;                 /* white input on grey header */
   border: 1px solid rgba(30, 58, 95, 0.28);  /* --mud-palette-lines-default */
@@ -86,7 +86,7 @@
   color: #005da8;                            /* --jim-link-hover-color */
 }
 
-/* Light mode — nav active link */
+/* Light mode: nav active link */
 [data-md-color-scheme="default"] .md-nav__link--active,
 [data-md-color-scheme="default"] .md-nav__link:is([data-md-state="active"]) {
   color: #0076d3;                            /* --jim-link-color */
@@ -97,7 +97,7 @@
    ======================================== */
 
 [data-md-color-scheme="slate"] {
-  --md-primary-fg-color: #1d1a3d;            /* header background — purple-navy bridge to brand */
+  --md-primary-fg-color: #1d1a3d;            /* header background: purple-navy bridge to brand */
   --md-primary-fg-color--light: #1d1a3d;
   --md-primary-fg-color--dark: #1d1a3d;
   --md-primary-bg-color: #e0e4ea;            /* header text (light on dark) */
@@ -120,7 +120,7 @@
 
 }
 
-/* Dark mode — search bar styling */
+/* Dark mode: search bar styling */
 [data-md-color-scheme="slate"] .md-search__input {
   background-color: #0d1e30;                 /* surface colour */
   border: 1px solid #243a52;                  /* --mud-palette-lines-default */
@@ -142,7 +142,7 @@
   color: #9ad0ff;                             /* --jim-link-hover-color */
 }
 
-/* Dark mode — nav active link */
+/* Dark mode: nav active link */
 [data-md-color-scheme="slate"] .md-nav__link--active,
 [data-md-color-scheme="slate"] .md-nav__link:is([data-md-state="active"]) {
   color: #67b9ff;                             /* --jim-link-color */
@@ -166,7 +166,7 @@
 }
 
 /* Material grid cards: lighten the border on hover (default behaviour fades it
-   to transparent, which reads as "darker" in dark mode). 2D look — no shadow. */
+   to transparent, which reads as "darker" in dark mode). 2D look, no shadow. */
 .md-typeset .grid.cards > :is(ul, ol) > li:hover,
 .md-typeset .grid > .card:hover {
   border-color: var(--md-default-fg-color--lighter);
@@ -447,7 +447,7 @@ body:has(.jim-home) .md-content__button {
   flex-shrink: 0;
 }
 
-/* Dark mode — soften the pill background and brighten the check */
+/* Dark mode: soften the pill background and brighten the check */
 [data-md-color-scheme="slate"] .jim-capabilities li {
   background: #0d1e30;
   border-color: #243a52;

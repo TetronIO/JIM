@@ -36,7 +36,7 @@ The JIM File Connector enables bi-directional synchronisation of identity data w
 
 ## File access
 
-JIM ships with a formal Docker volume — `jim-connector-files-volume` — mounted inside both the JIM Web and JIM Worker containers at `/connector-files`. The File Connector reads from and writes to paths under this directory. **You will configure all File Connector File Path settings as `/connector-files/<some-path>`.**
+JIM ships with a formal Docker volume (`jim-connector-files-volume`) mounted inside both the JIM Web and JIM Worker containers at `/connector-files`. The File Connector reads from and writes to paths under this directory. **You will configure all File Connector File Path settings as `/connector-files/<some-path>`.**
 
 There are two patterns for getting files into and out of `/connector-files`. Most deployments use both at the same time, depending on the integration.
 
@@ -44,18 +44,18 @@ There are two patterns for getting files into and out of `/connector-files`. Mos
 
 This is the simplest pattern and the recommended starting point. The volume is created and managed by Docker; ownership is set automatically so the JIM container's runtime user can read and write to it without any host-side permission tweaking.
 
-You don't need to configure anything in your `docker-compose.yml` — the volume is part of the bundled JIM compose files. To put a file into the volume, stream it through the worker container so the resulting file is owned by the JIM runtime user:
+You don't need to configure anything in your `docker-compose.yml`; the volume is part of the bundled JIM compose files. To put a file into the volume, stream it through the worker container so the resulting file is owned by the JIM runtime user:
 
 ```bash
 docker exec -i -u app jim.worker sh -c 'cat > /connector-files/Users.csv' < ./Users.csv
 ```
 
-The `-u app` flag is important: it runs the shell inside the container as the JIM runtime user (UID 1654), so the file lands with the correct ownership. This matters when JIM will later rewrite the same file — for example in **Export Only** or **Bidirectional** mode, or whenever schema discovery is triggered on an existing file.
+The `-u app` flag is important: it runs the shell inside the container as the JIM runtime user (UID 1654), so the file lands with the correct ownership. This matters when JIM will later rewrite the same file, for example in **Export Only** or **Bidirectional** mode, or whenever schema discovery is triggered on an existing file.
 
 !!! warning "Don't use `docker cp` to push files JIM will rewrite"
     `docker cp ./file jim.worker:/path` is tempting but preserves your host UID/GID. The resulting file is not writable by the JIM runtime user (UID 1654), so any subsequent JIM export against that file will fail with an "Access to the path … is denied" error. Use the `docker exec … cat >` form above instead.
 
-    Reading *out* of the volume with `docker cp` is fine — the file on the host takes your local UID, which is what you usually want:
+    Reading *out* of the volume with `docker cp` is fine; the file on the host takes your local UID, which is what you usually want:
 
     ```bash
     docker cp jim.worker:/connector-files/Exports.csv ./Exports.csv
@@ -69,7 +69,7 @@ When to use this pattern:
 
 ### 2. Integration: bind-mount over a subdirectory
 
-Use this pattern when an external system writes files to a fixed location you cannot change — typically a network share (SMB/CIFS or NFS) the customer's HR system writes to nightly.
+Use this pattern when an external system writes files to a fixed location you cannot change, typically a network share (SMB/CIFS or NFS) the customer's HR system writes to nightly.
 
 You bind-mount the host path over a *subdirectory* of `/connector-files`. JIM still sees a unified `/connector-files` filesystem; only the specific subdirectory's contents come from the host.
 
@@ -88,7 +88,7 @@ services:
 Then configure the File Connector with `File Path = /connector-files/hr-input/employees.csv`.
 
 !!! warning "Permissions on bind-mounted paths"
-    The JIM container runs as a non-root user (UID 1654, named `app`). The default named volume is owned by this user, so writes work out of the box. Bind-mounted host paths preserve host UID/GID — so if your HR system writes files owned by a different UID, the JIM worker may not have read access (for imports) or write access (for exports). Either:
+    The JIM container runs as a non-root user (UID 1654, named `app`). The default named volume is owned by this user, so writes work out of the box. Bind-mounted host paths preserve host UID/GID, so if your HR system writes files owned by a different UID, the JIM worker may not have read access (for imports) or write access (for exports). Either:
 
     - Make the host directory readable/writable by UID 1654 (`chown 1654:1654 /mnt/hr-extracts`), or
     - Adjust your network share's mount options (`uid=1654,gid=1654` for CIFS, or apply NFS UID-mapping) so files appear to be owned by UID 1654 inside the container.
@@ -103,7 +103,7 @@ The patterns combine naturally. A typical deployment looks like this:
 services:
   jim.worker:
     volumes:
-      # Default volume is already wired up — JIM uses it for exports and ad-hoc imports.
+      # Default volume is already wired up; JIM uses it for exports and ad-hoc imports.
       # No line needed here; comes from the base docker-compose.yml.
 
       # Pull HR extracts directly from the network share they're written to.
@@ -136,7 +136,7 @@ In **Export Only** mode where no file exists yet, schema discovery creates a min
 
 The error `File not found: '/connector-files/Users.csv'` indicates the file is not accessible at the specified path inside the container.
 
-- For named-volume files: confirm the file is in the volume — `docker exec jim.worker ls /connector-files`.
+- For named-volume files: confirm the file is in the volume: `docker exec jim.worker ls /connector-files`.
 - For bind-mounted paths: verify the host path exists and is mounted in `docker-compose.yml` (`docker compose config | grep connector-files`).
 - Paths are case-sensitive on Linux. Make sure the File Path in JIM matches the actual filename exactly.
 

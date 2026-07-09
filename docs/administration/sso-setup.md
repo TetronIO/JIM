@@ -103,7 +103,7 @@ To enable OAuth authentication in the Scalar API reference:
 
 Configuring the PowerShell module now means administrators and automation scripts can connect to JIM interactively with their SSO account, without needing to issue or manage API keys. You can skip this step if you don't plan to use the PowerShell module, but it only takes a moment and is worth doing up front.
 
-Entra ID allows a single app registration to serve both the JIM web application (confidential client with a secret) and the PowerShell module (public client using PKCE with a loopback redirect). You can reuse the same app registration from Step 1 — just add a new platform for the PowerShell flow:
+Entra ID allows a single app registration to serve both the JIM web application (confidential client with a secret) and the PowerShell module (public client using PKCE with a loopback redirect). You can reuse the same app registration from Step 1; just add a new platform for the PowerShell flow:
 
 1. Go to **Authentication**
 2. Click **Add a platform**
@@ -370,7 +370,7 @@ If you need separate API clients for service-to-service communication:
 
 Configuring the PowerShell module now means administrators and automation scripts can connect to JIM interactively with their SSO account, without needing to issue or manage API keys.
 
-The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based authentication. **Keycloak requires this to be a separate client** from the confidential web client — a single Keycloak client cannot be both confidential (with a secret) and public (PKCE/loopback). You must create a second, public client and tell JIM about it via `JIM_SSO_PUBLIC_CLIENT_ID` in Step 7.
+The JIM PowerShell module uses OAuth 2.0 with PKCE for interactive browser-based authentication. **Keycloak requires this to be a separate client** from the confidential web client: a single Keycloak client cannot be both confidential (with a secret) and public (PKCE/loopback). You must create a second, public client and tell JIM about it via `JIM_SSO_PUBLIC_CLIENT_ID` in Step 7.
 
 1. Navigate to **Clients**
 2. Click **Create client**
@@ -448,11 +448,11 @@ JIM uses two kinds of OAuth 2.0 clients, and depending on your identity provider
 | Client | Used by | Authentication | Configured via |
 |--------|---------|----------------|----------------|
 | **Confidential** | The JIM web application (Blazor UI) | A stored client secret sent directly from the backend to the IdP's token endpoint. Never exposed to the browser. | `JIM_SSO_CLIENT_ID` and `JIM_SSO_SECRET` |
-| **Public** | Interactive clients that run on the user's machine (PowerShell module, future CLI tools) | PKCE with a loopback redirect URI (`http://localhost:8400/callback/`). No secret — the IdP relies on PKCE to bind the authorisation response to the original client. | `JIM_SSO_PUBLIC_CLIENT_ID` (falls back to `JIM_SSO_CLIENT_ID` when unset) |
+| **Public** | Interactive clients that run on the user's machine (PowerShell module, future CLI tools) | PKCE with a loopback redirect URI (`http://localhost:8400/callback/`). No secret; the IdP relies on PKCE to bind the authorisation response to the original client. | `JIM_SSO_PUBLIC_CLIENT_ID` (falls back to `JIM_SSO_CLIENT_ID` when unset) |
 
 **When are these the same registration?**
 
-- **Microsoft Entra ID**: One app registration can have both a Web platform (for the confidential flow) and a Mobile/Desktop platform (for the public flow). In this case, leave `JIM_SSO_PUBLIC_CLIENT_ID` unset — the PowerShell module uses the same Application (client) ID as the web application.
+- **Microsoft Entra ID**: One app registration can have both a Web platform (for the confidential flow) and a Mobile/Desktop platform (for the public flow). In this case, leave `JIM_SSO_PUBLIC_CLIENT_ID` unset; the PowerShell module uses the same Application (client) ID as the web application.
 - **AD FS**: A single Application Group can include both a web application and a native application that share a Client Identifier. Leave `JIM_SSO_PUBLIC_CLIENT_ID` unset in that case.
 
 **When must they be different?**
@@ -464,8 +464,8 @@ JIM uses two kinds of OAuth 2.0 clients, and depending on your identity provider
 
 The JIM server exposes `/api/v1/auth/config`, an unauthenticated discovery endpoint that interactive clients call to learn how to authenticate. It returns:
 
-- `authority`: the OIDC authority URL — `JIM_SSO_PUBLIC_AUTHORITY` if set, else `JIM_SSO_AUTHORITY`
-- `clientId`: the client ID for public/PKCE flows — `JIM_SSO_PUBLIC_CLIENT_ID` if set, else `JIM_SSO_CLIENT_ID`
+- `authority`: the OIDC authority URL (`JIM_SSO_PUBLIC_AUTHORITY` if set, else `JIM_SSO_AUTHORITY`)
+- `clientId`: the client ID for public/PKCE flows (`JIM_SSO_PUBLIC_CLIENT_ID` if set, else `JIM_SSO_CLIENT_ID`)
 - `scopes`: the OAuth scopes to request: `openid`, `profile`, `offline_access`, and (when set) `JIM_SSO_API_SCOPE`
 
 Backend token validation (the JWT bearer middleware that protects `/api/**` endpoints) always uses `JIM_SSO_AUTHORITY` for issuer and JWKS, and `JIM_SSO_API_SCOPE` for the audience, regardless of which public client issued the token. As long as the public and confidential clients belong to the same realm/tenant and both request the same API scope, tokens from either are valid.

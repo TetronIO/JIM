@@ -1102,13 +1102,13 @@ Every CVE entry in `.trivyignore` MUST be preceded by a comment block containing
 2. **Affected component** (package name and version range)
 3. **Why Trivy flags it** (false positive mechanism or mitigation chain)
 4. **Where the real mitigation lives** (PR number, NuGet pin, or code reference)
-5. **Review date** — typically 3 months out. This is the hook to re-check whether the suppression is still needed (e.g., Trivy's matching may have been corrected, or the upstream image may have been rebuilt).
+5. **Review date**: typically 3 months out. This is the hook to re-check whether the suppression is still needed (e.g., Trivy's matching may have been corrected, or the upstream image may have been rebuilt).
 
 See the existing entries in `.trivyignore` for the canonical format. PR [#581](https://github.com/TetronIO/JIM/pull/581) established this pattern for `CVE-2026-26171` and `CVE-2026-33116`.
 
 **Review discipline:**
 
-Suppressions that pass their review date without action are a quiet failure mode — stale suppressions silently mask real vulnerabilities. When touching `.trivyignore` for any reason, re-evaluate entries whose review date has passed. Remove entries that are no longer justified; extend the review date with a fresh justification if they still are.
+Suppressions that pass their review date without action are a quiet failure mode: stale suppressions silently mask real vulnerabilities. When touching `.trivyignore` for any reason, re-evaluate entries whose review date has passed. Remove entries that are no longer justified; extend the review date with a fresh justification if they still are.
 
 #### GitHub Actions
 
@@ -1145,13 +1145,13 @@ docker compose exec jim.web dotnet ef database update
 
 ## File Connector Setup
 
-The JIM File Connector imports and exports identity data via CSV files. JIM ships with a Docker-managed named volume — `jim-connector-files-volume` — mounted at `/connector-files` inside both the JIM Web and JIM Worker containers. The connector reads and writes paths under that directory. The customer-facing reference is in [docs/connectors/jim-file-connector.md](../docs/connectors/jim-file-connector.md); this section is the developer-flavour view.
+The JIM File Connector imports and exports identity data via CSV files. JIM ships with a Docker-managed named volume (`jim-connector-files-volume`) mounted at `/connector-files` inside both the JIM Web and JIM Worker containers. The connector reads and writes paths under that directory. The customer-facing reference is in [docs/connectors/jim-file-connector.md](../docs/connectors/jim-file-connector.md); this section is the developer-flavour view.
 
 ### Why a named volume
 
-The worker container runs as the non-root `app` user (UID 1654). Bind-mounting a host directory into the container preserves the host UID, which usually doesn't match — so JIM can't write to it without explicit `chown` or mount-option intervention. Docker-managed named volumes inherit ownership from the container's mount point at first mount, so `app` always has read/write access. For dev and for the default customer deployment we use the named volume; for integration with external systems that write to fixed host paths, customers bind-mount over a subdirectory of `/connector-files`.
+The worker container runs as the non-root `app` user (UID 1654). Bind-mounting a host directory into the container preserves the host UID, which usually doesn't match, so JIM can't write to it without explicit `chown` or mount-option intervention. Docker-managed named volumes inherit ownership from the container's mount point at first mount, so `app` always has read/write access. For dev and for the default customer deployment we use the named volume; for integration with external systems that write to fixed host paths, customers bind-mount over a subdirectory of `/connector-files`.
 
-This is the same model dev and production use — there is no special dev override.
+This is the same model dev and production use; there is no special dev override.
 
 ### Getting files into the volume during dev
 
@@ -1161,7 +1161,7 @@ Use `docker cp` against the worker container:
 docker cp ./Users.csv jim.worker:/connector-files/Users.csv
 ```
 
-The integration test harness uses the helper `Copy-CsvToConnectorFiles` in `test/integration/utils/Test-Helpers.ps1` to push test CSVs to `/connector-files/test-data/` — see `Generate-TestCSV.ps1` for the seeding pattern.
+The integration test harness uses the helper `Copy-CsvToConnectorFiles` in `test/integration/utils/Test-Helpers.ps1` to push test CSVs to `/connector-files/test-data/`; see `Generate-TestCSV.ps1` for the seeding pattern.
 
 ### Getting files out of the volume
 
@@ -1192,15 +1192,15 @@ services:
 
 JIM still sees `/connector-files` as a single filesystem; only the `hr-input` subdirectory comes from the host. The File Connector setting becomes `/connector-files/hr-input/employees.csv`.
 
-For bind-mounted host paths, ensure the host files are readable/writable by UID 1654 — either `chown 1654:1654 /mnt/hr-extracts` or set mount options like `uid=1654,gid=1654` for CIFS/NFS.
+For bind-mounted host paths, ensure the host files are readable/writable by UID 1654: either `chown 1654:1654 /mnt/hr-extracts` or set mount options like `uid=1654,gid=1654` for CIFS/NFS.
 
 ### Troubleshooting
 
-**File not found** — confirm the file is in the volume: `docker exec jim.worker ls /connector-files`. For bind-mounted subdirs, verify the host path is mounted: `docker compose config | grep connector-files`.
+**File not found**: confirm the file is in the volume: `docker exec jim.worker ls /connector-files`. For bind-mounted subdirs, verify the host path is mounted: `docker compose config | grep connector-files`.
 
-**Access denied during export** — the JIM worker (UID 1654) doesn't have write access to a bind-mounted host path. Either `chown -R 1654:1654 /your/host/path` or set the mount UID. The default named volume doesn't have this problem.
+**Access denied during export**: the JIM worker (UID 1654) doesn't have write access to a bind-mounted host path. Either `chown -R 1654:1654 /your/host/path` or set the mount UID. The default named volume doesn't have this problem.
 
-**Permission errors surface as RPEIs** — `Access to the path … is denied` will appear on the Activity for the failing import or export, not be silently swallowed.
+**Permission errors surface as RPEIs**: `Access to the path … is denied` will appear on the Activity for the failing import or export, not be silently swallowed.
 
 ## PowerShell Module Development
 

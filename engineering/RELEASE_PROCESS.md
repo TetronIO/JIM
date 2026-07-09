@@ -277,7 +277,7 @@ The OIDC redirect URIs configured in your identity provider must match the JIM s
 
 #### Step 7: File Connector storage (if using the File Connector)
 
-The File Connector ships pre-configured to read and write at `/connector-files` inside the container, backed by the Docker-managed `jim-connector-files-volume`. **Default deployments need no setup** — start the stack and the volume is created automatically with correct ownership.
+The File Connector ships pre-configured to read and write at `/connector-files` inside the container, backed by the Docker-managed `jim-connector-files-volume`. **Default deployments need no setup**: start the stack and the volume is created automatically with correct ownership.
 
 To put CSV files in or pull them out:
 
@@ -291,7 +291,7 @@ docker cp jim.worker:/connector-files/Exports.csv /path/to/Exports.csv
 
 Configure the File Connector's File Path setting as `/connector-files/Users.csv`.
 
-For integrating with external systems that write to fixed network locations (SMB/NFS), bind-mount the host path over a subdirectory of `/connector-files` — see [docs/connectors/jim-file-connector.md](../docs/connectors/jim-file-connector.md#file-access) for the full pattern, including the UID 1654 ownership requirement for bind-mounted host paths.
+For integrating with external systems that write to fixed network locations (SMB/NFS), bind-mount the host path over a subdirectory of `/connector-files`; see [docs/connectors/jim-file-connector.md](../docs/connectors/jim-file-connector.md#file-access) for the full pattern, including the UID 1654 ownership requirement for bind-mounted host paths.
 
 #### Step 8: Start Services
 
