@@ -376,10 +376,14 @@ try {
         Write-Host "Running Full Import (Primary)..." -ForegroundColor Gray
         $importResult = Start-JIMRunProfile -ConnectedSystemId $primarySystem.id -RunProfileId $primaryFullImport.id -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import (Primary)"
+        # Fixed six-user dataset: importing more means the directory retained stale objects from an earlier
+        # scenario (see Assert-ImportedObjectCount). Fail loudly here rather than hours into a full regression.
+        Assert-ImportedObjectCount -ActivityId $importResult.activityId -Expected 6 -Name "Full Import (Primary)"
 
         Write-Host "Running Full Import (Secondary)..." -ForegroundColor Gray
         $importResult = Start-JIMRunProfile -ConnectedSystemId $secondarySystem.id -RunProfileId $secondaryFullImport.id -Wait -PassThru
         Assert-ActivitySuccess -ActivityId $importResult.activityId -Name "Full Import (Secondary)"
+        Assert-ImportedObjectCount -ActivityId $importResult.activityId -Expected 6 -Name "Full Import (Secondary)"
 
         if ($WaitSeconds -gt 0) { Start-Sleep -Seconds $WaitSeconds }
 

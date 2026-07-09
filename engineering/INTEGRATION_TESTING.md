@@ -228,7 +228,9 @@ See [Data Scale Templates](#data-scale-templates) for detailed template specific
 
 ## Test Lifecycle Quick Reference
 
-Integration tests require a complete environment reset between runs to ensure repeatable, idempotent results. This includes resetting **both** external systems (Samba AD, databases) **and** JIM itself (metaverse, configuration).
+Integration tests require a complete environment reset between runs to ensure repeatable, idempotent results. This includes resetting **both** external systems (Samba AD, OpenLDAP, databases) **and** JIM itself (metaverse, configuration).
+
+> **Directory reset between scenarios (full-regression runs):** the runner's per-scenario `Reset-JIMForNextScenario` removes the JIM database volume and clears the test data from *both* directory types. Samba AD's test OUs are deleted; OpenLDAP's `ou=People` and `ou=Groups` subtrees under `dc=yellowstone,dc=local` and `dc=glitterband,dc=local` are deleted and the empty base OUs recreated. OpenLDAP is a long-lived container whose data volume is not removed between scenarios, so without this explicit purge each OpenLDAP scenario would import the accumulated objects of every earlier OpenLDAP scenario. Fixed-size scenarios should assert their expected object count (see `Assert-ImportedObjectCount`) so a reset gap fails loudly rather than silently synchronising stale data.
 
 ### DevContainer / Local Development
 
