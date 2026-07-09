@@ -8,6 +8,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -315,6 +316,14 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
                 }
 
                 LogPageMemoryDiagnostics(i, totalCsoPages);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not SyncPersistenceException)
+            {
+                // Attribute the persistence failure (page, Connected System, affected object ids) before it
+                // propagates to the worker's activity-failure handler, which otherwise records only a generic
+                // "unhandled exception". This is a hard failure: we rethrow so the run stops rather than
+                // continuing with a page that did not fully persist (Synchronisation Integrity).
+                throw CreatePagePersistenceException(i, totalCsoPages, ex);
             }
             finally
             {

@@ -7,6 +7,7 @@ using JIM.Application.Interfaces;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
@@ -255,6 +256,13 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
                 }
 
                 LogPageMemoryDiagnostics(page, totalCsoPages);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not SyncPersistenceException)
+            {
+                // Attribute the persistence failure before it reaches the worker's activity-failure handler.
+                // Hard failure: rethrow so the run stops rather than continuing with a partially persisted page
+                // (Synchronisation Integrity).
+                throw CreatePagePersistenceException(page, totalCsoPages, ex);
             }
             finally
             {
