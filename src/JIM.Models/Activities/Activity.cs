@@ -17,7 +17,7 @@ public class Activity
 {
     /// <summary>
     /// The <see cref="TargetName"/> prefix used by Attribute Flow mapping activities (which carry
-    /// <see cref="ActivityTargetType.SyncRule"/> as a mapping has no target type of its own). Shared so the UI can
+    /// <see cref="ActivityTargetType.SynchronisationRule"/> as a mapping has no target type of its own). Shared so the UI can
     /// recognise a mapping activity and deep-link its target to the rule's Attribute Flow tab.
     /// </summary>
     public const string SyncRuleMappingTargetNamePrefix = "Mapping to ";
@@ -419,7 +419,7 @@ public class Activity
         switch (targetType)
         {
             case ActivityTargetType.ConnectedSystem: ConnectedSystemId ??= targetObjectId; break;
-            case ActivityTargetType.SyncRule: SyncRuleId ??= targetObjectId; break;
+            case ActivityTargetType.SynchronisationRule: SyncRuleId ??= targetObjectId; break;
             case ActivityTargetType.MetaverseAttribute: MetaverseAttributeId ??= targetObjectId; break;
             case ActivityTargetType.MetaverseObjectType: MetaverseObjectTypeId ??= targetObjectId; break;
             case ActivityTargetType.PredefinedSearch: PredefinedSearchId ??= targetObjectId; break;

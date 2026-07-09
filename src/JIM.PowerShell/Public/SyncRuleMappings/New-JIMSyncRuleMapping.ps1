@@ -4,16 +4,16 @@
 function New-JIMSyncRuleMapping {
     <#
     .SYNOPSIS
-        Creates a new Sync Rule Mapping (attribute flow rule) in JIM.
+        Creates a new Synchronisation Rule Mapping (attribute flow rule) in JIM.
 
     .DESCRIPTION
-        Creates a new attribute flow mapping for a Sync Rule.
+        Creates a new attribute flow mapping for a Synchronisation Rule.
         For Import rules, this maps Connected System attributes to Metaverse attributes.
         For Export rules, this maps Metaverse attributes to Connected System attributes.
         Alternatively, an expression can be used as the source for dynamic value generation.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Sync Rule to add the mapping to.
+        The unique identifier of the Synchronisation Rule to add the mapping to.
         Also accepts pipeline input via the Id property.
 
     .PARAMETER TargetMetaverseAttributeId
@@ -53,7 +53,7 @@ function New-JIMSyncRuleMapping {
         or Title.
 
     .OUTPUTS
-        PSCustomObject representing the created Sync Rule Mapping.
+        PSCustomObject representing the created Synchronisation Rule Mapping.
 
     .EXAMPLE
         New-JIMSyncRuleMapping -SyncRuleId 1 -TargetMetaverseAttributeId 5 -SourceConnectedSystemAttributeId 10
@@ -223,18 +223,18 @@ function New-JIMSyncRuleMapping {
             $targetDescription = "CS Attribute $TargetConnectedSystemAttributeId"
         }
 
-        if ($PSCmdlet.ShouldProcess("$targetDescription in Sync Rule $SyncRuleId", "Create Mapping")) {
-            Write-Verbose "Creating Sync Rule Mapping for Sync Rule: $SyncRuleId"
+        if ($PSCmdlet.ShouldProcess("$targetDescription in Synchronisation Rule $SyncRuleId", "Create Mapping")) {
+            Write-Verbose "Creating Synchronisation Rule Mapping for Synchronisation Rule: $SyncRuleId"
 
             try {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/mappings" -Method 'POST' -Body $body
 
-                Write-Verbose "Created Sync Rule Mapping with ID: $($result.id)"
+                Write-Verbose "Created Synchronisation Rule Mapping with ID: $($result.id)"
 
                 $result
             }
             catch {
-                Write-Error "Failed to create Sync Rule Mapping: $_"
+                Write-Error "Failed to create Synchronisation Rule Mapping: $_"
             }
         }
     }

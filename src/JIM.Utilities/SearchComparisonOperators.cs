@@ -10,7 +10,7 @@ namespace JIM.Utilities;
 /// The single source of truth for which <see cref="SearchComparisonType"/> operators are valid for a given
 /// attribute <see cref="AttributeDataType"/>. Pure and deterministic, with no dependencies on data access or DI,
 /// so every layer can share one rule: the REST API and PowerShell validation (<c>BuildCriterion</c>), the
-/// Predefined Search and Sync Rule scoping editors (operator dropdowns), the Sync Rule write path
+/// Predefined Search and Synchronisation Rule scoping editors (operator dropdowns), the Synchronisation Rule write path
 /// (<c>CreateOrUpdateSyncRuleAsync</c>), and the scoping evaluator.
 ///
 /// The returned lists are in canonical display order; presentation concerns (friendly labels such as

@@ -21,7 +21,7 @@
     Copyright = '(c) Tetron Limited. All rights reserved.'
 
     # Description of the functionality provided by this module
-    Description = 'PowerShell module for administering JIM (Junctional Identity Manager). Provides cmdlets for managing Connected Systems, Sync Rules, Run Profiles, Metaverse Objects, Activities, API Keys, Certificates, and more. Supports both interactive (SSO) and non-interactive (API Key) authentication.'
+    Description = 'PowerShell module for administering JIM (Junctional Identity Manager). Provides cmdlets for managing Connected Systems, Synchronisation Rules, Run Profiles, Metaverse Objects, Activities, API Keys, Certificates, and more. Supports both interactive (SSO) and non-interactive (API Key) authentication.'
 
     # Minimum version of the PowerShell engine required by this module
     PowerShellVersion = '7.0'
@@ -52,7 +52,7 @@
         'Get-JIMPendingExport',
         'Clear-JIMConnectedSystem',
 
-        # Sync Rules
+        # Synchronisation Rules
         'Get-JIMSyncRule',
         'New-JIMSyncRule',
         'Set-JIMSyncRule',
@@ -61,7 +61,7 @@
         # Configuration Change History
         'Get-JIMConfigurationChangeHistory',
 
-        # Sync Rule Mappings
+        # Synchronisation Rule Mappings
         'Get-JIMSyncRuleMapping',
         'New-JIMSyncRuleMapping',
         'Remove-JIMSyncRuleMapping',

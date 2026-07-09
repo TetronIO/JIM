@@ -8,8 +8,8 @@ using JIM.Utilities;
 namespace JIM.Web.Models;
 
 /// <summary>
-/// UI presentation layer for comparison operators in the criteria editors (Predefined Search and Sync Rule
-/// scoping). The set and order of valid operators per attribute type comes from the shared, layer-agnostic
+/// UI presentation layer for comparison operators in the criteria editors (Predefined Search and Synchronisation
+/// Rule scoping). The set and order of valid operators per attribute type comes from the shared, layer-agnostic
 /// <see cref="SearchComparisonOperators"/> rule; this type only adds the friendly, type-specific labels
 /// (for example DateTime renders "before" / "on or before" rather than "less than"). Keeping the labels here
 /// means both editors stay consistent without duplicating either the validity rule or the wording.

@@ -57,11 +57,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 The Activity list's Type column, and other Activity displays, no longer show the abbreviated "Sync Rule" for Synchronisation Rule activities. The underlying `ActivityTargetType.SyncRule` value is renamed to `SynchronisationRule` (a breaking REST API and OpenAPI schema change, acceptable pre-v1.0), and PowerShell help text and messages across the Synchronisation Rule cmdlets now consistently say "Synchronisation Rule" in full.
 - 🔄 When more than one Connected System contributes to the same Metaverse attribute, JIM now resolves the value by attribute priority instead of by synchronisation timing (last-writer-wins). Single-source attributes are unaffected; existing multi-source attributes resolve deterministically until you set an explicit priority order.
 - 🔄 When the source currently providing a multi-source attribute disconnects, JIM now hands the attribute to the next-priority Connected System still contributing it, rather than clearing the value. The attribute is only cleared when no other source contributes.
 - 🔄 The Activity children REST endpoint (`GET /api/v1/activities/{id}/children`) and the `Get-JIMActivityChildren` cmdlet are now paged, so a parent with many child activities no longer returns them all in one response. The endpoint now returns a paged envelope instead of a bare array, and the cmdlet gains `-Page`, `-PageSize`, and `-All` (it still emits one object per child to the pipeline). `Get-JIMActivityChildren` is also now exported from the module, having previously been unreachable.
 - 🔄 Attribute hand-over on source disconnection now also covers reference attributes (such as a manager) in the same synchronisation run, and correctly retains a value when the surviving source holds an identical copy; previously an identical value could be cleared until the surviving source next synchronised.
 - 🔄 Attribute hand-over now also triggers when a still-connected source simply stops supplying a value: the next-priority contributor takes over in the same synchronisation run instead of the attribute staying blank until that contributor next synchronises.
+- 🔄 A Connected System's Settings tab now groups its top-level setting categories (Connectivity, General, Export, and so on) into a collapsible accordion, matching the style already used on the Metaverse Object detail page, and separates multiple second-level setting headings within a category with a full-width divider line, making dense connector settings easier to scan.
 
 ### Performance
 

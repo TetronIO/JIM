@@ -56,7 +56,7 @@ public class ConnectedSystemServer
     private async Task CaptureConfigurationChangeAsync(Activity activity, SyncRule syncRule, string? changeReason)
     {
         await Application.ConfigurationChangeCapture.CaptureChangeAsync(activity, changeReason,
-            ActivityTargetType.SyncRule, syncRule.Id,
+            ActivityTargetType.SynchronisationRule, syncRule.Id,
             hashKey => Task.FromResult<ConfigurationSnapshot?>(Application.ConfigurationSnapshots.CreateSnapshot(syncRule, hashKey)),
             $"Synchronisation Rule {syncRule.Id}");
     }
@@ -4268,7 +4268,7 @@ public class ConnectedSystemServer
         {
             TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
             TargetContext = mapping.SyncRule?.Name,
-            TargetType = ActivityTargetType.SyncRule,
+            TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
             TargetOperationType = ActivityTargetOperationType.Create
         };
@@ -4306,7 +4306,7 @@ public class ConnectedSystemServer
         {
             TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
             TargetContext = mapping.SyncRule?.Name,
-            TargetType = ActivityTargetType.SyncRule,
+            TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
             TargetOperationType = ActivityTargetOperationType.Create
         };
@@ -4346,7 +4346,7 @@ public class ConnectedSystemServer
         {
             TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
             TargetContext = mapping.SyncRule?.Name,
-            TargetType = ActivityTargetType.SyncRule,
+            TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
             TargetOperationType = ActivityTargetOperationType.Update
         };
@@ -4377,7 +4377,7 @@ public class ConnectedSystemServer
         {
             TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
             TargetContext = mapping.SyncRule?.Name,
-            TargetType = ActivityTargetType.SyncRule,
+            TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
             TargetOperationType = ActivityTargetOperationType.Delete
         };
@@ -4414,7 +4414,7 @@ public class ConnectedSystemServer
         {
             TargetName = $"{Activity.SyncRuleMappingTargetNamePrefix}{targetName}",
             TargetContext = mapping.SyncRule?.Name,
-            TargetType = ActivityTargetType.SyncRule,
+            TargetType = ActivityTargetType.SynchronisationRule,
             SyncRuleId = mapping.SyncRule?.Id ?? mapping.SyncRuleId,
             TargetOperationType = ActivityTargetOperationType.Delete
         };
@@ -4649,7 +4649,7 @@ public class ConnectedSystemServer
         return new Activity
         {
             TargetName = $"Attribute priority order for {attributeName}",
-            TargetType = ActivityTargetType.SyncRule,
+            TargetType = ActivityTargetType.SynchronisationRule,
             TargetOperationType = ActivityTargetOperationType.Update
         };
     }
@@ -4721,7 +4721,7 @@ public class ConnectedSystemServer
             var childActivity = new Activity
             {
                 TargetName = rule.Name,
-                TargetType = ActivityTargetType.SyncRule,
+                TargetType = ActivityTargetType.SynchronisationRule,
                 TargetOperationType = ActivityTargetOperationType.Update,
                 SyncRuleId = ruleId,
                 ParentActivityId = parentActivity.Id,
@@ -5506,7 +5506,7 @@ public class ConnectedSystemServer
         {
             TargetName = syncRule.Name,
             TargetContext = connectedSystemForContext?.Name,
-            TargetType = ActivityTargetType.SyncRule,
+            TargetType = ActivityTargetType.SynchronisationRule,
             ParentActivityId = parentActivity?.Id
         };
 
@@ -5588,7 +5588,7 @@ public class ConnectedSystemServer
         {
             TargetName = syncRule.Name,
             TargetContext = connectedSystemForContext?.Name,
-            TargetType = ActivityTargetType.SyncRule,
+            TargetType = ActivityTargetType.SynchronisationRule,
             ParentActivityId = parentActivity?.Id
         };
 
@@ -5625,7 +5625,7 @@ public class ConnectedSystemServer
         {
             TargetName = syncRule.Name,
             TargetContext = connectedSystem?.Name,
-            TargetType = ActivityTargetType.SyncRule,
+            TargetType = ActivityTargetType.SynchronisationRule,
             TargetOperationType = ActivityTargetOperationType.Delete
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
@@ -5655,7 +5655,7 @@ public class ConnectedSystemServer
         {
             TargetName = syncRule.Name,
             TargetContext = connectedSystem?.Name,
-            TargetType = ActivityTargetType.SyncRule,
+            TargetType = ActivityTargetType.SynchronisationRule,
             TargetOperationType = ActivityTargetOperationType.Delete
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);

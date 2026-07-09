@@ -135,8 +135,8 @@ public class ConfigurationChangeHistoryApiTests
     public async Task GetSyncRuleChangeHistoryAsync_ReturnsPaginatedItemsAsync()
     {
         var rows = new List<ConfigurationChangeActivityData> { Data(1, ActivityTargetOperationType.Create, SyncRuleSnapJson("HR Inbound")) };
-        _activityRepo.Setup(r => r.GetConfigurationChangeCountAsync(ActivityTargetType.SyncRule, 55)).ReturnsAsync(1);
-        _activityRepo.Setup(r => r.GetConfigurationChangeActivitiesAsync(ActivityTargetType.SyncRule, 55, 0, It.IsAny<int>())).ReturnsAsync(rows);
+        _activityRepo.Setup(r => r.GetConfigurationChangeCountAsync(ActivityTargetType.SynchronisationRule, 55)).ReturnsAsync(1);
+        _activityRepo.Setup(r => r.GetConfigurationChangeActivitiesAsync(ActivityTargetType.SynchronisationRule, 55, 0, It.IsAny<int>())).ReturnsAsync(rows);
 
         var payload = await OkPayload<PaginatedResponse<ConfigurationChangeHistoryItem>>(
             _controller.GetSyncRuleChangeHistoryAsync(55, new PaginationRequest()));

@@ -596,7 +596,7 @@ public abstract class SyncTaskProcessorBase
         catch (SyncExpressionEvaluationException expressionEx)
         {
             // An inbound attribute-flow expression threw while evaluating. This is a configuration/data
-            // issue with the sync rule's expression, not a JIM bug: error the object (so it is surfaced
+            // issue with the Synchronisation Rule's expression, not a JIM bug: error the object (so it is surfaced
             // loudly and never silently swallowed) but let the activity continue for other objects. The
             // CSO's pending attribute changes are discarded (never applied), so the MVO is left untouched.
             var runProfileExecutionItem = _activity.PrepareRunProfileExecutionItem();

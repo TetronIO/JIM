@@ -4,13 +4,13 @@
 function Remove-JIMSyncRuleMapping {
     <#
     .SYNOPSIS
-        Removes a Sync Rule Mapping (attribute flow rule) from JIM.
+        Removes a Synchronisation Rule Mapping (attribute flow rule) from JIM.
 
     .DESCRIPTION
-        Deletes an attribute flow mapping from a Sync Rule.
+        Deletes an attribute flow mapping from a Synchronisation Rule.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Sync Rule.
+        The unique identifier of the Synchronisation Rule.
 
     .PARAMETER MappingId
         The unique identifier of the Mapping to delete.
@@ -27,7 +27,7 @@ function Remove-JIMSyncRuleMapping {
     .EXAMPLE
         Remove-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 5
 
-        Removes the mapping with ID 5 from Sync Rule 1 after confirmation.
+        Removes the mapping with ID 5 from Synchronisation Rule 1 after confirmation.
 
     .EXAMPLE
         Remove-JIMSyncRuleMapping -SyncRuleId 1 -MappingId 5 -Force
@@ -37,7 +37,7 @@ function Remove-JIMSyncRuleMapping {
     .EXAMPLE
         Get-JIMSyncRuleMapping -SyncRuleId 1 | Remove-JIMSyncRuleMapping -SyncRuleId 1
 
-        Removes all mappings from Sync Rule 1 (with confirmation for each).
+        Removes all mappings from Synchronisation Rule 1 (with confirmation for each).
 
     .LINK
         Get-JIMSyncRuleMapping
@@ -67,22 +67,22 @@ function Remove-JIMSyncRuleMapping {
         }
 
         $mapId = if ($InputObject) { $InputObject.id } else { $MappingId }
-        $displayName = "Mapping $mapId in Sync Rule $SyncRuleId"
+        $displayName = "Mapping $mapId in Synchronisation Rule $SyncRuleId"
 
         if ($Force -and -not $Confirm) {
             $ConfirmPreference = 'None'
         }
 
-        if ($PSCmdlet.ShouldProcess($displayName, "Remove Sync Rule Mapping")) {
-            Write-Verbose "Removing Sync Rule Mapping: $mapId from Sync Rule: $SyncRuleId"
+        if ($PSCmdlet.ShouldProcess($displayName, "Remove Synchronisation Rule Mapping")) {
+            Write-Verbose "Removing Synchronisation Rule Mapping: $mapId from Synchronisation Rule: $SyncRuleId"
 
             try {
                 $null = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/mappings/$mapId" -Method 'DELETE'
 
-                Write-Verbose "Removed Sync Rule Mapping: $mapId"
+                Write-Verbose "Removed Synchronisation Rule Mapping: $mapId"
             }
             catch {
-                Write-Error "Failed to remove Sync Rule Mapping: $_"
+                Write-Error "Failed to remove Synchronisation Rule Mapping: $_"
             }
         }
     }
