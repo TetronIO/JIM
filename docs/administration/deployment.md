@@ -194,7 +194,7 @@ Before deploying JIM in an air-gapped environment, ensure you have:
 ### Step 1: Transfer and Verify the Bundle
 
 ```bash
-# Transfer jim-release-X.Y.Z.tar.gz via approved media (USB, DVD, etc.)
+# Transfer jim-release-X.Y.Z.tar.gz via approved process
 
 # Extract the bundle
 tar -xzf jim-release-X.Y.Z.tar.gz
@@ -514,7 +514,8 @@ For air-gapped deployments, also verify:
 - [ ] SSO/OIDC identity provider is accessible from JIM server
 - [ ] DNS resolves JIM server name correctly
 - [ ] TLS certificates are valid and trusted (if using HTTPS)
-- [ ] Firewall allows traffic on required ports (5200/HTTP, 443/HTTPS, 5432/PostgreSQL)
+- [ ] Firewall allows inbound traffic to JIM's web port only (your chosen host port, e.g. 443 via reverse proxy, or the mapped HTTP port). The bundled PostgreSQL container publishes no host port; the database is reached only over the internal `jim-network` bridge
+- [ ] *If using an external PostgreSQL server:* the JIM host can reach it on 5432 (outbound, allowed on the database server's firewall)
 - [ ] File connector volumes mounted (if using File Connector)
 - [ ] Encryption key set backed up and included in the offline backup routine (see [Backup & Disaster Recovery](backup-recovery.md))
 - [ ] Initial admin user can log in
