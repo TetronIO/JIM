@@ -1529,7 +1529,13 @@ ou: Groups
 LDIF
 done
 '@
-        docker exec openldap-primary bash -c $openLdapPurge 2>&1 | Out-Null
+        # This .ps1 uses CRLF line endings, so the here-string above carries a trailing CR on
+        # every line. Passed to bash, each CR becomes part of the command: the LDAP URI parses
+        # as "ldap://localhost:1389\r" (rejected), and the heredoc terminator "LDIF\r" never
+        # matches "LDIF". Every ldapdelete/ldapadd then fails, '|| true' and Out-Null swallow the
+        # errors, and the purge silently no-ops, letting OpenLDAP pollution accumulate across
+        # scenarios. Strip CR so bash receives clean LF-terminated lines.
+        docker exec openldap-primary bash -c ($openLdapPurge -replace "`r", "") 2>&1 | Out-Null
     }
 
     # 4. Generate new API key and update .env
