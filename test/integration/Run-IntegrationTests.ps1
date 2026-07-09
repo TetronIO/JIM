@@ -343,7 +343,11 @@ function Invoke-ImagePrunePreservingSnapshots {
         $ids = docker images --filter "label=$label" -q 2>$null
         if ($ids) { $preserveIds += $ids }
     }
-    $preserveIds = $preserveIds | Sort-Object -Unique | Where-Object { $_ -ne "" }
+    # Wrap with @(...) so that when zero images carry a preserve label the pipeline yields an empty
+    # array rather than $null; under Set-StrictMode -Version Latest, $null.Count throws
+    # "The property 'Count' cannot be found on this object" and aborts Step 7 cleanup on an otherwise
+    # green run (same idiom used elsewhere in this file for StrictMode-safe .Count access).
+    $preserveIds = @($preserveIds | Sort-Object -Unique | Where-Object { $_ -ne "" })
 
     if ($preserveIds.Count -eq 0) {
         $result = docker image prune -af 2>&1

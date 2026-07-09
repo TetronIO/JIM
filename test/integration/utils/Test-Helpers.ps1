@@ -1651,7 +1651,7 @@ function Assert-ActivitySuccess {
 function Assert-ImportedObjectCount {
     <#
     .SYNOPSIS
-        Assert that an import (or sync) Activity processed exactly the expected number of objects.
+        Assert that an import Activity saw exactly the expected number of source objects.
 
     .DESCRIPTION
         Guards fixed-size scenarios against silent test-isolation failures. A scenario that populates a known,
@@ -1685,10 +1685,17 @@ function Assert-ImportedObjectCount {
     )
 
     $stats = Get-JIMActivityStats -ActivityId $ActivityId
-    $processed = [int]$stats.totalObjectsProcessed
+
+    # An import records the objects it saw through the CSO change counters, NOT totalObjectsProcessed:
+    # that counter belongs to the synchronisation phase and is always 0 for an import activity. Count
+    # every source object the import presented: new (adds) + changed (updates) + unchanged. Deletes are
+    # excluded because a deleted object is no longer in the source. This stays correct whether the CSOs
+    # already existed (re-import) or not, and matches how Scenario 7/9 read import counts (totalCsoAdds).
+    $processed = [int]$stats.totalCsoAdds + [int]$stats.totalCsoUpdates + [int]$stats.totalUnchanged
 
     if ($processed -ne $Expected) {
-        throw "Test isolation check failed: '$Name' processed $processed object(s) but exactly $Expected were expected. " +
+        throw "Test isolation check failed: '$Name' processed $processed object(s) but exactly $Expected were expected " +
+            "(adds=$($stats.totalCsoAdds), updates=$($stats.totalCsoUpdates), unchanged=$($stats.totalUnchanged)). " +
             "This usually means the source directory was not reset between scenarios and still holds stale objects " +
             "from an earlier run. ActivityId: $ActivityId"
     }
