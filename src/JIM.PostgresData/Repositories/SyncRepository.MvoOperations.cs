@@ -473,11 +473,8 @@ public partial class SyncRepository
                         attributeValuesToInsert.Add((mvo.Id, av));
                 }
 
-                foreach (var existingId in existing)
-                {
-                    if (!currentIds.Contains(existingId))
-                        attributeValueIdsToDelete.Add(existingId);
-                }
+                foreach (var existingId in existing.Where(existingId => !currentIds.Contains(existingId)))
+                    attributeValueIdsToDelete.Add(existingId);
             }
 
             if (attributeValuesToInsert.Count > 0)
@@ -513,9 +510,11 @@ public partial class SyncRepository
         const int columnsPerRow = 12;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
+        // Reuse one StringBuilder across chunks (Clear() each iteration) rather than allocating per chunk.
+        var sql = new StringBuilder();
         foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
         {
-            var sql = new StringBuilder();
+            sql.Clear();
             sql.Append("""
                 UPDATE "MetaverseObjects" AS m SET
                     "LastUpdated" = v."LastUpdated",
@@ -618,9 +617,8 @@ public partial class SyncRepository
                 avEntry.State = EntityState.Detached;
         }
 
-        foreach (var mvo in metaverseObjects)
+        foreach (var entry in metaverseObjects.Select(mvo => _context.Entry(mvo)))
         {
-            var entry = _context.Entry(mvo);
             if (entry.State != EntityState.Detached)
                 entry.State = EntityState.Detached;
         }
