@@ -164,11 +164,8 @@ public class PendingDeletionDto
     /// <summary>The display name of the Metaverse Object.</summary>
     public string? DisplayName { get; set; }
 
-    /// <summary>The type of the Metaverse Object.</summary>
-    public string TypeName { get; set; } = null!;
-
-    /// <summary>The type ID of the Metaverse Object.</summary>
-    public int TypeId { get; set; }
+    /// <summary>The object type (id and name). Nested to match the single-object response shape.</summary>
+    public MetaverseObjectTypeDto Type { get; set; } = null!;
 
     /// <summary>When the last connector was disconnected from this MVO.</summary>
     public DateTime LastConnectorDisconnectedDate { get; set; }
@@ -220,8 +217,11 @@ public class PendingDeletionDto
         {
             Id = entity.Id,
             DisplayName = entity.DisplayName,
-            TypeName = entity.Type?.Name ?? "Unknown",
-            TypeId = entity.Type?.Id ?? 0,
+            Type = new MetaverseObjectTypeDto
+            {
+                Id = entity.Type?.Id ?? 0,
+                Name = entity.Type?.Name ?? "Unknown"
+            },
             LastConnectorDisconnectedDate = entity.LastConnectorDisconnectedDate!.Value,
             DeletionEligibleDate = entity.DeletionEligibleDate,
             DaysUntilDeletion = daysUntilDeletion,

@@ -21,14 +21,9 @@ public class RoleMemberDto
     public string? DisplayName { get; set; }
 
     /// <summary>
-    /// The object type ID.
+    /// The object type (id and name). Nested to match the single-object response shape.
     /// </summary>
-    public int TypeId { get; set; }
-
-    /// <summary>
-    /// The object type name.
-    /// </summary>
-    public string TypeName { get; set; } = null!;
+    public MetaverseObjectTypeDto Type { get; set; } = null!;
 
     /// <summary>
     /// Creates a DTO from a MetaverseObject entity.
@@ -39,8 +34,11 @@ public class RoleMemberDto
         {
             Id = entity.Id,
             DisplayName = entity.DisplayName,
-            TypeId = entity.Type?.Id ?? 0,
-            TypeName = entity.Type?.Name ?? string.Empty
+            Type = new MetaverseObjectTypeDto
+            {
+                Id = entity.Type?.Id ?? 0,
+                Name = entity.Type?.Name ?? string.Empty
+            }
         };
     }
 }
