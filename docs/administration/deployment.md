@@ -84,6 +84,9 @@ flowchart TD
 | `jim-logs-volume`  | Application and database logs     |
 | `jim-keys-volume`  | Encryption keys                   |
 
+!!! danger "Back up the key volume with the database"
+    `jim-keys-volume` holds the encryption keys that protect every stored secret (Connected System credentials, the SSO secret, Schedule SQL-step connection strings). The database ciphertext cannot be decrypted without these keys, so a database backup restored without its matching keys leaves every secret unrecoverable. Back up the key volume and the database together, as a matched pair. See [Backup & Disaster Recovery](backup-recovery.md).
+
 ### Bundled vs External PostgreSQL
 
 |                    | Bundled                                       | External                                    |
@@ -191,7 +194,7 @@ Before deploying JIM in an air-gapped environment, ensure you have:
 ### Step 1: Transfer and Verify the Bundle
 
 ```bash
-# Transfer jim-release-X.Y.Z.tar.gz via approved media (USB, DVD, etc.)
+# Transfer jim-release-X.Y.Z.tar.gz via approved process
 
 # Extract the bundle
 tar -xzf jim-release-X.Y.Z.tar.gz
@@ -264,7 +267,7 @@ The OIDC redirect URIs configured in your identity provider must match the JIM s
 
 ### Step 6: File Connector storage (optional)
 
-The File Connector ships pre-configured to read and write at `/connector-files` inside the container, backed by a Docker-managed volume named `jim-connector-files-volume`. **No setup is required for the default case** — start the stack and the volume is created automatically with correct ownership.
+The File Connector ships pre-configured to read and write at `/connector-files` inside the container, backed by a Docker-managed volume named `jim-connector-files-volume`. **No setup is required for the default case**: start the stack and the volume is created automatically with correct ownership.
 
 To put files in or pull them out:
 
@@ -493,6 +496,8 @@ Use this checklist before going live:
 - [ ] SSO configured and tested with your identity provider
 - [ ] Initial admin user can log in and access the administration UI
 - [ ] Database backup strategy in place and tested
+- [ ] Encryption keys (`jim-keys-volume` / `JIM_ENCRYPTION_KEY_PATH`) backed up alongside the database, as a matched pair (see [Backup & Disaster Recovery](backup-recovery.md))
+- [ ] Full restore (database plus keys) rehearsed, with a Connected System confirmed to reconnect
 - [ ] Log level set appropriately (`Information` for production)
 - [ ] Health endpoint monitored by your alerting system
 - [ ] Firewall rules restrict access to JIM's port to authorised networks
@@ -509,7 +514,10 @@ For air-gapped deployments, also verify:
 - [ ] SSO/OIDC identity provider is accessible from JIM server
 - [ ] DNS resolves JIM server name correctly
 - [ ] TLS certificates are valid and trusted (if using HTTPS)
-- [ ] Firewall allows traffic on required ports (5200/HTTP, 443/HTTPS, 5432/PostgreSQL)
+- [ ] Firewall allows inbound traffic to JIM's web port only (your chosen host port, e.g. 443 via reverse proxy, or the mapped HTTP port). The bundled PostgreSQL container publishes no host port; the database is reached only over the internal `jim-network` bridge
+- [ ] *If using an external PostgreSQL server:* the JIM host can reach it on 5432 (outbound, allowed on the database server's firewall)
 - [ ] File connector volumes mounted (if using File Connector)
+- [ ] Encryption key set backed up and included in the offline backup routine (see [Backup & Disaster Recovery](backup-recovery.md))
 - [ ] Initial admin user can log in
+- [ ] Logs are being written to the configured path
 - [ ] Logs are being written to configured path

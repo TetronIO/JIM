@@ -277,7 +277,7 @@ The OIDC redirect URIs configured in your identity provider must match the JIM s
 
 #### Step 7: File Connector storage (if using the File Connector)
 
-The File Connector ships pre-configured to read and write at `/connector-files` inside the container, backed by the Docker-managed `jim-connector-files-volume`. **Default deployments need no setup** — start the stack and the volume is created automatically with correct ownership.
+The File Connector ships pre-configured to read and write at `/connector-files` inside the container, backed by the Docker-managed `jim-connector-files-volume`. **Default deployments need no setup**: start the stack and the volume is created automatically with correct ownership.
 
 To put CSV files in or pull them out:
 
@@ -291,7 +291,7 @@ docker cp jim.worker:/connector-files/Exports.csv /path/to/Exports.csv
 
 Configure the File Connector's File Path setting as `/connector-files/Users.csv`.
 
-For integrating with external systems that write to fixed network locations (SMB/NFS), bind-mount the host path over a subdirectory of `/connector-files` — see [docs/connectors/jim-file-connector.md](../docs/connectors/jim-file-connector.md#file-access) for the full pattern, including the UID 1654 ownership requirement for bind-mounted host paths.
+For integrating with external systems that write to fixed network locations (SMB/NFS), bind-mount the host path over a subdirectory of `/connector-files`; see [docs/connectors/jim-file-connector.md](../docs/connectors/jim-file-connector.md#file-access) for the full pattern, including the UID 1654 ownership requirement for bind-mounted host paths.
 
 #### Step 8: Start Services
 
@@ -348,17 +348,7 @@ Connect-JIM -BaseUrl "https://jim.your-domain.local" -ApiKey "your-api-key"
 
 ### Air-Gapped Network Checklist
 
-Before going live, verify:
-
-- [ ] All Docker images loaded successfully (`docker images | grep jim`)
-- [ ] PostgreSQL is accessible and migrations applied
-- [ ] SSO/OIDC identity provider is accessible from JIM server
-- [ ] DNS resolves JIM server name correctly
-- [ ] TLS certificates are valid and trusted (if using HTTPS)
-- [ ] Firewall allows traffic on required ports (5200/HTTP, 443/HTTPS, 5432/PostgreSQL)
-- [ ] File connector volumes mounted (if using File Connector)
-- [ ] Initial admin user can log in
-- [ ] Logs are being written to configured path
+The canonical air-gapped go-live checklist is maintained in the [Deployment Guide](../docs/administration/deployment.md#air-gapped-network-checklist). Follow it there rather than duplicating it here, so the two cannot drift.
 
 ### Building a Release Bundle Locally
 
