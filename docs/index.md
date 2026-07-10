@@ -14,49 +14,49 @@ hide:
 
 <div class="grid cards" markdown>
 
--   :material-sync:{ .lg .middle } **Hub-and-Spoke Synchronisation**
+-   :material-sync:{ .lg .middle } **[Hub-and-Spoke Synchronisation](concepts/architecture.md)**
 
     ---
 
     Central metaverse architecture for identity correlation across all Connected Systems. Bidirectional sync of Users, Groups, and custom object types.
 
--   :material-server-network:{ .lg .middle } **Multi-Directory LDAP**
+-   :material-server-network:{ .lg .middle } **[Multi-Directory LDAP](connectors/jim-ldap-connector.md)**
 
     ---
 
     Active Directory, OpenLDAP, 389 Directory Server, and other RFC 4512-compliant directories, all supported out of the box.
 
--   :material-docker:{ .lg .middle } **Container-Native Deployment**
+-   :material-docker:{ .lg .middle } **[Container-Native Deployment](administration/deployment.md)**
 
     ---
 
     Deploys as a single Docker stack with no legacy infrastructure requirements. Bundled or external PostgreSQL.
 
--   :material-shield-lock:{ .lg .middle } **Single Sign-On (SSO)**
+-   :material-shield-lock:{ .lg .middle } **[Single Sign-On (SSO)](administration/sso-setup.md)**
 
     ---
 
     OpenID Connect authentication with any OIDC-compliant Identity Provider. PKCE for enhanced security.
 
--   :material-function-variant:{ .lg .middle } **Expression-Based Transforms**
+-   :material-function-variant:{ .lg .middle } **[Expression-Based Transforms](concepts/expressions.md)**
 
     ---
 
     Transform data using expressions with built-in functions for common identity operations.
 
--   :material-api:{ .lg .middle } **REST API & PowerShell**
+-   :material-api:{ .lg .middle } **[REST API & PowerShell](api/index.md)**
 
     ---
 
     Full REST API with OpenAPI documentation, plus a cross-platform PowerShell module for automation and Identity as Code.
 
--   :material-wifi-off:{ .lg .middle } **Air-Gapped Ready**
+-   :material-wifi-off:{ .lg .middle } **[Air-Gapped Ready](administration/deployment.md#air-gapped-deployment)**
 
     ---
 
     Fully functional without internet connectivity. No cloud dependencies -- designed for sensitive and high-assurance environments.
 
--   :material-puzzle:{ .lg .middle } **Extensible Connectors**
+-   :material-puzzle:{ .lg .middle } **[Extensible Connectors](connectors/index.md)**
 
     ---
 
@@ -92,37 +92,29 @@ Enterprise identity synchronisation typically requires cloud connectivity, compl
 
 <div class="grid cards" markdown>
 
--   :material-rocket-launch:{ .lg .middle } **Getting Started**
+-   :material-rocket-launch:{ .lg .middle } **[Getting Started](getting-started/index.md)**
 
     ---
 
     Deploy JIM and run your first synchronisation.
 
-    [:octicons-arrow-right-24: Getting Started](getting-started/index.md)
-
--   :material-book-open-variant:{ .lg .middle } **Concepts**
+-   :material-book-open-variant:{ .lg .middle } **[Concepts](concepts/index.md)**
 
     ---
 
     Understand the metaverse, Connected Systems, Synchronisation Rules, and more.
 
-    [:octicons-arrow-right-24: Concepts](concepts/index.md)
-
--   :material-cog:{ .lg .middle } **Administration**
+-   :material-cog:{ .lg .middle } **[Administration](administration/index.md)**
 
     ---
 
     Configure, monitor, and manage your JIM deployment.
 
-    [:octicons-arrow-right-24: Administration](administration/index.md)
-
--   :material-power-plug:{ .lg .middle } **Connectors**
+-   :material-power-plug:{ .lg .middle } **[Connectors](connectors/index.md)**
 
     ---
 
     Connect JIM to LDAP directories, CSV files, and more.
-
-    [:octicons-arrow-right-24: Connectors](connectors/index.md)
 
 </div>
 

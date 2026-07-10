@@ -39,9 +39,9 @@
   --md-typeset-a-color: #0076d3;             /* --jim-link-color */
   --md-accent-fg-color: #0076d3;
 
-  /* Grid card surfaces: faint brand-purple-tinted panel, deepening a touch on hover */
-  --jim-card-bg: #f7f6fb;
-  --jim-card-bg-hover: #efecf8;
+  /* Grid card surfaces: JIM.Web navy-o6 light background grey, deepening a touch on hover */
+  --jim-card-bg: #f3f3f3;
+  --jim-card-bg-hover: #ebebeb;
 
 }
 
@@ -179,6 +179,7 @@
    cards, etc.). 2D look, no shadow. */
 .md-typeset .grid.cards > :is(ul, ol) > li,
 .md-typeset .grid > .card {
+  position: relative;   /* positioning context for the stretched-link overlay below */
   background-color: var(--jim-card-bg);
   border-radius: 8px;   /* match the JIM.Web portal's container/panel radius */
   transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
@@ -189,6 +190,34 @@
   border-color: var(--md-default-fg-color--lighter);
   background-color: var(--jim-card-bg-hover);
   box-shadow: none;
+}
+
+/* Make the whole panel a single click target. Each card carries at most one link
+   (a linked title, or a single call-to-action); stretch that link's hit area over
+   the entire card via a transparent ::after overlay, so the user clicks anywhere on
+   the panel rather than hunting for the link text (which otherwise floats at a
+   different height per card depending on body length). This is the Bootstrap
+   "stretched-link" pattern; the trade-off is that body text inside a linked card is
+   no longer selectable, which is acceptable for navigation cards. */
+.md-typeset .grid.cards > :is(ul, ol) > li a::after,
+.md-typeset .grid > .card a::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+/* A linked card title should read as a heading, not a blue link; the whole-card
+   hover (surface + border) is the affordance. Reveal the accent colour on hover to
+   confirm the panel is interactive. Bottom call-to-action links (not bold) keep
+   their normal link colour. */
+.md-typeset .grid.cards > :is(ul, ol) > li strong a,
+.md-typeset .grid > .card strong a {
+  color: inherit;
+}
+
+.md-typeset .grid.cards > :is(ul, ol) > li:hover strong a,
+.md-typeset .grid > .card:hover strong a {
+  color: var(--md-accent-fg-color);
 }
 
 /* ========================================
