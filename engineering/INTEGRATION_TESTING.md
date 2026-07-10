@@ -81,6 +81,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Exhaustive # Exhaustive tier (~152 cells, < 10 min)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario12-RelativeDateScoping"       # Relative-date inbound scoping (joiner/leaver)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario13-RelativeDateOutboundScoping" # Relative-date outbound scoping (staged provisioning)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario14-AttributePriority"        # Attribute Priority multi-source winner resolution (#91, OpenLDAP only)
 
 # Run with a specific template size
 ./test/integration/Run-IntegrationTests.ps1 -Template Nano
@@ -107,6 +108,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -Step InitialSync  # Scenario 8: InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort (OpenLDAP only)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario10-SyncRuleScoping" -Step InboundEnterScope  # Scenario 10: InboundEnterScope/InboundInScopeUpdate/InboundExitDisconnect/InboundExitRemainJoined/OutboundEnterScope/OutboundExitDisconnect/OutboundExitDelete/CrossSystemCascade/CriteriaOperators
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -OperatorFilter NotEquals  # Scenario 11: filter to cells using a single operator
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario14-AttributePriority" -Step BaselineResolution  # Scenario 14: BaselineResolution, RecallReElection, IdenticalValueHandOver, WithdrawalReElection, NoContributorCleared, AssertedNullOverridesSurvivor, NotJoinedNoOpinion, MidLifeJoinBlanksClear, MvaNullIsValueAssertsEmptySet, DisabledRuleNoOpinion, PriorityReorderPropagation, OutOfScopeNoOpinion (OpenLDAP only)
 
 # Combine scenario, template, and step
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Template Small -Step All
@@ -154,6 +156,7 @@ This single script handles everything:
 | `Scenario11-ScopingCriteriaMatrix` | Scoping criteria evaluation matrix: full operator x value-type x group-structure coverage via batched per-cell CSO and MV types. Three tiers: Quick (~12 cells, < 90s), Default (~41 cells, < 5 min), Exhaustive (~152 cells, < 10 min). Round-trip persistence and API negative-cell probes run first. | file (bespoke deterministic seed) | n/a |
 | `Scenario12-RelativeDateScoping` | Relative-date inbound scoping: date-driven joiner provisioning and leaver deprovisioning, plus per-run re-evaluation against the live clock | file (HR CSV, metaverse-only) | n/a |
 | `Scenario13-RelativeDateOutboundScoping` | Relative-date outbound scoping: downstream provisioning held until a joiner's start date arrives, released via the Temporal Scope Reconciler's outbound lane | file (HR CSV source, CSV export target) | n/a |
+| `Scenario14-AttributePriority` | Attribute Priority multi-source winner resolution (#91): two import Synchronisation Rules contribute the same Metaverse attributes (Description, Job Title, Manager reference, multi-valued Other Telephones) at different priorities; validates winner-takes-all for scalars, multi-valued handling, recall/re-election, and null/withdrawal/priority-reorder behaviour. OpenLDAP only (two-suffix topology: dc=yellowstone Primary + dc=glitterband Secondary in one container) | openldap-primary (two suffixes) | ✅ (only) |
 
 **Available Templates (`-Template` parameter):**
 
@@ -1165,9 +1168,9 @@ The scenario seeds its own fixed test users positioned relative to "now" and ign
 
 ### Phase 2 (Road-mapped) - Database Scenarios
 
-> The scenario numbers below (Multi-Source Aggregation, Database Source/Target, Performance Baselines) were originally drafted as 9, 10, and 11, then renumbered to 12, 13, and 14 as implemented Phase 1 scenarios claimed each range: Partition-Scoped Imports, Synchronisation Rule Scoping and the Scoping Criteria Matrix took 9-11, and the Relative-Date Scoping scenarios took 12-13. The planned scenarios are now numbered 14-16.
+> The scenario numbers below (Multi-Source Aggregation, Database Source/Target, Performance Baselines) have been renumbered repeatedly as implemented scenarios claimed each range: Partition-Scoped Imports, Synchronisation Rule Scoping and the Scoping Criteria Matrix took 9-11, the Relative-Date Scoping scenarios took 12-13, and Attribute Priority (#91) took 14. The planned scenarios are now numbered 15-17.
 
-#### Scenario 14: Multi-Source Aggregation
+#### Scenario 15: Multi-Source Aggregation
 
 **Purpose**: Validate multiple database sources feeding the metaverse with join rules and attribute precedence.
 
@@ -1186,24 +1189,24 @@ The scenario seeds its own fixed test users positioned relative to "now" and ign
 | 3 | **Precedence** | SQL Server authoritative for email/phone, Oracle for department/title |
 | 4 | **DataTypes** | VARCHAR, NVARCHAR, DATE, DATETIME, INT, BIT -> correct mapping |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario14-MultiSourceAggregation.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario15-MultiSourceAggregation.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario14-MultiSourceAggregation.ps1 -Step InitialLoad -Template Small
-./Invoke-Scenario14-MultiSourceAggregation.ps1 -Step JoinRules -Template Small
-./Invoke-Scenario14-MultiSourceAggregation.ps1 -Step Precedence -Template Small
-./Invoke-Scenario14-MultiSourceAggregation.ps1 -Step DataTypes -Template Small
+./Invoke-Scenario15-MultiSourceAggregation.ps1 -Step InitialLoad -Template Small
+./Invoke-Scenario15-MultiSourceAggregation.ps1 -Step JoinRules -Template Small
+./Invoke-Scenario15-MultiSourceAggregation.ps1 -Step Precedence -Template Small
+./Invoke-Scenario15-MultiSourceAggregation.ps1 -Step DataTypes -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario14-MultiSourceAggregation.ps1 -Step All -Template Small
+./Invoke-Scenario15-MultiSourceAggregation.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 15: Database Source/Target
+#### Scenario 16: Database Source/Target
 
 **Purpose**: Validate database connector import/export capabilities.
 
@@ -1220,24 +1223,24 @@ The scenario seeds its own fixed test users positioned relative to "now" and ign
 | 3 | **DataTypes** | Data type handling (text, numeric, date, boolean) |
 | 4 | **MultiValue** | Multi-valued attributes (if supported) |
 
-**Script**: `test/integration/scenarios/Invoke-Scenario15-DatabaseSourceTarget.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario16-DatabaseSourceTarget.ps1`
 
 **Execution Model**:
 
 ```powershell
 # Individual steps
-./Invoke-Scenario15-DatabaseSourceTarget.ps1 -Step Import -Template Small
-./Invoke-Scenario15-DatabaseSourceTarget.ps1 -Step Export -Template Small
-./Invoke-Scenario15-DatabaseSourceTarget.ps1 -Step DataTypes -Template Small
-./Invoke-Scenario15-DatabaseSourceTarget.ps1 -Step MultiValue -Template Small
+./Invoke-Scenario16-DatabaseSourceTarget.ps1 -Step Import -Template Small
+./Invoke-Scenario16-DatabaseSourceTarget.ps1 -Step Export -Template Small
+./Invoke-Scenario16-DatabaseSourceTarget.ps1 -Step DataTypes -Template Small
+./Invoke-Scenario16-DatabaseSourceTarget.ps1 -Step MultiValue -Template Small
 
 # Run all steps sequentially
-./Invoke-Scenario15-DatabaseSourceTarget.ps1 -Step All -Template Small
+./Invoke-Scenario16-DatabaseSourceTarget.ps1 -Step All -Template Small
 ```
 
 ---
 
-#### Scenario 16: Performance Baselines
+#### Scenario 17: Performance Baselines
 
 **Purpose**: Establish performance characteristics at various scales.
 
@@ -1250,7 +1253,7 @@ The scenario seeds its own fixed test users positioned relative to "now" and ign
 4. Identify bottlenecks
 5. Establish acceptable thresholds
 
-**Script**: `test/integration/scenarios/Invoke-Scenario16-Performance.ps1`
+**Script**: `test/integration/scenarios/Invoke-Scenario17-Performance.ps1`
 
 ---
 
@@ -2140,6 +2143,7 @@ JIM/
         │   ├── Invoke-Scenario11-ScopingCriteriaMatrix.ps1       # Scoping criteria evaluation matrix
         │   ├── Invoke-Scenario12-RelativeDateScoping.ps1         # Relative-date inbound scoping
         │   ├── Invoke-Scenario13-RelativeDateOutboundScoping.ps1 # Relative-date outbound scoping
+        │   ├── Invoke-Scenario14-AttributePriority.ps1          # Attribute Priority winner resolution (OpenLDAP only)
         │   ├── data/                                             # Per-scenario data + manifests (incl. Scenario 11 matrix)
         │   └── data/                                              # Scenario-specific CSV overlays (Scenarios 4, 5)
         ├── docker/
