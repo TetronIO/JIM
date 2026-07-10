@@ -2202,13 +2202,13 @@ JIM/
 
 ## Current Progress & Known Issues
 
-### Phase 1 Status (as of 2026-07-03) - ✅ COMPLETE
+### Phase 1 Status (as of 2026-07-10) - ✅ COMPLETE
 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Infrastructure | ✅ Complete | Samba AD, CSV file mounting, volume orchestration |
 | API Endpoints | ✅ Complete | Schema management, Synchronisation Rules, mappings, Run Profiles |
-| PowerShell Module | ✅ Complete | Cmdlets cover every scenario currently in use (1, 2, 4, 5, 6, 7, 8, 9, 10) |
+| PowerShell Module | ✅ Complete | Cmdlets cover every scenario currently in use (1, 2, 4-14) |
 | Scenario 1 | ✅ Complete | 8 lifecycle tests (Joiner, Mover, Mover-Rename, Mover-Move, Disable, Enable, Leaver, Reconnection) plus ImportOnly/SyncOnly diagnostic steps |
 | Scenario 2 | ✅ Complete | All 4 tests (Provision, ForwardSync, ReverseSync, Conflict) |
 | Scenario 3 | ⏳ Pending | Stub script exists, not yet implemented |
@@ -2222,9 +2222,10 @@ JIM/
 | Scenario 11 | ✅ Complete | Scoping criteria evaluation matrix: three tiers (Quick / Default / Exhaustive) covering operator x value-type x group-structure end-to-end via batched per-cell CSO types, plus round-trip persistence and API negative-cell probes |
 | Scenario 12 | ✅ Complete | Relative-date inbound scoping: date-driven joiner provisioning and leaver deprovisioning, plus per-run re-evaluation against the live clock (#85) |
 | Scenario 13 | ✅ Complete | Relative-date outbound scoping: staged downstream provisioning via the Temporal Scope Reconciler's outbound lane (#892) |
+| Scenario 14 | ✅ Complete | Attribute Priority multi-source winner resolution: 12 steps covering winner-takes-all scalar resolution, multi-valued handling, recall/re-election and null/withdrawal/priority-reorder behaviour (OpenLDAP only) (#91) |
 | Entitlement (JIM-to-AD) | ⏸️ Deferred | Requires Internal MVO design |
 | Entitlement (Convert Authority) | ⏸️ Deferred | Requires Internal MVO design |
-| Scenarios 14-16 | ⏳ Road-mapped | Database scenarios (multi-source aggregation, database source/target, performance baselines): require Database Connector (#170) |
+| Scenarios 15-17 | ⏳ Road-mapped | Database scenarios (multi-source aggregation, database source/target, performance baselines): require Database Connector (#170) |
 | GitHub Actions | ⏳ Pending | CI/CD workflow not yet created |
 
 ### Remaining Work
@@ -2232,7 +2233,7 @@ JIM/
 1. **Complete Scenario 3** - GALSYNC (AD to CSV export); stub script exists but not implemented
 2. **Create GitHub Actions workflow** - `.github/workflows/integration-tests.yml` for CI/CD automation
 3. **Road-mapped: Entitlement Management** - Internal MVO design required (deferred scenarios above)
-4. **Road-mapped: Scenarios 14-16** - Database connector testing (SQL Server, PostgreSQL, Oracle, MySQL)
+4. **Road-mapped: Scenarios 15-17** - Database connector testing (SQL Server, PostgreSQL, Oracle, MySQL)
 
 ---
 
