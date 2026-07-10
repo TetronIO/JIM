@@ -642,8 +642,20 @@ body:has(.jim-home) .md-content__button {
    SVG). Planned edges carry no packets - nothing flows there yet. */
 .jim-diagram .jimdg-packet { fill: var(--jimdg-packet); }
 
+/* Diagram footnote: a muted, centred caption decoding the visual encoding.
+   Text that refers to the packet animation goes in .jimdg-caption-motion so
+   it disappears alongside the dots under reduced motion. */
+.md-typeset .jim-diagram-caption {
+  margin: 0.6rem auto 1.6rem;
+  max-width: 34rem;
+  text-align: center;
+  font-size: 0.66rem;
+  color: var(--md-default-fg-color--light);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .jim-diagram .jimdg-packet {
+  .jim-diagram .jimdg-packet,
+  .md-typeset .jim-diagram-caption .jimdg-caption-motion {
     display: none;
   }
 }

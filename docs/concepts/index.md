@@ -6,6 +6,8 @@ For per-object documentation (Connected Systems, Synchronisation Rules, Schedule
 
 --8<-- "assets/diagrams/hub-and-spoke.svg"
 
+<p class="jim-diagram-caption">The Connected Systems shown are illustrative examples. Dashed elements indicate planned connectivity.<span class="jimdg-caption-motion"> Moving dots trace identity data flowing through the hub.</span></p>
+
 ## 🏗️ Architecture
 
 JIM follows a hub-and-spoke **metaverse pattern** where all identity data flows through a central authoritative repository. No data moves directly between Connected Systems -- every change passes through the metaverse, giving you a single point of governance and control. Learn about JIM's components, layers, and deployment model in the [Architecture](architecture.md) guide.
