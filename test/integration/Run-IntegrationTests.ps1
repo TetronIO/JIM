@@ -164,8 +164,8 @@
     ./Run-IntegrationTests.ps1 -PreRelease
 
     Runs the full pre-release regression: every implemented scenario against both
-    directory types, with Samba AD at the MediumLarge template and OpenLDAP at Scale100k50Groups.
-    Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD MediumLarge -TemplateOpenLDAP Scale100k50Groups.
+    directory types, with Samba AD at the Medium template and OpenLDAP at Large.
+    Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Large.
 #>
 
 param(
@@ -543,7 +543,7 @@ function Show-ScenarioMenu {
         }
         @{
             Name = "Pre-Release"
-            Description = "Runs every implemented scenario sequentially for both Samba AD and OpenLDAP at MediumLarge and Scale100k50Groups templates, respectively"
+            Description = "Runs every implemented scenario sequentially for both Samba AD and OpenLDAP at Medium and Large templates, respectively"
             Disabled = $false
             SeparatorAfter = $true
         }
@@ -1223,12 +1223,12 @@ function Test-TemplateRelevant {
     return $true
 }
 
-# -PreRelease is shorthand for: -Scenario All -DirectoryType All -TemplateSambaAD MediumLarge -TemplateOpenLDAP Scale100k50Groups
+# -PreRelease is shorthand for: -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Large
 if ($PreRelease) {
     $Scenario               = "All"
     $DirectoryType          = "All"
-    $TemplateSambaAD        = "MediumLarge"
-    $TemplateOpenLDAP       = "Scale100k50Groups"
+    $TemplateSambaAD        = "Medium"
+    $TemplateOpenLDAP       = "Large"
     $DirectoryTypeWasExplicitlySet = $true
     $TemplateWasExplicitlySet      = $true
 }
@@ -1238,13 +1238,13 @@ if (-not $Scenario) {
     $Scenario = Show-ScenarioMenu
 
     # "Pre-Release" is a special menu entry that expands to all-scenarios, both directory
-    # types, with Samba AD at MediumLarge and OpenLDAP at Scale100k50Groups. It bypasses the Template
+    # types, with Samba AD at Medium and OpenLDAP at Large. It bypasses the Template
     # and DirectoryType sub-menus since those are fixed by the Pre-Release preset.
     if ($Scenario -eq "Pre-Release") {
         $Scenario                      = "All"
         $DirectoryType                 = "All"
-        $TemplateSambaAD               = "MediumLarge"
-        $TemplateOpenLDAP              = "Scale100k50Groups"
+        $TemplateSambaAD               = "Medium"
+        $TemplateOpenLDAP              = "Large"
         $DirectoryTypeWasExplicitlySet = $true
         $TemplateWasExplicitlySet      = $true
     }

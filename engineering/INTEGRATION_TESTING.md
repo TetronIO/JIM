@@ -129,13 +129,13 @@ This single script handles everything:
 # Large-scale test with reduced logging and no change tracking
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario1-HRToIdentityDirectory" -Template Large -LogLevel Warning -DisableChangeTracking
 
-# Full pre-release regression suite (all scenarios, both directory types, Samba Medium/Large, OpenLDAP Scale100k50Groups)
+# Full pre-release regression suite (all scenarios, both directory types, Samba AD at Medium, OpenLDAP at Large)
 ./test/integration/Run-IntegrationTests.ps1 -PreRelease
 ```
 
 **Strict-mode hardening:** the runner uses `Set-StrictMode -Version Latest`, so local debugging must treat uninitialised variables and missing properties as errors. This matches CI behaviour and prevents drift between the two environments.
 
-**-PreRelease preset**: shorthand for the full pre-release regression (`-Scenario All -DirectoryType All` for Samba AD with Medium + Large templates and OpenLDAP with Scale100k50Groups). Use this as the final sign-off before cutting a release.
+**-PreRelease preset**: shorthand for the full pre-release regression (`-Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Large`): every implemented scenario against both directory types, with Samba AD at the Medium template and OpenLDAP at the Large template. Use this as the recommended pre-release gate, the final sign-off before cutting a release.
 
 **Available Scenarios (`-Scenario` parameter):**
 
