@@ -10,7 +10,7 @@
 <!-- expressed with <g> groups instead. -->
 <svg class="jim-diagram" viewBox="0 0 1160 640" role="img" aria-labelledby="jimdg-hs-title jimdg-hs-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-hs-title">JIM hub-and-spoke synchronisation concept</title>
-  <desc id="jimdg-hs-desc">Source systems on the left and target systems on the right connect to JIM in the centre. Inside JIM, Connectors pass imported data through the Import, Synchronise and Export pipeline, which correlates and projects identities into the Metaverse, the authoritative identity core. Every flow passes through JIM; no data moves directly between Connected Systems. Enterprise database and cloud application connectivity are planned.</desc>
+  <desc id="jimdg-hs-desc">Source systems on the left and target systems on the right connect to JIM in the centre. Inside JIM, Connectors pass imported data through the Import, Synchronise and Export pipeline, which correlates and projects identities into the Metaverse, the authoritative data store for fused identities. Every flow passes through JIM; no data moves directly between Connected Systems. Enterprise database and cloud application connectivity are planned.</desc>
   <g id="jimdg-hs-hub">
     <rect class="jimdg-hub" x="300" y="28" width="560" height="584" rx="8"/>
     <text class="jimdg-hub-title" x="580" y="66">JIM</text>
@@ -39,7 +39,7 @@
     <g id="jimdg-hs-core">
       <rect class="jimdg-core" x="330" y="482" width="500" height="84" rx="8"/>
       <text class="jimdg-core-title" x="580" y="517">Metaverse</text>
-      <text class="jimdg-core-sub" x="580" y="541">Authoritative identity core</text>
+      <text class="jimdg-core-sub" x="580" y="541">Authoritative data store for fused identities</text>
     </g>
     <g id="jimdg-hs-flows">
       <line class="jimdg-flow" x1="400" y1="186" x2="400" y2="252"/>
