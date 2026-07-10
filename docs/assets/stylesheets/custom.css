@@ -39,9 +39,10 @@
   --md-typeset-a-color: #0076d3;             /* --jim-link-color */
   --md-accent-fg-color: #0076d3;
 
-  /* Grid card surfaces: JIM.Web navy-o6 light background grey, deepening a touch on hover */
-  --jim-card-bg: #f3f3f3;
-  --jim-card-bg-hover: #ebebeb;
+  /* Grid card surfaces: soft light grey (lightened a touch from JIM.Web's navy-o6
+     #f3f3f3 background), deepening slightly on hover */
+  --jim-card-bg: #f7f7f7;
+  --jim-card-bg-hover: #efefef;
 
 }
 
