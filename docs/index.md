@@ -7,8 +7,9 @@ hide:
   - toc
 ---
 
-<img class="diagram-light" alt="JIM System Context" src="diagrams/images/light/jim-structurizr-1-SystemContext.svg">
-<img class="diagram-dark" alt="JIM System Context" src="diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
+--8<-- "assets/diagrams/system-context.svg"
+
+<p class="jim-diagram-caption">JIM in context: administrators and automation work through its UI and API while it synchronises identity data with your systems. Dashed elements indicate planned connectivity.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
 ## ✨ Key Features
 

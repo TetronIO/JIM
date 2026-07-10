@@ -1,0 +1,45 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- The metaverse pattern (Concepts > Architecture; also reused on the -->
+<!-- Developer Guide's architecture page): all identity data flows through -->
+<!-- the Metaverse, never directly between systems. -->
+<!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
+<!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: keep this file free of blank lines AND of comments inside the -->
+<!-- <svg> element; it is inlined into markdown via pymdownx.snippets, and -->
+<!-- python-markdown ends the raw-HTML block at either. Structure is -->
+<!-- expressed with <g> groups instead. -->
+<svg class="jim-diagram" viewBox="0 0 1160 160" role="img" aria-labelledby="jimdg-mp-title jimdg-mp-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="jimdg-mp-title">The metaverse pattern</title>
+  <desc id="jimdg-mp-desc">Source systems on the left import identity data into the Metaverse, the single source of truth at the centre. Target systems on the right receive exports from it. Data always flows through the Metaverse; it never moves directly between systems.</desc>
+  <g id="jimdg-mp-nodes">
+    <rect class="jimdg-system" x="100" y="40" width="240" height="80" rx="8"/>
+    <text class="jimdg-system-name" x="220" y="73">Source Systems</text>
+    <text class="jimdg-system-sub" x="220" y="96">HR · directories · files</text>
+    <rect class="jimdg-core" x="450" y="32" width="260" height="96" rx="8"/>
+    <text class="jimdg-core-title" x="580" y="72">Metaverse</text>
+    <text class="jimdg-core-sub" x="580" y="98">single source of truth</text>
+    <rect class="jimdg-system" x="820" y="40" width="240" height="80" rx="8"/>
+    <text class="jimdg-system-name" x="940" y="73">Target Systems</text>
+    <text class="jimdg-system-sub" x="940" y="96">directories · applications</text>
+  </g>
+  <g id="jimdg-mp-edges">
+    <line class="jimdg-spoke" x1="340" y1="80" x2="440" y2="80"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(450,80) rotate(0)"/>
+    <text class="jimdg-spoke-label" x="395" y="68">import</text>
+    <line class="jimdg-spoke" x1="710" y1="80" x2="810" y2="80"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(820,80) rotate(0)"/>
+    <text class="jimdg-spoke-label" x="765" y="68">export</text>
+  </g>
+  <g id="jimdg-mp-packets">
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.4s" begin="0s" repeatCount="indefinite" path="M340,80 L438,80"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.4s" begin="-1.2s" repeatCount="indefinite" path="M710,80 L808,80"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-1.2s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>

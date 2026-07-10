@@ -229,20 +229,7 @@ else
     print_warning "MkDocs Material installation failed - you can install manually: pip install \"mkdocs>=1.6,<2\" \"mkdocs-material>=9.7,<10\" \"mkdocs-glightbox>=0.4,<1\" --break-system-packages"
 fi
 
-# 7. Install Puppeteer and Chrome for diagram export (jim-diagrams)
-print_step "Installing diagram export dependencies (Puppeteer + Chrome)..."
-STRUCTURIZR_DIR="$WORKDIR/engineering/diagrams/structurizr"
-if [ -f "$STRUCTURIZR_DIR/package.json" ]; then
-    if (cd "$STRUCTURIZR_DIR" && npm install --silent 2>/dev/null && npx puppeteer browsers install chrome 2>/dev/null); then
-        print_success "Puppeteer and Chrome installed for diagram export"
-    else
-        print_warning "Diagram export dependencies failed - you can install manually: cd engineering/diagrams/structurizr && npm install && npx puppeteer browsers install chrome"
-    fi
-else
-    print_warning "Structurizr package.json not found - skipping diagram export setup"
-fi
-
-# 8. Install Playwright browser for the Playwright MCP server (in-IDE UI validation)
+# 7. Install Playwright browser for the Playwright MCP server (in-IDE UI validation)
 print_step "Installing Playwright MCP browser (Chromium)..."
 # The Playwright MCP server (.mcp.json) drives a real Chromium to validate UI changes from the IDE.
 # The browser binary is not baked into the image, so install it here. The version below is pinned so the
@@ -260,7 +247,7 @@ else
     print_warning "Playwright MCP browser install failed - UI validation via the Playwright MCP will be unavailable until installed manually (see .devcontainer/README.md)"
 fi
 
-# 9. Build the solution
+# 8. Build the solution
 print_step "Building JIM solution..."
 if dotnet build JIM.sln --verbosity quiet --no-restore; then
     print_success "Solution built successfully"
@@ -268,7 +255,7 @@ else
     print_warning "Build had warnings or errors. Run 'dotnet build JIM.sln' to see details."
 fi
 
-# 10. Configure Git commit signing
+# 9. Configure Git commit signing
 # Delegates to .devcontainer/configure-signing.sh which handles Codespaces
 # (via gh-gpgsign) and local devcontainers (via forwarded SSH agent) and
 # prints a prominent warning if neither is available. Returns non-zero if
@@ -313,7 +300,7 @@ else
     print_warning "Failed to set core.hooksPath; pre-commit checks will not run"
 fi
 
-# 12. Install Claude Code CLI
+# 10. Install Claude Code CLI
 print_step "Installing Claude Code CLI..."
 if command -v npm >/dev/null 2>&1; then
     if npm install -g @anthropic-ai/claude-code --silent 2>/dev/null; then
@@ -325,7 +312,7 @@ else
     print_warning "npm not found - skipping Claude Code CLI install"
 fi
 
-# 13. Check gh CLI authentication
+# 11. Check gh CLI authentication
 # The gh CLI is used for PR/issue operations and other GitHub API calls.
 # It is NOT involved in git push/pull (SSH remote handles that) or commit
 # signing (SSH agent forward handles that), so a missing gh token is not
@@ -353,7 +340,7 @@ else
 "
 fi
 
-# 14. Mirror host SSH directory into the container's writable ~/.ssh
+# 12. Mirror host SSH directory into the container's writable ~/.ssh
 # The host's ~/.ssh is bind-mounted read-only at /host-ssh (see devcontainer.json
 # "mounts"). We can't ssh straight from there because:
 #   * the files are owned by the host user's UID (which may not be 1000 on
@@ -406,7 +393,7 @@ else
     print_warning "Could not pre-create integration-test log directories (pre-existing root-owned dirs?). If integration tests later fail to write logs, run: sudo chown -R \$(id -un):\$(id -gn) test/integration/results"
 fi
 
-# 15. Display useful information
+# 13. Display useful information
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✓ JIM Development Environment Ready!${NC}"

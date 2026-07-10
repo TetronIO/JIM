@@ -270,7 +270,6 @@ The `VERSION` file is the single source of truth for JIM's version number. It fe
 - All .NET assembly versions (via `Directory.Build.props`)
 - Docker image tags (via release workflow)
 - PowerShell module version (updated at release time)
-- Diagram metadata (via `export-diagrams.js`)
 
 **Versioning scheme:** [Semantic Versioning](https://semver.org/), `X.Y.Z` with optional prerelease suffix (e.g., `0.3.0-alpha`).
 

@@ -4,7 +4,6 @@ repo_url: https://github.com/TetronIO/JIM
 repo_name: TetronIO/JIM
 
 exclude_docs: |
-  diagrams/structurizr/node_modules/
   CLAUDE.md
 
 # Silence the INFO emitted for relative links MkDocs leaves as-is for the
