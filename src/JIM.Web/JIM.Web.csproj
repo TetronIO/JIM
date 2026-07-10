@@ -29,7 +29,7 @@
          ("Circular schema references may terminate OpenAPI parsing", high). Remove once the parent
          package references a patched version. -->
     <PackageReference Include="Microsoft.OpenApi" Version="2.9.0" />
-    <PackageReference Include="Scalar.AspNetCore" Version="2.16.10" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.16.11" />
     <PackageReference Include="MudBlazor" Version="9.6.0" />
   </ItemGroup>
 
