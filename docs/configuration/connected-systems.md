@@ -20,11 +20,9 @@ Every Connected System is associated with a [connector](../connectors/index.md) 
 
 The connector space is a critical concept. It is a staging area between the external system and the metaverse: when JIM imports data from a Connected System, it does not write directly to the metaverse. Instead, it creates or updates **Connected System Objects (CSOs)** in the connector space; the metaverse is only updated during the explicit synchronisation phase.
 
-```mermaid
-flowchart LR
-    A["External System"] -->|Import| B["Connector Space (CSOs)"]
-    B -->|Sync| C["Metaverse (MVOs)"]
-```
+--8<-- "assets/diagrams/sync-pipeline.svg"
+
+<p class="jim-diagram-caption">Imported data is staged in the connector space as Connected System Objects; the Metaverse is only touched during the synchronisation phase, and exports stage the same way in reverse.<span class="jimdg-caption-motion"> Moving dots trace data through the pipeline.</span></p>
 
 This two-stage approach gives you:
 

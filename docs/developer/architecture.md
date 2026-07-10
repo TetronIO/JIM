@@ -8,8 +8,9 @@ JIM implements an enterprise identity management system using the metaverse patt
 
 ## System Context
 
-<img class="diagram-light" alt="System Context" src="../../diagrams/images/light/jim-structurizr-1-SystemContext.svg">
-<img class="diagram-dark" alt="System Context" src="../../diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
+--8<-- "assets/diagrams/system-context.svg"
+
+<p class="jim-diagram-caption">Administrators and automation clients work through JIM's UI and API; JIM synchronises with the surrounding systems. Dashed elements indicate planned connectivity.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
 ## Layered Architecture
 
@@ -31,8 +32,9 @@ JIM follows a strict N-tier layered architecture. Upper layers depend on lower l
 
 ## Container Diagram
 
-<img class="diagram-light" alt="Containers" src="../../diagrams/images/light/jim-structurizr-1-Containers.svg">
-<img class="diagram-dark" alt="Containers" src="../../diagrams/images/dark/jim-structurizr-1-Containers.svg">
+--8<-- "assets/diagrams/containers.svg"
+
+<p class="jim-diagram-caption">JIM's deployable containers. PostgreSQL doubles as the task queue: the Scheduler queues work and the Worker polls it, so the services coordinate through the database rather than calling each other.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
 ## Metaverse Pattern
 
@@ -43,38 +45,87 @@ The metaverse is the authoritative identity repository at the centre of JIM's ar
 - **SyncRule**<br /> Bidirectional mappings between Connected Systems and the metaverse
 - **Staging Areas**<br /> Import/export staging for transactional integrity
 
-```mermaid
-flowchart LR
-    A["Connected System\n(e.g. HR)"] <-->|Import / Export| B["Metaverse"]
-    B <-->|Import / Export| C["Connected System\n(e.g. AD)"]
-```
+--8<-- "assets/diagrams/metaverse-pattern.svg"
+
+<p class="jim-diagram-caption">Sources project identities into the Metaverse; targets receive them from it. The same Connected System can be both source and target (writeback).<span class="jimdg-caption-motion"> Moving dots trace import and export flows.</span></p>
 
 ## Component Diagrams
 
+Component-level views are maintained as Mermaid diagrams so they can evolve alongside the code (the Worker view is shared with the [customer architecture page](../concepts/architecture.md)).
+
 ### Application Layer
 
-<img class="diagram-light" alt="Application Layer" src="../../diagrams/images/light/jim-structurizr-1-AppLayerComponents.svg">
-<img class="diagram-dark" alt="Application Layer" src="../../diagrams/images/dark/jim-structurizr-1-AppLayerComponents.svg">
+`JIM.Application` exposes a single entry point, the `JimApplication` facade, which delegates to the domain servers. The Worker's processors bypass the facade and use `SyncServer` and `SyncEngine` directly for performance-critical synchronisation work.
 
-### Connectors
+```mermaid
+flowchart TD
+    WEB["JIM.Web<br>Blazor UI + REST API"] --> FACADE
+    SCHED["JIM.Scheduler"] --> FACADE
+    WORKER["JIM.Worker<br>task processors"] --> SYNCSRV
+    WORKER --> ENGINE
 
-<img class="diagram-light" alt="Connectors" src="../../diagrams/images/light/jim-structurizr-1-ConnectorComponents.svg">
-<img class="diagram-dark" alt="Connectors" src="../../diagrams/images/dark/jim-structurizr-1-ConnectorComponents.svg">
+    subgraph APP["JIM.Application"]
+        FACADE["JimApplication facade"]
+        SYNCSRV["SyncServer<br>sync orchestration"]
+        ENGINE["SyncEngine<br>pure sync domain logic, no I/O"]
+        SERVERS["Domain servers<br>Metaverse · ConnectedSystem · ObjectMatching · Search<br>Security · Scheduler · ChangeHistory · Certificate<br>ServiceSettings · Activity · Tasking · FileSystem · ExampleData"]
+        SYNCSERVERS["Sync evaluation servers<br>ExportEvaluation · ExportExecution<br>ScopingEvaluation · DriftDetection"]
+        REPO["IJimRepository"]
+        SYNCREPO["ISyncRepository"]
+        FACADE --> SERVERS
+        FACADE --> SYNCSERVERS
+        SYNCSRV --> SYNCSERVERS
+        SERVERS --> REPO
+        SYNCSERVERS --> SYNCREPO
+        SYNCSRV --> SYNCREPO
+    end
+
+    REPO --> DB[("PostgreSQL")]
+    SYNCREPO --> DB
+```
 
 ### Web Application
 
-<img class="diagram-light" alt="Web App" src="../../diagrams/images/light/jim-structurizr-1-WebAppComponents.svg">
-<img class="diagram-dark" alt="Web App" src="../../diagrams/images/dark/jim-structurizr-1-WebAppComponents.svg">
+```mermaid
+flowchart TD
+    ADMIN["Administrator"] --> PAGES
+    AUTO["Automation Client<br>PowerShell Module"] --> API
+    IDP["Identity Provider<br>OIDC"] --- AUTH
+
+    subgraph WEBAPP["JIM.Web"]
+        AUTH["Authentication middleware<br>OIDC + API key validation"] --> PAGES["Blazor pages<br>admin UI"]
+        AUTH --> API["API controllers<br>REST at /api/"]
+    end
+
+    PAGES --> FACADE["JimApplication facade"]
+    API --> FACADE
+```
 
 ### Worker Service
 
-<img class="diagram-light" alt="Worker" src="../../diagrams/images/light/jim-structurizr-1-WorkerComponents.svg">
-<img class="diagram-dark" alt="Worker" src="../../diagrams/images/dark/jim-structurizr-1-WorkerComponents.svg">
+--8<-- "assets/diagrams/worker-components.svg"
+
+<p class="jim-diagram-caption">Inside the Worker Service: the host dispatches import, synchronise and export processors, and the Sync Engine makes the synchronisation decisions. The host polls the task queue in PostgreSQL, where the whole service reads and writes staged and Metaverse data; the Connectors carry data to and from Connected Systems.<span class="jimdg-caption-motion"> Moving dots trace data arriving through, and leaving via, the Connectors.</span></p>
+
+### Connectors
+
+```mermaid
+flowchart TD
+    WORKER["JIM.Worker<br>import & export processors"] --> LDAP & FILE
+    WORKER -.-> SQL & SCIM
+
+    LDAP["LDAP Connector"] --> AD["Directory Services<br>LDAP / LDAPS"]
+    FILE["File Connector"] --> FILES["File Systems & HR exports<br>CSV"]
+    SQL["Database Connector<br>(planned)"] -.-> DBS["Enterprise Databases<br>SQL"]
+    SCIM["SCIM 2.0 Connector<br>(planned)"] -.-> CLOUD["Cloud Applications<br>SCIM 2.0"]
+```
 
 ### Scheduler Service
 
-<img class="diagram-light" alt="Scheduler" src="../../diagrams/images/light/jim-structurizr-1-SchedulerComponents.svg">
-<img class="diagram-dark" alt="Scheduler" src="../../diagrams/images/dark/jim-structurizr-1-SchedulerComponents.svg">
+```mermaid
+flowchart LR
+    HOST["Scheduler Host<br>30-second polling loop · due-time evaluation · crash recovery"] --> FACADE["JimApplication facade"] --> DB[("PostgreSQL<br>schedules & task queue")]
+```
 
 ## Technology Stack
 

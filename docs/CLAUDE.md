@@ -72,21 +72,6 @@ When creating ASCII diagrams in documentation or code comments, use only reliabl
 | `-` / `|`   | `=` special chars | Lines (horizontal/vertical)|
 | `-`         | bullets       | Bullet points in diagrams      |
 
-## C4 Architecture Diagrams (SVG)
-
-C4 diagrams are exported SVGs from the Structurizr DSL (`engineering/diagrams/structurizr/`). Each diagram has a light and dark variant stored under `docs/diagrams/images/light/` and `docs/diagrams/images/dark/`.
-
-Embed them as paired `<img>` tags so the correct variant shows for the active theme:
-
-```html
-<img class="diagram-light" alt="Description" src="../../diagrams/images/light/jim-structurizr-1-Example.svg">
-<img class="diagram-dark"  alt="Description" src="../../diagrams/images/dark/jim-structurizr-1-Example.svg">
-```
-
-- CSS in `docs/assets/stylesheets/custom.css` hides the inactive variant based on `data-md-color-scheme`
-- GLightbox picks up both `<img>` tags automatically; the hidden one is ignored by the browser
-- **Path gotcha:** MkDocs serves pages at trailing-slash URLs (e.g. `/JIM/developer/architecture/`). Relative paths resolve from that URL, not the `.md` file location. Count `../` levels from the served URL, not the file path.
-
 ## Concept Diagrams (inline SVG)
 
 Customer-level concept diagrams (e.g. the Concepts page hero) are **hand-authored SVGs**, stored under `docs/assets/diagrams/` and inlined into the page via pymdownx.snippets:
@@ -107,6 +92,7 @@ Authoring rules:
 - Follow the snippet include with a `<p class="jim-diagram-caption">` footnote decoding the visual encoding (illustrative examples, dashed = planned). Wrap any sentence that refers to the packet animation in `<span class="jimdg-caption-motion">`; it hides together with the dots under `prefers-reduced-motion`.
 - No build step: the SVG is a static asset edited by hand; preview with `jim-docs` and verify in both themes.
 - GLightbox does not apply to inline SVGs (it wraps `<img>` only); size the composition to be legible at content-column width.
+- **README exports:** the GitHub README embeds self-contained light/dark copies of `system-context.svg` and `containers.svg` from `.github/diagrams/`. After changing either source (or the `--jimdg-*` tokens in `custom.css`), regenerate them with `pwsh ./scripts/Export-ReadmeDiagrams.ps1` and commit the results.
 
 ## Mermaid Diagrams
 

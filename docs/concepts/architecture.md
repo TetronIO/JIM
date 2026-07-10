@@ -11,11 +11,9 @@ At the heart of JIM is the **metaverse**: a centralised repository of identity o
 - **Decoupled systems**<br /> Connected Systems do not need to know about each other; they only interact with the metaverse.
 - **Auditability**<br /> Every change is tracked as it passes through the hub.
 
-```mermaid
-flowchart LR
-    A["Source Systems\n\nHR Database\nBadge System"] -->|Import| B["Metaverse\n\nIdentity\nObjects"]
-    B -->|Export| C["Target Systems\n\nActive Directory\nEmail System"]
-```
+--8<-- "assets/diagrams/metaverse-pattern.svg"
+
+<p class="jim-diagram-caption">Sources project identities into the Metaverse; targets receive them from it. The same Connected System can be both source and target (writeback).<span class="jimdg-caption-motion"> Moving dots trace import and export flows.</span></p>
 
 **Key principle**: All identity data flows through the metaverse. JIM never synchronises directly between Connected Systems.
 
@@ -63,16 +61,9 @@ JIM uses PostgreSQL as its sole data store. The database holds all configuration
 
 JIM follows a strict layered architecture. Each layer depends only on the layer directly below it -- higher layers never bypass intermediate layers.
 
-```mermaid
-flowchart TD
-    A["<b>Presentation</b><br>JIM.Web (Blazor + API)"]
-    B["<b>Application</b><br>JIM.Application (Servers)"]
-    C["<b>Domain</b><br>JIM.Models (Entities, DTOs)"]
-    D["<b>Data</b><br>JIM.PostgresData (EF Core)"]
-    E["<b>Integration</b><br>JIM.Connectors"]
+--8<-- "assets/diagrams/layered-architecture.svg"
 
-    A --> B --> C --> D --- E
-```
+<p class="jim-diagram-caption">Arrows show dependencies: each layer depends only on the layer directly beneath it. The Integration layer's Connectors sit at the base of the stack alongside data access.</p>
 
 ### Presentation Layer
 

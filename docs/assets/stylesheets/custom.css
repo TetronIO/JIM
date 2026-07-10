@@ -225,16 +225,6 @@
 }
 
 /* ========================================
-   Theme-aware diagram switching
-   ======================================== */
-
-/* Light mode: show light diagrams, hide dark */
-[data-md-color-scheme="default"] .diagram-dark { display: none; }
-
-/* Dark mode: show dark diagrams, hide light */
-[data-md-color-scheme="slate"] .diagram-light { display: none; }
-
-/* ========================================
    GLightbox theme-aware overlay
    ======================================== */
 
@@ -638,6 +628,7 @@ body:has(.jim-home) .md-content__button {
 .jim-diagram .jimdg-system-sub-planned  { font-size: 13px; fill: var(--jimdg-muted-text); }
 .jim-diagram .jimdg-flow-label   { font-size: 12.5px; font-weight: 500; fill: var(--jimdg-flow-text); text-anchor: start; }
 .jim-diagram .jimdg-anchor-end   { text-anchor: end; }
+.jim-diagram .jimdg-anchor-middle { text-anchor: middle; }
 
 /* Detail-card anatomy: left-aligned card headings with a right-aligned type
    tag, a hairline divider, and small attribute/value rows (used by the

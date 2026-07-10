@@ -86,10 +86,10 @@ Why choose JIM?
 ## Architecture
 JIM is a container-based distributed application implementing the metaverse pattern for centralised identity governance.
 
-<a href="docs/diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
+<a href=".github/diagrams/system-context-dark.svg">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
-    <img alt="JIM System Context" src="docs/diagrams/images/light/jim-structurizr-1-SystemContext.svg">
+    <source media="(prefers-color-scheme: dark)" srcset=".github/diagrams/system-context-dark.svg">
+    <img alt="JIM System Context" src=".github/diagrams/system-context-light.svg">
   </picture>
 </a>
 
@@ -100,10 +100,10 @@ JIM is a container-based distributed application implementing the metaverse patt
 - **JIM.PowerShell** - A cross-platform PowerShell module (Windows, macOS, Linux) for full configuration and automation of JIM, enabling Identity as Code (IDaC)
 - A database - PostgreSQL
 
-<a href="docs/diagrams/images/dark/jim-structurizr-1-Containers.svg">
+<a href=".github/diagrams/containers-dark.svg">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/images/dark/jim-structurizr-1-Containers.svg">
-    <img alt="JIM Containers" src="docs/diagrams/images/light/jim-structurizr-1-Containers.svg">
+    <source media="(prefers-color-scheme: dark)" srcset=".github/diagrams/containers-dark.svg">
+    <img alt="JIM Containers" src=".github/diagrams/containers-light.svg">
   </picture>
 </a>
 

@@ -57,8 +57,9 @@ RUN printf 'Package: moby-containerd\nPin: version 2.2.*\nPin-Priority: 1001\n' 
 # Docker-in-Docker proxy ports aren't auto-forwarded by VS Code Dev Containers;
 # socat provides a userspace bridge that VS Code detects and forwards to the host.
 #
-# Install Chromium shared libraries for Puppeteer (diagram export via jim-diagrams).
-# Puppeteer downloads its own Chrome binary, but needs these OS libraries at runtime.
+# Install Chromium shared libraries for the Playwright MCP browser (in-IDE UI
+# validation). setup.sh downloads the Chromium binary itself, but it needs these
+# OS libraries at runtime (avoids a --with-deps / sudo install step).
 #
 # Install python3-pip for MkDocs Material install in setup.sh. The Noble base
 # image only ships python3-minimal, which lacks pip/ensurepip - so pip install
