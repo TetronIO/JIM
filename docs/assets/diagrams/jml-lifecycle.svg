@@ -1,0 +1,110 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- The Joiner, Mover and Leaver lifecycle (Concepts > JML Lifecycle). -->
+<!-- Three moments in one identity's lifetime, each flowing from the source -->
+<!-- system through JIM (one continuous band; the identity persists in the -->
+<!-- Metaverse) out to the target-system outcomes. -->
+<!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
+<!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: keep this file free of blank lines AND of comments inside the -->
+<!-- <svg> element; it is inlined into markdown via pymdownx.snippets, and -->
+<!-- python-markdown ends the raw-HTML block at either. Structure is -->
+<!-- expressed with <g> groups instead. -->
+<svg class="jim-diagram" viewBox="0 0 1160 556" role="img" aria-labelledby="jimdg-jml-title jimdg-jml-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="jimdg-jml-title">The Joiner, Mover and Leaver lifecycle</title>
+  <desc id="jimdg-jml-desc">An identity's lifecycle in three phases, each flowing from the source system through JIM to the target systems. Joiner: a new starter record in the HR system is imported, JIM creates the identity by projecting it into the Metaverse, and accounts are provisioned in the target systems. Mover: a department transfer is imported, the identity is updated and the changes flow out to every target system's account. Leaver: the terminated record is imported, deletion rules and a grace period retire the identity, and target system accounts are deprovisioned.</desc>
+  <g id="jimdg-jml-phases">
+    <text class="jimdg-stage-label" x="250" y="52">Joiner</text>
+    <text class="jimdg-system-sub" x="250" y="74">a new identity appears</text>
+    <text class="jimdg-stage-label" x="580" y="52">Mover</text>
+    <text class="jimdg-system-sub" x="580" y="74">the identity changes</text>
+    <text class="jimdg-stage-label" x="910" y="52">Leaver</text>
+    <text class="jimdg-system-sub" x="910" y="74">the identity leaves</text>
+    <line class="jimdg-spoke" x1="350" y1="46" x2="470" y2="46"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(480,46) rotate(0)"/>
+    <line class="jimdg-spoke" x1="680" y1="46" x2="800" y2="46"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(810,46) rotate(0)"/>
+  </g>
+  <g id="jimdg-jml-events">
+    <rect class="jimdg-system" x="120" y="110" width="260" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="250" y="138">New starter record</text>
+    <text class="jimdg-system-sub" x="250" y="159">HR System</text>
+    <rect class="jimdg-system" x="450" y="110" width="260" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="580" y="138">Department transfer</text>
+    <text class="jimdg-system-sub" x="580" y="159">HR System</text>
+    <rect class="jimdg-system" x="780" y="110" width="260" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="910" y="138">Record terminated</text>
+    <text class="jimdg-system-sub" x="910" y="159">HR System</text>
+  </g>
+  <g id="jimdg-jml-jim">
+    <rect class="jimdg-hub" x="90" y="244" width="980" height="148" rx="8"/>
+    <text class="jimdg-hub-title" x="580" y="279">JIM</text>
+    <rect class="jimdg-chip" x="120" y="296" width="260" height="68" rx="8"/>
+    <text class="jimdg-chip-label" x="250" y="324">Identity created</text>
+    <text class="jimdg-chip-sub" x="250" y="344">projected into the Metaverse</text>
+    <rect class="jimdg-chip" x="450" y="296" width="260" height="68" rx="8"/>
+    <text class="jimdg-chip-label" x="580" y="324">Identity updated</text>
+    <text class="jimdg-chip-sub" x="580" y="344">changes flow through the Metaverse</text>
+    <rect class="jimdg-chip" x="780" y="296" width="260" height="68" rx="8"/>
+    <text class="jimdg-chip-label" x="910" y="324">Identity retired</text>
+    <text class="jimdg-chip-sub" x="910" y="344">deletion rules · grace period</text>
+  </g>
+  <g id="jimdg-jml-outcomes">
+    <rect class="jimdg-system" x="120" y="462" width="260" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="250" y="490">Accounts provisioned</text>
+    <text class="jimdg-system-sub" x="250" y="511">Target Systems</text>
+    <rect class="jimdg-system" x="450" y="462" width="260" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="580" y="490">Accounts updated</text>
+    <text class="jimdg-system-sub" x="580" y="511">Target Systems</text>
+    <rect class="jimdg-system" x="780" y="462" width="260" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="910" y="490">Accounts deprovisioned</text>
+    <text class="jimdg-system-sub" x="910" y="511">Target Systems</text>
+  </g>
+  <g id="jimdg-jml-flows">
+    <line class="jimdg-spoke" x1="250" y1="174" x2="250" y2="234"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(250,244) rotate(90)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="262" y="213">import</text>
+    <line class="jimdg-spoke" x1="580" y1="174" x2="580" y2="234"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,244) rotate(90)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="592" y="213">import</text>
+    <line class="jimdg-spoke" x1="910" y1="174" x2="910" y2="234"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(910,244) rotate(90)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="922" y="213">import</text>
+    <line class="jimdg-spoke" x1="250" y1="392" x2="250" y2="452"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(250,462) rotate(90)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="262" y="431">export</text>
+    <line class="jimdg-spoke" x1="580" y1="392" x2="580" y2="452"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,462) rotate(90)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="592" y="431">export</text>
+    <line class="jimdg-spoke" x1="910" y1="392" x2="910" y2="452"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(910,462) rotate(90)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="922" y="431">export</text>
+  </g>
+  <g id="jimdg-jml-packets">
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.4s" begin="0s" repeatCount="indefinite" path="M250,176 L250,233"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.4s" begin="1.2s" repeatCount="indefinite" path="M250,394 L250,451"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="1.2s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.4s" begin="-0.8s" repeatCount="indefinite" path="M580,176 L580,233"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-0.8s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.4s" begin="0.4s" repeatCount="indefinite" path="M580,394 L580,451"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="0.4s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.4s" begin="-1.6s" repeatCount="indefinite" path="M910,176 L910,233"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-1.6s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.4s" begin="-0.4s" repeatCount="indefinite" path="M910,394 L910,451"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-0.4s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>

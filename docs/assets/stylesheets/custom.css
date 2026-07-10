@@ -626,6 +626,7 @@ body:has(.jim-home) .md-content__button {
 .jim-diagram .jimdg-hub-title    { font-size: 22px; font-weight: 700; fill: var(--jimdg-hub-text); }
 .jim-diagram .jimdg-layer-title  { font-size: 14px; font-weight: 600; fill: var(--jimdg-layer-text); }
 .jim-diagram .jimdg-chip-label   { font-size: 13.5px; font-weight: 600; fill: var(--jimdg-chip-text); }
+.jim-diagram .jimdg-chip-sub     { font-size: 11px; fill: var(--jimdg-chip-text); opacity: 0.78; }
 .jim-diagram .jimdg-chip-label-planned { font-size: 12.5px; font-weight: 600; fill: var(--jimdg-chip-muted-text); }
 .jim-diagram .jimdg-chip-sub-planned   { font-size: 11px; fill: var(--jimdg-chip-muted-text); }
 .jim-diagram .jimdg-stage-label  { font-size: 16px; font-weight: 600; fill: var(--jimdg-node-text); }
