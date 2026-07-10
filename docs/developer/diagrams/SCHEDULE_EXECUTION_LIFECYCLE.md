@@ -1,8 +1,10 @@
 # Schedule Execution Lifecycle
 
-> Last updated: 2026-04-22, JIM v0.10.0
+> Last updated: 2026-07-10, JIM v0.13.0
 
 This diagram shows how schedules are triggered, how step groups are queued and advanced, and how the scheduler and worker collaborate to drive multi-step execution to completion.
+
+JIM seeds one built-in schedule at startup: the hourly **Temporal Scope Reconciliation** schedule (Temporal Scope Reconciliation, #85; cron `0 * * * *`), whose single step is of type `TemporalScopeReconciliation`. It runs the same queue-and-advance machinery as any other schedule; the only difference is the step type it queues (see Step Group Queuing Detail below), which creates a `TemporalScopeReconciliationWorkerTask` rather than a `SynchronisationWorkerTask`.
 
 ## Three-Service Collaboration
 
@@ -77,9 +79,11 @@ flowchart TD
     ForEach -->|Yes| CheckType{Step<br/>type?}
 
     CheckType -->|RunProfile| CreateSyncTask[Create SynchronisationWorkerTask<br/>Set ConnectedSystemId + RunProfileId<br/>Set ExecutionMode: Parallel/Sequential<br/>Set ContinueOnFailure from step<br/>Link to ScheduleExecution]
+    CheckType -->|TemporalScopeReconciliation| CreateTemporalTask[QueueTemporalScopeReconciliationStepAsync<br/>Create TemporalScopeReconciliationWorkerTask<br/>No per-instance configuration<br/>Link to ScheduleExecution]
     CheckType -->|PowerShell<br/>Executable<br/>SqlScript| NotImpl[Log warning:<br/>not yet implemented<br/>Skip step]
 
     CreateSyncTask --> CreateActivity[TaskingServer.CreateWorkerTaskAsync<br/>Creates Activity with initiator triad<br/>Associates Activity with WorkerTask]
+    CreateTemporalTask --> CreateActivity
     CreateActivity --> ForEach
     NotImpl --> ForEach
 ```

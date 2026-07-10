@@ -68,13 +68,13 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 
 | Category | Cmdlets | Description |
 |----------|---------|-------------|
-| [System](system.md) | 4 | Health checks, version, auth config, and user info |
+| [System](system.md) | 5 | Health checks, version, auth config, user info, and system reset |
 | [Connection](connection.md) | 3 | Connect, disconnect, and test JIM sessions |
-| [Connected Systems](connected-systems.md) | 19 | Manage Connected Systems, schemas, partitions, and connector space objects |
+| [Connected Systems](connected-systems.md) | 20 | Manage Connected Systems, schemas, partitions, connector space objects, and connector definitions |
 | [Run Profiles](run-profiles.md) | 5 | Create and execute import, sync, and export operations |
-| [Synchronisation Rules](synchronisation-rules.md) | 17 | Define attribute mappings, scoping criteria, and Object Matching Rules |
-| [Metaverse](metaverse.md) | 8 | Query objects, manage schema types and attributes, review pending deletions |
-| [Predefined Searches](predefined-searches.md) | 2 | List and toggle the searches that drive portal list views and the fast search API |
+| [Synchronisation Rules](synchronisation-rules.md) | 23 | Define attribute mappings, scoping criteria, and Object Matching Rules |
+| [Metaverse](metaverse.md) | 14 | Query objects, manage schema types and attributes, set Attribute Priority, and review pending deletions |
+| [Predefined Searches](predefined-searches.md) | 9 | List and toggle the searches that drive portal list views and the fast search API, and manage their filter criteria (groups and criteria) |
 | [Schedules](schedules.md) | 11 | Automate synchronisation workflows with scheduled execution |
 | [Activities](activities.md) | 3 | Monitor operation history, statistics, and execution items |
 | [API Keys](api-keys.md) | 4 | Create, manage, and revoke API keys |
@@ -82,8 +82,11 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Service Settings](service-settings.md) | 3 | View and modify runtime configuration |
 | [Security](security.md) | 5 | Manage security roles and their memberships, including listing the roles a Metaverse Object is in |
 | [History](history.md) | 4 | Query configuration change history, query deleted objects, and manage change history retention |
-| [Example Data](example-data.md) | 3 | Generate sample data for testing and evaluation |
+| [Example Data](example-data.md) | 6 | Generate sample data for testing and evaluation, and create, update, and remove reusable Example Data Sets |
 | [Expressions](expressions.md) | 1 | Test Synchronisation Rule expressions before deployment |
+| [Worker Tasks](worker-tasks.md) | 2 | Monitor and cancel in-flight background worker tasks |
+| [File System](file-system.md) | 2 | Browse and validate server-side paths when configuring file-based connectors |
+| [Logs](logs.md) | 3 | Query, retrieve, and tail JIM service log files for remote troubleshooting |
 
 ## Quick Start
 
