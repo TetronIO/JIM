@@ -43,6 +43,7 @@
      #f3f3f3 background), deepening slightly on hover */
   --jim-card-bg: #f7f7f7;
   --jim-card-bg-hover: #efefef;
+  --jim-card-border: rgba(0, 0, 0, 0.13);   /* a touch darker than Material's default lightest */
 
 }
 
@@ -126,6 +127,7 @@
   /* Grid card surfaces: raised navy panel, lifting a touch lighter on hover */
   --jim-card-bg: #0d1e30;
   --jim-card-bg-hover: #14293f;
+  --jim-card-border: var(--md-default-fg-color--lightest);   /* unchanged from Material default */
 
 }
 
@@ -182,6 +184,7 @@
 .md-typeset .grid > .card {
   position: relative;   /* positioning context for the stretched-link overlay below */
   background-color: var(--jim-card-bg);
+  border-color: var(--jim-card-border);
   border-radius: 8px;   /* match the JIM.Web portal's container/panel radius */
   transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
 }
