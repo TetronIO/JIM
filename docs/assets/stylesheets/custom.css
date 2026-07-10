@@ -494,6 +494,15 @@ body:has(.jim-home) .md-content__button {
   flex-shrink: 0;
 }
 
+/* Light mode: pin the check green. Material's own `.md-typeset .twemoji svg`
+   rule (fill: currentColor) outranks the base rule above on specificity and
+   would otherwise paint the tick the monochrome body colour; the scheme-prefixed
+   selector here matches the specificity that already lets the dark rule win. */
+[data-md-color-scheme="default"] .jim-capabilities li .twemoji,
+[data-md-color-scheme="default"] .jim-capabilities li svg {
+  fill: #2e9e5a;
+}
+
 /* Dark mode: soften the pill background and brighten the check */
 [data-md-color-scheme="slate"] .jim-capabilities li {
   background: #0d1e30;
