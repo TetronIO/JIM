@@ -162,28 +162,9 @@ In **Containers Used**, `samba-* / openldap-primary` means the scenario runs aga
 
 **Available Templates (`-Template` parameter):**
 
-Choose a template based on your testing goals. For measured run times see [Run-Time Estimates](#run-time-estimates).
-
-- **Nano** (default): 3 users, 1 group - Fast dev iteration and debugging
-- **Micro**: 10 users, 3 groups - Quick smoke tests and development
-- **Small**: 100 users, 20 groups - Small business scenarios, unit testing
-- **Medium**: 1,000 users, 100 groups - Medium enterprise, CI/CD pipelines
-- **MediumLarge**: 5,000 users, 250 groups - Large medium enterprise, performance validation
-- **Large**: 10,000 users, 500 groups - Large enterprise, performance baselines
-- **Scale100k50Groups**: 100,000 users, 50 groups - Very large enterprise, stress testing (**requires 20+ GB host RAM**; see note below)
-- **Scale200k55Groups**: 200,000 users, 55 groups - Very large enterprise, extended stress testing (**requires 24+ GB host RAM**)
-- **Scale500k65Groups**: 500,000 users, 65 groups - Massive enterprise, scale validation (**requires 32+ GB host RAM**)
-- **Scale750k70Groups**: 750,000 users, 70 groups - Near-million scale validation (**requires 32+ GB host RAM**)
-- **Scale1m80Groups**: 1,000,000 users, 70 groups - Global enterprise, scale limits (**requires 64+ GB host RAM**). _Note: the name's "80" reflects the originally planned group count; the actual count is 70. The capped-groups Samba-friendly templates above are kept for Samba scale testing; long-tail counterparts (Scale*k*kGroups) are listed below._
-- **Scale100k5kGroups**: 100,000 users, 5,027 groups (realistic long-tail shape) - Scenario 8 entitlement sync against representative enterprise group topology. **OpenLDAP only**; rejected on Samba AD. Same memory requirements as Scale100k50Groups.
-- **Scale200k10kGroups**: 200,000 users, 9,984 groups (long-tail shape) - Scenario 8 only. **OpenLDAP only**. Same memory profile as Scale200k55Groups plus additional RAM for the larger group/membership working set (~28+ GB recommended).
-- **Scale500k25kGroups**: 500,000 users, 24,997 groups (long-tail shape) - Scenario 8 only. **OpenLDAP only**. ~40+ GB recommended.
-- **Scale750k40kGroups**: 750,000 users, 40,011 groups (long-tail shape) - Scenario 8 only. **OpenLDAP only**. ~48+ GB recommended.
-- **Scale1m60kGroups**: 1,000,000 users, 60,073 groups (long-tail shape) - Scenario 8 only. **OpenLDAP only**. ~64+ GB recommended; also requires raising the OpenLDAP accesslog `olcDbMaxSize` proportionally (see Troubleshooting → "OpenLDAP accesslog full" below).
+See [Data Scale Templates](#data-scale-templates) for the full list: sizes, group counts, use case and minimum host RAM.
 
 > **Memory requirements for large templates:** The Scale100k50Groups and above templates require significantly more memory than smaller templates. The worker loads all imported objects into memory during processing; a 100K object import produces a worker peak working set of approximately 2.3 GB, plus 1–2 GB for the database during bulk inserts. **A 16 GB machine is not sufficient for Scale100k50Groups**; the worker will be OOM-killed during the save phase even without IDE overhead. In a GitHub Codespace (16 GB total), the problem is worse because the IDE and dev tools consume additional memory. Run Scale100k50Groups tests on a machine with at least 20–24 GB total RAM. See the [Deployment Guide - Memory Scaling](../DEPLOYMENT_GUIDE.md#memory-scaling-by-identity-object-count) for detailed requirements.
-
-See [Data Scale Templates](#data-scale-templates) for detailed template specifications.
 
 **Available Directory Types (`-DirectoryType` parameter):**
 
@@ -413,24 +394,27 @@ flowchart TD
 
 Choose the appropriate template based on test goals. For run times see [Run-Time Estimates](#run-time-estimates).
 
-| Template   | Users     | Groups  | Avg Memberships | Total Objects | Use Case                          |
-|------------|-----------|---------|-----------------|---------------|-----------------------------------|
-| **Nano**   | 3         | 1       | 1               | 4             | Fast dev iteration, debugging     |
-| **Micro**  | 10        | 3       | 3               | 13            | Quick smoke tests, development    |
-| **Small**  | 100       | 20      | 5               | 120           | Small business, unit tests        |
-| **Medium** | 1,000     | 100     | 8               | 1,100         | Medium enterprise, CI/CD          |
-| **MediumLarge** | 5,000 | 250     | 9               | 5,250         | Large medium enterprise, validation |
-| **Large**  | 10,000    | 500     | 10              | 10,500        | Large enterprise, baselines       |
-| **Scale100k50Groups** | 100,000   | 50      | 12              | 100,050       | Very large enterprise, stress     |
-| **Scale100k5kGroups** | 100,000   | 5,027   | ~9 (measured)   | 105,027       | Scenario 8 long-tail group shape (OpenLDAP only) |
-| **Scale200k55Groups** | 200,000   | 55      | 12              | 200,055       | Very large enterprise, extended   |
-| **Scale200k10kGroups** | 200,000  | 9,984   | ~8              | 209,984       | Scenario 8 long-tail group shape (OpenLDAP only) |
-| **Scale500k65Groups** | 500,000   | 65      | 13              | 500,065       | Massive enterprise, validation    |
-| **Scale500k25kGroups** | 500,000  | 24,997  | ~10             | 524,997       | Scenario 8 long-tail group shape (OpenLDAP only) |
-| **Scale750k70Groups** | 750,000   | 70      | 14              | 750,070       | Near-million scale validation     |
-| **Scale750k40kGroups** | 750,000  | 40,011  | ~11             | 790,011       | Scenario 8 long-tail group shape (OpenLDAP only) |
-| **Scale1m80Groups** | 1,000,000 | 70      | 15              | 1,000,070     | Global enterprise, scale limits (group count reshape pending) |
-| **Scale1m60kGroups** | 1,000,000 | 60,073 | ~13             | 1,060,073     | Scenario 8 long-tail group shape (OpenLDAP only) |
+| Template | Users | Groups | Avg Memberships | Total Objects | Use Case | Min RAM |
+|----------|-------|--------|-----------------|---------------|----------|---------|
+| **Nano** | 3 | 1 | 1 | 4 | Fast dev iteration, debugging | - |
+| **Micro** | 10 | 3 | 3 | 13 | Quick smoke tests, development | - |
+| **Small** | 100 | 20 | 5 | 120 | Small business, unit tests | - |
+| **Medium** | 1,000 | 100 | 8 | 1,100 | Medium enterprise, CI/CD | - |
+| **MediumLarge** | 5,000 | 250 | 9 | 5,250 | Large medium enterprise, validation | - |
+| **Large** | 10,000 | 500 | 10 | 10,500 | Large enterprise, baselines | - |
+| **Scale100k50Groups** | 100,000 | 50 | 12 | 100,050 | Very large enterprise, stress | 20+ GB |
+| **Scale100k5kGroups** | 100,000 | 5,027 | ~9 (measured) | 105,027 | Scenario 8 long-tail group shape (OpenLDAP only) | 20+ GB |
+| **Scale200k55Groups** | 200,000 | 55 | 12 | 200,055 | Very large enterprise, extended | 24+ GB |
+| **Scale200k10kGroups** | 200,000 | 9,984 | ~8 | 209,984 | Scenario 8 long-tail group shape (OpenLDAP only) | 28+ GB |
+| **Scale500k65Groups** | 500,000 | 65 | 13 | 500,065 | Massive enterprise, validation | 32+ GB |
+| **Scale500k25kGroups** | 500,000 | 24,997 | ~10 | 524,997 | Scenario 8 long-tail group shape (OpenLDAP only) | 40+ GB |
+| **Scale750k70Groups** | 750,000 | 70 | 14 | 750,070 | Near-million scale validation | 32+ GB |
+| **Scale750k40kGroups** | 750,000 | 40,011 | ~11 | 790,011 | Scenario 8 long-tail group shape (OpenLDAP only) | 48+ GB |
+| **Scale1m80Groups** | 1,000,000 | 70 | 15 | 1,000,070 | Global enterprise, scale limits | 64+ GB |
+| **Scale1m60kGroups** | 1,000,000 | 60,073 | ~13 | 1,060,073 | Scenario 8 long-tail group shape (OpenLDAP only) | 64+ GB |
+
+- **Scale1m80Groups**: the name's "80" reflects the originally planned group count; the actual count is 70. The capped-groups templates (`Scale*Groups`) are kept for Samba AD scale testing; the long-tail counterparts (`Scale*kGroups`) model realistic group topology and are OpenLDAP only.
+- **Scale1m60kGroups**: also requires raising the OpenLDAP accesslog `olcDbMaxSize` proportionally (see Troubleshooting -> "OpenLDAP accesslog full").
 
 ### Data Characteristics
 
@@ -446,36 +430,46 @@ All templates generate realistic enterprise data following normal distribution p
 
 ## Run-Time Estimates
 
-> Wall-clock times **measured on this devcontainer** (best endeavours; cold-cache figures marked *(est.)* are extrapolated, not directly measured). **Time (cached)** assumes the directory snapshot images and JIM stack images already exist, the normal case after the first run on a machine. **First run adds** is the one-time build of those images on top. Two things dominate: run time is driven almost entirely by **Scenarios 1, 7 and 8**, and it is strongly **directory-dependent**, because `samba-tool` takes a per-write LDB lock, Samba AD's Scenario 8 is far slower than OpenLDAP's (Scenario 8 alone measured 96 min on Samba MediumLarge versus 19 min on OpenLDAP at the larger Large template). Scenarios 2, 4, 6, 10, 11, 12, 13 use fixed small data and barely move with `-Template`.
+> Wall-clock times **measured on this devcontainer** (best endeavours; cold-cache figures marked *(est.)* are extrapolated, not directly measured). **Time (cached)** assumes the directory snapshot images and JIM stack images already exist, the normal case after the first run on a machine. **First run adds** is the one-time build of those images on top. Two things dominate: run time is driven almost entirely by **Scenarios 1, 7 and 8**, and it is strongly **directory-dependent**, because `samba-tool` takes a per-write LDB lock, Samba AD's Scenario 8 is far slower than OpenLDAP's (Scenario 8 alone measured 96 min on Samba MediumLarge versus 19 min on OpenLDAP at the larger Large template). Scenarios 2, 4, 6, 11, 12, 13 use fixed small data and barely move with `-Template`. Directory-selectable scenarios have a separate Samba AD and OpenLDAP row.
 
-| Runner option | Directory | Template | Time (cached) | First run adds *(est.)* |
-|---------------|-----------|----------|---------------|-------------------------|
-| `-PreRelease` | Samba + OpenLDAP | Medium + Large | **~2h 45m** | +~15 min |
-| `-Scenario All` | SambaAD | Medium | ~1h 00m | +~10 min |
-| `-Scenario All` | SambaAD | MediumLarge | ~2h 40m | +~10 min |
-| `-Scenario All` | OpenLDAP | Large | ~1h 45m | +~15 min |
-| `-Scenario All` | OpenLDAP | Scale100k50Groups | ~7h 15m | +~1h |
-| `-Scenario All` | either | Nano / Micro / Small | ~30-40 min *(est.)* | +~5 min |
-| Scenario1 HRToIdentityDirectory | both | Medium / Large / 100k | 11m / 21m / 3h | scales strongly |
-| Scenario2 CrossDomainSync | both | any | ~1.5m | fixed |
+| Runner option | Directory | Template(s) | Time (cached) | Notes |
+|---------------|-----------|-------------|---------------|-------|
+| `-PreRelease` | Samba AD + OpenLDAP | Medium + Large | **~2h 45m** | first run +~15 min |
+| `-Scenario All` | Samba AD | Medium | ~1h 00m | first run +~10 min |
+| `-Scenario All` | Samba AD | MediumLarge | ~2h 40m | first run +~10 min |
+| `-Scenario All` | OpenLDAP | Large | ~1h 45m | first run +~15 min |
+| `-Scenario All` | OpenLDAP | Scale100k50Groups | ~7h 15m | first run +~1h |
+| `-Scenario All` | Samba AD or OpenLDAP | Nano / Micro / Small | ~30-40m *(est.)* | not directly measured |
+| Scenario1 HRToIdentityDirectory | Samba AD | Medium / MediumLarge | 11m / 24m | scales strongly |
+| Scenario1 HRToIdentityDirectory | OpenLDAP | Large / 100k | 21m / 3h | scales strongly |
+| Scenario2 CrossDomainSync | Samba AD | any | ~1.5m | fixed |
+| Scenario2 CrossDomainSync | OpenLDAP | any | ~1.5m | fixed |
 | Scenario3 GALSYNC | n/a | n/a | stub, not implemented | n/a |
-| Scenario4 DeletionRules | both | any | ~7m (grace-period waits) | fixed |
-| Scenario5 MatchingRules | both | Medium / 100k | 2m / 22m | scales |
-| Scenario6 SchedulerService | both | any | ~1m | fixed |
-| Scenario7 ClearConnectedSystemObjects | both | Medium / 100k | 1.5m / 52m | scales |
-| Scenario8 CrossDomainEntitlementSync | both | see note | Samba 8m (Med) / 96m (ML); OpenLDAP 19m (Large) / 137m (100k) | scales; Samba far slower |
-| Scenario9 PartitionScopedImports | both | Medium / 100k | 1m / 9m | scales |
-| Scenario10 SyncRuleScoping | both | any | ~3m | ~fixed |
-| Scenario11 ScopingCriteriaMatrix | both (file) | any | ~1m Default (90s Quick, 10m Exhaustive) | tier-driven |
-| Scenario12 RelativeDateScoping | both (file) | any | ~2.5m (date-window wait) | fixed |
-| Scenario13 RelativeDateOutboundScoping | both (file) | any | ~3m (date-window wait) | fixed |
-| Scenario14 AttributePriority | OpenLDAP only | (ignored) | ~2m (fixed six-user dataset) | +~4m JIM build |
+| Scenario4 DeletionRules | Samba AD | any | ~7m | fixed (grace-period waits) |
+| Scenario4 DeletionRules | OpenLDAP | any | ~7m | fixed (grace-period waits) |
+| Scenario5 MatchingRules | Samba AD | Medium / MediumLarge | ~2m | fixed (Nano data) |
+| Scenario5 MatchingRules | OpenLDAP | Large / 100k | 5m / 22m | see reset-overhead note |
+| Scenario6 SchedulerService | Samba AD | any | ~1m | fixed |
+| Scenario6 SchedulerService | OpenLDAP | any | ~1m | fixed |
+| Scenario7 ClearConnectedSystemObjects | Samba AD | Medium / MediumLarge | 1.5m / 3m | scales |
+| Scenario7 ClearConnectedSystemObjects | OpenLDAP | Large / 100k | 4.5m / 52m | scales |
+| Scenario8 CrossDomainEntitlementSync | Samba AD | Medium / MediumLarge | 8m / 96m | scales; samba-tool per-write lock |
+| Scenario8 CrossDomainEntitlementSync | OpenLDAP | Large / 100k | 19m / 2h 17m | scales |
+| Scenario9 PartitionScopedImports | Samba AD | Medium / MediumLarge | ~1m | ~fixed |
+| Scenario9 PartitionScopedImports | OpenLDAP | Large / 100k | 2m / 9m | scales |
+| Scenario10 SyncRuleScoping | Samba AD | Medium / MediumLarge | ~2.5m | ~fixed |
+| Scenario10 SyncRuleScoping | OpenLDAP | Large / 100k | 3m / 5m | mild scale |
+| Scenario11 ScopingCriteriaMatrix | file-based (no directory) | any | ~1m Default | Quick / Default / Exhaustive tiers |
+| Scenario12 RelativeDateScoping | file-based (no directory) | any | ~2.5m | date-window wait |
+| Scenario13 RelativeDateOutboundScoping | file-based (no directory) | any | ~3m | date-window wait |
+| Scenario14 AttributePriority | OpenLDAP only | (ignored) | ~2m | fixed six-user; -Template ignored |
 
 **Notes:**
 
 - Per-scenario times are the scenario's contribution inside a full run. Run one **standalone** and add the fixed harness overhead (reset, start services, cleanup): roughly +1 min warm, or +5 min on a first run that also rebuilds the JIM images (~4 min).
 - Nano/Micro/Small full-regression times are estimates, not directly measured. A run floors at roughly 25-30 min from fixed-duration scenarios (Scenario 4's grace periods, Scenarios 12/13's date-window waits) plus ~12 between-scenario resets, so shrinking the template below Medium buys little.
 - The first-run directory-snapshot build scales with user count: negligible for light templates, ~45-60 min at Scale100k50Groups (100k users). At scale, also mind the reset-hygiene caveat in [issue #961](https://github.com/TetronIO/JIM/issues/961).
+- OpenLDAP per-scenario times at scale can include between-scenario reset/directory overhead (see [#961](https://github.com/TetronIO/JIM/issues/961)); for the non-scaling scenarios (e.g. Scenario 5) treat the 100k figure as an upper bound, not the scenario's intrinsic cost.
 - Scenario 14 ignores `-Template` (it always uses its bespoke six-user, two-suffix dataset) and runs on OpenLDAP only.
 
 ---
