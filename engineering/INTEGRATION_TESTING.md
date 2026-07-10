@@ -27,10 +27,9 @@
 14. [Troubleshooting](#troubleshooting)
 15. [Appendix](#appendix)
 16. [Current Progress & Known Issues](#current-progress--known-issues)
-17. [Known Issues & TODOs](#known-issues--todos)
-18. [Workflow Tests vs Integration Tests](#workflow-tests-vs-integration-tests)
-19. [Metrics Streaming](#metrics-streaming)
-20. [Related Documentation](#related-documentation)
+17. [Workflow Tests vs Integration Tests](#workflow-tests-vs-integration-tests)
+18. [Metrics Streaming](#metrics-streaming)
+19. [Related Documentation](#related-documentation)
 
 ---
 
@@ -83,23 +82,11 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario13-RelativeDateOutboundScoping" # Relative-date outbound scoping (staged provisioning)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario14-AttributePriority"        # Attribute Priority multi-source winner resolution (#91, OpenLDAP only)
 
-# Run with a specific template size
-./test/integration/Run-IntegrationTests.ps1 -Template Nano
-./test/integration/Run-IntegrationTests.ps1 -Template Micro
-./test/integration/Run-IntegrationTests.ps1 -Template Small
-./test/integration/Run-IntegrationTests.ps1 -Template Medium
-./test/integration/Run-IntegrationTests.ps1 -Template MediumLarge
-./test/integration/Run-IntegrationTests.ps1 -Template Large
-./test/integration/Run-IntegrationTests.ps1 -Template Scale100k50Groups
+# Run with a specific template size (see Data Scale Templates for the full list)
+./test/integration/Run-IntegrationTests.ps1 -Template Nano                    # smallest; fast dev iteration
+./test/integration/Run-IntegrationTests.ps1 -Template Medium                  # typical CI/CD size
+./test/integration/Run-IntegrationTests.ps1 -Template Scale100k50Groups       # scale/stress
 ./test/integration/Run-IntegrationTests.ps1 -Template Scale100k5kGroups       # long-tail, OpenLDAP + Scenario 8 only
-./test/integration/Run-IntegrationTests.ps1 -Template Scale200k55Groups
-./test/integration/Run-IntegrationTests.ps1 -Template Scale200k10kGroups      # long-tail, OpenLDAP + Scenario 8 only
-./test/integration/Run-IntegrationTests.ps1 -Template Scale500k65Groups
-./test/integration/Run-IntegrationTests.ps1 -Template Scale500k25kGroups      # long-tail, OpenLDAP + Scenario 8 only
-./test/integration/Run-IntegrationTests.ps1 -Template Scale750k70Groups
-./test/integration/Run-IntegrationTests.ps1 -Template Scale750k40kGroups      # long-tail, OpenLDAP + Scenario 8 only
-./test/integration/Run-IntegrationTests.ps1 -Template Scale1m80Groups
-./test/integration/Run-IntegrationTests.ps1 -Template Scale1m60kGroups        # long-tail, OpenLDAP + Scenario 8 only
 
 # Run only a specific test step (steps vary by scenario)
 ./test/integration/Run-IntegrationTests.ps1 -Step Joiner                          # Scenario 1: Joiner, Mover, Mover-Rename, Mover-Move, Disable, Enable, Leaver, Reconnection
@@ -218,48 +205,20 @@ Integration tests require a complete environment reset between runs to ensure re
 
 > **Directory reset between scenarios (full-regression runs):** the runner's per-scenario `Reset-JIMForNextScenario` removes the JIM database volume and clears the test data from *both* directory types. Samba AD's test OUs are deleted; OpenLDAP's `ou=People` and `ou=Groups` subtrees under `dc=yellowstone,dc=local` and `dc=glitterband,dc=local` are deleted and the empty base OUs recreated. OpenLDAP is a long-lived container whose data volume is not removed between scenarios, so without this explicit purge each OpenLDAP scenario would import the accumulated objects of every earlier OpenLDAP scenario. Fixed-size scenarios should assert their expected object count (see `Assert-ImportedObjectCount`) so a reset gap fails loudly rather than silently synchronising stale data.
 
-### DevContainer / Local Development
-
-For developers running tests locally in a DevContainer or development environment:
+Both locally and in CI, every run follows the same six-stage lifecycle. `Run-IntegrationTests.ps1` (see [Quick Start](#-quick-start)) automates all six stages; you do not drive them by hand.
 
 ```mermaid
 flowchart TD
-    A["<b>1. STAND UP</b><br/># Start external systems<br/>docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d"]
-    B["<b>2. POPULATE</b><br/># Populate test data<br/>./Populate-SambaAD.ps1 -Template Small<br/>./Generate-TestCSV.ps1 -Template Small"]
-    C["<b>3. CONFIGURE JIM</b><br/># Configure via API<br/>./Setup-Scenario1.ps1 -ApiKey $key"]
-    D["<b>4. EXECUTE TESTS</b><br/># Run scenario steps<br/>./Invoke-Scenario1... -Step All -Template Small"]
-    E["<b>5. RESET (for next run)</b><br/># Reset BOTH external systems AND JIM database<br/>docker compose -f test/integration/docker/docker-compose.integration-tests.yml down -v<br/>docker compose -f docker-compose.yml down -v<br/><br/># Then stand up fresh for next test run<br/>docker compose -f docker-compose.yml up -d<br/>docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d"]
-    A --> B --> C --> D --> E
+    A["<b>1. STAND UP</b><br/>JIM stack + directory/database containers"]
+    B["<b>2. POPULATE</b><br/>Generate CSV + populate Samba AD / OpenLDAP for the chosen template"]
+    C["<b>3. CONFIGURE JIM</b><br/>Create Connected Systems, Synchronisation Rules, Run Profiles via the PowerShell module"]
+    D["<b>4. EXECUTE</b><br/>Run the scenario's steps with waits between each import/sync/export cycle"]
+    E["<b>5. VALIDATE</b><br/>Assert expected objects, attributes and outcomes"]
+    F["<b>6. RESET / TEAR DOWN</b><br/>Remove JIM database + external system data so the next run starts clean"]
+    A --> B --> C --> D --> E --> F --> A
 ```
 
-**Key Commands:**
-
-| Step | Command | Purpose |
-|------|---------|---------|
-| Stand up external systems | `docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d` | Start Samba AD, databases |
-| Stand up JIM | `jim-stack` or `docker compose up -d` | Start JIM services |
-| Populate test data | `./Populate-SambaAD.ps1 -Template Small` | Create users/groups in external systems |
-| Configure JIM | `./Setup-Scenario1.ps1` | Create Connected Systems, Synchronisation Rules |
-| Run tests | `./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step All` | Execute test scenario |
-| Reset external systems | `docker compose -f test/integration/docker/docker-compose.integration-tests.yml down -v` | Remove external system data |
-| Reset JIM | `docker compose -f docker-compose.yml down -v` | Remove JIM database (metaverse, config) |
-
-### CI/CD Pipeline
-
-For automated testing in GitHub Actions:
-
-```mermaid
-flowchart TD
-    T["<b>WORKFLOW TRIGGER</b> (Manual via workflow_dispatch)<br/>- Select Template: Micro / Small / Medium / Large / Scale100k50Groups-Scale1m80Groups / Scale100k5kGroups-Scale1m60kGroups (long-tail, OpenLDAP only)<br/>- Select Phase: 1 (Supported) or 2 (Road-mapped)"]
-    S1["<b>1. STAND UP</b><br/>- JIM stack<br/>- External systems"]
-    S2["<b>2. BUILD JIM</b><br/>- dotnet build<br/>- Wait ready"]
-    S3["<b>3. CONFIGURE</b><br/>- Setup scripts<br/>- Populate data"]
-    S4["<b>4. EXECUTE</b><br/>- Run scenarios<br/>- Validate"]
-    S5["<b>5. COLLECT</b><br/>- Test results<br/>- Upload artefacts"]
-    S6["<b>6. TEAR DOWN</b> (always runs)<br/>- down -v ALL"]
-    C["<b>CLEAN STATE:</b> Runner is fresh for next workflow run<br/>No persistent volumes = automatic reset"]
-    T --> S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> C
-```
+**Local vs CI:** locally the runner performs the reset between runs (and `Reset-JIMForNextScenario` between scenarios of a full-regression sweep). In CI each run gets a fresh GitHub runner, so there are no persistent volumes and the reset is automatic. See [CI/CD Integration](#cicd-integration) for the workflow itself.
 
 **CI/CD Characteristics:**
 
@@ -325,7 +284,7 @@ Each scenario script supports a `-Step` parameter that controls which test case 
 
 **Common parameters across all scenario scripts**:
 - `-Step <StepName>` - Execute a specific test step (or `All` for full sequence)
-- `-Template <Size>` - Data scale template (Nano, Micro, Small, Medium, Large, Scale100k50Groups, Scale200k55Groups, Scale500k65Groups, Scale750k70Groups, Scale1m80Groups, Scale100k5kGroups, Scale200k10kGroups, Scale500k25kGroups, Scale750k40kGroups, Scale1m60kGroups)
+- `-Template <Size>` - Data scale template; see [Data Scale Templates](#data-scale-templates) for the full list
 - `-TemplateSambaAD <Size>` - Override `-Template` for Samba AD when using `-DirectoryType All`
 - `-TemplateOpenLDAP <Size>` - Override `-Template` for OpenLDAP when using `-DirectoryType All`
 - `-WaitSeconds <N>` - Override default wait time between steps (default: 60)
@@ -358,10 +317,10 @@ flowchart TB
         direction TB
         subgraph P1["Phase 1 (Supported)"]
             direction TB
-            P1A["Panoply AD<br/>(Scenarios 1 & 3)<br/>Port: 389/636"]
-            P1B["Panoply APAC<br/>(Scenario 2)<br/>Port: 10389/636"]
-            P1C["Quantum Dynamics EMEA<br/>Port: 11389"]
-            P1D["OpenLDAP<br/>Port: 1389/1636"]
+            P1A["samba-ad-primary<br/>(primary directory)<br/>389/636"]
+            P1B["samba-ad-source<br/>(cross-domain source)<br/>389/636"]
+            P1C["samba-ad-target<br/>(cross-domain target)<br/>389/636"]
+            P1D["openldap-primary<br/>(two suffixes)<br/>1389/1636"]
             CSV["CSV Files (mounted volume at /connector-files)"]
         end
         subgraph P2["Phase 2 (Road-mapped)"]
@@ -375,18 +334,7 @@ flowchart TB
     end
 ```
 
-### Test Flow
-
-```mermaid
-flowchart TD
-    A["<b>1. Stand Up Systems</b><br/>docker&nbsp;compose&nbsp;up&nbsp;(selected&nbsp;services&nbsp;based&nbsp;on&nbsp;phase/scenario)"]
-    B["<b>2. Populate Test Data</b><br/>PowerShell scripts generate realistic data:<br/>-&nbsp;Populate-SambaAD.ps1&nbsp;-Template&nbsp;Medium<br/>-&nbsp;Generate-TestCSV.ps1&nbsp;-Template&nbsp;Medium<br/>-&nbsp;Populate-SqlServer.ps1&nbsp;-Template&nbsp;Medium&nbsp;(Phase&nbsp;2)"]
-    C["<b>3. Configure JIM</b><br/>PowerShell module creates Connected Systems, Synchronisation Rules, Run Profiles:<br/>-&nbsp;Connect-JIM&nbsp;-ApiKey&nbsp;$env:JIM_API_KEY<br/>-&nbsp;New-JIMConnectedSystem&nbsp;(HR&nbsp;CSV,&nbsp;Samba&nbsp;AD)<br/>-&nbsp;New-JIMSyncRule&nbsp;(attribute&nbsp;flows)<br/>-&nbsp;New-JIMRunProfile&nbsp;(import,&nbsp;sync,&nbsp;export&nbsp;steps)"]
-    D["<b>4. Execute Scenarios</b><br/>Run scenario scripts:<br/>-&nbsp;Invoke-Scenario1-HRToIdentityDirectory.ps1<br/>-&nbsp;Invoke-Scenario2-CrossDomainSync.ps1<br/>-&nbsp;Invoke-Scenario3-GALSYNC.ps1<br/>-&nbsp;Invoke-Scenario7-ClearConnectedSystemObjects.ps1<br/>-&nbsp;..."]
-    E["<b>5. Validate Results</b><br/>Assertions check expected outcomes:<br/>-&nbsp;User&nbsp;provisioned&nbsp;correctly?<br/>-&nbsp;Attributes&nbsp;flowed&nbsp;as&nbsp;configured?<br/>-&nbsp;Performance&nbsp;within&nbsp;thresholds?"]
-    F["<b>6. Tear Down</b><br/>docker&nbsp;compose&nbsp;down&nbsp;-v&nbsp;(complete&nbsp;cleanup)"]
-    A --> B --> C --> D --> E --> F
-```
+The end-to-end run lifecycle (stand up, populate, configure, execute, validate, tear down) is shown under [Test Lifecycle Quick Reference](#test-lifecycle-quick-reference).
 
 ---
 
@@ -839,58 +787,10 @@ Step 8 [SEQUENTIAL]:  Delta Sync AD
 
 These scenarios test group management capabilities - a core ILM function where the system manages group memberships based on identity attributes.
 
-#### Deferred: Entitlement Management - JIM to AD ⏸️
+Two further entitlement scenarios are designed but **deferred**, both blocked on the same prerequisite: **Internally-managed MVOs** (Metaverse Objects created within JIM rather than imported from a Connected System). No scenario numbers are assigned; each will be allocated when work begins.
 
-> **Status**: ⏸️ **DEFERRED** - This scenario requires proper design and implementation of Internally-managed MVOs (Metaverse Objects created within JIM rather than imported from a Connected System). Deferred until Internal MVO support is designed and implemented. No scenario number assigned; will be allocated when work begins.
-
-**Purpose**: Validate JIM as the authoritative source for entitlement groups, provisioning them to AD with membership derived from person attributes.
-
-**Concept**: JIM creates and manages role-based groups (e.g., department groups, company groups, job title groups). Group membership is calculated from person attributes in the metaverse. Groups are provisioned to AD, and JIM detects and corrects any unauthorised changes made directly in AD.
-
-**Systems**:
-- Source: JIM Metaverse (groups created via JIM API, not imported from a Connected System)
-- Target: Panoply AD (OU=Entitlements,OU=Groups,OU=Corp,DC=panoply,DC=local)
-
-**Group Types Created**:
-- **Department Groups**: `Dept-{Department}` (e.g., `Dept-Finance`, `Dept-Information Technology`)
-- **Company Groups**: `Company-{Company}` (e.g., `Company-Panoply`, `Company-Nexus Dynamics`)
-- **Job Title Groups**: `Role-{Title}` (e.g., `Role-Manager`, `Role-Analyst`)
-
-**Test Steps** (executed sequentially):
-
-| Step | Test Case | Description |
-|------|-----------|-------------|
-| 1 | **CreateGroups** | Groups created in JIM via API -> provisioned to AD with calculated membership |
-| 2 | **UpdateMembership** | User department changes in HR -> membership updated (removed from old group, added to new) |
-| 3 | **DetectDrift** | Admin manually adds/removes member in AD -> JIM detects drift on next sync |
-| 4 | **ReassertState** | JIM reasserts expected membership, overwriting unauthorised AD changes |
-| 5 | **DeleteGroup** | Group deleted from JIM MV -> group deleted from AD |
-| 6 | **DeleteMember** | User deleted from JIM MV -> user removed from all group memberships in AD |
-
----
-
-#### Deferred: Entitlement Management - Convert AD Group Authority to JIM ⏸️
-
-> **Status**: ⏸️ **DEFERRED** - This scenario requires proper design and implementation of Internally-managed MVOs. After import, groups would need to be marked as JIM-authoritative (Internal origin), which requires the same Internal MVO support as the scenario above. Deferred until Internal MVO support is designed and implemented. No scenario number assigned; will be allocated when work begins.
-
-**Purpose**: Validate importing existing AD groups into JIM and converting authority so JIM becomes the authoritative source. After conversion, any changes made directly in AD are overwritten by JIM.
-
-**Concept**: Organisations often have existing groups in AD that were created manually or by other tools. This scenario tests bringing those groups under JIM management, making JIM authoritative for their membership.
-
-**Systems**:
-- Source: Panoply AD (existing groups in OU=Legacy Groups,OU=Groups,OU=Corp)
-- Target: JIM Metaverse (becomes authoritative after import)
-- Export Target: Panoply AD (same groups, now JIM-managed)
-
-**Test Steps** (executed sequentially):
-
-| Step | Test Case | Description |
-|------|-----------|-------------|
-| 1 | **ImportGroups** | Existing AD groups imported into JIM metaverse with current membership |
-| 2 | **ConvertAuthority** | Groups marked as JIM-authoritative (export Synchronisation Rule enabled) |
-| 3 | **UpdateViaJIM** | Membership changed via JIM API -> changes exported to AD |
-| 4 | **DetectDrift** | Admin manually modifies group in AD -> JIM detects drift |
-| 5 | **ReassertState** | JIM overwrites AD changes, reasserting JIM-managed membership |
+- **Entitlement Management - JIM to AD** ⏸️: JIM as the authoritative source for role-based groups (department/company/job-title), provisioning them to AD with membership derived from person attributes and correcting drift. Needs Internal MVO support to create the groups inside JIM.
+- **Entitlement Management - Convert AD Group Authority to JIM** ⏸️: import existing AD groups, then mark them JIM-authoritative (Internal origin) so JIM overwrites subsequent direct-AD changes. Needs the same Internal MVO support to flip imported groups to Internal origin.
 
 ---
 
@@ -1202,90 +1102,11 @@ The scenario seeds its own fixed test users positioned relative to "now" and ign
 
 > The scenario numbers below (Multi-Source Aggregation, Database Source/Target, Performance Baselines) have been renumbered repeatedly as implemented scenarios claimed each range: Partition-Scoped Imports, Synchronisation Rule Scoping and the Scoping Criteria Matrix took 9-11, the Relative-Date Scoping scenarios took 12-13, and Attribute Priority (#91) took 14. The planned scenarios are now numbered 15-17.
 
-#### Scenario 15: Multi-Source Aggregation
+All three Phase 2 scenarios are blocked on the **Database Connector** ([#170](https://github.com/TetronIO/JIM/issues/170)); the scripts do not exist yet. Planned shape:
 
-**Purpose**: Validate multiple database sources feeding the metaverse with join rules and attribute precedence.
-
-**Systems**:
-- Source 1: SQL Server (HRIS System A - Business Unit A)
-- Source 2: Oracle Database (HRIS System B - Business Unit B)
-- Target 1: Panoply AD
-- Target 2: CSV (Reporting)
-
-**Test Steps** (executed sequentially):
-
-| Step | Test Case | Description |
-|------|-----------|-------------|
-| 1 | **InitialLoad** | Both sources -> metaverse -> both targets |
-| 2 | **JoinRules** | Matching employeeID across sources -> single Metaverse Object |
-| 3 | **Precedence** | SQL Server authoritative for email/phone, Oracle for department/title |
-| 4 | **DataTypes** | VARCHAR, NVARCHAR, DATE, DATETIME, INT, BIT -> correct mapping |
-
-**Script**: `test/integration/scenarios/Invoke-Scenario15-MultiSourceAggregation.ps1`
-
-**Execution Model**:
-
-```powershell
-# Individual steps
-./Invoke-Scenario15-MultiSourceAggregation.ps1 -Step InitialLoad -Template Small
-./Invoke-Scenario15-MultiSourceAggregation.ps1 -Step JoinRules -Template Small
-./Invoke-Scenario15-MultiSourceAggregation.ps1 -Step Precedence -Template Small
-./Invoke-Scenario15-MultiSourceAggregation.ps1 -Step DataTypes -Template Small
-
-# Run all steps sequentially
-./Invoke-Scenario15-MultiSourceAggregation.ps1 -Step All -Template Small
-```
-
----
-
-#### Scenario 16: Database Source/Target
-
-**Purpose**: Validate database connector import/export capabilities.
-
-**Systems**:
-- Source: SQL Server
-- Target: PostgreSQL
-
-**Test Steps** (executed sequentially):
-
-| Step | Test Case | Description |
-|------|-----------|-------------|
-| 1 | **Import** | Import users from SQL Server |
-| 2 | **Export** | Export users to PostgreSQL |
-| 3 | **DataTypes** | Data type handling (text, numeric, date, boolean) |
-| 4 | **MultiValue** | Multi-valued attributes (if supported) |
-
-**Script**: `test/integration/scenarios/Invoke-Scenario16-DatabaseSourceTarget.ps1`
-
-**Execution Model**:
-
-```powershell
-# Individual steps
-./Invoke-Scenario16-DatabaseSourceTarget.ps1 -Step Import -Template Small
-./Invoke-Scenario16-DatabaseSourceTarget.ps1 -Step Export -Template Small
-./Invoke-Scenario16-DatabaseSourceTarget.ps1 -Step DataTypes -Template Small
-./Invoke-Scenario16-DatabaseSourceTarget.ps1 -Step MultiValue -Template Small
-
-# Run all steps sequentially
-./Invoke-Scenario16-DatabaseSourceTarget.ps1 -Step All -Template Small
-```
-
----
-
-#### Scenario 17: Performance Baselines
-
-**Purpose**: Establish performance characteristics at various scales.
-
-**Systems**: All (depending on scenario)
-
-**Test Coverage**:
-1. Run each scenario at each template scale
-2. Measure import, sync, export times
-3. Measure memory consumption
-4. Identify bottlenecks
-5. Establish acceptable thresholds
-
-**Script**: `test/integration/scenarios/Invoke-Scenario17-Performance.ps1`
+- **Scenario 15: Multi-Source Aggregation** - two database sources (SQL Server + Oracle) feeding the metaverse, exercising join rules across sources, attribute precedence (each source authoritative for different attributes), and database data-type mapping. Targets Samba AD plus a CSV reporting export.
+- **Scenario 16: Database Source/Target** - straight database connector import/export (SQL Server -> PostgreSQL), covering data-type handling and multi-valued attributes.
+- **Scenario 17: Performance Baselines** - run each scenario across template scales, measuring import/sync/export time and memory to establish thresholds and identify bottlenecks.
 
 ---
 
@@ -1426,137 +1247,23 @@ Write-Host "Scenario 1 configuration complete" -ForegroundColor Green
 | API Key Authentication | [#175](https://github.com/TetronIO/JIM/issues/175) | **✅ Complete** | API key authentication fully functional for all endpoints |
 | PowerShell Module | [#176](https://github.com/TetronIO/JIM/issues/176) | **✅ Complete** | Core cmdlets implemented and tested |
 
-#### API Key Authentication Status (Issue #175)
-
-**✅ RESOLVED** - API key authentication is now fully functional for both GET and POST/PUT/DELETE operations.
-
-**Completed:**
-- ✅ Created 3 connector definition API endpoints (GET list, GET by ID, GET by name)
-- ✅ Created `Get-JIMConnectorDefinition` PowerShell cmdlet
-- ✅ Added cmdlet to module manifest exports
-- ✅ OIDC redirect suppressed for API requests (returns 401 JSON instead of 302)
-- ✅ Added detailed logging to API key authentication handler
-- ✅ **Fixed**: API key handler now invoked for `[Authorize]` protected endpoints
-- ✅ **Fixed**: DbContext threading issues in authentication handler
-- ✅ **Fixed**: Write operations (POST/PUT/DELETE) now work with API key auth
-- ✅ **Fixed**: Null initiatedBy handling for API key authentication
-- ✅ Build succeeds, all 395 unit tests pass
-
-**Root Cause & Fix:**
-The issue was that ASP.NET Core's authentication pipeline only runs the DefaultScheme (Cookie) by default. Other schemes are only tried when explicitly requested. The fix was to add `ForwardDefaultSelector` to Cookie authentication options, which conditionally forwards to API Key authentication when the `X-API-Key` header is present.
-
-**Technical Details:**
-- Added `ForwardDefaultSelector` in Program.cs Cookie options
-- Changed `ApiKeyAuthenticationHandler` to inject `IServiceProvider` instead of `JimApplication`
-- Create new DI scope for each database operation to prevent DbContext threading issues
-- Separate scope for background usage tracking task
-- Allow null `initiatedBy` for API key auth in SynchronisationController
-- Use appropriate constructors for worker tasks when user context unavailable
-
-#### PowerShell Module Status (Issue #176)
-
-**✅ Core cmdlets implemented and tested.**
-
-**Completed Cmdlets:**
-- ✅ `Connect-JIM` - API key authentication
-- ✅ `Get-JIMConnectorDefinition` - List and retrieve connector definitions
-- ✅ `Get-JIMConnectedSystem` / `New-JIMConnectedSystem` / `Set-JIMConnectedSystem` - Manage Connected Systems
-- ✅ `Get-JIMRunProfile` / `New-JIMRunProfile` / `Start-JIMRunProfile` - Manage and execute Run Profiles
-- ✅ `Get-JIMSyncRule` / `New-JIMSyncRule` - Manage Synchronisation Rules
-
-**Fixes Applied:**
-- ✅ Fixed pagination handling for empty arrays (Get-JIMConnectedSystem, Get-JIMSyncRule)
-- ✅ Fixed parameter types (Get-JIMConnectorDefinition -Id uses int, not Guid)
-- ✅ Fixed JSON serialization of hashtable keys (Set-JIMConnectedSystem)
-
-**Remaining Work:**
-- Synchronisation Rules require object type IDs from imported connector schema (needs schema import cmdlet)
+Both dependencies above are complete (see the Dependencies table). API key authentication works for all verbs (GET/POST/PUT/DELETE), and the core cmdlets (`Connect-JIM`, `Get-JIMConnectorDefinition`, and the `*-JIMConnectedSystem` / `*-JIMRunProfile` / `*-JIMSyncRule` families) are implemented and tested. The one known gap is a schema-import cmdlet: Synchronisation Rules need object-type IDs from the imported connector schema.
 
 ---
 
 ## Running Tests Locally
 
-### Quick Start - Single Scenario
+**Use the runner.** `Run-IntegrationTests.ps1` (see [Quick Start](#-quick-start)) is the supported way to run tests locally; it stands up the stack, populates data, configures JIM, runs the scenario, and tears down, for any scenario, template, and directory type. Everything below is for low-level debugging only.
+
+**Driving the pieces by hand** (when you need to inspect state between stages): stand up the environment with `Start-IntegrationTestEnvironment.ps1`, create an API key with `Setup-InfrastructureApiKey.ps1`, then invoke a scenario script directly (see the [Manual step-by-step](#-quick-start) block in Quick Start). Scenario 2 and Scenario 8 need two Samba AD instances, brought up with the `scenario2` compose profile:
 
 ```powershell
-# Stand up Phase 1 systems
-docker compose -f test/integration/docker/docker-compose.integration-tests.yml up -d
-
-# Wait for systems to be ready (AD takes ~2 minutes to initialise)
-Start-Sleep -Seconds 120
-
-# Populate with Small template
-./test/integration/Populate-SambaAD.ps1 -Template Small -Instance Primary
-./test/integration/Generate-TestCSV.ps1 -Template Small
-
-# Run Scenario 1
-./test/integration/scenarios/Invoke-Scenario1-HRToIdentityDirectory.ps1 -Template Small
-
-# Tear down when complete
-docker compose -f test/integration/docker/docker-compose.integration-tests.yml down -v
-```
-
-### Running Specific Scenario
-
-#### Scenario 2 (Directory Sync)
-
-Scenario 2 requires two AD instances, so use the `scenario2` profile:
-
-```powershell
-# Stand up Scenario 2 systems (Source and Target AD)
 docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 up -d
-
-# Wait for systems
-Start-Sleep -Seconds 180
-
-# Populate both AD instances
-./test/integration/Populate-SambaAD.ps1 -Template Medium -Instance Source
-./test/integration/Populate-SambaAD.ps1 -Template Medium -Instance Target
-
-# Run scenario
-./test/integration/scenarios/Invoke-Scenario2-CrossDomainSync.ps1 -Template Medium
-
-# Tear down
-docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile scenario2 down -v
 ```
 
-### Running All Phase 1 Scenarios
+**Alternative all-Phase-1 invoker:** `./test/integration/Invoke-IntegrationTests.ps1 -Template Medium -Phase 1` stands up every Phase 1 system, runs all scenarios, collects results to `test/integration/results/`, and tears down. Prefer `Run-IntegrationTests.ps1 -Scenario All` unless you specifically need this script.
 
-```powershell
-# Use master script
-./test/integration/Invoke-IntegrationTests.ps1 -Template Medium -Phase 1
-```
-
-This script will:
-1. Stand up all Phase 1 systems
-2. Populate data
-3. Run all Phase 1 scenarios
-4. Collect results to `test/integration/results/`
-5. Tear down systems
-6. Display summary report
-
-### Phase 2 (Database Scenarios)
-
-Phase 2 requires the Database Connector (#170) to be complete:
-
-```powershell
-# Stand up Phase 2 systems
-docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile phase2 up -d
-
-# Wait for databases (Oracle can take 5-10 minutes)
-./test/integration/Wait-SystemsReady.ps1 -Phase 2
-
-# Populate databases
-./test/integration/Populate-SqlServer.ps1 -Template Medium
-./test/integration/Populate-Oracle.ps1 -Template Medium
-./test/integration/Populate-PostgreSQL.ps1 -Template Medium
-
-# Run Phase 2 scenarios
-./test/integration/Invoke-IntegrationTests.ps1 -Template Medium -Phase 2
-
-# Tear down
-docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile phase2 down -v
-```
+Phase 2 (database) scenarios are not yet runnable; they are blocked on the Database Connector ([#170](https://github.com/TetronIO/JIM/issues/170)).
 
 ---
 
@@ -1780,27 +1487,16 @@ foreach ($attr in $ldapUserType.attributes) {
 
 JIM includes built-in performance diagnostics that automatically measure and log operation timings during sync operations. This is invaluable for identifying performance bottlenecks during integration testing.
 
-### Performance Optimization Results
+### Performance Optimisation
 
-Following extensive optimization work (see [GitHub Issue #190](https://github.com/TetronIO/JIM/issues/190)), JIM now delivers exceptional synchronisation performance:
+JIM's synchronisation hot paths were heavily optimised under [#190](https://github.com/TetronIO/JIM/issues/190). The durable wins:
 
-**Actual Performance (December 2024):**
-- **Medium dataset (~1,000 users)**: 78 seconds total (import + sync + export)
-  - FullSync: 34.5s (8 runs, avg 4.3s)
-  - FullImport: 13.8s (8 runs, avg 1.7s)
-  - Export: 30.1s (7 runs, avg 4.3s)
-- **Performance improvement**: 192x faster than original baseline (4 users/minute -> ~768 users/minute)
-
-**Key Optimizations:**
 1. Eliminated O(N×M) query complexity through pre-loaded caching
 2. Batch database operations for Metaverse Objects
-3. Query optimization with `.AsSplitQuery()` to prevent cartesian explosion
+3. `.AsSplitQuery()` to prevent cartesian explosion on eager-loaded graphs
 4. Pre-loaded lookup dictionaries for export rules and Connected System Objects
 
-**Production Readiness:**
-- ✅ All acceptance criteria exceeded (100 users < 60s, 1000 users < 5min)
-- ✅ 98.8% improvement in FullSync operation time
-- ✅ Production-ready for large-scale identity synchronisation workloads
+For current measured run times see [Run-Time Estimates](#run-time-estimates); the diagnostics below are how you profile a specific run.
 
 ### Automatic Enablement
 
@@ -2204,20 +1900,18 @@ JIM/
 
 ### Container Port Reference
 
-| Service              | Container Port | Host Port | Protocol |
-|----------------------|----------------|-----------|----------|
-| Panoply AD     | 389            | 389       | LDAP     |
-| Panoply AD     | 636            | 636       | LDAPS    |
-| Panoply APAC | 389            | 10389     | LDAP     |
-| Panoply APAC | 636            | 10636     | LDAPS    |
-| Panoply EMEA | 389            | 11389     | LDAP     |
-| Panoply EMEA | 636            | 11636     | LDAPS    |
-| SQL Server           | 1433           | 1433      | TCP      |
-| Oracle XE            | 1521           | 1521      | TCP      |
-| PostgreSQL (Test)    | 5432           | 5433      | TCP      |
-| MySQL                | 3306           | 3306      | TCP      |
-| OpenLDAP             | 389            | 12389     | LDAP     |
-| OpenLDAP             | 636            | 12636     | LDAPS    |
+All integration-test containers are internal to the `jim-network` Docker network; **no ports are published to the host**. The JIM containers reach them by container name, and you can `docker exec` in for ad-hoc queries. The ports below are container-internal.
+
+| Container | Role | Port | Protocol |
+|-----------|------|------|----------|
+| `samba-ad-primary` | Primary directory (single-directory scenarios) | 389 / 636 | LDAP / LDAPS |
+| `samba-ad-source` | Cross-domain source (Scenarios 2 & 8) | 389 / 636 | LDAP / LDAPS |
+| `samba-ad-target` | Cross-domain target (Scenarios 2 & 8) | 389 / 636 | LDAP / LDAPS |
+| `openldap-primary` | OpenLDAP, two suffixes (all directory scenarios; Scenario 14 only) | 1389 / 1636 | LDAP / LDAPS |
+| `sqlserver-hris-a` | Phase 2 source (road-mapped) | 1433 | TCP |
+| `oracle-hris-b` | Phase 2 source (road-mapped) | 1521 | TCP |
+| `postgres-target` | Phase 2 target (road-mapped) | 5432 | TCP |
+| `mysql-test` | Phase 2 (road-mapped) | 3306 | TCP |
 
 ### Environment Variables
 
@@ -2262,27 +1956,13 @@ JIM/
 
 ### Remaining Work
 
-1. **Complete Scenario 3** - GALSYNC (AD to CSV export); stub script exists but not implemented
-2. **Create GitHub Actions workflow** - `.github/workflows/integration-tests.yml` for CI/CD automation
-3. **Road-mapped: Entitlement Management** - Internal MVO design required (deferred scenarios above)
-4. **Road-mapped: Scenarios 15-17** - Database connector testing (SQL Server, PostgreSQL, Oracle, MySQL)
+- **Scenario 3 (GALSYNC)** - stub exists; AD-to-CSV export not yet implemented
+- **GitHub Actions workflow** - `.github/workflows/integration-tests.yml` for CI/CD automation
+- **Entitlement Management** (both deferred scenarios) and **Scenarios 15-17** - blocked on Internal MVO design and the Database Connector ([#170](https://github.com/TetronIO/JIM/issues/170)) respectively
 
----
+### Known Gaps
 
-## Known Issues & TODOs
-
-### Test Data Reset Automation
-**Priority: Low | Status: Partial**
-
-**Current State:**
-- CSV reset works (`Generate-TestCSV.ps1`)
-- AD cleanup attempts but often fails (users don't exist)
-- JIM database reset requires full stack down/up
-
-**Improvements Needed:**
-- Silent cleanup (suppress "user not found" warnings)
-- Faster JIM reset without full stack restart
-- Automated metaverse purge API endpoint for testing
+- **Test data reset (low priority):** between-scenario reset is handled by the runner's `Reset-JIMForNextScenario`, and scenarios self-reset via `Reset-JIMSystem -Force`. Residual rough edges: standalone/manual AD cleanup can still emit "user not found" noise, and there is no dedicated metaverse-purge API for testing (reset is via a full DB-volume teardown).
 
 ---
 
