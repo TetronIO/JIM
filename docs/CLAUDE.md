@@ -87,6 +87,25 @@ Embed them as paired `<img>` tags so the correct variant shows for the active th
 - GLightbox picks up both `<img>` tags automatically; the hidden one is ignored by the browser
 - **Path gotcha:** MkDocs serves pages at trailing-slash URLs (e.g. `/JIM/developer/architecture/`). Relative paths resolve from that URL, not the `.md` file location. Count `../` levels from the served URL, not the file path.
 
+## Concept Diagrams (inline SVG)
+
+Customer-level concept diagrams (e.g. the Concepts page hero) are **hand-authored SVGs**, stored under `docs/assets/diagrams/` and inlined into the page via pymdownx.snippets:
+
+```markdown
+--8<-- "assets/diagrams/hub-and-spoke.svg"
+```
+
+Because the SVG is inlined (not loaded via `<img>`), the page's CSS themes it: **one SVG serves both light and dark mode**, and text renders in the page's IBM Plex Sans webfont.
+
+Authoring rules:
+
+- **No colour literals in the SVG.** Shapes and text carry `.jimdg-*` classes; all colours live as `--jimdg-*` custom properties in `custom.css` ("Concept diagrams" section), with light and dark values per `[data-md-color-scheme]`. The visual language (tokens, geometry, rules) is defined in `engineering/DESIGN.md` > Diagrams.
+- **No blank lines inside the SVG file.** The snippet is inlined into markdown as a raw-HTML block; a blank line would end the block and the remainder would be parsed as markdown.
+- Root element: `<svg class="jim-diagram" viewBox="..." role="img" aria-labelledby="...">` with a `<title>` and descriptive `<desc>`.
+- Arrowheads are explicit polygons, not `<marker>` elements (markers restyle unreliably across browsers).
+- No build step: the SVG is a static asset edited by hand; preview with `jim-docs` and verify in both themes.
+- GLightbox does not apply to inline SVGs (it wraps `<img>` only); size the composition to be legible at content-column width.
+
 ## Mermaid Diagrams
 
 Write Mermaid diagrams inline in markdown as normal fenced code blocks:

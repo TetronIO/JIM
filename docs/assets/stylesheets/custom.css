@@ -517,3 +517,121 @@ body:has(.jim-home) .md-content__button {
 [data-md-color-scheme="slate"] .jim-capabilities li svg {
   fill: #4ade80;
 }
+
+/* ========================================
+   Concept diagrams (inline SVG)
+   Hand-authored SVGs inlined into pages via pymdownx.snippets
+   (e.g. docs/assets/diagrams/hub-and-spoke.svg). One SVG serves
+   both themes: geometry lives in the SVG, every colour lives here
+   as a --jimdg-* token so the site theme toggle restyles it.
+   Token values: engineering/DESIGN.md > Diagrams.
+   ======================================== */
+
+[data-md-color-scheme="default"] {
+  --jimdg-hub-fill: #f8f6fd;
+  --jimdg-hub-stroke: #5A45A2;
+  --jimdg-hub-text: #483790;
+  --jimdg-layer-fill: #ede8f8;
+  --jimdg-layer-stroke: #7B68B8;
+  --jimdg-layer-text: #483790;
+  --jimdg-chip-fill: #ffffff;
+  --jimdg-chip-stroke: #7B68B8;
+  --jimdg-chip-text: #483790;
+  --jimdg-chip-muted-fill: #f7f7f7;
+  --jimdg-chip-muted-stroke: #b7bfca;
+  --jimdg-chip-muted-text: #7a8a9a;
+  --jimdg-node-fill: #ffffff;
+  --jimdg-node-stroke: #b7bfca;
+  --jimdg-node-text: #121b29;
+  --jimdg-core-fill: #5A45A2;
+  --jimdg-core-stroke: #483790;
+  --jimdg-core-text: #ffffff;
+  --jimdg-system-fill: #ffffff;
+  --jimdg-system-stroke: #1e3a5f;
+  --jimdg-system-text: #1A2B45;
+  --jimdg-sub-text: #4a5568;
+  --jimdg-muted-fill: #f7f7f7;
+  --jimdg-muted-stroke: #b7bfca;
+  --jimdg-muted-text: #7a8a9a;
+  --jimdg-edge: #4a5568;
+  --jimdg-edge-muted: #7a8a9a;
+  --jimdg-flow: #5A45A2;
+  --jimdg-flow-text: #483790;
+}
+
+[data-md-color-scheme="slate"] {
+  --jimdg-hub-fill: #1d1a3d;
+  --jimdg-hub-stroke: #7B68B8;
+  --jimdg-hub-text: #c9bfe8;
+  --jimdg-layer-fill: #2a2352;
+  --jimdg-layer-stroke: #7B68B8;
+  --jimdg-layer-text: #d5ccef;
+  --jimdg-chip-fill: #1d1a3d;
+  --jimdg-chip-stroke: #7B68B8;
+  --jimdg-chip-text: #d5ccef;
+  --jimdg-chip-muted-fill: #141230;
+  --jimdg-chip-muted-stroke: #3d3564;
+  --jimdg-chip-muted-text: #8a86a8;
+  --jimdg-node-fill: #0d1e30;
+  --jimdg-node-stroke: #243a52;
+  --jimdg-node-text: #e0e4ea;
+  --jimdg-core-fill: #6a4fc2;
+  --jimdg-core-stroke: #7B68B8;
+  --jimdg-core-text: #ffffff;
+  --jimdg-system-fill: #0d1e30;
+  --jimdg-system-stroke: #2a4e7a;
+  --jimdg-system-text: #e0e4ea;
+  --jimdg-sub-text: #8a9eb4;
+  --jimdg-muted-fill: #0a1a2c;
+  --jimdg-muted-stroke: #243a52;
+  --jimdg-muted-text: #8a9eb4;
+  --jimdg-edge: #8a9eb4;
+  --jimdg-edge-muted: #5c718a;
+  --jimdg-flow: #7B68B8;
+  --jimdg-flow-text: #c9bfe8;
+}
+
+.jim-diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 1.25rem 0 0;
+  font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+}
+
+/* Containers and nodes (flat fills, no shadows, 8px radii in the SVG) */
+.jim-diagram .jimdg-hub    { fill: var(--jimdg-hub-fill);   stroke: var(--jimdg-hub-stroke);   stroke-width: 2; }
+.jim-diagram .jimdg-layer  { fill: var(--jimdg-layer-fill); stroke: var(--jimdg-layer-stroke); stroke-width: 1; }
+.jim-diagram .jimdg-chip   { fill: var(--jimdg-chip-fill);  stroke: var(--jimdg-chip-stroke);  stroke-width: 1; }
+.jim-diagram .jimdg-stage  { fill: var(--jimdg-node-fill);  stroke: var(--jimdg-node-stroke);  stroke-width: 1; }
+.jim-diagram .jimdg-core   { fill: var(--jimdg-core-fill);  stroke: var(--jimdg-core-stroke);  stroke-width: 2; }
+.jim-diagram .jimdg-system { fill: var(--jimdg-system-fill); stroke: var(--jimdg-system-stroke); stroke-width: 2; }
+
+/* Planned (roadmap) variants: dashed and muted */
+.jim-diagram .jimdg-chip-planned   { fill: var(--jimdg-chip-muted-fill); stroke: var(--jimdg-chip-muted-stroke); stroke-width: 1; stroke-dasharray: 5 4; }
+.jim-diagram .jimdg-system-planned { fill: var(--jimdg-muted-fill);      stroke: var(--jimdg-muted-stroke);      stroke-width: 2; stroke-dasharray: 5 4; }
+
+/* Edges: spokes (system <-> JIM) and internal flows */
+.jim-diagram .jimdg-spoke         { stroke: var(--jimdg-edge);       stroke-width: 2; }
+.jim-diagram .jimdg-spoke-planned { stroke: var(--jimdg-edge-muted); stroke-width: 2; stroke-dasharray: 6 5; }
+.jim-diagram .jimdg-arrow         { fill: var(--jimdg-edge); }
+.jim-diagram .jimdg-arrow-planned { fill: var(--jimdg-edge-muted); }
+.jim-diagram .jimdg-flow          { stroke: var(--jimdg-flow); stroke-width: 2; }
+.jim-diagram .jimdg-flow-arrow    { fill: var(--jimdg-flow); }
+
+/* Text: sizes in SVG user units; the viewBox scales them with the diagram */
+.jim-diagram text { text-anchor: middle; }
+.jim-diagram .jimdg-hub-title    { font-size: 22px; font-weight: 700; fill: var(--jimdg-hub-text); }
+.jim-diagram .jimdg-layer-title  { font-size: 14px; font-weight: 600; fill: var(--jimdg-layer-text); }
+.jim-diagram .jimdg-chip-label   { font-size: 13.5px; font-weight: 600; fill: var(--jimdg-chip-text); }
+.jim-diagram .jimdg-chip-label-planned { font-size: 12.5px; font-weight: 600; fill: var(--jimdg-chip-muted-text); }
+.jim-diagram .jimdg-chip-sub-planned   { font-size: 11px; fill: var(--jimdg-chip-muted-text); }
+.jim-diagram .jimdg-stage-label  { font-size: 16px; font-weight: 600; fill: var(--jimdg-node-text); }
+.jim-diagram .jimdg-core-title   { font-size: 19px; font-weight: 700; fill: var(--jimdg-core-text); }
+.jim-diagram .jimdg-core-sub     { font-size: 13.5px; fill: var(--jimdg-core-text); opacity: 0.85; }
+.jim-diagram .jimdg-system-name  { font-size: 17px; font-weight: 600; fill: var(--jimdg-system-text); }
+.jim-diagram .jimdg-system-sub   { font-size: 13px; fill: var(--jimdg-sub-text); }
+.jim-diagram .jimdg-system-name-planned { font-size: 17px; font-weight: 600; fill: var(--jimdg-muted-text); }
+.jim-diagram .jimdg-system-sub-planned  { font-size: 13px; fill: var(--jimdg-muted-text); }
+.jim-diagram .jimdg-flow-label   { font-size: 12.5px; font-weight: 500; fill: var(--jimdg-flow-text); text-anchor: start; }
+.jim-diagram .jimdg-anchor-end   { text-anchor: end; }

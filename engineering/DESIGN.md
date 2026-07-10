@@ -303,6 +303,37 @@ Sidebar uses `surface` background. Active nav item indicated by `primary` colour
 
 Header row uses `background` token. Row content uses `body-sm` typography. Alternating row shading with surface/background tokens. No row hover shadow.
 
+## Diagrams
+
+The diagram design system covers the docs site (`docs.junctional.io`) and marketing surfaces (`junctional.io`), so diagrams read as one family across both properties. Concept diagrams are **hand-authored SVGs inlined into the page** (via `pymdownx.snippets` on the docs site): geometry lives in the SVG, and every colour lives in the site stylesheet as a `--jimdg-*` custom property, so a single SVG serves both light and dark mode through the normal theme toggle. The reference implementation is `docs/assets/diagrams/hub-and-spoke.svg` plus the "Concept diagrams" section of `docs/assets/stylesheets/custom.css`.
+
+Diagrams use the **brand colours**, not the portal `--mud-palette-*` tokens, consistent with the brand-vs-theme rule above. The semantic roles mirror the causality-visualisation roles: purple for JIM/metaverse-side concepts, navy for Connected-System-side concepts.
+
+### Element tokens
+
+| Element | Light | Dark |
+|---|---|---|
+| Diagram background | transparent (page shows through) | transparent |
+| JIM boundary (hub container) | fill `#f8f6fd`, stroke `#5A45A2`, label `#483790` | fill `#1d1a3d`, stroke `#7B68B8`, label `#c9bfe8` |
+| Metaverse core | fill `#5A45A2`, text `#ffffff`, stroke `#483790` | fill `#6a4fc2`, text `#ffffff`, stroke `#7B68B8` |
+| JIM inner layer (e.g. Connectors) | fill `#ede8f8`, stroke `#7B68B8`, text `#483790` | fill `#2a2352`, stroke `#7B68B8`, text `#d5ccef` |
+| Pipeline stage / neutral node | fill `#ffffff`, stroke `#b7bfca`, text `#121b29` | fill `#0d1e30`, stroke `#243a52`, text `#e0e4ea` |
+| Connected System (external) | fill `#ffffff`, stroke `#1e3a5f`, text `#1A2B45` | fill `#0d1e30`, stroke `#2a4e7a`, text `#e0e4ea` |
+| Planned / roadmap element | fill `#f7f7f7`, dashed stroke `#b7bfca`, text `#7a8a9a` | fill `#0a1a2c`, dashed stroke `#243a52`, text `#8a9eb4` |
+| Edge (data flow) | stroke `#4a5568` | stroke `#8a9eb4` |
+| Edge (JIM-internal flow) | stroke `#5A45A2`, label `#483790` | stroke `#7B68B8`, label `#c9bfe8` |
+| Edge (planned flow) | dashed, `#7a8a9a` | dashed, `#5c718a` |
+
+### Rules
+
+- **One SVG, both themes.** No colour literals inside diagram SVGs: shapes and text carry `.jimdg-*` classes and the stylesheet's `[data-md-color-scheme]` token blocks do the theming. Adding a diagram must not add new colour values outside the token blocks.
+- **Typography:** IBM Plex Sans, inherited from the page's webfonts (set via the `.jim-diagram` class). No Space Grotesk in diagrams; it is reserved for display surfaces.
+- **Geometry:** 8px corner radius on nodes and containers (matching docs cards and portal panels); flat fills, no shadows or gradients. Arrowheads are explicit small polygons, not SVG markers (markers restyle unreliably across browsers).
+- **Accessibility:** every diagram SVG carries `role="img"` with a `<title>` and a `<desc>` that narrates the concept.
+- **Planned (roadmap) elements** are dashed, muted, and say "(planned)" in their label; no separate legend.
+- **Sync-model diagrams never draw system-to-system edges**; every flow passes through JIM, visually reinforcing the hub-and-spoke metaverse pattern.
+- **British English** in all labels; JIM domain entity names are Title Cased per the writing rules.
+
 ## Do's and Don'ts
 
 ### Do

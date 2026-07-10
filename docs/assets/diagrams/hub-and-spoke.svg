@@ -1,0 +1,98 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- JIM hub-and-spoke synchronisation concept (Concepts page hero). -->
+<!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
+<!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: keep this file free of blank lines AND of comments inside the -->
+<!-- <svg> element; it is inlined into markdown via pymdownx.snippets, and -->
+<!-- python-markdown ends the raw-HTML block at either. Structure is -->
+<!-- expressed with <g> groups instead. -->
+<svg class="jim-diagram" viewBox="0 0 1160 640" role="img" aria-labelledby="jimdg-hs-title jimdg-hs-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="jimdg-hs-title">JIM hub-and-spoke synchronisation concept</title>
+  <desc id="jimdg-hs-desc">Source systems on the left and target systems on the right connect to JIM in the centre. Inside JIM, Connectors pass imported data through the Import, Synchronise and Export pipeline, which correlates and projects identities into the Metaverse, the authoritative identity core. Every flow passes through JIM; no data moves directly between Connected Systems. Enterprise database and cloud application connectivity are planned.</desc>
+  <g id="jimdg-hs-hub">
+    <rect class="jimdg-hub" x="300" y="28" width="560" height="584" rx="8"/>
+    <text class="jimdg-hub-title" x="580" y="66">JIM</text>
+    <g id="jimdg-hs-connectors">
+      <rect class="jimdg-layer" x="330" y="90" width="500" height="96" rx="8"/>
+      <text class="jimdg-layer-title" x="580" y="116">Connectors</text>
+      <rect class="jimdg-chip" x="344" y="130" width="112" height="44" rx="8"/>
+      <text class="jimdg-chip-label" x="400" y="157">LDAP</text>
+      <rect class="jimdg-chip" x="464" y="130" width="112" height="44" rx="8"/>
+      <text class="jimdg-chip-label" x="520" y="157">File / CSV</text>
+      <rect class="jimdg-chip-planned" x="584" y="130" width="112" height="44" rx="8"/>
+      <text class="jimdg-chip-label-planned" x="640" y="148">SQL</text>
+      <text class="jimdg-chip-sub-planned" x="640" y="164">(planned)</text>
+      <rect class="jimdg-chip-planned" x="704" y="130" width="112" height="44" rx="8"/>
+      <text class="jimdg-chip-label-planned" x="760" y="148">SCIM 2.0</text>
+      <text class="jimdg-chip-sub-planned" x="760" y="164">(planned)</text>
+    </g>
+    <g id="jimdg-hs-pipeline">
+      <rect class="jimdg-stage" x="330" y="262" width="140" height="56" rx="8"/>
+      <text class="jimdg-stage-label" x="400" y="296">Import</text>
+      <rect class="jimdg-stage" x="510" y="262" width="140" height="56" rx="8"/>
+      <text class="jimdg-stage-label" x="580" y="296">Synchronise</text>
+      <rect class="jimdg-stage" x="690" y="262" width="140" height="56" rx="8"/>
+      <text class="jimdg-stage-label" x="760" y="296">Export</text>
+    </g>
+    <g id="jimdg-hs-core">
+      <rect class="jimdg-core" x="330" y="482" width="500" height="84" rx="8"/>
+      <text class="jimdg-core-title" x="580" y="517">Metaverse</text>
+      <text class="jimdg-core-sub" x="580" y="541">Authoritative identity core</text>
+    </g>
+    <g id="jimdg-hs-flows">
+      <line class="jimdg-flow" x1="400" y1="186" x2="400" y2="252"/>
+      <polygon class="jimdg-flow-arrow" points="400,262 394.5,252 405.5,252"/>
+      <text class="jimdg-flow-label jimdg-anchor-end" x="390" y="222">staging</text>
+      <line class="jimdg-flow" x1="760" y1="262" x2="760" y2="196"/>
+      <polygon class="jimdg-flow-arrow" points="760,186 754.5,196 765.5,196"/>
+      <text class="jimdg-flow-label jimdg-anchor-end" x="750" y="222">outbound changes</text>
+      <line class="jimdg-flow" x1="470" y1="290" x2="500" y2="290"/>
+      <polygon class="jimdg-flow-arrow" points="510,290 500,284.5 500,295.5"/>
+      <line class="jimdg-flow" x1="650" y1="290" x2="680" y2="290"/>
+      <polygon class="jimdg-flow-arrow" points="690,290 680,284.5 680,295.5"/>
+      <line class="jimdg-flow" x1="580" y1="328" x2="580" y2="472"/>
+      <polygon class="jimdg-flow-arrow" points="580,318 574.5,328 585.5,328"/>
+      <polygon class="jimdg-flow-arrow" points="580,482 574.5,472 585.5,472"/>
+      <text class="jimdg-flow-label" x="592" y="404">correlate &amp; project</text>
+    </g>
+  </g>
+  <g id="jimdg-hs-sources">
+    <rect class="jimdg-system" x="20" y="118" width="220" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="130" y="146">HR System</text>
+    <text class="jimdg-system-sub" x="130" y="167">CSV</text>
+    <rect class="jimdg-system" x="20" y="288" width="220" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="130" y="316">Legacy Directory</text>
+    <text class="jimdg-system-sub" x="130" y="337">LDAP</text>
+    <rect class="jimdg-system-planned" x="20" y="458" width="220" height="64" rx="8"/>
+    <text class="jimdg-system-name-planned" x="130" y="486">Enterprise Databases</text>
+    <text class="jimdg-system-sub-planned" x="130" y="507">SQL (planned)</text>
+  </g>
+  <g id="jimdg-hs-targets">
+    <rect class="jimdg-system" x="920" y="118" width="220" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="1030" y="146">Active Directory</text>
+    <text class="jimdg-system-sub" x="1030" y="167">LDAP · writeback</text>
+    <rect class="jimdg-system" x="920" y="288" width="220" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="1030" y="316">Business Application</text>
+    <text class="jimdg-system-sub" x="1030" y="337">CSV</text>
+    <rect class="jimdg-system-planned" x="920" y="458" width="220" height="64" rx="8"/>
+    <text class="jimdg-system-name-planned" x="1030" y="486">Cloud Applications</text>
+    <text class="jimdg-system-sub-planned" x="1030" y="507">SCIM 2.0 (planned)</text>
+  </g>
+  <g id="jimdg-hs-spokes">
+    <line class="jimdg-spoke" x1="240" y1="150" x2="290" y2="150"/>
+    <polygon class="jimdg-arrow" points="300,150 290,144.5 290,155.5"/>
+    <line class="jimdg-spoke" x1="240" y1="320" x2="290" y2="320"/>
+    <polygon class="jimdg-arrow" points="300,320 290,314.5 290,325.5"/>
+    <line class="jimdg-spoke-planned" x1="240" y1="490" x2="290" y2="490"/>
+    <polygon class="jimdg-arrow-planned" points="300,490 290,484.5 290,495.5"/>
+    <line class="jimdg-spoke" x1="870" y1="150" x2="910" y2="150"/>
+    <polygon class="jimdg-arrow" points="860,150 870,144.5 870,155.5"/>
+    <polygon class="jimdg-arrow" points="920,150 910,144.5 910,155.5"/>
+    <line class="jimdg-spoke" x1="860" y1="320" x2="910" y2="320"/>
+    <polygon class="jimdg-arrow" points="920,320 910,314.5 910,325.5"/>
+    <line class="jimdg-spoke-planned" x1="860" y1="490" x2="910" y2="490"/>
+    <polygon class="jimdg-arrow-planned" points="920,490 910,484.5 910,495.5"/>
+  </g>
+</svg>
