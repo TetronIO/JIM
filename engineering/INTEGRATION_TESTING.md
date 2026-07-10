@@ -160,7 +160,7 @@ This single script handles everything:
 
 **Available Templates (`-Template` parameter):**
 
-Choose a template based on your testing goals:
+Choose a template based on your testing goals. The time shown is a rough **single import/sync/export cycle** at that size, not a scenario or a full run; for measured per-scenario and full-regression times see [Run-Time Estimates](#run-time-estimates).
 
 - **Nano** (default): 3 users, 1 group - **< 10 sec** - Fast dev iteration and debugging
 - **Micro**: 10 users, 3 groups - **< 30 sec** - Quick smoke tests and development
@@ -409,9 +409,9 @@ flowchart TD
 
 ## Data Scale Templates
 
-Choose the appropriate template based on test goals:
+Choose the appropriate template based on test goals. The **Per cycle** column is a rough single import/sync/export cycle at that size; for full-scenario and full-regression run times see [Run-Time Estimates](#run-time-estimates).
 
-| Template   | Users     | Groups  | Avg Memberships | Total Objects | Use Case                          | Est. Time  |
+| Template   | Users     | Groups  | Avg Memberships | Total Objects | Use Case                          | Per cycle  |
 |------------|-----------|---------|-----------------|---------------|-----------------------------------|------------|
 | **Nano**   | 3         | 1       | 1               | 4             | Fast dev iteration, debugging     | < 10 sec   |
 | **Micro**  | 10        | 3       | 3               | 13            | Quick smoke tests, development    | < 30 sec   |
@@ -439,6 +439,42 @@ All templates generate realistic enterprise data following normal distribution p
 - **Group Memberships**: Normal distribution (most users 5-15 groups, power users 30+)
 - **Attributes**: Valid names, email patterns, phone numbers, addresses
 - **Organisational Structure**: Tree hierarchy with realistic spans of control
+
+---
+
+## Run-Time Estimates
+
+> Wall-clock times **measured on this devcontainer** (best endeavours; cold-cache figures marked *(est.)* are extrapolated, not directly measured). **Time (cached)** assumes the directory snapshot images and JIM stack images already exist, the normal case after the first run on a machine. **First run adds** is the one-time build of those images on top. Two things dominate: run time is driven almost entirely by **Scenarios 1, 7 and 8**, and it is strongly **directory-dependent**, because `samba-tool` takes a per-write LDB lock, Samba AD's Scenario 8 is far slower than OpenLDAP's (Scenario 8 alone measured 96 min on Samba MediumLarge versus 19 min on OpenLDAP at the larger Large template). Scenarios 2, 4, 6, 10, 11, 12, 13 use fixed small data and barely move with `-Template`.
+
+| Runner option | Directory | Template | Time (cached) | First run adds *(est.)* |
+|---------------|-----------|----------|---------------|-------------------------|
+| `-PreRelease` | Samba + OpenLDAP | Medium + Large | **~2h 45m** | +~15 min |
+| `-Scenario All` | SambaAD | Medium | ~1h 00m | +~10 min |
+| `-Scenario All` | SambaAD | MediumLarge | ~2h 40m | +~10 min |
+| `-Scenario All` | OpenLDAP | Large | ~1h 45m | +~15 min |
+| `-Scenario All` | OpenLDAP | Scale100k50Groups | ~7h 15m | +~1h |
+| `-Scenario All` | either | Nano / Micro / Small | ~30-40 min *(est.)* | +~5 min |
+| Scenario1 HRToIdentityDirectory | both | Medium / Large / 100k | 11m / 21m / 3h | scales strongly |
+| Scenario2 CrossDomainSync | both | any | ~1.5m | fixed |
+| Scenario3 GALSYNC | n/a | n/a | stub, not implemented | n/a |
+| Scenario4 DeletionRules | both | any | ~7m (grace-period waits) | fixed |
+| Scenario5 MatchingRules | both | Medium / 100k | 2m / 22m | scales |
+| Scenario6 SchedulerService | both | any | ~1m | fixed |
+| Scenario7 ClearConnectedSystemObjects | both | Medium / 100k | 1.5m / 52m | scales |
+| Scenario8 CrossDomainEntitlementSync | both | see note | Samba 8m (Med) / 96m (ML); OpenLDAP 19m (Large) / 137m (100k) | scales; Samba far slower |
+| Scenario9 PartitionScopedImports | both | Medium / 100k | 1m / 9m | scales |
+| Scenario10 SyncRuleScoping | both | any | ~3m | ~fixed |
+| Scenario11 ScopingCriteriaMatrix | both (file) | any | ~1m Default (90s Quick, 10m Exhaustive) | tier-driven |
+| Scenario12 RelativeDateScoping | both (file) | any | ~2.5m (date-window wait) | fixed |
+| Scenario13 RelativeDateOutboundScoping | both (file) | any | ~3m (date-window wait) | fixed |
+| Scenario14 AttributePriority | OpenLDAP only | (ignored) | ~2m (fixed six-user dataset) | +~4m JIM build |
+
+**Notes:**
+
+- Per-scenario times are the scenario's contribution inside a full run. Run one **standalone** and add the fixed harness overhead (reset, start services, cleanup): roughly +1 min warm, or +5 min on a first run that also rebuilds the JIM images (~4 min).
+- Nano/Micro/Small full-regression times are estimates, not directly measured. A run floors at roughly 25-30 min from fixed-duration scenarios (Scenario 4's grace periods, Scenarios 12/13's date-window waits) plus ~12 between-scenario resets, so shrinking the template below Medium buys little.
+- The first-run directory-snapshot build scales with user count: negligible for light templates, ~45-60 min at Scale100k50Groups (100k users). At scale, also mind the reset-hygiene caveat in [issue #961](https://github.com/TetronIO/JIM/issues/961).
+- Scenario 14 ignores `-Template` (it always uses its bespoke six-user, two-suffix dataset) and runs on OpenLDAP only.
 
 ---
 
