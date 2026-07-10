@@ -218,6 +218,15 @@ updates:
         update-types: ["version-update:semver-major"]
 
   # GitHub Actions
+  #
+  # Grouped so that the codeql-action sub-actions (init, autobuild, analyze,
+  # upload-sarif) always bump together. They are separate `uses:` lines
+  # (codeql.yml uses three of them in the same job; ci.yml uses upload-sarif
+  # in the Trivy job), so Dependabot otherwise raises one PR per line despite
+  # them sharing a version. init/autobuild/analyze must run the same version
+  # in the same job: CodeQL fails with "Loaded a configuration file for
+  # version 'X', but running version 'Y'" if they drift, so a bump to only
+  # one of the three (an ungrouped PR) cannot pass CI on its own.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -233,3 +242,7 @@ updates:
       # Ignore all major version updates
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"
