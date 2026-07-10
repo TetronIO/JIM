@@ -51,55 +51,21 @@ The metaverse is the authoritative identity repository at the centre of JIM's ar
 
 ## Component Diagrams
 
-Component-level views are maintained as Mermaid diagrams so they can evolve alongside the code (the Worker view is shared with the [customer architecture page](../concepts/architecture.md)).
+The component views use the docs site's hand-authored diagram system and are simplified for legibility (the Worker view also appears on the [customer architecture page](../concepts/architecture.md)); the [process diagrams](#process-diagrams) below carry the exact runtime flows.
 
 ### Application Layer
 
 `JIM.Application` exposes a single entry point, the `JimApplication` facade, which delegates to the domain servers. The Worker's processors bypass the facade and use `SyncServer` and `SyncEngine` directly for performance-critical synchronisation work.
 
-```mermaid
-flowchart TD
-    WEB["JIM.Web<br>Blazor UI + REST API"] --> FACADE
-    SCHED["JIM.Scheduler"] --> FACADE
-    WORKER["JIM.Worker<br>task processors"] --> SYNCSRV
-    WORKER --> ENGINE
+--8<-- "assets/diagrams/app-layer-components.svg"
 
-    subgraph APP["JIM.Application"]
-        FACADE["JimApplication facade"]
-        SYNCSRV["SyncServer<br>sync orchestration"]
-        ENGINE["SyncEngine<br>pure sync domain logic, no I/O"]
-        SERVERS["Domain servers<br>Metaverse · ConnectedSystem · ObjectMatching · Search<br>Security · Scheduler · ChangeHistory · Certificate<br>ServiceSettings · Activity · Tasking · FileSystem · ExampleData"]
-        SYNCSERVERS["Sync evaluation servers<br>ExportEvaluation · ExportExecution<br>ScopingEvaluation · DriftDetection"]
-        REPO["IJimRepository"]
-        SYNCREPO["ISyncRepository"]
-        FACADE --> SERVERS
-        FACADE --> SYNCSERVERS
-        SYNCSRV --> SYNCSERVERS
-        SERVERS --> REPO
-        SYNCSERVERS --> SYNCREPO
-        SYNCSRV --> SYNCREPO
-    end
-
-    REPO --> DB[("PostgreSQL")]
-    SYNCREPO --> DB
-```
+<p class="jim-diagram-caption">The facade fronts the domain servers for the Web and Scheduler services; the Worker's task processors use SyncServer and the stateless SyncEngine directly. Domain servers reach PostgreSQL through IJimRepository, the sync servers through the dedicated ISyncRepository (SyncServer also uses it directly; omitted for legibility).<span class="jimdg-caption-motion"> Moving dots trace calls and data in flight.</span></p>
 
 ### Web Application
 
-```mermaid
-flowchart TD
-    ADMIN["Administrator"] --> PAGES
-    AUTO["Automation Client<br>PowerShell Module"] --> API
-    IDP["Identity Provider<br>OIDC"] --- AUTH
+--8<-- "assets/diagrams/webapp-components.svg"
 
-    subgraph WEBAPP["JIM.Web"]
-        AUTH["Authentication middleware<br>OIDC + API key validation"] --> PAGES["Blazor pages<br>admin UI"]
-        AUTH --> API["API controllers<br>REST at /api/"]
-    end
-
-    PAGES --> FACADE["JimApplication facade"]
-    API --> FACADE
-```
+<p class="jim-diagram-caption">Every request enters through the authentication middleware, which validates OIDC sign-in against the Identity Provider and API keys, before reaching the Blazor pages or API controllers; both call the JimApplication facade.<span class="jimdg-caption-motion"> Moving dots trace requests in flight.</span></p>
 
 ### Worker Service
 
@@ -109,23 +75,15 @@ flowchart TD
 
 ### Connectors
 
-```mermaid
-flowchart TD
-    WORKER["JIM.Worker<br>import & export processors"] --> LDAP & FILE
-    WORKER -.-> SQL & SCIM
+--8<-- "assets/diagrams/connector-components.svg"
 
-    LDAP["LDAP Connector"] --> AD["Directory Services<br>LDAP / LDAPS"]
-    FILE["File Connector"] --> FILES["File Systems & HR exports<br>CSV"]
-    SQL["Database Connector<br>(planned)"] -.-> DBS["Enterprise Databases<br>SQL"]
-    SCIM["SCIM 2.0 Connector<br>(planned)"] -.-> CLOUD["Cloud Applications<br>SCIM 2.0"]
-```
+<p class="jim-diagram-caption">The Worker's import and export processors invoke the connectors, which carry data to and from the external systems. Dashed elements indicate planned connectors.<span class="jimdg-caption-motion"> Moving dots trace data in flight.</span></p>
 
 ### Scheduler Service
 
-```mermaid
-flowchart LR
-    HOST["Scheduler Host<br>30-second polling loop · due-time evaluation · crash recovery"] --> FACADE["JimApplication facade"] --> DB[("PostgreSQL<br>schedules & task queue")]
-```
+--8<-- "assets/diagrams/scheduler-components.svg"
+
+<p class="jim-diagram-caption">The Scheduler Host's polling loop evaluates schedule due times and performs crash recovery, queueing tasks through the facade into PostgreSQL for the Worker to pick up.<span class="jimdg-caption-motion"> Moving dots trace tasks being queued.</span></p>
 
 ## Technology Stack
 

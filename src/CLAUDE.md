@@ -286,7 +286,7 @@ Optional, clearable fields (e.g. `Description`) follow one convention across bot
 **Updating Architecture Diagrams:**
 
 When making architectural changes (new containers, components, connectors, or significant restructuring):
-1. Update the affected hand-authored SVGs under `docs/assets/diagrams/` (System Context, Containers, Worker components) and the Mermaid component diagrams in `docs/developer/architecture.md`
+1. Update the affected hand-authored SVGs under `docs/assets/diagrams/` (System Context, Containers, and the component views for the Application Layer, Web Application, Worker, Connectors and Scheduler)
 2. If `system-context.svg` or `containers.svg` changed (or the diagram tokens in `custom.css` did), regenerate the README exports: `pwsh ./scripts/Export-ReadmeDiagrams.ps1`
 3. Commit the diagram changes together with the code change
 

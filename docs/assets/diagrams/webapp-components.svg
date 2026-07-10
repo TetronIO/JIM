@@ -1,0 +1,88 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- Inside the Web Application (Developer Guide > Architecture): requests -->
+<!-- enter through the authentication middleware and reach the Blazor pages -->
+<!-- or API controllers, which call the JimApplication facade. -->
+<!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
+<!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: keep this file free of blank lines AND of comments inside the -->
+<!-- <svg> element; it is inlined into markdown via pymdownx.snippets, and -->
+<!-- python-markdown ends the raw-HTML block at either. Structure is -->
+<!-- expressed with <g> groups instead. -->
+<svg class="jim-diagram" viewBox="0 0 1160 630" role="img" aria-labelledby="jimdg-wa-title jimdg-wa-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="jimdg-wa-title">Inside the Web Application</title>
+  <desc id="jimdg-wa-desc">Administrators use the Blazor admin pages and automation clients call the REST API controllers; every request enters through the authentication middleware, which validates OIDC sign-in against the Identity Provider and API keys. Both the pages and the controllers call the JimApplication facade, the Application Layer's single entry point.</desc>
+  <g id="jimdg-wa-people">
+    <rect class="jimdg-stage" x="140" y="20" width="220" height="64" rx="8"/>
+    <circle class="jimdg-person-glyph" cx="160" cy="41" r="6"/>
+    <path class="jimdg-person-glyph" d="M149,63 a11,11 0 0 1 22,0 z"/>
+    <text class="jimdg-stage-label" x="268" y="47">Administrator</text>
+    <text class="jimdg-system-sub" x="268" y="68">web UI</text>
+    <rect class="jimdg-stage" x="470" y="20" width="220" height="64" rx="8"/>
+    <text class="jimdg-glyph-code" x="482" y="48">&gt;_</text>
+    <text class="jimdg-stage-label" x="592" y="47">Automation Client</text>
+    <text class="jimdg-system-sub" x="592" y="68">REST API · PowerShell</text>
+    <rect class="jimdg-system" x="800" y="20" width="220" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="910" y="48">Identity Provider</text>
+    <text class="jimdg-system-sub" x="910" y="69">OIDC single sign-on</text>
+  </g>
+  <g id="jimdg-wa-boundary">
+    <rect class="jimdg-hub" x="90" y="150" width="980" height="330" rx="8"/>
+    <text class="jimdg-hub-title" x="580" y="186">JIM.Web</text>
+  </g>
+  <g id="jimdg-wa-middleware">
+    <rect class="jimdg-stage" x="130" y="220" width="900" height="64" rx="8"/>
+    <text class="jimdg-stage-label" x="580" y="246">Authentication middleware</text>
+    <text class="jimdg-system-sub" x="580" y="267">OIDC sign-in · API key validation</text>
+  </g>
+  <g id="jimdg-wa-endpoints">
+    <rect class="jimdg-stage" x="210" y="340" width="240" height="80" rx="8"/>
+    <text class="jimdg-stage-label" x="330" y="373">Blazor pages</text>
+    <text class="jimdg-system-sub" x="330" y="396">admin UI</text>
+    <rect class="jimdg-stage" x="710" y="340" width="240" height="80" rx="8"/>
+    <text class="jimdg-stage-label" x="830" y="373">API controllers</text>
+    <text class="jimdg-system-sub" x="830" y="396">REST at /api/</text>
+  </g>
+  <g id="jimdg-wa-facade">
+    <rect class="jimdg-stage" x="430" y="540" width="300" height="64" rx="8"/>
+    <text class="jimdg-stage-label" x="580" y="566">JimApplication facade</text>
+    <text class="jimdg-system-sub" x="580" y="587">Application Layer entry point</text>
+  </g>
+  <g id="jimdg-wa-edges">
+    <line class="jimdg-spoke" x1="250" y1="84" x2="250" y2="210"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(250,220) rotate(90)"/>
+    <line class="jimdg-spoke" x1="580" y1="84" x2="580" y2="210"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,220) rotate(90)"/>
+    <line class="jimdg-spoke" x1="910" y1="220" x2="910" y2="94"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(910,84) rotate(-90)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="922" y="130">OIDC</text>
+    <line class="jimdg-flow" x1="330" y1="284" x2="330" y2="330"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(330,340) rotate(90)"/>
+    <text class="jimdg-flow-label" x="342" y="316">validates requests</text>
+    <line class="jimdg-flow" x1="830" y1="284" x2="830" y2="330"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(830,340) rotate(90)"/>
+    <line class="jimdg-flow" x1="330" y1="420" x2="491.8" y2="534.2"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(500,540) rotate(35.2)"/>
+    <line class="jimdg-flow" x1="830" y1="420" x2="668.2" y2="534.2"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(660,540) rotate(144.8)"/>
+  </g>
+  <g id="jimdg-wa-packets">
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.2s" begin="0s" repeatCount="indefinite" path="M250,86 L250,208"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.2s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="1.6s" begin="1.1s" repeatCount="indefinite" path="M330,286 L330,328"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="1.6s" begin="1.1s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.2s" begin="-1s" repeatCount="indefinite" path="M580,86 L580,208"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.2s" begin="-1s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="1.6s" begin="0.1s" repeatCount="indefinite" path="M830,286 L830,328"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="1.6s" begin="0.1s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>
