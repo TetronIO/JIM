@@ -1,0 +1,101 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- Inside the Worker Service (C4 level 3, simplified for customer docs): -->
+<!-- the task processors, the Sync Engine, and the Connectors it hosts. -->
+<!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
+<!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: no blank lines or comments inside the <svg> element (pymdownx -->
+<!-- snippets inlines this into markdown); structure uses <g> groups. -->
+<svg class="jim-diagram" viewBox="0 0 1160 690" role="img" aria-labelledby="jimdg-wk-title jimdg-wk-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="jimdg-wk-title">Inside the Worker Service</title>
+  <desc id="jimdg-wk-desc">The Worker Host polls the PostgreSQL task queue and dispatches processors for import, synchronisation and export. Import processors stage data arriving through the Connectors; synchronisation processors use the Sync Engine to apply projection, attribute flow, and deletion and matching rules; the export processor sends outbound changes back through the Connectors to Connected Systems. The Connectors layer hosts the LDAP and File/CSV connectors, with SQL and SCIM 2.0 connectors planned.</desc>
+  <g id="jimdg-wk-db">
+    <path class="jimdg-stage" d="M20,96 A110,16 0 0 1 240,96 L240,264 A110,16 0 0 1 20,264 Z"/>
+    <ellipse class="jimdg-stage" cx="130" cy="96" rx="110" ry="16"/>
+    <text class="jimdg-stage-label" x="130" y="170">PostgreSQL</text>
+    <text class="jimdg-system-sub" x="130" y="192">task queue</text>
+    <text class="jimdg-system-sub" x="130" y="211">staged &amp; metaverse data</text>
+  </g>
+  <g id="jimdg-wk-boundary">
+    <rect class="jimdg-hub" x="310" y="40" width="830" height="600" rx="8"/>
+    <text class="jimdg-hub-title" x="725" y="78">Worker Service</text>
+  </g>
+  <g id="jimdg-wk-host">
+    <rect class="jimdg-stage" x="340" y="104" width="770" height="64" rx="8"/>
+    <text class="jimdg-stage-label" x="725" y="131">Worker Host</text>
+    <text class="jimdg-system-sub" x="725" y="153">polls the task queue · dispatches processors</text>
+  </g>
+  <g id="jimdg-wk-processors">
+    <rect class="jimdg-stage" x="350" y="228" width="230" height="84" rx="8"/>
+    <text class="jimdg-stage-label" x="465" y="261">Import</text>
+    <text class="jimdg-system-sub" x="465" y="283">full &amp; delta imports</text>
+    <rect class="jimdg-stage" x="615" y="228" width="230" height="84" rx="8"/>
+    <text class="jimdg-stage-label" x="730" y="261">Synchronise</text>
+    <text class="jimdg-system-sub" x="730" y="283">full &amp; delta synchronisation</text>
+    <rect class="jimdg-stage" x="880" y="228" width="230" height="84" rx="8"/>
+    <text class="jimdg-stage-label" x="995" y="261">Export</text>
+    <text class="jimdg-system-sub" x="995" y="283">pending export execution</text>
+  </g>
+  <g id="jimdg-wk-engine">
+    <rect class="jimdg-stage" x="615" y="372" width="230" height="96" rx="8"/>
+    <text class="jimdg-stage-label" x="730" y="404">Sync Engine</text>
+    <text class="jimdg-system-sub" x="730" y="426">projection · attribute flow</text>
+    <text class="jimdg-system-sub" x="730" y="445">deletion &amp; matching rules</text>
+  </g>
+  <g id="jimdg-wk-connectors">
+    <rect class="jimdg-layer" x="340" y="506" width="770" height="96" rx="8"/>
+    <text class="jimdg-layer-title" x="725" y="532">Connectors</text>
+    <rect class="jimdg-chip" x="356" y="546" width="160" height="44" rx="8"/>
+    <text class="jimdg-chip-label" x="436" y="573">LDAP</text>
+    <rect class="jimdg-chip" x="549" y="546" width="160" height="44" rx="8"/>
+    <text class="jimdg-chip-label" x="629" y="573">File / CSV</text>
+    <rect class="jimdg-chip-planned" x="741" y="546" width="160" height="44" rx="8"/>
+    <text class="jimdg-chip-label-planned" x="821" y="564">SQL</text>
+    <text class="jimdg-chip-sub-planned" x="821" y="580">(planned)</text>
+    <rect class="jimdg-chip-planned" x="934" y="546" width="160" height="44" rx="8"/>
+    <text class="jimdg-chip-label-planned" x="1014" y="564">SCIM 2.0</text>
+    <text class="jimdg-chip-sub-planned" x="1014" y="580">(planned)</text>
+  </g>
+  <g id="jimdg-wk-flows">
+    <line class="jimdg-flow" x1="465" y1="168" x2="465" y2="218"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(465,228) rotate(90)"/>
+    <line class="jimdg-flow" x1="730" y1="168" x2="730" y2="218"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(730,228) rotate(90)"/>
+    <line class="jimdg-flow" x1="995" y1="168" x2="995" y2="218"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(995,228) rotate(90)"/>
+    <text class="jimdg-flow-label" x="742" y="200">dispatches</text>
+    <line class="jimdg-flow" x1="730" y1="312" x2="730" y2="362"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(730,372) rotate(90)"/>
+    <text class="jimdg-flow-label" x="742" y="345">uses</text>
+    <line class="jimdg-flow" x1="465" y1="506" x2="465" y2="322"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(465,312) rotate(-90)"/>
+    <text class="jimdg-flow-label" x="477" y="420">staged imports</text>
+    <line class="jimdg-flow" x1="995" y1="312" x2="995" y2="496"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(995,506) rotate(90)"/>
+    <text class="jimdg-flow-label" x="1007" y="420">outbound changes</text>
+    <line class="jimdg-flow" x1="340" y1="136" x2="250" y2="136"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(240,136) rotate(180)"/>
+    <text class="jimdg-flow-label jimdg-anchor-end" x="338" y="124">polls task queue</text>
+    <line class="jimdg-flow" x1="350" y1="250" x2="250" y2="250"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(240,250) rotate(180)"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(350,250) rotate(0)"/>
+    <text class="jimdg-flow-label jimdg-anchor-end" x="338" y="238">identity data</text>
+  </g>
+  <g id="jimdg-wk-outside">
+    <line class="jimdg-spoke" x1="725" y1="612" x2="725" y2="636"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(725,646) rotate(90)"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(725,602) rotate(-90)"/>
+    <text class="jimdg-note" x="725" y="668">Connected Systems</text>
+  </g>
+  <g id="jimdg-wk-packets">
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="3s" begin="0s" repeatCount="indefinite" path="M465,500 L465,320"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="3s" begin="-1.5s" repeatCount="indefinite" path="M995,318 L995,500"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-1.5s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>

@@ -651,6 +651,17 @@ body:has(.jim-home) .md-content__button {
 /* Connector links: undirected joins (line + round terminators), as opposed
    to the directed spoke/flow arrows */
 .jim-diagram .jimdg-link-end     { fill: var(--jimdg-edge); }
+.jim-diagram .jimdg-link-end-planned { fill: var(--jimdg-edge-muted); }
+
+/* Edge labels on spokes (grey family, matching the edge colour), and
+   anchor helpers for placing labels beside vertical lines */
+.jim-diagram .jimdg-spoke-label  { font-size: 12.5px; fill: var(--jimdg-edge); }
+.jim-diagram .jimdg-anchor-start { text-anchor: start; }
+
+/* People glyphs (C4 person affordance): a small silhouette / terminal mark
+   drawn inside the card, tinted like secondary text */
+.jim-diagram .jimdg-person-glyph { fill: var(--jimdg-sub-text); opacity: 0.9; }
+.jim-diagram .jimdg-glyph-code   { font-family: "IBM Plex Mono", Consolas, monospace; font-size: 10px; font-weight: 600; fill: var(--jimdg-sub-text); }
 
 /* Data packets: dots travelling along live edges (SMIL animateMotion in the
    SVG). Planned edges carry no packets - nothing flows there yet. */

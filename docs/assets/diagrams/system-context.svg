@@ -1,0 +1,89 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- JIM System Context (C4 level 1): who and what interacts with JIM. -->
+<!-- Embedded on the homepage and Concepts > Architecture. -->
+<!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
+<!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: no blank lines or comments inside the <svg> element (pymdownx -->
+<!-- snippets inlines this into markdown); structure uses <g> groups. -->
+<svg class="jim-diagram" viewBox="0 0 1160 630" role="img" aria-labelledby="jimdg-sc-title jimdg-sc-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="jimdg-sc-title">JIM System Context</title>
+  <desc id="jimdg-sc-desc">Administrators manage JIM through the web UI and PowerShell, and automation clients call its REST API. An OIDC Identity Provider authenticates sign-in. JIM synchronises with Directory Services over LDAP and LDAPS, imports from HR systems via CSV, and reads and writes file systems. Enterprise database connectivity over SQL and cloud application provisioning over SCIM 2.0 are planned.</desc>
+  <g id="jimdg-sc-people">
+    <rect class="jimdg-stage" x="150" y="36" width="220" height="64" rx="8"/>
+    <circle class="jimdg-person-glyph" cx="176" cy="57" r="6"/>
+    <path class="jimdg-person-glyph" d="M165,79 a11,11 0 0 1 22,0 z"/>
+    <text class="jimdg-stage-label" x="260" y="63">Administrator</text>
+    <text class="jimdg-system-sub" x="260" y="84">configures &amp; operates JIM</text>
+    <rect class="jimdg-stage" x="470" y="36" width="220" height="64" rx="8"/>
+    <text class="jimdg-glyph-code" x="500" y="64">&gt;_</text>
+    <text class="jimdg-stage-label" x="580" y="63">Automation Client</text>
+    <text class="jimdg-system-sub" x="580" y="84">CI/CD · scripts · API keys</text>
+    <rect class="jimdg-system" x="790" y="36" width="220" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="900" y="63">Identity Provider</text>
+    <text class="jimdg-system-sub" x="900" y="84">OIDC single sign-on</text>
+  </g>
+  <g id="jimdg-sc-jim">
+    <rect class="jimdg-core" x="430" y="240" width="300" height="140" rx="8"/>
+    <text class="jimdg-core-title" x="580" y="296">JIM</text>
+    <text class="jimdg-core-sub" x="580" y="322">Junctional Identity Manager</text>
+    <text class="jimdg-core-sub" x="580" y="344">self-hosted identity synchronisation</text>
+  </g>
+  <g id="jimdg-sc-systems">
+    <rect class="jimdg-system" x="30" y="520" width="200" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="130" y="548">Directory Services</text>
+    <text class="jimdg-system-sub" x="130" y="569">Active Directory · LDAP</text>
+    <rect class="jimdg-system" x="255" y="520" width="200" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="355" y="548">HR Systems</text>
+    <text class="jimdg-system-sub" x="355" y="569">authoritative source</text>
+    <rect class="jimdg-system" x="480" y="520" width="200" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="580" y="548">File Systems</text>
+    <text class="jimdg-system-sub" x="580" y="569">CSV &amp; flat files</text>
+    <rect class="jimdg-system-planned" x="705" y="520" width="200" height="64" rx="8"/>
+    <text class="jimdg-system-name-planned" x="805" y="548">Enterprise Databases</text>
+    <text class="jimdg-system-sub-planned" x="805" y="569">SQL (planned)</text>
+    <rect class="jimdg-system-planned" x="930" y="520" width="200" height="64" rx="8"/>
+    <text class="jimdg-system-name-planned" x="1030" y="548">Cloud Applications</text>
+    <text class="jimdg-system-sub-planned" x="1030" y="569">SCIM 2.0 (planned)</text>
+  </g>
+  <g id="jimdg-sc-edges">
+    <line class="jimdg-spoke" x1="260" y1="100" x2="491.4" y2="235"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(500,240) rotate(30.3)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-end" x="420" y="200">web UI · PowerShell</text>
+    <line class="jimdg-spoke" x1="580" y1="100" x2="580" y2="230"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,240) rotate(90)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="592" y="170">REST API</text>
+    <line class="jimdg-spoke" x1="900" y1="100" x2="668.6" y2="235"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(660,240) rotate(149.7)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="740" y="200">OIDC</text>
+    <line class="jimdg-spoke" x1="450.8" y1="383.9" x2="139.2" y2="516.1"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(130,520) rotate(157)"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(460,380) rotate(-23)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="352" y="430">LDAP/LDAPS</text>
+    <line class="jimdg-spoke" x1="355" y1="520" x2="512.4" y2="386.5"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(520,380) rotate(-40.3)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="426" y="472">imports · CSV</text>
+    <line class="jimdg-spoke" x1="580" y1="390" x2="580" y2="510"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,380) rotate(-90)"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,520) rotate(90)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="592" y="455">reads &amp; writes</text>
+    <line class="jimdg-spoke-planned" x1="647.6" y1="386.5" x2="797.4" y2="513.5"/>
+    <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(805,520) rotate(40.3)"/>
+    <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(640,380) rotate(220.3)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-end" x="688" y="430">SQL</text>
+    <line class="jimdg-spoke-planned" x1="700" y1="380" x2="1020.8" y2="516.1"/>
+    <polygon class="jimdg-arrow-planned" points="0,0 -10,-5.5 -10,5.5" transform="translate(1030,520) rotate(23)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-end" x="900" y="470">provisions · SCIM 2.0</text>
+  </g>
+  <g id="jimdg-sc-packets">
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="3s" begin="0s" repeatCount="indefinite" path="M355,520 L512,386"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="3s" begin="-1.5s" repeatCount="indefinite" path="M450,384 L140,516"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-1.5s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>
