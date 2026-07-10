@@ -39,6 +39,10 @@
   --md-typeset-a-color: #0076d3;             /* --jim-link-color */
   --md-accent-fg-color: #0076d3;
 
+  /* Grid card surfaces: faint brand-purple-tinted panel, deepening a touch on hover */
+  --jim-card-bg: #f7f6fb;
+  --jim-card-bg-hover: #efecf8;
+
 }
 
 /* Light mode: search bar styling */
@@ -118,6 +122,10 @@
   /* Links */
   --md-typeset-a-color: #67b9ff;             /* --jim-link-color */
 
+  /* Grid card surfaces: raised navy panel, lifting a touch lighter on hover */
+  --jim-card-bg: #0d1e30;
+  --jim-card-bg-hover: #14293f;
+
 }
 
 /* Dark mode: search bar styling */
@@ -165,11 +173,20 @@
   border-color: var(--md-accent-fg-color);
 }
 
-/* Material grid cards: lighten the border on hover (default behaviour fades it
-   to transparent, which reads as "darker" in dark mode). 2D look, no shadow. */
+/* Material grid cards: give each panel a subtly toned surface so it reads as a
+   distinct card rather than a bordered void, and lift both the surface and the
+   border on hover. Applies site-wide (feature grids, quick links, connector
+   cards, etc.). 2D look, no shadow. */
+.md-typeset .grid.cards > :is(ul, ol) > li,
+.md-typeset .grid > .card {
+  background-color: var(--jim-card-bg);
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
 .md-typeset .grid.cards > :is(ul, ol) > li:hover,
 .md-typeset .grid > .card:hover {
   border-color: var(--md-default-fg-color--lighter);
+  background-color: var(--jim-card-bg-hover);
   box-shadow: none;
 }
 

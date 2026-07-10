@@ -128,12 +128,14 @@ Enterprise identity synchronisation typically requires cloud connectivity, compl
 
 ## State of Development
 
-JIM has reached MVP completion. The core identity lifecycle is fully functional:
+JIM has completed **pre-release stabilisation** and moved well beyond its initial MVP. The core identity lifecycle is fully functional:
 
 - **Import** identities from source systems (LDAP, CSV)
 - **Sync** to reconcile identities in the central metaverse
 - **Export** changes to target systems with Pending Export management
 - **Schedule** automated synchronisation using cron or interval-based triggers
+
+The platform has been hardened for production, with bounded-memory pipelines proven at 100K+ object scale, an OWASP Top 10:2025 assessment, supply chain hardening, and comprehensive integration test coverage across all synchronisation scenarios. See the [Product Roadmap](reference/roadmap.md) for what is coming as JIM progresses towards its first stable release.
 
 ## 💬 Community & Support
 
