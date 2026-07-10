@@ -632,25 +632,29 @@ Adds an individual scoping criterion to a group. Each criterion compares an attr
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -MetaverseAttributeId <int> -ComparisonType <string>
     [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-PassThru]
+    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
+    [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 
 # By metaverse attribute name
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -MetaverseAttributeName <string> -ComparisonType <string>
     [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-PassThru]
+    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
+    [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 
 # By Connected System attribute ID
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -ConnectedSystemAttributeId <int> -ComparisonType <string>
     [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-PassThru]
+    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
+    [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 
 # By Connected System attribute name
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -ConnectedSystemAttributeName <string> -ComparisonType <string>
     [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-PassThru]
+    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
+    [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 ```
 
 ### Parameters

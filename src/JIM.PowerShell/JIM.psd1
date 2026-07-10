@@ -3,7 +3,7 @@
     RootModule = 'JIM.psm1'
 
     # Version number of this module.
-    ModuleVersion = '0.12.0'
+    ModuleVersion = '0.13.0'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Core', 'Desktop')
@@ -47,7 +47,10 @@
         'Set-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemContainer',
         'Get-JIMConnectedSystemObject',
+        'Get-JIMConnectedSystemObjectType',
+        'Get-JIMConnectedSystemObjectAttributeValue',
         'Get-JIMConnectedSystemObjectChangeHistory',
+        'Get-JIMConnectedSystemDeletionPreview',
         'Get-JIMConnectedSystemUnresolvedReferenceCount',
         'Get-JIMPendingExport',
         'Clear-JIMConnectedSystem',
@@ -71,6 +74,11 @@
         'New-JIMMatchingRule',
         'Set-JIMMatchingRule',
         'Remove-JIMMatchingRule',
+        'Get-JIMSyncRuleMatchingRule',
+        'New-JIMSyncRuleMatchingRule',
+        'Set-JIMSyncRuleMatchingRule',
+        'Remove-JIMSyncRuleMatchingRule',
+        'Switch-JIMMatchingMode',
 
         # Scoping Criteria
         'Get-JIMScopingCriteria',
@@ -122,6 +130,7 @@
         # Metaverse
         'Get-JIMMetaverseObject',
         'Get-JIMMetaverseObjectChangeHistory',
+        'Get-JIMPendingDeletion',
         'Search-JIMMetaverseObject',
         'Get-JIMMetaverseObjectType',
         'New-JIMMetaverseObjectType',

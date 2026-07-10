@@ -63,6 +63,18 @@ hide:
 
     Built-in LDAP and CSV connectors, with a framework for developing custom connectors for bespoke scenarios.
 
+-   :material-sort:{ .lg .middle } **[Attribute Priority](concepts/attribute-priority.md)**
+
+    ---
+
+    Deterministic precedence when multiple Connected Systems contribute the same Metaverse attribute, with "Null is a value" assertion, next-contributor hand-over, and per-value provenance.
+
+-   :material-history:{ .lg .middle } **[Configuration Change History](configuration/activities.md#configuration-change-history)**
+
+    ---
+
+    Versioned who/what/when audit across every configuration type, with secret redaction and a reason-for-change prompt.
+
 </div>
 
 ## 🎯 Scenarios
