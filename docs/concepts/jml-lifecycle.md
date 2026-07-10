@@ -6,14 +6,9 @@ The **Joiner/Mover/Leaver** (JML) lifecycle is the foundational automation model
 
 Every identity follows a predictable lifecycle:
 
-```mermaid
-flowchart LR
-    J["Joiner\n\nNew identity appears\nin source system"] --> M["Mover\n\nRole changes flow\nthrough the metaverse"]
-    M --> L["Leaver\n\nIdentity removed\nor disabled"]
-    J -.- JP["Provision\naccounts"]
-    M -.- MP["Update accounts\nacross systems"]
-    L -.- LP["Deprovision\naccounts"]
-```
+--8<-- "assets/diagrams/jml-lifecycle.svg"
+
+<p class="jim-diagram-caption">One identity's journey through JIM: events recorded in the source system flow through the Metaverse to every target system. Accounts are provisioned for joiners, updated for movers, and deprovisioned (disabled or deleted) for leavers; the systems shown are illustrative.<span class="jimdg-caption-motion"> Moving dots trace the import and export flows.</span></p>
 
 JIM handles each phase through its [Synchronisation Rules](../configuration/synchronisation-rules.md) and [synchronisation pipeline](synchronisation-pipeline.md), applying the appropriate actions automatically based on your configuration.
 

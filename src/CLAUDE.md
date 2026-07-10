@@ -286,8 +286,8 @@ Optional, clearable fields (e.g. `Description`) follow one convention across bot
 **Updating Architecture Diagrams:**
 
 When making architectural changes (new containers, components, connectors, or significant restructuring):
-1. Update `docs/diagrams/structurizr/workspace.dsl` to reflect the change
-2. Regenerate SVGs: `jim-diagrams` (requires Docker)
-3. Commit both the DSL changes and regenerated SVG files together
+1. Update the affected hand-authored SVGs under `docs/assets/diagrams/` (System Context, Containers, Worker components) and the Mermaid component diagrams in `docs/developer/architecture.md`
+2. If `system-context.svg` or `containers.svg` changed (or the diagram tokens in `custom.css` did), regenerate the README exports: `pwsh ./scripts/Export-ReadmeDiagrams.ps1`
+3. Commit the diagram changes together with the code change
 
-> **DSL syntax and diagram details:** See `docs/diagrams/structurizr/README.md`
+> **Authoring conventions:** `docs/CLAUDE.md` > Concept Diagrams; **visual language:** `engineering/DESIGN.md` > Diagrams

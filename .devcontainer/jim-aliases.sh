@@ -60,9 +60,6 @@ Documentation:
   jim-docs           - Preview docs site at http://localhost:8000
   jim-docs-build     - Build static docs site to site/
 
-Diagrams:
-  jim-diagrams       - Export Structurizr C4 diagrams as SVG
-
 OpenAPI:
   jim-openapi-generate - Generate static OpenAPI document (no DB/IdP required)
 
@@ -551,111 +548,6 @@ jim-reset() {
 # Documentation preview (MkDocs Material)
 alias jim-docs='mkdocs serve --dev-addr 0.0.0.0:8000'
 alias jim-docs-build='mkdocs build'
-
-# Structurizr diagram export
-jim-diagrams() {
-  local repo_root structurizr_dir container_name port
-  repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo '/workspaces/JIM')"
-  structurizr_dir="${repo_root}/engineering/diagrams/structurizr"
-  container_name="jim-structurizr-export"
-  port=8085
-
-  # Resolve a launchable Chromium for the SVG export. Chrome for Testing (what
-  # Puppeteer downloads) has no Linux arm64 build, so on arm64 hosts the bundled
-  # Chrome cannot launch ("rosetta error: failed to open elf ... ld-linux-x86-64.so.2").
-  # Fall back to a native Chromium (Playwright's, or a system one) and hand it to
-  # Puppeteer via PUPPETEER_EXECUTABLE_PATH. On x86_64 the bundled Chrome is used unchanged.
-  if [ -z "${PUPPETEER_EXECUTABLE_PATH:-}" ]; then
-    case "$(uname -m)" in
-      aarch64 | arm64)
-        local native_chrome candidate
-        native_chrome="$(find "${HOME}/.cache/ms-playwright" -type f -path '*/chrome-linux/chrome' 2>/dev/null | head -n1)"
-        if [ -z "${native_chrome}" ]; then
-          for candidate in chromium chromium-browser google-chrome-stable google-chrome; do
-            if command -v "${candidate}" > /dev/null 2>&1; then
-              native_chrome="$(command -v "${candidate}")"
-              break
-            fi
-          done
-        fi
-        if [ -z "${native_chrome}" ]; then
-          echo "ERROR: No launchable Chromium found for diagram export."
-          echo "       Chrome for Testing has no Linux arm64 build, so Puppeteer's bundled"
-          echo "       Chrome cannot run on this host. Install one with"
-          echo "       'npx playwright install chromium' (or apt), or set"
-          echo "       PUPPETEER_EXECUTABLE_PATH to a working browser, then retry."
-          return 1
-        fi
-        export PUPPETEER_EXECUTABLE_PATH="${native_chrome}"
-        echo "arm64 host detected: using native Chromium for export: ${PUPPETEER_EXECUTABLE_PATH}"
-        ;;
-    esac
-  fi
-
-  # Verify Puppeteer/Chrome are available (installed by devcontainer setup)
-  if [ ! -d "${structurizr_dir}/node_modules" ]; then
-    echo "Installing Puppeteer dependencies..."
-    (cd "${structurizr_dir}" && npm install --silent && npx puppeteer browsers install chrome 2>/dev/null)
-  fi
-
-  # Remove any stale container
-  docker rm -f "${container_name}" 2>/dev/null
-
-  # Start Structurizr Local (adrs mount resolves the symlink inside the container)
-  # Note: structurizr/lite is deprecated; using structurizr/structurizr with 'local' command
-  echo "Starting Structurizr Local on port ${port}..."
-  docker run -d --name "${container_name}" \
-    -p "${port}:8080" \
-    -v "${structurizr_dir}:/usr/local/structurizr" \
-    -v "${repo_root}/engineering/adrs:/usr/local/structurizr/adrs" \
-    structurizr/structurizr local > /dev/null
-
-  # Wait for Structurizr Local to be ready
-  echo "Waiting for Structurizr Local to start..."
-  local attempts=0
-  while [ $attempts -lt 30 ]; do
-    if curl -sf "http://localhost:${port}/workspace/1/diagrams" > /dev/null 2>&1; then
-      break
-    fi
-    attempts=$((attempts + 1))
-    sleep 2
-  done
-
-  if [ $attempts -ge 30 ]; then
-    echo "ERROR: Structurizr Local failed to start within 60 seconds."
-    docker rm -f "${container_name}" > /dev/null 2>&1
-    return 1
-  fi
-
-  echo "Structurizr Local is ready."
-
-  # Remove old images (light, dark, and legacy root-level)
-  rm -f "${repo_root}/docs/diagrams/images"/jim-structurizr-1-*.svg
-  rm -f "${repo_root}/docs/diagrams/images/light"/jim-structurizr-1-*.svg
-  rm -f "${repo_root}/docs/diagrams/images/dark"/jim-structurizr-1-*.svg
-
-  # Export diagrams (light + dark)
-  node "${structurizr_dir}/export-diagrams.js" \
-    "http://localhost:${port}/workspace/1/diagrams" \
-    "${repo_root}/docs/diagrams/images"
-  local export_rc=$?
-
-  # Cleanup
-  echo "Stopping Structurizr Local..."
-  docker rm -f "${container_name}" > /dev/null 2>&1
-
-  if [ $export_rc -eq 0 ]; then
-    echo ""
-    echo "Diagrams exported:"
-    echo "  Light mode (docs/diagrams/images/light/):"
-    ls -1 "${repo_root}/docs/diagrams/images/light"/jim-structurizr-1-*.svg 2>/dev/null | sed 's|.*/||' | sed 's/^/    /'
-    echo "  Dark mode (docs/diagrams/images/dark/):"
-    ls -1 "${repo_root}/docs/diagrams/images/dark"/jim-structurizr-1-*.svg 2>/dev/null | sed 's|.*/||' | sed 's/^/    /'
-  else
-    echo "ERROR: Diagram export failed."
-    return 1
-  fi
-}
 
 # Create a new PRD from template
 jim-prd() {

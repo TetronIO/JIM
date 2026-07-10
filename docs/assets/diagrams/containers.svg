@@ -1,0 +1,125 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- JIM Containers (C4 level 2): the deployable units and how they interact. -->
+<!-- Strictly containers: Web Application, Worker Service, Scheduler Service, -->
+<!-- PostgreSQL and the PowerShell Module. In-process libraries (Application -->
+<!-- Layer, Connectors) are not containers; the Worker's annotation carries them. -->
+<!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
+<!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: no blank lines or comments inside the <svg> element (pymdownx -->
+<!-- snippets inlines this into markdown); structure uses <g> groups. -->
+<svg class="jim-diagram" viewBox="0 0 1160 750" role="img" aria-labelledby="jimdg-ct-title jimdg-ct-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="jimdg-ct-title">JIM Containers</title>
+  <desc id="jimdg-ct-desc">JIM deploys as a set of containers. Administrators use the Web Application's Blazor UI, or the PowerShell Module which wraps the REST API; automation clients call the REST API directly; an OIDC Identity Provider authenticates sign-in. The Web Application, Scheduler Service and Worker Service all use the PostgreSQL database, which also acts as the task queue: the Scheduler queues tasks and the Worker polls them. The Worker Service runs the synchronisation pipeline and hosts the Connectors, connecting to Directory Services, HR systems and file systems, with enterprise database and cloud application connectivity planned.</desc>
+  <g id="jimdg-ct-people">
+    <rect class="jimdg-stage" x="150" y="32" width="200" height="64" rx="8"/>
+    <circle class="jimdg-person-glyph" cx="166" cy="53" r="6"/>
+    <path class="jimdg-person-glyph" d="M155,75 a11,11 0 0 1 22,0 z"/>
+    <text class="jimdg-stage-label" x="264" y="59">Administrator</text>
+    <text class="jimdg-system-sub" x="264" y="80">web UI &amp; PowerShell</text>
+    <rect class="jimdg-stage" x="480" y="32" width="200" height="64" rx="8"/>
+    <text class="jimdg-glyph-code" x="496" y="60">&gt;_</text>
+    <text class="jimdg-stage-label" x="592" y="59">Automation Client</text>
+    <text class="jimdg-system-sub" x="592" y="80">REST API · API keys</text>
+    <rect class="jimdg-system" x="790" y="32" width="200" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="890" y="59">Identity Provider</text>
+    <text class="jimdg-system-sub" x="890" y="80">OIDC single sign-on</text>
+  </g>
+  <g id="jimdg-ct-boundary">
+    <rect class="jimdg-hub" x="90" y="150" width="980" height="450" rx="8"/>
+    <text class="jimdg-hub-title" x="580" y="188">JIM</text>
+  </g>
+  <g id="jimdg-ct-containers">
+    <rect class="jimdg-stage" x="140" y="225" width="220" height="80" rx="8"/>
+    <text class="jimdg-stage-label" x="250" y="258">PowerShell Module</text>
+    <text class="jimdg-system-sub" x="250" y="280">automation via the REST API</text>
+    <rect class="jimdg-stage" x="460" y="225" width="240" height="80" rx="8"/>
+    <text class="jimdg-stage-label" x="580" y="258">Web Application</text>
+    <text class="jimdg-system-sub" x="580" y="280">Blazor admin UI + REST API</text>
+    <rect class="jimdg-stage" x="770" y="225" width="240" height="80" rx="8"/>
+    <text class="jimdg-stage-label" x="890" y="258">Scheduler Service</text>
+    <text class="jimdg-system-sub" x="890" y="280">cron &amp; interval triggers</text>
+    <rect class="jimdg-stage" x="460" y="420" width="240" height="96" rx="8"/>
+    <text class="jimdg-stage-label" x="580" y="450">Worker Service</text>
+    <text class="jimdg-system-sub" x="580" y="472">runs the sync pipeline</text>
+    <text class="jimdg-system-sub" x="580" y="491">hosts the Connectors</text>
+    <path class="jimdg-stage" d="M780,436 A110,16 0 0 1 1000,436 L1000,524 A110,16 0 0 1 780,524 Z"/>
+    <ellipse class="jimdg-stage" cx="890" cy="436" rx="110" ry="16"/>
+    <text class="jimdg-stage-label" x="890" y="486">PostgreSQL</text>
+    <text class="jimdg-system-sub" x="890" y="508">configuration &amp; identity data</text>
+  </g>
+  <g id="jimdg-ct-edges">
+    <line class="jimdg-spoke" x1="250" y1="96" x2="250" y2="215"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(250,225) rotate(90)"/>
+    <line class="jimdg-spoke" x1="330" y1="96" x2="531.5" y2="219.8"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(540,225) rotate(31.6)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-end" x="455" y="180">web UI</text>
+    <line class="jimdg-spoke" x1="580" y1="96" x2="580" y2="215"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,225) rotate(90)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="592" y="170">REST API</text>
+    <line class="jimdg-spoke" x1="890" y1="96" x2="658.8" y2="220.3"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(650,225) rotate(151.7)"/>
+    <text class="jimdg-spoke-label jimdg-anchor-start" x="745" y="180">OIDC</text>
+    <line class="jimdg-flow" x1="360" y1="265" x2="450" y2="265"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(460,265) rotate(0)"/>
+    <text class="jimdg-flow-label" x="372" y="253">REST API</text>
+    <line class="jimdg-flow" x1="640" y1="305" x2="821.5" y2="417.7"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(830,423) rotate(31.85)"/>
+    <text class="jimdg-flow-label jimdg-anchor-end" x="716" y="364">reads &amp; writes</text>
+    <line class="jimdg-flow" x1="890" y1="305" x2="890" y2="410"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(890,420) rotate(90)"/>
+    <text class="jimdg-flow-label" x="902" y="350">queues tasks</text>
+    <line class="jimdg-flow" x1="700" y1="470" x2="770" y2="470"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(780,470) rotate(0)"/>
+    <text class="jimdg-flow-label" x="706" y="458">task queue</text>
+  </g>
+  <g id="jimdg-ct-links">
+    <line class="jimdg-spoke" x1="480" y1="516" x2="120" y2="656"/>
+    <circle class="jimdg-link-end" cx="480" cy="516" r="3.5"/>
+    <circle class="jimdg-link-end" cx="120" cy="656" r="3.5"/>
+    <line class="jimdg-spoke" x1="530" y1="516" x2="350" y2="656"/>
+    <circle class="jimdg-link-end" cx="530" cy="516" r="3.5"/>
+    <circle class="jimdg-link-end" cx="350" cy="656" r="3.5"/>
+    <line class="jimdg-spoke" x1="580" y1="516" x2="580" y2="656"/>
+    <circle class="jimdg-link-end" cx="580" cy="516" r="3.5"/>
+    <circle class="jimdg-link-end" cx="580" cy="656" r="3.5"/>
+    <line class="jimdg-spoke-planned" x1="630" y1="516" x2="810" y2="656"/>
+    <circle class="jimdg-link-end-planned" cx="630" cy="516" r="3.5"/>
+    <circle class="jimdg-link-end-planned" cx="810" cy="656" r="3.5"/>
+    <line class="jimdg-spoke-planned" x1="680" y1="516" x2="1040" y2="656"/>
+    <circle class="jimdg-link-end-planned" cx="680" cy="516" r="3.5"/>
+    <circle class="jimdg-link-end-planned" cx="1040" cy="656" r="3.5"/>
+  </g>
+  <g id="jimdg-ct-systems">
+    <rect class="jimdg-system" x="20" y="656" width="200" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="120" y="684">Directory Services</text>
+    <text class="jimdg-system-sub" x="120" y="705">LDAP · LDAPS</text>
+    <rect class="jimdg-system" x="250" y="656" width="200" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="350" y="684">HR Systems</text>
+    <text class="jimdg-system-sub" x="350" y="705">CSV</text>
+    <rect class="jimdg-system" x="480" y="656" width="200" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="580" y="684">File Systems</text>
+    <text class="jimdg-system-sub" x="580" y="705">CSV &amp; flat files</text>
+    <rect class="jimdg-system-planned" x="710" y="656" width="200" height="64" rx="8"/>
+    <text class="jimdg-system-name-planned" x="810" y="684">Enterprise Databases</text>
+    <text class="jimdg-system-sub-planned" x="810" y="705">SQL (planned)</text>
+    <rect class="jimdg-system-planned" x="940" y="656" width="200" height="64" rx="8"/>
+    <text class="jimdg-system-name-planned" x="1040" y="684">Cloud Applications</text>
+    <text class="jimdg-system-sub-planned" x="1040" y="705">SCIM 2.0 (planned)</text>
+  </g>
+  <g id="jimdg-ct-packets">
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="3s" begin="0s" repeatCount="indefinite" path="M480,516 L120,656"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="3s" begin="-1.5s" repeatCount="indefinite" path="M350,656 L530,516"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-1.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="3s" begin="-0.75s" repeatCount="indefinite" path="M580,516 L580,656"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-0.75s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>
