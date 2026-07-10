@@ -32,15 +32,17 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
 
             appLayer = container "Application Layer" "Business logic and domain services" "JIM.Application" {
                 jimApplication = component "JimApplication Facade" "Single entry point to all domain services for Web and Scheduler" "C# Facade Class"
-                syncEngine = component "SyncEngine" "Pure domain logic for sync decisions - projection, attribute flow, deletion rules, export confirmation. Stateless, I/O-free" "C# Service"
+                syncEngine = component "SyncEngine" "Pure domain logic for sync decisions - projection, Attribute Flow (multi-source resolution by Attribute Priority with 'Null is a value' and next-contributor hand-over), deletion rules, export confirmation. Stateless, I/O-free" "C# Service"
                 syncServer = component "SyncServer" "Orchestration facade for Worker processors - delegates to domain servers and ISyncRepository" "C# Service"
                 metaverseServer = component "MetaverseServer" "Metaverse object CRUD, querying, attribute management" "C# Service"
                 connectedSystemServer = component "ConnectedSystemServer" "Connected system lifecycle, configuration, run profiles, sync rules, and attribute mappings" "C# Service"
                 objectMatchingServer = component "ObjectMatchingServer" "Join logic between ConnectedSystemObjects and MetaverseObjects" "C# Service"
                 exportEvaluationServer = component "ExportEvaluationServer" "Determines pending exports based on attribute changes" "C# Service"
                 scopingEvaluationServer = component "ScopingEvaluationServer" "Evaluates sync rule scoping filters" "C# Service"
+                scopeReconciliationServer = component "ScopeReconciliationServer" "Temporal Scope Reconciler - re-evaluates relative-date scope transitions (joiners/leavers crossing date boundaries) that the change-driven sync path skips. Runs hourly, out of band" "C# Service"
                 exportExecutionServer = component "ExportExecutionServer" "Executes pending exports with retry logic and parallel batching" "C# Service"
                 driftDetectionService = component "DriftDetectionService" "Detects target system drift from authoritative MVO state, creates corrective pending exports" "C# Service"
+                configChangeCaptureService = component "ConfigurationChangeCaptureService" "Versioned configuration change-history capture shared by every configuration type's server (Synchronisation Rules, Connected Systems, Schedules, Service Settings, Metaverse schema, Certificates, API Keys, Roles, Predefined Searches, Connector Definitions, Example Data). Records redacted snapshots and diffs onto configuration-change Activities" "C# Service"
                 schedulerServer = component "SchedulerServer" "Schedule management, due time evaluation, execution advancement, crash recovery" "C# Service"
                 searchServer = component "SearchServer" "Metaverse search and query functionality" "C# Service"
                 securityServer = component "SecurityServer" "Role-based access control and user-to-role assignments" "C# Service"
@@ -76,7 +78,7 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
 
             database = container "PostgreSQL Database" "Stores configuration, metaverse objects, staging area, sync rules, activity history, task queue" "PostgreSQL 18" "Database"
 
-            pwsh = container "PowerShell Module" "Cross-platform module with 97 cmdlets for automation and scripting" "PowerShell 7" "Client Library"
+            pwsh = container "PowerShell Module" "Cross-platform module with 129 cmdlets for automation and scripting" "PowerShell 7" "Client Library"
 
             !docs docs
             !adrs adrs
@@ -145,6 +147,7 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
         jim.appLayer.jimApplication -> jim.appLayer.taskingServer "Delegates to" "Method calls"
         jim.appLayer.jimApplication -> jim.appLayer.fileSystemServer "Delegates to" "Method calls"
         jim.appLayer.jimApplication -> jim.appLayer.exampleDataServer "Delegates to" "Method calls"
+        jim.appLayer.jimApplication -> jim.appLayer.scopeReconciliationServer "Delegates to" "Method calls"
 
         # SyncServer orchestration (used by Worker processors)
         jim.appLayer.syncServer -> jim.appLayer.exportEvaluationServer "Delegates to" "Method calls"
@@ -172,6 +175,12 @@ workspace "JIM Identity Management System" "C4 model for JIM - a central identit
         jim.appLayer.serviceSettingsServer -> jim.appLayer.repository "Uses" "IJimRepository"
         jim.appLayer.activityServer -> jim.appLayer.repository "Uses" "IJimRepository"
         jim.appLayer.taskingServer -> jim.appLayer.repository "Uses" "IJimRepository"
+        jim.appLayer.scopeReconciliationServer -> jim.appLayer.scopingEvaluationServer "Uses" "Method calls"
+        jim.appLayer.scopeReconciliationServer -> jim.appLayer.repository "Uses" "IJimRepository"
+        jim.appLayer.connectedSystemServer -> jim.appLayer.configChangeCaptureService "Captures change history via" "Method calls"
+        jim.appLayer.schedulerServer -> jim.appLayer.configChangeCaptureService "Captures change history via" "Method calls"
+        jim.appLayer.serviceSettingsServer -> jim.appLayer.configChangeCaptureService "Captures change history via" "Method calls"
+        jim.appLayer.metaverseServer -> jim.appLayer.configChangeCaptureService "Captures change history via" "Method calls"
 
         # Data access to database
         jim.appLayer.repository -> jim.database "Reads/Writes" "EF Core (JIM.PostgresData)"

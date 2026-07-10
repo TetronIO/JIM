@@ -1,6 +1,6 @@
 # Worker Task Lifecycle
 
-> Last updated: 2026-04-22, JIM v0.10.0
+> Last updated: 2026-07-10, JIM v0.13.0
 
 This diagram shows how the JIM Worker service picks up, executes, and completes tasks. It covers the main polling loop, task dispatch, heartbeat management, cancellation handling, and housekeeping.
 
@@ -94,6 +94,14 @@ flowchart TD
     DeleteComplete --> CompleteTask
     DeleteFail --> CompleteTask
 
+    %% --- Temporal Scope Reconciliation task ---
+    TaskType -->|TemporalScopeReconciliation<br/>WorkerTask| Temporal[ScopeReconciliation.ReconcileAsync<br/>Failure-safe watermark from last<br/>completed sweep<br/>Flags objects for scope review]
+    Temporal --> TemporalResult{Success?}
+    TemporalResult -->|Yes| TemporalComplete[CompleteActivityAsync]
+    TemporalResult -->|No| TemporalFail[FailActivityWithErrorAsync]
+    TemporalComplete --> CompleteTask
+    TemporalFail --> CompleteTask
+
     %% --- Activity completion for sync tasks ---
     CompleteActivity[CompleteActivityBasedOnExecutionResultsAsync<br/>Calculate summary stats from RPEIs]
     CompleteActivity --> DetermineStatus{RPEI<br/>error analysis}
@@ -158,7 +166,7 @@ flowchart LR
 ## Key Design Decisions
 
 - **Three-layer sync DI architecture (#394)**<br /> Worker processors use three collaborating interfaces injected at task spawn time:
-  - **ISyncEngine:** Pure domain logic (projection decisions, Attribute Flow, deletion rules, export confirmation). Stateless, synchronous, zero-dependency, I/O-free, fully unit-testable. 8 methods covering projection, Attribute Flow, export confirmation, deletion rules, and reconciliation. Used by import, full sync, and delta sync processors.
+  - **ISyncEngine:** Pure domain logic (projection decisions, Attribute Flow, deletion rules, export confirmation). Stateless, synchronous, zero-dependency, I/O-free, fully unit-testable. 9 methods covering projection, Attribute Flow, export confirmation, deletion rules, out-of-scope action, applying pending attribute changes, and reconciliation. Used by import, full sync, and delta sync processors.
   - **ISyncServer:** Orchestration facade that delegates to existing application-layer servers (ExportEvaluationServer, ExportExecutionServer, ScopingEvaluationServer, DriftDetectionService) and ISyncRepository. All processors use this.
   - **ISyncRepository:** Dedicated data access boundary for sync operations (bulk CSO/MVO writes, Pending Exports, RPEIs). Replaces scattered access through multiple server properties.
 

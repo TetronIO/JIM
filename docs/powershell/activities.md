@@ -4,7 +4,7 @@ title: Activities
 
 # Activities
 
-Activity cmdlets retrieve and inspect the execution history of operations within JIM. Activities track all operations: synchronisation runs, data generation, certificate management, and other administrative actions. Use these cmdlets to review activity logs, retrieve execution statistics, and inspect child activities spawned by parent operations.
+Activity cmdlets retrieve and inspect the execution history of operations within JIM. Activities track all operations: synchronisation runs, data generation, certificate management, and other administrative actions. Example data generation is now its own distinct **Data Generation** activity type, separate from configuration changes to an Example Data Template. Use these cmdlets to review activity logs, retrieve execution statistics, and inspect child activities spawned by parent operations.
 
 ---
 

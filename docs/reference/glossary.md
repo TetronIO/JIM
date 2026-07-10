@@ -8,6 +8,12 @@ Activity
 Attribute Flow
 :   A rule that maps an attribute between a Connected System Object and a Metaverse Object. Attribute Flows define how data moves during synchronisation, including any transformations applied via expressions.
 
+Attribute Priority
+:   The deterministic precedence that decides which Connected System's value wins when several contribute the same Metaverse Object attribute. Each contributing inbound Synchronisation Rule holds a priority for the attribute, and the highest-priority contributor that has a value sets it, so the result never depends on the order synchronisations happen to run in.
+
+Configuration Change History
+:   A versioned, per-object audit of who changed a configuration entity, what changed, and when, captured as a redacted snapshot on the originating Activity. It covers every administrator-mutable configuration type and is retained on its own, typically much longer, retention period.
+
 Connector
 :   An adapter for communicating with an external system. Each connector implements the protocol and logic required to import from and export to a specific type of data source (e.g. LDAP directories, CSV files).
 
@@ -35,6 +41,9 @@ Metaverse
 MVO (Metaverse Object)
 :   The central identity entity stored in the metaverse. Each MVO represents a single real-world identity and may be linked to multiple Connected System Objects across different systems.
 
+Null is a value
+:   A per-contributor Attribute Priority setting. When an in-scope contributor with this setting supplies no value, JIM positively asserts "no value" and clears the attribute downstream, rather than falling through to a lower-priority source. It distinguishes a deliberate, authoritative clear from a contributor that simply has no opinion.
+
 Obsoletion
 :   The process of marking a Connected System Object as no longer existing in its source system. Obsoletion is detected during import when an object that was previously present is no longer returned by the Connected System.
 
@@ -55,3 +64,6 @@ Run Profile
 
 Synchronisation Rule
 :   A complete mapping configuration between a Connected System and the metaverse. Synchronisation Rules define object type mappings, Attribute Flows, scoping criteria, Object Matching Rules, and the direction of data flow (inbound or outbound).
+
+Temporal Scope Reconciliation
+:   A scheduled reconciliation that re-evaluates the scoping criteria of Synchronisation Rules which depend on relative dates, so objects move in or out of scope as time passes even when their own attributes have not changed.
