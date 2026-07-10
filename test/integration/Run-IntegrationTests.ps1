@@ -164,8 +164,8 @@
     ./Run-IntegrationTests.ps1 -PreRelease
 
     Runs the full pre-release regression: every implemented scenario against both
-    directory types, with Samba AD at the MediumLarge template and OpenLDAP at Scale100k50Groups.
-    Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD MediumLarge -TemplateOpenLDAP Scale100k50Groups.
+    directory types, with Samba AD at the Medium template and OpenLDAP at Large.
+    Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Large.
 #>
 
 param(
@@ -314,14 +314,10 @@ function Test-LongTailTemplateCompatibility {
 Test-LongTailTemplateCompatibility -Template $Template -DirectoryType $DirectoryType `
     -TemplateSambaAD $TemplateSambaAD -TemplateOpenLDAP $TemplateOpenLDAP
 
-# Hard-fail: Scenario 14 (Attribute Priority) depends on two LDAP suffixes hosted on a single
-# OpenLDAP container (docker/openldap/scripts/01-add-second-suffix.sh); Samba AD has no
-# equivalent multi-suffix mechanism. Reject early rather than failing deep into setup.
-# -DirectoryType All is exempt: its handler below runs the OpenLDAP leg and skips the
-# Samba AD leg for this scenario, and the -Scenario All loop likewise skips it on Samba AD.
-if ($Scenario -like "*Scenario14*" -and $DirectoryType -eq "SambaAD") {
-    throw "Scenario 14 (Attribute Priority) requires two LDAP suffixes on a single OpenLDAP container and is OpenLDAP only. Rejected -DirectoryType $DirectoryType. Use -DirectoryType OpenLDAP."
-}
+# NOTE: Scenario 14 (Attribute Priority) is OpenLDAP only (two-suffix topology). Its
+# directory-type handling runs *after* scenario/directory resolution (see "Scenario 14
+# directory coercion" below), not here, because when the scenario is chosen from the
+# interactive menu $Scenario is still empty at this point.
 
 # Resolve directory configuration (used throughout for Docker profiles, population, setup)
 # Skip for "All" — the DirectoryType All handler orchestrates multiple runs with specific types.
@@ -543,7 +539,7 @@ function Show-ScenarioMenu {
         }
         @{
             Name = "Pre-Release"
-            Description = "Runs every implemented scenario sequentially for both Samba AD and OpenLDAP at MediumLarge and Scale100k50Groups templates, respectively"
+            Description = "Runs every implemented scenario sequentially for both Samba AD and OpenLDAP at Medium and Large templates, respectively"
             Disabled = $false
             SeparatorAfter = $true
         }
@@ -1223,12 +1219,12 @@ function Test-TemplateRelevant {
     return $true
 }
 
-# -PreRelease is shorthand for: -Scenario All -DirectoryType All -TemplateSambaAD MediumLarge -TemplateOpenLDAP Scale100k50Groups
+# -PreRelease is shorthand for: -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Large
 if ($PreRelease) {
     $Scenario               = "All"
     $DirectoryType          = "All"
-    $TemplateSambaAD        = "MediumLarge"
-    $TemplateOpenLDAP       = "Scale100k50Groups"
+    $TemplateSambaAD        = "Medium"
+    $TemplateOpenLDAP       = "Large"
     $DirectoryTypeWasExplicitlySet = $true
     $TemplateWasExplicitlySet      = $true
 }
@@ -1238,13 +1234,13 @@ if (-not $Scenario) {
     $Scenario = Show-ScenarioMenu
 
     # "Pre-Release" is a special menu entry that expands to all-scenarios, both directory
-    # types, with Samba AD at MediumLarge and OpenLDAP at Scale100k50Groups. It bypasses the Template
+    # types, with Samba AD at Medium and OpenLDAP at Large. It bypasses the Template
     # and DirectoryType sub-menus since those are fixed by the Pre-Release preset.
     if ($Scenario -eq "Pre-Release") {
         $Scenario                      = "All"
         $DirectoryType                 = "All"
-        $TemplateSambaAD               = "MediumLarge"
-        $TemplateOpenLDAP              = "Scale100k50Groups"
+        $TemplateSambaAD               = "Medium"
+        $TemplateOpenLDAP              = "Large"
         $DirectoryTypeWasExplicitlySet = $true
         $TemplateWasExplicitlySet      = $true
     }
@@ -1259,9 +1255,15 @@ if (-not $Scenario) {
         }
     }
 
-    # Show directory type menu only if not explicitly provided
+    # Show directory type menu only if not explicitly provided. Scenario 14 is OpenLDAP
+    # only (two-suffix topology), so don't offer a choice; go straight to OpenLDAP.
     if (-not $DirectoryTypeWasExplicitlySet) {
-        $DirectoryType = Show-DirectoryTypeMenu
+        if ($Scenario -like "*Scenario14*") {
+            $DirectoryType = "OpenLDAP"
+        }
+        else {
+            $DirectoryType = Show-DirectoryTypeMenu
+        }
         # Re-resolve directory config with the selected type (skip for "All" — handled below)
         if ($DirectoryType -ne "All") {
             $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType
@@ -1288,6 +1290,25 @@ if (-not $Scenario) {
             'Default'    { } # neither switch set
         }
     }
+}
+
+# ---------------------------------------------------------------------------
+# Scenario 14 directory coercion (Attribute Priority is OpenLDAP only)
+# ---------------------------------------------------------------------------
+# Scenario 14 depends on two LDAP suffixes hosted on a single OpenLDAP container
+# (docker/openldap/scripts/01-add-second-suffix.sh); Samba AD has no equivalent
+# multi-suffix mechanism. This runs after scenario/directory resolution (whether the
+# values came from parameters or the interactive menu) and before the build, so the
+# constraint is enforced whichever way they were chosen. If -DirectoryType SambaAD was
+# explicitly passed, respect the explicit intent and reject; otherwise coerce to
+# OpenLDAP. -DirectoryType All is handled by its own block below.
+if ($Scenario -like "*Scenario14*" -and $DirectoryType -eq "SambaAD") {
+    if ($DirectoryTypeWasExplicitlySet) {
+        throw "Scenario 14 (Attribute Priority) requires two LDAP suffixes on a single OpenLDAP container and is OpenLDAP only. Rejected -DirectoryType SambaAD. Use -DirectoryType OpenLDAP."
+    }
+    Write-Host "${YELLOW}Scenario 14 (Attribute Priority) is OpenLDAP only; using -DirectoryType OpenLDAP.${NC}"
+    $DirectoryType = "OpenLDAP"
+    $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType "OpenLDAP"
 }
 
 # ---------------------------------------------------------------------------
