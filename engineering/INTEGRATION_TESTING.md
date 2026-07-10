@@ -77,8 +77,8 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario9-PartitionScopedImports"  # Partition-scoped import Run Profiles
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario10-SyncRuleScoping"          # Synchronisation Rule scoping behaviour (inbound + outbound)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix"    # Scoping criteria evaluation matrix (Default tier)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Quick      # Quick tier (~12 cells, < 90s)
-./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Exhaustive # Exhaustive tier (~152 cells, < 10 min)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Quick      # Quick tier (~12 cells)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario11-ScopingCriteriaMatrix" -Exhaustive # Exhaustive tier (~152 cells)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario12-RelativeDateScoping"       # Relative-date inbound scoping (joiner/leaver)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario13-RelativeDateOutboundScoping" # Relative-date outbound scoping (staged provisioning)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario14-AttributePriority"        # Attribute Priority multi-source winner resolution (#91, OpenLDAP only)
@@ -141,43 +141,45 @@ This single script handles everything:
 
 **Available Scenarios (`-Scenario` parameter):**
 
-| Scenario | Description | Containers Used | OpenLDAP |
-|----------|-------------|-----------------|----------|
-| `Scenario1-HRToIdentityDirectory` | HR + Training CSV -> AD provisioning (Joiner/Mover/Leaver) | samba-ad-primary / openldap-primary | ✅ |
-| `Scenario2-CrossDomainSync` | APAC -> EMEA directory sync | samba-ad-source, samba-ad-target / openldap-primary | ✅ |
-| `Scenario3-GALSYNC` | AD -> CSV global address list export (stub, not implemented) | samba-ad-primary / openldap-primary | ✅ |
-| `Scenario4-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary / openldap-primary | ✅ |
-| `Scenario5-MatchingRules` | Object Matching Rules testing | samba-ad-primary / openldap-primary | ✅ |
-| `Scenario6-SchedulerService` | Scheduler service end-to-end testing | samba-ad-primary / openldap-primary | ✅ |
-| `Scenario7-ClearConnectedSystemObjects` | Clear connector space testing | samba-ad-primary / openldap-primary | ✅ |
-| `Scenario8-CrossDomainEntitlementSync` | Group sync between APAC and EMEA domains | samba-ad-source, samba-ad-target / openldap-primary | ✅ |
-| `Scenario9-PartitionScopedImports` | Partition-scoped import Run Profiles | samba-ad-primary / openldap-primary | ✅ |
-| `Scenario10-SyncRuleScoping` | Synchronisation Rule scoping behaviour: inbound enter/in-scope-update/exit (Disconnect, RemainJoined); outbound enter/exit (Disconnect, Delete); cross-system inline cascade; criteria persistence | file (HR CSV), samba-ad-primary / openldap-primary | ✅ |
-| `Scenario11-ScopingCriteriaMatrix` | Scoping criteria evaluation matrix: full operator x value-type x group-structure coverage via batched per-cell CSO and MV types. Three tiers: Quick (~12 cells, < 90s), Default (~41 cells, < 5 min), Exhaustive (~152 cells, < 10 min). Round-trip persistence and API negative-cell probes run first. | file (bespoke deterministic seed) | n/a |
-| `Scenario12-RelativeDateScoping` | Relative-date inbound scoping: date-driven joiner provisioning and leaver deprovisioning, plus per-run re-evaluation against the live clock | file (HR CSV, metaverse-only) | n/a |
-| `Scenario13-RelativeDateOutboundScoping` | Relative-date outbound scoping: downstream provisioning held until a joiner's start date arrives, released via the Temporal Scope Reconciler's outbound lane | file (HR CSV source, CSV export target) | n/a |
-| `Scenario14-AttributePriority` | Attribute Priority multi-source winner resolution (#91): two import Synchronisation Rules contribute the same Metaverse attributes (Description, Job Title, Manager reference, multi-valued Other Telephones) at different priorities; validates winner-takes-all for scalars, multi-valued handling, recall/re-election, and null/withdrawal/priority-reorder behaviour. OpenLDAP only (two-suffix topology: dc=yellowstone Primary + dc=glitterband Secondary in one container) | openldap-primary (two suffixes) | ✅ (only) |
+In **Containers Used**, `samba-* / openldap-primary` means the scenario runs against Samba AD or OpenLDAP depending on `-DirectoryType`; `file (...)` means no directory container (CSV / metaverse only). Scenario 14 is OpenLDAP only.
+
+| Scenario | Description | Containers Used |
+|----------|-------------|-----------------|
+| `Scenario1-HRToIdentityDirectory` | HR + Training CSV -> AD provisioning (Joiner/Mover/Leaver) | samba-ad-primary / openldap-primary |
+| `Scenario2-CrossDomainSync` | APAC -> EMEA directory sync | samba-ad-source, samba-ad-target / openldap-primary |
+| `Scenario3-GALSYNC` | AD -> CSV global address list export (stub, not implemented) | samba-ad-primary / openldap-primary |
+| `Scenario4-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary / openldap-primary |
+| `Scenario5-MatchingRules` | Object Matching Rules testing | samba-ad-primary / openldap-primary |
+| `Scenario6-SchedulerService` | Scheduler service end-to-end testing | samba-ad-primary / openldap-primary |
+| `Scenario7-ClearConnectedSystemObjects` | Clear connector space testing | samba-ad-primary / openldap-primary |
+| `Scenario8-CrossDomainEntitlementSync` | Group sync between APAC and EMEA domains | samba-ad-source, samba-ad-target / openldap-primary |
+| `Scenario9-PartitionScopedImports` | Partition-scoped import Run Profiles | samba-ad-primary / openldap-primary |
+| `Scenario10-SyncRuleScoping` | Synchronisation Rule scoping behaviour: inbound enter/in-scope-update/exit (Disconnect, RemainJoined); outbound enter/exit (Disconnect, Delete); cross-system inline cascade; criteria persistence | file (HR CSV), samba-ad-primary / openldap-primary |
+| `Scenario11-ScopingCriteriaMatrix` | Scoping criteria evaluation matrix: full operator x value-type x group-structure coverage via batched per-cell CSO and MV types. Three tiers: Quick (~12 cells), Default (~41 cells), Exhaustive (~152 cells). Round-trip persistence and API negative-cell probes run first. | file (bespoke deterministic seed) |
+| `Scenario12-RelativeDateScoping` | Relative-date inbound scoping: date-driven joiner provisioning and leaver deprovisioning, plus per-run re-evaluation against the live clock | file (HR CSV, metaverse-only) |
+| `Scenario13-RelativeDateOutboundScoping` | Relative-date outbound scoping: downstream provisioning held until a joiner's start date arrives, released via the Temporal Scope Reconciler's outbound lane | file (HR CSV source, CSV export target) |
+| `Scenario14-AttributePriority` | Attribute Priority multi-source winner resolution (#91): two import Synchronisation Rules contribute the same Metaverse attributes (Description, Job Title, Manager reference, multi-valued Other Telephones) at different priorities; validates winner-takes-all for scalars, multi-valued handling, recall/re-election, and null/withdrawal/priority-reorder behaviour. OpenLDAP only (two-suffix topology: dc=yellowstone Primary + dc=glitterband Secondary in one container) | openldap-primary (two suffixes) |
 
 **Available Templates (`-Template` parameter):**
 
-Choose a template based on your testing goals. The time shown is a rough **single import/sync/export cycle** at that size, not a scenario or a full run; for measured per-scenario and full-regression times see [Run-Time Estimates](#run-time-estimates).
+Choose a template based on your testing goals. For measured run times see [Run-Time Estimates](#run-time-estimates).
 
-- **Nano** (default): 3 users, 1 group - **< 10 sec** - Fast dev iteration and debugging
-- **Micro**: 10 users, 3 groups - **< 30 sec** - Quick smoke tests and development
-- **Small**: 100 users, 20 groups - **< 2 min** - Small business scenarios, unit testing
-- **Medium**: 1,000 users, 100 groups - **< 2 min** - Medium enterprise, CI/CD pipelines
-- **MediumLarge**: 5,000 users, 250 groups - **< 5 min** - Large medium enterprise, performance validation
-- **Large**: 10,000 users, 500 groups - **< 15 min** - Large enterprise, performance baselines
-- **Scale100k50Groups**: 100,000 users, 50 groups - **< 2 hours** - Very large enterprise, stress testing (**requires 20+ GB host RAM**; see note below)
-- **Scale200k55Groups**: 200,000 users, 55 groups - **TBD** - Very large enterprise, extended stress testing (**requires 24+ GB host RAM**)
-- **Scale500k65Groups**: 500,000 users, 65 groups - **TBD** - Massive enterprise, scale validation (**requires 32+ GB host RAM**)
-- **Scale750k70Groups**: 750,000 users, 70 groups - **TBD** - Near-million scale validation (**requires 32+ GB host RAM**)
-- **Scale1m80Groups**: 1,000,000 users, 70 groups - **TBD** - Global enterprise, scale limits (**requires 64+ GB host RAM**). _Note: the name's "80" reflects the originally planned group count; the actual count is 70. The capped-groups Samba-friendly templates above are kept for Samba scale testing; long-tail counterparts (Scale*k*kGroups) are listed below._
-- **Scale100k5kGroups**: 100,000 users, 5,027 groups (realistic long-tail shape) - **< 2 hours** - Scenario 8 entitlement sync against representative enterprise group topology. **OpenLDAP only**; rejected on Samba AD. Same memory requirements as Scale100k50Groups.
-- **Scale200k10kGroups**: 200,000 users, 9,984 groups (long-tail shape) - **TBD** - Scenario 8 only. **OpenLDAP only**. Same memory profile as Scale200k55Groups plus additional RAM for the larger group/membership working set (~28+ GB recommended).
-- **Scale500k25kGroups**: 500,000 users, 24,997 groups (long-tail shape) - **TBD** - Scenario 8 only. **OpenLDAP only**. ~40+ GB recommended.
-- **Scale750k40kGroups**: 750,000 users, 40,011 groups (long-tail shape) - **TBD** - Scenario 8 only. **OpenLDAP only**. ~48+ GB recommended.
-- **Scale1m60kGroups**: 1,000,000 users, 60,073 groups (long-tail shape) - **TBD** - Scenario 8 only. **OpenLDAP only**. ~64+ GB recommended; also requires raising the OpenLDAP accesslog `olcDbMaxSize` proportionally (see Troubleshooting → "OpenLDAP accesslog full" below).
+- **Nano** (default): 3 users, 1 group - Fast dev iteration and debugging
+- **Micro**: 10 users, 3 groups - Quick smoke tests and development
+- **Small**: 100 users, 20 groups - Small business scenarios, unit testing
+- **Medium**: 1,000 users, 100 groups - Medium enterprise, CI/CD pipelines
+- **MediumLarge**: 5,000 users, 250 groups - Large medium enterprise, performance validation
+- **Large**: 10,000 users, 500 groups - Large enterprise, performance baselines
+- **Scale100k50Groups**: 100,000 users, 50 groups - Very large enterprise, stress testing (**requires 20+ GB host RAM**; see note below)
+- **Scale200k55Groups**: 200,000 users, 55 groups - Very large enterprise, extended stress testing (**requires 24+ GB host RAM**)
+- **Scale500k65Groups**: 500,000 users, 65 groups - Massive enterprise, scale validation (**requires 32+ GB host RAM**)
+- **Scale750k70Groups**: 750,000 users, 70 groups - Near-million scale validation (**requires 32+ GB host RAM**)
+- **Scale1m80Groups**: 1,000,000 users, 70 groups - Global enterprise, scale limits (**requires 64+ GB host RAM**). _Note: the name's "80" reflects the originally planned group count; the actual count is 70. The capped-groups Samba-friendly templates above are kept for Samba scale testing; long-tail counterparts (Scale*k*kGroups) are listed below._
+- **Scale100k5kGroups**: 100,000 users, 5,027 groups (realistic long-tail shape) - Scenario 8 entitlement sync against representative enterprise group topology. **OpenLDAP only**; rejected on Samba AD. Same memory requirements as Scale100k50Groups.
+- **Scale200k10kGroups**: 200,000 users, 9,984 groups (long-tail shape) - Scenario 8 only. **OpenLDAP only**. Same memory profile as Scale200k55Groups plus additional RAM for the larger group/membership working set (~28+ GB recommended).
+- **Scale500k25kGroups**: 500,000 users, 24,997 groups (long-tail shape) - Scenario 8 only. **OpenLDAP only**. ~40+ GB recommended.
+- **Scale750k40kGroups**: 750,000 users, 40,011 groups (long-tail shape) - Scenario 8 only. **OpenLDAP only**. ~48+ GB recommended.
+- **Scale1m60kGroups**: 1,000,000 users, 60,073 groups (long-tail shape) - Scenario 8 only. **OpenLDAP only**. ~64+ GB recommended; also requires raising the OpenLDAP accesslog `olcDbMaxSize` proportionally (see Troubleshooting → "OpenLDAP accesslog full" below).
 
 > **Memory requirements for large templates:** The Scale100k50Groups and above templates require significantly more memory than smaller templates. The worker loads all imported objects into memory during processing; a 100K object import produces a worker peak working set of approximately 2.3 GB, plus 1–2 GB for the database during bulk inserts. **A 16 GB machine is not sufficient for Scale100k50Groups**; the worker will be OOM-killed during the save phase even without IDE overhead. In a GitHub Codespace (16 GB total), the problem is worse because the IDE and dev tools consume additional memory. Run Scale100k50Groups tests on a machine with at least 20–24 GB total RAM. See the [Deployment Guide - Memory Scaling](../DEPLOYMENT_GUIDE.md#memory-scaling-by-identity-object-count) for detailed requirements.
 
@@ -409,26 +411,26 @@ flowchart TD
 
 ## Data Scale Templates
 
-Choose the appropriate template based on test goals. The **Per cycle** column is a rough single import/sync/export cycle at that size; for full-scenario and full-regression run times see [Run-Time Estimates](#run-time-estimates).
+Choose the appropriate template based on test goals. For run times see [Run-Time Estimates](#run-time-estimates).
 
-| Template   | Users     | Groups  | Avg Memberships | Total Objects | Use Case                          | Per cycle  |
-|------------|-----------|---------|-----------------|---------------|-----------------------------------|------------|
-| **Nano**   | 3         | 1       | 1               | 4             | Fast dev iteration, debugging     | < 10 sec   |
-| **Micro**  | 10        | 3       | 3               | 13            | Quick smoke tests, development    | < 30 sec   |
-| **Small**  | 100       | 20      | 5               | 120           | Small business, unit tests        | < 2 min    |
-| **Medium** | 1,000     | 100     | 8               | 1,100         | Medium enterprise, CI/CD          | < 2 min    |
-| **MediumLarge** | 5,000 | 250     | 9               | 5,250         | Large medium enterprise, validation | < 5 min  |
-| **Large**  | 10,000    | 500     | 10              | 10,500        | Large enterprise, baselines       | < 15 min   |
-| **Scale100k50Groups** | 100,000   | 50      | 12              | 100,050       | Very large enterprise, stress     | < 2 hours  |
-| **Scale100k5kGroups** | 100,000   | 5,027   | ~9 (measured)   | 105,027       | Scenario 8 long-tail group shape (OpenLDAP only) | < 2 hours |
-| **Scale200k55Groups** | 200,000   | 55      | 12              | 200,055       | Very large enterprise, extended   | TBD        |
-| **Scale200k10kGroups** | 200,000  | 9,984   | ~8              | 209,984       | Scenario 8 long-tail group shape (OpenLDAP only) | TBD |
-| **Scale500k65Groups** | 500,000   | 65      | 13              | 500,065       | Massive enterprise, validation    | TBD        |
-| **Scale500k25kGroups** | 500,000  | 24,997  | ~10             | 524,997       | Scenario 8 long-tail group shape (OpenLDAP only) | TBD |
-| **Scale750k70Groups** | 750,000   | 70      | 14              | 750,070       | Near-million scale validation     | TBD        |
-| **Scale750k40kGroups** | 750,000  | 40,011  | ~11             | 790,011       | Scenario 8 long-tail group shape (OpenLDAP only) | TBD |
-| **Scale1m80Groups** | 1,000,000 | 70      | 15              | 1,000,070     | Global enterprise, scale limits (group count reshape pending) | TBD |
-| **Scale1m60kGroups** | 1,000,000 | 60,073 | ~13             | 1,060,073     | Scenario 8 long-tail group shape (OpenLDAP only) | TBD |
+| Template   | Users     | Groups  | Avg Memberships | Total Objects | Use Case                          |
+|------------|-----------|---------|-----------------|---------------|-----------------------------------|
+| **Nano**   | 3         | 1       | 1               | 4             | Fast dev iteration, debugging     |
+| **Micro**  | 10        | 3       | 3               | 13            | Quick smoke tests, development    |
+| **Small**  | 100       | 20      | 5               | 120           | Small business, unit tests        |
+| **Medium** | 1,000     | 100     | 8               | 1,100         | Medium enterprise, CI/CD          |
+| **MediumLarge** | 5,000 | 250     | 9               | 5,250         | Large medium enterprise, validation |
+| **Large**  | 10,000    | 500     | 10              | 10,500        | Large enterprise, baselines       |
+| **Scale100k50Groups** | 100,000   | 50      | 12              | 100,050       | Very large enterprise, stress     |
+| **Scale100k5kGroups** | 100,000   | 5,027   | ~9 (measured)   | 105,027       | Scenario 8 long-tail group shape (OpenLDAP only) |
+| **Scale200k55Groups** | 200,000   | 55      | 12              | 200,055       | Very large enterprise, extended   |
+| **Scale200k10kGroups** | 200,000  | 9,984   | ~8              | 209,984       | Scenario 8 long-tail group shape (OpenLDAP only) |
+| **Scale500k65Groups** | 500,000   | 65      | 13              | 500,065       | Massive enterprise, validation    |
+| **Scale500k25kGroups** | 500,000  | 24,997  | ~10             | 524,997       | Scenario 8 long-tail group shape (OpenLDAP only) |
+| **Scale750k70Groups** | 750,000   | 70      | 14              | 750,070       | Near-million scale validation     |
+| **Scale750k40kGroups** | 750,000  | 40,011  | ~11             | 790,011       | Scenario 8 long-tail group shape (OpenLDAP only) |
+| **Scale1m80Groups** | 1,000,000 | 70      | 15              | 1,000,070     | Global enterprise, scale limits (group count reshape pending) |
+| **Scale1m60kGroups** | 1,000,000 | 60,073 | ~13             | 1,060,073     | Scenario 8 long-tail group shape (OpenLDAP only) |
 
 ### Data Characteristics
 
