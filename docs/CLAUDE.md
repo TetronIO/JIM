@@ -103,6 +103,7 @@ Authoring rules:
 - **No blank lines inside the SVG file.** The snippet is inlined into markdown as a raw-HTML block; a blank line would end the block and the remainder would be parsed as markdown.
 - Root element: `<svg class="jim-diagram" viewBox="..." role="img" aria-labelledby="...">` with a `<title>` and descriptive `<desc>`.
 - Arrowheads are explicit polygons, not `<marker>` elements (markers restyle unreliably across browsers).
+- Edge animation uses SMIL data packets (`<circle class="jimdg-packet">` with `animateMotion`), only on live edges, direction matching the arrowheads; `custom.css` hides `.jimdg-packet` under `prefers-reduced-motion`. Full motion rules: `engineering/DESIGN.md` > Diagrams.
 - No build step: the SVG is a static asset edited by hand; preview with `jim-docs` and verify in both themes.
 - GLightbox does not apply to inline SVGs (it wraps `<img>` only); size the composition to be legible at content-column width.
 

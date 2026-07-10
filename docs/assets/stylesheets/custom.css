@@ -557,6 +557,7 @@ body:has(.jim-home) .md-content__button {
   --jimdg-edge-muted: #7a8a9a;
   --jimdg-flow: #5A45A2;
   --jimdg-flow-text: #483790;
+  --jimdg-packet: #5A45A2;
 }
 
 [data-md-color-scheme="slate"] {
@@ -589,6 +590,7 @@ body:has(.jim-home) .md-content__button {
   --jimdg-edge-muted: #5c718a;
   --jimdg-flow: #7B68B8;
   --jimdg-flow-text: #c9bfe8;
+  --jimdg-packet: #9d86e8;
 }
 
 .jim-diagram {
@@ -635,3 +637,13 @@ body:has(.jim-home) .md-content__button {
 .jim-diagram .jimdg-system-sub-planned  { font-size: 13px; fill: var(--jimdg-muted-text); }
 .jim-diagram .jimdg-flow-label   { font-size: 12.5px; font-weight: 500; fill: var(--jimdg-flow-text); text-anchor: start; }
 .jim-diagram .jimdg-anchor-end   { text-anchor: end; }
+
+/* Data packets: dots travelling along live edges (SMIL animateMotion in the
+   SVG). Planned edges carry no packets - nothing flows there yet. */
+.jim-diagram .jimdg-packet { fill: var(--jimdg-packet); }
+
+@media (prefers-reduced-motion: reduce) {
+  .jim-diagram .jimdg-packet {
+    display: none;
+  }
+}

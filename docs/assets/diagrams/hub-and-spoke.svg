@@ -95,4 +95,50 @@
     <line class="jimdg-spoke-planned" x1="860" y1="490" x2="910" y2="490"/>
     <polygon class="jimdg-arrow-planned" points="920,490 910,484.5 910,495.5"/>
   </g>
+  <g id="jimdg-hs-packets">
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.4s" begin="0s" repeatCount="indefinite" path="M240,150 L289,150"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.4s" begin="-1.3s" repeatCount="indefinite" path="M240,320 L289,320"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-1.3s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.6s" begin="-0.6s" repeatCount="indefinite" path="M400,186 L400,251"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.6s" begin="-0.6s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2s" begin="-0.2s" repeatCount="indefinite" path="M470,290 L499,290"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.2;0.8;1" dur="2s" begin="-0.2s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2s" begin="-1.1s" repeatCount="indefinite" path="M650,290 L679,290"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.2;0.8;1" dur="2s" begin="-1.1s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.6s" begin="-1.9s" repeatCount="indefinite" path="M760,262 L760,197"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.6s" begin="-1.9s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="4.5s" begin="-0.4s" repeatCount="indefinite" path="M580,330 L580,470"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.9;1" dur="4.5s" begin="-0.4s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="4.5s" begin="-2.7s" repeatCount="indefinite" path="M580,470 L580,330"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.1;0.9;1" dur="4.5s" begin="-2.7s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.4s" begin="-0.9s" repeatCount="indefinite" path="M870,150 L909,150"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-0.9s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.4s" begin="-2s" repeatCount="indefinite" path="M910,150 L871,150"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-2s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.4s" begin="-1.7s" repeatCount="indefinite" path="M860,320 L909,320"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-1.7s" repeatCount="indefinite"/>
+    </circle>
+  </g>
 </svg>

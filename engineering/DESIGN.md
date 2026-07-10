@@ -332,6 +332,7 @@ Diagrams use the **brand colours**, not the portal `--mud-palette-*` tokens, con
 - **Accessibility:** every diagram SVG carries `role="img"` with a `<title>` and a `<desc>` that narrates the concept.
 - **Planned (roadmap) elements** are dashed, muted, and say "(planned)" in their label; no separate legend.
 - **Sync-model diagrams never draw system-to-system edges**; every flow passes through JIM, visually reinforcing the hub-and-spoke metaverse pattern.
+- **Motion: data packets, not marching dashes.** Edge animation is small dots (SMIL `animateMotion`) travelling in the direction of each arrow, in the `--jimdg-packet` token colour (`#5A45A2` light / `#9d86e8` dark); animated dashes are not used because dashes encode "planned". Packets are slow and staggered, fade in and out at the ends of their path, and appear **only on live edges** - planned edges never animate (nothing flows there yet). All packets are hidden under `prefers-reduced-motion: reduce`.
 - **British English** in all labels; JIM domain entity names are Title Cased per the writing rules.
 
 ## Do's and Don'ts
