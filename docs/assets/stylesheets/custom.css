@@ -638,6 +638,20 @@ body:has(.jim-home) .md-content__button {
 .jim-diagram .jimdg-flow-label   { font-size: 12.5px; font-weight: 500; fill: var(--jimdg-flow-text); text-anchor: start; }
 .jim-diagram .jimdg-anchor-end   { text-anchor: end; }
 
+/* Detail-card anatomy: left-aligned card headings with a right-aligned type
+   tag, a hairline divider, and small attribute/value rows (used by the
+   Metaverse anatomy diagram; reusable by any card-style diagram) */
+.jim-diagram .jimdg-card-title   { font-size: 15px; font-weight: 600; fill: var(--jimdg-node-text); text-anchor: start; }
+.jim-diagram .jimdg-card-tag     { font-size: 12px; fill: var(--jimdg-sub-text); text-anchor: end; }
+.jim-diagram .jimdg-card-divider { stroke: var(--jimdg-node-stroke); stroke-width: 1; }
+.jim-diagram .jimdg-list-item    { font-size: 12.5px; fill: var(--jimdg-sub-text); text-anchor: start; }
+.jim-diagram .jimdg-attr-name    { fill: var(--jimdg-node-text); font-weight: 500; }
+.jim-diagram .jimdg-note         { font-size: 12.5px; fill: var(--jimdg-sub-text); }
+
+/* Connector links: undirected joins (line + round terminators), as opposed
+   to the directed spoke/flow arrows */
+.jim-diagram .jimdg-link-end     { fill: var(--jimdg-edge); }
+
 /* Data packets: dots travelling along live edges (SMIL animateMotion in the
    SVG). Planned edges carry no packets - nothing flows there yet. */
 .jim-diagram .jimdg-packet { fill: var(--jimdg-packet); }
