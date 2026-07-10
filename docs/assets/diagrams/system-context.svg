@@ -12,14 +12,14 @@
   <desc id="jimdg-sc-desc">Administrators manage JIM through the web UI and PowerShell, and automation clients call its REST API. An OIDC Identity Provider authenticates sign-in. JIM synchronises with Directory Services over LDAP and LDAPS, imports from HR systems via CSV, and reads and writes file systems. Enterprise database connectivity over SQL and cloud application provisioning over SCIM 2.0 are planned.</desc>
   <g id="jimdg-sc-people">
     <rect class="jimdg-stage" x="150" y="36" width="220" height="64" rx="8"/>
-    <circle class="jimdg-person-glyph" cx="176" cy="57" r="6"/>
-    <path class="jimdg-person-glyph" d="M165,79 a11,11 0 0 1 22,0 z"/>
-    <text class="jimdg-stage-label" x="260" y="63">Administrator</text>
-    <text class="jimdg-system-sub" x="260" y="84">configures &amp; operates JIM</text>
+    <circle class="jimdg-person-glyph" cx="170" cy="57" r="6"/>
+    <path class="jimdg-person-glyph" d="M159,79 a11,11 0 0 1 22,0 z"/>
+    <text class="jimdg-stage-label" x="278" y="63">Administrator</text>
+    <text class="jimdg-system-sub" x="278" y="84">configures &amp; operates</text>
     <rect class="jimdg-stage" x="470" y="36" width="220" height="64" rx="8"/>
-    <text class="jimdg-glyph-code" x="500" y="64">&gt;_</text>
-    <text class="jimdg-stage-label" x="580" y="63">Automation Client</text>
-    <text class="jimdg-system-sub" x="580" y="84">CI/CD · scripts · API keys</text>
+    <text class="jimdg-glyph-code" x="492" y="64">&gt;_</text>
+    <text class="jimdg-stage-label" x="594" y="63">Automation Client</text>
+    <text class="jimdg-system-sub" x="594" y="84">CI/CD · API keys</text>
     <rect class="jimdg-system" x="790" y="36" width="220" height="64" rx="8"/>
     <text class="jimdg-system-name" x="900" y="63">Identity Provider</text>
     <text class="jimdg-system-sub" x="900" y="84">OIDC single sign-on</text>

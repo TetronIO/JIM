@@ -45,7 +45,7 @@ The background processor that executes all identity operations -- imports, synch
 
 --8<-- "assets/diagrams/worker-components.svg"
 
-<p class="jim-diagram-caption">Inside the Worker Service: the host dispatches import, synchronise and export processors; the Sync Engine makes the synchronisation decisions; the Connectors carry data to and from Connected Systems.<span class="jimdg-caption-motion"> Moving dots trace data arriving through, and leaving via, the Connectors.</span></p>
+<p class="jim-diagram-caption">Inside the Worker Service: the host dispatches import, synchronise and export processors, and the Sync Engine makes the synchronisation decisions. The host polls the task queue in PostgreSQL, where the whole service reads and writes staged and Metaverse data; the Connectors carry data to and from Connected Systems.<span class="jimdg-caption-motion"> Moving dots trace data arriving through, and leaving via, the Connectors.</span></p>
 
 ### JIM.Scheduler
 

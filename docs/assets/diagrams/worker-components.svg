@@ -9,7 +9,7 @@
 <!-- snippets inlines this into markdown); structure uses <g> groups. -->
 <svg class="jim-diagram" viewBox="0 0 1160 690" role="img" aria-labelledby="jimdg-wk-title jimdg-wk-desc" xmlns="http://www.w3.org/2000/svg">
   <title id="jimdg-wk-title">Inside the Worker Service</title>
-  <desc id="jimdg-wk-desc">The Worker Host polls the PostgreSQL task queue and dispatches processors for import, synchronisation and export. Import processors stage data arriving through the Connectors; synchronisation processors use the Sync Engine to apply projection, attribute flow, and deletion and matching rules; the export processor sends outbound changes back through the Connectors to Connected Systems. The Connectors layer hosts the LDAP and File/CSV connectors, with SQL and SCIM 2.0 connectors planned.</desc>
+  <desc id="jimdg-wk-desc">The Worker Host polls the PostgreSQL task queue and dispatches processors for import, synchronisation and export; the service reads and writes staged and Metaverse data in the same database. Import processors stage data arriving through the Connectors; synchronisation processors use the Sync Engine to apply projection, attribute flow, and deletion and matching rules; the export processor sends outbound changes back through the Connectors to Connected Systems. The Connectors layer hosts the LDAP and File/CSV connectors, with SQL and SCIM 2.0 connectors planned.</desc>
   <g id="jimdg-wk-db">
     <path class="jimdg-stage" d="M20,96 A110,16 0 0 1 240,96 L240,264 A110,16 0 0 1 20,264 Z"/>
     <ellipse class="jimdg-stage" cx="130" cy="96" rx="110" ry="16"/>
@@ -77,10 +77,9 @@
     <line class="jimdg-flow" x1="340" y1="136" x2="250" y2="136"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(240,136) rotate(180)"/>
     <text class="jimdg-flow-label jimdg-anchor-end" x="338" y="124">polls task queue</text>
-    <line class="jimdg-flow" x1="350" y1="250" x2="250" y2="250"/>
+    <line class="jimdg-flow" x1="300" y1="250" x2="250" y2="250"/>
     <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(240,250) rotate(180)"/>
-    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(350,250) rotate(0)"/>
-    <text class="jimdg-flow-label jimdg-anchor-end" x="338" y="238">identity data</text>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(310,250) rotate(0)"/>
   </g>
   <g id="jimdg-wk-outside">
     <line class="jimdg-spoke" x1="725" y1="612" x2="725" y2="636"/>
