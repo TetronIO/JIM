@@ -14,6 +14,11 @@ function Get-JIMMetaverseObject {
         By default, returns a single page of results. Use -All to automatically
         paginate through all results and return every matching object.
 
+        For safety, -All fetches at most 1000 pages (~100,000 objects at the default
+        page size of 100) and then stops with a warning. Supply -Force to override the
+        cap and fetch every page. When -All is used on a large result set, a warning is
+        emitted so a long-running sequential fetch is not a surprise.
+
     .PARAMETER Id
         The unique identifier (GUID) of a specific Metaverse Object to retrieve.
 
@@ -40,7 +45,12 @@ function Get-JIMMetaverseObject {
 
     .PARAMETER All
         Automatically paginate through all results and return every matching object.
-        Cannot be used with -Page.
+        Cannot be used with -Page. Fetches at most 1000 pages before stopping with a
+        warning; use -Force to fetch beyond the cap.
+
+    .PARAMETER Force
+        Override the -All page ceiling (1000 pages) and fetch every page regardless of
+        how large the result set is. Only valid with -All.
 
     .PARAMETER Page
         Page number for paginated results. Defaults to 1. Cannot be used with -All.
@@ -60,6 +70,12 @@ function Get-JIMMetaverseObject {
         Get-JIMMetaverseObject -All
 
         Gets all Metaverse Objects, automatically paginating through all results.
+
+    .EXAMPLE
+        Get-JIMMetaverseObject -All -Force
+
+        Gets all Metaverse Objects, overriding the 1000-page safety cap for very large
+        metaverses (over ~100,000 objects).
 
     .EXAMPLE
         Get-JIMMetaverseObject -Id "12345678-1234-1234-1234-123456789abc"
@@ -165,6 +181,9 @@ function Get-JIMMetaverseObject {
 
         [Parameter(Mandatory, ParameterSetName = 'ListAll')]
         [switch]$All,
+
+        [Parameter(ParameterSetName = 'ListAll')]
+        [switch]$Force,
 
         [Parameter(Mandatory, ParameterSetName = 'Count')]
         [switch]$Count,
@@ -280,13 +299,23 @@ function Get-JIMMetaverseObject {
                 }
 
                 $currentPage = $Page
+                $pagesFetched = 0
+                $warnedLargeSet = $false
                 do {
                     $queryParams = @("page=$currentPage") + $baseQueryParams
                     $queryString = $queryParams -join '&'
                     $response = Invoke-JIMApi -Endpoint "/api/v1/metaverse/objects?$queryString"
+                    $pagesFetched++
 
                     # Handle paginated response - check property exists, not truthy (empty array is valid)
                     $objects = if ($null -ne $response.items) { $response.items } else { $response }
+
+                    # Warn up front (once) when -All is auto-paginating a large result set, so a long-running
+                    # sequential fetch is not a surprise.
+                    if ($All -and -not $warnedLargeSet -and $response.totalCount -ge $script:JIMAllWarningThreshold) {
+                        Write-Warning "Get-JIMMetaverseObject -All is fetching a large result set ($($response.totalCount) objects across $($response.totalPages) pages); this may take a while."
+                        $warnedLargeSet = $true
+                    }
 
                     # Output each object individually for pipeline support
                     foreach ($obj in $objects) {
@@ -295,6 +324,14 @@ function Get-JIMMetaverseObject {
 
                     # Check if we should fetch the next page
                     $hasMore = $All -and $response.hasNextPage -eq $true
+
+                    # Enforce the -All page ceiling unless -Force is supplied, so a runaway fetch cannot
+                    # hammer the API sequentially without bound. Stop clearly rather than truncating silently.
+                    if ($hasMore -and -not $Force -and $pagesFetched -ge $script:JIMMaxAllPages) {
+                        Write-Warning "Get-JIMMetaverseObject -All stopped after $script:JIMMaxAllPages pages (~$($script:JIMMaxAllPages * $PageSize) objects); more results remain (total pages: $($response.totalPages)). Re-run with -Force to fetch everything, or narrow the query with -Search, -ObjectTypeName or -AttributeName."
+                        break
+                    }
+
                     if ($hasMore) {
                         $currentPage++
                         Write-Verbose "Fetching page $currentPage of $($response.totalPages)..."

@@ -622,7 +622,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId <int> [-Search <string>] [-Statu
     [-Page <int>] [-PageSize <int>]
 
 # ListAll
-Get-JIMConnectedSystemObject -ConnectedSystemId <int> -All [-Search <string>] [-Status <string>]
+Get-JIMConnectedSystemObject -ConnectedSystemId <int> -All [-Force] [-Search <string>] [-Status <string>]
     [-ObjectTypeId <int>] [-JoinType <string>] [-SortBy <string>] [-Ascending] [-PageSize <int>]
 
 # ById
@@ -634,7 +634,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
 
 # AttributeValuesAll
 Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
-    -AttributeName <string> [-Search <string>] -All
+    -AttributeName <string> [-Search <string>] -All [-Force]
 ```
 
 ### Parameters
@@ -652,7 +652,8 @@ Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
 | `Ascending` | `switch` | No | `$false` | Sort the object list ascending instead of the default descending |
 | `Page` | `int` | No | `1` | Page number for paginated results |
 | `PageSize` | `int` | No | `50` | Number of results per page (maximum 100) |
-| `All` | `switch` | No | `$false` | Returns all objects, or all attribute values, without paging |
+| `All` | `switch` | No | `$false` | Returns all objects, or all attribute values, auto-paginating. Fetches at most 1000 pages (~100,000 items at the default page size) and then stops with a warning; a warning is also emitted up front when the result set is large |
+| `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All` |
 
 ### Output
 
@@ -672,6 +673,11 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 3 -Search "smith" -Status Obsole
 
 ```powershell title="Get every object in a Connected System"
 Get-JIMConnectedSystemObject -ConnectedSystemId 3 -All
+```
+
+```powershell title="Get every object in a very large connector space, overriding the -All safety cap"
+# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything.
+Get-JIMConnectedSystemObject -ConnectedSystemId 3 -All -Force
 ```
 
 ```powershell title="Get a specific connector space object"

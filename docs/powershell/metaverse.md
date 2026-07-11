@@ -548,7 +548,7 @@ Get-JIMMetaverseObject -Id <guid> [-Attributes <string[]>]
 
 # ListAll
 Get-JIMMetaverseObject [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search <string>]
-    [-AttributeName <string> -AttributeValue <string>] [-Attributes <string[]>] -All
+    [-AttributeName <string> -AttributeValue <string>] [-Attributes <string[]>] -All [-Force]
 ```
 
 #### Parameters
@@ -562,7 +562,8 @@ Get-JIMMetaverseObject [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search
 | `AttributeName` | `string` | No | | Attribute name to search on; requires `AttributeValue` |
 | `AttributeValue` | `string` | No | | Attribute value to match; requires `AttributeName` |
 | `Attributes` | `string[]` | No | | Attribute names to include in results; use `"*"` to return all attributes |
-| `All` | `switch` | No | `false` | Automatically paginate through all results |
+| `All` | `switch` | No | `false` | Automatically paginate through all results. Fetches at most 1000 pages (~100,000 objects at the default page size) and then stops with a warning; a warning is also emitted up front when the result set is large |
+| `Force` | `switch` | No | `false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All` |
 | `Page` | `int` | No | `1` | Page number for paginated results |
 | `PageSize` | `int` | No | `100` | Number of results per page (maximum 100) |
 
@@ -588,6 +589,11 @@ Get-JIMMetaverseObject -AttributeName "Employee Id" -AttributeValue "12345" -Att
 
 ```powershell title="Retrieve all Group objects with auto-pagination"
 Get-JIMMetaverseObject -ObjectTypeName "Group" -All -Attributes @("Display Name", "Member")
+```
+
+```powershell title="Fetch a very large metaverse, overriding the -All safety cap"
+# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything.
+Get-JIMMetaverseObject -ObjectTypeName "Person" -All -Force
 ```
 
 ```powershell title="Page through results manually"

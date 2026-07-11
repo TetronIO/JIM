@@ -33,7 +33,7 @@ All endpoints require authentication except a small number of system endpoints (
 
 These behaviours are common across the API. The interactive API reference is authoritative for any specific endpoint; the summary here is for orientation.
 
-**Pagination.** List endpoints accept `page`, `pageSize`, `sortBy`, `sortDirection`, and `filter` query parameters and return a paginated envelope (`items`, `totalCount`, `page`, `pageSize`, `totalPages`, `hasNextPage`, `hasPreviousPage`). The interactive API reference lists the exact parameter constraints for each endpoint.
+**Pagination.** List endpoints accept `page`, `pageSize`, `sortBy`, `sortDirection`, and `filter` query parameters and return a paginated envelope (`items`, `totalCount`, `page`, `pageSize`, `totalPages`, `hasNextPage`, `hasPreviousPage`). `pageSize` is capped at 100. `page` is capped at 1000: requesting a page beyond that returns a `400` rather than being silently clamped, because scanning to such a deep offset is expensive at scale (at the maximum page size this ceiling is roughly 100,000 objects). If you genuinely need to walk a very large result set, narrow it with a filter or search rather than paging that deep. The interactive API reference lists the exact parameter constraints for each endpoint.
 
 **Errors.** All errors return a consistent JSON shape with a machine-readable `code`, a human-readable `message`, optional `details` and `validationErrors`, and a `timestamp`. The full set of error codes is documented per endpoint in the interactive API reference.
 
