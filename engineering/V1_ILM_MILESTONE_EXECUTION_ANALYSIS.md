@@ -64,7 +64,7 @@ Priority and Effort below use the GitHub issue-field vocabulary configured for t
 
 | Issue | Why it blocks launch | Effort |
 |---|---|---|
-| [#91](https://github.com/TetronIO/JIM/issues/91) MV attribute priority (finish) | Half-shipped: engine enforces priorities but no UI to view/reorder them. Non-deterministic multi-source resolution is data corruption by another name. | High (remainder) |
+| ~~[#91](https://github.com/TetronIO/JIM/issues/91) MV attribute priority (finish)~~ **Done:** merged (engine + view/reorder UI). | ~~High (remainder)~~ |
 | [#655](https://github.com/TetronIO/JIM/issues/655) MVO deletion cascade: Provisioned-only delete exports | Leaver deprovisioning fails for Joined/Projected CSOs; breaks the core JML guarantee in the most common deployment shape. Merge [#126](https://github.com/TetronIO/JIM/issues/126) into it. | Medium |
 | [#242](https://github.com/TetronIO/JIM/issues/242) Unique value generation | Table-stakes provisioning (sAMAccountName, UPN, mail). Without it greenfield provisioning is impossible. Needs PRD first. | High |
 | [#421](https://github.com/TetronIO/JIM/issues/421) Schema refresh preview phase | One click can cascade-delete Synchronisation Rules and objects. Unacceptable in target sectors. | High |
@@ -73,7 +73,7 @@ Priority and Effort below use the GitHub issue-field vocabulary configured for t
 | [#376](https://github.com/TetronIO/JIM/issues/376) CRUD custom Metaverse Object Types | Modelling beyond User/Group requires it; unlocks per-type deletion rules. Depends on [#377](https://github.com/TetronIO/JIM/issues/377). | High |
 | ~~[#154](https://github.com/TetronIO/JIM/issues/154) API Endpoint Coverage (merge branch)~~ | **Done:** merged via PR [#897](https://github.com/TetronIO/JIM/pull/897) on 2026-07-02; the API/PowerShell lane is unblocked. | ~~S~~ |
 | ~~[#467](https://github.com/TetronIO/JIM/issues/467) Role membership API (verify + close)~~ | **Done:** verified (endpoints, lockout rules, cmdlets, 22 green tests, docs) and closed 2026-07-02. | ~~Low~~ |
-| [#14](https://github.com/TetronIO/JIM/issues/14) Change history (gap audit + close) | Audit history is table stakes; mostly delivered. Verify retention scheduling and the five stated requirements. | Medium |
+| ~~[#14](https://github.com/TetronIO/JIM/issues/14) Change history (gap audit + close)~~ **Done:** delivered and merged (PR [#945](https://github.com/TetronIO/JIM/pull/945)). | ~~Medium~~ |
 | [#9](https://github.com/TetronIO/JIM/issues/9) Synchronisation Readers role | "Give the helpdesk read-only access" is a first-week ask; everyone-as-Administrator is unacceptable. | Medium |
 | [#500](https://github.com/TetronIO/JIM/issues/500) OWASP remediation | Rate limiting and privileged-operations audit trail are what a regulated buyer's security review checks first. Splittable; other items are cheap. | High (splittable) |
 | [#861](https://github.com/TetronIO/JIM/issues/861) DB-backed test tier in CI | Nearly-free regression protection for sync/persistence correctness; protects every other lane. Do first. | Low |
