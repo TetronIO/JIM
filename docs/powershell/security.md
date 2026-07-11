@@ -71,7 +71,7 @@ Get-JIMRoleMember -InputObject <PSCustomObject>
 
 ### Output
 
-Metaverse Object members with `id`, `displayName`, `typeId`, and `typeName` properties.
+Metaverse Object members with `id`, `displayName`, and a nested `type` object (`type.id` and `type.name`) properties. (Prior to this release the object type was exposed as flat `typeId`/`typeName` properties; this is a breaking change to the output shape.)
 
 ### Examples
 

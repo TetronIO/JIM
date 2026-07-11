@@ -570,6 +570,8 @@ Get-JIMMetaverseObject [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search
 
 Metaverse Objects including their ID, object type, and requested attributes.
 
+The object type is returned as a nested `type` object with `id` and `name` properties (for example `$obj.type.name`), identical in both the list and single-object responses. (Prior to this release the list response exposed flat `typeId` and `typeName` properties instead; this is a breaking change to the output shape.)
+
 When retrieved by ID, each attribute value also carries its provenance: `contributedBySystemId`/`contributedBySystemName` identify the Connected System, and `contributedBySyncRuleId`/`contributedBySyncRuleName` identify the exact Synchronisation Rule that won [attribute priority resolution](../concepts/attribute-priority.md) and contributed the value. A value row with `nullValue` set to `true` is an asserted null: a deliberate, authoritative "no value" assertion carrying provenance only; treat it as no value present, distinct from the attribute having no row at all.
 
 #### Examples
@@ -673,7 +675,7 @@ Get-JIMPendingDeletion -Summary
 
 Depending on the parameter set:
 
-- **List**: pending deletion items including object details and scheduled deletion date
+- **List**: pending deletion items including object details and scheduled deletion date. The object type is returned as a nested `type` object with `id` and `name` properties (previously flat `typeId`/`typeName`; this is a breaking change to the output shape).
 - **Count**: total number of pending deletions as an integer
 - **Summary**: breakdown of pending deletion counts grouped by object type
 
