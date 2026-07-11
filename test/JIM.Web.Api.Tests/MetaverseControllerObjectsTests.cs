@@ -211,8 +211,9 @@ public class MetaverseControllerObjectsTests
         Assert.That(dto, Is.Not.Null);
         Assert.That(dto!.Id, Is.EqualTo(objectId));
         Assert.That(dto.Created, Is.EqualTo(created));
-        Assert.That(dto.TypeId, Is.EqualTo(2));
-        Assert.That(dto.TypeName, Is.EqualTo("Group"));
+        Assert.That(dto.Type, Is.Not.Null);
+        Assert.That(dto.Type!.Id, Is.EqualTo(2));
+        Assert.That(dto.Type.Name, Is.EqualTo("Group"));
         Assert.That(dto.Status, Is.EqualTo(MetaverseObjectStatus.Obsolete));
         Assert.That(dto.DisplayName, Is.EqualTo("Test Group"));
         // Additional attributes are in the Attributes dictionary (DisplayName is excluded as it has its own property)
