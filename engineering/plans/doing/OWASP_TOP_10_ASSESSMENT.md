@@ -1,6 +1,6 @@
 # OWASP Top 10:2025 Assessment
 
-- **Status:** Planned
+- **Status:** Doing (gap 5, DynamicExpresso review, complete; gaps 1-4 open or in progress; see [issue #500](https://github.com/TetronIO/JIM/issues/500) for current per-gap status)
 - **Issue:** [#500](https://github.com/TetronIO/JIM/issues/500)
 - **Assessed:** 2026-04-09
 - **Standard:** [OWASP Top 10:2025](https://owasp.org/Top10/2025/)
@@ -307,6 +307,15 @@ A global exception handler catches all unhandled exceptions. Production response
 ---
 
 ### 5. DynamicExpresso Input Path Review (Low)
+
+**Status: Implemented.** Findings, the input path inventory, and the guardrails added are documented in
+[`engineering/EXPRESSION_SECURITY.md`](../../EXPRESSION_SECURITY.md). Summary: every expression input path is
+Administrator-authored configuration behind `[Authorize(Roles = "Administrator")]`; no user-controlled input
+reaches the evaluator. Reflection and type-escape attempts were proven to fail against the real evaluator
+(unit tests, not assumed). Two non-subtractive guardrails were added (an expression length ceiling and a bounded
+compiled-expression cache); a function/operator allowlist, removing default reference types, and evaluation
+timeouts were all considered and explicitly rejected as they would impair legitimate expression functionality
+for no matching security benefit.
 
 **OWASP:** A03, A05
 **Risk:** If user-controlled input reaches the expression evaluator, it becomes a code injection vector.
