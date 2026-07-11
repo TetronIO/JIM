@@ -40,8 +40,8 @@ Get-JIMHealth [-Url <string>] -Live
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `status` | `string` | Health status: `healthy`, `ready`/`not_ready`, or `alive` |
-| `timestamp` | `string` | UTC timestamp of the check |
+| `Status` | `string` | Health status: `healthy`, `ready`/`not_ready`, or `alive` |
+| `Timestamp` | `string` | UTC timestamp of the check |
 
 ### Examples
 
@@ -90,8 +90,8 @@ Get-JIMVersion [-Url <string>]
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `product` | `string` | Product name (always `JIM`) |
-| `version` | `string` | Semantic version number |
+| `Product` | `string` | Product name (always `JIM`) |
+| `Version` | `string` | Semantic version number |
 
 ### Examples
 
@@ -105,7 +105,7 @@ Get-JIMVersion
 
 ```powershell title="Use version in a script"
 $v = Get-JIMVersion -Url "https://jim.example.com"
-Write-Host "JIM version: $($v.version)"
+Write-Host "JIM version: $($v.Version)"
 ```
 
 ---
@@ -130,12 +130,12 @@ Get-JIMAuthConfig [-Url <string>]
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `authority` | `string` | OIDC authority URL |
-| `clientId` | `string` | OAuth client ID |
-| `scopes` | `array` | OAuth scopes to request |
-| `responseType` | `string` | OAuth response type (always `code`) |
-| `usePkce` | `boolean` | Whether PKCE is required (always `true`) |
-| `codeChallengeMethod` | `string` | PKCE challenge method (always `S256`) |
+| `Authority` | `string` | OIDC authority URL |
+| `ClientId` | `string` | OAuth client ID |
+| `Scopes` | `array` | OAuth scopes to request |
+| `ResponseType` | `string` | OAuth response type (always `code`) |
+| `UsePkce` | `boolean` | Whether PKCE is required (always `true`) |
+| `CodeChallengeMethod` | `string` | PKCE challenge method (always `S256`) |
 
 ### Examples
 
@@ -145,9 +145,9 @@ Get-JIMAuthConfig -Url "https://jim.example.com"
 
 ```powershell title="Validate SSO configuration"
 $config = Get-JIMAuthConfig -Url "https://jim.example.com"
-Write-Host "Authority: $($config.authority)"
-Write-Host "Client ID: $($config.clientId)"
-Write-Host "Scopes: $($config.scopes -join ', ')"
+Write-Host "Authority: $($config.Authority)"
+Write-Host "Client ID: $($config.ClientId)"
+Write-Host "Scopes: $($config.Scopes -join ', ')"
 ```
 
 ---
@@ -170,13 +170,13 @@ None.
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `authorised` | `boolean` | Whether the user has a JIM identity and can access the system |
-| `isAdministrator` | `boolean` | Whether the user has the Administrator role |
-| `name` | `string` | Display name |
-| `authMethod` | `string` | `oauth` or `api_key` |
-| `metaverseObjectId` | `guid?` | The user's Metaverse Object ID (`$null` if not authorised) |
-| `roles` | `array` | Role names assigned to the user |
-| `message` | `string?` | Additional context (present when not authorised) |
+| `Authorised` | `boolean` | Whether the user has a JIM identity and can access the system |
+| `IsAdministrator` | `boolean` | Whether the user has the Administrator role |
+| `Name` | `string` | Display name |
+| `AuthMethod` | `string` | `oauth` or `api_key` |
+| `MetaverseObjectId` | `guid?` | The user's Metaverse Object ID (`$null` if not authorised) |
+| `Roles` | `array` | Role names assigned to the user |
+| `Message` | `string?` | Additional context (present when not authorised) |
 
 ### Examples
 
@@ -187,8 +187,8 @@ Get-JIMUserInfo
 
 ```powershell title="Check administrator access"
 $user = Get-JIMUserInfo
-if ($user.isAdministrator) {
-    Write-Host "Admin access confirmed for $($user.name)"
+if ($user.IsAdministrator) {
+    Write-Host "Admin access confirmed for $($user.Name)"
 } else {
     Write-Warning "Not an administrator"
 }
@@ -202,7 +202,7 @@ if ($user.isAdministrator) {
 
 - Requires an active connection via [Connect-JIM](connection.md#connect-jim).
 - This endpoint does not require the Administrator role; any authenticated user or API key can call it.
-- If the user is authenticated but not authorised (no JIM identity), `authorised` is `$false` and a `message` explains why.
+- If the user is authenticated but not authorised (no JIM identity), `Authorised` is `$false` and a `Message` explains why.
 
 ---
 
@@ -226,7 +226,7 @@ Reset-JIMSystem [-Force] [-IncludeAdministrators] [-AcknowledgeAdministratorLock
 
 ### Output
 
-Returns a `PSCustomObject` containing the counts of removed entities (for example `connectedSystemsRemoved`, `syncRulesRemoved`, `metaverseObjectsRemoved`).
+Returns a `PSCustomObject` containing the counts of removed entities (for example `ConnectedSystemsRemoved`, `SyncRulesRemoved`, `MetaverseObjectsRemoved`).
 
 **ShouldProcess impact level:** High. The cmdlet prompts for confirmation by default; pass `-Force` to suppress.
 
@@ -242,7 +242,7 @@ Reset-JIMSystem -Force
 
 ```powershell title="Capture and report on what was removed"
 $result = Reset-JIMSystem -Force
-"Removed $($result.connectedSystemsRemoved) Connected Systems"
+"Removed $($result.ConnectedSystemsRemoved) Connected Systems"
 ```
 
 ### Notes
