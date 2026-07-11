@@ -115,19 +115,40 @@ Most cmdlets accept pipeline input and produce pipeline-friendly output, enablin
 ```powershell
 # Execute all "Full Import" Run Profiles across all Connected Systems
 Get-JIMConnectedSystem | ForEach-Object {
-    Start-JIMRunProfile -ConnectedSystemId $_.id -RunProfileName "Full Import" -Wait
+    Start-JIMRunProfile -ConnectedSystemId $_.Id -RunProfileName "Full Import" -Wait
 }
 
 # Find all Synchronisation Rules for a specific Connected System
 Get-JIMSyncRule -ConnectedSystemName "HR System"
 
 # Bulk-disable expired API keys
-Get-JIMApiKey | Where-Object { $_.expiresAt -and $_.expiresAt -lt (Get-Date) } |
-    ForEach-Object { Set-JIMApiKey -Id $_.id -Disable }
+Get-JIMApiKey | Where-Object { $_.ExpiresAt -and $_.ExpiresAt -lt (Get-Date) } |
+    ForEach-Object { Set-JIMApiKey -Id $_.Id -Disable }
 
 # Validate all certificates
-Get-JIMCertificate | ForEach-Object { Test-JIMCertificate -Id $_.id }
+Get-JIMCertificate | ForEach-Object { Test-JIMCertificate -Id $_.Id }
 ```
+
+## Output Object Conventions
+
+Cmdlet output objects use **PascalCase** property names, following PowerShell convention, even though JIM's REST API serialises its JSON in camelCase:
+
+```powershell
+$mvo = Get-JIMMetaverseObject -Id $id
+$mvo.DisplayName        # not $mvo.displayName
+$mvo.Type.Name          # nested objects are PascalCase too
+```
+
+PowerShell member access is case-insensitive, so a script that reads the wire casing (`$mvo.displayName`) still resolves; but `Get-Member`, `Format-Table`, `ConvertTo-Json` and tab-completion all present the PascalCase names.
+
+**Exception: dictionaries keyed by your data keep their keys exactly as supplied.** A Metaverse Object's `Attributes` map is keyed by attribute name, so those keys follow your schema's casing rather than PascalCase:
+
+```powershell
+$mvo.Attributes.mail          # attribute-name keys are verbatim...
+$mvo.Attributes.employeeID    # ...not 'Mail' / 'EmployeeID'
+```
+
+The same applies to any other data-keyed map, such as a log entry's `Properties`.
 
 ## Confirmation Prompts
 

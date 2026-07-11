@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- 🔄 The JIM PowerShell module now returns output objects with PascalCase property names (`$obj.DisplayName`, `$obj.Type.Name`), following PowerShell convention, instead of the REST API's camelCase wire casing. PowerShell member access is case-insensitive, so most scripts are unaffected, but `Get-Member`, `ConvertTo-Json` and `Format-Table` now surface PascalCase; scripts that compare property-name strings or round-trip output through JSON may need updating. Dictionaries keyed by your own data (a Metaverse Object's Attributes, a log entry's Properties) keep their keys exactly as supplied.
+
 ## [0.13.0] - 2026-07-10
 
 ### Added

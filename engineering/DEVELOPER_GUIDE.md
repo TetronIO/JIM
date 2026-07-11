@@ -1354,6 +1354,7 @@ jim-test-ps
 - **Cmdlet names**: Use approved PowerShell verbs (`Get`, `Set`, `New`, `Remove`, `Invoke`, `Start`, `Stop`)
 - **Noun prefix**: Always use `JIM` prefix (e.g., `Get-JIMActivity`, `New-JIMSyncRule`)
 - **Parameters**: Use PascalCase, support both ID and Name where applicable
+- **Output**: Cmdlets return objects with **PascalCase** property names. This is applied centrally: `Invoke-JIMApi` normalises the REST API's camelCase JSON via the `ConvertTo-JIMOutputObject` private helper, so do NOT hand-roll per-cmdlet casing or add `Add-Member` renames for it. Dynamic-key dictionaries (attribute-value maps, log properties) keep their keys verbatim; if a new endpoint returns a dictionary keyed by user data, register its camelCase wire property name in `ConvertTo-JIMOutputObject`'s opaque-key list (`$script:JIMOpaqueValueProperties`), or its keys will be wrongly PascalCased.
 - **British English**: Use British spelling in descriptions and comments
 
 ### Common Patterns
@@ -1380,16 +1381,19 @@ if ($PSCmdlet.ParameterSetName -eq "ByName") {
 ```
 
 **Using the internal API helper**:
+
+Call `Invoke-JIMApi` (not the inner `Invoke-JIMApiRequest`): it is the single choke point that handles auth, token refresh, and normalises the response to PascalCase property names. Calling `Invoke-JIMApiRequest` directly bypasses that normalisation and leaks the wire's camelCase casing.
+
 ```powershell
 # GET request
-$result = Invoke-JIMApiRequest -Method Get -Endpoint "api/v1/connected-systems"
+$result = Invoke-JIMApi -Method GET -Endpoint "/api/v1/connected-systems"
 
 # POST with body
 $body = @{ Name = "Test"; Description = "Test system" }
-$result = Invoke-JIMApiRequest -Method Post -Endpoint "api/v1/connected-systems" -Body $body
+$result = Invoke-JIMApi -Method POST -Endpoint "/api/v1/connected-systems" -Body $body
 
 # DELETE
-Invoke-JIMApiRequest -Method Delete -Endpoint "api/v1/connected-systems/$id"
+Invoke-JIMApi -Method DELETE -Endpoint "/api/v1/connected-systems/$id"
 ```
 
 ## Common Development Tasks
