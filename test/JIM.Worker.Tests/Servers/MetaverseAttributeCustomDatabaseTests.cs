@@ -3,7 +3,10 @@
 
 using JIM.Application;
 using JIM.Models.Core;
+using JIM.Models.Core.DTOs;
+using JIM.Models.ExampleData;
 using JIM.Models.Logic;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
@@ -182,7 +185,7 @@ public class MetaverseAttributeCustomDatabaseTests
         {
             var jim = new JimApplication(new PostgresDataRepository(act));
             var attribute = await jim.Metaverse.GetMetaverseAttributeAsync(costCentreId);
-            var impact = await jim.Metaverse.DeleteMetaverseAttributeWithCascadeAsync(attribute!, (MetaverseObject?)null);
+            var impact = await jim.Metaverse.DeleteMetaverseAttributeWithCascadeAsync(attribute!, TestUtilities.GetInitiatedBy());
             Assert.That(impact.Deleted, Is.True);
         }
 
@@ -219,12 +222,186 @@ public class MetaverseAttributeCustomDatabaseTests
         {
             var jim = new JimApplication(new PostgresDataRepository(act));
             var attribute = await jim.Metaverse.GetMetaverseAttributeAsync(attributeId);
-            var impact = await jim.Metaverse.DeleteMetaverseAttributeWithCascadeAsync(attribute!, (MetaverseObject?)null);
+            var impact = await jim.Metaverse.DeleteMetaverseAttributeWithCascadeAsync(attribute!, TestUtilities.GetInitiatedBy());
             Assert.That(impact.BlockedByValues, Is.True);
             Assert.That(impact.Deleted, Is.False);
         }
 
         await using var verify = NewContext();
         Assert.That(await verify.MetaverseAttributes.AnyAsync(a => a.Id == attributeId), Is.True, "a values-blocked delete makes no change");
+    }
+
+    [Test]
+    public async Task DeleteMetaverseAttributeWithCascadeAsync_ExportMappingLeftSourceless_RemovesParentButKeepsMappingWithOtherSourcesAsync()
+    {
+        int costCentreId, soleMappingId, mixedMappingId;
+        await using (var seed = NewContext())
+        {
+            var connectorDefinition = new ConnectorDefinition { Name = "C", BuiltIn = true };
+            var system = new ConnectedSystem { Name = "S", ConnectorDefinition = connectorDefinition };
+            var csType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
+            var targetA = new ConnectedSystemObjectTypeAttribute { Name = "targetA", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued, ConnectedSystemObjectType = csType, Selected = true };
+            var targetB = new ConnectedSystemObjectTypeAttribute { Name = "targetB", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued, ConnectedSystemObjectType = csType, Selected = true };
+            var otherSource = new ConnectedSystemObjectTypeAttribute { Name = "otherSource", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued, ConnectedSystemObjectType = csType, Selected = true };
+            csType.Attributes.Add(targetA);
+            csType.Attributes.Add(targetB);
+            csType.Attributes.Add(otherSource);
+
+            var personType = new MetaverseObjectType { Name = "Person", PluralName = "People", BuiltIn = true };
+            var costCentre = new MetaverseAttribute { Name = "costCentre", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+            personType.Attributes.Add(costCentre);
+
+            seed.ConnectorDefinitions.Add(connectorDefinition);
+            seed.ConnectedSystems.Add(system);
+            seed.ConnectedSystemObjectTypes.Add(csType);
+            seed.MetaverseObjectTypes.Add(personType);
+            await seed.SaveChangesAsync();
+            costCentreId = costCentre.Id;
+
+            var exportRule = new SyncRule
+            {
+                Name = "Export",
+                Direction = SyncRuleDirection.Export,
+                Enabled = true,
+                ConnectedSystem = system,
+                ConnectedSystemObjectType = csType,
+                MetaverseObjectType = personType
+            };
+            // Sole-source export mapping: its only source reads costCentre, so removing that source empties it.
+            var soleMapping = new SyncRuleMapping { TargetConnectedSystemAttribute = targetA };
+            soleMapping.Sources.Add(new SyncRuleMappingSource { MetaverseAttribute = costCentre, Order = 0 });
+            // Mixed-source export mapping: keeps a Connected System source, so it survives.
+            var mixedMapping = new SyncRuleMapping { TargetConnectedSystemAttribute = targetB };
+            mixedMapping.Sources.Add(new SyncRuleMappingSource { MetaverseAttribute = costCentre, Order = 0 });
+            mixedMapping.Sources.Add(new SyncRuleMappingSource { ConnectedSystemAttribute = otherSource, Order = 1 });
+            exportRule.AttributeFlowRules.Add(soleMapping);
+            exportRule.AttributeFlowRules.Add(mixedMapping);
+            seed.SyncRules.Add(exportRule);
+            await seed.SaveChangesAsync();
+            soleMappingId = soleMapping.Id;
+            mixedMappingId = mixedMapping.Id;
+        }
+
+        await using (var act = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(act));
+            var attribute = await jim.Metaverse.GetMetaverseAttributeAsync(costCentreId);
+
+            // Preview lists the source-less mapping as a knock-on removal, and the surviving mapping's source.
+            var impact = await jim.Metaverse.EvaluateAttributeDeletionAsync(attribute!);
+            Assert.That(impact.References.Any(r => r.Kind == AttributeReferenceKind.ExportAttributeFlowMapping && r.Id == soleMappingId), Is.True);
+            Assert.That(impact.References.Any(r => r.Kind == AttributeReferenceKind.ExportAttributeFlowSource), Is.True);
+
+            var result = await jim.Metaverse.DeleteMetaverseAttributeWithCascadeAsync(attribute!, TestUtilities.GetInitiatedBy());
+            Assert.That(result.Deleted, Is.True);
+        }
+
+        await using var verify = NewContext();
+        Assert.That(await verify.SyncRuleMappings.AnyAsync(m => m.Id == soleMappingId), Is.False, "the source-less export mapping was removed");
+        Assert.That(await verify.SyncRuleMappings.AnyAsync(m => m.Id == mixedMappingId), Is.True, "the mapping with another source survives");
+        Assert.That(await verify.SyncRuleMappingSources.CountAsync(), Is.EqualTo(1), "only the surviving mapping's non-costCentre source remains");
+    }
+
+    [Test]
+    public async Task DeleteMetaverseAttributeWithCascadeAsync_ObjectMatchingRuleLeftSourceless_RemovesRuleButKeepsRuleWithOtherSourcesAsync()
+    {
+        int costCentreId, soleRuleId, mixedRuleId;
+        await using (var seed = NewContext())
+        {
+            var connectorDefinition = new ConnectorDefinition { Name = "C", BuiltIn = true };
+            var system = new ConnectedSystem { Name = "S", ConnectorDefinition = connectorDefinition };
+            var csType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
+            var otherSource = new ConnectedSystemObjectTypeAttribute { Name = "otherSource", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued, ConnectedSystemObjectType = csType, Selected = true };
+            csType.Attributes.Add(otherSource);
+
+            var personType = new MetaverseObjectType { Name = "Person", PluralName = "People", BuiltIn = true };
+            var costCentre = new MetaverseAttribute { Name = "costCentre", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+            var buildingCode = new MetaverseAttribute { Name = "buildingCode", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+            personType.Attributes.Add(costCentre);
+            personType.Attributes.Add(buildingCode);
+
+            seed.ConnectorDefinitions.Add(connectorDefinition);
+            seed.ConnectedSystems.Add(system);
+            seed.ConnectedSystemObjectTypes.Add(csType);
+            seed.MetaverseObjectTypes.Add(personType);
+            await seed.SaveChangesAsync();
+            costCentreId = costCentre.Id;
+
+            // Rules target buildingCode (not costCentre), so they are only removed via the source-less rule.
+            var soleRule = new ObjectMatchingRule { ConnectedSystemObjectType = csType, MetaverseObjectType = personType, TargetMetaverseAttribute = buildingCode, Order = 0 };
+            soleRule.Sources.Add(new ObjectMatchingRuleSource { MetaverseAttribute = costCentre, Order = 0 });
+            var mixedRule = new ObjectMatchingRule { ConnectedSystemObjectType = csType, MetaverseObjectType = personType, TargetMetaverseAttribute = buildingCode, Order = 1 };
+            mixedRule.Sources.Add(new ObjectMatchingRuleSource { MetaverseAttribute = costCentre, Order = 0 });
+            mixedRule.Sources.Add(new ObjectMatchingRuleSource { ConnectedSystemAttribute = otherSource, Order = 1 });
+            seed.ObjectMatchingRules.AddRange(soleRule, mixedRule);
+            await seed.SaveChangesAsync();
+            soleRuleId = soleRule.Id;
+            mixedRuleId = mixedRule.Id;
+        }
+
+        await using (var act = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(act));
+            var attribute = await jim.Metaverse.GetMetaverseAttributeAsync(costCentreId);
+
+            var impact = await jim.Metaverse.EvaluateAttributeDeletionAsync(attribute!);
+            Assert.That(impact.References.Any(r => r.Kind == AttributeReferenceKind.SourcelessObjectMatchingRule && r.Id == soleRuleId), Is.True);
+            Assert.That(impact.References.Any(r => r.Kind == AttributeReferenceKind.ObjectMatchingRuleSource), Is.True);
+
+            var result = await jim.Metaverse.DeleteMetaverseAttributeWithCascadeAsync(attribute!, TestUtilities.GetInitiatedBy());
+            Assert.That(result.Deleted, Is.True);
+        }
+
+        await using var verify = NewContext();
+        Assert.That(await verify.ObjectMatchingRules.AnyAsync(r => r.Id == soleRuleId), Is.False, "the source-less Object Matching Rule was removed");
+        Assert.That(await verify.ObjectMatchingRules.AnyAsync(r => r.Id == mixedRuleId), Is.True, "the rule with another source survives");
+        Assert.That(await verify.ObjectMatchingRuleSources.CountAsync(), Is.EqualTo(1), "only the surviving rule's non-costCentre source remains");
+    }
+
+    [Test]
+    public async Task DeleteMetaverseAttributeWithCascadeAsync_ExtendedReferences_RemovedOrNulledAndPreviewedAsync()
+    {
+        int costCentreId;
+        await using (var seed = NewContext())
+        {
+            var personType = new MetaverseObjectType { Name = "Person", PluralName = "People", BuiltIn = true };
+            var costCentre = new MetaverseAttribute { Name = "costCentre", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+            personType.Attributes.Add(costCentre);
+            seed.MetaverseObjectTypes.Add(personType);
+            await seed.SaveChangesAsync();
+            costCentreId = costCentre.Id;
+
+            // A Predefined Search display column, an Example Data template attribute, and the Service Settings SSO
+            // unique-identifier mapping, all referencing the attribute.
+            var search = new PredefinedSearch { MetaverseObjectType = personType, Name = "People", Uri = "people" };
+            search.Attributes.Add(new PredefinedSearchAttribute { MetaverseAttribute = costCentre, Position = 0 });
+            seed.PredefinedSearches.Add(search);
+            seed.ExampleDataTemplateAttributes.Add(new ExampleDataTemplateAttribute { MetaverseAttribute = costCentre });
+            seed.ServiceSettings.Add(new ServiceSettings { SSOUniqueIdentifierMetaverseAttribute = costCentre });
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var act = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(act));
+            var attribute = await jim.Metaverse.GetMetaverseAttributeAsync(costCentreId);
+
+            var impact = await jim.Metaverse.EvaluateAttributeDeletionAsync(attribute!);
+            Assert.That(impact.References.Any(r => r.Kind == AttributeReferenceKind.PredefinedSearchAttribute), Is.True);
+            Assert.That(impact.References.Any(r => r.Kind == AttributeReferenceKind.ExampleDataTemplateAttribute), Is.True);
+            Assert.That(impact.References.Any(r => r.Kind == AttributeReferenceKind.ServiceSettingsSsoIdentifier), Is.True);
+
+            var result = await jim.Metaverse.DeleteMetaverseAttributeWithCascadeAsync(attribute!, TestUtilities.GetInitiatedBy());
+            Assert.That(result.Deleted, Is.True);
+        }
+
+        await using var verify = NewContext();
+        Assert.That(await verify.PredefinedSearchAttributes.AnyAsync(), Is.False, "the Predefined Search column was removed");
+        Assert.That(await verify.ExampleDataTemplateAttributes.AnyAsync(), Is.False, "the Example Data template attribute was removed");
+        // The Service Settings singleton survives, but its SSO unique-identifier mapping was cleared (set null).
+        var ssoFk = await verify.ServiceSettings
+            .Select(s => EF.Property<int?>(s, "SSOUniqueIdentifierMetaverseAttributeId"))
+            .SingleAsync();
+        Assert.That(ssoFk, Is.Null, "the SSO unique-identifier mapping was cleared, not left dangling");
     }
 }

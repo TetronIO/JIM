@@ -357,9 +357,35 @@ public class MetaverseRepository : IMetaverseRepository
             .ToListAsync();
     }
 
+    /// <summary>
+    /// Identifies the export Synchronisation Rule mappings and Object Matching Rules that would be left with no
+    /// sources at all once every source reading the attribute is removed. Such parents are invalid configuration and
+    /// must be removed as a knock-on. Excludes parents already removed wholesale for targeting the attribute.
+    /// </summary>
+    private async Task<(HashSet<int> SourcelessExportMappingIds, HashSet<int> SourcelessMatchingRuleIds)> GetSourcelessParentsAsync(int attributeId)
+    {
+        // Export mappings (not import mappings targeting the attribute) that have at least one source reading it, where
+        // every remaining source reads it (so removing those sources empties the mapping).
+        var exportMappingCounts = await Repository.Database.SyncRuleMappings
+            .Where(m => m.TargetMetaverseAttributeId != attributeId && m.Sources.Any(s => s.MetaverseAttributeId == attributeId))
+            .Select(m => new { m.Id, Total = m.Sources.Count, Removing = m.Sources.Count(s => s.MetaverseAttributeId == attributeId) })
+            .ToListAsync();
+        var sourcelessExportMappingIds = exportMappingCounts.Where(x => x.Total == x.Removing).Select(x => x.Id).ToHashSet();
+
+        // Object Matching Rules (not those already removed for targeting the attribute) left with no sources.
+        var matchingRuleCounts = await Repository.Database.ObjectMatchingRules
+            .Where(r => r.TargetMetaverseAttributeId != attributeId && r.Sources.Any(s => s.MetaverseAttributeId == attributeId))
+            .Select(r => new { r.Id, Total = r.Sources.Count, Removing = r.Sources.Count(s => s.MetaverseAttributeId == attributeId) })
+            .ToListAsync();
+        var sourcelessMatchingRuleIds = matchingRuleCounts.Where(x => x.Total == x.Removing).Select(x => x.Id).ToHashSet();
+
+        return (sourcelessExportMappingIds, sourcelessMatchingRuleIds);
+    }
+
     public async Task<List<AttributeReference>> GetAttributeReferencesAsync(int attributeId)
     {
         var references = new List<AttributeReference>();
+        var (sourcelessExportMappingIds, sourcelessMatchingRuleIds) = await GetSourcelessParentsAsync(attributeId);
 
         // 1. Object Type bindings (the many-to-many associations).
         var bindings = await Repository.Database.MetaverseObjectTypes
@@ -391,25 +417,44 @@ public class MetaverseRepository : IMetaverseRepository
                 : $"Import Attribute Flow (mapping {m.Id})"
         }));
 
-        // 3. Export Attribute Flow sources (mapping sources that read this attribute).
+        // 3. Export Attribute Flow sources that read this attribute, whose parent mapping survives (has other sources).
+        //    Sources whose parent would be left source-less are represented by the parent mapping in step 4 instead.
         var exportSources = await Repository.Database.SyncRuleMappings
-            .Where(m => m.Sources.Any(s => s.MetaverseAttributeId == attributeId))
+            .Where(m => m.TargetMetaverseAttributeId != attributeId && m.Sources.Any(s => s.MetaverseAttributeId == attributeId))
             .SelectMany(m => m.Sources
                 .Where(s => s.MetaverseAttributeId == attributeId)
-                .Select(s => new { SourceId = s.Id, m.SyncRuleId, SyncRuleName = m.SyncRule != null ? m.SyncRule.Name : null }))
+                .Select(s => new { SourceId = s.Id, MappingId = m.Id, m.SyncRuleId, SyncRuleName = m.SyncRule != null ? m.SyncRule.Name : null }))
             .ToListAsync();
-        references.AddRange(exportSources.Select(s => new AttributeReference
+        references.AddRange(exportSources
+            .Where(s => !sourcelessExportMappingIds.Contains(s.MappingId))
+            .Select(s => new AttributeReference
+            {
+                Kind = AttributeReferenceKind.ExportAttributeFlowSource,
+                Id = s.SourceId,
+                SyncRuleId = s.SyncRuleId,
+                SyncRuleName = s.SyncRuleName,
+                Description = s.SyncRuleName != null
+                    ? $"Export Attribute Flow source in Synchronisation Rule '{s.SyncRuleName}'"
+                    : $"Export Attribute Flow source (mapping source {s.SourceId})"
+            }));
+
+        // 4. Export mappings removed as a knock-on because they would be left source-less.
+        var sourcelessExportMappings = await Repository.Database.SyncRuleMappings
+            .Where(m => sourcelessExportMappingIds.Contains(m.Id))
+            .Select(m => new { m.Id, m.SyncRuleId, SyncRuleName = m.SyncRule != null ? m.SyncRule.Name : null })
+            .ToListAsync();
+        references.AddRange(sourcelessExportMappings.Select(m => new AttributeReference
         {
-            Kind = AttributeReferenceKind.ExportAttributeFlowSource,
-            Id = s.SourceId,
-            SyncRuleId = s.SyncRuleId,
-            SyncRuleName = s.SyncRuleName,
-            Description = s.SyncRuleName != null
-                ? $"Export Attribute Flow source in Synchronisation Rule '{s.SyncRuleName}'"
-                : $"Export Attribute Flow source (mapping source {s.SourceId})"
+            Kind = AttributeReferenceKind.ExportAttributeFlowMapping,
+            Id = m.Id,
+            SyncRuleId = m.SyncRuleId,
+            SyncRuleName = m.SyncRuleName,
+            Description = m.SyncRuleName != null
+                ? $"Export Attribute Flow in Synchronisation Rule '{m.SyncRuleName}' (removed: it would be left with no sources)"
+                : $"Export Attribute Flow (mapping {m.Id}) removed: it would be left with no sources"
         }));
 
-        // 4. Scoping criteria that evaluate this attribute. The owning Synchronisation Rule is reachable only via the
+        // 5. Scoping criteria that evaluate this attribute. The owning Synchronisation Rule is reachable only via the
         //    nested criteria-group graph (no direct navigation), so we key the reference on the criterion id; the
         //    Web/API layer can enrich the rule linkage in a later phase.
         var scopingCriteria = await Repository.Database.SyncRuleScopingCriteria
@@ -423,7 +468,7 @@ public class MetaverseRepository : IMetaverseRepository
             Description = $"Scoping criterion {id}"
         }));
 
-        // 5. Object Matching Rules whose target is this attribute.
+        // 6. Object Matching Rules whose target is this attribute.
         var matchingRuleTargets = await Repository.Database.ObjectMatchingRules
             .Where(r => r.TargetMetaverseAttributeId == attributeId)
             .Select(r => new { r.Id, r.SyncRuleId, SyncRuleName = r.SyncRule != null ? r.SyncRule.Name : null })
@@ -437,18 +482,95 @@ public class MetaverseRepository : IMetaverseRepository
             Description = $"Object Matching Rule {r.Id}"
         }));
 
-        // 6. Object Matching Rule sources that read this attribute.
+        // 7. Object Matching Rule sources that read this attribute, whose parent rule survives (has other sources) and
+        //    is not itself being removed for targeting the attribute.
         var matchingRuleSources = await Repository.Database.ObjectMatchingRuleSources
-            .Where(s => s.MetaverseAttributeId == attributeId)
+            .Where(s => s.MetaverseAttributeId == attributeId && s.ObjectMatchingRule.TargetMetaverseAttributeId != attributeId)
             .Select(s => new { s.Id, s.ObjectMatchingRuleId, s.ObjectMatchingRule.SyncRuleId, SyncRuleName = s.ObjectMatchingRule.SyncRule != null ? s.ObjectMatchingRule.SyncRule.Name : null })
             .ToListAsync();
-        references.AddRange(matchingRuleSources.Select(s => new AttributeReference
+        references.AddRange(matchingRuleSources
+            .Where(s => !sourcelessMatchingRuleIds.Contains(s.ObjectMatchingRuleId))
+            .Select(s => new AttributeReference
+            {
+                Kind = AttributeReferenceKind.ObjectMatchingRuleSource,
+                Id = s.Id,
+                SyncRuleId = s.SyncRuleId,
+                SyncRuleName = s.SyncRuleName,
+                Description = $"Object Matching Rule source {s.Id} (rule {s.ObjectMatchingRuleId})"
+            }));
+
+        // 8. Object Matching Rules removed as a knock-on because they would be left source-less.
+        var sourcelessMatchingRules = await Repository.Database.ObjectMatchingRules
+            .Where(r => sourcelessMatchingRuleIds.Contains(r.Id))
+            .Select(r => new { r.Id, r.SyncRuleId, SyncRuleName = r.SyncRule != null ? r.SyncRule.Name : null })
+            .ToListAsync();
+        references.AddRange(sourcelessMatchingRules.Select(r => new AttributeReference
         {
-            Kind = AttributeReferenceKind.ObjectMatchingRuleSource,
-            Id = s.Id,
-            SyncRuleId = s.SyncRuleId,
-            SyncRuleName = s.SyncRuleName,
-            Description = $"Object Matching Rule source {s.Id} (rule {s.ObjectMatchingRuleId})"
+            Kind = AttributeReferenceKind.SourcelessObjectMatchingRule,
+            Id = r.Id,
+            SyncRuleId = r.SyncRuleId,
+            SyncRuleName = r.SyncRuleName,
+            Description = $"Object Matching Rule {r.Id} (removed: it would be left with no sources)"
+        }));
+
+        // 9. Predefined Search display columns that show this attribute.
+        var predefinedSearchAttributes = await Repository.Database.PredefinedSearchAttributes
+            .Where(x => x.MetaverseAttribute.Id == attributeId)
+            .Select(x => new { x.Id, SearchName = x.PredefinedSearch.Name })
+            .ToListAsync();
+        references.AddRange(predefinedSearchAttributes.Select(x => new AttributeReference
+        {
+            Kind = AttributeReferenceKind.PredefinedSearchAttribute,
+            Id = x.Id,
+            Description = $"Predefined Search column in '{x.SearchName}'"
+        }));
+
+        // 10. Predefined Search criteria that filter on this attribute.
+        var predefinedSearchCriteria = await Repository.Database.PredefinedSearchCriteria
+            .Where(x => x.MetaverseAttributeId == attributeId)
+            .Select(x => x.Id)
+            .ToListAsync();
+        references.AddRange(predefinedSearchCriteria.Select(id => new AttributeReference
+        {
+            Kind = AttributeReferenceKind.PredefinedSearchCriterion,
+            Id = id,
+            Description = $"Predefined Search criterion {id}"
+        }));
+
+        // 11. Example Data template attributes that generate values for this attribute.
+        var exampleDataTemplateAttributes = await Repository.Database.ExampleDataTemplateAttributes
+            .Where(x => x.MetaverseAttribute != null && x.MetaverseAttribute.Id == attributeId)
+            .Select(x => x.Id)
+            .ToListAsync();
+        references.AddRange(exampleDataTemplateAttributes.Select(id => new AttributeReference
+        {
+            Kind = AttributeReferenceKind.ExampleDataTemplateAttribute,
+            Id = id,
+            Description = $"Example Data template attribute {id}"
+        }));
+
+        // 12. Example Data template attribute dependencies that reference this attribute.
+        var exampleDataTemplateAttributeDependencies = await Repository.Database.ExampleDataTemplateAttributeDependencies
+            .Where(x => x.MetaverseAttribute.Id == attributeId)
+            .Select(x => x.Id)
+            .ToListAsync();
+        references.AddRange(exampleDataTemplateAttributeDependencies.Select(id => new AttributeReference
+        {
+            Kind = AttributeReferenceKind.ExampleDataTemplateAttributeDependency,
+            Id = id,
+            Description = $"Example Data template attribute dependency {id}"
+        }));
+
+        // 13. Service Settings SSO unique-identifier mapping. Cleared (set to null), not deleted.
+        var ssoSettings = await Repository.Database.ServiceSettings
+            .Where(x => x.SSOUniqueIdentifierMetaverseAttribute != null && x.SSOUniqueIdentifierMetaverseAttribute.Id == attributeId)
+            .Select(x => x.Id)
+            .ToListAsync();
+        references.AddRange(ssoSettings.Select(id => new AttributeReference
+        {
+            Kind = AttributeReferenceKind.ServiceSettingsSsoIdentifier,
+            Id = id,
+            Description = "Service Settings SSO unique-identifier mapping (cleared)"
         }));
 
         return references;
@@ -457,6 +579,7 @@ public class MetaverseRepository : IMetaverseRepository
     public async Task CascadeDeleteMetaverseAttributeAsync(int attributeId)
     {
         var db = Repository.Database;
+        var (sourcelessExportMappingIds, sourcelessMatchingRuleIds) = await GetSourcelessParentsAsync(attributeId);
 
         // Leaf sources first: Object Matching Rule sources and export mapping sources that read the attribute.
         var omrSources = await db.ObjectMatchingRuleSources.Where(s => s.MetaverseAttributeId == attributeId).ToListAsync();
@@ -479,6 +602,16 @@ public class MetaverseRepository : IMetaverseRepository
             db.SyncRuleMappingSources.RemoveRange(mapping.Sources);
         db.SyncRuleMappings.RemoveRange(importMappings);
 
+        // Export mappings left source-less by removing their attribute-reading source: remove the mapping and any of
+        // its remaining (now-orphaned) sources so no invalid, source-less mapping survives.
+        var sourcelessExportMappings = await db.SyncRuleMappings
+            .Include(m => m.Sources)
+            .Where(m => sourcelessExportMappingIds.Contains(m.Id))
+            .ToListAsync();
+        foreach (var mapping in sourcelessExportMappings)
+            db.SyncRuleMappingSources.RemoveRange(mapping.Sources);
+        db.SyncRuleMappings.RemoveRange(sourcelessExportMappings);
+
         // Object Matching Rules targeting the attribute. Their sources cascade at the database (required FK), but we
         // remove them in-context for a clean, fully-tracked delete.
         var matchingRules = await db.ObjectMatchingRules
@@ -489,8 +622,38 @@ public class MetaverseRepository : IMetaverseRepository
             db.ObjectMatchingRuleSources.RemoveRange(rule.Sources);
         db.ObjectMatchingRules.RemoveRange(matchingRules);
 
-        // Finally the attribute itself. The Object Type bindings (many-to-many) and any required-cascade references
-        // (Predefined Search columns/criteria, Example Data template dependencies) are removed by database cascade.
+        // Object Matching Rules left source-less by removing their attribute-reading source: remove the rule (and its
+        // remaining sources) so no invalid, source-less rule survives.
+        var sourcelessMatchingRules = await db.ObjectMatchingRules
+            .Include(r => r.Sources)
+            .Where(r => sourcelessMatchingRuleIds.Contains(r.Id))
+            .ToListAsync();
+        foreach (var rule in sourcelessMatchingRules)
+            db.ObjectMatchingRuleSources.RemoveRange(rule.Sources);
+        db.ObjectMatchingRules.RemoveRange(sourcelessMatchingRules);
+
+        // Predefined Search display columns and criteria, and Example Data template attributes and dependencies. These
+        // would be removed by database cascade anyway, but we remove them explicitly so nothing changes unaudited.
+        var predefinedSearchAttributes = await db.PredefinedSearchAttributes.Where(x => x.MetaverseAttribute.Id == attributeId).ToListAsync();
+        db.PredefinedSearchAttributes.RemoveRange(predefinedSearchAttributes);
+
+        var predefinedSearchCriteria = await db.PredefinedSearchCriteria.Where(x => x.MetaverseAttributeId == attributeId).ToListAsync();
+        db.PredefinedSearchCriteria.RemoveRange(predefinedSearchCriteria);
+
+        var exampleDataTemplateAttributes = await db.ExampleDataTemplateAttributes.Where(x => x.MetaverseAttribute != null && x.MetaverseAttribute.Id == attributeId).ToListAsync();
+        db.ExampleDataTemplateAttributes.RemoveRange(exampleDataTemplateAttributes);
+
+        var exampleDataTemplateAttributeDependencies = await db.ExampleDataTemplateAttributeDependencies.Where(x => x.MetaverseAttribute.Id == attributeId).ToListAsync();
+        db.ExampleDataTemplateAttributeDependencies.RemoveRange(exampleDataTemplateAttributeDependencies);
+
+        // Service Settings SSO unique-identifier: clear the mapping (set null) rather than delete the singleton row.
+        var ssoSettings = await db.ServiceSettings
+            .Where(x => x.SSOUniqueIdentifierMetaverseAttribute != null && x.SSOUniqueIdentifierMetaverseAttribute.Id == attributeId)
+            .ToListAsync();
+        foreach (var settings in ssoSettings)
+            db.Entry(settings).Property("SSOUniqueIdentifierMetaverseAttributeId").CurrentValue = null;
+
+        // Finally the attribute itself. The Object Type bindings (many-to-many) are removed by database cascade.
         var attribute = await db.MetaverseAttributes.FindAsync(attributeId);
         if (attribute != null)
             db.MetaverseAttributes.Remove(attribute);

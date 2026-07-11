@@ -39,5 +39,43 @@ public enum AttributeReferenceKind
     /// <summary>
     /// An Object Matching Rule source that reads this Metaverse Attribute.
     /// </summary>
-    ObjectMatchingRuleSource = 5
+    ObjectMatchingRuleSource = 5,
+
+    /// <summary>
+    /// An export Synchronisation Rule mapping removed as a knock-on because removing its attribute-reading source
+    /// would leave it with no sources at all. A source-less mapping is invalid configuration and cannot survive.
+    /// </summary>
+    ExportAttributeFlowMapping = 6,
+
+    /// <summary>
+    /// An Object Matching Rule removed as a knock-on because removing its attribute-reading source would leave it
+    /// with no sources at all. A source-less rule is invalid configuration and cannot survive.
+    /// </summary>
+    SourcelessObjectMatchingRule = 7,
+
+    /// <summary>
+    /// A Predefined Search display column (PredefinedSearchAttribute) that shows this Metaverse Attribute.
+    /// </summary>
+    PredefinedSearchAttribute = 8,
+
+    /// <summary>
+    /// A Predefined Search criterion that filters on this Metaverse Attribute.
+    /// </summary>
+    PredefinedSearchCriterion = 9,
+
+    /// <summary>
+    /// An Example Data template attribute that generates values for this Metaverse Attribute.
+    /// </summary>
+    ExampleDataTemplateAttribute = 10,
+
+    /// <summary>
+    /// An Example Data template attribute dependency that references this Metaverse Attribute.
+    /// </summary>
+    ExampleDataTemplateAttributeDependency = 11,
+
+    /// <summary>
+    /// The Service Settings SSO unique-identifier mapping that points at this Metaverse Attribute. This reference is
+    /// cleared (set to null), not deleted, and audited as a Service Setting configuration change.
+    /// </summary>
+    ServiceSettingsSsoIdentifier = 12
 }

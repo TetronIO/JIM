@@ -229,6 +229,43 @@ public class MetaverseServerCustomAttributeTests
     }
 
     [Test]
+    public async Task DeleteMetaverseAttributeWithCascadeAsync_WithExtendedReferenceKinds_AuditsEachAsChildWithCorrectTargetTypeAsync()
+    {
+        var attribute = Attribute();
+        var references = new List<AttributeReference>
+        {
+            new() { Kind = AttributeReferenceKind.ExportAttributeFlowMapping, Id = 11, SyncRuleId = 5, SyncRuleName = "Export Users", Description = "Export mapping (source-less)" },
+            new() { Kind = AttributeReferenceKind.SourcelessObjectMatchingRule, Id = 30, Description = "OMR (source-less)" },
+            new() { Kind = AttributeReferenceKind.PredefinedSearchAttribute, Id = 40, Description = "Predefined Search column" },
+            new() { Kind = AttributeReferenceKind.PredefinedSearchCriterion, Id = 41, Description = "Predefined Search criterion" },
+            new() { Kind = AttributeReferenceKind.ExampleDataTemplateAttribute, Id = 50, Description = "Example Data template attribute" },
+            new() { Kind = AttributeReferenceKind.ExampleDataTemplateAttributeDependency, Id = 51, Description = "Example Data dependency" },
+            new() { Kind = AttributeReferenceKind.ServiceSettingsSsoIdentifier, Id = 1, Description = "SSO mapping (cleared)" }
+        };
+        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountsByTypeAsync(42)).ReturnsAsync([]);
+        _metaverseRepo.Setup(r => r.GetAttributeReferencesAsync(42)).ReturnsAsync(references);
+        _metaverseRepo.Setup(r => r.CascadeDeleteMetaverseAttributeAsync(42)).Returns(Task.CompletedTask);
+
+        var impact = await _jim.Metaverse.DeleteMetaverseAttributeWithCascadeAsync(attribute, TestUtilities.GetInitiatedBy());
+
+        Assert.That(impact.Deleted, Is.True);
+        _metaverseRepo.Verify(r => r.CascadeDeleteMetaverseAttributeAsync(42), Times.Once);
+
+        var parent = _createdActivities.Single(a => a.ParentActivityId == null);
+        var children = _createdActivities.Where(a => a.ParentActivityId == parent.Id && !ReferenceEquals(a, parent)).ToList();
+        Assert.That(children, Has.Count.EqualTo(references.Count + 1), "one child per reference plus the attribute removal");
+
+        // Each new reference kind is audited under the correct Activity target type.
+        Assert.That(children.Count(c => c.TargetType == ActivityTargetType.PredefinedSearch), Is.EqualTo(2));
+        Assert.That(children.Count(c => c.TargetType == ActivityTargetType.ExampleDataTemplate), Is.EqualTo(2));
+        Assert.That(children.Count(c => c.TargetType == ActivityTargetType.ServiceSetting), Is.EqualTo(1));
+        // SourcelessObjectMatchingRule maps to ObjectMatchingRule; ExportAttributeFlowMapping to SynchronisationRule.
+        Assert.That(children.Count(c => c.TargetType == ActivityTargetType.ObjectMatchingRule), Is.EqualTo(1));
+        Assert.That(children.Count(c => c.TargetType == ActivityTargetType.SynchronisationRule), Is.EqualTo(1));
+        Assert.That(children.Count(c => c.TargetType == ActivityTargetType.MetaverseAttribute && c.Message!.Contains("Removed Metaverse Attribute")), Is.EqualTo(1));
+    }
+
+    [Test]
     public async Task DeleteMetaverseAttributeWithCascadeAsync_WithNoReferencesOrValues_DeletesWithoutConfirmationAsync()
     {
         var attribute = Attribute();
