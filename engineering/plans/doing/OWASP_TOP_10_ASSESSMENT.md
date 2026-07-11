@@ -1,6 +1,6 @@
 # OWASP Top 10:2025 Assessment
 
-- **Status:** Planned
+- **Status:** Doing (remediation started; see issue #500 for per-gap status)
 - **Issue:** [#500](https://github.com/TetronIO/JIM/issues/500)
 - **Assessed:** 2026-04-09
 - **Standard:** [OWASP Top 10:2025](https://owasp.org/Top10/2025/)
@@ -255,6 +255,8 @@ A global exception handler catches all unhandled exceptions. Production response
 4. CI builds use `dotnet restore --locked-mode` to fail if lock files are out of date
 
 **Effort:** Low
+
+**Status: Implemented.** `packages.lock.json` is now committed for every project, and `Directory.Build.props` forces `RestoreLockedMode` whenever `CI=true`, with explicit `--locked-mode` / `/p:RestoreLockedMode=true` in CI, the release workflow, and all three production container image builds. Because Dependabot does not reliably regenerate lock files across project references when it bumps a NuGet version, a new `regenerate-nuget-lock-files` workflow watches Dependabot's NuGet branches and pushes a signed regeneration commit automatically. See `engineering/DEPENDENCY_PINNING.md` for the full policy.
 
 ---
 

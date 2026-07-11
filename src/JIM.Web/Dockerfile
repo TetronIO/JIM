@@ -57,13 +57,31 @@ WORKDIR /src
 COPY ["Directory.Build.props", "./"]
 COPY ["VERSION", "./"]
 COPY ["src/JIM.Web/JIM.Web.csproj", "JIM.Web/"]
+COPY ["src/JIM.Web/packages.lock.json", "JIM.Web/"]
 COPY ["src/JIM.Models/JIM.Models.csproj", "JIM.Models/"]
+COPY ["src/JIM.Models/packages.lock.json", "JIM.Models/"]
 COPY ["src/JIM.Application/JIM.Application.csproj", "JIM.Application/"]
+COPY ["src/JIM.Application/packages.lock.json", "JIM.Application/"]
 COPY ["src/JIM.PostgresData/JIM.PostgresData.csproj", "JIM.PostgresData/"]
+COPY ["src/JIM.PostgresData/packages.lock.json", "JIM.PostgresData/"]
 COPY ["src/JIM.Utilities/JIM.Utilities.csproj", "JIM.Utilities/"]
+COPY ["src/JIM.Utilities/packages.lock.json", "JIM.Utilities/"]
 COPY ["src/JIM.Connectors/JIM.Connectors.csproj", "JIM.Connectors/"]
+COPY ["src/JIM.Connectors/packages.lock.json", "JIM.Connectors/"]
 COPY ["src/JIM.Data/JIM.Data.csproj", "JIM.Data/"]
+COPY ["src/JIM.Data/packages.lock.json", "JIM.Data/"]
 
+# This restore step is a Docker layer-caching optimisation only (warms the
+# NuGet package cache before the source COPY below invalidates later layers);
+# it deliberately does NOT pass RestoreLockedMode. Locked-mode enforcement for
+# JIM.Web happens at the publish step instead, because `dotnet restore` run in
+# isolation as a Microsoft.NET.Sdk.Web single-project restore inside this exact
+# SDK image hits a known upstream bug where the implicit
+# Microsoft.AspNetCore.App.Internal.Assets framework-reference package is
+# dropped from the locked-mode comparison and the restore fails NU1004 no
+# matter what the lock file contains (dotnet/aspnetcore#64897). `dotnet
+# publish` performs its own implicit restore and is unaffected, so it is the
+# step that actually validates and enforces the lock file for this project.
 RUN dotnet restore "./JIM.Web/JIM.Web.csproj"
 
 COPY src/ .
@@ -72,7 +90,7 @@ WORKDIR "/src/JIM.Web"
 # Publish stage - optimised for production
 FROM build AS publish
 ARG VERSION_SUFFIX=
-RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=false /p:VersionSuffix="${VERSION_SUFFIX}"
+RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=false /p:VersionSuffix="${VERSION_SUFFIX}" /p:RestoreLockedMode=true
 
 # Generate OpenAPI document in lightweight mode (no DB or IdP required).
 # The app starts, generates the schema from controller metadata, writes the

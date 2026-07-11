@@ -72,6 +72,10 @@ Categorise each PR into one of three ecosystems:
 - Check: Is the package from a trusted publisher?
 - Check: Run `dotnet list package --vulnerable` if concerned about transitive vulnerabilities
 - Check: Does CI build and all tests pass?
+- **Lock files**: JIM enforces locked-mode NuGet restore in CI, so every NuGet PR needs its `packages.lock.json` file(s) updated to match. Dependabot does not reliably do this itself (dependabot-core#12318, dependabot-core#10863); the `regenerate-nuget-lock-files` workflow pushes an automated `chore: regenerate NuGet lock files for Dependabot update` commit to the PR branch when needed, so **a red first CI run on a fresh Dependabot NuGet PR is expected**, not a failure to investigate. Before assessing CI status:
+  1. Confirm the regeneration commit is present (check the PR's commit list) and that CI is green on the current head, not the original Dependabot commit.
+  2. If the regeneration workflow itself failed (check its run log) and no lock-file commit landed, regenerate manually from a local checkout of the branch: `dotnet restore JIM.sln --force-evaluate`, review the diff, commit, and push.
+  3. See `engineering/DEPENDENCY_PINNING.md` for the full policy and mechanism.
 
 ### GitHub Actions
 - Check: Is this a patch or minor update within the same major version tag?
@@ -130,7 +134,7 @@ Unless running in review-only mode:
 - All dependency updates require human review - no auto-merge
 - Docker images pinned by digest (`@sha256:...`)
 - Functional apt packages pinned to exact versions
-- NuGet packages pinned in `.csproj` files
-- GitHub Actions pinned by major version tag
+- NuGet packages pinned in `.csproj` files, transitive dependencies locked via `packages.lock.json` and enforced `RestoreLockedMode`
+- GitHub Actions pinned by immutable commit SHA (with a `# vX.Y.Z` version comment)
 - Prefer Microsoft-maintained and well-established packages
-- Full details in CLAUDE.md under "Supply Chain Security" and docs/DEVELOPER_GUIDE.md under "Dependency Pinning and Updates"
+- Full details in CLAUDE.md under "Third-Party Dependency Governance", engineering/DEVELOPER_GUIDE.md under "Dependency Pinning and Updates", and engineering/DEPENDENCY_PINNING.md (canonical policy page)
