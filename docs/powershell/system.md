@@ -202,7 +202,7 @@ if ($user.IsAdministrator) {
 
 - Requires an active connection via [Connect-JIM](connection.md#connect-jim).
 - This endpoint does not require the Administrator role; any authenticated user or API key can call it.
-- If the user is authenticated but not authorised (no JIM identity), `authorised` is `$false` and a `message` explains why.
+- If the user is authenticated but not authorised (no JIM identity), `Authorised` is `$false` and a `Message` explains why.
 
 ---
 

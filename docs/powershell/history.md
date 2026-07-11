@@ -47,7 +47,7 @@ Get-JIMConfigurationChangeHistory -Type <string> -Id <int|guid|string>
 
 ### Output
 
-In the summary modes, returns one `PSCustomObject` per change with `version`, `operation`, `initiatedBy`, `when`, `reason`, and a one-line `summary`. With `-Version`, returns the change detail (metadata, the redacted snapshot, and the diff against the previous version). With `-CompareFrom` / `-CompareTo`, returns the structured diff. With `-AsDiff`, returns the rendered diff as coloured strings.
+In the summary modes, returns one `PSCustomObject` per change with `Version`, `Operation`, `InitiatedBy`, `When`, `Reason`, and a one-line `Summary`. With `-Version`, returns the change detail (metadata, the redacted snapshot, and the diff against the previous version). With `-CompareFrom` / `-CompareTo`, returns the structured diff. With `-AsDiff`, returns the rendered diff as coloured strings.
 
 ### Examples
 
@@ -146,7 +146,7 @@ Get-JIMDeletedObject -ObjectType CSO -ConnectedSystemId <int>
 
 ### Output
 
-Returns a `PSCustomObject` with paginated results containing `items`, `totalCount`, `page`, and `pageSize` properties. Each item represents a deleted object with its attributes at the time of deletion.
+Returns a `PSCustomObject` with paginated results containing `Items`, `TotalCount`, `Page`, and `PageSize` properties. Each item represents a deleted object with its attributes at the time of deletion.
 
 ### Examples
 
@@ -203,7 +203,7 @@ Get-JIMHistoryCount -ConnectedSystemName <string>
 
 ### Output
 
-Returns a `PSCustomObject` with `connectedSystemId`, `connectedSystemName`, and `changeRecordCount` properties.
+Returns a `PSCustomObject` with `ConnectedSystemId`, `ConnectedSystemName`, and `ChangeRecordCount` properties.
 
 ### Examples
 

@@ -26,7 +26,7 @@ Get-JIMRole [-Name <string>]
 
 ### Output
 
-Role objects with `id`, `name`, `builtIn`, `created`, and `staticMemberCount` properties.
+Role objects with `Id`, `Name`, `BuiltIn`, `Created`, and `StaticMemberCount` properties.
 
 ### Examples
 
@@ -71,7 +71,7 @@ Get-JIMRoleMember -InputObject <PSCustomObject>
 
 ### Output
 
-Metaverse Object members with `id`, `displayName`, and a nested `type` object (`type.id` and `type.name`) properties. (Prior to this release the object type was exposed as flat `typeId`/`typeName` properties; this is a breaking change to the output shape.)
+Metaverse Object members with `Id`, `DisplayName`, and a nested `Type` object (`Type.Id` and `Type.Name`) properties. (Prior to this release the object type was exposed as flat `TypeId`/`TypeName` properties; this is a breaking change to the output shape.)
 
 ### Examples
 
@@ -114,7 +114,7 @@ Get-JIMMetaverseObjectRole -Id <guid>
 
 ### Output
 
-Role objects with `id`, `name`, `builtIn`, `created`, and `staticMemberCount` properties. Returns nothing if the object is not a member of any role.
+Role objects with `Id`, `Name`, `BuiltIn`, `Created`, and `StaticMemberCount` properties. Returns nothing if the object is not a member of any role.
 
 ### Examples
 
