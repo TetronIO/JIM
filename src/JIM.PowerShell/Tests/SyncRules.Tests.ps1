@@ -5,7 +5,7 @@
 
 <#
 .SYNOPSIS
-    Pester tests for Sync Rule cmdlets.
+    Pester tests for Synchronisation Rule cmdlets.
 #>
 
 BeforeAll {

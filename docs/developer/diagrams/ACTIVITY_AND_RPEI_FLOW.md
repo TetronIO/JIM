@@ -1,8 +1,10 @@
 # Activity and RPEI Flow
 
-> Last updated: 2026-04-22, JIM v0.10.0
+> Last updated: 2026-07-10, JIM v0.13.0
 
 This diagram shows how Activities are created, how Run Profile Execution Items (RPEIs) are accumulated during operations, and how the final activity status is determined. Activities are the immutable audit record for every operation in JIM.
+
+Activities arise from two distinct paths. Operational work (synchronisation, data generation, clearing or deleting a Connected System, Temporal Scope Reconciliation) runs on a Worker Task, so its Activity is created when the task is queued and stays `InProgress` until the task completes. Configuration changes (issue #14) take no Worker Task: the config server that mutates the entity creates and completes the Activity synchronously, in the same call, alongside a versioned configuration snapshot.
 
 Since v0.10.0, sync RPEIs are bulk-inserted per page via raw SQL (`FlushRpeisAsync`) rather than held in-memory for the full run, to keep memory bounded at 100K+ object scale. Summary statistics are accumulated incrementally during each flush. Cross-page reference resolution merges new attribute-flow rows under the existing MvoChange parent rather than creating a duplicate RPEI, resolving the previous ~2x RPEI duplication when references spanned multiple pages.
 
@@ -27,6 +29,7 @@ flowchart TD
     Trigger -->|Schedule fires| Scheduler[SchedulerServer:<br/>Queue step group tasks]
     Trigger -->|Manual run| Web[JIM.Web:<br/>User clicks Run]
     Trigger -->|API call| Api[API controller:<br/>Create task request]
+    Trigger -->|Config change| ConfigServer[Config server e.g.<br/>ConnectedSystemServer, SchedulerServer,<br/>MetaverseServer, SearchServer, ServiceSettingsServer]
 
     Scheduler --> CreateTask[TaskingServer.CreateWorkerTaskAsync]
     Web --> CreateTask
@@ -37,11 +40,18 @@ flowchart TD
     TaskType -->|ExampleDataTemplateWorkerTask| DataGenActivity[TargetType = ExampleDataTemplate]
     TaskType -->|ClearConnectedSystemObjectsWorkerTask| ClearActivity[TargetType = ConnectedSystem<br/>TargetOperationType = Clear]
     TaskType -->|DeleteConnectedSystemWorkerTask| DeleteActivity[TargetType = ConnectedSystem<br/>TargetOperationType = Delete]
+    TaskType -->|TemporalScopeReconciliationWorkerTask| TemporalActivity[TargetType = TemporalScopeReconciliation]
 
     SyncActivity --> CreateActivity
     DataGenActivity --> CreateActivity
     ClearActivity --> CreateActivity
     DeleteActivity --> CreateActivity
+    TemporalActivity --> CreateActivity
+
+    %% --- Configuration change: created synchronously, no worker task (#14) ---
+    ConfigServer --> ConfigActivity[Create + complete Activity SYNCHRONOUSLY<br/>no worker task involved<br/>CreateActivityWithTriadAsync, then<br/>capture configuration snapshot, then<br/>CompleteActivityAsync in the same call]
+    ConfigActivity --> ConfigTargets[TargetType is a configuration type:<br/>SynchronisationRule, Schedule, ServiceSetting,<br/>TrustedCertificate, ApiKey, Role, PredefinedSearch,<br/>ConnectorDefinition, MetaverseObjectType,<br/>MetaverseAttribute, ExampleDataSet, ObjectMatchingRule, ...<br/>TargetOperationType = Create, Update or Delete]
+    ConfigTargets --> ConfigDone([Configuration change<br/>Activity persisted])
 
     CreateActivity[CreateActivityWithTriadAsync:<br/>Status = InProgress<br/>Executed = UtcNow<br/>Copy initiator triad from task<br/>Copy schedule execution context]
     CreateActivity --> Validate[ValidateActivity:<br/>InitiatedByType must not be NotSet<br/>User/ApiKey must have InitiatedById]
@@ -177,3 +187,7 @@ flowchart TD
 - **Triple fallback for failure**<br /> `SafeFailActivityAsync` ensures activities are never left stuck in `InProgress`, even when the DbContext is corrupted or disposed. This is critical for system reliability; stuck activities would block future schedule executions.
 
 - **Initiator triad audit**<br /> Every activity records who initiated it (`InitiatedByType`, `InitiatedById`, `InitiatedByName`). For scheduled tasks, this preserves the schedule context. For deferred MVO deletions, the original initiator is captured at mark time and replayed during housekeeping.
+
+- **Synchronous configuration-change Activities (#14)**<br /> Configuration changes do not go through a Worker Task. The owning config server creates the Activity, mutates the entity, captures a configuration snapshot, and completes the Activity all in the same synchronous call. `ActivityTargetType` now spans the full configuration surface, including `SynchronisationRule`, `Schedule`, `ServiceSetting`, `TrustedCertificate`, `ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `MetaverseObjectType`, `MetaverseAttribute`, `ObjectMatchingRule` and `ExampleDataSet`, in addition to the operational target types created by Worker Tasks.
+
+- **Scope-exit and no-contributor sync outcomes (Attribute Priority, #91)**<br /> Beyond the `ObjectChangeType` recorded on each RPEI, sync builds a finer-grained outcome tree. A CSO leaving scope (rather than being deleted at source) records a `DisconnectedOutOfScope` outcome, and when a recalled attribute has no surviving contributor and is genuinely cleared (not re-elected to a survivor, not frozen under a deletion grace period), a `NoContributor` child outcome is surfaced so an administrator can see the blank was an event, not merely an uncontributed attribute.

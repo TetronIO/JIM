@@ -1,0 +1,54 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- Inside the Scheduler Service (Developer Guide > Architecture): the -->
+<!-- Scheduler Host evaluates due schedules through the JimApplication -->
+<!-- facade and queues Worker tasks in PostgreSQL. -->
+<!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
+<!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: keep this file free of blank lines AND of comments inside the -->
+<!-- <svg> element; it is inlined into markdown via pymdownx.snippets, and -->
+<!-- python-markdown ends the raw-HTML block at either. Structure is -->
+<!-- expressed with <g> groups instead. -->
+<svg class="jim-diagram" viewBox="0 0 1160 230" role="img" aria-labelledby="jimdg-sd-title jimdg-sd-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="jimdg-sd-title">Inside the Scheduler Service</title>
+  <desc id="jimdg-sd-desc">The Scheduler Host runs a 30-second polling loop that evaluates schedule due times and performs crash recovery. It queues tasks through the JimApplication facade, which stores schedules and the task queue in PostgreSQL for the Worker to pick up.</desc>
+  <g id="jimdg-sd-boundary">
+    <rect class="jimdg-hub" x="90" y="20" width="400" height="200" rx="8"/>
+    <text class="jimdg-hub-title" x="290" y="56">JIM.Scheduler</text>
+  </g>
+  <g id="jimdg-sd-host">
+    <rect class="jimdg-stage" x="130" y="90" width="320" height="96" rx="8"/>
+    <text class="jimdg-stage-label" x="290" y="124">Scheduler Host</text>
+    <text class="jimdg-system-sub" x="290" y="148">30-second polling loop</text>
+    <text class="jimdg-system-sub" x="290" y="167">due times · crash recovery</text>
+  </g>
+  <g id="jimdg-sd-facade">
+    <rect class="jimdg-stage" x="560" y="106" width="280" height="64" rx="8"/>
+    <text class="jimdg-stage-label" x="700" y="132">JimApplication facade</text>
+    <text class="jimdg-system-sub" x="700" y="153">queues Worker tasks</text>
+  </g>
+  <g id="jimdg-sd-db">
+    <path class="jimdg-stage" d="M910,112 A110,14 0 0 1 1130,112 L1130,184 A110,14 0 0 1 910,184 Z"/>
+    <ellipse class="jimdg-stage" cx="1020" cy="112" rx="110" ry="14"/>
+    <text class="jimdg-stage-label" x="1020" y="146">PostgreSQL</text>
+    <text class="jimdg-system-sub" x="1020" y="168">schedules &amp; task queue</text>
+  </g>
+  <g id="jimdg-sd-edges">
+    <line class="jimdg-flow" x1="450" y1="138" x2="550" y2="138"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(560,138) rotate(0)"/>
+    <text class="jimdg-flow-label jimdg-anchor-middle" x="505" y="126">queues tasks</text>
+    <line class="jimdg-flow" x1="840" y1="138" x2="900" y2="138"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(910,138) rotate(0)"/>
+  </g>
+  <g id="jimdg-sd-packets">
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2s" begin="0s" repeatCount="indefinite" path="M450,138 L548,138"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="1.6s" begin="1s" repeatCount="indefinite" path="M840,138 L898,138"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="1.6s" begin="1s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>

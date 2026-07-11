@@ -4,15 +4,15 @@
 function Get-JIMScopingCriteria {
     <#
     .SYNOPSIS
-        Gets scoping criteria groups for a sync rule.
+        Gets scoping criteria groups for a Synchronisation Rule.
 
     .DESCRIPTION
-        Retrieves the scoping criteria groups configured on an export sync rule.
+        Retrieves the scoping criteria groups configured on an export Synchronisation Rule.
         Scoping criteria define which Metaverse objects are included in the export.
-        Only export sync rules support scoping criteria.
+        Only export Synchronisation Rules support scoping criteria.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the sync rule.
+        The unique identifier of the Synchronisation Rule.
 
     .PARAMETER GroupId
         Optional. The unique identifier of a specific criteria group to retrieve.
@@ -23,7 +23,7 @@ function Get-JIMScopingCriteria {
     .EXAMPLE
         Get-JIMScopingCriteria -SyncRuleId 5
 
-        Returns all scoping criteria groups for sync rule ID 5.
+        Returns all scoping criteria groups for Synchronisation Rule ID 5.
 
     .EXAMPLE
         Get-JIMScopingCriteria -SyncRuleId 5 -GroupId 10
@@ -54,12 +54,12 @@ function Get-JIMScopingCriteria {
 
         try {
             if ($PSBoundParameters.ContainsKey('GroupId')) {
-                Write-Verbose "Getting scoping criteria group $GroupId for sync rule $SyncRuleId"
+                Write-Verbose "Getting scoping criteria group $GroupId for Synchronisation Rule $SyncRuleId"
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria/$GroupId"
                 $result | Add-Member -NotePropertyName 'SyncRuleId' -NotePropertyValue $SyncRuleId -PassThru -Force
             }
             else {
-                Write-Verbose "Getting all scoping criteria groups for sync rule $SyncRuleId"
+                Write-Verbose "Getting all scoping criteria groups for Synchronisation Rule $SyncRuleId"
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria"
                 foreach ($group in $result) {
                     $group | Add-Member -NotePropertyName 'SyncRuleId' -NotePropertyValue $SyncRuleId -PassThru -Force

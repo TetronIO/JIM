@@ -100,6 +100,7 @@ The settings listed below are the ones most commonly adjusted; the full list is 
 | `Sync.PartitionValidationMode` | Run Profile partition validation | Synchronisation | Controls how JIM behaves when a Run Profile is executed for a Connected System that supports partitions but has none selected. `Error` blocks execution; `Warning` allows execution but logs a warning.                                                         | `Error`       |
 | `History.RetentionPeriod`    | History retention period  | History         | The duration for which activity and audit history is retained. Format: `d.hh:mm:ss`. Longer periods increase database size and may affect performance. Configuration change history is excluded; it has its own retention period below.                          | `90.00:00:00` (90 days) |
 | `History.ConfigurationChangeRetentionPeriod` | Configuration change retention period | History | The duration for which configuration change history (versioned Connected System, Synchronisation Rule, and Schedule snapshots) is retained. Kept separately from, and typically much longer than, the general history retention period. Format: `d.hh:mm:ss`.     | `3650.00:00:00` (~10 years) |
+| `ChangeTracking.ConfigurationChanges.Enabled` | Track configuration changes | History | Enables or disables capture of Configuration Change History. When `true`, a redacted, versioned snapshot is recorded on the Activity for every configuration create, update, and delete. Set to `false` to stop capturing new history; existing history is not deleted. | `true`        |
 
 !!! tip "Editing service settings"
     Navigate to **Admin > Service Settings**, use the filter and search box to locate the setting by key or display name, and click the edit icon. Changes are audited: the settings page shows who last modified each value and when.
@@ -113,6 +114,19 @@ The settings listed below are the ones most commonly adjusted; the full list is 
 | `JIM_LOG_LEVEL`    | Minimum log level. Valid values: `Verbose`, `Debug`, `Information`, `Warning`, `Error`, `Fatal`. | `Information`   | `Warning`        |
 | `JIM_LOG_PATH`     | Directory path for log file output.                                                | `/tmp/jim-logs` | `/var/log/jim`   |
 | `JIM_LOG_REQUESTS` | When `true`, logs all HTTP requests. Useful for debugging but generates high volume. | `false`         | `true`           |
+
+---
+
+## Encryption Keys
+
+JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Schedule SQL-step connection strings) with keys stored on the filesystem. All three services (`jim.web`, `jim.worker`, `jim.scheduler`) must resolve to the same key location so they can decrypt each other's data.
+
+| Variable                  | Description                                                                                                                                                                                 | Default                          | Example        |
+|---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------|----------------|
+| `JIM_ENCRYPTION_KEY_PATH` | Filesystem path where encryption keys are stored. When unset, JIM uses `/data/keys` (the `jim-keys-volume` Docker volume) if `/data` exists, otherwise the platform application-data directory. | *(unset)* -- resolves to `/data/keys` in Docker | `/data/keys`   |
+
+!!! danger "These keys must be backed up with the database"
+    The database ciphertext cannot be decrypted without these keys. A database backup restored without its matching keys leaves every stored secret unrecoverable. See [Backup & Disaster Recovery](backup-recovery.md).
 
 ---
 

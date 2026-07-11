@@ -34,6 +34,12 @@ This section covers everything you need to deploy, configure, and maintain JIM i
 
     Procedures for upgrading JIM in connected and air-gapped environments, including backup recommendations and migration notes.
 
+-   **[Backup & Disaster Recovery](backup-recovery.md)**
+
+    ---
+
+    What to back up (database plus encryption keys, as a matched pair), how to take and restore a backup, securing key backups, and recovery expectations if keys are lost.
+
 -   **[Troubleshooting](troubleshooting.md)**
 
     ---

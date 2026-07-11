@@ -22,6 +22,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 
 - Hub-and-spoke architecture using a central metaverse for identity correlation
 - Bidirectional synchronisation of Users, Groups, and custom object types (e.g., Departments, Roles, Computers)
+- [Attribute Priority](https://docs.junctional.io/concepts/attribute-priority/): deterministic precedence when multiple Connected Systems contribute the same Metaverse attribute, with "Null is a value" assertion, next-contributor hand-over, and per-value provenance
 - Multi-directory LDAP support: AD DS, OpenLDAP, 389 Directory Server, and RFC 4512-compliant ones
 - Built-in scheduler that supports parallel operations
 - Tested at 100K+ object scale with bounded memory pipelines
@@ -30,6 +31,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Modern Web Portal and REST API with interactive Scalar [API reference](https://docs.junctional.io/api/reference/)
 - PowerShell automation for Identity as Code (IDaC) - deploy JIM instances in minutes, not months
 - Realtime activity monitoring
+- [Configuration Change History](https://docs.junctional.io/configuration/activities/#configuration-change-history): versioned who/what/when audit across all configuration types, with secret redaction and a reason-for-change prompt
 - Single Sign-On (SSO) using OpenID Connect
 - Dark/Light mode
 
@@ -86,10 +88,10 @@ Why choose JIM?
 ## Architecture
 JIM is a container-based distributed application implementing the metaverse pattern for centralised identity governance.
 
-<a href="docs/diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
+<a href=".github/diagrams/system-context-dark.svg">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
-    <img alt="JIM System Context" src="docs/diagrams/images/light/jim-structurizr-1-SystemContext.svg">
+    <source media="(prefers-color-scheme: dark)" srcset=".github/diagrams/system-context-dark.svg">
+    <img alt="JIM System Context" src=".github/diagrams/system-context-light.svg">
   </picture>
 </a>
 
@@ -100,10 +102,10 @@ JIM is a container-based distributed application implementing the metaverse patt
 - **JIM.PowerShell** - A cross-platform PowerShell module (Windows, macOS, Linux) for full configuration and automation of JIM, enabling Identity as Code (IDaC)
 - A database - PostgreSQL
 
-<a href="docs/diagrams/images/dark/jim-structurizr-1-Containers.svg">
+<a href=".github/diagrams/containers-dark.svg">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/images/dark/jim-structurizr-1-Containers.svg">
-    <img alt="JIM Containers" src="docs/diagrams/images/light/jim-structurizr-1-Containers.svg">
+    <source media="(prefers-color-scheme: dark)" srcset=".github/diagrams/containers-dark.svg">
+    <img alt="JIM Containers" src=".github/diagrams/containers-light.svg">
   </picture>
 </a>
 

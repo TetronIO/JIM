@@ -3,7 +3,7 @@
     RootModule = 'JIM.psm1'
 
     # Version number of this module.
-    ModuleVersion = '0.12.0'
+    ModuleVersion = '0.13.0'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Core', 'Desktop')
@@ -21,7 +21,7 @@
     Copyright = '(c) Tetron Limited. All rights reserved.'
 
     # Description of the functionality provided by this module
-    Description = 'PowerShell module for administering JIM (Junctional Identity Manager). Provides cmdlets for managing Connected Systems, Sync Rules, Run Profiles, Metaverse Objects, Activities, API Keys, Certificates, and more. Supports both interactive (SSO) and non-interactive (API Key) authentication.'
+    Description = 'PowerShell module for administering JIM (Junctional Identity Manager). Provides cmdlets for managing Connected Systems, Synchronisation Rules, Run Profiles, Metaverse Objects, Activities, API Keys, Certificates, and more. Supports both interactive (SSO) and non-interactive (API Key) authentication.'
 
     # Minimum version of the PowerShell engine required by this module
     PowerShellVersion = '7.0'
@@ -47,12 +47,15 @@
         'Set-JIMConnectedSystemPartition',
         'Set-JIMConnectedSystemContainer',
         'Get-JIMConnectedSystemObject',
+        'Get-JIMConnectedSystemObjectType',
+        'Get-JIMConnectedSystemObjectAttributeValue',
         'Get-JIMConnectedSystemObjectChangeHistory',
+        'Get-JIMConnectedSystemDeletionPreview',
         'Get-JIMConnectedSystemUnresolvedReferenceCount',
         'Get-JIMPendingExport',
         'Clear-JIMConnectedSystem',
 
-        # Sync Rules
+        # Synchronisation Rules
         'Get-JIMSyncRule',
         'New-JIMSyncRule',
         'Set-JIMSyncRule',
@@ -61,7 +64,7 @@
         # Configuration Change History
         'Get-JIMConfigurationChangeHistory',
 
-        # Sync Rule Mappings
+        # Synchronisation Rule Mappings
         'Get-JIMSyncRuleMapping',
         'New-JIMSyncRuleMapping',
         'Remove-JIMSyncRuleMapping',
@@ -71,6 +74,11 @@
         'New-JIMMatchingRule',
         'Set-JIMMatchingRule',
         'Remove-JIMMatchingRule',
+        'Get-JIMSyncRuleMatchingRule',
+        'New-JIMSyncRuleMatchingRule',
+        'Set-JIMSyncRuleMatchingRule',
+        'Remove-JIMSyncRuleMatchingRule',
+        'Switch-JIMMatchingMode',
 
         # Scoping Criteria
         'Get-JIMScopingCriteria',
@@ -122,6 +130,7 @@
         # Metaverse
         'Get-JIMMetaverseObject',
         'Get-JIMMetaverseObjectChangeHistory',
+        'Get-JIMPendingDeletion',
         'Search-JIMMetaverseObject',
         'Get-JIMMetaverseObjectType',
         'New-JIMMetaverseObjectType',

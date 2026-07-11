@@ -58,9 +58,9 @@ A Pending Export's journey typically spans three separate Run Profile executions
 ```mermaid
 flowchart LR
     subgraph "1. Sync (Full or Delta)"
-        SyncStart[MVO attribute changes<br/>during inbound flow] --> CheckRecall{Pure recall?<br/>All changes are<br/>attribute removals}
-        CheckRecall -->|Yes| SkipRecall[Skip export evaluation<br/>Prevents expression mapping<br/>errors against incomplete data<br/>No PE created]
-        CheckRecall -->|No| EvalExport[EvaluateExportRules:<br/>Find export Synchronisation Rules<br/>for MVO type]
+        SyncStart[MVO attribute changes<br/>during inbound flow<br/>incl. attribute recall +<br/>#91 next-contributor re-election] --> CheckDelete{MVO queued for<br/>immediate deletion?}
+        CheckDelete -->|Yes| SkipDelete[Skip export evaluation<br/>MVO about to be deleted;<br/>work would be discarded #390<br/>No PE created]
+        CheckDelete -->|No| EvalExport[EvaluateExportRules:<br/>Find export Synchronisation Rules<br/>for MVO type]
         EvalExport --> InScope{MVO in scope<br/>for export rule?}
         InScope -->|No| EvalDeprov[Evaluate deprovisioning:<br/>Create Delete PE if CSO exists]
         InScope -->|Yes| MapAttrs[Map MVO attributes<br/>to CSO attributes<br/>via export Synchronisation Rule mappings]
@@ -197,7 +197,7 @@ This prevents silent loss of drift corrections when merging with export evaluati
 
 - **Drift correction**<br /> When `EnforceState` is enabled on an export Synchronisation Rule and the CSO has values that don't match the MVO, a corrective PE is created to reassert the correct values. This detects and corrects unauthorised changes made directly in target systems.
 
-- **Pure recall skip**<br /> When all changed attributes on an MVO are removals (attribute recall due to CSO disconnection), export evaluation is skipped entirely. Expression-based mappings (e.g., DN templates) would evaluate against post-recall null attributes and produce invalid values. Target systems retain their existing attribute values until attribute priority (Issue #91) enables replacement value resolution.
+- **Attribute recall and re-election**<br /> When a Connected System Object disconnects (obsoleted, or fallen out of scope), JIM recalls the values that system contributed. If a lower-priority Synchronisation Rule still contributes, the next contributor is re-elected in the same sync run ([Attribute Priority](../../concepts/attribute-priority.md), #91) and export evaluation stages a change-of-value on the target; if no contributor survives, the attribute is cleared and export evaluation stages a null-clear. Export evaluation is no longer skipped for recall. Expression-based mappings (e.g. DN templates) are protected from evaluating against post-recall nulls by re-election supplying a replacement value, by grace-period freezing of identity-critical single-source attributes, and by the #390 skip of recall when the MVO is about to be deleted.
 
 - **Value-level drift merge**<br /> When merging drift corrections with export evaluation changes, the merge key is a composite of `AttributeId` + value identity (not just `AttributeId`). This prevents silent loss of multi-valued attribute drift corrections; e.g., 117 member removals would be dropped if merged by `AttributeId` alone.
 

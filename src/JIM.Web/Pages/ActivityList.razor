@@ -18,7 +18,7 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>@_pageTitle</PageTitle>
-<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@_pageTitle</MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@_pageTitle</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mt-2 mb-0">
@@ -89,7 +89,7 @@
                    MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetMultiSelectText))">
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystem">Connected System</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ConnectedSystemRunProfile">Connected System Run Profile</MudSelectItem>
-            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.SyncRule">Synchronisation Rule</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.SynchronisationRule">Synchronisation Rule</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.MetaverseObject">Metaverse Object</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.MetaverseAttribute">Metaverse Attribute</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ExampleDataTemplate">Example Data Template</MudSelectItem>
@@ -125,8 +125,11 @@
             <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.System">System</MudSelectItem>
         </MudSelect>
     </MudItem>
-    <MudItem Class="flex-grow-1">
-        @* No dense margin: matches the height of the neighbouring filter selects. *@
+    <MudItem Class="flex-grow-1" Style="max-width: 280px;">
+        @* No dense margin: matches the height of the neighbouring filter selects.
+           Max-width caps MudDateRangePicker's much wider default (~2x a select),
+           which otherwise starves the trailing checkbox and pause button of row
+           space and pushes them onto their own line. *@
         <MudDateRangePicker Label="Created between" Variant="Variant.Outlined"
                             DateRange="_filterDateRange" DateRangeChanged="OnDateRangeChanged"
                             Clearable="true" AutoClose="true" />

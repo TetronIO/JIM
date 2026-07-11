@@ -1,0 +1,75 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- A complete synchronisation cycle (Concepts > Sync Pipeline > Putting It -->
+<!-- Together): one identity travelling from HR to Active Directory. The -->
+<!-- numbered badges match the step list beneath the diagram. -->
+<!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
+<!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: keep this file free of blank lines AND of comments inside the -->
+<!-- <svg> element; it is inlined into markdown via pymdownx.snippets, and -->
+<!-- python-markdown ends the raw-HTML block at either. Structure is -->
+<!-- expressed with <g> groups instead. -->
+<svg class="jim-diagram" viewBox="0 0 1160 200" role="img" aria-labelledby="jimdg-sy-title jimdg-sy-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="jimdg-sy-title">A complete synchronisation cycle</title>
+  <desc id="jimdg-sy-desc">Four numbered steps carry an identity from the HR system to Active Directory. Step 1: import brings employee records into the HR connector space. Step 2: inbound synchronisation joins or projects them into the Metaverse. Step 3: outbound synchronisation stages changes in the Active Directory connector space. Step 4: export sends the pending changes to Active Directory.</desc>
+  <g id="jimdg-sy-cards">
+    <rect class="jimdg-system" x="10" y="60" width="180" height="80" rx="8"/>
+    <text class="jimdg-system-name" x="100" y="93">HR System</text>
+    <text class="jimdg-system-sub" x="100" y="116">authoritative source</text>
+    <rect class="jimdg-stage" x="250" y="60" width="180" height="80" rx="8"/>
+    <text class="jimdg-stage-label" x="340" y="93">Connector Space</text>
+    <text class="jimdg-system-sub" x="340" y="116">HR · CSOs</text>
+    <rect class="jimdg-core" x="490" y="60" width="180" height="80" rx="8"/>
+    <text class="jimdg-core-title" x="580" y="95">Metaverse</text>
+    <text class="jimdg-core-sub" x="580" y="118">MVOs</text>
+    <rect class="jimdg-stage" x="730" y="60" width="180" height="80" rx="8"/>
+    <text class="jimdg-stage-label" x="820" y="93">Connector Space</text>
+    <text class="jimdg-system-sub" x="820" y="116">AD · CSOs</text>
+    <rect class="jimdg-system" x="970" y="60" width="180" height="80" rx="8"/>
+    <text class="jimdg-system-name" x="1060" y="93">Active Directory</text>
+    <text class="jimdg-system-sub" x="1060" y="116">target accounts</text>
+  </g>
+  <g id="jimdg-sy-edges">
+    <line class="jimdg-spoke" x1="190" y1="100" x2="240" y2="100"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(250,100) rotate(0)"/>
+    <line class="jimdg-flow" x1="430" y1="100" x2="480" y2="100"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(490,100) rotate(0)"/>
+    <line class="jimdg-flow" x1="670" y1="100" x2="720" y2="100"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(730,100) rotate(0)"/>
+    <line class="jimdg-spoke" x1="910" y1="100" x2="960" y2="100"/>
+    <polygon class="jimdg-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(970,100) rotate(0)"/>
+  </g>
+  <g id="jimdg-sy-badges">
+    <circle class="jimdg-chip" cx="220" cy="30" r="14"/>
+    <text class="jimdg-chip-label" x="220" y="35">1</text>
+    <circle class="jimdg-chip" cx="460" cy="30" r="14"/>
+    <text class="jimdg-chip-label" x="460" y="35">2</text>
+    <circle class="jimdg-chip" cx="700" cy="30" r="14"/>
+    <text class="jimdg-chip-label" x="700" y="35">3</text>
+    <circle class="jimdg-chip" cx="940" cy="30" r="14"/>
+    <text class="jimdg-chip-label" x="940" y="35">4</text>
+    <text class="jimdg-spoke-label" x="220" y="169">import</text>
+    <text class="jimdg-flow-label jimdg-anchor-middle" x="460" y="169">inbound sync</text>
+    <text class="jimdg-flow-label jimdg-anchor-middle" x="700" y="169">outbound sync</text>
+    <text class="jimdg-spoke-label" x="940" y="169">export</text>
+  </g>
+  <g id="jimdg-sy-packets">
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="6s" begin="0s" repeatCount="indefinite" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;0;0.175;1" path="M190,100 L248,100"/>
+      <animate attributeName="opacity" values="0;1;1;0;0" keyTimes="0;0.01;0.165;0.175;1" dur="6s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="6s" begin="0s" repeatCount="indefinite" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;0.25;0.425;1" path="M430,100 L488,100"/>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.25;0.26;0.415;0.425;1" dur="6s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="6s" begin="0s" repeatCount="indefinite" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;0.5;0.675;1" path="M670,100 L728,100"/>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.5;0.51;0.665;0.675;1" dur="6s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="6s" begin="0s" repeatCount="indefinite" calcMode="linear" keyPoints="0;0;1;1" keyTimes="0;0.75;0.925;1" path="M910,100 L968,100"/>
+      <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.75;0.76;0.915;0.925;1" dur="6s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>

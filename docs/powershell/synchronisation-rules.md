@@ -632,25 +632,29 @@ Adds an individual scoping criterion to a group. Each criterion compares an attr
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -MetaverseAttributeId <int> -ComparisonType <string>
     [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-PassThru]
+    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
+    [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 
 # By metaverse attribute name
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -MetaverseAttributeName <string> -ComparisonType <string>
     [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-PassThru]
+    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
+    [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 
 # By Connected System attribute ID
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -ConnectedSystemAttributeId <int> -ComparisonType <string>
     [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-PassThru]
+    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
+    [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 
 # By Connected System attribute name
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -ConnectedSystemAttributeName <string> -ComparisonType <string>
     [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
-    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>] [-PassThru]
+    [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
+    [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -801,7 +805,7 @@ Remove-JIMScopingCriterion -SyncRuleId 5 -GroupId 2 -CriterionId 7
 Matching rules determine how JIM links Connected System Objects to Metaverse Objects during synchronisation. JIM supports two matching modes:
 
 - **Per-object-type (simple):** matching rules are defined at the Connected System level and apply to all Synchronisation Rules for a given object type. This is the default mode.
-- **Per-sync-rule (advanced):** each Synchronisation Rule has its own independent matching rules, allowing different Synchronisation Rules to use different join criteria.
+- **Per-Synchronisation-Rule (advanced):** each Synchronisation Rule has its own independent matching rules, allowing different Synchronisation Rules to use different join criteria.
 
 Use [Switch-JIMMatchingMode](#switch-jimmatchingmode) to change between modes. The current mode determines which set of cmdlets to use.
 
@@ -809,7 +813,7 @@ Use [Switch-JIMMatchingMode](#switch-jimmatchingmode) to change between modes. T
 
 ## Switch-JIMMatchingMode
 
-Switches a Connected System between per-object-type (simple) and per-sync-rule (advanced) matching modes. Existing matching rules are migrated automatically during the switch.
+Switches a Connected System between per-object-type (simple) and per-Synchronisation-Rule (advanced) matching modes. Existing matching rules are migrated automatically during the switch.
 
 ### Syntax
 
@@ -822,7 +826,7 @@ Switch-JIMMatchingMode -ConnectedSystemId <int> -Mode <string> [-PassThru]
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | Yes | | The ID of the Connected System. Accepts pipeline input. |
-| `Mode` | `string` | Yes | | Target matching mode. Valid values: `ConnectedSystem` (simple, per-object-type), `SyncRule` (advanced, per-sync-rule). |
+| `Mode` | `string` | Yes | | Target matching mode. Valid values: `ConnectedSystem` (simple, per-object-type), `SyncRule` (advanced, per-Synchronisation-Rule). |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Connected System Object |
 
 ### Output
@@ -839,7 +843,7 @@ With `-PassThru`, returns the Connected System Object reflecting the new mode. W
 
 ### Examples
 
-```powershell title="Switch to advanced per-sync-rule matching"
+```powershell title="Switch to advanced per-Synchronisation-Rule matching"
 Switch-JIMMatchingMode -ConnectedSystemId 1 -Mode SyncRule
 ```
 
@@ -1024,9 +1028,9 @@ Remove-JIMMatchingRule -ConnectedSystemId 1 -Id 5 -Force
 
 ---
 
-## Per-Sync-Rule Matching Rules
+## Per-Synchronisation-Rule Matching Rules
 
-These cmdlets manage matching rules in advanced (per-sync-rule) mode, where each Synchronisation Rule defines its own matching configuration independently.
+These cmdlets manage matching rules in advanced (per-Synchronisation-Rule) mode, where each Synchronisation Rule defines its own matching configuration independently.
 
 ### Get-JIMSyncRuleMatchingRule
 
@@ -1119,7 +1123,7 @@ New-JIMSyncRuleMatchingRule -SyncRuleId 5 `
 
 ### Set-JIMSyncRuleMatchingRule
 
-Modifies an existing per-sync-rule matching rule.
+Modifies an existing per-Synchronisation-Rule matching rule.
 
 #### Syntax
 
@@ -1159,7 +1163,7 @@ Set-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 3 `
 
 ### Remove-JIMSyncRuleMatchingRule
 
-Deletes a per-sync-rule matching rule.
+Deletes a per-Synchronisation-Rule matching rule.
 
 #### Syntax
 

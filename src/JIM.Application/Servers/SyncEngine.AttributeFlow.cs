@@ -53,7 +53,7 @@ public partial class SyncEngine
         var csoType = objectTypes.Single(t => t.Id == cso.TypeId);
         var mvo = cso.MetaverseObject;
 
-        // Provenance: stamp the winning sync rule alongside the contributing system on every value this mapping
+        // Provenance: stamp the winning Synchronisation Rule alongside the contributing system on every value this mapping
         // writes (#91), so the Metaverse Object value records which rule contributed it, not just which system.
         var contributingSyncRuleId = syncRuleMapping.SyncRuleId;
 

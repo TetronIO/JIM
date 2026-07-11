@@ -4,7 +4,6 @@ repo_url: https://github.com/TetronIO/JIM
 repo_name: TetronIO/JIM
 
 exclude_docs: |
-  diagrams/structurizr/node_modules/
   CLAUDE.md
 
 # Silence the INFO emitted for relative links MkDocs leaves as-is for the
@@ -120,6 +119,7 @@ nav:
       - SSO Setup: administration/sso-setup.md
       - Configuration Reference: administration/configuration.md
       - Upgrading: administration/upgrading.md
+      - Backup & Disaster Recovery: administration/backup-recovery.md
       - Troubleshooting: administration/troubleshooting.md
   - Connectors:
       - connectors/index.md

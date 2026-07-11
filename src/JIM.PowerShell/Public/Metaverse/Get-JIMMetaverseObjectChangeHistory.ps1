@@ -9,7 +9,7 @@ function Get-JIMMetaverseObjectChangeHistory {
     .DESCRIPTION
         Retrieves a paginated list of change records for the specified Metaverse Object,
         ordered by change time descending (most recent first). Each record carries the
-        initiator, sync rule, and run profile context, plus the per-attribute value changes.
+        initiator, Synchronisation Rule, and run profile context, plus the per-attribute value changes.
 
         By default, returns a single page of results. Use -All to automatically paginate
         through all change records and return every row.

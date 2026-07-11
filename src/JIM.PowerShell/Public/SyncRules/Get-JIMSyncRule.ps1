@@ -11,19 +11,19 @@ function Get-JIMSyncRule {
         a specific rule by ID, or filter by Connected System.
 
     .PARAMETER Id
-        The unique identifier of a specific Sync Rule to retrieve.
+        The unique identifier of a specific Synchronisation Rule to retrieve.
 
     .PARAMETER ConnectedSystemId
-        Filter Sync Rules by Connected System ID.
+        Filter Synchronisation Rules by Connected System ID.
 
     .PARAMETER ConnectedSystemName
-        Filter Sync Rules by Connected System name. Must be an exact match.
+        Filter Synchronisation Rules by Connected System name. Must be an exact match.
 
     .PARAMETER Name
-        Filter Sync Rules by name. Supports wildcards (e.g., "Inbound*").
+        Filter Synchronisation Rules by name. Supports wildcards (e.g., "Inbound*").
 
     .OUTPUTS
-        PSCustomObject representing Sync Rule(s).
+        PSCustomObject representing Synchronisation Rule(s).
 
     .EXAMPLE
         Get-JIMSyncRule
@@ -33,27 +33,27 @@ function Get-JIMSyncRule {
     .EXAMPLE
         Get-JIMSyncRule -Id 1
 
-        Gets the Sync Rule with ID 1.
+        Gets the Synchronisation Rule with ID 1.
 
     .EXAMPLE
         Get-JIMSyncRule -ConnectedSystemId 1
 
-        Gets all Sync Rules for Connected System ID 1.
+        Gets all Synchronisation Rules for Connected System ID 1.
 
     .EXAMPLE
         Get-JIMSyncRule -ConnectedSystemName 'Contoso AD'
 
-        Gets all Sync Rules for the Connected System named 'Contoso AD'.
+        Gets all Synchronisation Rules for the Connected System named 'Contoso AD'.
 
     .EXAMPLE
         Get-JIMSyncRule -Name "Inbound*"
 
-        Gets all Sync Rules with names starting with "Inbound".
+        Gets all Synchronisation Rules with names starting with "Inbound".
 
     .EXAMPLE
         Get-JIMConnectedSystem -Name "HR*" | Get-JIMSyncRule
 
-        Gets all Sync Rules for Connected Systems with names starting with "HR".
+        Gets all Synchronisation Rules for Connected Systems with names starting with "HR".
 
     .LINK
         New-JIMSyncRule
@@ -95,13 +95,13 @@ function Get-JIMSyncRule {
 
         switch ($PSCmdlet.ParameterSetName) {
             'ById' {
-                Write-Verbose "Getting Sync Rule with ID: $Id"
+                Write-Verbose "Getting Synchronisation Rule with ID: $Id"
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$Id"
                 $result
             }
 
             default {
-                Write-Verbose "Getting all Sync Rules"
+                Write-Verbose "Getting all Synchronisation Rules"
                 $response = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules"
 
                 # Handle paginated response - check if 'items' property exists (not if it's truthy)

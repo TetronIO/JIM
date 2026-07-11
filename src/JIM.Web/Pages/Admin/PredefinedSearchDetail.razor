@@ -15,7 +15,7 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Predefined Search: @_predefinedSearch?.Name</PageTitle>
-<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.SavedSearch" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Predefined Search:</span> <span class="mud-primary-text">@_predefinedSearch?.Name</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.SavedSearch" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Predefined Search:</span> <span class="mud-primary-text">@_predefinedSearch?.Name</span></MudText>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_predefinedSearch != null)
@@ -30,8 +30,7 @@
     // below) because nullable-flow narrowing on a field does not survive an intervening method call.
     var predefinedSearchBuiltIn = _predefinedSearch.BuiltIn;
 
-    <div class="mt-6">
-    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pa-0 mt-6">
+    <NavigableMudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" Class="mt-2" TabPanelsClass="pt-5">
 
         <MudTabPanel Text="Details">
     <MudPaper Class="pa-4" Outlined="true">
@@ -130,7 +129,6 @@
         </MudTabPanel>
 
     </NavigableMudTabs>
-    </div>
 
     @* ─── Add Criteria Group dialog ─── *@
     <MudDialog @bind-Visible="_addGroupDialogVisible" Options="_dialogOptions">

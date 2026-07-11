@@ -22,7 +22,7 @@ public class ActivityConfigurationTargetTests
         foreach (var (targetType, getter) in new (ActivityTargetType TargetType, Func<Activity, int?> Getter)[]
         {
             (ActivityTargetType.ConnectedSystem, a => a.ConnectedSystemId),
-            (ActivityTargetType.SyncRule, a => a.SyncRuleId),
+            (ActivityTargetType.SynchronisationRule, a => a.SyncRuleId),
             (ActivityTargetType.MetaverseAttribute, a => a.MetaverseAttributeId),
             (ActivityTargetType.MetaverseObjectType, a => a.MetaverseObjectTypeId),
             (ActivityTargetType.PredefinedSearch, a => a.PredefinedSearchId),
@@ -96,7 +96,7 @@ public class ActivityConfigurationTargetTests
         {
             Assert.That(() => activity.SetConfigurationTargetId(ActivityTargetType.Schedule, 42),
                 Throws.TypeOf<ArgumentOutOfRangeException>(), "Schedule is Guid-keyed, not integer-keyed");
-            Assert.That(() => activity.SetConfigurationTargetId(ActivityTargetType.SyncRule, Guid.NewGuid()),
+            Assert.That(() => activity.SetConfigurationTargetId(ActivityTargetType.SynchronisationRule, Guid.NewGuid()),
                 Throws.TypeOf<ArgumentOutOfRangeException>(), "SyncRule is integer-keyed, not Guid-keyed");
             Assert.That(() => activity.SetConfigurationTargetId(ActivityTargetType.ConnectedSystem, "key"),
                 Throws.TypeOf<ArgumentOutOfRangeException>(), "ConnectedSystem is integer-keyed, not string-keyed");

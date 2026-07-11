@@ -164,8 +164,8 @@
     ./Run-IntegrationTests.ps1 -PreRelease
 
     Runs the full pre-release regression: every implemented scenario against both
-    directory types, with Samba AD at the MediumLarge template and OpenLDAP at Scale100k50Groups.
-    Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD MediumLarge -TemplateOpenLDAP Scale100k50Groups.
+    directory types, with Samba AD at the Medium template and OpenLDAP at Large.
+    Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Large.
 #>
 
 param(
@@ -314,14 +314,10 @@ function Test-LongTailTemplateCompatibility {
 Test-LongTailTemplateCompatibility -Template $Template -DirectoryType $DirectoryType `
     -TemplateSambaAD $TemplateSambaAD -TemplateOpenLDAP $TemplateOpenLDAP
 
-# Hard-fail: Scenario 14 (Attribute Priority) depends on two LDAP suffixes hosted on a single
-# OpenLDAP container (docker/openldap/scripts/01-add-second-suffix.sh); Samba AD has no
-# equivalent multi-suffix mechanism. Reject early rather than failing deep into setup.
-# -DirectoryType All is exempt: its handler below runs the OpenLDAP leg and skips the
-# Samba AD leg for this scenario, and the -Scenario All loop likewise skips it on Samba AD.
-if ($Scenario -like "*Scenario14*" -and $DirectoryType -eq "SambaAD") {
-    throw "Scenario 14 (Attribute Priority) requires two LDAP suffixes on a single OpenLDAP container and is OpenLDAP only. Rejected -DirectoryType $DirectoryType. Use -DirectoryType OpenLDAP."
-}
+# NOTE: Scenario 14 (Attribute Priority) is OpenLDAP only (two-suffix topology). Its
+# directory-type handling runs *after* scenario/directory resolution (see "Scenario 14
+# directory coercion" below), not here, because when the scenario is chosen from the
+# interactive menu $Scenario is still empty at this point.
 
 # Resolve directory configuration (used throughout for Docker profiles, population, setup)
 # Skip for "All" — the DirectoryType All handler orchestrates multiple runs with specific types.
@@ -343,7 +339,11 @@ function Invoke-ImagePrunePreservingSnapshots {
         $ids = docker images --filter "label=$label" -q 2>$null
         if ($ids) { $preserveIds += $ids }
     }
-    $preserveIds = $preserveIds | Sort-Object -Unique | Where-Object { $_ -ne "" }
+    # Wrap with @(...) so that when zero images carry a preserve label the pipeline yields an empty
+    # array rather than $null; under Set-StrictMode -Version Latest, $null.Count throws
+    # "The property 'Count' cannot be found on this object" and aborts Step 7 cleanup on an otherwise
+    # green run (same idiom used elsewhere in this file for StrictMode-safe .Count access).
+    $preserveIds = @($preserveIds | Sort-Object -Unique | Where-Object { $_ -ne "" })
 
     if ($preserveIds.Count -eq 0) {
         $result = docker image prune -af 2>&1
@@ -539,7 +539,7 @@ function Show-ScenarioMenu {
         }
         @{
             Name = "Pre-Release"
-            Description = "Runs every implemented scenario sequentially for both Samba AD and OpenLDAP at MediumLarge and Scale100k50Groups templates, respectively"
+            Description = "Runs every implemented scenario sequentially for both Samba AD and OpenLDAP at Medium and Large templates, respectively"
             Disabled = $false
             SeparatorAfter = $true
         }
@@ -1219,12 +1219,12 @@ function Test-TemplateRelevant {
     return $true
 }
 
-# -PreRelease is shorthand for: -Scenario All -DirectoryType All -TemplateSambaAD MediumLarge -TemplateOpenLDAP Scale100k50Groups
+# -PreRelease is shorthand for: -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Large
 if ($PreRelease) {
     $Scenario               = "All"
     $DirectoryType          = "All"
-    $TemplateSambaAD        = "MediumLarge"
-    $TemplateOpenLDAP       = "Scale100k50Groups"
+    $TemplateSambaAD        = "Medium"
+    $TemplateOpenLDAP       = "Large"
     $DirectoryTypeWasExplicitlySet = $true
     $TemplateWasExplicitlySet      = $true
 }
@@ -1234,13 +1234,13 @@ if (-not $Scenario) {
     $Scenario = Show-ScenarioMenu
 
     # "Pre-Release" is a special menu entry that expands to all-scenarios, both directory
-    # types, with Samba AD at MediumLarge and OpenLDAP at Scale100k50Groups. It bypasses the Template
+    # types, with Samba AD at Medium and OpenLDAP at Large. It bypasses the Template
     # and DirectoryType sub-menus since those are fixed by the Pre-Release preset.
     if ($Scenario -eq "Pre-Release") {
         $Scenario                      = "All"
         $DirectoryType                 = "All"
-        $TemplateSambaAD               = "MediumLarge"
-        $TemplateOpenLDAP              = "Scale100k50Groups"
+        $TemplateSambaAD               = "Medium"
+        $TemplateOpenLDAP              = "Large"
         $DirectoryTypeWasExplicitlySet = $true
         $TemplateWasExplicitlySet      = $true
     }
@@ -1255,9 +1255,15 @@ if (-not $Scenario) {
         }
     }
 
-    # Show directory type menu only if not explicitly provided
+    # Show directory type menu only if not explicitly provided. Scenario 14 is OpenLDAP
+    # only (two-suffix topology), so don't offer a choice; go straight to OpenLDAP.
     if (-not $DirectoryTypeWasExplicitlySet) {
-        $DirectoryType = Show-DirectoryTypeMenu
+        if ($Scenario -like "*Scenario14*") {
+            $DirectoryType = "OpenLDAP"
+        }
+        else {
+            $DirectoryType = Show-DirectoryTypeMenu
+        }
         # Re-resolve directory config with the selected type (skip for "All" — handled below)
         if ($DirectoryType -ne "All") {
             $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType
@@ -1284,6 +1290,25 @@ if (-not $Scenario) {
             'Default'    { } # neither switch set
         }
     }
+}
+
+# ---------------------------------------------------------------------------
+# Scenario 14 directory coercion (Attribute Priority is OpenLDAP only)
+# ---------------------------------------------------------------------------
+# Scenario 14 depends on two LDAP suffixes hosted on a single OpenLDAP container
+# (docker/openldap/scripts/01-add-second-suffix.sh); Samba AD has no equivalent
+# multi-suffix mechanism. This runs after scenario/directory resolution (whether the
+# values came from parameters or the interactive menu) and before the build, so the
+# constraint is enforced whichever way they were chosen. If -DirectoryType SambaAD was
+# explicitly passed, respect the explicit intent and reject; otherwise coerce to
+# OpenLDAP. -DirectoryType All is handled by its own block below.
+if ($Scenario -like "*Scenario14*" -and $DirectoryType -eq "SambaAD") {
+    if ($DirectoryTypeWasExplicitlySet) {
+        throw "Scenario 14 (Attribute Priority) requires two LDAP suffixes on a single OpenLDAP container and is OpenLDAP only. Rejected -DirectoryType SambaAD. Use -DirectoryType OpenLDAP."
+    }
+    Write-Host "${YELLOW}Scenario 14 (Attribute Priority) is OpenLDAP only; using -DirectoryType OpenLDAP.${NC}"
+    $DirectoryType = "OpenLDAP"
+    $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType "OpenLDAP"
 }
 
 # ---------------------------------------------------------------------------
@@ -1496,6 +1521,42 @@ function Reset-JIMForNextScenario {
         foreach ($ou in @("OU=TestUsers,DC=gentian,DC=local", "OU=CorpManaged,DC=gentian,DC=local")) {
             docker exec samba-ad-target samba-tool ou delete $ou --force-subtree-delete 2>&1 | Out-Null
         }
+    }
+
+    # 3b. Clean OpenLDAP test data (yellowstone.local / glitterband.local), used by the OpenLDAP directory type.
+    # Unlike the JIM database (volume removed above) and Samba AD (OUs deleted above), the OpenLDAP directory has
+    # no other cross-scenario reset: it is a long-lived container whose data volume persists between scenarios.
+    # Without this, each OpenLDAP scenario imports the accumulated objects of every earlier OpenLDAP scenario;
+    # that is why the "six-user" Scenario14-AttributePriority actually synchronised ~50,000 stale objects and hit
+    # the Metaverse Object update concurrency failure. Delete the People/Groups subtrees (all users and groups) and
+    # recreate the empty base OUs the next scenario's populate expects, symmetric with the Samba AD OU cleanup above.
+    $openLdapRunning = docker ps --filter "name=openldap-primary" --format '{{.Names}}' 2>$null
+    if ($openLdapRunning) {
+        Write-Host "${GRAY}  Cleaning OpenLDAP test data...${NC}"
+        $openLdapPurge = @'
+uri="ldap://localhost:1389"
+pw="Test@123!"
+for suffix in dc=yellowstone,dc=local dc=glitterband,dc=local; do
+  admin="cn=admin,$suffix"
+  ldapdelete -r -x -H "$uri" -D "$admin" -w "$pw" "ou=People,$suffix" "ou=Groups,$suffix" >/dev/null 2>&1 || true
+  ldapadd -x -H "$uri" -D "$admin" -w "$pw" >/dev/null 2>&1 <<LDIF || true
+dn: ou=People,$suffix
+objectClass: organizationalUnit
+ou: People
+
+dn: ou=Groups,$suffix
+objectClass: organizationalUnit
+ou: Groups
+LDIF
+done
+'@
+        # This .ps1 uses CRLF line endings, so the here-string above carries a trailing CR on
+        # every line. Passed to bash, each CR becomes part of the command: the LDAP URI parses
+        # as "ldap://localhost:1389\r" (rejected), and the heredoc terminator "LDIF\r" never
+        # matches "LDIF". Every ldapdelete/ldapadd then fails, '|| true' and Out-Null swallow the
+        # errors, and the purge silently no-ops, letting OpenLDAP pollution accumulate across
+        # scenarios. Strip CR so bash receives clean LF-terminated lines.
+        docker exec openldap-primary bash -c ($openLdapPurge -replace "`r", "") 2>&1 | Out-Null
     }
 
     # 4. Generate new API key and update .env

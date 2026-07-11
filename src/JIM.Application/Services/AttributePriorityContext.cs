@@ -21,7 +21,7 @@ public sealed class AttributePriorityContext
     // (object type, attribute) -> contributing mappings, ordered canonically (priority asc, then mapping id).
     private readonly Dictionary<(int ObjectTypeId, int AttributeId), List<SyncRuleMapping>> _contributorsByAttribute = new();
 
-    // (object type, attribute, sync rule) -> the contributing mapping, for O(1) incumbent lookup.
+    // (object type, attribute, Synchronisation Rule) -> the contributing mapping, for O(1) incumbent lookup.
     private readonly Dictionary<(int ObjectTypeId, int AttributeId, int SyncRuleId), SyncRuleMapping> _contributorBySyncRule = new();
 
     /// <summary>
@@ -36,7 +36,7 @@ public sealed class AttributePriorityContext
 
     /// <summary>
     /// Builds the contributor cache from all Synchronisation Rules across every Connected System. Only enabled
-    /// import rules with a target Metaverse Attribute and a persisted sync rule id contribute.
+    /// import rules with a target Metaverse Attribute and a persisted Synchronisation Rule id contribute.
     /// </summary>
     /// <param name="allSyncRules">Every Synchronisation Rule across all Connected Systems.</param>
     /// <param name="honourNullAssertions">See <see cref="HonourNullAssertions"/>. Defaults to true for the resolution
@@ -84,7 +84,7 @@ public sealed class AttributePriorityContext
         _contributorsByAttribute.TryGetValue((objectTypeId, attributeId), out var list) ? list.Count : 0;
 
     /// <summary>
-    /// The contributing mapping for a given sync rule, or null if that rule no longer contributes to the attribute.
+    /// The contributing mapping for a given Synchronisation Rule, or null if that rule no longer contributes to the attribute.
     /// </summary>
     public SyncRuleMapping? GetContributor(int objectTypeId, int attributeId, int syncRuleId) =>
         _contributorBySyncRule.TryGetValue((objectTypeId, attributeId, syncRuleId), out var mapping) ? mapping : null;

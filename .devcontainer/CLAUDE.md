@@ -50,9 +50,6 @@
 - `jim-docs` - Preview docs site at http://localhost:8000 (live-reloading)
 - `jim-docs-build` - Build static docs site to site/
 
-**Diagrams:**
-- `jim-diagrams` - Export Structurizr C4 diagrams as SVG (requires Docker)
-
 **Planning:**
 - `jim-prd` - Create a new PRD from template (prompts for feature name)
 

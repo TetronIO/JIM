@@ -8,7 +8,7 @@ function Reset-JIMSystem {
 
     .DESCRIPTION
         Performs a factory reset against the connected JIM instance, removing all
-        configured Connected Systems, Sync Rules, Schedules, Activities,
+        configured Connected Systems, Synchronisation Rules, Schedules, Activities,
         Pending Exports, Metaverse Objects, custom Metaverse Object Types, custom
         Metaverse Attributes, custom Roles, custom Connector Definitions, custom
         Predefined Searches, custom Example Data Sets, non-infrastructure API Keys,
