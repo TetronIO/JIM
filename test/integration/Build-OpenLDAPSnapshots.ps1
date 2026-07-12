@@ -227,6 +227,13 @@ function Build-OpenLDAPSnapshot {
     Write-Host "  Backing up volume data for commit..." -ForegroundColor Gray
     docker exec $ContainerName bash -c "cp -a /bitnami/openldap /bitnami/openldap.provisioned" 2>&1 | Out-Null
 
+    # Drop the accesslog MDB from the provisioned copy. start-openldap.sh deletes it
+    # on every boot anyway (stale accesslog data is never reusable across slapd
+    # lifetimes), and at scale it is huge: population writes alone grow it to ~8GB
+    # at Scale200k10kGroups, which would otherwise be baked into the image and
+    # copied back out on every container start for no benefit.
+    docker exec $ContainerName bash -c "rm -f /bitnami/openldap.provisioned/data/accesslog/*.mdb" 2>&1 | Out-Null
+
     # Copy the start-openldap.sh script into the container
     $startScript = docker exec $ContainerName test -f /start-openldap.sh 2>&1
     if ($LASTEXITCODE -ne 0) {
@@ -328,6 +335,11 @@ $openLDAPEnv = @{
     LDAP_ENABLE_TLS             = "no"
     LDAP_SKIP_DEFAULT_TREE      = "no"
     LDAP_ENABLE_ACCESSLOG       = "yes"
+    # Snapshot population is bulk test-data loading, never customer-representative, so
+    # always build with relaxed (nosync) MDB durability for speed. The snapshot itself is
+    # mode-agnostic: start-openldap.sh reconciles the nosync flags on every container
+    # start from LDAP_TEST_FAST_WRITES (see the runner's -DurableDirectoryWrites switch).
+    LDAP_TEST_FAST_WRITES       = "yes"
 }
 
 foreach ($scen in $scenariosToProcess) {

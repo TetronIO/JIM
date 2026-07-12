@@ -1166,9 +1166,10 @@ public static class TestUtilities
         List<MetaverseObject>? mvos = null,
         List<PendingExport>? pendingExports = null,
         Activity? activity = null,
-        List<SyncRule>? syncRules = null)
+        List<SyncRule>? syncRules = null,
+        SyncRepository? repository = null)
     {
-        var syncRepo = new SyncRepository();
+        var syncRepo = repository ?? new SyncRepository();
         syncRepo.SetSyncOutcomeTrackingLevel(
             ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
 

@@ -71,7 +71,7 @@ else
                                             </MudTooltip>
                                         </span>
                                     }
-                                    <MudTooltip Text="@changeGroup.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")"
+                                    <MudTooltip Text="@changeGroup.ChangeTime.ToLocalTime().ToFriendlyDate()"
                                                 Placement="Placement.Top" Arrow="true">
                                         <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="margin-right: 12px;">
                                             @GetRelativeTime(changeGroup.ChangeTime)</MudText>
@@ -182,7 +182,7 @@ else
                                         }
                                     </MudText>
                                         <MudText Class="mud-text-secondary">
-                                            @_selectedChange?.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")
+                                            @_selectedChange?.ChangeTime.ToLocalTime().ToFriendlyDate()
                                         </MudText>
                                     </div>
                                 </MudStack>

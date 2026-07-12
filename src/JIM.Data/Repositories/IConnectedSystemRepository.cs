@@ -160,12 +160,15 @@ public interface IConnectedSystemRepository
     /// <summary>
     /// Retrieves a single batch of Pending Exports that are ready for execution, using AsNoTracking
     /// for minimal memory overhead. Uses the same database-level filtering as <see cref="GetExecutableExportsAsync"/>.
+    /// Pages via keyset pagination ordered by (CreatedAt, Id) so batch collection stays a single
+    /// forward sweep at scale (issue #985).
     /// </summary>
     /// <param name="connectedSystemId">The Connected System to load exports for.</param>
-    /// <param name="skip">Number of rows to skip (for paging).</param>
     /// <param name="take">Maximum number of rows to return.</param>
+    /// <param name="afterCreatedAt">CreatedAt of the last row of the previous batch, or null to start from the beginning.</param>
+    /// <param name="afterId">Id of the last row of the previous batch, or null to start from the beginning.</param>
     /// <returns>Untracked Pending Exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
-    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take);
+    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId);
 
     /// <summary>
     /// Gets lightweight summaries of executable exports for pre-export reconciliation.

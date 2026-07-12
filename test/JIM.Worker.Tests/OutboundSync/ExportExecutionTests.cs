@@ -1884,4 +1884,165 @@ public class ExportExecutionTests
     }
 
     #endregion
+
+    #region batch scan efficiency (issue #985)
+
+    /// <summary>
+    /// Spy repository that counts how many times the export batch-collection loop hits the
+    /// database. Deferred (reference-bearing) exports stay Pending in the database for the
+    /// whole collection loop, so a scan that restarts from the beginning for every batch
+    /// degrades to O(n²) page loads at scale (issue #985).
+    /// </summary>
+    private sealed class BatchLoadCountingSyncRepository : SyncRepository
+    {
+        public int BatchLoadCalls;
+
+        public override Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
+        {
+            Interlocked.Increment(ref BatchLoadCalls);
+            return base.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId);
+        }
+    }
+
+    private static Mock<IConnector> CreateSucceedingCallsConnector()
+    {
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+                exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+        return mockConnector;
+    }
+
+    private PendingExport CreateSeededCreateExport(ConnectedSystem targetSystem, ConnectedSystemObjectType type,
+        DateTime createdAt, bool hasUnresolvedReferences)
+    {
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = type,
+            TypeId = type.Id
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Create,
+            CreatedAt = createdAt,
+            HasUnresolvedReferences = hasUnresolvedReferences,
+            MaxRetries = 3,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        };
+        PendingExportsData.Add(pendingExport);
+        return pendingExport;
+    }
+
+    /// <summary>
+    /// Issue #985: with N deferred (reference-bearing) exports and batch size B, batch
+    /// collection must be a single forward sweep over the query (ceil(N/B) pages plus one
+    /// exhaustion probe), not a restart-from-zero rescan per batch, which costs O((N/B)²)
+    /// page loads and starved the connector for hours at 200K scale.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeferredExports_BatchCollectionIsSinglePassAsync()
+    {
+        // Arrange: a fresh application wired to a counting repository.
+        var countingRepo = new BatchLoadCountingSyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: countingRepo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        const int exportCount = 250;
+        const int batchSize = 100;
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+        for (var i = 0; i < exportCount; i++)
+        {
+            var pe = CreateSeededCreateExport(targetSystem, targetUserType,
+                baseTime.AddMilliseconds(i), hasUnresolvedReferences: true);
+            countingRepo.SeedPendingExport(pe);
+        }
+
+        var mockConnector = CreateSucceedingCallsConnector();
+        var options = new ExportExecutionOptions { BatchSize = batchSize };
+
+        // Act
+        var result = await jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None);
+
+        // Assert: every export was collected...
+        Assert.That(result.ProcessedPendingExportIds, Has.Count.EqualTo(exportCount));
+
+        // ...in a single forward sweep: 3 pages of 100 + 1 exhaustion probe.
+        const int maxExpectedBatchLoads = exportCount / batchSize + 2;
+        Assert.That(countingRepo.BatchLoadCalls, Is.LessThanOrEqualTo(maxExpectedBatchLoads),
+            $"Batch collection re-scanned the Pending Export query: {countingRepo.BatchLoadCalls} page loads " +
+            $"for {exportCount} deferred exports at batch size {batchSize} (expected <= {maxExpectedBatchLoads}). " +
+            "See issue #985.");
+    }
+
+    /// <summary>
+    /// Guard for keyset tie-handling (issue #985): exports sharing a single CreatedAt instant
+    /// must all be collected exactly once when paging splits the tie across batches.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_IdenticalCreatedAt_AllExportedExactlyOnceAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var sharedCreatedAt = DateTime.UtcNow.AddMinutes(-5);
+        var seededIds = new List<Guid>();
+        for (var i = 0; i < 5; i++)
+        {
+            var pe = CreateSeededCreateExport(targetSystem, targetUserType, sharedCreatedAt,
+                hasUnresolvedReferences: false);
+            SyncRepo.SeedPendingExport(pe);
+            seededIds.Add(pe.Id);
+        }
+
+        var exportedIds = new List<Guid>();
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+            {
+                lock (exportedIds)
+                {
+                    exportedIds.AddRange(exports.Select(pe => pe.Id));
+                }
+                return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+            });
+
+        var options = new ExportExecutionOptions { BatchSize = 2 };
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None);
+
+        // Assert: all five exported, no duplicates, no skips.
+        Assert.That(result.SuccessCount, Is.EqualTo(5));
+        Assert.That(exportedIds, Is.EquivalentTo(seededIds));
+    }
+
+    #endregion
 }

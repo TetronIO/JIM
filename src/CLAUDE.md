@@ -94,6 +94,7 @@ Every new source file MUST include a copyright header as the very first content.
 - For file-open code paths (`FileStream`, `Directory.CreateDirectory`, `Path.*`), the expected set is `UnauthorizedAccessException`, `IOException`, `ArgumentException`, `NotSupportedException`, `System.Security.SecurityException`.
 - When several catches share identical fallback behaviour, extract a small private helper (e.g. `FailOpen(path, ex)`) and call it from each typed catch - keeps the catches specific without duplicating the handler body.
 - For JS interop retry patterns in `OnAfterRenderAsync` (e.g. loading user preferences), catch `InvalidOperationException` specifically; this is the exception Blazor throws when JS interop is invoked before the runtime is ready
+- For JS interop in code paths that can run during component or circuit teardown (`OnAfterRenderAsync`, `Dispose`/`DisposeAsync`, timer and polling callbacks), also catch `JSDisconnectedException`; this is the disposal-side sibling, thrown when the client has already disconnected. Note that `NavigationManager.NavigateTo` performs its JS interop in a fire-and-forget continuation, so a local try/catch cannot observe the failure; teardown-reachable code must not call `NavigateTo` at all (see `NavigableMudTabs` for the guard pattern)
 
 **Logging Security (CWE-117 - log injection):**
 - ALWAYS wrap user-controlled `string?` values with `LogSanitiser.Sanitise()` (from `JIM.Utilities`) before passing them as arguments to any `ILogger` or Serilog log call
