@@ -715,10 +715,14 @@ public interface ISyncRepository
     Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId);
 
     /// <summary>
-    /// Gets a batch of executable exports using paged loading.
-    /// Uses AsNoTracking in production for minimal EF overhead.
+    /// Gets a batch of executable exports using keyset pagination ordered by (CreatedAt, Id).
+    /// Pass the CreatedAt and Id of the last row of the previous batch to fetch the next one;
+    /// pass null for both to start from the beginning. Keyset (rather than offset) paging keeps
+    /// batch collection a single forward sweep even as executed rows drop out of the query and
+    /// deferred rows remain in it (issue #985). Uses AsNoTracking in production for minimal EF
+    /// overhead.
     /// </summary>
-    Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take);
+    Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId);
 
     /// <summary>
     /// Gets lightweight summaries of executable exports for pre-export reconciliation.

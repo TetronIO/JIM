@@ -1621,10 +1621,24 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
+    public virtual Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
     {
-        var result = GetExecutableExportsForSystem(connectedSystemId)
-            .Skip(skip)
+        // Keyset pagination on (CreatedAt, Id), mirroring the Postgres implementation.
+        // Guid ordering only needs to be self-consistent within this store; .NET's
+        // Guid comparison is used for both the predicate and the ordering.
+        var query = GetExecutableExportsForSystem(connectedSystemId);
+
+        if (afterCreatedAt.HasValue && afterId.HasValue)
+        {
+            var cursorCreatedAt = afterCreatedAt.Value;
+            var cursorId = afterId.Value;
+            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
+                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
+        }
+
+        var result = query
+            .OrderBy(pe => pe.CreatedAt)
+            .ThenBy(pe => pe.Id)
             .Take(take)
             .ToList();
         return Task.FromResult(result);

@@ -2858,9 +2858,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await ExecutableExportsQuery(connectedSystemId).CountAsync();
     }
 
-    public async Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
+    public async Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
     {
-        return await ExecutableExportsQuery(connectedSystemId)
+        var query = ExecutableExportsQuery(connectedSystemId);
+
+        // Keyset pagination on (CreatedAt, Id): strictly after the last row of the previous
+        // batch. Unlike OFFSET paging, the cursor stays valid as executed rows drop out of
+        // the query mid-run, so the export loop can make a single forward sweep instead of
+        // rescanning from the start for every batch (issue #985). Backed by
+        // IX_PendingExports_ConnectedSystemId_CreatedAt_Id. Guid ordering only needs to be
+        // self-consistent between this predicate and the ORDER BY below; both use the
+        // store's uuid ordering.
+        if (afterCreatedAt.HasValue && afterId.HasValue)
+        {
+            var cursorCreatedAt = afterCreatedAt.Value;
+            var cursorId = afterId.Value;
+            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
+                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
+        }
+
+        return await query
             .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
@@ -2876,7 +2893,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(cso => cso!.AttributeValues)
                     .ThenInclude(av => av.Attribute)
             .OrderBy(pe => pe.CreatedAt)
-            .Skip(skip)
+            .ThenBy(pe => pe.Id)
             .Take(take)
             .ToListAsync();
     }

@@ -377,35 +377,41 @@ public class ExportExecutionServer
             try
             {
                 // Load and process exports in batches to avoid loading all 100K+ entities at once.
-                // After processing, Update exports drop from the query (attribute changes
-                // transition to ExportedPendingConfirmation). Create exports may re-enter with
-                // Status=Exported. We track processed IDs and scan forward through query results
-                // to find unprocessed exports in each iteration.
+                // Batch collection is a single forward sweep using keyset pagination on
+                // (CreatedAt, Id). Executed exports drop out of the query mid-run (Update
+                // attribute changes transition to ExportedPendingConfirmation; Create/Delete
+                // move to Status=Exported, which the query excludes), and deferred
+                // reference-bearing exports stay Pending in the database while being
+                // collected in memory; a strictly-increasing cursor is immune to both, so
+                // nothing is ever re-read. The previous OFFSET implementation restarted its
+                // scan from zero for every batch and degraded to O(n²) page loads once
+                // thousands of deferred exports accumulated (issue #985).
+                //
+                // Known trade-off: an export whose NextRetryAt backoff elapses mid-run at a
+                // position already behind the cursor is not picked up until the next export
+                // run. The OFFSET implementation only ever caught those incidentally.
                 var deferredExports = new List<PendingExport>();
                 var processedCount = 0;
                 var processedIds = new HashSet<Guid>();
+                DateTime? cursorCreatedAt = null;
+                Guid? cursorId = null;
                 var exportPhaseStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                 while (true)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    // Scan forward through query results to find unprocessed exports.
-                    // Most processed exports drop from the query (Update type), so skip=0
-                    // typically returns fresh exports. For Create exports that re-enter,
-                    // we page forward until we find unprocessed ones or exhaust the query.
                     List<PendingExport> batch;
-                    var scanSkip = 0;
 
                     while (true)
                     {
                         List<PendingExport> rawBatch;
                         using (Diagnostics.Diagnostics.Database.StartSpan("LoadExportBatch")
-                            .SetTag("skip", scanSkip)
+                            .SetTag("afterCreatedAt", cursorCreatedAt?.ToString("O") ?? "start")
                             .SetTag("take", options.BatchSize))
                         {
-                            rawBatch = await SyncRepo
-                                .GetExecutableExportBatchAsync(connectedSystem.Id, scanSkip, options.BatchSize);
+                            rawBatch = await SyncRepo.GetExecutableExportBatchAsync(
+                                connectedSystem.Id, options.BatchSize, cursorCreatedAt, cursorId);
                         }
 
                         if (rawBatch.Count == 0)
@@ -414,7 +420,14 @@ public class ExportExecutionServer
                             break;
                         }
 
-                        // Filter out already-processed exports
+                        // Advance the cursor past everything just read, whether or not it
+                        // survives the processed filter below.
+                        var lastRow = rawBatch[^1];
+                        cursorCreatedAt = lastRow.CreatedAt;
+                        cursorId = lastRow.Id;
+
+                        // Safety net: a monotonic cursor never re-reads rows, but keep the
+                        // in-memory filter as a guard against duplicates.
                         batch = processedIds.Count > 0
                             ? rawBatch.Where(pe => !processedIds.Contains(pe.Id)).ToList()
                             : rawBatch;
@@ -422,8 +435,8 @@ public class ExportExecutionServer
                         if (batch.Count > 0)
                             break;
 
-                        // All exports in this page were already processed; scan forward
-                        scanSkip += rawBatch.Count;
+                        // Entire page was already processed (unexpected under keyset paging);
+                        // keep sweeping forward.
                     }
 
                     if (batch.Count == 0)
