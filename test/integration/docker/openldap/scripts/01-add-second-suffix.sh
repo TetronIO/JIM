@@ -215,6 +215,33 @@ ALMODIFY
     echo "[openldap-init] Accesslog database configured (mapsize=128GB, sizeLimit=unlimited)"
 fi
 
+# Relax MDB write durability for test speed unless explicitly disabled.
+# 'olcDbEnvFlags: nosync' skips the per-transaction fsync that otherwise caps
+# LDAP write throughput at ~70 adds/sec (single-writer MDB, two fsyncs per
+# logged write via the accesslog overlay). Test data is disposable, so fast
+# writes are the default; snapshot population in particular benefits hugely.
+#
+# *** TEST-ONLY SPEED-UP; NOT THE CUSTOMER EXPERIENCE. *** Customer directories
+# fsync their writes. start-openldap.sh re-reconciles this flag on every
+# container start from LDAP_TEST_FAST_WRITES, and the integration test runner
+# exposes -DurableDirectoryWrites to run customer-representative tests.
+if [ "${LDAP_TEST_FAST_WRITES:-yes}" = "yes" ]; then
+    echo "[openldap-init] Enabling fast (nosync) writes on all MDB databases (TEST-ONLY speed-up)..."
+    for DB_DN in "$YELLOWSTONE_DB_DN" "$GLITTERBAND_DB_DN" "$ACCESSLOG_DB_DN"; do
+        if [ -n "$DB_DN" ]; then
+            ldapmodify -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<NOSYNC || echo "[openldap-init] WARNING: failed to enable nosync on $DB_DN"
+dn: $DB_DN
+changetype: modify
+add: olcDbEnvFlags
+olcDbEnvFlags: nosync
+NOSYNC
+        fi
+    done
+    echo "[openldap-init] Fast writes enabled"
+else
+    echo "[openldap-init] LDAP_TEST_FAST_WRITES=no — keeping durable (customer-representative) writes"
+fi
+
 # Stop slapd (Bitnami will restart it after all init scripts)
 echo "[openldap-init] Stopping slapd..."
 kill "$SLAPD_PID" 2>/dev/null || true

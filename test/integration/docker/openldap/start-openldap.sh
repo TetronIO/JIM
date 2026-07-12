@@ -85,10 +85,58 @@ SLAPMOD
     fi
 }
 
+# Reconcile MDB write durability with the requested test mode.
+#
+# LDAP_TEST_FAST_WRITES=yes (the default) sets 'olcDbEnvFlags: nosync' on every MDB
+# database, skipping the per-transaction fsync. slapd's MDB backend is single-writer
+# and fsyncs each write transaction (twice per logged write, because the accesslog
+# overlay is a second MDB database), which caps LDAP write throughput at roughly
+# 70 adds/sec regardless of client concurrency. Test data is disposable, so tests
+# trade crash durability for speed by default.
+#
+# *** THIS IS AN ARTIFICIAL TEST-ONLY SPEED-UP, NOT THE CUSTOMER EXPERIENCE. ***
+# Real customer directories fsync their writes; export throughput against them is
+# bounded by their directory's write path. Run the integration suite with
+# -DurableDirectoryWrites (LDAP_TEST_FAST_WRITES=no) to measure customer-
+# representative export performance.
+#
+# The reconcile is two-way and idempotent, so one snapshot image serves both modes.
+FAST_WRITES="${LDAP_TEST_FAST_WRITES:-yes}"
+
+set_db_durability() {
+    suffix="$1"
+    db_ldif=$(grep -l "^olcSuffix: $suffix" "$CONFIG_DIR/cn=config/"olcDatabase=*.ldif 2>/dev/null | head -1)
+    if [ -z "$db_ldif" ]; then
+        return
+    fi
+    has_nosync=$(grep -c "^olcDbEnvFlags: nosync" "$db_ldif")
+    db_rdn=$(basename "$db_ldif" .ldif)
+    if [ "$FAST_WRITES" = "yes" ] && [ "$has_nosync" -eq 0 ]; then
+        echo "[openldap-snapshot] Enabling fast (nosync) writes for '$suffix' (TEST-ONLY speed-up)..."
+        "$SLAPMODIFY" -F "$CONFIG_DIR" -n 0 <<SLAPMOD || echo "[openldap-snapshot] WARNING: failed to enable nosync for '$suffix'"
+dn: $db_rdn,cn=config
+changetype: modify
+add: olcDbEnvFlags
+olcDbEnvFlags: nosync
+SLAPMOD
+    elif [ "$FAST_WRITES" != "yes" ] && [ "$has_nosync" -gt 0 ]; then
+        echo "[openldap-snapshot] Removing nosync for '$suffix' (durable, customer-representative writes)..."
+        "$SLAPMODIFY" -F "$CONFIG_DIR" -n 0 <<SLAPMOD || echo "[openldap-snapshot] WARNING: failed to remove nosync for '$suffix'"
+dn: $db_rdn,cn=config
+changetype: modify
+delete: olcDbEnvFlags
+olcDbEnvFlags: nosync
+SLAPMOD
+    fi
+}
+
 if [ -d "$CONFIG_DIR" ] && [ -x "$SLAPMODIFY" ]; then
     set_db_maxsize "cn=accesslog" "$ACCESSLOG_MAXSIZE"
     set_db_maxsize "dc=yellowstone,dc=local" "$MAINDB_MAXSIZE"
     set_db_maxsize "dc=glitterband,dc=local" "$MAINDB_MAXSIZE"
+    set_db_durability "cn=accesslog"
+    set_db_durability "dc=yellowstone,dc=local"
+    set_db_durability "dc=glitterband,dc=local"
 fi
 
 # Hand off to the original Bitnami entrypoint

@@ -244,6 +244,17 @@ OpenLDAP's MDB databases have a fixed maximum map size (`olcDbMaxSize`). A full 
 
 Both are configured in `test/integration/docker/openldap/scripts/01-add-second-suffix.sh` (fresh builds) and reconciled at every container start by `start-openldap.sh` via offline `slapmodify`, so snapshot images baked with older, smaller values converge automatically. Current settings: **accesslog 128 GB, main databases (Yellowstone/Glitterband) 32 GB each**, sized for the full long-tail template range up to Scale1m60kGroups (measured: one ~210K-object write cycle consumes ~8 GB of accesslog; 200K users + 10K groups consume ~634 MB of main database). MDB maps are sparse: disk is only consumed as data is written, so the large caps cost nothing on small templates or small machines. Keep the two scripts' values in sync when changing them.
 
+**OpenLDAP write durability: tests run ARTIFICIALLY FAST by default (IMPORTANT):**
+
+The OpenLDAP integration containers default to relaxed MDB durability (`olcDbEnvFlags: nosync` on all three databases), skipping the per-transaction fsync. Measured effect: ~34 adds/sec durable vs ~308 adds/sec relaxed on the same host. Test data is disposable, so this is the right default for iteration speed, especially at the large templates where the initial export writes 200K+ entries.
+
+**This is NOT the customer experience.** Real customer directories fsync their writes; export throughput against them is bounded by the directory's write path (LDAP provisioning at a customer will look like the durable numbers, not the fast ones). Do not draw customer-facing performance conclusions, publish benchmark figures, or size hardware from fast-mode runs.
+
+- To run customer-representative tests: `./test/integration/Run-IntegrationTests.ps1 ... -DurableDirectoryWrites`
+- The mode is printed in the run configuration ("Directory Writes:") and recorded in separate performance baselines (durable runs use a `-durable` suffix in `results/performance/`), so fast and durable wall-clocks are never compared against each other.
+- Mechanics: the runner sets `OPENLDAP_FAST_WRITES`, compose forwards it as `LDAP_TEST_FAST_WRITES`, and `start-openldap.sh` adds/removes the nosync flags in `cn=config` offline at every container start. Snapshot images are mode-agnostic; switching modes does not invalidate any cached snapshot.
+- Samba AD runs are unaffected (always durable).
+
 ## CSV cache
 
 The three large, deterministic HR CSVs (`hr-users.csv`, `departments.csv`, `training-records.csv`) are cached by `test/integration/Get-OrGenerate-TestCSV.ps1`. At Scale100k50Groups the cache turns ~100 s of CSV generation into a sub-second tar extraction.

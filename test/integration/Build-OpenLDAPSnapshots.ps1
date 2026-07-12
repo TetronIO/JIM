@@ -335,6 +335,11 @@ $openLDAPEnv = @{
     LDAP_ENABLE_TLS             = "no"
     LDAP_SKIP_DEFAULT_TREE      = "no"
     LDAP_ENABLE_ACCESSLOG       = "yes"
+    # Snapshot population is bulk test-data loading, never customer-representative, so
+    # always build with relaxed (nosync) MDB durability for speed. The snapshot itself is
+    # mode-agnostic: start-openldap.sh reconciles the nosync flags on every container
+    # start from LDAP_TEST_FAST_WRITES (see the runner's -DurableDirectoryWrites switch).
+    LDAP_TEST_FAST_WRITES       = "yes"
 }
 
 foreach ($scen in $scenariosToProcess) {
