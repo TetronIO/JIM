@@ -16,6 +16,7 @@ using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.PostgresData;
 using JIM.Utilities;
+using JIM.Web.Logging;
 using JIM.Web.Middleware.Api;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
@@ -728,14 +729,22 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
     // Suppress EF Core SQL query logging — these are noise with no diagnostic value
     loggerConfiguration.MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Fatal);
     loggerConfiguration.Enrich.FromLogContext();
-    loggerConfiguration.WriteTo.File(
-        formatter: new RenderedCompactJsonFormatter(),
-        path: Path.Combine(loggingPath, "jim.web..log"),
-        rollingInterval: RollingInterval.Day,
-        retainedFileCountLimit: 100,
-        fileSizeLimitBytes: 50 * 1024 * 1024,  // 50MB per file — keeps files manageable for analysis
-        rollOnFileSizeLimit: true);
-    loggerConfiguration.WriteTo.Console();
+
+    // The sinks sit behind a demoting wrapper so benign Blazor circuit-disconnect noise (framework Error
+    // events caused by JSDisconnectedException when a browser disconnects mid-operation) is logged at
+    // Warning. Real circuit errors pass through unchanged. See CircuitDisconnectDemotingSink.
+    var sinkLogger = new LoggerConfiguration()
+        .MinimumLevel.Verbose()
+        .WriteTo.File(
+            formatter: new RenderedCompactJsonFormatter(),
+            path: Path.Combine(loggingPath, "jim.web..log"),
+            rollingInterval: RollingInterval.Day,
+            retainedFileCountLimit: 100,
+            fileSizeLimitBytes: 50 * 1024 * 1024,  // 50MB per file; keeps files manageable for analysis
+            rollOnFileSizeLimit: true)
+        .WriteTo.Console()
+        .CreateLogger();
+    loggerConfiguration.WriteTo.Sink(new CircuitDisconnectDemotingSink(sinkLogger));
 
     if (assignLogLogger)
         Log.Logger = loggerConfiguration.CreateLogger();

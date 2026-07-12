@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🔄 The JIM PowerShell module now returns output objects with PascalCase property names (`$obj.DisplayName`, `$obj.Type.Name`), following PowerShell convention, instead of the REST API's camelCase wire casing. PowerShell member access is case-insensitive, so most scripts are unaffected, but `Get-Member`, `ConvertTo-Json` and `Format-Table` now surface PascalCase; scripts that compare property-name strings or round-trip output through JSON may need updating. Dictionaries keyed by your own data (a Metaverse Object's Attributes, a log entry's Properties) keep their keys exactly as supplied.
 
+### Fixed
+
+- 🐛 Closing the browser or navigating away while an admin page with tabs (such as Operations) was open no longer records spurious Error-level "Navigation failed" and "Unhandled exception in circuit" entries in the JIM.Web log. Any remaining browser-disconnect noise from the framework is now logged at Warning, so Error entries once again indicate genuine problems.
+
 ### Performance
 
 - ⚡ Exports no longer stall between batches at large scale. Batch collection now walks the Pending Export queue in a single pass (keyset pagination, backed by a new index) instead of rescanning it from the start for every batch; at 200,000 objects with 10,000 reference-bearing groups the old behaviour spent hours re-reading already-collected rows before the first group reached the target system.
