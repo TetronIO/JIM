@@ -306,7 +306,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+    public virtual Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
     {
         var idSet = new HashSet<Guid>(csoIds);
         var result = GetCsosForSystem(connectedSystemId)

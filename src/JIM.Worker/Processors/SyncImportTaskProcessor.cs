@@ -1079,10 +1079,91 @@ public class SyncImportTaskProcessor
         }
     }
 
+    /// <summary>
+    /// Maximum number of CSO IDs to hydrate in a single <see cref="ISyncRepository.GetConnectedSystemObjectsByIdsAsync"/>
+    /// call. Chunking keeps individual queries (and their parameter counts) bounded at very large page sizes.
+    /// </summary>
+    private const int CsoHydrationChunkSize = 1000;
+
+    /// <summary>
+    /// Pre-fetch phase (#988): resolves every import object in this page to a candidate CSO ID via the
+    /// existing <see cref="LookupCsoByExternalId"/> dictionary lookup, then hydrates all distinct matched
+    /// IDs with a small, bounded number of batch queries (chunked at <see cref="CsoHydrationChunkSize"/>)
+    /// instead of one query per object. This eliminates the N+1 that remained after #440's lookup-only fix.
+    /// </summary>
+    /// <returns>A dictionary of hydrated CSOs, keyed by ID, for use by the per-object processing loop.</returns>
+    private async Task<Dictionary<Guid, ConnectedSystemObject>> HydrateCsoPageAsync(ConnectedSystemImportResult connectedSystemImportResult)
+    {
+        var hydratedCsoPage = new Dictionary<Guid, ConnectedSystemObject>();
+
+        // Nothing to pre-fetch on a first-ever import (_csIsEmpty) - every object is new by definition.
+        if (_csIsEmpty || _connectedSystem.ObjectTypes == null)
+            return hydratedCsoPage;
+
+        var pageObjectCount = connectedSystemImportResult.ImportObjects.Count;
+        using var span = Diagnostics.Sync.StartSpan("HydrateCsoPage").SetTag("pageObjectCount", pageObjectCount);
+
+        var csoIdsToHydrate = new HashSet<Guid>();
+        foreach (var importObject in connectedSystemImportResult.ImportObjects)
+        {
+            if (string.IsNullOrEmpty(importObject.ObjectType))
+                continue;
+
+            var csObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
+            if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsExternalId))
+                continue;
+
+            // Malformed import objects (missing/multi-valued/empty External Id attribute) are swallowed
+            // here and left for the per-object loop to raise properly via its own RPEI error handling;
+            // this pre-fetch pass only cares about collecting candidate IDs to hydrate in bulk.
+            Guid? csoId;
+            try
+            {
+                csoId = LookupCsoByExternalId(importObject, csObjectType);
+            }
+            catch (MissingExternalIdAttributeException)
+            {
+                continue;
+            }
+            catch (ExternalIdAttributeNotSingleValuedException)
+            {
+                continue;
+            }
+            catch (ExternalIdAttributeValueMissingException)
+            {
+                continue;
+            }
+            catch (InvalidDataException)
+            {
+                continue;
+            }
+
+            if (csoId.HasValue)
+                csoIdsToHydrate.Add(csoId.Value);
+        }
+
+        if (csoIdsToHydrate.Count > 0)
+        {
+            foreach (var chunk in csoIdsToHydrate.Chunk(CsoHydrationChunkSize))
+            {
+                var csos = await _syncRepo.GetConnectedSystemObjectsByIdsAsync(_connectedSystem.Id, chunk);
+                foreach (var cso in csos)
+                    hydratedCsoPage[cso.Id] = cso;
+            }
+        }
+
+        span.SetTag("hydratedCsoCount", hydratedCsoPage.Count);
+        return hydratedCsoPage;
+    }
+
     private async Task ProcessImportObjectsAsync(ConnectedSystemImportResult connectedSystemImportResult, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, HashSet<string>? crossPageSeenExternalIds = null)
     {
         if (_connectedSystem.ObjectTypes == null)
             throw new InvalidDataException("ProcessImportObjectsAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
+
+        // Batch-hydrate this page's matched CSOs in one pass (#988), instead of relying on
+        // per-object hydration inside the loop below.
+        var hydratedCsoPage = await HydrateCsoPageAsync(connectedSystemImportResult);
 
         // Track external IDs seen in THIS batch to detect same-batch duplicates.
         // Key: "objectTypeId:externalIdValue" (composite key to handle multiple object types)
@@ -1265,7 +1346,7 @@ public class SyncImportTaskProcessor
                 ConnectedSystemObject? connectedSystemObject;
                 using (Diagnostics.Sync.StartSpan("FindMatchingCso"))
                 {
-                    connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType);
+                    connectedSystemObject = await TryAndFindMatchingConnectedSystemObjectAsync(importObject, csObjectType, hydratedCsoPage);
                 }
 
                 // Handle delete requests from delta imports (e.g., LDAP changelog)
@@ -1601,19 +1682,17 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
-    /// Hydration phase: Loads a full CSO entity graph by ID with all includes needed for attribute
-    /// diffing during import processing. This is a single PK-based query with includes — much cheaper
-    /// than the previous attribute-value-based search query with LOWER() string comparison.
+    /// Hydration phase: Looks up the full CSO entity graph from the page's pre-fetched hydration
+    /// dictionary (see <see cref="HydrateCsoPageAsync"/>), which was populated with all includes needed
+    /// for attribute diffing during import processing via a small number of batch queries (#988).
     /// Falls back to secondary external ID lookup for PendingProvisioning CSOs not found in the dictionary.
     /// </summary>
-    private async Task<ConnectedSystemObject?> HydrateCsoAsync(Guid? csoId, ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
+    private async Task<ConnectedSystemObject?> HydrateCsoAsync(Guid? csoId, ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, IReadOnlyDictionary<Guid, ConnectedSystemObject> hydratedCsoPage)
     {
-        // If lookup found a match, hydrate the full entity by ID
+        // If lookup found a match, retrieve the full entity from the page's pre-fetched hydration dictionary
         if (csoId.HasValue)
         {
-            var csos = await _syncRepo.GetConnectedSystemObjectsByIdsAsync(_connectedSystem.Id, new[] { csoId.Value });
-            var cso = csos.FirstOrDefault();
-            if (cso != null)
+            if (hydratedCsoPage.TryGetValue(csoId.Value, out var cso))
                 return cso;
 
             // Cache had the ID but the CSO no longer exists (deleted between pre-fetch and hydrate).
@@ -1656,13 +1735,15 @@ public class SyncImportTaskProcessor
     /// <summary>
     /// Combined Lookup + Hydrate: finds a matching CSO for an imported object.
     /// Phase 1 (Lookup): O(1) dictionary lookup using the pre-fetched external ID mappings.
-    /// Phase 2 (Hydrate): Loads the full CSO entity graph by ID for attribute diffing.
-    /// This replaces the previous per-object attribute-value-based search queries (#440).
+    /// Phase 2 (Hydrate): Looks up the full CSO entity graph from the page's pre-fetched hydration
+    /// dictionary (batch-loaded once per page, see <see cref="HydrateCsoPageAsync"/>) for attribute diffing.
+    /// This replaces the previous per-object attribute-value-based search queries (#440) and,
+    /// subsequently, the per-object hydration query that remained after that fix (#988).
     /// </summary>
-    private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
+    private async Task<ConnectedSystemObject?> TryAndFindMatchingConnectedSystemObjectAsync(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, IReadOnlyDictionary<Guid, ConnectedSystemObject> hydratedCsoPage)
     {
         var csoId = LookupCsoByExternalId(connectedSystemImportObject, connectedSystemObjectType);
-        return await HydrateCsoAsync(csoId, connectedSystemImportObject, connectedSystemObjectType);
+        return await HydrateCsoAsync(csoId, connectedSystemImportObject, connectedSystemObjectType, hydratedCsoPage);
     }
 
     private ConnectedSystemObject? CreateConnectedSystemObjectFromImportObject(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType, ActivityRunProfileExecutionItem activityRunProfileExecutionItem)
