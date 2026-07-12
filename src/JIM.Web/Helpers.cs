@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Core;
@@ -47,6 +48,36 @@ public static class Helpers
     public static string ConvertFromUrlParam(string urlParam)
     {
         return urlParam.Replace("-", " ");
+    }
+
+    /// <summary>
+    /// Matches an RFC reference such as "RFC2256" or "RFC 4519" as a whole word.
+    /// The number group is used to build the IETF Datatracker Url.
+    /// </summary>
+    private static readonly Regex RfcReferenceRegex = new(
+        @"\bRFC\s?(\d{3,5})\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Converts any RFC references within a text value (e.g. "RFC2256: business category") into
+    /// hyperlinks to the corresponding IETF Datatracker page, preserving the original text of each
+    /// reference. All non-link content is HTML-encoded, so the result is safe to render via
+    /// <c>@((MarkupString)...)</c>.
+    /// </summary>
+    public static string LinkifyRfcReferences(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return string.Empty;
+
+        // HTML-encode first so that any markup in the source text is neutralised; the regex still
+        // matches because encoding does not alter the ASCII "RFC" token or its digits.
+        var encoded = WebUtility.HtmlEncode(text);
+
+        return RfcReferenceRegex.Replace(encoded, match =>
+        {
+            var number = match.Groups[1].Value;
+            return $"<a class=\"mud-link mud-primary-text\" href=\"https://datatracker.ietf.org/doc/html/rfc{number}\" target=\"_blank\" rel=\"noopener noreferrer\">{match.Value}</a>";
+        });
     }
 
     /// <summary>
@@ -426,6 +457,7 @@ public static class Helpers
             _ => Color.Default
         };
     }
+
     #endregion
 
     #region Initiator Icon Helpers
