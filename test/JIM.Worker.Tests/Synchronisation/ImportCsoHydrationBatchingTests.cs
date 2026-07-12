@@ -106,7 +106,7 @@ public class ImportCsoHydrationBatchingTests
     [Test]
     public async Task ProcessImportObjectsAsync_ReImportOfManyExistingCsos_HydratesCsosInBatchesNotPerObjectAsync()
     {
-        // Arrange — seed 2,500 existing CSOs (spans more than one 1,000-id hydration chunk)
+        // Arrange: seed 2,500 existing CSOs (spans more than one 1,000-id hydration chunk)
         // and re-import all of them with a changed DISPLAY_NAME, so every object matches an
         // existing CSO and requires hydration.
         const int objectCount = 2500;
@@ -126,7 +126,7 @@ public class ImportCsoHydrationBatchingTests
         var processor = await CreateProcessorAsync(mockFileConnector);
         await processor.PerformImportAsync();
 
-        // Assert — batched hydration means ceil(2500/1000) = 3 chunked calls, plus a small
+        // Assert: batched hydration means ceil(2500/1000) = 3 chunked calls, plus a small
         // constant of slack for any incidental calls elsewhere. Nowhere near the 2,500 calls
         // the old per-object hydration would have made.
         const int maxExpectedHydrationCalls = 3 + 2;
@@ -161,7 +161,7 @@ public class ImportCsoHydrationBatchingTests
     [Test]
     public async Task ProcessImportObjectsAsync_CsoVanishesBeforeBatchHydration_FallsThroughGracefullyAsync()
     {
-        // Arrange — one existing CSO, whose ID is known to the pre-fetch external ID lookup
+        // Arrange: one existing CSO, whose ID is known to the pre-fetch external ID lookup
         // dictionary, but the batch hydration call always returns nothing (simulating the CSO
         // having been deleted between the pre-fetch and the hydration query).
         var (existingCsos, hrIds) = CreateExistingCsos(1);
@@ -179,7 +179,7 @@ public class ImportCsoHydrationBatchingTests
         var processor = await CreateProcessorAsync(mockFileConnector);
         await processor.PerformImportAsync();
 
-        // Assert — the importer should not throw, and should fall through to treating the
+        // Assert: the importer should not throw, and should fall through to treating the
         // object as new (the secondary external ID lookup also finds nothing), exactly as the
         // pre-batching code did for this scenario. The original (now "vanished" from hydration's
         // point of view, but never actually removed from the store) CSO is untouched - imported

@@ -564,7 +564,7 @@ public class SyncEngineReconciliationTests
 
     #endregion
 
-    #region ReconcileCsoAgainstPendingExport — per data type, via full orchestration (issue #988 pin)
+    #region ReconcileCsoAgainstPendingExport: per data type, via full orchestration (issue #988 pin)
     //
     // These pin ReconcileCsoAgainstPendingExport's behaviour per data type and change type directly
     // (rather than via the single-CSO IsAttributeChangeConfirmed convenience overload above), because
