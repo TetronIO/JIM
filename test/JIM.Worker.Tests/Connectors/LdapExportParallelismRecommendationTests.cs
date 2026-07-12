@@ -29,10 +29,10 @@ public class LdapExportParallelismRecommendationTests
     /// </summary>
     private const int ExpectedCapableDirectoryRecommendation = 2;
 
-    #region GetRecommendedExportParallelism — per directory type, after Export Concurrency auto-tune
+    #region GetRecommendedExportParallelism: per directory type, after Export Concurrency auto-tune
 
     // LdapDirectoryType is internal, so it can't appear in a public [TestCase] method signature
-    // (CS0051) — one test per directory type instead, mirroring LdapExportConcurrencyAutoTuneTests.
+    // (CS0051); one test per directory type instead, mirroring LdapExportConcurrencyAutoTuneTests.
 
     [Test]
     public void GetRecommendedExportParallelism_ActiveDirectoryAfterAutoTune_Returns2()
@@ -96,12 +96,12 @@ public class LdapExportParallelismRecommendationTests
 
     #endregion
 
-    #region GetRecommendedExportParallelism — no recommendation available
+    #region GetRecommendedExportParallelism: no recommendation available
 
     [Test]
     public void GetRecommendedExportParallelism_ExportConcurrencySettingMissing_ReturnsNull()
     {
-        // No schema import has happened yet (e.g. a brand new Connected System) — the connector
+        // No schema import has happened yet (e.g. a brand new Connected System); the connector
         // must not open a connection here, and has no cached/derivable value to offer.
         var connector = new LdapConnector();
 

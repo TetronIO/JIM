@@ -556,7 +556,7 @@ public class ExportExecutionServer
                         // Fast path (issue #985c): the whole batch just loaded was deferred
                         // (reference-bearing) and nothing in it was executable. Continuing to
                         // page through the remainder 100 rows at a time would only ever rebuild
-                        // the same deferred list one page slower — at group-heavy scale (10K+
+                        // the same deferred list one page slower; at group-heavy scale (10K+
                         // deferred exports) this was the entire cost of the collection loop.
                         // Collect everything beyond the cursor with a single set-based query and
                         // stop scanning; a mixed batch (some immediate, some deferred) always
@@ -566,7 +566,7 @@ public class ExportExecutionServer
                         // executable exports interleave in (CreatedAt, Id) order, so a full batch
                         // of deferred exports does not prove the remainder of the queue is
                         // deferred too. Without the probe, executable exports created after a
-                        // contiguous deferred run would silently never execute in this run — a
+                        // contiguous deferred run would silently never execute in this run; a
                         // behaviour regression versus page-by-page scanning. The probe is a cheap
                         // indexed existence check (no Includes, no materialisation); when it
                         // finds executable exports beyond the cursor, this branch is skipped and
@@ -597,7 +597,7 @@ public class ExportExecutionServer
                     }
                     // Note: no break when a batch has only ineligible/deferred exports and the
                     // fast path above did not trigger (a mixed batch, or executable exports still
-                    // exist beyond the cursor) — the outer loop continues scanning forward since
+                    // exist beyond the cursor); the outer loop continues scanning forward since
                     // later batches (ordered by CreatedAt) may contain eligible exports. The loop
                     // only exits when batch.Count == 0 (database exhausted, handled above) or via
                     // the fast-path break above.

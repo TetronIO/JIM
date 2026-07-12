@@ -2085,7 +2085,7 @@ public class ExportExecutionTests
         var baseTime = DateTime.UtcNow.AddMinutes(-10);
         var offset = 0;
 
-        // Page 1 (4 rows): interleaved immediate/deferred — must NOT fast-path.
+        // Page 1 (4 rows): interleaved immediate/deferred; must NOT fast-path.
         var page1Types = new[] { false, true, false, true };
         foreach (var deferred in page1Types)
         {
@@ -2094,7 +2094,7 @@ public class ExportExecutionTests
             countingRepo.SeedPendingExport(pe);
         }
 
-        // Page 2 (4 rows): entirely deferred — must fast-path and bulk-collect the rest.
+        // Page 2 (4 rows): entirely deferred; must fast-path and bulk-collect the rest.
         for (var i = 0; i < 4; i++)
         {
             var pe = CreateSeededCreateExport(targetSystem, targetUserType,
@@ -2127,7 +2127,7 @@ public class ExportExecutionTests
         Assert.That(result.ProcessedPendingExportIds, Has.Count.EqualTo(exportCount));
         Assert.That(result.SuccessCount, Is.EqualTo(exportCount));
 
-        // Only the 2 pages that were actually loaded — no further page loads once the
+        // Only the 2 pages that were actually loaded; no further page loads once the
         // wholly-deferred second page triggered the fast path.
         Assert.That(countingRepo.BatchLoadCalls, Is.EqualTo(2),
             $"Expected exactly 2 page loads (mixed page 1, all-deferred page 2); got {countingRepo.BatchLoadCalls}.");
