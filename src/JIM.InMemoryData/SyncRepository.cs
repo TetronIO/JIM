@@ -508,14 +508,16 @@ public class SyncRepository : ISyncRepository
                 cso.AttributeValues.Add(addition);
             }
 
-            foreach (var removal in cso.PendingAttributeValueRemovals)
+            // Single pass over cso.AttributeValues (#988) instead of one RemoveAll/Remove scan per
+            // pending removal - the latter is O(removals x AttributeValues), quadratic for a large
+            // multi-valued attribute (e.g. a big group's next Full Import replacing membership).
+            if (cso.PendingAttributeValueRemovals.Count > 0)
             {
                 // Use reference equality when Id is Guid.Empty (newly created, not yet persisted).
                 // With EF Core, these objects have DB-generated IDs. In-memory, they remain empty.
-                if (removal.Id == Guid.Empty)
-                    cso.AttributeValues.Remove(removal);
-                else
-                    cso.AttributeValues.RemoveAll(av => av.Id == removal.Id);
+                var removalIds = new HashSet<Guid>(cso.PendingAttributeValueRemovals.Where(r => r.Id != Guid.Empty).Select(r => r.Id));
+                var removalRefs = new HashSet<ConnectedSystemObjectAttributeValue>(cso.PendingAttributeValueRemovals.Where(r => r.Id == Guid.Empty));
+                cso.AttributeValues.RemoveAll(av => (av.Id != Guid.Empty && removalIds.Contains(av.Id)) || removalRefs.Contains(av));
             }
 
             cso.PendingAttributeValueAdditions = new List<ConnectedSystemObjectAttributeValue>();

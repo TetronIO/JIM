@@ -1945,37 +1945,64 @@ public class SyncImportTaskProcessor
                 switch (csoAttribute.Type)
                 {
                     case AttributeDataType.Text:
+                    {
+                        // Value sets built once per attribute (#988): replaces nested O(cso*import)
+                        // List.Any() scans with O(1) average-case set membership tests. Comparison
+                        // stays case-SENSITIVE Ordinal, exactly matching the original string.Equals(sv).
+                        var csoStringAttrValues = connectedSystemObject.AttributeValues
+                            .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.StringValue != null)
+                            .ToList();
+                        var importStringSet = new HashSet<string>(importedObjectAttribute.StringValues, StringComparer.Ordinal);
+
                         // find values on the cso of type string that aren't on the imported object and remove them first
-                        var missingStringAttributeValues = connectedSystemObject.AttributeValues.Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.StringValue != null && !importedObjectAttribute.StringValues.Any(i => i.Equals(av.StringValue))).ToList();
+                        var missingStringAttributeValues = csoStringAttrValues.Where(av => !importStringSet.Contains(av.StringValue!)).ToList();
                         connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingStringAttributeValues);
 
                         // find imported values of type string that aren't on the cso and add them
-                        var newStringValues = importedObjectAttribute.StringValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.StringValue != null && av.StringValue.Equals(sv))).ToList();
+                        var csoStringSet = csoStringAttrValues.Select(av => av.StringValue!).ToHashSet(StringComparer.Ordinal);
+                        var newStringValues = importedObjectAttribute.StringValues.Where(sv => !csoStringSet.Contains(sv)).ToList();
                         foreach (var newStringValue in newStringValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, StringValue = newStringValue });
                         break;
+                    }
 
                     case AttributeDataType.Number:
+                    {
+                        var csoIntAttrValues = connectedSystemObject.AttributeValues
+                            .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.IntValue != null)
+                            .ToList();
+                        var importIntSet = new HashSet<int>(importedObjectAttribute.IntValues);
+
                         // find values on the cso of type int that aren't on the imported object and remove them first
-                        var missingIntAttributeValues = connectedSystemObject.AttributeValues.Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.IntValue != null && !importedObjectAttribute.IntValues.Any(i => i.Equals(av.IntValue))).ToList();
+                        var missingIntAttributeValues = csoIntAttrValues.Where(av => !importIntSet.Contains(av.IntValue!.Value)).ToList();
                         connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingIntAttributeValues);
 
                         // find imported values of type int that aren't on the cso and add them
-                        var newIntValues = importedObjectAttribute.IntValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.IntValue != null && av.IntValue.Equals(sv))).ToList();
+                        var csoIntSet = csoIntAttrValues.Select(av => av.IntValue!.Value).ToHashSet();
+                        var newIntValues = importedObjectAttribute.IntValues.Where(sv => !csoIntSet.Contains(sv)).ToList();
                         foreach (var newIntValue in newIntValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, IntValue = newIntValue });
                         break;
+                    }
 
                     case AttributeDataType.LongNumber:
+                    {
+                        var csoLongAttrValues = connectedSystemObject.AttributeValues
+                            .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.LongValue != null)
+                            .ToList();
+                        var importLongSet = new HashSet<long>(importedObjectAttribute.LongValues);
+
                         // find values on the cso of type long that aren't on the imported object and remove them first
-                        var missingLongAttributeValues = connectedSystemObject.AttributeValues.Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.LongValue != null && !importedObjectAttribute.LongValues.Any(i => i.Equals(av.LongValue))).ToList();
+                        var missingLongAttributeValues = csoLongAttrValues.Where(av => !importLongSet.Contains(av.LongValue!.Value)).ToList();
                         connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingLongAttributeValues);
 
                         // find imported values of type long that aren't on the cso and add them
-                        var newLongValues = importedObjectAttribute.LongValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.LongValue != null && av.LongValue.Equals(sv))).ToList();
+                        var csoLongSet = csoLongAttrValues.Select(av => av.LongValue!.Value).ToHashSet();
+                        var newLongValues = importedObjectAttribute.LongValues.Where(sv => !csoLongSet.Contains(sv)).ToList();
                         foreach (var newLongValue in newLongValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, LongValue = newLongValue });
                         break;
+                    }
 
                     case AttributeDataType.DateTime:
                         // date time attribute types can only be single-valued by nature. handle differently to multivalued attribute types.
@@ -2031,16 +2058,22 @@ public class SyncImportTaskProcessor
                                 refCsoId, unresolved);
                         }
 
-                        // Helper: Check if an import reference string matches an existing CSO attribute value.
-                        // This handles both unresolved references and resolved references. Persisted resolved
-                        // references match via refExtIdLookup (built by GetReferenceExternalIdsAsync): hydration
-                        // deliberately does not materialise ReferenceValue navigations (#917), so the navigation
-                        // branch below only fires for values resolved in-memory earlier in this run.
-                        static bool ImportRefMatchesCsoValue(string importRef, ConnectedSystemObjectAttributeValue av, IReadOnlyDictionary<Guid, string>? refExtIdLookup)
+                        // Helper: Check if an import reference string matches an existing CSO attribute value,
+                        // against pre-built sets of the import's reference values (#988) rather than scanning
+                        // the import list per CSO value. This handles both unresolved references and resolved
+                        // references. Persisted resolved references match via refExtIdLookup (built by
+                        // GetReferenceExternalIdsAsync): hydration deliberately does not materialise
+                        // ReferenceValue navigations (#917), so the navigation branch below only fires for
+                        // values resolved in-memory earlier in this run.
+                        static bool CsoValueMatchesAnyImportRef(
+                            ConnectedSystemObjectAttributeValue av,
+                            IReadOnlyDictionary<Guid, string>? refExtIdLookup,
+                            HashSet<string> importRefsOrdinal,
+                            HashSet<string> importRefsIgnoreCase)
                         {
                             // Check unresolved reference (case-sensitive to preserve data fidelity)
                             if (av.UnresolvedReferenceValue != null &&
-                                av.UnresolvedReferenceValue.Equals(importRef, StringComparison.Ordinal))
+                                importRefsOrdinal.Contains(av.UnresolvedReferenceValue))
                                 return true;
 
                             // Check resolved reference - compare against the referenced CSO's external ID
@@ -2051,8 +2084,7 @@ public class SyncImportTaskProcessor
                                 var refExternalId = av.ReferenceValue.SecondaryExternalIdAttributeValue?.StringValue
                                                  ?? av.ReferenceValue.ExternalIdAttributeValue?.StringValue;
                                 // Use case-insensitive comparison for DNs since case may vary
-                                if (refExternalId != null &&
-                                    refExternalId.Equals(importRef, StringComparison.OrdinalIgnoreCase))
+                                if (refExternalId != null && importRefsIgnoreCase.Contains(refExternalId))
                                     return true;
                             }
 
@@ -2061,22 +2093,53 @@ public class SyncImportTaskProcessor
                             if (av.ReferenceValueId.HasValue &&
                                 refExtIdLookup != null &&
                                 refExtIdLookup.TryGetValue(av.ReferenceValueId.Value, out var fallbackExternalId) &&
-                                fallbackExternalId.Equals(importRef, StringComparison.OrdinalIgnoreCase))
+                                importRefsIgnoreCase.Contains(fallbackExternalId))
                                 return true;
 
                             return false;
                         }
 
+                        // Value sets built once per attribute (#988): two comparers mirror the original dual
+                        // case-sensitivity exactly (Ordinal for unresolved refs, OrdinalIgnoreCase for resolved
+                        // refs via either the in-memory navigation or the persisted lookup dictionary).
+                        var importRefsOrdinalSet = new HashSet<string>(importedObjectAttribute.ReferenceValues, StringComparer.Ordinal);
+                        var importRefsIgnoreCaseSet = new HashSet<string>(importedObjectAttribute.ReferenceValues, StringComparer.OrdinalIgnoreCase);
+
                         // Find CSO reference values that aren't in the import - mark for removal
                         var missingReferenceValues = csoRefAttrValues
                             .Where(av => (av.UnresolvedReferenceValue != null || av.ReferenceValue != null || av.ReferenceValueId.HasValue) &&
-                                        !importedObjectAttribute.ReferenceValues.Any(importRef => ImportRefMatchesCsoValue(importRef, av, referenceExternalIdLookup)))
+                                        !CsoValueMatchesAnyImportRef(av, referenceExternalIdLookup, importRefsOrdinalSet, importRefsIgnoreCaseSet))
                             .ToList();
                         connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingReferenceValues);
 
+                        // CSO-side sets built once per attribute, for the reverse (addition) direction:
+                        // does any CSO value match a given import reference? Both resolution paths (in-memory
+                        // navigation and persisted lookup dictionary) feed the SAME case-insensitive set,
+                        // since either one matching is sufficient - exactly as the original || chain allowed.
+                        var csoUnresolvedRefSet = csoRefAttrValues
+                            .Where(av => av.UnresolvedReferenceValue != null)
+                            .Select(av => av.UnresolvedReferenceValue!)
+                            .ToHashSet(StringComparer.Ordinal);
+                        var csoResolvedRefExternalIdSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var av in csoRefAttrValues)
+                        {
+                            if (av.ReferenceValue != null)
+                            {
+                                var navExternalId = av.ReferenceValue.SecondaryExternalIdAttributeValue?.StringValue
+                                                 ?? av.ReferenceValue.ExternalIdAttributeValue?.StringValue;
+                                if (navExternalId != null)
+                                    csoResolvedRefExternalIdSet.Add(navExternalId);
+                            }
+
+                            if (av.ReferenceValueId.HasValue &&
+                                referenceExternalIdLookup != null &&
+                                referenceExternalIdLookup.TryGetValue(av.ReferenceValueId.Value, out var fallbackExternalId))
+                                csoResolvedRefExternalIdSet.Add(fallbackExternalId);
+                        }
+
                         // Find imported reference values that aren't on the CSO - mark for addition
                         var newReferenceValues = importedObjectAttribute.ReferenceValues
-                            .Where(importRef => !csoRefAttrValues.Any(av => ImportRefMatchesCsoValue(importRef, av, referenceExternalIdLookup)))
+                            .Where(importRef => !csoUnresolvedRefSet.Contains(importRef) && !csoResolvedRefExternalIdSet.Contains(importRef))
                             .ToList();
 
                         // Resolved references are matched via the SQL dictionary by design (#917):
@@ -2108,15 +2171,23 @@ public class SyncImportTaskProcessor
                         break;
 
                     case AttributeDataType.Guid:
+                    {
+                        var csoGuidAttrValues = connectedSystemObject.AttributeValues
+                            .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.GuidValue != null)
+                            .ToList();
+                        var importGuidSet = new HashSet<Guid>(importedObjectAttribute.GuidValues);
+
                         // find values on the cso of type Guid that aren't on the imported object and remove them first
-                        var missingGuidAttributeValues = connectedSystemObject.AttributeValues.Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.GuidValue != null && !importedObjectAttribute.GuidValues.Any(i => i.Equals(av.GuidValue))).ToList();
+                        var missingGuidAttributeValues = csoGuidAttrValues.Where(av => !importGuidSet.Contains(av.GuidValue!.Value)).ToList();
                         connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingGuidAttributeValues);
 
                         // find imported values of type Guid that aren't on the cso and add them
-                        var newGuidValues = importedObjectAttribute.GuidValues.Where(sv => !connectedSystemObject.AttributeValues.Any(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.GuidValue != null && av.GuidValue.Equals(sv))).ToList();
+                        var csoGuidSet = csoGuidAttrValues.Select(av => av.GuidValue!.Value).ToHashSet();
+                        var newGuidValues = importedObjectAttribute.GuidValues.Where(sv => !csoGuidSet.Contains(sv)).ToList();
                         foreach (var newGuidValue in newGuidValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, GuidValue = newGuidValue });
                         break;
+                    }
 
                     case AttributeDataType.Boolean:
                         // there will be only a single value for a bool. is it the same or different?
