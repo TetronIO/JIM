@@ -1363,9 +1363,15 @@ public class ExportEvaluationServer
         if (csoId.HasValue && (changeType == PendingExportChangeType.Update || changeType == PendingExportChangeType.Create))
         {
             PendingExport? dbPendingExport;
-            using (var peLookupSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("GetPendingExportByCsoIdForMerge"))
+            using (var peLookupSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("GetPendingExportByCsoIdForMerge")
+                .SetTag("leanFetch", true))
             {
-                dbPendingExport = await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(csoId.Value);
+                // Lean fetch (issue #986): the merge logic below only ever reads Id and
+                // AttributeValueChanges off dbPendingExport, never ConnectedSystemObject,
+                // SourceMetaverseObject or ConnectedSystem. The heavy GetPendingExportByConnectedSystemObjectIdAsync
+                // also loads those CSO/MVO attribute value graphs, which for a large group can run into
+                // the hundreds of thousands of rows and dominated this fetch (measured 99.5% of merge cost).
+                dbPendingExport = await SyncRepo.GetPendingExportByConnectedSystemObjectIdForMergeAsync(csoId.Value);
                 peLookupSpan.SetTag("found", dbPendingExport != null);
                 peLookupSpan.SetTag("existingChangeCount", dbPendingExport?.AttributeValueChanges.Count ?? 0);
                 peLookupSpan.SetSuccess();

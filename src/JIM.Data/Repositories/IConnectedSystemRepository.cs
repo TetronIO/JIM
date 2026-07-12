@@ -336,6 +336,22 @@ public interface IConnectedSystemRepository
     public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
 
     /// <summary>
+    /// Lean fetch for the export evaluation merge-and-replace path (see
+    /// <c>ExportEvaluationServer.CreateOrUpdatePendingExportWithNoNetChangeAsync</c>). Only
+    /// AttributeValueChanges (with Attribute) are loaded; ConnectedSystemObject, ConnectedSystem
+    /// and SourceMetaverseObject and their attribute value graphs are skipped because the merge
+    /// logic never reads them. <see cref="GetPendingExportByConnectedSystemObjectIdAsync"/>'s full
+    /// Include chain could load hundreds of thousands of rows per fetch for a large group's
+    /// Connected System Object and source Metaverse Object, re-fetched once per removed member
+    /// during cohort deprovisioning (issue #986). Use this method on that hot path instead;
+    /// <see cref="GetPendingExportByConnectedSystemObjectIdAsync"/> stays as-is for callers that
+    /// need the full graph (for example the Pending Export detail page).
+    /// </summary>
+    /// <param name="connectedSystemObjectId">The unique identifier of the Connected System Object.</param>
+    /// <returns>The PendingExport for the CSO with AttributeValueChanges loaded, or null if none exists.</returns>
+    public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdForMergeAsync(Guid connectedSystemObjectId);
+
+    /// <summary>
     /// Retrieves Pending Exports for multiple Connected System Objects in a single query.
     /// More efficient than calling GetPendingExportByConnectedSystemObjectIdAsync multiple times.
     /// </summary>
