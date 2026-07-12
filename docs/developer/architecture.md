@@ -157,10 +157,12 @@ Export parallelism operates on two independent axes:
 1. **LDAP Connector Pipelining:** Multiple LDAP operations execute concurrently within a single export batch using `SemaphoreSlim`-based throttling, tuned per directory type by Export Concurrency auto-tune (see `LdapConnector.AutoTuneExportConcurrency`)
 2. **Parallel Batch Processing:** Multiple export batches process concurrently with separate `IRepository` and `IConnector` instances per batch, gated by the `SupportsParallelExport` connector capability, and controlled by a Connected System's Max Export Parallelism setting
 
+The two axes multiply: each parallel batch pipeline gets its own connector instance running its own Export Concurrency operations, so total in-flight operations = Max Export Parallelism x Export Concurrency.
+
 A Connected System's Max Export Parallelism resolves via `ExportParallelismResolver` (`JIM.Worker.Processors`) in this order:
 
 1. An explicit Max Export Parallelism value on the Connected System always wins, respecting the administrator's choice.
-2. Otherwise, if the connector implements `IConnectorRecommendedExportParallelism`, its recommendation is used, clamped to 1-16. The LDAP Connector mirrors its own auto-tuned Export Concurrency (axis 1 above) so the two knobs stay coherent rather than recommending a contradictory value.
+2. Otherwise, if the connector implements `IConnectorRecommendedExportParallelism`, its recommendation is used, clamped to 1-16. The LDAP Connector recommends a deliberately conservative 2 when the system's Export Concurrency signals a capable directory (8 or above; the auto-tune only sets 16, for Active Directory and OpenLDAP), keeping the multiplied total mild (2 x 16 = 32 in-flight operations); otherwise it makes no recommendation.
 3. Otherwise, JIM falls back to 1 (sequential), the pre-existing default.
 
 Note that for directories with a single-writer storage backend (for example OpenLDAP's mdb), higher batch parallelism does not translate into proportionally higher write throughput; the recommendation is a starting point, not a guarantee.

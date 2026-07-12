@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 🔄 The JIM PowerShell module now returns output objects with PascalCase property names (`$obj.DisplayName`, `$obj.Type.Name`), following PowerShell convention, instead of the REST API's camelCase wire casing. PowerShell member access is case-insensitive, so most scripts are unaffected, but `Get-Member`, `ConvertTo-Json` and `Format-Table` now surface PascalCase; scripts that compare property-name strings or round-trip output through JSON may need updating. Dictionaries keyed by your own data (a Metaverse Object's Attributes, a log entry's Properties) keep their keys exactly as supplied.
-- 🔄 Exports now default to a connector-recommended degree of parallelism when a Connected System's Max Export Parallelism isn't explicitly configured, instead of always defaulting to sequential. For the LDAP Connector this mirrors its own directory-aware Export Concurrency tuning. An explicitly configured Max Export Parallelism value is always respected.
+- 🔄 Exports now default to a conservative connector-recommended degree of parallelism when a Connected System's Max Export Parallelism isn't explicitly configured, instead of always defaulting to sequential. The LDAP Connector recommends two parallel batch pipelines for capable directories (those tuned to a high Export Concurrency) and stays sequential otherwise. An explicitly configured Max Export Parallelism value is always respected.
 
 ### Fixed
 
