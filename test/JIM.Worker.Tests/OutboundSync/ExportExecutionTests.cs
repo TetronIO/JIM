@@ -1896,11 +1896,18 @@ public class ExportExecutionTests
     private sealed class BatchLoadCountingSyncRepository : SyncRepository
     {
         public int BatchLoadCalls;
+        public int RemainingDeferredCalls;
 
         public override Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
         {
             Interlocked.Increment(ref BatchLoadCalls);
             return base.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId);
+        }
+
+        public override Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+        {
+            Interlocked.Increment(ref RemainingDeferredCalls);
+            return base.GetRemainingDeferredExportsAsync(connectedSystemId, afterCreatedAt, afterId);
         }
     }
 
@@ -1992,6 +1999,131 @@ public class ExportExecutionTests
             $"Batch collection re-scanned the Pending Export query: {countingRepo.BatchLoadCalls} page loads " +
             $"for {exportCount} deferred exports at batch size {batchSize} (expected <= {maxExpectedBatchLoads}). " +
             "See issue #985.");
+    }
+
+    /// <summary>
+    /// Issue #985 (c): once a loaded batch is discovered to contain only deferred
+    /// (reference-bearing) exports and nothing executable, the collection loop must stop
+    /// page-by-page scanning and collect all remaining deferred exports with a single bulk
+    /// repository call, rather than continuing to page 100 at a time purely to build the
+    /// deferred list. With N=1000 deferred exports and batch size 100, the first page already
+    /// reveals the batch is entirely deferred, so at most one further page load plus exactly
+    /// one bulk collect call are needed (previously this cost ceil(N/B)+1 = 11 page loads).
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_AllDeferredExports_FastPathsRemainingCollectionInSingleBulkCallAsync()
+    {
+        // Arrange: a fresh application wired to a counting repository.
+        var countingRepo = new BatchLoadCountingSyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: countingRepo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        const int exportCount = 1000;
+        const int batchSize = 100;
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+        for (var i = 0; i < exportCount; i++)
+        {
+            var pe = CreateSeededCreateExport(targetSystem, targetUserType,
+                baseTime.AddMilliseconds(i), hasUnresolvedReferences: true);
+            countingRepo.SeedPendingExport(pe);
+        }
+
+        var mockConnector = CreateSucceedingCallsConnector();
+        var options = new ExportExecutionOptions { BatchSize = batchSize };
+
+        // Act
+        var result = await jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None);
+
+        // Assert: every export was still collected...
+        Assert.That(result.ProcessedPendingExportIds, Has.Count.EqualTo(exportCount));
+
+        // ...via at most 2 page loads plus exactly one bulk "collect the rest" call, not
+        // ceil(N/B) = 10 page loads (plus an exhaustion probe).
+        Assert.That(countingRepo.BatchLoadCalls, Is.LessThanOrEqualTo(2),
+            $"Batch collection paged through deferred exports instead of fast-pathing: " +
+            $"{countingRepo.BatchLoadCalls} page loads for {exportCount} deferred exports at batch size {batchSize}. " +
+            "See issue #985 (c).");
+        Assert.That(countingRepo.RemainingDeferredCalls, Is.EqualTo(1),
+            "Expected exactly one bulk GetRemainingDeferredExportsAsync call to collect the deferred tail.");
+    }
+
+    /// <summary>
+    /// Issue #985 (c): the fast path must only trigger for a batch that is entirely deferred.
+    /// A batch mixing executable and deferred exports must execute the executable ones exactly
+    /// as before (no fast path), while a later batch that is entirely deferred should still
+    /// trigger the fast path for the remainder.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_MixedThenAllDeferredBatch_ExecutesImmediateNormallyAndFastPathsRestAsync()
+    {
+        // Arrange
+        var countingRepo = new BatchLoadCountingSyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: countingRepo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        const int batchSize = 4;
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+        var offset = 0;
+
+        // Page 1 (4 rows): interleaved immediate/deferred — must NOT fast-path.
+        var page1Types = new[] { false, true, false, true };
+        foreach (var deferred in page1Types)
+        {
+            var pe = CreateSeededCreateExport(targetSystem, targetUserType,
+                baseTime.AddMilliseconds(offset++), hasUnresolvedReferences: deferred);
+            countingRepo.SeedPendingExport(pe);
+        }
+
+        // Page 2 (4 rows): entirely deferred — must fast-path and bulk-collect the rest.
+        for (var i = 0; i < 4; i++)
+        {
+            var pe = CreateSeededCreateExport(targetSystem, targetUserType,
+                baseTime.AddMilliseconds(offset++), hasUnresolvedReferences: true);
+            countingRepo.SeedPendingExport(pe);
+        }
+
+        // Remaining tail (4 rows): all deferred, collected via the bulk call, not further pages.
+        for (var i = 0; i < 4; i++)
+        {
+            var pe = CreateSeededCreateExport(targetSystem, targetUserType,
+                baseTime.AddMilliseconds(offset++), hasUnresolvedReferences: true);
+            countingRepo.SeedPendingExport(pe);
+        }
+
+        const int exportCount = 12;
+        var mockConnector = CreateSucceedingCallsConnector();
+        var options = new ExportExecutionOptions { BatchSize = batchSize };
+
+        // Act
+        var result = await jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None);
+
+        // Assert: every export accounted for and (trivially, since none reference real MVOs)
+        // successfully exported, exactly as the pre-#985(c) page-by-page loop would produce.
+        Assert.That(result.ProcessedPendingExportIds, Has.Count.EqualTo(exportCount));
+        Assert.That(result.SuccessCount, Is.EqualTo(exportCount));
+
+        // Only the 2 pages that were actually loaded — no further page loads once the
+        // wholly-deferred second page triggered the fast path.
+        Assert.That(countingRepo.BatchLoadCalls, Is.EqualTo(2),
+            $"Expected exactly 2 page loads (mixed page 1, all-deferred page 2); got {countingRepo.BatchLoadCalls}.");
+        Assert.That(countingRepo.RemainingDeferredCalls, Is.EqualTo(1),
+            "Expected exactly one bulk GetRemainingDeferredExportsAsync call once page 2 was found to be entirely deferred.");
     }
 
     /// <summary>

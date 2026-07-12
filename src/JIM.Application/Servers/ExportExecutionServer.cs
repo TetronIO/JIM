@@ -550,10 +550,45 @@ public class ExportExecutionServer
                         // all accumulated entities — 40K+ entities after 100 batches.
                         SyncRepo.ClearChangeTracker();
                     }
-                    // Note: no break when a batch has only ineligible/deferred exports — the outer
-                    // loop continues scanning forward since later batches (ordered by CreatedAt) may
-                    // contain eligible exports. The loop only exits when batch.Count == 0 (database
-                    // exhausted), handled above at line 352.
+                    else if (batchDeferred.Count == batch.Count)
+                    {
+                        // Fast path (issue #985c): the whole batch just loaded was deferred
+                        // (reference-bearing) and nothing in it was executable. Continuing to
+                        // page through the remainder 100 rows at a time would only ever rebuild
+                        // the same deferred list one page slower — at group-heavy scale (10K+
+                        // deferred exports) this was the entire cost of the collection loop.
+                        // Collect everything beyond the cursor with a single set-based query and
+                        // stop scanning; a mixed batch (some immediate, some deferred) always
+                        // takes the branch above instead and keeps paging normally.
+                        using var span = Diagnostics.Diagnostics.Database.StartSpan("CollectRemainingDeferred")
+                            .SetTag("afterCreatedAt", cursorCreatedAt?.ToString("O") ?? "start");
+
+                        var remainingDeferred = await SyncRepo.GetRemainingDeferredExportsAsync(
+                            connectedSystem.Id, cursorCreatedAt, cursorId);
+
+                        // Safety net: mirror the in-loop processedIds guard above, even though a
+                        // strictly-increasing cursor should make duplicates impossible here.
+                        if (processedIds.Count > 0)
+                            remainingDeferred = remainingDeferred.Where(pe => !processedIds.Contains(pe.Id)).ToList();
+
+                        foreach (var pe in remainingDeferred)
+                        {
+                            processedIds.Add(pe.Id);
+                            result.ProcessedPendingExportIds.Add(pe.Id);
+                        }
+
+                        deferredExports.AddRange(remainingDeferred);
+
+                        span.SetTag("collectedCount", remainingDeferred.Count);
+                        span.SetSuccess();
+
+                        break;
+                    }
+                    // Note: no break when a batch has only ineligible/deferred exports and the
+                    // fast path above did not trigger (a mixed batch) — the outer loop continues
+                    // scanning forward since later batches (ordered by CreatedAt) may contain
+                    // eligible exports. The loop only exits when batch.Count == 0 (database
+                    // exhausted, handled above) or via the fast-path break above.
                 }
 
                 // Second pass: Exports with unresolved references (deferred)

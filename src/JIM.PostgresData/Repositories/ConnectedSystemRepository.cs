@@ -2899,6 +2899,45 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Collects all remaining executable exports with unresolved references (deferred) strictly
+    /// after the given keyset cursor, in a single query. Used to fast-path the export
+    /// batch-collection loop once a batch is discovered to be made up entirely of deferred
+    /// exports: paging through the remainder 100 rows at a time would only ever build the same
+    /// deferred list one page slower (issue #985). Same Include chain and keyset predicate as
+    /// <see cref="GetExecutableExportBatchAsync"/>, restricted to HasUnresolvedReferences exports,
+    /// with no page size limit.
+    /// </summary>
+    public async Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+    {
+        var query = ExecutableExportsQuery(connectedSystemId)
+            .Where(pe => pe.HasUnresolvedReferences);
+
+        if (afterCreatedAt.HasValue && afterId.HasValue)
+        {
+            var cursorCreatedAt = afterCreatedAt.Value;
+            var cursorId = afterId.Value;
+            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
+                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
+        }
+
+        return await query
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            // Same rationale as GetExecutableExportBatchAsync: CSO.Type is required by
+            // LdapConnectorExport (GetObjectClass() fallback, placeholder modifications).
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.Type)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+            .OrderBy(pe => pe.CreatedAt)
+            .ThenBy(pe => pe.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
     /// Shared query builder for executable exports. Applies all database-level eligibility filters
     /// including the checks previously done in-memory by IsReadyForExecution:
     /// - Exclude Update exports with no exportable attribute changes

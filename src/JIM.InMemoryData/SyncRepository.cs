@@ -1645,6 +1645,32 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
+    /// Collects all remaining executable exports with unresolved references (deferred) strictly
+    /// after the given keyset cursor, in a single call, mirroring the Postgres implementation.
+    /// Used to fast-path the export batch-collection loop once a batch is discovered to be made
+    /// up entirely of deferred exports (issue #985).
+    /// </summary>
+    public virtual Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+    {
+        var query = GetExecutableExportsForSystem(connectedSystemId)
+            .Where(pe => pe.HasUnresolvedReferences);
+
+        if (afterCreatedAt.HasValue && afterId.HasValue)
+        {
+            var cursorCreatedAt = afterCreatedAt.Value;
+            var cursorId = afterId.Value;
+            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
+                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
+        }
+
+        var result = query
+            .OrderBy(pe => pe.CreatedAt)
+            .ThenBy(pe => pe.Id)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
     /// Applies the same eligibility filters as the Postgres ExecutableExportsQuery:
     /// status must be Pending, Exported, or ExportNotConfirmed; exports not yet due for retry or
     /// that have exceeded max retries are excluded; Update exports must have at least one Pending or
