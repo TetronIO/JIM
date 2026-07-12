@@ -853,6 +853,72 @@ public class SyncEngineReconciliationTests
     }
 
     /// <summary>
+    /// Issue #988 revision: the per-attribute value index derives its type from the CSO values' OWN
+    /// Attribute navigation. If that navigation is null (values loaded without the Attribute include,
+    /// e.g. a partially hydrated entity), the index is built as NotSet with no typed sets, and a naive
+    /// set-only probe would report an actually-confirmed change as unconfirmed - a silent divergence
+    /// from ValueExistsOnCso, which switches on the CHANGE's attribute type and compares raw value
+    /// fields regardless of the value-side navigation. The fallback path must preserve the original
+    /// semantics exactly: a Text Add whose value is present on the CSO is confirmed.
+    /// </summary>
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_TextAddWithNullAttributeNavigationOnCsoValue_StillConfirmed()
+    {
+        // CSO value carries the AttributeId but NOT the Attribute navigation.
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid() };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = 1,
+            Attribute = null!,
+            StringValue = "expected"
+        });
+
+        var attrChange = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "expected");
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.ConfirmedChanges, Has.Count.EqualTo(1),
+            "The exported value IS present on the CSO; a null value-side Attribute navigation must not stop confirmation.");
+        Assert.That(result.PendingExportDeleted, Is.True);
+        Assert.That(result.RetryChanges, Is.Empty,
+            "A falsely-unconfirmed change here would surface spurious retries and, after max retries, false export confirmation errors.");
+    }
+
+    /// <summary>
+    /// Issue #988 revision, mirror case of the null-navigation Add test above: a Remove change whose
+    /// value is STILL present on the CSO (with a null value-side Attribute navigation) must NOT be
+    /// confirmed. This exercises the fallback finding the value (returning true internally), where a
+    /// naive set-only probe would miss it and falsely confirm the removal.
+    /// </summary>
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_TextRemoveWithNullAttributeNavigationOnCsoValue_NotConfirmed()
+    {
+        // CSO value carries the AttributeId but NOT the Attribute navigation, and the value the
+        // Remove change asserts is gone is in fact still present.
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid() };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            AttributeId = 1,
+            Attribute = null!,
+            StringValue = "stillhere"
+        });
+
+        var attrChange = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Remove, stringValue: "stillhere");
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.ConfirmedChanges, Is.Empty,
+            "The value is still on the CSO; confirming its removal would silently corrupt reconciliation state.");
+        Assert.That(result.RetryChanges, Has.Count.EqualTo(1));
+    }
+
+    /// <summary>
     /// Issue #988: the confirmed-change removal loop used List.Remove per confirmed change (O(n) scan
     /// each), quadratic for a Pending Export with many confirmed changes. This is a functional pin
     /// (correct end state), with the accompanying scale-guard test below proving the complexity fix.

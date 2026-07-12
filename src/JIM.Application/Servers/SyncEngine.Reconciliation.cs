@@ -283,6 +283,15 @@ public partial class SyncEngine
     private sealed class AttributeValueIndex
     {
         public required int Count { get; init; }
+
+        /// <summary>
+        /// The raw CSO values this index was built from (a reference copy of the caller's list,
+        /// no allocation cost). Kept on EVERY index so <see cref="ValueExistsInIndex"/> can fall
+        /// back to the original <see cref="ValueExistsOnCso"/> linear comparison whenever the
+        /// typed set a probe needs is missing; see the mismatch guard there for the scenario.
+        /// </summary>
+        public required List<ConnectedSystemObjectAttributeValue> RawValues { get; init; }
+
         public HashSet<string>? TextValues { get; init; }
         public HashSet<string>? ReferenceValues { get; init; }
         public HashSet<int>? NumberValues { get; init; }
@@ -304,12 +313,14 @@ public partial class SyncEngine
             AttributeDataType.Text => new AttributeValueIndex
             {
                 Count = values.Count,
+                RawValues = values,
                 TextValues = values.Where(v => v.StringValue != null).Select(v => v.StringValue!).ToHashSet(StringComparer.Ordinal)
             },
 
             AttributeDataType.Reference => new AttributeValueIndex
             {
                 Count = values.Count,
+                RawValues = values,
                 // Both attrChange.UnresolvedReferenceValue and attrChange.StringValue are matched
                 // against the CSO's UnresolvedReferenceValue (see ValueExistsOnCso's Reference case),
                 // so a single index built from that one CSO-side field covers both probes.
@@ -319,30 +330,35 @@ public partial class SyncEngine
             AttributeDataType.Number => new AttributeValueIndex
             {
                 Count = values.Count,
+                RawValues = values,
                 NumberValues = values.Where(v => v.IntValue.HasValue).Select(v => v.IntValue!.Value).ToHashSet()
             },
 
             AttributeDataType.LongNumber => new AttributeValueIndex
             {
                 Count = values.Count,
+                RawValues = values,
                 LongNumberValues = values.Where(v => v.LongValue.HasValue).Select(v => v.LongValue!.Value).ToHashSet()
             },
 
             AttributeDataType.Guid => new AttributeValueIndex
             {
                 Count = values.Count,
+                RawValues = values,
                 GuidValues = values.Where(v => v.GuidValue.HasValue).Select(v => v.GuidValue!.Value).ToHashSet()
             },
 
             AttributeDataType.Boolean => new AttributeValueIndex
             {
                 Count = values.Count,
+                RawValues = values,
                 BooleanValues = values.Where(v => v.BoolValue.HasValue).Select(v => v.BoolValue!.Value).ToHashSet()
             },
 
             AttributeDataType.DateTime => new AttributeValueIndex
             {
                 Count = values.Count,
+                RawValues = values,
                 DateTimeTicksValues = values.Where(v => v.DateTimeValue.HasValue).Select(v => v.DateTimeValue!.Value.Ticks).ToHashSet()
             },
 
@@ -351,10 +367,11 @@ public partial class SyncEngine
             AttributeDataType.Binary => new AttributeValueIndex
             {
                 Count = values.Count,
+                RawValues = values,
                 BinaryValues = values
             },
 
-            _ => new AttributeValueIndex { Count = values.Count }
+            _ => new AttributeValueIndex { Count = values.Count, RawValues = values }
         };
     }
 
@@ -369,6 +386,34 @@ public partial class SyncEngine
             return false;
 
         var attrType = attrChange.Attribute?.Type ?? AttributeDataType.NotSet;
+
+        // Mismatch guard (belt and braces): the index's typed set is derived from the CSO values'
+        // OWN Attribute navigation type, while this probe uses the CHANGE's attribute type. If the
+        // value-side navigation was not loaded (Attribute null, so the index was built as NotSet
+        // with no typed sets despite Count > 0), or the two types genuinely disagree, the set this
+        // probe needs is null even though values exist. Silently probing a null set would report an
+        // actually-confirmed change as unconfirmed (false retries, then false export confirmation
+        // errors), so fall back to the original linear comparison, which switches on the change's
+        // type and compares raw value fields regardless of the value-side navigation - guaranteeing
+        // byte-identical behaviour with ValueExistsOnCso for every mismatch. The fast path below
+        // stays hot for the normal case where the index and probe types agree.
+        var typedSetAvailableForProbe = attrType switch
+        {
+            AttributeDataType.Text => index.TextValues != null,
+            AttributeDataType.Number => index.NumberValues != null,
+            AttributeDataType.LongNumber => index.LongNumberValues != null,
+            AttributeDataType.DateTime => index.DateTimeTicksValues != null,
+            AttributeDataType.Binary => index.BinaryValues != null,
+            AttributeDataType.Boolean => index.BooleanValues != null,
+            AttributeDataType.Guid => index.GuidValues != null,
+            AttributeDataType.Reference => index.ReferenceValues != null,
+            // NotSet and any future types: ValueExistsOnCso's default arm returns false, matching
+            // the fast switch's own default arm, so either route is equivalent; take the fallback
+            // for uniformity.
+            _ => false
+        };
+        if (!typedSetAvailableForProbe)
+            return ValueExistsOnCso(index.RawValues, attrChange);
 
         return attrType switch
         {
