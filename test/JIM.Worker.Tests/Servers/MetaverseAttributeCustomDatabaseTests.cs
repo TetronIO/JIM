@@ -404,4 +404,134 @@ public class MetaverseAttributeCustomDatabaseTests
             .SingleAsync();
         Assert.That(ssoFk, Is.Null, "the SSO unique-identifier mapping was cleared, not left dangling");
     }
+
+    [Test]
+    public async Task UnassignAttributeFromObjectTypeAsync_TypeScoped_CascadesTypeReferencesButLeavesOtherTypesAndGlobalSsoAsync()
+    {
+        int costCentreId, personTypeId, personImportMappingId, personExportMappingId, groupImportMappingId;
+        await using (var seed = NewContext())
+        {
+            var connectorDefinition = new ConnectorDefinition { Name = "C", BuiltIn = true };
+            var system = new ConnectedSystem { Name = "S", ConnectorDefinition = connectorDefinition };
+            var csType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
+            var target = new ConnectedSystemObjectTypeAttribute { Name = "target", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued, ConnectedSystemObjectType = csType, Selected = true };
+            csType.Attributes.Add(target);
+
+            var personType = new MetaverseObjectType { Name = "Person", PluralName = "People", BuiltIn = true };
+            var groupType = new MetaverseObjectType { Name = "Group", PluralName = "Groups", BuiltIn = true };
+            var costCentre = new MetaverseAttribute { Name = "costCentre", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+            // Bound to both types.
+            personType.Attributes.Add(costCentre);
+            groupType.Attributes.Add(costCentre);
+
+            seed.ConnectorDefinitions.Add(connectorDefinition);
+            seed.ConnectedSystems.Add(system);
+            seed.ConnectedSystemObjectTypes.Add(csType);
+            seed.MetaverseObjectTypes.AddRange(personType, groupType);
+            await seed.SaveChangesAsync();
+            costCentreId = costCentre.Id;
+            personTypeId = personType.Id;
+
+            SyncRule Rule(string name, SyncRuleDirection direction, MetaverseObjectType type) => new()
+            {
+                Name = name, Direction = direction, Enabled = true,
+                ConnectedSystem = system, ConnectedSystemObjectType = csType, MetaverseObjectType = type
+            };
+
+            // Import flow targeting costCentre, owned by a rule targeting Person (in scope for the unassign).
+            var personImportRule = Rule("Person Import", SyncRuleDirection.Import, personType);
+            var personImportMapping = new SyncRuleMapping { TargetMetaverseAttribute = costCentre };
+            personImportRule.AttributeFlowRules.Add(personImportMapping);
+
+            // Export flow whose sole source reads costCentre, owned by a rule targeting Person (source-less within scope).
+            var personExportRule = Rule("Person Export", SyncRuleDirection.Export, personType);
+            var personExportMapping = new SyncRuleMapping { TargetConnectedSystemAttribute = target };
+            personExportMapping.Sources.Add(new SyncRuleMappingSource { MetaverseAttribute = costCentre, Order = 0 });
+            personExportRule.AttributeFlowRules.Add(personExportMapping);
+
+            // Import flow targeting costCentre, owned by a rule targeting Group (OUT of scope; must be untouched).
+            var groupImportRule = Rule("Group Import", SyncRuleDirection.Import, groupType);
+            var groupImportMapping = new SyncRuleMapping { TargetMetaverseAttribute = costCentre };
+            groupImportRule.AttributeFlowRules.Add(groupImportMapping);
+
+            seed.SyncRules.AddRange(personImportRule, personExportRule, groupImportRule);
+
+            // Global SSO unique-identifier mapping (must NOT be cleared by a per-type unassign).
+            seed.ServiceSettings.Add(new ServiceSettings { SSOUniqueIdentifierMetaverseAttribute = costCentre });
+            await seed.SaveChangesAsync();
+            personImportMappingId = personImportMapping.Id;
+            personExportMappingId = personExportMapping.Id;
+            groupImportMappingId = groupImportMapping.Id;
+        }
+
+        await using (var act = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(act));
+
+            var impact = await jim.Metaverse.EvaluateAttributeUnassignAsync(costCentreId, personTypeId);
+            // The preview lists the Person-scoped references but not the Group flow nor the global SSO mapping.
+            Assert.That(impact.References.Any(r => r.Kind == AttributeReferenceKind.ImportAttributeFlow && r.Id == personImportMappingId), Is.True);
+            Assert.That(impact.References.Any(r => r.Kind == AttributeReferenceKind.ExportAttributeFlowMapping && r.Id == personExportMappingId), Is.True);
+            Assert.That(impact.References.Any(r => r.Id == groupImportMappingId), Is.False, "the Group-scoped flow is out of scope for a Person unassign");
+            Assert.That(impact.References.Any(r => r.Kind == AttributeReferenceKind.ServiceSettingsSsoIdentifier), Is.False, "the global SSO mapping is never in a per-type unassign");
+
+            var result = await jim.Metaverse.UnassignAttributeFromObjectTypeAsync(costCentreId, personTypeId, TestUtilities.GetInitiatedBy());
+            Assert.That(result.Unassigned, Is.True);
+        }
+
+        await using var verify = NewContext();
+        // The attribute itself survives (still bound to Group).
+        Assert.That(await verify.MetaverseAttributes.AnyAsync(a => a.Id == costCentreId), Is.True, "the attribute is not deleted by an unassign");
+        // Person-scoped references removed; Group-scoped reference untouched.
+        Assert.That(await verify.SyncRuleMappings.AnyAsync(m => m.Id == personImportMappingId), Is.False, "the Person import flow was cascade-removed");
+        Assert.That(await verify.SyncRuleMappings.AnyAsync(m => m.Id == personExportMappingId), Is.False, "the source-less Person export mapping was removed");
+        Assert.That(await verify.SyncRuleMappings.AnyAsync(m => m.Id == groupImportMappingId), Is.True, "the Group import flow is untouched");
+        // The binding to Person is gone; the binding to Group remains.
+        var boundTypeNames = await verify.MetaverseObjectTypes
+            .Where(t => t.Attributes.Any(a => a.Id == costCentreId))
+            .Select(t => t.Name)
+            .ToListAsync();
+        Assert.That(boundTypeNames, Is.EquivalentTo(new[] { "Group" }), "only the Person binding was removed");
+        // The global SSO unique-identifier mapping is still set.
+        var ssoFk = await verify.ServiceSettings
+            .Select(s => EF.Property<int?>(s, "SSOUniqueIdentifierMetaverseAttributeId"))
+            .SingleAsync();
+        Assert.That(ssoFk, Is.EqualTo(costCentreId), "a per-type unassign must not clear the global SSO mapping");
+    }
+
+    [Test]
+    public async Task UnassignAttributeFromObjectTypeAsync_WithStoredValuesOfType_RefusesAndLeavesBindingAsync()
+    {
+        int costCentreId, personTypeId;
+        await using (var seed = NewContext())
+        {
+            var personType = new MetaverseObjectType { Name = "Person", PluralName = "People", BuiltIn = true };
+            var costCentre = new MetaverseAttribute { Name = "costCentre", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+            personType.Attributes.Add(costCentre);
+            seed.MetaverseObjectTypes.Add(personType);
+            await seed.SaveChangesAsync();
+            costCentreId = costCentre.Id;
+            personTypeId = personType.Id;
+
+            var p1 = new MetaverseObject { Type = personType };
+            p1.AttributeValues.Add(new MetaverseObjectAttributeValue { Attribute = costCentre, MetaverseObject = p1, StringValue = "100" });
+            seed.MetaverseObjects.Add(p1);
+            await seed.SaveChangesAsync();
+        }
+
+        await using (var act = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(act));
+            var impact = await jim.Metaverse.UnassignAttributeFromObjectTypeAsync(costCentreId, personTypeId, TestUtilities.GetInitiatedBy());
+            Assert.That(impact.BlockedByValues, Is.True);
+            Assert.That(impact.Unassigned, Is.False);
+        }
+
+        await using var verify = NewContext();
+        var boundTypeNames = await verify.MetaverseObjectTypes
+            .Where(t => t.Attributes.Any(a => a.Id == costCentreId))
+            .Select(t => t.Name)
+            .ToListAsync();
+        Assert.That(boundTypeNames, Is.EquivalentTo(new[] { "Person" }), "a values-blocked unassign makes no change");
+    }
 }

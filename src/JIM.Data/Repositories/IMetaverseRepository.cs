@@ -419,6 +419,15 @@ public interface IMetaverseRepository
     public Task<List<AttributeReference>> GetAttributeReferencesAsync(int attributeId);
 
     /// <summary>
+    /// Returns the configuration references to the attribute that are <em>scoped to a single Metaverse Object Type</em>:
+    /// the one binding, references owned by Synchronisation Rules that target the type, and Predefined Searches /
+    /// Example Data templates belonging to it, with source-less-parent repair applied within that set. Attribute-global
+    /// references (rules targeting other types, and the Service Settings SSO mapping) are excluded. Backs the unassign
+    /// preview and cascade.
+    /// </summary>
+    public Task<List<AttributeReference>> GetAttributeReferencesForObjectTypeAsync(int attributeId, int metaverseObjectTypeId);
+
+    /// <summary>
     /// Deletes the attribute and every configuration reference to it (bindings, Attribute Flow mappings and sources,
     /// scoping criteria, Object Matching Rules and sources) in dependency order, in a single transaction, leaving
     /// nothing dangling. Callers MUST have already confirmed no Metaverse Object holds a stored value for the
@@ -426,6 +435,15 @@ public interface IMetaverseRepository
     /// </summary>
     /// <param name="attributeId">The unique identifier of the attribute to delete.</param>
     public Task CascadeDeleteMetaverseAttributeAsync(int attributeId);
+
+    /// <summary>
+    /// Unbinds the attribute from a single Metaverse Object Type and cascade-removes the configuration references
+    /// scoped to that type (see <see cref="GetAttributeReferencesForObjectTypeAsync"/>), in dependency order, in a
+    /// single transaction. The attribute itself, references owned by rules targeting other types, and the global
+    /// Service Settings SSO mapping are left untouched. Callers MUST have already confirmed no Metaverse Object of the
+    /// type holds a stored value for the attribute.
+    /// </summary>
+    public Task CascadeUnassignAttributeFromObjectTypeAsync(int attributeId, int metaverseObjectTypeId);
 
     /// <summary>
     /// Binds a Metaverse Attribute to a Metaverse Object Type (adds the many-to-many association). Idempotent: does

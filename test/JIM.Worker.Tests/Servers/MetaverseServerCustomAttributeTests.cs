@@ -284,62 +284,85 @@ public class MetaverseServerCustomAttributeTests
 
     #region unassign
 
-    [Test]
-    public async Task UnassignAttributeFromObjectTypeAsync_WithValuesOfThatType_RefusesAsync()
+    private void SetUpUnassign(int attributeId, int objectTypeId, bool builtIn, int objectsWithValues, List<AttributeReference> references)
     {
         var attribute = new MetaverseAttribute
         {
-            Id = 42, Name = "costCentre",
-            MetaverseObjectTypes = [new MetaverseObjectType { Id = 1, Name = "User" }]
+            Id = attributeId, Name = "costCentre", BuiltIn = builtIn,
+            MetaverseObjectTypes = [new MetaverseObjectType { Id = objectTypeId, Name = "User" }]
         };
-        _metaverseRepo.Setup(r => r.GetMetaverseAttributeWithObjectTypesAsync(42, false)).ReturnsAsync(attribute);
-        _metaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false)).ReturnsAsync(new MetaverseObjectType { Id = 1, Name = "User" });
-        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountByTypeAsync(42, 1)).ReturnsAsync(450);
+        _metaverseRepo.Setup(r => r.GetMetaverseAttributeWithObjectTypesAsync(attributeId, false)).ReturnsAsync(attribute);
+        _metaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(objectTypeId, false)).ReturnsAsync(new MetaverseObjectType { Id = objectTypeId, Name = "User" });
+        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountByTypeAsync(attributeId, objectTypeId)).ReturnsAsync(objectsWithValues);
+        _metaverseRepo.Setup(r => r.GetAttributeReferencesForObjectTypeAsync(attributeId, objectTypeId)).ReturnsAsync(references);
+        _metaverseRepo.Setup(r => r.CascadeUnassignAttributeFromObjectTypeAsync(attributeId, objectTypeId)).Returns(Task.CompletedTask);
+    }
+
+    private static AttributeReference BindingRef(int objectTypeId = 1) =>
+        new() { Kind = AttributeReferenceKind.Binding, Id = objectTypeId, MetaverseObjectTypeId = objectTypeId, MetaverseObjectTypeName = "User", Description = "Object Type binding: User" };
+
+    [Test]
+    public async Task UnassignAttributeFromObjectTypeAsync_WithValuesOfThatType_RefusesAsync()
+    {
+        SetUpUnassign(42, 1, builtIn: false, objectsWithValues: 450, references: [BindingRef()]);
 
         var impact = await _jim.Metaverse.UnassignAttributeFromObjectTypeAsync(42, 1, TestUtilities.GetInitiatedBy());
 
         Assert.That(impact.BlockedByValues, Is.True);
         Assert.That(impact.Unassigned, Is.False);
         Assert.That(impact.ObjectsWithValues, Is.EqualTo(450));
-        _metaverseRepo.Verify(r => r.RemoveAttributeObjectTypeBindingAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+        _metaverseRepo.Verify(r => r.CascadeUnassignAttributeFromObjectTypeAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
     }
 
     [Test]
-    public async Task UnassignAttributeFromObjectTypeAsync_NoValues_RemovesBindingAndAuditsAsync()
+    public async Task UnassignAttributeFromObjectTypeAsync_BindingOnly_UnassignsWithoutConfirmationAsync()
     {
-        var attribute = new MetaverseAttribute
-        {
-            Id = 42, Name = "costCentre",
-            MetaverseObjectTypes = [new MetaverseObjectType { Id = 1, Name = "User" }]
-        };
-        _metaverseRepo.Setup(r => r.GetMetaverseAttributeWithObjectTypesAsync(42, false)).ReturnsAsync(attribute);
-        _metaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false)).ReturnsAsync(new MetaverseObjectType { Id = 1, Name = "User" });
-        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountByTypeAsync(42, 1)).ReturnsAsync(0);
-        _metaverseRepo.Setup(r => r.RemoveAttributeObjectTypeBindingAsync(42, 1)).Returns(Task.CompletedTask);
+        SetUpUnassign(42, 1, builtIn: false, objectsWithValues: 0, references: [BindingRef()]);
 
         var impact = await _jim.Metaverse.UnassignAttributeFromObjectTypeAsync(42, 1, TestUtilities.GetInitiatedBy());
 
         Assert.That(impact.Unassigned, Is.True);
-        _metaverseRepo.Verify(r => r.RemoveAttributeObjectTypeBindingAsync(42, 1), Times.Once);
-        Assert.That(_createdActivities, Has.Count.EqualTo(1));
+        Assert.That(impact.RequiresConfirmation, Is.False, "removing only the binding needs no type-the-name confirmation");
+        _metaverseRepo.Verify(r => r.CascadeUnassignAttributeFromObjectTypeAsync(42, 1), Times.Once);
+        // One parent Activity, one child for the binding.
+        var parent = _createdActivities.Single(a => a.ParentActivityId == null);
+        Assert.That(_createdActivities.Count(a => a.ParentActivityId == parent.Id), Is.EqualTo(1));
+    }
+
+    [Test]
+    public async Task UnassignAttributeFromObjectTypeAsync_WithTypeScopedReferences_CascadesAndAuditsChildrenAsync()
+    {
+        var references = new List<AttributeReference>
+        {
+            BindingRef(),
+            new() { Kind = AttributeReferenceKind.ImportAttributeFlow, Id = 10, SyncRuleId = 5, SyncRuleName = "Import Users (User)", Description = "Import Attribute Flow in Synchronisation Rule 'Import Users (User)'" },
+            new() { Kind = AttributeReferenceKind.ScopingCriterion, Id = 22, Description = "Scoping criterion 22" }
+        };
+        SetUpUnassign(42, 1, builtIn: false, objectsWithValues: 0, references: references);
+
+        var impact = await _jim.Metaverse.UnassignAttributeFromObjectTypeAsync(42, 1, TestUtilities.GetInitiatedBy());
+
+        Assert.That(impact.Unassigned, Is.True);
+        Assert.That(impact.RequiresConfirmation, Is.True, "removing references beyond the binding requires confirmation");
+        _metaverseRepo.Verify(r => r.CascadeUnassignAttributeFromObjectTypeAsync(42, 1), Times.Once);
+
+        var parent = _createdActivities.Single(a => a.ParentActivityId == null);
+        var children = _createdActivities.Where(a => a.ParentActivityId == parent.Id && !ReferenceEquals(a, parent)).ToList();
+        Assert.That(children, Has.Count.EqualTo(references.Count), "one child Activity per type-scoped reference, including the binding");
+        // Import flow and scoping criterion both audit under the Synchronisation Rule target type.
+        Assert.That(children.Count(c => c.TargetType == ActivityTargetType.SynchronisationRule), Is.EqualTo(2));
+        Assert.That(children.Count(c => c.TargetType == ActivityTargetType.MetaverseObjectType), Is.EqualTo(1), "the binding removal is audited under the Object Type");
     }
 
     [Test]
     public async Task UnassignAttributeFromObjectTypeAsync_WithBuiltIn_ThrowsAsync()
     {
-        var attribute = new MetaverseAttribute
-        {
-            Id = 1, Name = "Display Name", BuiltIn = true,
-            MetaverseObjectTypes = [new MetaverseObjectType { Id = 1, Name = "User" }]
-        };
-        _metaverseRepo.Setup(r => r.GetMetaverseAttributeWithObjectTypesAsync(1, false)).ReturnsAsync(attribute);
-        _metaverseRepo.Setup(r => r.GetMetaverseObjectTypeAsync(1, false)).ReturnsAsync(new MetaverseObjectType { Id = 1, Name = "User" });
-        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountByTypeAsync(1, 1)).ReturnsAsync(0);
+        SetUpUnassign(1, 1, builtIn: true, objectsWithValues: 0, references: [BindingRef()]);
 
         Assert.ThrowsAsync<InvalidOperationException>(
             () => _jim.Metaverse.UnassignAttributeFromObjectTypeAsync(1, 1, TestUtilities.GetInitiatedBy()));
 
-        _metaverseRepo.Verify(r => r.RemoveAttributeObjectTypeBindingAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+        _metaverseRepo.Verify(r => r.CascadeUnassignAttributeFromObjectTypeAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
     }
 
     #endregion

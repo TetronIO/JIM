@@ -763,7 +763,9 @@ public class MetaverseServer
 
     /// <summary>
     /// Evaluates the impact of unassigning a Metaverse Attribute from a single Metaverse Object Type without making
-    /// any change. Metaverse Objects <em>of that type</em> holding a stored value are the only hard block.
+    /// any change. Metaverse Objects <em>of that type</em> holding a stored value are the only hard block. The impact
+    /// carries the type-scoped references (the binding plus any references owned by Synchronisation Rules targeting the
+    /// type, and Predefined Searches / Example Data templates belonging to it) that the unassignment would remove.
     /// </summary>
     public async Task<AttributeUnassignImpact> EvaluateAttributeUnassignAsync(int attributeId, int metaverseObjectTypeId)
     {
@@ -772,6 +774,7 @@ public class MetaverseServer
 
         var objectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(metaverseObjectTypeId, false);
         var objectsWithValues = await Application.Repository.Metaverse.GetAttributeValueObjectCountByTypeAsync(attributeId, metaverseObjectTypeId);
+        var references = await Application.Repository.Metaverse.GetAttributeReferencesForObjectTypeAsync(attributeId, metaverseObjectTypeId);
 
         return new AttributeUnassignImpact
         {
@@ -781,21 +784,25 @@ public class MetaverseServer
             MetaverseObjectTypeId = metaverseObjectTypeId,
             MetaverseObjectTypeName = objectType?.Name ?? metaverseObjectTypeId.ToString(),
             WasBound = attribute.MetaverseObjectTypes.Any(t => t.Id == metaverseObjectTypeId),
-            ObjectsWithValues = objectsWithValues
+            ObjectsWithValues = objectsWithValues,
+            References = references
         };
     }
 
     /// <summary>
-    /// Unassigns (unbinds) a custom Metaverse Attribute from a Metaverse Object Type, recorded as an audited Activity.
-    /// Refused (no change) while any Metaverse Object of that type holds a stored value; the returned impact reports
-    /// the block. Built-in attributes cannot be unassigned.
+    /// Unassigns (unbinds) a custom Metaverse Attribute from a Metaverse Object Type, cascade-removing the references
+    /// scoped to that type (references owned by Synchronisation Rules targeting the type, and Predefined Searches /
+    /// Example Data templates belonging to it), in dependency order as one transaction, with source-less-parent repair
+    /// applied within that set. Attribute-global references (rules targeting other types, and the Service Settings SSO
+    /// mapping) are left untouched. Refused (no change) while any Metaverse Object of that type holds a stored value.
+    /// Recorded as a parent unassign Activity with a child Activity per removed reference. Built-ins cannot be unassigned.
     /// </summary>
-    /// <returns>The evaluated impact; <see cref="AttributeUnassignImpact.Unassigned"/> is true when the binding was removed.</returns>
+    /// <returns>The evaluated impact; <see cref="AttributeUnassignImpact.Unassigned"/> is true when the unassignment happened.</returns>
     public Task<AttributeUnassignImpact> UnassignAttributeFromObjectTypeAsync(int attributeId, int metaverseObjectTypeId, MetaverseObject? initiatedBy, string? changeReason = null) =>
         UnassignAttributeFromObjectTypeCoreAsync(attributeId, metaverseObjectTypeId, activity => Application.Activities.CreateActivityAsync(activity, initiatedBy), changeReason);
 
     /// <summary>
-    /// Unassigns a custom Metaverse Attribute from a Metaverse Object Type (API-key initiator overload).
+    /// Unassigns a custom Metaverse Attribute from a Metaverse Object Type with type-scoped cascade (API-key initiator).
     /// </summary>
     public Task<AttributeUnassignImpact> UnassignAttributeFromObjectTypeAsync(int attributeId, int metaverseObjectTypeId, ApiKey initiatedByApiKey, string? changeReason = null) =>
         UnassignAttributeFromObjectTypeCoreAsync(attributeId, metaverseObjectTypeId, activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey), changeReason);
@@ -811,7 +818,7 @@ public class MetaverseServer
         if (!impact.WasBound || impact.BlockedByValues)
             return impact;
 
-        var activity = new Activity
+        var parent = new Activity
         {
             TargetName = impact.AttributeName,
             TargetContext = impact.MetaverseObjectTypeName,
@@ -819,18 +826,35 @@ public class MetaverseServer
             TargetOperationType = ActivityTargetOperationType.Update,
             Message = $"Unassigned Metaverse Attribute '{impact.AttributeName}' from Metaverse Object Type '{impact.MetaverseObjectTypeName}'"
         };
-        await createActivityAsync(activity);
+        await createActivityAsync(parent);
 
         try
         {
-            await Application.Repository.Metaverse.RemoveAttributeObjectTypeBindingAsync(attributeId, metaverseObjectTypeId);
-            await CaptureAttributeConfigurationChangeAsync(activity, attributeId, changeReason);
-            await Application.Activities.CompleteActivityAsync(activity);
+            // One child Activity per removed reference (the binding and each type-scoped cascade reference), grouped
+            // under the parent unassign Activity, mirroring the delete cascade audit.
+            foreach (var reference in impact.References)
+            {
+                var referenceChild = new Activity
+                {
+                    ParentActivityId = parent.Id,
+                    TargetName = reference.Description,
+                    TargetContext = impact.AttributeName,
+                    TargetType = ReferenceActivityTargetType(reference.Kind),
+                    TargetOperationType = ActivityTargetOperationType.Delete,
+                    Message = $"Removed {reference.Description} scoped to Metaverse Object Type '{impact.MetaverseObjectTypeName}'"
+                };
+                await createActivityAsync(referenceChild);
+                await Application.Activities.CompleteActivityAsync(referenceChild);
+            }
+
+            await Application.Repository.Metaverse.CascadeUnassignAttributeFromObjectTypeAsync(attributeId, metaverseObjectTypeId);
+            await CaptureAttributeConfigurationChangeAsync(parent, attributeId, changeReason);
+            await Application.Activities.CompleteActivityAsync(parent);
         }
         catch (Exception ex)
         {
-            // Activity execution boundary: any failure must be recorded on the Activity, never escape silently.
-            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            // Activity execution boundary: any failure must be recorded on the parent Activity, never escape silently.
+            await Application.Activities.FailActivityWithErrorAsync(parent, ex);
             throw;
         }
 
