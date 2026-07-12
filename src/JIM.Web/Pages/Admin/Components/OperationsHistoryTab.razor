@@ -707,7 +707,7 @@
                         {
                             <tr>
                                 <td><MudText Typo="Typo.body2">Duration</MudText></td>
-                                <td><MudText Typo="Typo.body2">@_selectedActivity.ExecutionTime.Value.ToCasualString()</MudText></td>
+                                <td><MudText Typo="Typo.body2">@_selectedActivity.ExecutionTime.Value.ToAbbreviatedString(int.MaxValue)</MudText></td>
                             </tr>
                         }
                     </tbody>
@@ -730,7 +730,9 @@
                     {
                         <MudIcon Icon="@Icons.Material.Filled.Schedule" />
                     }
-                    <MudText Typo="Typo.body1">@(_selectedActivity.InitiatedByName ?? "Unknown")</MudText>
+                    <MudText Typo="Typo.body1">
+                        <AuditPrincipalLink PrincipalType="_selectedActivity.InitiatedByType" PrincipalId="_selectedActivity.InitiatedById" PrincipalName="@_selectedActivity.InitiatedByName" />
+                    </MudText>
                 </div>
             </MudPaper>
 
