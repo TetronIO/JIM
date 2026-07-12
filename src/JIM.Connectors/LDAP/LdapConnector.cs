@@ -11,7 +11,7 @@ using System.Net;
 using System.Security.Cryptography.X509Certificates;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -473,6 +473,26 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         _exportSettings = null;
         _currentExport = null;
         CloseImportConnection();
+    }
+    #endregion
+
+    #region IConnectorRecommendedExportParallelism members
+    /// <summary>
+    /// Recommends export batch parallelism aligned with the directory type already detected for
+    /// this Connected System (issue #985d). The directory type itself is not a labelled setting,
+    /// so it cannot be determined from <paramref name="settingValues"/> without a fresh
+    /// connection, which this method must not open. Export Concurrency, however, is auto-tuned
+    /// per directory type at schema import time (see <see cref="AutoTuneExportConcurrency"/>,
+    /// sourced from <see cref="LdapConnectorRootDse.RecommendedExportConcurrency"/>), so its
+    /// current setting value is the best available connection-free, directory-aware signal.
+    /// Mirroring it here keeps the two knobs coherent: an administrator who has manually tuned
+    /// Export Concurrency (or whose directory auto-tuned to a non-default value) gets a matching
+    /// parallelism recommendation rather than a contradictory one.
+    /// </summary>
+    public int? GetRecommendedExportParallelism(List<ConnectedSystemSettingValue> settingValues)
+    {
+        return settingValues
+            .FirstOrDefault(s => s.Setting.Name == _settingExportConcurrency)?.IntValue;
     }
     #endregion
 
