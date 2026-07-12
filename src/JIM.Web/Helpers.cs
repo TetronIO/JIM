@@ -94,11 +94,14 @@ public static class Helpers
     }
 
     /// <summary>
-    /// Extension method that converts a DateTime into a more human-readable string.
+    /// Extension method that converts a DateTime into the site-wide human-friendly full date/time string
+    /// (e.g. "12 Jul 2026 14:30:00"). Unambiguous and culture-independent, unlike the short date/time
+    /// formats. Callers are responsible for calling <see cref="DateTime.ToLocalTime"/> first if the value
+    /// should be displayed in the user's local time rather than UTC.
     /// </summary>
     public static string ToFriendlyDate(this DateTime dateTime)
     {
-        return $"{dateTime.ToShortDateString()} ({dateTime.ToShortTimeString()})";
+        return dateTime.ToString("dd MMM yyyy HH:mm:ss");
     }
 
     /// <summary>

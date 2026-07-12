@@ -197,7 +197,7 @@
             </MudTd>
             @if (_hasSecondaryExternalId)
             {
-                <MudTd DataLabel="Secondary External Id" Class="jim-text-break">
+                <MudTd DataLabel="Secondary External Id" Class="jim-text-code mud-text-secondary">
                     @if (!string.IsNullOrEmpty(context.SecondaryExternalIdValue))
                     {
                         @context.SecondaryExternalIdValue
@@ -221,17 +221,23 @@
                         <MudText Color="Color.Info">@context.PendingDisplayName</MudText>
                     </MudTooltip>
                 }
+                else
+                {
+                    <EmptyValue />
+                }
             </MudTd>
-            <MudTd DataLabel="Type">@context.TypeName</MudTd>
+            <MudTd DataLabel="Type">
+                <MudChip T="string" Text="@context.TypeName" Variant="Variant.Text" Color="@GetTypeChipColor(context.TypeName)" />
+            </MudTd>
             <MudTd DataLabel="Created">
-                <MudTooltip Text="@context.Created.ToString("O")" Arrow="true" Placement="Placement.Top">
+                <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                     <MudText>@context.Created.ToLocalTime().ToRelativeTime()</MudText>
                 </MudTooltip>
             </MudTd>
             <MudTd DataLabel="Date Joined">
                 @if (context.DateJoined != null)
                 {
-                    <MudTooltip Text="@context.DateJoined.Value.ToString("O")" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@context.DateJoined.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                         <MudText>@context.DateJoined.Value.ToLocalTime().ToRelativeTime()</MudText>
                     </MudTooltip>
                 }
@@ -320,6 +326,35 @@ else
     private bool _clearDialogVisible;
     private bool _clearDeleteChangeHistory = true; // Default to true (recommended for re-import)
     private readonly DialogOptions _clearDialogOptions = new() { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    private static readonly Color[] TypeChipPalette =
+    [
+        Color.Primary,
+        Color.Secondary,
+        Color.Tertiary,
+        Color.Info,
+        Color.Success,
+        Color.Warning,
+        Color.Error,
+        Color.Dark
+    ];
+
+    // Assigns each distinct Type a colour the first time it's seen, so the (typically small) set of
+    // types actually present in this table are guaranteed distinct colours, rather than relying on a
+    // hash that could collide between two arbitrary type names.
+    private readonly Dictionary<string, Color> _typeChipColors = new();
+
+    private Color GetTypeChipColor(string typeName)
+    {
+        if (!_typeChipColors.TryGetValue(typeName, out var color))
+        {
+            color = TypeChipPalette[_typeChipColors.Count % TypeChipPalette.Length];
+            _typeChipColors[typeName] = color;
+        }
+
+        return color;
+    }
+
     private bool _hasSecondaryExternalId;
     private string _externalIdColumnHeader = "External Id";
     private string _secondaryExternalIdColumnHeader = "Secondary External Id";
