@@ -550,7 +550,8 @@ public class ExportExecutionServer
                         // all accumulated entities — 40K+ entities after 100 batches.
                         SyncRepo.ClearChangeTracker();
                     }
-                    else if (batchDeferred.Count == batch.Count)
+                    else if (batchDeferred.Count == batch.Count
+                        && !await SyncRepo.AnyExecutableNonDeferredExportsAfterAsync(connectedSystem.Id, cursorCreatedAt, cursorId))
                     {
                         // Fast path (issue #985c): the whole batch just loaded was deferred
                         // (reference-bearing) and nothing in it was executable. Continuing to
@@ -560,6 +561,16 @@ public class ExportExecutionServer
                         // Collect everything beyond the cursor with a single set-based query and
                         // stop scanning; a mixed batch (some immediate, some deferred) always
                         // takes the branch above instead and keeps paging normally.
+                        //
+                        // The existence probe above is REQUIRED before breaking out: deferred and
+                        // executable exports interleave in (CreatedAt, Id) order, so a full batch
+                        // of deferred exports does not prove the remainder of the queue is
+                        // deferred too. Without the probe, executable exports created after a
+                        // contiguous deferred run would silently never execute in this run — a
+                        // behaviour regression versus page-by-page scanning. The probe is a cheap
+                        // indexed existence check (no Includes, no materialisation); when it
+                        // finds executable exports beyond the cursor, this branch is skipped and
+                        // normal paging continues for this iteration.
                         using var span = Diagnostics.Diagnostics.Database.StartSpan("CollectRemainingDeferred")
                             .SetTag("afterCreatedAt", cursorCreatedAt?.ToString("O") ?? "start");
 
@@ -585,10 +596,11 @@ public class ExportExecutionServer
                         break;
                     }
                     // Note: no break when a batch has only ineligible/deferred exports and the
-                    // fast path above did not trigger (a mixed batch) — the outer loop continues
-                    // scanning forward since later batches (ordered by CreatedAt) may contain
-                    // eligible exports. The loop only exits when batch.Count == 0 (database
-                    // exhausted, handled above) or via the fast-path break above.
+                    // fast path above did not trigger (a mixed batch, or executable exports still
+                    // exist beyond the cursor) — the outer loop continues scanning forward since
+                    // later batches (ordered by CreatedAt) may contain eligible exports. The loop
+                    // only exits when batch.Count == 0 (database exhausted, handled above) or via
+                    // the fast-path break above.
                 }
 
                 // Second pass: Exports with unresolved references (deferred)

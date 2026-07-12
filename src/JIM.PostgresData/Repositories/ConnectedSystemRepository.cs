@@ -2938,6 +2938,32 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Returns whether any executable exports WITHOUT unresolved references exist strictly after
+    /// the given keyset cursor. Guards the deferred-collection fast path (issue #985): deferred
+    /// and executable exports interleave in (CreatedAt, Id) order, so a wholly-deferred batch
+    /// does not prove the rest of the queue is deferred too; collecting the deferred remainder
+    /// and breaking out of the scan without this probe would silently drop any executable
+    /// exports created after the deferred run. A cheap indexed existence check (backed by
+    /// IX_PendingExports_ConnectedSystemId_CreatedAt_Id): no Includes, no ordering, no entity
+    /// materialisation.
+    /// </summary>
+    public async Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+    {
+        var query = ExecutableExportsQuery(connectedSystemId)
+            .Where(pe => !pe.HasUnresolvedReferences);
+
+        if (afterCreatedAt.HasValue && afterId.HasValue)
+        {
+            var cursorCreatedAt = afterCreatedAt.Value;
+            var cursorId = afterId.Value;
+            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
+                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
+        }
+
+        return await query.AnyAsync();
+    }
+
+    /// <summary>
     /// Shared query builder for executable exports. Applies all database-level eligibility filters
     /// including the checks previously done in-memory by IsReadyForExecution:
     /// - Exclude Update exports with no exportable attribute changes

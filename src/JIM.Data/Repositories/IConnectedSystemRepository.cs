@@ -184,6 +184,20 @@ public interface IConnectedSystemRepository
     public Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
 
     /// <summary>
+    /// Returns whether any executable exports WITHOUT unresolved references exist strictly after
+    /// the given keyset cursor. Guards the deferred-collection fast path (issue #985): deferred
+    /// and executable exports interleave in (CreatedAt, Id) order, so an all-deferred batch does
+    /// not prove the rest of the queue is deferred too. Same filtering semantics and keyset
+    /// predicate as <see cref="GetExecutableExportBatchAsync"/>, restricted to non-deferred
+    /// exports; implemented as an existence check (no Includes, no entity materialisation).
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System to probe.</param>
+    /// <param name="afterCreatedAt">CreatedAt of the last row already collected, or null to probe from the beginning.</param>
+    /// <param name="afterId">Id of the last row already collected, or null to probe from the beginning.</param>
+    /// <returns>True if at least one executable, non-deferred Pending Export exists beyond the cursor.</returns>
+    public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
+
+    /// <summary>
     /// Gets lightweight summaries of executable exports for pre-export reconciliation.
     /// Returns only scalar fields via projection query — no Include chains, no entity tracking.
     /// </summary>
