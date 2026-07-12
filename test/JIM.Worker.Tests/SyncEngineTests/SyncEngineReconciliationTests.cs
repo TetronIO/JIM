@@ -564,6 +564,369 @@ public class SyncEngineReconciliationTests
 
     #endregion
 
+    #region ReconcileCsoAgainstPendingExport — per data type, via full orchestration (issue #988 pin)
+    //
+    // These pin ReconcileCsoAgainstPendingExport's behaviour per data type and change type directly
+    // (rather than via the single-CSO IsAttributeChangeConfirmed convenience overload above), because
+    // this is the method issue #988 refactors to use a per-attribute value index instead of repeated
+    // List.Any() scans. Written before the refactor to confirm the refactor changes nothing observable.
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_NumberAdd_Confirmed_MarksForDeletion()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Number, intValue: 42);
+        var attrChange = CreateAttrChange(1, AttributeDataType.Number, PendingExportAttributeChangeType.Add, intValue: 42);
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.PendingExportDeleted, Is.True);
+        Assert.That(result.ConfirmedChanges, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_NumberAdd_Unconfirmed_MarksForRetry()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Number, intValue: 1);
+        var attrChange = CreateAttrChange(1, AttributeDataType.Number, PendingExportAttributeChangeType.Add, intValue: 42);
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.RetryChanges, Has.Count.EqualTo(1));
+        Assert.That(result.ConfirmedChanges, Is.Empty);
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_LongNumberAdd_Confirmed_MarksForDeletion()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.LongNumber, longValue: 9999999999L);
+        var attrChange = CreateAttrChange(1, AttributeDataType.LongNumber, PendingExportAttributeChangeType.Add, longValue: 9999999999L);
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.PendingExportDeleted, Is.True);
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_DateTimeAdd_Confirmed_MarksForDeletion()
+    {
+        var dt = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.DateTime, dateTimeValue: dt);
+        var attrChange = CreateAttrChange(1, AttributeDataType.DateTime, PendingExportAttributeChangeType.Add, dateTimeValue: dt);
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.PendingExportDeleted, Is.True);
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_GuidAdd_Confirmed_MarksForDeletion()
+    {
+        var guid = Guid.NewGuid();
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Guid, guidValue: guid);
+        var attrChange = CreateAttrChange(1, AttributeDataType.Guid, PendingExportAttributeChangeType.Add, guidValue: guid);
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.PendingExportDeleted, Is.True);
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_BinaryAdd_Confirmed_MarksForDeletion()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Binary, byteValue: [0x01, 0x02, 0x03]);
+        var attrChange = CreateAttrChange(1, AttributeDataType.Binary, PendingExportAttributeChangeType.Add, byteValue: [0x01, 0x02, 0x03]);
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.PendingExportDeleted, Is.True);
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_BinaryAdd_Unconfirmed_MarksForRetry()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Binary, byteValue: [0x09, 0x09]);
+        var attrChange = CreateAttrChange(1, AttributeDataType.Binary, PendingExportAttributeChangeType.Add, byteValue: [0x01, 0x02, 0x03]);
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.RetryChanges, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_ReferenceAdd_ViaUnresolvedReferenceValue_MarksForDeletion()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Reference, unresolvedReferenceValue: "CN=User1,DC=test");
+        var attrChange = CreateAttrChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Add, unresolvedReferenceValue: "CN=User1,DC=test");
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.PendingExportDeleted, Is.True);
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_ReferenceAdd_ViaStringValueMatchingUnresolved_MarksForDeletion()
+    {
+        // Export resolution clears UnresolvedReferenceValue and sets StringValue instead; the CSO's
+        // UnresolvedReferenceValue must still be matched against the change's StringValue.
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Reference, unresolvedReferenceValue: "CN=User1,DC=test");
+        var attrChange = CreateAttrChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Add, stringValue: "CN=User1,DC=test");
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.PendingExportDeleted, Is.True);
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_TextRemove_ValueAbsent_Confirmed_MarksForDeletion()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Text, stringValue: "other");
+        var attrChange = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Remove, stringValue: "removed");
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.PendingExportDeleted, Is.True);
+        Assert.That(result.ConfirmedChanges, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_TextRemove_ValueStillPresent_Unconfirmed_MarksForRetry()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Text, stringValue: "stillhere");
+        var attrChange = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Remove, stringValue: "stillhere");
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.RetryChanges, Has.Count.EqualTo(1));
+        Assert.That(result.ConfirmedChanges, Is.Empty);
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_RemoveAll_NoValuesLeft_Confirmed_MarksForDeletion()
+    {
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid() };
+        var attrChange = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.RemoveAll);
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.PendingExportDeleted, Is.True);
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_RemoveAll_ValuesStillExist_Unconfirmed_MarksForRetry()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Text, stringValue: "still");
+        var attrChange = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.RemoveAll);
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.RetryChanges, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_UpdateEmptyValue_NoCsoValues_Confirmed_MarksForDeletion()
+    {
+        // Clearing a single-valued attribute: pending change has all nulls, CSO should have no values.
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid() };
+        var attrChange = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Update);
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.PendingExportDeleted, Is.True);
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_UpdateEmptyValue_CsoStillHasValues_Unconfirmed_MarksForRetry()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Text, stringValue: "not cleared");
+        var attrChange = CreateAttrChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Update);
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.RetryChanges, Has.Count.EqualTo(1));
+    }
+
+    /// <summary>
+    /// Pins the per-attribute value-index helper introduced by #988: several independent pending
+    /// changes targeting the same multi-valued attribute must each be evaluated correctly against
+    /// the CSO's values for that attribute (confirmed only when actually present/absent as expected),
+    /// with the shared index reused across all of them rather than rebuilt or bled between changes.
+    /// </summary>
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_MultipleChangesSameMultiValuedAttribute_EachEvaluatedIndependently()
+    {
+        var attribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "member", Type = AttributeDataType.Reference };
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid() };
+        foreach (var dn in new[] { "CN=A,DC=test", "CN=B,DC=test", "CN=C,DC=test" })
+        {
+            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            {
+                AttributeId = 1,
+                Attribute = attribute,
+                UnresolvedReferenceValue = dn
+            });
+        }
+
+        var confirmedAdd = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(), AttributeId = 1, Attribute = attribute,
+            ChangeType = PendingExportAttributeChangeType.Add, UnresolvedReferenceValue = "CN=A,DC=test",
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+        };
+        var unconfirmedAdd = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(), AttributeId = 1, Attribute = attribute,
+            ChangeType = PendingExportAttributeChangeType.Add, UnresolvedReferenceValue = "CN=NOT-THERE,DC=test",
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+        };
+        var confirmedRemove = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(), AttributeId = 1, Attribute = attribute,
+            ChangeType = PendingExportAttributeChangeType.Remove, UnresolvedReferenceValue = "CN=ALREADY-GONE,DC=test",
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+        };
+        var unconfirmedRemove = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(), AttributeId = 1, Attribute = attribute,
+            ChangeType = PendingExportAttributeChangeType.Remove, UnresolvedReferenceValue = "CN=C,DC=test",
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+        };
+
+        var pe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            Status = PendingExportStatus.Exported,
+            AttributeValueChanges = [confirmedAdd, unconfirmedAdd, confirmedRemove, unconfirmedRemove]
+        };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.ConfirmedChanges, Is.EquivalentTo(new[] { confirmedAdd, confirmedRemove }));
+        Assert.That(result.RetryChanges, Is.EquivalentTo(new[] { unconfirmedAdd, unconfirmedRemove }));
+        // Confirmed changes are removed from the Pending Export; unconfirmed ones remain.
+        Assert.That(pe.AttributeValueChanges, Is.EquivalentTo(new[] { unconfirmedAdd, unconfirmedRemove }));
+    }
+
+    /// <summary>
+    /// Issue #988: the confirmed-change removal loop used List.Remove per confirmed change (O(n) scan
+    /// each), quadratic for a Pending Export with many confirmed changes. This is a functional pin
+    /// (correct end state), with the accompanying scale-guard test below proving the complexity fix.
+    /// </summary>
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_ManyConfirmedChanges_AllRemovedFromPendingExport()
+    {
+        const int changeCount = 500;
+        var attribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "member", Type = AttributeDataType.Reference };
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid() };
+        var changes = new List<PendingExportAttributeValueChange>(changeCount);
+        for (var i = 0; i < changeCount; i++)
+        {
+            var dn = $"CN=user{i},DC=test";
+            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { AttributeId = 1, Attribute = attribute, UnresolvedReferenceValue = dn });
+            changes.Add(new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(), AttributeId = 1, Attribute = attribute,
+                ChangeType = PendingExportAttributeChangeType.Add, UnresolvedReferenceValue = dn,
+                Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+            });
+        }
+
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = changes };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.ConfirmedChanges, Has.Count.EqualTo(changeCount));
+        Assert.That(result.PendingExportDeleted, Is.True, "All changes confirmed - Pending Export should be marked for deletion.");
+    }
+
+    /// <summary>
+    /// Issue #988 scale guard: reconciling a large group's worth of confirmed Reference changes must
+    /// stay fast. Before the fix, ValueExistsOnCso's per-change List.Any() scan and the per-change
+    /// List.Remove in the confirmed-change removal loop are both O(n) per change, i.e. O(n²) overall -
+    /// this is a stable red/green discriminator (the unfixed code takes tens of seconds here, not a
+    /// flaky micro-benchmark), not a tight timing assertion.
+    /// </summary>
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_LargeGroupManyReferenceChanges_CompletesWithinBound()
+    {
+        const int memberCount = 50_000;
+        var attribute = new ConnectedSystemObjectTypeAttribute { Id = 1, Name = "member", Type = AttributeDataType.Reference };
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid() };
+        var changes = new List<PendingExportAttributeValueChange>(memberCount);
+        for (var i = 0; i < memberCount; i++)
+        {
+            var dn = $"CN=user{i},DC=test";
+            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { AttributeId = 1, Attribute = attribute, UnresolvedReferenceValue = dn });
+            changes.Add(new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(), AttributeId = 1, Attribute = attribute,
+                ChangeType = PendingExportAttributeChangeType.Add, UnresolvedReferenceValue = dn,
+                Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation
+            });
+        }
+
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = changes };
+        var result = new PendingExportReconciliationResult();
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+        stopwatch.Stop();
+
+        Assert.That(result.ConfirmedChanges, Has.Count.EqualTo(memberCount));
+        Assert.That(result.PendingExportDeleted, Is.True);
+        Assert.That(stopwatch.Elapsed, Is.LessThan(TimeSpan.FromSeconds(5)),
+            $"Reconciling a {memberCount:N0}-member group with {memberCount:N0} pending Reference changes took " +
+            $"{stopwatch.Elapsed.TotalSeconds:N1}s; expected well under 5s with the #988 fix applied.");
+    }
+
+    #endregion
+
     #region Helpers
 
     private static ConnectedSystemObject CreateCsoWithAttributeValue(
