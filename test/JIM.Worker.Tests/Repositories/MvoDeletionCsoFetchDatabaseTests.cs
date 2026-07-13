@@ -192,4 +192,31 @@ public class MvoDeletionCsoFetchDatabaseTests
                 "Each loaded value's Attribute must be loaded; delete Pending Export stamping reads it.");
         }
     }
+
+    /// <summary>
+    /// The fetch runs on the worker's long-lived, tracking DbContext mid-page-flush. Identity
+    /// resolution then returns already-tracked CSO instances, and earlier passes of the same page
+    /// may have disconnected one in memory (MetaverseObjectId = null) ahead of persistence. The
+    /// grouping must therefore key on the database row's MVO ID, not the materialised entity's
+    /// in-memory value, or the flush throws for every page that mixes disconnects with deletions.
+    /// </summary>
+    [Test]
+    public async Task GetConnectedSystemObjectsForMvoDeletionAsync_ToleratesTrackedInMemoryDisconnectsAsync()
+    {
+        var (mvoIdA, mvoIdB, _, _) = await SeedTwoGroupsAsync();
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        // Simulate page processing having disconnected MVO A's CSO in memory, not yet persisted.
+        var trackedCso = await ctx.ConnectedSystemObjects.SingleAsync(c => c.MetaverseObjectId == mvoIdA);
+        trackedCso.MetaverseObjectId = null;
+
+        var result = await repository.Sync.GetConnectedSystemObjectsForMvoDeletionAsync([mvoIdA, mvoIdB]);
+
+        Assert.That(result.Keys, Is.EquivalentTo(new[] { mvoIdA, mvoIdB }),
+            "Grouping must key on the database row's MVO ID; the in-memory disconnect must not break or reassign the grouping.");
+        Assert.That(result[mvoIdA].Single().Id, Is.EqualTo(trackedCso.Id),
+            "The tracked (in-memory disconnected) instance must still be returned under its database MVO ID.");
+    }
 }

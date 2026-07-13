@@ -922,12 +922,19 @@ public partial class SyncRepository
         if (metaverseObjectIds.Count == 0)
             return new Dictionary<Guid, List<ConnectedSystemObject>>();
 
-        // Step 1: the CSO rows themselves, no children.
+        // Step 1: the CSO rows themselves, no children. The MVO ID is projected from the database
+        // row rather than read from the materialised entity afterwards: this is a tracking query
+        // on the worker's long-lived context, so identity resolution returns already-tracked
+        // instances, and earlier passes of the same page may have disconnected one in memory
+        // (MetaverseObjectId = null) ahead of persistence; grouping on the in-memory value would
+        // then throw. The ?? Guid.Empty is unreachable (the Where excludes NULL rows) and exists
+        // only to keep the projection null-safe.
         var mvoIds = metaverseObjectIds.ToArray();
-        var csos = await _context.ConnectedSystemObjects
+        var csoRows = await _context.ConnectedSystemObjects
             .Where(cso => cso.MetaverseObjectId.HasValue && mvoIds.Contains(cso.MetaverseObjectId.Value))
+            .Select(cso => new { Cso = cso, MvoId = cso.MetaverseObjectId ?? Guid.Empty })
             .ToListAsync();
-        if (csos.Count == 0)
+        if (csoRows.Count == 0)
             return new Dictionary<Guid, List<ConnectedSystemObject>>();
 
         // Step 2: only the external ID attribute values, matched by the CSO's external ID columns
@@ -936,7 +943,7 @@ public partial class SyncRepository
         // cannot express the column match: EF Core cannot translate a filtered Include that
         // references the parent entity (InvalidOperationException at query translation), so this
         // runs as a correlated subquery and the values are stitched onto the CSOs below.
-        var csoIds = csos.Select(c => c.Id).ToList();
+        var csoIds = csoRows.Select(r => r.Cso.Id).ToList();
         var externalIdValueRows = await _context.ConnectedSystemObjects
             .Where(cso => csoIds.Contains(cso.Id))
             .SelectMany(cso => cso.AttributeValues
@@ -950,7 +957,7 @@ public partial class SyncRepository
         // Stitch in memory. Tracked-query navigation fix-up may already have added a value to its
         // CSO's collection (or the CSO may already be tracked with its values from page processing),
         // so guard against double-adding the same instance.
-        var csosById = csos.ToDictionary(c => c.Id);
+        var csosById = csoRows.ToDictionary(r => r.Cso.Id, r => r.Cso);
         foreach (var row in externalIdValueRows)
         {
             row.Value.Attribute = row.Attribute;
@@ -959,9 +966,9 @@ public partial class SyncRepository
                 attributeValues.Add(row.Value);
         }
 
-        return csos
-            .GroupBy(cso => cso.MetaverseObjectId!.Value)
-            .ToDictionary(g => g.Key, g => g.ToList());
+        return csoRows
+            .GroupBy(r => r.MvoId)
+            .ToDictionary(g => g.Key, g => g.Select(r => r.Cso).ToList());
     }
 
     /// <summary>
