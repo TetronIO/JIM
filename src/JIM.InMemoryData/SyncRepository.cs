@@ -907,10 +907,22 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
+    // Virtual so tests can spy on per-object deletes; the MVO deletion flush must use the
+    // set-based DeleteMetaverseObjectsAsync instead (issue #993).
+    public virtual Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
         _mvos.Remove(metaverseObject.Id);
         _csosByMvo.Remove(metaverseObject.Id);
+        return Task.CompletedTask;
+    }
+
+    public virtual Task DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
+    {
+        foreach (var metaverseObject in metaverseObjects)
+        {
+            _mvos.Remove(metaverseObject.Id);
+            _csosByMvo.Remove(metaverseObject.Id);
+        }
         return Task.CompletedTask;
     }
 
@@ -1341,7 +1353,9 @@ public class SyncRepository : ISyncRepository
 
     #region MVO Change History
 
-    public Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change)
+    // Virtual so tests can spy on per-object change record creation; the MVO deletion flush
+    // persists its Deleted change records via PersistPendingMvoChangesAsync instead (issue #993).
+    public virtual Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change)
     {
         if (change.Id == Guid.Empty)
             change.Id = Guid.NewGuid();
@@ -1420,7 +1434,9 @@ public class SyncRepository : ISyncRepository
 
     #region Export Evaluation Support
 
-    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
+    // Virtual so tests can spy on per-object fetches; the MVO deletion flush must use the
+    // set-based GetConnectedSystemObjectsForMvoDeletionAsync instead (issue #993).
+    public virtual Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
     {
         var result = new List<ConnectedSystemObject>();
         if (_csosByMvo.TryGetValue(metaverseObjectId, out var csoIds))
@@ -1432,6 +1448,41 @@ public class SyncRepository : ISyncRepository
             }
         }
         return Task.FromResult(result);
+    }
+
+    // In-memory objects carry their full attribute value lists; the Postgres implementation's
+    // lean include shape (external ID attribute values only) cannot be modelled here (see the
+    // EF in-memory caveat in test/CLAUDE.md).
+    public virtual Task<Dictionary<Guid, List<ConnectedSystemObject>>> GetConnectedSystemObjectsForMvoDeletionAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        var result = new Dictionary<Guid, List<ConnectedSystemObject>>();
+        foreach (var mvoId in metaverseObjectIds.Where(_csosByMvo.ContainsKey))
+        {
+            var joinedCsos = _csosByMvo[mvoId]
+                .Where(_csos.ContainsKey)
+                .Select(csoId => _csos[csoId])
+                .ToList();
+
+            if (joinedCsos.Count > 0)
+                result[mvoId] = joinedCsos;
+        }
+        return Task.FromResult(result);
+    }
+
+    public virtual Task DisconnectConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        foreach (var cso in connectedSystemObjectIds
+            .Where(_csos.ContainsKey)
+            .Select(csoId => _csos[csoId]))
+        {
+            cso.MetaverseObjectId = null;
+            cso.MetaverseObject = null;
+            cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
+            cso.DateJoined = null;
+            UpdateMvoIndex(cso);
+        }
+        return Task.CompletedTask;
     }
 
     public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(

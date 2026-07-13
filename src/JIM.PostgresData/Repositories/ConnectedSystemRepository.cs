@@ -3639,7 +3639,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // Lightweight query: only load AttributeValueChanges with Attribute (needed for reconciliation comparison).
         // Skip ConnectedSystemObject (caller already has CSOs in memory), ConnectedSystem, and SourceMetaverseObject.
+        // AsNoTracking: every caller treats these as read-only snapshots (the duplicate self-heal
+        // below and the deferred-export reconciliation both already assume it), and tracked
+        // Pending Exports on the worker's long-lived context become a hazard once raw SQL
+        // deletes their rows (see DeletePendingExportsByConnectedSystemObjectIdsAsync).
         var pendingExports = await Repository.Database.PendingExports
+            .AsNoTracking()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
             .Where(pe => pe.ConnectedSystemObjectId != null && csoIdList.Contains(pe.ConnectedSystemObjectId.Value))
