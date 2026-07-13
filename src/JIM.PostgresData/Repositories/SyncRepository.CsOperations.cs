@@ -891,32 +891,58 @@ public partial class SyncRepository
     /// Used before ExecuteDeleteAsync to prevent the change tracker from interfering
     /// with direct SQL operations (e.g., ClientSetNull cascading on orphaned children).
     /// </summary>
+    /// <remarks>
+    /// Change detection is suppressed while enumerating: mid-sync, tracked entities routinely
+    /// hold navigations to untracked instances that duplicate already-tracked keys (cross-page
+    /// reference resolution builds such graphs), and ChangeTracker.Entries&lt;T&gt;() otherwise
+    /// runs DetectChanges, attaches those graphs, and throws an identity conflict. Detaching
+    /// needs only the entries already tracked, so skipping detection is safe.
+    /// </remarks>
     private void DetachTrackedEntities<T>(Func<T, bool> predicate) where T : class
     {
-        var entries = _context.ChangeTracker.Entries<T>()
-            .Where(e => predicate(e.Entity))
-            .ToList();
+        var autoDetectChanges = _context.ChangeTracker.AutoDetectChangesEnabled;
+        _context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            var entries = _context.ChangeTracker.Entries<T>()
+                .Where(e => predicate(e.Entity))
+                .ToList();
 
-        foreach (var entry in entries)
-            entry.State = EntityState.Detached;
+            foreach (var entry in entries)
+                entry.State = EntityState.Detached;
+        }
+        finally
+        {
+            _context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
     }
 
     /// <summary>
     /// Detaches tracked PendingExportAttributeValueChange entities whose PendingExportId shadow FK
     /// matches any of the given parent IDs. Accesses the shadow property via the change tracker entry.
+    /// Change detection is suppressed for the same reason as <see cref="DetachTrackedEntities{T}"/>.
     /// </summary>
     private void DetachTrackedChildEntities(List<Guid> pendingExportIds)
     {
-        var entries = _context.ChangeTracker.Entries<PendingExportAttributeValueChange>()
-            .Where(e =>
-            {
-                var fkValue = e.Property<Guid?>("PendingExportId").CurrentValue;
-                return fkValue.HasValue && pendingExportIds.Contains(fkValue.Value);
-            })
-            .ToList();
+        var autoDetectChanges = _context.ChangeTracker.AutoDetectChangesEnabled;
+        _context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            var entries = _context.ChangeTracker.Entries<PendingExportAttributeValueChange>()
+                .Where(e =>
+                {
+                    var fkValue = e.Property<Guid?>("PendingExportId").CurrentValue;
+                    return fkValue.HasValue && pendingExportIds.Contains(fkValue.Value);
+                })
+                .ToList();
 
-        foreach (var entry in entries)
-            entry.State = EntityState.Detached;
+            foreach (var entry in entries)
+                entry.State = EntityState.Detached;
+        }
+        finally
+        {
+            _context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
     }
 
     #endregion

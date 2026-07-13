@@ -204,4 +204,52 @@ public class MvoDeletionPendingExportReplaceDatabaseTests
         Assert.That(await verify.PendingExportAttributeValueChanges.AnyAsync(), Is.False,
             "The replaced Pending Export's attribute value changes must be deleted.");
     }
+
+    /// <summary>
+    /// Mid-sync, the tracker routinely holds entities whose navigations reference untracked
+    /// instances that duplicate already-tracked keys (cross-page reference resolution builds such
+    /// graphs; the method's raw SQL exists partly to avoid detonating them). The detach step must
+    /// therefore not trigger DetectChanges: ChangeTracker.Entries&lt;T&gt;() otherwise attaches the
+    /// undetected graph and throws an identity conflict ("another instance with the same key value
+    /// is already being tracked"), as seen on Scenario8-CrossDomainEntitlementSync.
+    /// </summary>
+    [Test]
+    public async Task DeletePendingExportsByConnectedSystemObjectIdsAsync_TrackerHoldsUndetectedDuplicateKeyGraph_DeletesWithoutIdentityConflictAsync()
+    {
+        var (mvoId, csoId) = await SeedJoinedUserWithCreatePendingExportAsync();
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var trackedPe = await ctx.PendingExports
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .SingleAsync(pe => pe.ConnectedSystemObjectId == csoId);
+        var trackedAttr = trackedPe.AttributeValueChanges.Single().Attribute;
+
+        // Simulate cross-page state: a tracked entity's collection navigation gains an untracked
+        // child whose graph carries a DUPLICATE instance (same key, different object) of an
+        // already-tracked attribute. No DetectChanges has run since.
+        var duplicateAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = trackedAttr.Id, Name = trackedAttr.Name, Type = trackedAttr.Type,
+            AttributePlurality = trackedAttr.AttributePlurality
+        };
+        trackedPe.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            Attribute = duplicateAttr,
+            AttributeId = duplicateAttr.Id,
+            StringValue = "untracked.duplicate@example.com",
+            ChangeType = PendingExportAttributeChangeType.Update
+        });
+
+        await repository.Sync.DeletePendingExportsByConnectedSystemObjectIdsAsync([csoId]);
+
+        await using var verify = NewContext();
+        Assert.That(await verify.PendingExports.AnyAsync(), Is.False,
+            "The Pending Export must be deleted despite the undetected duplicate-key graph in the tracker.");
+        Assert.That(await verify.MetaverseObjects.AnyAsync(m => m.Id == mvoId), Is.True,
+            "The MVO is not part of this operation and must be untouched.");
+    }
 }
