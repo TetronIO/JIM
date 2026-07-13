@@ -1918,6 +1918,91 @@ public class ExportExecutionTests
         }
     }
 
+    /// <summary>
+    /// Simulates database persistence isolation for the parallel export batch path: the real
+    /// ProcessBatchesInParallelAsync re-loads each batch's Pending Exports by ID on a FRESH
+    /// per-batch DbContext, which only sees state that has been persisted. The plain in-memory
+    /// repository returns live object references, so in-memory mutations (such as reference
+    /// resolution) are visible to "re-loads" even when nothing was persisted; that masks exactly
+    /// the class of bug this fake exists to expose. Here, GetPendingExportsByIdsAsync returns
+    /// deep clones of the last-PERSISTED state, and only UpdatePendingExportsAsync (the persist
+    /// event) refreshes that state.
+    /// </summary>
+    private sealed class PersistenceIsolatingSyncRepository : SyncRepository
+    {
+        private readonly Dictionary<Guid, PendingExport> _persistedState = new();
+        private readonly object _persistLock = new();
+
+        /// <summary>
+        /// Seeds a Pending Export into the store AND snapshots it as the persisted (committed)
+        /// state, as a real database row would be after the sync run that created it.
+        /// </summary>
+        public void SeedPendingExportAsPersisted(PendingExport pendingExport)
+        {
+            SeedPendingExport(pendingExport);
+            lock (_persistLock)
+                _persistedState[pendingExport.Id] = ClonePendingExport(pendingExport);
+        }
+
+        public override Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+        {
+            var list = pendingExports.ToList();
+            lock (_persistLock)
+            {
+                foreach (var pe in list)
+                    _persistedState[pe.Id] = ClonePendingExport(pe);
+            }
+            return base.UpdatePendingExportsAsync(list);
+        }
+
+        public override Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+        {
+            lock (_persistLock)
+            {
+                var result = pendingExportIds
+                    .Where(id => _persistedState.ContainsKey(id))
+                    .Select(id => ClonePendingExport(_persistedState[id]))
+                    .ToList();
+                return Task.FromResult(result);
+            }
+        }
+
+        private static PendingExport ClonePendingExport(PendingExport source)
+        {
+            return new PendingExport
+            {
+                Id = source.Id,
+                ConnectedSystemId = source.ConnectedSystemId,
+                ConnectedSystem = source.ConnectedSystem,
+                ConnectedSystemObject = source.ConnectedSystemObject,
+                ConnectedSystemObjectId = source.ConnectedSystemObjectId,
+                SourceMetaverseObjectId = source.SourceMetaverseObjectId,
+                Status = source.Status,
+                ChangeType = source.ChangeType,
+                CreatedAt = source.CreatedAt,
+                HasUnresolvedReferences = source.HasUnresolvedReferences,
+                MaxRetries = source.MaxRetries,
+                ErrorCount = source.ErrorCount,
+                NextRetryAt = source.NextRetryAt,
+                LastAttemptedAt = source.LastAttemptedAt,
+                AttributeValueChanges = source.AttributeValueChanges.Select(avc => new PendingExportAttributeValueChange
+                {
+                    Id = avc.Id,
+                    PendingExportId = avc.PendingExportId,
+                    AttributeId = avc.AttributeId,
+                    Attribute = avc.Attribute,
+                    ChangeType = avc.ChangeType,
+                    Status = avc.Status,
+                    StringValue = avc.StringValue,
+                    UnresolvedReferenceValue = avc.UnresolvedReferenceValue,
+                    GuidValue = avc.GuidValue,
+                    IntValue = avc.IntValue,
+                    ExportAttemptCount = avc.ExportAttemptCount
+                }).ToList()
+            };
+        }
+    }
+
     private static Mock<IConnector> CreateSucceedingCallsConnector()
     {
         var mockConnector = new Mock<IConnector>();
@@ -2204,6 +2289,128 @@ public class ExportExecutionTests
             "The deferred bulk-collect must not fire while executable exports remain beyond the cursor.");
         Assert.That(countingRepo.ExecutableProbeCalls, Is.GreaterThanOrEqualTo(1),
             "Expected the all-deferred page 1 to trigger the executable-exports existence probe.");
+    }
+
+    /// <summary>
+    /// Regression guard for the parallel deferred-export path: ProcessBatchesInParallelAsync
+    /// re-loads each batch's Pending Exports by ID on a fresh per-batch repository/DbContext,
+    /// which only sees PERSISTED state. Reference resolution happens in memory before dispatch,
+    /// so the resolutions must be persisted BEFORE the parallel batches execute; otherwise each
+    /// batch re-loads the stale unresolved rows and sends raw Metaverse Object identifiers to
+    /// the target directory ("member: value #0 invalid per syntax" against OpenLDAP; observed
+    /// 2026-07-13 when the Max Export Parallelism default first exceeded 1). The sequential path
+    /// masks this by passing the in-memory objects straight to the connector.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredExports_ConnectorReceivesResolvedReferencesAsync()
+    {
+        // Arrange: an application wired to a persistence-isolating repository, so per-batch
+        // re-loads behave like a real fresh DbContext (persisted state only).
+        var isolatingRepo = new PersistenceIsolatingSyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: isolatingRepo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+
+        // Referenced MVOs with target CSOs so every deferred reference resolves in this run.
+        var referencedMvoIds = new List<Guid>();
+        for (var i = 0; i < 6; i++)
+        {
+            var mvoId = Guid.NewGuid();
+            referencedMvoIds.Add(mvoId);
+            isolatingRepo.SeedMetaverseObject(new MetaverseObject { Id = mvoId });
+
+            var referencedCso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                MetaverseObjectId = mvoId,
+                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        Attribute = objectGuidAttr,
+                        AttributeId = objectGuidAttr.Id,
+                        GuidValue = Guid.NewGuid()
+                    }
+                }
+            };
+            isolatingRepo.SeedConnectedSystemObject(referencedCso);
+        }
+
+        // Six deferred reference-bearing exports at batch size 2 = three deferred batches,
+        // which is what routes execution through ProcessBatchesInParallelAsync (it requires
+        // more than one batch) when MaxParallelism > 1 and both factories are supplied.
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+        for (var i = 0; i < 6; i++)
+        {
+            var pe = CreateSeededCreateExport(targetSystem, targetUserType,
+                baseTime.AddMilliseconds(i), hasUnresolvedReferences: true);
+            pe.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+            {
+                Id = Guid.NewGuid(),
+                PendingExportId = pe.Id,
+                ChangeType = PendingExportAttributeChangeType.Add,
+                AttributeId = managerAttr.Id,
+                Attribute = managerAttr,
+                UnresolvedReferenceValue = referencedMvoIds[i].ToString(),
+                Status = PendingExportAttributeChangeStatus.Pending
+            });
+            isolatingRepo.SeedPendingExportAsPersisted(pe);
+        }
+
+        // Recording connectors: capture the reference values each batch's connector actually
+        // receives, cloned AT CALL TIME so later in-memory mutations cannot mask staleness.
+        var receivedReferenceValues = new System.Collections.Concurrent.ConcurrentBag<(Guid PeId, string? StringValue, string? UnresolvedReferenceValue)>();
+        Mock<IConnector> CreateRecordingConnector()
+        {
+            var mock = new Mock<IConnector>();
+            var export = mock.As<IConnectorExportUsingCalls>();
+            mock.Setup(c => c.Name).Returns("Recording Test Connector");
+            export.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+                {
+                    foreach (var pe in exports)
+                        foreach (var avc in pe.AttributeValueChanges.Where(a => a.AttributeId == managerAttr.Id))
+                            receivedReferenceValues.Add((pe.Id, avc.StringValue, avc.UnresolvedReferenceValue));
+                    return exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList();
+                });
+            return mock;
+        }
+
+        var primaryConnector = CreateRecordingConnector();
+        var options = new ExportExecutionOptions { BatchSize = 2, MaxParallelism = 2 };
+
+        // Act
+        var result = await jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            primaryConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None,
+            progressCallback: null,
+            connectorFactory: () => CreateRecordingConnector().Object,
+            repositoryFactory: () => isolatingRepo);
+
+        // Assert: every deferred export reached a connector, and every reference the connectors
+        // received was RESOLVED (StringValue populated, unresolved marker cleared). Before the
+        // fix, the parallel batches re-loaded pre-resolution rows and received raw MVO GUIDs.
+        Assert.That(receivedReferenceValues.Count, Is.EqualTo(6),
+            "All six deferred exports should have been executed via connector batches.");
+        var unresolvedReceived = receivedReferenceValues
+            .Where(v => string.IsNullOrEmpty(v.StringValue) || !string.IsNullOrEmpty(v.UnresolvedReferenceValue))
+            .ToList();
+        Assert.That(unresolvedReceived, Is.Empty,
+            "Connector received unresolved reference values; in-memory resolutions must be persisted " +
+            "before parallel deferred batches re-load their exports from fresh contexts. Received: " +
+            string.Join("; ", unresolvedReceived.Select(v => $"PE {v.PeId}: StringValue='{v.StringValue}', Unresolved='{v.UnresolvedReferenceValue}'")));
+        Assert.That(result.FailedCount, Is.EqualTo(0), "No deferred export should fail in this scenario.");
     }
 
     /// <summary>

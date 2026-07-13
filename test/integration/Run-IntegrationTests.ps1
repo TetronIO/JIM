@@ -2347,6 +2347,17 @@ if (Get-Command socat -ErrorAction SilentlyContinue) {
 
 Start-Sleep -Seconds 2
 
+# Snapshot image selection communicates with docker compose via process-level environment
+# variables, and an all-scenarios sweep invokes each scenario in this same process. Clear them
+# all up front so a scenario that skips snapshot selection (Scenario 1's empty target,
+# Scenario 14's bespoke six-user dataset) or whose snapshot check fails gets the compose
+# defaults, not the previous scenario's snapshot. Leaked state here put Scenario 14 on the
+# previous scenario's general-small image (50 baked-in users), tripping its isolation check.
+$env:SAMBA_IMAGE_PRIMARY = $null
+$env:SAMBA_IMAGE_SOURCE = $null
+$env:SAMBA_IMAGE_TARGET = $null
+$env:OPENLDAP_IMAGE_PRIMARY = $null
+
 # Check for pre-populated snapshot images (Scenario 1 / primary)
 # Note: "*Scenario1*" also substring-matches "Scenario14-...", so it must be excluded explicitly;
 # Scenario 14 is OpenLDAP only (enforced above) and has no Samba AD snapshot of its own.

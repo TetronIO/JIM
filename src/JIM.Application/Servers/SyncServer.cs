@@ -156,6 +156,77 @@ public class SyncServer : ISyncServer
         await _syncRepo.DeleteMetaverseObjectAsync(metaverseObject);
     }
 
+    /// <summary>
+    /// Deletes multiple Metaverse Objects in one set-based pass, with change tracking (issue #993).
+    /// Semantically equivalent to calling <see cref="DeleteMetaverseObjectAsync"/> per object, but the
+    /// change-tracking flag is read once, the FK cleanup statements run once for the whole batch, and
+    /// the Deleted change records are persisted via the bulk COPY path instead of one INSERT per
+    /// attribute value. Used by the sync page flush where 0-grace-period deprovisioning can delete
+    /// hundreds of objects per page.
+    /// </summary>
+    /// <param name="deletions">The Metaverse Objects to delete, each with the attribute values to
+    /// record on its Deleted change record (captured before attribute recall removed them).</param>
+    /// <param name="initiatorType">The type of principal that initiated the deletion.</param>
+    /// <param name="initiatorId">The unique identifier of the initiating principal, if any.</param>
+    /// <param name="initiatorName">The display name of the initiating principal, if any.</param>
+    public async Task DeleteMetaverseObjectsAsync(
+        List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletions,
+        ActivityInitiatorType initiatorType,
+        Guid? initiatorId,
+        string? initiatorName)
+    {
+        if (deletions.Count == 0)
+            return;
+
+        var changeTrackingEnabled = await GetMvoChangeTrackingEnabledAsync();
+
+        var changes = new List<MetaverseObjectChange>();
+        if (changeTrackingEnabled)
+        {
+            foreach (var (metaverseObject, finalAttributeValues) in deletions)
+            {
+                var attributesToCapture = finalAttributeValues;
+
+                var displayName = metaverseObject.DisplayName;
+                if (displayName == null && attributesToCapture.Count > 0)
+                {
+                    var displayNameAttrValue = attributesToCapture.SingleOrDefault(
+                        av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
+                    displayName = displayNameAttrValue?.StringValue;
+                }
+
+                var change = new MetaverseObjectChange
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = ObjectChangeType.Deleted,
+                    ChangeTime = DateTime.UtcNow,
+                    InitiatedByType = initiatorType,
+                    InitiatedById = initiatorId,
+                    InitiatedByName = initiatorName,
+                    ChangeInitiatorType = initiatorType == ActivityInitiatorType.User
+                        ? MetaverseObjectChangeInitiatorType.User
+                        : MetaverseObjectChangeInitiatorType.NotSet,
+                    DeletedMetaverseObjectId = metaverseObject.Id,
+                    DeletedObjectTypeId = metaverseObject.Type?.Id,
+                    DeletedObjectDisplayName = displayName
+                };
+
+                foreach (var attributeValue in attributesToCapture)
+                    change.AddAttributeValueChange(attributeValue, ValueChangeType.Remove);
+
+                changes.Add(change);
+            }
+        }
+
+        await _syncRepo.DeleteMetaverseObjectsAsync(deletions.Select(d => d.Mvo).ToList());
+
+        // Persist the Deleted change records after the deletions, matching the singular method's
+        // ordering. The bulk COPY path writes the parent, attribute and value rows in one
+        // transaction instead of the singular path's one INSERT per row.
+        if (changes.Count > 0)
+            await _syncRepo.PersistPendingMvoChangesAsync(changes, []);
+    }
+
     #endregion
 
     #region CSO Persistence with Change Tracking
@@ -287,6 +358,9 @@ public class SyncServer : ISyncServer
 
     public Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo)
         => _exportEval.EvaluateMvoDeletionAsync(mvo);
+
+    public Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos)
+        => _exportEval.EvaluateMvoDeletionsAsync(mvos);
 
     public Task<ReferenceRecallContext> CaptureReferenceRecallContextAsync(IReadOnlyCollection<Guid> deletionCandidateMvoIds)
         => _exportEval.CaptureReferenceRecallContextAsync(deletionCandidateMvoIds);

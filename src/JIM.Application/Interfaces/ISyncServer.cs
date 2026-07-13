@@ -119,6 +119,17 @@ public interface ISyncServer
         string? initiatorName,
         List<MetaverseObjectAttributeValue>? finalAttributeValues);
 
+    /// <summary>
+    /// Set-based form of <see cref="DeleteMetaverseObjectAsync"/> (issue #993): deletes multiple
+    /// MVOs with one FK cleanup pass and bulk change record persistence. Semantically equivalent
+    /// to calling the singular method per object.
+    /// </summary>
+    Task DeleteMetaverseObjectsAsync(
+        List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletions,
+        ActivityInitiatorType initiatorType,
+        Guid? initiatorId,
+        string? initiatorName);
+
     #endregion
 
     #region Activity Management
@@ -251,6 +262,12 @@ public interface ISyncServer
     /// Creates delete exports for provisioned CSOs and disconnects them.
     /// </summary>
     Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo);
+
+    /// <summary>
+    /// Set-based form of <see cref="EvaluateMvoDeletionAsync"/> (issue #993): one CSO fetch,
+    /// Pending Export ensure and CSO disconnect pass for the whole batch of MVOs.
+    /// </summary>
+    Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos);
 
     /// <summary>
     /// Captures the referencing-object and resolution state reference recall needs before Metaverse

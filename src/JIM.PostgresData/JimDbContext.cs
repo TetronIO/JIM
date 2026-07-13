@@ -514,6 +514,13 @@ public class JimDbContext : DbContext
             .HasDatabaseName("IX_Activities_Created")
             .IsDescending(true);
 
+        // Performance index for Metaverse Object deletion (issue #993): every MVO delete nulls
+        // Activities.MetaverseObjectId to preserve audit history, and without this index that
+        // UPDATE sequentially scans the Activities table once per deletion batch.
+        modelBuilder.Entity<Activity>()
+            .HasIndex(a => a.MetaverseObjectId)
+            .HasDatabaseName("IX_Activities_MetaverseObjectId");
+
         // Sync outcome indexes for RPEI detail loading and aggregate stats queries
         modelBuilder.Entity<ActivityRunProfileExecutionItemSyncOutcome>()
             .HasIndex(o => o.ActivityRunProfileExecutionItemId)

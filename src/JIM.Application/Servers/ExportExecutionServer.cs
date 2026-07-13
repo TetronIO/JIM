@@ -726,6 +726,23 @@ public class ExportExecutionServer
         // Batch-export resolved deferred exports
         if (resolvedExports.Count > 0)
         {
+            // Persist the in-memory reference resolutions BEFORE executing the deferred batches.
+            // The parallel path (ProcessBatchesInParallelAsync) re-loads each batch by ID on a
+            // fresh per-batch repository/DbContext, which only sees persisted state; without
+            // persisting first, those contexts read the still-unresolved rows and send raw
+            // Metaverse Object identifiers to the target system (observed against OpenLDAP as
+            // "member: value #0 invalid per syntax" when Max Export Parallelism first defaulted
+            // above 1). The sequential path passes these in-memory instances straight to the
+            // connector and does not strictly need the persist, but doing it unconditionally
+            // also means a worker crash mid-export no longer loses completed resolution work.
+            // UpdatePendingExportsAsync persists both the parent rows and the attribute value
+            // change rows (StringValue/UnresolvedReferenceValue) via raw SQL.
+            using (Diagnostics.Diagnostics.Database.StartSpan("PersistResolvedDeferredExports")
+                .SetTag("count", resolvedExports.Count))
+            {
+                await SyncRepo.UpdatePendingExportsAsync(resolvedExports);
+            }
+
             // Clear the change tracker before exporting deferred batches.
             // The CSO lookup query above re-loaded entities into the tracker, which causes
             // identity conflicts when the EF fallback paths (used in tests with in-memory DB)

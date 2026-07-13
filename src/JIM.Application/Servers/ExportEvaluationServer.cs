@@ -540,69 +540,145 @@ public class ExportEvaluationServer
     /// Also disconnects CSOs from the MVO to prevent spurious sync processing.
     /// </summary>
     public async Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo)
+        => await EvaluateMvoDeletionsAsync([mvo]);
+
+    /// <summary>
+    /// Set-based form of <see cref="EvaluateMvoDeletionAsync"/> (issue #993): evaluates all the
+    /// given MVOs' deletions with one CSO fetch, one existing Pending Export lookup, one bulk
+    /// Pending Export replace/create, and one CSO disconnect statement, instead of several round
+    /// trips per object. Per-object semantics are identical: delete Pending Exports are ensured
+    /// for Provisioned CSOs (reusing an existing Delete PE, replacing any other change type), and
+    /// every joined CSO is disconnected from its MVO.
+    /// </summary>
+    /// <param name="mvos">The Metaverse Objects about to be deleted.</param>
+    /// <returns>The Delete Pending Exports for the MVOs' Provisioned CSOs: newly created ones plus
+    /// any existing Delete Pending Exports that were reused.</returns>
+    public async Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos)
     {
         var pendingExports = new List<PendingExport>();
+        if (mvos.Count == 0)
+            return pendingExports;
 
-        // Get all CSOs joined to this MVO (includes attribute values for secondary external ID)
-        var joinedCsos = await SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdAsync(mvo.Id);
+        // One query for all CSOs joined to any of the MVOs (lean shape: external ID attribute
+        // values only, which is all the delete PE stamping below needs).
+        var csosByMvo = await SyncRepo.GetConnectedSystemObjectsForMvoDeletionAsync(
+            mvos.Select(m => m.Id).ToList());
 
-        foreach (var cso in joinedCsos)
+        // Q4 Decision: Only create delete exports for Provisioned CSOs. Non-Provisioned CSOs are
+        // still disconnected to prevent spurious sync processing after the MVO is deleted.
+        // The fetched dictionary is iterated directly: its keys are exactly the given MVOs that
+        // have joined CSOs, so no per-MVO lookup or implicit filtering is needed.
+        var csoIdsToDisconnect = new List<Guid>();
+        var provisionedCsos = new List<(ConnectedSystemObject Cso, Guid MvoId)>();
+        foreach (var (mvoId, joinedCsos) in csosByMvo)
         {
-            // Q4 Decision: Only create delete exports for Provisioned CSOs
-            if (cso.JoinType != ConnectedSystemObjectJoinType.Provisioned)
+            foreach (var cso in joinedCsos)
             {
-                Log.Debug("EvaluateMvoDeletionAsync: Skipping delete for CSO {CsoId} - JoinType is {JoinType}, not Provisioned",
-                    cso.Id, cso.JoinType);
-
-                // Still disconnect non-Provisioned CSOs to prevent spurious sync processing
-                cso.MetaverseObjectId = null;
-                cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
-                cso.DateJoined = null;
-                await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
-                Log.Debug("EvaluateMvoDeletionAsync: Disconnected non-Provisioned CSO {CsoId} from MVO {MvoId}",
-                    cso.Id, mvo.Id);
-                continue;
+                csoIdsToDisconnect.Add(cso.Id);
+                if (cso.JoinType == ConnectedSystemObjectJoinType.Provisioned)
+                {
+                    provisionedCsos.Add((cso, mvoId));
+                }
+                else
+                {
+                    Log.Debug("EvaluateMvoDeletionsAsync: Skipping delete for CSO {CsoId} - JoinType is {JoinType}, not Provisioned; disconnecting only",
+                        cso.Id, cso.JoinType);
+                }
             }
+        }
 
-            // Build the secondary external ID (e.g. DN for LDAP) as an attribute change to
-            // attach to the PE. The CSO will be disconnected from the MVO right after this and
-            // may be deleted by housekeeping before the export runs; connectors like LDAP need
-            // the DN preserved on the PE to perform the actual delete.
-            var attributeValueChanges = new List<PendingExportAttributeValueChange>();
-            var secondaryIdAttrValue = cso.SecondaryExternalIdAttributeValue;
-            if (secondaryIdAttrValue?.Attribute != null && !string.IsNullOrEmpty(secondaryIdAttrValue.StringValue))
+        if (provisionedCsos.Count > 0)
+        {
+            // Delete-PE collision policy, set-based. PendingExports has a unique index on
+            // ConnectedSystemObjectId, so only one PE per CSO is allowed: an existing Delete PE
+            // is reused; any other change type is deleted and replaced with a Delete PE (the same
+            // policy EnsureDeletePendingExportAsync applies on the singular path).
+            var existingPesByCsoId = await SyncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(
+                provisionedCsos.Select(p => p.Cso.Id).ToList());
+
+            var replacedPeCsoIds = new List<Guid>();
+            var newPendingExports = new List<PendingExport>();
+            foreach (var (cso, mvoId) in provisionedCsos)
             {
-                attributeValueChanges.Add(new PendingExportAttributeValueChange
+                if (existingPesByCsoId.TryGetValue(cso.Id, out var existingPe))
+                {
+                    if (existingPe.ChangeType == PendingExportChangeType.Delete)
+                    {
+                        Log.Information("EvaluateMvoDeletionsAsync: Delete PendingExport {ExistingPeId} already exists for CSO {CsoId} (status: {Status}). Reusing.",
+                            existingPe.Id, cso.Id, existingPe.Status);
+                        pendingExports.Add(existingPe);
+                        continue;
+                    }
+
+                    Log.Information("EvaluateMvoDeletionsAsync: Replacing existing {ChangeType} PendingExport {ExistingPeId} for CSO {CsoId} with Delete PE",
+                        existingPe.ChangeType, existingPe.Id, cso.Id);
+                    replacedPeCsoIds.Add(cso.Id);
+                }
+
+                // Build the secondary external ID (e.g. DN for LDAP) as an attribute change to
+                // attach to the PE. The CSO will be disconnected from the MVO right after this and
+                // may be deleted by housekeeping before the export runs; connectors like LDAP need
+                // the DN preserved on the PE to perform the actual delete.
+                var attributeValueChanges = new List<PendingExportAttributeValueChange>();
+                var secondaryIdAttrValue = cso.SecondaryExternalIdAttributeValue;
+                if (secondaryIdAttrValue?.Attribute != null && !string.IsNullOrEmpty(secondaryIdAttrValue.StringValue))
+                {
+                    attributeValueChanges.Add(new PendingExportAttributeValueChange
+                    {
+                        Id = Guid.NewGuid(),
+                        Attribute = secondaryIdAttrValue.Attribute,
+                        AttributeId = secondaryIdAttrValue.Attribute.Id,
+                        StringValue = secondaryIdAttrValue.StringValue,
+                        ChangeType = PendingExportAttributeChangeType.Update
+                    });
+
+                    Log.Debug("EvaluateMvoDeletionsAsync: Will store secondary external ID '{Value}' (attr {AttrName}) on delete PE for CSO {CsoId}",
+                        secondaryIdAttrValue.StringValue, secondaryIdAttrValue.Attribute.Name, cso.Id);
+                }
+                else
+                {
+                    Log.Warning("EvaluateMvoDeletionsAsync: CSO {CsoId} has no secondary external ID - delete export may fail if CSO is deleted before export",
+                        cso.Id);
+                }
+
+                // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property,
+                // matching EnsureDeletePendingExportAsync.
+                var pendingExport = new PendingExport
                 {
                     Id = Guid.NewGuid(),
-                    Attribute = secondaryIdAttrValue.Attribute,
-                    AttributeId = secondaryIdAttrValue.Attribute.Id,
-                    StringValue = secondaryIdAttrValue.StringValue,
-                    ChangeType = PendingExportAttributeChangeType.Update
-                });
+                    ConnectedSystemId = cso.ConnectedSystemId,
+                    ConnectedSystemObjectId = cso.Id,
+                    ChangeType = PendingExportChangeType.Delete,
+                    Status = PendingExportStatus.Pending,
+                    SourceMetaverseObjectId = mvoId,
+                    CreatedAt = DateTime.UtcNow
+                };
+                foreach (var avc in attributeValueChanges)
+                    pendingExport.AttributeValueChanges.Add(avc);
 
-                Log.Debug("EvaluateMvoDeletionAsync: Will store secondary external ID '{Value}' (attr {AttrName}) on delete PE for CSO {CsoId}",
-                    secondaryIdAttrValue.StringValue, secondaryIdAttrValue.Attribute.Name, cso.Id);
+                newPendingExports.Add(pendingExport);
+                Log.Information("EvaluateMvoDeletionsAsync: Delete PendingExport {ExportId} staged for CSO {CsoId} in system {SystemId}",
+                    pendingExport.Id, cso.Id, cso.ConnectedSystemId);
             }
-            else
+
+            if (replacedPeCsoIds.Count > 0)
+                await SyncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(replacedPeCsoIds);
+
+            if (newPendingExports.Count > 0)
             {
-                Log.Warning("EvaluateMvoDeletionAsync: CSO {CsoId} has no secondary external ID - delete export may fail if CSO is deleted before export",
-                    cso.Id);
+                await SyncRepo.CreatePendingExportsAsync(newPendingExports);
+                pendingExports.AddRange(newPendingExports);
             }
+        }
 
-            var pendingExport = await EnsureDeletePendingExportAsync(cso, mvo.Id, attributeValueChanges);
-            pendingExports.Add(pendingExport);
-
-            // Disconnect the CSO from the MVO to prevent spurious sync processing after the MVO is deleted.
-            // The confirming import will mark the CSO as Obsolete when the object is deleted from the target,
-            // and we don't want the subsequent sync to try to "disconnect" an already-orphaned CSO.
-            cso.MetaverseObjectId = null;
-            cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
-            cso.DateJoined = null;
-            await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
-
-            Log.Information("EvaluateMvoDeletionAsync: Delete PendingExport {ExportId} ensured for CSO {CsoId} in system {SystemId}, CSO disconnected from MVO",
-                pendingExport.Id, cso.Id, cso.ConnectedSystemId);
+        // Disconnect every joined CSO from its MVO in one statement, to prevent spurious sync
+        // processing after the MVOs are deleted. The confirming import will mark target CSOs as
+        // Obsolete when the objects are deleted from the target.
+        if (csoIdsToDisconnect.Count > 0)
+        {
+            await SyncRepo.DisconnectConnectedSystemObjectsAsync(csoIdsToDisconnect);
+            Log.Information("EvaluateMvoDeletionsAsync: Disconnected {CsoCount} CSO(s) across {MvoCount} MVO(s); {PeCount} delete Pending Export(s) ensured",
+                csoIdsToDisconnect.Count, mvos.Count, pendingExports.Count);
         }
 
         return pendingExports;
@@ -708,14 +784,16 @@ public class ExportEvaluationServer
 
         // Resolve the deletion candidates' per-system reference values now, while their CSOs are
         // still joined. Preference order matches export-time resolution: secondary external ID
-        // (for example the DN for LDAP) first, else the primary external ID.
+        // (for example the DN for LDAP) first, else the primary external ID. One bulk CSO fetch
+        // for all referenced MVOs (issue #993); the lean shape loads exactly the external ID
+        // attribute values this resolution reads.
         var referencedIds = context.Candidates
             .Select(c => c.ReferencedMetaverseObjectId)
             .ToHashSet();
 
-        foreach (var referencedId in referencedIds)
+        var joinedCsosByReferencedId = await SyncRepo.GetConnectedSystemObjectsForMvoDeletionAsync(referencedIds);
+        foreach (var (referencedId, joinedCsos) in joinedCsosByReferencedId)
         {
-            var joinedCsos = await SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdAsync(referencedId);
             foreach (var (systemId, resolvedValue) in joinedCsos
                 .Select(cso => (cso.ConnectedSystemId, Value: ResolveCsoReferenceValue(cso)))
                 .Where(pair => pair.Value != null))

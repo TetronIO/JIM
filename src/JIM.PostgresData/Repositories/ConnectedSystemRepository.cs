@@ -3561,76 +3561,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .FirstOrDefaultAsync(pe => pe.ConnectedSystemObjectId == connectedSystemObjectId);
     }
 
-    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
-    {
-        var csoIdList = connectedSystemObjectIds.ToList();
-        if (csoIdList.Count == 0)
-            return new Dictionary<Guid, PendingExport>();
-
-        var pendingExports = await Repository.Database.PendingExports
-            .AsSplitQuery()
-            .Include(pe => pe.ConnectedSystem)
-            .Include(pe => pe.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.AttributeValues)
-                    .ThenInclude(av => av.Attribute)
-            .Include(pe => pe.AttributeValueChanges)
-                .ThenInclude(avc => avc.Attribute)
-            .Include(pe => pe.SourceMetaverseObject)
-                .ThenInclude(mvo => mvo!.AttributeValues)
-                    .ThenInclude(av => av.Attribute)
-            .Where(pe => pe.ConnectedSystemObject != null && csoIdList.Contains(pe.ConnectedSystemObject.Id))
-            .ToListAsync();
-
-        // Build dictionary mapping CSO ID to Pending Export.
-        // There should only be one Pending Export per CSO. If duplicates are found (indicating a
-        // previous data integrity issue), self-heal by keeping the newest PE and deleting the older one(s).
-        var filteredExports = pendingExports.Where(pe => pe.ConnectedSystemObject != null).ToList();
-        var result = new Dictionary<Guid, PendingExport>();
-        var duplicatesToDelete = new List<PendingExport>();
-
-        foreach (var pe in filteredExports)
-        {
-            var csoId = pe.ConnectedSystemObject!.Id;
-            if (result.ContainsKey(csoId))
-            {
-                // Duplicate detected — keep the newer PE (by CreatedAt), queue the older one for deletion
-                var existing = result[csoId];
-                PendingExport keeper, discard;
-
-                if (pe.CreatedAt >= existing.CreatedAt)
-                {
-                    keeper = pe;
-                    discard = existing;
-                }
-                else
-                {
-                    keeper = existing;
-                    discard = pe;
-                }
-
-                Log.Warning("GetPendingExportsByConnectedSystemObjectIdsAsync: DUPLICATE PENDING EXPORT detected for CSO {CsoId}. " +
-                    "Keeping PE {KeeperId} (created {KeeperDate}), deleting stale PE {DiscardId} (created {DiscardDate}). " +
-                    "This indicates a previous data integrity issue that has been self-healed.",
-                    csoId, keeper.Id, keeper.CreatedAt, discard.Id, discard.CreatedAt);
-
-                duplicatesToDelete.Add(discard);
-                result[csoId] = keeper;
-            }
-            else
-            {
-                result[csoId] = pe;
-            }
-        }
-
-        // Delete any duplicate PEs found during dictionary building
-        foreach (var duplicate in duplicatesToDelete)
-        {
-            await DeletePendingExportAsync(duplicate);
-        }
-
-        return result;
-    }
-
     public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
     {
         var csoIdList = connectedSystemObjectIds.ToList();
@@ -3639,7 +3569,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // Lightweight query: only load AttributeValueChanges with Attribute (needed for reconciliation comparison).
         // Skip ConnectedSystemObject (caller already has CSOs in memory), ConnectedSystem, and SourceMetaverseObject.
+        // AsNoTracking: every caller treats these as read-only snapshots (the duplicate self-heal
+        // below and the deferred-export reconciliation both already assume it), and tracked
+        // Pending Exports on the worker's long-lived context become a hazard once raw SQL
+        // deletes their rows (see DeletePendingExportsByConnectedSystemObjectIdsAsync).
         var pendingExports = await Repository.Database.PendingExports
+            .AsNoTracking()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
             .Where(pe => pe.ConnectedSystemObjectId != null && csoIdList.Contains(pe.ConnectedSystemObjectId.Value))

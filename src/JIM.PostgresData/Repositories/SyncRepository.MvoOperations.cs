@@ -686,4 +686,62 @@ public partial class SyncRepository
     }
 
     #endregion
+
+    #region Metaverse Object - Bulk Delete
+
+    /// <summary>
+    /// Deletes multiple MVOs in one set-based pass (issue #993). Each FK cleanup statement from
+    /// the singular <see cref="SyncRepository.DeleteMetaverseObjectAsync"/> runs once for the whole
+    /// batch via <c>= ANY</c> instead of once per object, and the MVO rows themselves are removed
+    /// in a single SaveChanges. Semantics per object are identical to the singular method.
+    /// </summary>
+    public async Task DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
+    {
+        if (metaverseObjects.Count == 0)
+            return;
+
+        var mvoIds = metaverseObjects.Select(mvo => mvo.Id).ToArray();
+
+        // Null out FK reference in Activities to preserve audit history
+        await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""Activities"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = ANY({0})",
+            mvoIds);
+
+        // Stamp DeletedMetaverseObjectId on all prior change records for these MVOs so that
+        // GetDeletedMvoChangeHistoryAsync can correlate them after the FK is nulled.
+        // Then null the FK to allow the MVOs to be deleted without constraint violations.
+        await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjectChanges"" SET ""DeletedMetaverseObjectId"" = ""MetaverseObjectId"", ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = ANY({0})",
+            mvoIds);
+
+        // Null out FK reference in ConnectedSystemObjects to detach any CSOs still joined
+        // to these MVOs, and fix up tracked instances to match the database state so a later
+        // SaveChangesAsync does not write the stale FK value back.
+        await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects"" SET ""MetaverseObjectId"" = NULL WHERE ""MetaverseObjectId"" = ANY({0})",
+            mvoIds);
+        var mvoIdSet = mvoIds.ToHashSet();
+        foreach (var trackedCso in _context.ChangeTracker.Entries<Models.Staging.ConnectedSystemObject>()
+            .Where(e => e.Entity.MetaverseObjectId.HasValue && mvoIdSet.Contains(e.Entity.MetaverseObjectId.Value)))
+        {
+            trackedCso.Entity.MetaverseObjectId = null;
+            trackedCso.Entity.MetaverseObject = null;
+        }
+
+        // Null out reference attribute values on other MVOs that point at the deleted MVOs
+        // (e.g. Manager references), and reference values in change tracking records.
+        await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjectAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = ANY({0})",
+            mvoIds);
+        await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""MetaverseObjectChangeAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = ANY({0})",
+            mvoIds);
+
+        _context.MetaverseObjects.RemoveRange(metaverseObjects);
+        await _context.SaveChangesAsync();
+
+        Log.Information("DeleteMetaverseObjectsAsync: Deleted {Count} Metaverse Objects in bulk", metaverseObjects.Count);
+    }
+
+    #endregion
 }

@@ -20,7 +20,7 @@
                    Size="Size.Small"
                    StartIcon="@Icons.Material.Filled.Outbox"
                    Href="@($"/admin/connected-systems/{ConnectedSystem.Id}/pending-exports")">
-            Pending Exports @(PendingExportCount > 0 ? $"({PendingExportCount.ToString("N0")})" : "")
+            Pending Export @(PendingExportCount > 0 ? $"({PendingExportCount.ToString("N0")})" : "")
         </MudButton>
     </MudStack>
     <MudForm @bind-IsValid="@IsDetailsFormValid" @bind-Errors="@DetailsFormErrors">
