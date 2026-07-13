@@ -2810,13 +2810,14 @@ public abstract class SyncTaskProcessorBase
                     "FlushPendingMvoDeletionsAsync: Deleted {Count} MVO(s) in bulk", deletionsToProcess.Count);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // The set-based path failed for the batch as a whole; fall back to per-MVO processing
             // so one bad object cannot sink the entire page's deletions, and each failure can be
             // isolated, reported and marked for housekeeping retry. Both paths are idempotent per
             // object (delete PE ensure reuses existing Delete PEs; FK cleanup re-runs are no-ops),
-            // so re-processing objects the bulk attempt already touched is safe.
+            // so re-processing objects the bulk attempt already touched is safe. Cancellation is
+            // excluded: an aborting run must propagate, not grind through a per-MVO fallback.
             Log.Warning(ex,
                 "FlushPendingMvoDeletionsAsync: Bulk deletion of {Count} MVO(s) failed; falling back to per-MVO deletion for error isolation",
                 deletionsToProcess.Count);

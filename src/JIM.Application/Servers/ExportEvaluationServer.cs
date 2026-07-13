@@ -566,19 +566,18 @@ public class ExportEvaluationServer
 
         // Q4 Decision: Only create delete exports for Provisioned CSOs. Non-Provisioned CSOs are
         // still disconnected to prevent spurious sync processing after the MVO is deleted.
+        // The fetched dictionary is iterated directly: its keys are exactly the given MVOs that
+        // have joined CSOs, so no per-MVO lookup or implicit filtering is needed.
         var csoIdsToDisconnect = new List<Guid>();
         var provisionedCsos = new List<(ConnectedSystemObject Cso, Guid MvoId)>();
-        foreach (var mvo in mvos)
+        foreach (var (mvoId, joinedCsos) in csosByMvo)
         {
-            if (!csosByMvo.TryGetValue(mvo.Id, out var joinedCsos))
-                continue;
-
             foreach (var cso in joinedCsos)
             {
                 csoIdsToDisconnect.Add(cso.Id);
                 if (cso.JoinType == ConnectedSystemObjectJoinType.Provisioned)
                 {
-                    provisionedCsos.Add((cso, mvo.Id));
+                    provisionedCsos.Add((cso, mvoId));
                 }
                 else
                 {

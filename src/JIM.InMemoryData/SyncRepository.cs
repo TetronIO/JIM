@@ -1457,17 +1457,12 @@ public class SyncRepository : ISyncRepository
         IReadOnlyCollection<Guid> metaverseObjectIds)
     {
         var result = new Dictionary<Guid, List<ConnectedSystemObject>>();
-        foreach (var mvoId in metaverseObjectIds)
+        foreach (var mvoId in metaverseObjectIds.Where(_csosByMvo.ContainsKey))
         {
-            if (!_csosByMvo.TryGetValue(mvoId, out var csoIds))
-                continue;
-
-            var joinedCsos = new List<ConnectedSystemObject>();
-            foreach (var csoId in csoIds)
-            {
-                if (_csos.TryGetValue(csoId, out var cso))
-                    joinedCsos.Add(cso);
-            }
+            var joinedCsos = _csosByMvo[mvoId]
+                .Where(_csos.ContainsKey)
+                .Select(csoId => _csos[csoId])
+                .ToList();
 
             if (joinedCsos.Count > 0)
                 result[mvoId] = joinedCsos;
@@ -1477,11 +1472,10 @@ public class SyncRepository : ISyncRepository
 
     public virtual Task DisconnectConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
     {
-        foreach (var csoId in connectedSystemObjectIds)
+        foreach (var cso in connectedSystemObjectIds
+            .Where(_csos.ContainsKey)
+            .Select(csoId => _csos[csoId]))
         {
-            if (!_csos.TryGetValue(csoId, out var cso))
-                continue;
-
             cso.MetaverseObjectId = null;
             cso.MetaverseObject = null;
             cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
