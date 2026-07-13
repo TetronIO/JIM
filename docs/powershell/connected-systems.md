@@ -134,7 +134,7 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
 | `Name` | `string` | No | | New display name |
 | `Description` | `string` | No | | New description |
 | `SettingValues` | `hashtable` | No | | Connector-specific settings. Keys are setting IDs; values are hashtables with `stringValue`, `intValue`, or `checkboxValue`. |
-| `MaxExportParallelism` | `int` | No | | Maximum number of parallel export threads (1 to 16) |
+| `MaxExportParallelism` | `int` | No | | Maximum number of parallel export threads (1 to 16). Leave unset to let the connector recommend a conservative value (the LDAP Connector recommends 2 for capable directories, those tuned to a high Export Concurrency); JIM stays sequential (1) if the connector offers no recommendation. An explicitly set value always takes precedence. |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Connected System Object |
 

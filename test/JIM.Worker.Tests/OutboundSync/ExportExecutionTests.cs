@@ -1896,11 +1896,25 @@ public class ExportExecutionTests
     private sealed class BatchLoadCountingSyncRepository : SyncRepository
     {
         public int BatchLoadCalls;
+        public int RemainingDeferredCalls;
+        public int ExecutableProbeCalls;
 
         public override Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
         {
             Interlocked.Increment(ref BatchLoadCalls);
             return base.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId);
+        }
+
+        public override Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+        {
+            Interlocked.Increment(ref RemainingDeferredCalls);
+            return base.GetRemainingDeferredExportsAsync(connectedSystemId, afterCreatedAt, afterId);
+        }
+
+        public override Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+        {
+            Interlocked.Increment(ref ExecutableProbeCalls);
+            return base.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);
         }
     }
 
@@ -1992,6 +2006,204 @@ public class ExportExecutionTests
             $"Batch collection re-scanned the Pending Export query: {countingRepo.BatchLoadCalls} page loads " +
             $"for {exportCount} deferred exports at batch size {batchSize} (expected <= {maxExpectedBatchLoads}). " +
             "See issue #985.");
+    }
+
+    /// <summary>
+    /// Issue #985 (c): once a loaded batch is discovered to contain only deferred
+    /// (reference-bearing) exports and nothing executable, the collection loop must stop
+    /// page-by-page scanning and collect all remaining deferred exports with a single bulk
+    /// repository call, rather than continuing to page 100 at a time purely to build the
+    /// deferred list. With N=1000 deferred exports and batch size 100, the first page already
+    /// reveals the batch is entirely deferred, so at most one further page load plus exactly
+    /// one bulk collect call are needed (previously this cost ceil(N/B)+1 = 11 page loads).
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_AllDeferredExports_FastPathsRemainingCollectionInSingleBulkCallAsync()
+    {
+        // Arrange: a fresh application wired to a counting repository.
+        var countingRepo = new BatchLoadCountingSyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: countingRepo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        const int exportCount = 1000;
+        const int batchSize = 100;
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+        for (var i = 0; i < exportCount; i++)
+        {
+            var pe = CreateSeededCreateExport(targetSystem, targetUserType,
+                baseTime.AddMilliseconds(i), hasUnresolvedReferences: true);
+            countingRepo.SeedPendingExport(pe);
+        }
+
+        var mockConnector = CreateSucceedingCallsConnector();
+        var options = new ExportExecutionOptions { BatchSize = batchSize };
+
+        // Act
+        var result = await jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None);
+
+        // Assert: every export was still collected...
+        Assert.That(result.ProcessedPendingExportIds, Has.Count.EqualTo(exportCount));
+
+        // ...via at most 2 page loads plus exactly one bulk "collect the rest" call, not
+        // ceil(N/B) = 10 page loads (plus an exhaustion probe).
+        Assert.That(countingRepo.BatchLoadCalls, Is.LessThanOrEqualTo(2),
+            $"Batch collection paged through deferred exports instead of fast-pathing: " +
+            $"{countingRepo.BatchLoadCalls} page loads for {exportCount} deferred exports at batch size {batchSize}. " +
+            "See issue #985 (c).");
+        Assert.That(countingRepo.RemainingDeferredCalls, Is.EqualTo(1),
+            "Expected exactly one bulk GetRemainingDeferredExportsAsync call to collect the deferred tail.");
+        Assert.That(countingRepo.ExecutableProbeCalls, Is.EqualTo(1),
+            "Expected exactly one executable-exports existence probe before the fast path fired.");
+    }
+
+    /// <summary>
+    /// Issue #985 (c): the fast path must only trigger for a batch that is entirely deferred.
+    /// A batch mixing executable and deferred exports must execute the executable ones exactly
+    /// as before (no fast path), while a later batch that is entirely deferred should still
+    /// trigger the fast path for the remainder.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_MixedThenAllDeferredBatch_ExecutesImmediateNormallyAndFastPathsRestAsync()
+    {
+        // Arrange
+        var countingRepo = new BatchLoadCountingSyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: countingRepo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        const int batchSize = 4;
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+        var offset = 0;
+
+        // Page 1 (4 rows): interleaved immediate/deferred; must NOT fast-path.
+        var page1Types = new[] { false, true, false, true };
+        foreach (var deferred in page1Types)
+        {
+            var pe = CreateSeededCreateExport(targetSystem, targetUserType,
+                baseTime.AddMilliseconds(offset++), hasUnresolvedReferences: deferred);
+            countingRepo.SeedPendingExport(pe);
+        }
+
+        // Page 2 (4 rows): entirely deferred; must fast-path and bulk-collect the rest.
+        for (var i = 0; i < 4; i++)
+        {
+            var pe = CreateSeededCreateExport(targetSystem, targetUserType,
+                baseTime.AddMilliseconds(offset++), hasUnresolvedReferences: true);
+            countingRepo.SeedPendingExport(pe);
+        }
+
+        // Remaining tail (4 rows): all deferred, collected via the bulk call, not further pages.
+        for (var i = 0; i < 4; i++)
+        {
+            var pe = CreateSeededCreateExport(targetSystem, targetUserType,
+                baseTime.AddMilliseconds(offset++), hasUnresolvedReferences: true);
+            countingRepo.SeedPendingExport(pe);
+        }
+
+        const int exportCount = 12;
+        var mockConnector = CreateSucceedingCallsConnector();
+        var options = new ExportExecutionOptions { BatchSize = batchSize };
+
+        // Act
+        var result = await jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None);
+
+        // Assert: every export accounted for and (trivially, since none reference real MVOs)
+        // successfully exported, exactly as the pre-#985(c) page-by-page loop would produce.
+        Assert.That(result.ProcessedPendingExportIds, Has.Count.EqualTo(exportCount));
+        Assert.That(result.SuccessCount, Is.EqualTo(exportCount));
+
+        // Only the 2 pages that were actually loaded; no further page loads once the
+        // wholly-deferred second page triggered the fast path.
+        Assert.That(countingRepo.BatchLoadCalls, Is.EqualTo(2),
+            $"Expected exactly 2 page loads (mixed page 1, all-deferred page 2); got {countingRepo.BatchLoadCalls}.");
+        Assert.That(countingRepo.RemainingDeferredCalls, Is.EqualTo(1),
+            "Expected exactly one bulk GetRemainingDeferredExportsAsync call once page 2 was found to be entirely deferred.");
+        Assert.That(countingRepo.ExecutableProbeCalls, Is.EqualTo(1),
+            "Expected exactly one executable-exports existence probe (for the all-deferred page 2; " +
+            "the mixed page 1 must not probe).");
+    }
+
+    /// <summary>
+    /// Issue #985 (c) correctness guard: deferred and executable Pending Exports interleave in
+    /// (CreatedAt, Id) order, so a contiguous run of a full batch of deferred exports can be
+    /// followed by later executable ones. The fast path must NOT trigger in that case; breaking
+    /// out of the scan after bulk-collecting only the deferred remainder would silently skip the
+    /// executable exports for the whole run, a behaviour regression versus normal paging.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_FullDeferredBatchFollowedByExecutableExports_ExecutesExecutableExportsAsync()
+    {
+        // Arrange
+        var countingRepo = new BatchLoadCountingSyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: countingRepo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        const int batchSize = 4;
+        var baseTime = DateTime.UtcNow.AddMinutes(-10);
+        var offset = 0;
+
+        // Page 1 (exactly one full batch): entirely deferred.
+        for (var i = 0; i < batchSize; i++)
+        {
+            var pe = CreateSeededCreateExport(targetSystem, targetUserType,
+                baseTime.AddMilliseconds(offset++), hasUnresolvedReferences: true);
+            countingRepo.SeedPendingExport(pe);
+        }
+
+        // Later rows: executable (non-deferred) exports created after the deferred run.
+        var executableIds = new List<Guid>();
+        for (var i = 0; i < 3; i++)
+        {
+            var pe = CreateSeededCreateExport(targetSystem, targetUserType,
+                baseTime.AddMilliseconds(offset++), hasUnresolvedReferences: false);
+            countingRepo.SeedPendingExport(pe);
+            executableIds.Add(pe.Id);
+        }
+
+        const int exportCount = batchSize + 3;
+        var mockConnector = CreateSucceedingCallsConnector();
+        var options = new ExportExecutionOptions { BatchSize = batchSize };
+
+        // Act
+        var result = await jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None);
+
+        // Assert: the executable exports created after the all-deferred batch must have been
+        // collected and executed in this run, exactly as page-by-page scanning would have done.
+        Assert.That(result.ProcessedPendingExportIds, Is.SupersetOf(executableIds),
+            "Executable exports beyond an all-deferred batch were never collected; the fast path " +
+            "must not break out of the scan while executable exports remain. See issue #985 (c).");
+        Assert.That(result.SuccessCount, Is.EqualTo(exportCount),
+            $"All {exportCount} exports (deferred + executable) should have exported successfully in this run.");
+
+        // The probe found executable exports beyond the cursor, so the fast path must not have
+        // fired; the loop kept paging normally instead.
+        Assert.That(countingRepo.RemainingDeferredCalls, Is.EqualTo(0),
+            "The deferred bulk-collect must not fire while executable exports remain beyond the cursor.");
+        Assert.That(countingRepo.ExecutableProbeCalls, Is.GreaterThanOrEqualTo(1),
+            "Expected the all-deferred page 1 to trigger the executable-exports existence probe.");
     }
 
     /// <summary>

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - 🔄 The JIM PowerShell module now returns output objects with PascalCase property names (`$obj.DisplayName`, `$obj.Type.Name`), following PowerShell convention, instead of the REST API's camelCase wire casing. PowerShell member access is case-insensitive, so most scripts are unaffected, but `Get-Member`, `ConvertTo-Json` and `Format-Table` now surface PascalCase; scripts that compare property-name strings or round-trip output through JSON may need updating. Dictionaries keyed by your own data (a Metaverse Object's Attributes, a log entry's Properties) keep their keys exactly as supplied.
+- 🔄 Exports now default to a conservative connector-recommended degree of parallelism when a Connected System's Max Export Parallelism isn't explicitly configured, instead of always defaulting to sequential. The LDAP Connector recommends two parallel batch pipelines for capable directories (those tuned to a high Export Concurrency) and stays sequential otherwise. An explicitly configured Max Export Parallelism value is always respected.
 
 ### Fixed
 
@@ -22,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Performance
 
 - ⚡ Exports no longer stall between batches at large scale. Batch collection now walks the Pending Export queue in a single pass (keyset pagination, backed by a new index) instead of rescanning it from the start for every batch; at 200,000 objects with 10,000 reference-bearing groups the old behaviour spent hours re-reading already-collected rows before the first group reached the target system.
+- ⚡ The tail of a large, reference-heavy export no longer spends time paging through Pending Exports it has already identified as deferred. Once a batch turns out to be entirely reference-bearing, JIM now collects the remaining deferred exports in a single query instead of continuing to page through them 100 at a time.
 - ⚡ Full Imports at large scale are dramatically faster: matched objects are no longer hydrated one database round trip at a time, confirming a large group no longer degrades quadratically with its membership size, and bulk attribute value writes now stream via PostgreSQL binary COPY instead of parameterised inserts. A Full Import of 210,000 objects that previously took over 40 minutes now completes in around 8.
 - ⚡ Deprovisioning users who are members of large groups no longer slows synchronisation to a crawl. Updating or deleting a large group's pending changes no longer reloads the group's full membership from the database each time.
 

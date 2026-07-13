@@ -733,6 +733,26 @@ public interface ISyncRepository
     Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId);
 
     /// <summary>
+    /// Collects all remaining executable exports with unresolved references (deferred) strictly
+    /// after the given keyset cursor, in a single call. Used by the export batch-collection loop
+    /// to fast-path once a batch is discovered to be made up entirely of deferred exports, instead
+    /// of continuing to page through the remainder 100 rows at a time purely to build the deferred
+    /// list (issue #985). Same ordering and filtering semantics as
+    /// <see cref="GetExecutableExportBatchAsync"/>, restricted to HasUnresolvedReferences exports.
+    /// </summary>
+    Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
+
+    /// <summary>
+    /// Returns whether any executable exports WITHOUT unresolved references exist strictly after
+    /// the given keyset cursor. Guards the deferred-collection fast path (issue #985): deferred
+    /// and executable exports interleave in (CreatedAt, Id) order, so an all-deferred batch does
+    /// not prove the rest of the queue is deferred too. Same filtering semantics as
+    /// <see cref="GetExecutableExportBatchAsync"/>, restricted to non-deferred exports; a cheap
+    /// existence check with no entity materialisation.
+    /// </summary>
+    Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
+
+    /// <summary>
     /// Gets lightweight summaries of executable exports for pre-export reconciliation.
     /// Returns only scalar fields (Id, ChangeType, Status, CsoId, MvoId) via projection
     /// query — no Include chains, no entity tracking. At 100K objects this uses ~3 MB
