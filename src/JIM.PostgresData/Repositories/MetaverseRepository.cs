@@ -1132,8 +1132,7 @@ public class MetaverseRepository : IMetaverseRepository
         // Use raw SQL for all queries — EF Core's query pipeline adds significant overhead
         // at 100k+ scale, while the underlying SQL executes in ~10-30ms.
         var connection = Repository.Database.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
-            await connection.OpenAsync();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
 
         var typeId = predefinedSearch.MetaverseObjectType.Id;
         var offset = (page - 1) * pageSize;

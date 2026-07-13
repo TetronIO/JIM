@@ -4953,8 +4953,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return;
 
         var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
-        if (npgsqlConn.State != System.Data.ConnectionState.Open)
-            await npgsqlConn.OpenAsync();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
             """

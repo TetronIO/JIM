@@ -239,10 +239,10 @@ public class ExportExecutionParallelBatchTests
         };
 
         var repoFactoryCalled = false;
-        Func<ISyncRepository> repositoryFactory = () =>
+        Func<ISyncRepositoryScope> repositoryFactory = () =>
         {
             repoFactoryCalled = true;
-            return TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData);
+            return new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
         };
 
         var options = new ExportExecutionOptions
@@ -350,7 +350,7 @@ public class ExportExecutionParallelBatchTests
         var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
 
         Func<IConnector> connectorFactory = () => CreateMockConnector(ConnectedSystemExportResult.Succeeded()).Object;
-        Func<ISyncRepository> repositoryFactory = () => TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData);
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
 
         using var cts = new CancellationTokenSource();
         cts.Cancel(); // Cancel immediately
@@ -399,7 +399,7 @@ public class ExportExecutionParallelBatchTests
         var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
 
         Func<IConnector> connectorFactory = () => CreateMockConnector(ConnectedSystemExportResult.Succeeded()).Object;
-        Func<ISyncRepository> repositoryFactory = () => TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData);
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
 
         var progressReports = new List<ExportProgressInfo>();
         Func<ExportProgressInfo, Task> progressCallback = info =>
@@ -467,10 +467,10 @@ public class ExportExecutionParallelBatchTests
         };
 
         var repoFactoryCalled = false;
-        Func<ISyncRepository> repositoryFactory = () =>
+        Func<ISyncRepositoryScope> repositoryFactory = () =>
         {
             repoFactoryCalled = true;
-            return TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData);
+            return new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
         };
 
         var options = new ExportExecutionOptions
@@ -520,7 +520,7 @@ public class ExportExecutionParallelBatchTests
 
         var primaryConnector = CreateMockConnector(ConnectedSystemExportResult.Succeeded());
         Func<IConnector> connectorFactory = () => CreateMockConnector(ConnectedSystemExportResult.Succeeded()).Object;
-        Func<ISyncRepository> repositoryFactory = () => TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData);
+        Func<ISyncRepositoryScope> repositoryFactory = () => new SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
 
         var options = new ExportExecutionOptions
         {

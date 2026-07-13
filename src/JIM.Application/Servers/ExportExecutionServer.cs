@@ -64,7 +64,7 @@ public class ExportExecutionServer
     /// <param name="cancellationToken">Cancellation token to stop export processing</param>
     /// <param name="progressCallback">Optional callback for progress reporting</param>
     /// <param name="connectorFactory">Optional factory to create additional connector instances for parallel batches</param>
-    /// <param name="repositoryFactory">Optional factory to create per-batch IRepository instances for parallel batches</param>
+    /// <param name="repositoryFactory">Optional factory to create disposable per-batch repository scopes for parallel batches; each batch disposes its scope on completion, releasing the scope's DbContext and pooled connection</param>
     /// <param name="batchCompletedCallback">Optional callback invoked after each batch with processed export items.
     /// Enables streaming RPEI creation per-batch instead of accumulating all items across the entire run.
     /// When provided, ProcessedExportItems on the result will be empty — items are consumed per-batch via this callback.</param>
@@ -77,7 +77,7 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback = null,
         Func<IConnector>? connectorFactory = null,
-        Func<ISyncRepository>? repositoryFactory = null,
+        Func<ISyncRepositoryScope>? repositoryFactory = null,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         options ??= new ExportExecutionOptions();
@@ -300,7 +300,7 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
-        Func<ISyncRepository>? repositoryFactory,
+        Func<ISyncRepositoryScope>? repositoryFactory,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         // Check if connector supports export using calls
@@ -360,7 +360,7 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
-        Func<ISyncRepository>? repositoryFactory,
+        Func<ISyncRepositoryScope>? repositoryFactory,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         try
@@ -663,7 +663,7 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
-        Func<ISyncRepository>? repositoryFactory)
+        Func<ISyncRepositoryScope>? repositoryFactory)
     {
         var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null;
 
@@ -757,8 +757,14 @@ public class ExportExecutionServer
 
             if (useParallelBatches && deferredBatches.Count > 1)
             {
+                // Snapshot the immediate-phase counts, mirroring ProcessDeferredBatchesSequentiallyAsync:
+                // ProcessBatchSuccessAsync increments the result counters for deferred batches too, so
+                // progress reports add deferred-phase progress to this fixed offset rather than
+                // resetting to a phase-local count (the "2,884 of 209,984" UI regression).
+                var immediateProcessedCount = result.SuccessCount + result.FailedCount;
                 await ProcessBatchesInParallelAsync(connectedSystem, connector, deferredBatches, result, options,
-                    cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch");
+                    cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch",
+                    processedExportsOffset: immediateProcessedCount);
             }
             else
             {
@@ -866,8 +872,9 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector> connectorFactory,
-        Func<ISyncRepository> repositoryFactory,
+        Func<ISyncRepositoryScope> repositoryFactory,
         string spanName,
+        int processedExportsOffset = 0,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         Log.Information("ProcessBatchesInParallelAsync: Processing {BatchCount} batches with MaxParallelism={MaxParallelism}",
@@ -894,8 +901,11 @@ public class ExportExecutionServer
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                // Create per-batch repository with its own context
-                var batchRepo = repositoryFactory();
+                // Create a per-batch repository scope with its own context; disposing it when
+                // the batch completes releases the context and its pooled connection (undisposed
+                // scopes pinned one connection per batch and exhausted the pool at scale).
+                using var batchScope = repositoryFactory();
+                var batchRepo = batchScope.Repository;
 
                 // Re-load this batch's Pending Exports from the batch's own context
                 var batch = await batchRepo.GetPendingExportsByIdsAsync(batchIds);
@@ -978,7 +988,7 @@ public class ExportExecutionServer
                             {
                                 Phase = ExportPhase.Executing,
                                 TotalExports = result.TotalPendingExports,
-                                ProcessedExports = newProcessedCount,
+                                ProcessedExports = processedExportsOffset + newProcessedCount,
                                 CurrentBatchSize = batch.Count,
                                 Message = "Exporting"
                             });
