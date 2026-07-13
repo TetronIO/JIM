@@ -971,7 +971,9 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    // Virtual for test-support subclasses (see GetPendingExportsByIdsAsync): persisting is the
+    // event that makes state visible to fresh per-batch contexts in the parallel export path.
+    public virtual Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
         foreach (var pe in pendingExports)
             _pendingExports[pe.Id] = pe;
@@ -1768,7 +1770,10 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+    // Virtual for test-support subclasses: the parallel export batch path re-loads Pending
+    // Exports by ID on a fresh per-batch context, and tests need to simulate that database
+    // isolation (returning last-persisted state rather than live in-memory references).
+    public virtual Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
     {
         var result = pendingExportIds
             .Where(id => _pendingExports.ContainsKey(id))
