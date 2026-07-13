@@ -905,4 +905,69 @@ public partial class SyncRepository
     }
 
     #endregion
+
+    #region Connected System Object - MVO Deletion Support (issue #993)
+
+    /// <summary>
+    /// Gets all CSOs joined to any of the given MVOs across all Connected Systems, in one query,
+    /// grouped by MVO ID. LEAN SHAPE: only the external ID and secondary external ID attribute
+    /// values (with their Attribute) are loaded; MVO deletion needs the secondary external ID
+    /// (e.g. the DN for LDAP) to stamp on delete Pending Exports, and reference recall needs the
+    /// external IDs to pre-resolve reference values. Loading the full attribute graph here would
+    /// materialise every membership row of any deleted group.
+    /// </summary>
+    public async Task<Dictionary<Guid, List<ConnectedSystemObject>>> GetConnectedSystemObjectsForMvoDeletionAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        if (metaverseObjectIds.Count == 0)
+            return new Dictionary<Guid, List<ConnectedSystemObject>>();
+
+        var mvoIds = metaverseObjectIds.ToArray();
+        var csos = await _context.ConnectedSystemObjects
+            .Include(cso => cso.AttributeValues
+                .Where(av =>
+                    av.AttributeId == cso.ExternalIdAttributeId ||
+                    av.AttributeId == cso.SecondaryExternalIdAttributeId ||
+                    av.Attribute!.IsExternalId ||
+                    av.Attribute!.IsSecondaryExternalId))
+                .ThenInclude(av => av.Attribute)
+            .Where(cso => cso.MetaverseObjectId.HasValue && mvoIds.Contains(cso.MetaverseObjectId.Value))
+            .ToListAsync();
+
+        return csos
+            .GroupBy(cso => cso.MetaverseObjectId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+    }
+
+    /// <summary>
+    /// Disconnects the given CSOs from their MVOs in one set-based statement: nulls
+    /// <c>MetaverseObjectId</c> and <c>DateJoined</c> and resets <c>JoinType</c> to
+    /// <c>NotJoined</c>. Tracked instances are fixed up to match the database state so a later
+    /// SaveChangesAsync does not write stale join state back (same pattern as the CSO detach in
+    /// the MVO delete path).
+    /// </summary>
+    public async Task DisconnectConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return;
+
+        var csoIds = connectedSystemObjectIds.ToArray();
+        await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects""
+              SET ""MetaverseObjectId"" = NULL, ""JoinType"" = {1}, ""DateJoined"" = NULL
+              WHERE ""Id"" = ANY({0})",
+            csoIds, (int)ConnectedSystemObjectJoinType.NotJoined);
+
+        var csoIdSet = csoIds.ToHashSet();
+        foreach (var trackedCso in _context.ChangeTracker.Entries<ConnectedSystemObject>()
+            .Where(e => csoIdSet.Contains(e.Entity.Id)))
+        {
+            trackedCso.Entity.MetaverseObjectId = null;
+            trackedCso.Entity.MetaverseObject = null;
+            trackedCso.Entity.JoinType = ConnectedSystemObjectJoinType.NotJoined;
+            trackedCso.Entity.DateJoined = null;
+        }
+    }
+
+    #endregion
 }

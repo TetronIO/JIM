@@ -2728,53 +2728,146 @@ public abstract class SyncTaskProcessorBase
         using var span = Diagnostics.Sync.StartSpan("FlushPendingMvoDeletions");
         span.SetTag("deleteCount", _pendingMvoDeletions.Count);
 
+        // Safeguard: If an MVO was re-joined by a new CSO during Pass 2 of the same page
+        // (e.g., an obsolete CSO disconnected in Pass 1 triggered 0-grace-period deletion,
+        // then a different CSO joined the same MVO in Pass 2), skip the deletion.
+        // Check specifically for CSOs joined during THIS sync page, identified by JoinType=Joined
+        // which is set by AttemptJoinAsync. Other join types (Provisioned, Projected) predate this page.
+        // We must also verify the CSO belongs to the current Connected System being synced,
+        // because CSOs from other systems (e.g., a Provisioned AD CSO) were not processed
+        // in this sync run and should not prevent intentional deletion rules.
+        var deletionsToProcess = new List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)>();
+        foreach (var (mvo, finalAttributeValues) in _pendingMvoDeletions)
+        {
+            if (mvo.ConnectedSystemObjects.Any(cso =>
+                cso.JoinType == ConnectedSystemObjectJoinType.Joined &&
+                cso.ConnectedSystemId == _connectedSystem.Id &&
+                cso.Status != ConnectedSystemObjectStatus.Obsolete))
+            {
+                Log.Information(
+                    "FlushPendingMvoDeletionsAsync: Skipping deletion of MVO {MvoId} - it was reconnected during this page " +
+                    "({ConnectorCount} active connector(s) from this system). Clearing deletion markers.",
+                    mvo.Id, mvo.ConnectedSystemObjects.Count(cso =>
+                        cso.JoinType == ConnectedSystemObjectJoinType.Joined &&
+                        cso.ConnectedSystemId == _connectedSystem.Id));
+
+                // Clear any deletion markers set during Pass 1
+                mvo.LastConnectorDisconnectedDate = null;
+                mvo.DeletionInitiatedByType = ActivityInitiatorType.NotSet;
+                mvo.DeletionInitiatedById = null;
+                mvo.DeletionInitiatedByName = null;
+                continue;
+            }
+
+            deletionsToProcess.Add((mvo, finalAttributeValues));
+        }
+
         // Reference recall (#908): capture which other Metaverse Objects reference the deletion
         // candidates, and the candidates' per-system resolved reference values, BEFORE deletion
-        // nulls the reference FKs and disconnects their CSOs. Staging happens after the loop, for
+        // nulls the reference FKs and disconnects their CSOs. Staging happens after deletion, for
         // only the objects that actually got deleted.
-        var deletionCandidateIds = _pendingMvoDeletions.Select(d => d.Mvo.Id).ToList();
-        var referenceRecallContext = await _syncServer.CaptureReferenceRecallContextAsync(deletionCandidateIds);
-        var deletedMvoIds = new List<Guid>();
+        ReferenceRecallContext referenceRecallContext;
+        using (Diagnostics.Sync.StartSpan("MvoDeletionCaptureRecallContext")
+            .SetTag("candidateCount", deletionsToProcess.Count))
+        {
+            referenceRecallContext = await _syncServer.CaptureReferenceRecallContextAsync(
+                deletionsToProcess.Select(d => d.Mvo.Id).ToList());
+        }
 
-        foreach (var (mvo, finalAttributeValues) in _pendingMvoDeletions)
+        var deletedMvoIds = new List<Guid>();
+        try
+        {
+            // Set-based fast path (issue #993): one bulk deletion evaluation (delete Pending
+            // Exports plus CSO disconnects) and one bulk MVO delete (FK cleanup, row removal,
+            // change records) for the whole page, instead of many round trips per MVO.
+            if (deletionsToProcess.Count > 0)
+            {
+                using (Diagnostics.Sync.StartSpan("MvoDeletionEvaluateBulk")
+                    .SetTag("mvoCount", deletionsToProcess.Count))
+                {
+                    var deleteExports = await _syncServer.EvaluateMvoDeletionsAsync(
+                        deletionsToProcess.Select(d => d.Mvo).ToList());
+                    if (deleteExports.Count > 0)
+                    {
+                        Log.Information(
+                            "FlushPendingMvoDeletionsAsync: Ensured {Count} delete Pending Exports across {MvoCount} MVOs",
+                            deleteExports.Count, deletionsToProcess.Count);
+                    }
+                }
+
+                using (Diagnostics.Sync.StartSpan("MvoDeletionDeleteBulk")
+                    .SetTag("mvoCount", deletionsToProcess.Count))
+                {
+                    await _syncServer.DeleteMetaverseObjectsAsync(
+                        deletionsToProcess,
+                        _activity.InitiatedByType,
+                        _activity.InitiatedById,
+                        _activity.InitiatedByName);
+                }
+
+                deletedMvoIds.AddRange(deletionsToProcess.Select(d => d.Mvo.Id));
+                Log.Information(
+                    "FlushPendingMvoDeletionsAsync: Deleted {Count} MVO(s) in bulk", deletionsToProcess.Count);
+            }
+        }
+        catch (Exception ex)
+        {
+            // The set-based path failed for the batch as a whole; fall back to per-MVO processing
+            // so one bad object cannot sink the entire page's deletions, and each failure can be
+            // isolated, reported and marked for housekeeping retry. Both paths are idempotent per
+            // object (delete PE ensure reuses existing Delete PEs; FK cleanup re-runs are no-ops),
+            // so re-processing objects the bulk attempt already touched is safe.
+            Log.Warning(ex,
+                "FlushPendingMvoDeletionsAsync: Bulk deletion of {Count} MVO(s) failed; falling back to per-MVO deletion for error isolation",
+                deletionsToProcess.Count);
+            deletedMvoIds.AddRange(await ProcessMvoDeletionsIndividuallyAsync(deletionsToProcess));
+        }
+
+        // Reference recall (#908): stage membership-removal Pending Exports for Metaverse Objects
+        // that referenced the deleted objects. Without this, referencing groups' target CSOs never
+        // change, the unchanged-skip means no sync re-evaluates them, and a target without
+        // referential integrity keeps the deleted object as a member forever.
+        if (deletedMvoIds.Count > 0)
+        {
+            using (Diagnostics.Sync.StartSpan("MvoDeletionStageRecallExports")
+                .SetTag("deletedCount", deletedMvoIds.Count))
+            {
+                var recallResult = await _syncServer.StageReferenceRecallExportsAsync(referenceRecallContext, deletedMvoIds);
+                Log.Information(
+                    "FlushPendingMvoDeletionsAsync: Reference recall for {DeletedCount} deleted MVO(s): " +
+                    "{ReferencingCount} referencing MVO(s) evaluated, {PeCount} Pending Export(s) staged with " +
+                    "{ChangeCount} removal change(s), {DroppedCount} unresolvable change(s) dropped",
+                    deletedMvoIds.Count, recallResult.ReferencingObjectsEvaluated, recallResult.PendingExportsStaged,
+                    recallResult.RemovalChangesStaged, recallResult.UnresolvableChangesDropped);
+            }
+        }
+
+        _pendingMvoDeletions.Clear();
+        _preRecallAttributeSnapshots.Clear();
+        span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Per-MVO fallback for <see cref="FlushPendingMvoDeletionsAsync"/>: processes each deletion
+    /// individually so a failure on one object cannot sink the rest of the page, matching the
+    /// pre-#993 behaviour. A failed object is marked with <c>LastConnectorDisconnectedDate</c> so
+    /// housekeeping retries it. Returns the IDs of the MVOs that were actually deleted.
+    /// </summary>
+    private async Task<List<Guid>> ProcessMvoDeletionsIndividuallyAsync(
+        List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletionsToProcess)
+    {
+        var deletedMvoIds = new List<Guid>();
+        foreach (var (mvo, finalAttributeValues) in deletionsToProcess)
         {
             try
             {
-                // Safeguard: If this MVO was re-joined by a new CSO during Pass 2 of the same page
-                // (e.g., an obsolete CSO disconnected in Pass 1 triggered 0-grace-period deletion,
-                // then a different CSO joined the same MVO in Pass 2), skip the deletion.
-                // Check specifically for CSOs joined during THIS sync page — identified by JoinType=Joined
-                // which is set by AttemptJoinAsync. Other join types (Provisioned, Projected) predate this page.
-                // We must also verify the CSO belongs to the current Connected System being synced,
-                // because CSOs from other systems (e.g., a Provisioned AD CSO) were not processed
-                // in this sync run and should not prevent intentional deletion rules.
-                if (mvo.ConnectedSystemObjects.Any(cso =>
-                    cso.JoinType == ConnectedSystemObjectJoinType.Joined &&
-                    cso.ConnectedSystemId == _connectedSystem.Id &&
-                    cso.Status != ConnectedSystemObjectStatus.Obsolete))
-                {
-                    Log.Information(
-                        "FlushPendingMvoDeletionsAsync: Skipping deletion of MVO {MvoId} — it was reconnected during this page " +
-                        "({ConnectorCount} active connector(s) from this system). Clearing deletion markers.",
-                        mvo.Id, mvo.ConnectedSystemObjects.Count(cso =>
-                            cso.JoinType == ConnectedSystemObjectJoinType.Joined &&
-                            cso.ConnectedSystemId == _connectedSystem.Id));
-
-                    // Clear any deletion markers set during Pass 1
-                    mvo.LastConnectorDisconnectedDate = null;
-                    mvo.DeletionInitiatedByType = ActivityInitiatorType.NotSet;
-                    mvo.DeletionInitiatedById = null;
-                    mvo.DeletionInitiatedByName = null;
-                    continue;
-                }
-
                 // Create delete Pending Exports for any remaining Provisioned CSOs
                 // This handles WhenAuthoritativeSourceDisconnected where target CSOs still exist
                 var deleteExports = await _syncServer.EvaluateMvoDeletionAsync(mvo);
                 if (deleteExports.Count > 0)
                 {
                     Log.Information(
-                        "FlushPendingMvoDeletionsAsync: Created {Count} delete Pending Exports for MVO {MvoId}",
+                        "ProcessMvoDeletionsIndividuallyAsync: Created {Count} delete Pending Exports for MVO {MvoId}",
                         deleteExports.Count, mvo.Id);
                 }
 
@@ -2788,7 +2881,7 @@ public abstract class SyncTaskProcessorBase
                     finalAttributeValues);
                 deletedMvoIds.Add(mvo.Id);
                 Log.Information(
-                    "FlushPendingMvoDeletionsAsync: Deleted MVO {MvoId} ({DisplayName})",
+                    "ProcessMvoDeletionsIndividuallyAsync: Deleted MVO {MvoId} ({DisplayName})",
                     mvo.Id, mvo.DisplayName ?? "No display name");
             }
             catch (Exception ex)
@@ -2796,31 +2889,14 @@ public abstract class SyncTaskProcessorBase
                 // Log error but continue with other deletions
                 // Set LastConnectorDisconnectedDate as fallback so housekeeping can retry
                 Log.Error(ex,
-                    "FlushPendingMvoDeletionsAsync: Failed to delete MVO {MvoId}, marking for housekeeping retry",
+                    "ProcessMvoDeletionsIndividuallyAsync: Failed to delete MVO {MvoId}, marking for housekeeping retry",
                     mvo.Id);
                 mvo.LastConnectorDisconnectedDate = DateTime.UtcNow;
                 await _syncRepo.UpdateMetaverseObjectAsync(mvo);
             }
         }
 
-        // Reference recall (#908): stage membership-removal Pending Exports for Metaverse Objects
-        // that referenced the deleted objects. Without this, referencing groups' target CSOs never
-        // change, the unchanged-skip means no sync re-evaluates them, and a target without
-        // referential integrity keeps the deleted object as a member forever.
-        if (deletedMvoIds.Count > 0)
-        {
-            var recallResult = await _syncServer.StageReferenceRecallExportsAsync(referenceRecallContext, deletedMvoIds);
-            Log.Information(
-                "FlushPendingMvoDeletionsAsync: Reference recall for {DeletedCount} deleted MVO(s): " +
-                "{ReferencingCount} referencing MVO(s) evaluated, {PeCount} Pending Export(s) staged with " +
-                "{ChangeCount} removal change(s), {DroppedCount} unresolvable change(s) dropped",
-                deletedMvoIds.Count, recallResult.ReferencingObjectsEvaluated, recallResult.PendingExportsStaged,
-                recallResult.RemovalChangesStaged, recallResult.UnresolvableChangesDropped);
-        }
-
-        _pendingMvoDeletions.Clear();
-        _preRecallAttributeSnapshots.Clear();
-        span.SetSuccess();
+        return deletedMvoIds;
     }
 
     /// <summary>
