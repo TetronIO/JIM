@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Exports running with Max Export Parallelism above one no longer send unresolved reference values (raw internal identifiers) to the target system. Reference resolution results are now persisted before parallel export batches execute, so every batch sees the resolved values; previously group memberships could be exported as invalid values and fail (for example "invalid per syntax" from an LDAP directory).
 - 🐛 Closing the browser or navigating away while an admin page with tabs (such as Operations) was open no longer records spurious Error-level "Navigation failed" and "Unhandled exception in circuit" entries in the JIM.Web log. Any remaining browser-disconnect noise from the framework is now logged at Warning, so Error entries once again indicate genuine problems.
 
 ### Performance
