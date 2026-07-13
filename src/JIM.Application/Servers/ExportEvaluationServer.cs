@@ -635,7 +635,12 @@ public class ExportEvaluationServer
         Guid sourceMetaverseObjectId,
         List<PendingExportAttributeValueChange>? attributeValueChanges = null)
     {
-        var existingPe = await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id);
+        // Lean fetch (issue #986): this method only reads ChangeType/Id/Status off the existing
+        // Pending Export and passes it to DeletePendingExportAsync, which needs AttributeValueChanges
+        // loaded for EF-tracked child-row disposal. The heavy fetch also loaded the CSO's and source
+        // Metaverse Object's full attribute value graphs, which for a large group CSO (group
+        // deprovisioning) runs into the hundreds of thousands of rows, none of them read here.
+        var existingPe = await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(cso.Id);
 
         if (existingPe != null)
         {
@@ -1363,9 +1368,15 @@ public class ExportEvaluationServer
         if (csoId.HasValue && (changeType == PendingExportChangeType.Update || changeType == PendingExportChangeType.Create))
         {
             PendingExport? dbPendingExport;
-            using (var peLookupSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("GetPendingExportByCsoIdForMerge"))
+            using (var peLookupSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("GetPendingExportByCsoIdForMerge")
+                .SetTag("leanFetch", true))
             {
-                dbPendingExport = await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(csoId.Value);
+                // Lean fetch (issue #986): the merge logic below only ever reads Id and
+                // AttributeValueChanges off dbPendingExport, never ConnectedSystemObject,
+                // SourceMetaverseObject or ConnectedSystem. The heavy GetPendingExportByConnectedSystemObjectIdAsync
+                // also loads those CSO/MVO attribute value graphs, which for a large group can run into
+                // the hundreds of thousands of rows and dominated this fetch (measured 99.5% of merge cost).
+                dbPendingExport = await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(csoId.Value);
                 peLookupSpan.SetTag("found", dbPendingExport != null);
                 peLookupSpan.SetTag("existingChangeCount", dbPendingExport?.AttributeValueChanges.Count ?? 0);
                 peLookupSpan.SetSuccess();

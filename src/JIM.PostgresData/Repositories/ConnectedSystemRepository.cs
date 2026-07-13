@@ -3480,6 +3480,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .FirstOrDefaultAsync(pe => pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.Id == connectedSystemObjectId);
     }
 
+    /// <inheritdoc />
+    public async Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
+    {
+        // Lean Include shape for the merge-and-replace path (issue #986): only AttributeValueChanges
+        // (with Attribute, needed by GetAttributeChangeMergeKey for single-vs-multi-valued dedup) are
+        // loaded. Deliberately no ConnectedSystemObject.AttributeValues or SourceMetaverseObject.AttributeValues -
+        // the merge logic in ExportEvaluationServer only reads Id and AttributeValueChanges off the
+        // fetched PendingExport, but for a large group's CSO/MVO those value collections can run into
+        // the hundreds of thousands of rows (see the heavy GetPendingExportByConnectedSystemObjectIdAsync
+        // above, which this call site used before this fix).
+        return await Repository.Database.PendingExports
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .FirstOrDefaultAsync(pe => pe.ConnectedSystemObjectId == connectedSystemObjectId);
+    }
+
     public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
     {
         var csoIdList = connectedSystemObjectIds.ToList();

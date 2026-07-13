@@ -416,6 +416,74 @@ public class ExportEvaluationTests
             "Should create exactly one new Delete PE");
     }
 
+    /// <summary>
+    /// Tests that when EvaluateMvoDeletionAsync replaces an existing non-Delete Pending Export, the
+    /// replaced Pending Export is removed from the store together with its attribute value changes;
+    /// none of them may leak onto the replacement Delete Pending Export. Pins the delete-path fetch
+    /// behaviour across the lean-fetch call-site change (issue #986): child-row disposal on delete
+    /// relies on the fetched entity having its AttributeValueChanges loaded.
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionAsync_WhenCreatePeWithAttributeChangesExists_ReplacementDisposesOldPeAndChangesAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var targetAttribute = targetUserType.Attributes.First(a => a.Type == AttributeDataType.Text);
+
+        var provisionedCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObject = mvo,
+            MetaverseObjectId = mvo.Id,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned
+        };
+
+        ConnectedSystemObjectsData.Add(provisionedCso);
+        SyncRepo.SeedConnectedSystemObject(provisionedCso);
+
+        // Pre-populate with an existing Create PE carrying attribute value changes
+        // Must set ConnectedSystemObject navigation property because mock DbSet doesn't auto-load it
+        var existingCreatePe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystemObjectId = provisionedCso.Id,
+            ConnectedSystemObject = provisionedCso,
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Pending,
+            SourceMetaverseObjectId = mvo.Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        existingCreatePe.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            PendingExportId = existingCreatePe.Id,
+            Attribute = targetAttribute,
+            AttributeId = targetAttribute.Id,
+            ChangeType = PendingExportAttributeChangeType.Add,
+            StringValue = "stale value from the replaced Create PE"
+        });
+        PendingExportsData.Add(existingCreatePe);
+        SyncRepo.SeedPendingExport(existingCreatePe);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+
+        // Assert: the old Create PE and its changes are gone; the replacement carries none of them
+        Assert.That(result.Count, Is.EqualTo(1), "Should return exactly one PE");
+        Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete), "Should be a Delete PE");
+        Assert.That(SyncRepo.PendingExports.ContainsKey(existingCreatePe.Id), Is.False,
+            "The replaced Create PE should be removed from the store");
+        Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(1), "Only the replacement Delete PE should remain");
+        Assert.That(result[0].AttributeValueChanges.Any(avc => avc.StringValue == "stale value from the replaced Create PE"),
+            Is.False, "No attribute value change from the replaced PE may leak onto the replacement");
+    }
+
     #region EvaluateOutOfScopeExportsAsync (cascade) — Delete-PE collision handling
 
     /// <summary>

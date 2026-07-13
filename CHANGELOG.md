@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ⚡ Exports no longer stall between batches at large scale. Batch collection now walks the Pending Export queue in a single pass (keyset pagination, backed by a new index) instead of rescanning it from the start for every batch; at 200,000 objects with 10,000 reference-bearing groups the old behaviour spent hours re-reading already-collected rows before the first group reached the target system.
 - ⚡ Full Imports at large scale are dramatically faster: matched objects are no longer hydrated one database round trip at a time, confirming a large group no longer degrades quadratically with its membership size, and bulk attribute value writes now stream via PostgreSQL binary COPY instead of parameterised inserts. A confirming Full Import of 210,000 objects that previously took around 42 minutes completes dramatically quicker.
+- ⚡ Deprovisioning users who are members of large groups no longer slows synchronisation to a crawl. Updating or deleting a large group's pending changes no longer reloads the group's full membership from the database each time.
 
 ## [0.13.0] - 2026-07-10
 
