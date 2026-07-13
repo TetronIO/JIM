@@ -59,7 +59,7 @@
                             <tr>
                                 <td><strong>Connected System</strong></td>
                                 <td>
-                                    <MudLink Href="@Utilities.GetConnectedSystemHref(_connectedSystemHeader!)">
+                                    <MudLink Typo="Typo.body1" Href="@Utilities.GetConnectedSystemHref(_connectedSystemHeader!)">
                                         @_pendingExport.ConnectedSystem.Name
                                     </MudLink>
                                 </td>
@@ -81,7 +81,7 @@
                                     }
                                     else
                                     {
-                                        <span>No</span>
+                                        <MudText Typo="Typo.body1">No</MudText>
                                     }
                                 </td>
                             </tr>

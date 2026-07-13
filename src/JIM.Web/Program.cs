@@ -16,6 +16,7 @@ using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.PostgresData;
 using JIM.Utilities;
+using JIM.Web.Logging;
 using JIM.Web.Middleware.Api;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
@@ -26,6 +27,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Microsoft.AspNetCore.OpenApi;
@@ -60,6 +62,7 @@ using System.Security.Claims;
 // JIM_INFRASTRUCTURE_API_KEY - Creates an infrastructure API key on startup for CI/CD automation (24hr expiry)
 // JIM_ENCRYPTION_KEY_PATH - Custom path for encryption key storage (default: /data/keys or app data directory)
 // JIM_THEME - Built-in colour theme name (default: refined)
+// JIM_TRUSTED_PROXIES - Comma-separated trusted proxy IPs/CIDR networks; enables X-Forwarded-For/-Proto (default: none trusted)
 
 // initial logging setup for when the application has not yet been created (bootstrapping)...
 InitialiseLogging(new LoggerConfiguration(), true);
@@ -87,6 +90,32 @@ try
     }
 
     var builder = WebApplication.CreateBuilder(args);
+
+    // Reverse proxy trust (optional; container orchestration override, per CLAUDE.md's environment-variable
+    // design principle). Unset by default: no forwarded headers are trusted and RemoteIpAddress is used as-is,
+    // which is correct when JIM is reached directly. Set JIM_TRUSTED_PROXIES to a comma-separated list of proxy
+    // IPs and/or CIDR networks when JIM sits behind a reverse proxy/load balancer, so X-Forwarded-For/-Proto are
+    // trusted only from those sources and the real client IP (used for unauthenticated API rate limiting,
+    // logging, HTTPS redirection, etc.) is recovered rather than the proxy's own address. Deliberately not part
+    // of ValidateSsoConfiguration's fail-fast checks: it is an optional deployment-topology override, not
+    // required configuration.
+    var trustedProxiesValue = Environment.GetEnvironmentVariable(Constants.Config.TrustedProxies);
+    var trustedProxies = TrustedProxyParser.Parse(trustedProxiesValue);
+    if (!trustedProxies.IsEmpty)
+    {
+        builder.Services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+            options.KnownProxies.Clear();
+            options.KnownIPNetworks.Clear();
+            foreach (var proxy in trustedProxies.KnownProxies)
+                options.KnownProxies.Add(proxy);
+            foreach (var network in trustedProxies.KnownNetworks)
+                options.KnownIPNetworks.Add(network);
+        });
+        Log.Information("Trusting forwarded headers from {ProxyCount} known proxy address(es) and {NetworkCount} known network(s)",
+            trustedProxies.KnownProxies.Count, trustedProxies.KnownNetworks.Count);
+    }
 
     // Configure database connection
     var connectionString = JimDbContext.BuildConnectionString();
@@ -358,6 +387,11 @@ try
 
     // setup authorisation policies
     builder.Services.AddAuthorization();
+
+    // REST API rate limiting (issue #500, OWASP Top 10:2025 A02). Registers the settings cache and the global
+    // limiter; UseRateLimiter() below wires it into the pipeline. Not needed in OpenAPI generation mode, which
+    // never accepts requests.
+    builder.Services.AddApiRateLimiting();
     } // end of !isOpenApiGenerateMode auth block
 
     // Add services to the container.
@@ -597,6 +631,12 @@ try
         app.Logger.LogInformation("No static OpenAPI document found; using runtime generation (development only)");
     }
 
+    // Forwarded headers (X-Forwarded-For / X-Forwarded-Proto) must be processed before anything that reads the
+    // client IP or scheme: HTTPS redirection, authentication, and rate limiting all depend on it. A no-op unless
+    // JIM_TRUSTED_PROXIES was set above (the common case: JIM reached directly, no proxy to trust).
+    if (!trustedProxies.IsEmpty)
+        app.UseForwardedHeaders();
+
     app.UseHttpsRedirection();
     app.UseStaticFiles();
     app.UseRouting();
@@ -614,6 +654,20 @@ try
         context => context.Request.Path.StartsWithSegments("/api"),
         appBuilder => appBuilder.UseJimRoleEnrichment()
     );
+
+    // REST API rate limiting (issue #500). Must run after authentication and role enrichment so the
+    // GlobalLimiter's partition factory sees a fully-resolved identity (roles, the Metaverse Object ID claim),
+    // and BEFORE authorisation: a request that will fail authorisation (missing/invalid credentials, insufficient
+    // role) must still be counted and throttled per client IP, otherwise unauthenticated brute-force/credential
+    // probing against protected endpoints would bypass the limiter entirely via authorisation's 401/403
+    // short-circuit. Applied pipeline-wide (not UseWhen-scoped to /api) because the GlobalLimiter itself already
+    // returns a no-op limiter for non-API paths; a single registration keeps that decision in one place
+    // (RateLimitPartitionResolver) instead of splitting it between the pipeline and the partition factory.
+    // Skipped in OpenAPI generation mode, matching the AddApiRateLimiting registration above: that mode never
+    // serves requests, and UseRateLimiter verifies its services are registered at pipeline-build time, so an
+    // ungated call crashes the openapi-gen Docker build stage at startup.
+    if (!isOpenApiGenerateMode)
+        app.UseRateLimiter();
 
     app.UseAuthorization();
 
@@ -728,14 +782,22 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
     // Suppress EF Core SQL query logging — these are noise with no diagnostic value
     loggerConfiguration.MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Fatal);
     loggerConfiguration.Enrich.FromLogContext();
-    loggerConfiguration.WriteTo.File(
-        formatter: new RenderedCompactJsonFormatter(),
-        path: Path.Combine(loggingPath, "jim.web..log"),
-        rollingInterval: RollingInterval.Day,
-        retainedFileCountLimit: 100,
-        fileSizeLimitBytes: 50 * 1024 * 1024,  // 50MB per file — keeps files manageable for analysis
-        rollOnFileSizeLimit: true);
-    loggerConfiguration.WriteTo.Console();
+
+    // The sinks sit behind a demoting wrapper so benign Blazor circuit-disconnect noise (framework Error
+    // events caused by JSDisconnectedException when a browser disconnects mid-operation) is logged at
+    // Warning. Real circuit errors pass through unchanged. See CircuitDisconnectDemotingSink.
+    var sinkLogger = new LoggerConfiguration()
+        .MinimumLevel.Verbose()
+        .WriteTo.File(
+            formatter: new RenderedCompactJsonFormatter(),
+            path: Path.Combine(loggingPath, "jim.web..log"),
+            rollingInterval: RollingInterval.Day,
+            retainedFileCountLimit: 100,
+            fileSizeLimitBytes: 50 * 1024 * 1024,  // 50MB per file; keeps files manageable for analysis
+            rollOnFileSizeLimit: true)
+        .WriteTo.Console()
+        .CreateLogger();
+    loggerConfiguration.WriteTo.Sink(new CircuitDisconnectDemotingSink(sinkLogger));
 
     if (assignLogLogger)
         Log.Logger = loggerConfiguration.CreateLogger();

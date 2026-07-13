@@ -14,6 +14,7 @@ using JIM.Models.Transactional;
 using JIM.Models.Transactional.DTOs;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Serilog;
 using System.Diagnostics;
 namespace JIM.PostgresData.Repositories;
@@ -2858,9 +2859,26 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await ExecutableExportsQuery(connectedSystemId).CountAsync();
     }
 
-    public async Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
+    public async Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
     {
-        return await ExecutableExportsQuery(connectedSystemId)
+        var query = ExecutableExportsQuery(connectedSystemId);
+
+        // Keyset pagination on (CreatedAt, Id): strictly after the last row of the previous
+        // batch. Unlike OFFSET paging, the cursor stays valid as executed rows drop out of
+        // the query mid-run, so the export loop can make a single forward sweep instead of
+        // rescanning from the start for every batch (issue #985). Backed by
+        // IX_PendingExports_ConnectedSystemId_CreatedAt_Id. Guid ordering only needs to be
+        // self-consistent between this predicate and the ORDER BY below; both use the
+        // store's uuid ordering.
+        if (afterCreatedAt.HasValue && afterId.HasValue)
+        {
+            var cursorCreatedAt = afterCreatedAt.Value;
+            var cursorId = afterId.Value;
+            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
+                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
+        }
+
+        return await query
             .AsNoTracking()
             .AsSplitQuery()
             .Include(pe => pe.AttributeValueChanges)
@@ -2876,9 +2894,74 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .ThenInclude(cso => cso!.AttributeValues)
                     .ThenInclude(av => av.Attribute)
             .OrderBy(pe => pe.CreatedAt)
-            .Skip(skip)
+            .ThenBy(pe => pe.Id)
             .Take(take)
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// Collects all remaining executable exports with unresolved references (deferred) strictly
+    /// after the given keyset cursor, in a single query. Used to fast-path the export
+    /// batch-collection loop once a batch is discovered to be made up entirely of deferred
+    /// exports: paging through the remainder 100 rows at a time would only ever build the same
+    /// deferred list one page slower (issue #985). Same Include chain and keyset predicate as
+    /// <see cref="GetExecutableExportBatchAsync"/>, restricted to HasUnresolvedReferences exports,
+    /// with no page size limit.
+    /// </summary>
+    public async Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+    {
+        var query = ExecutableExportsQuery(connectedSystemId)
+            .Where(pe => pe.HasUnresolvedReferences);
+
+        if (afterCreatedAt.HasValue && afterId.HasValue)
+        {
+            var cursorCreatedAt = afterCreatedAt.Value;
+            var cursorId = afterId.Value;
+            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
+                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
+        }
+
+        return await query
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            // Same rationale as GetExecutableExportBatchAsync: CSO.Type is required by
+            // LdapConnectorExport (GetObjectClass() fallback, placeholder modifications).
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.Type)
+            .Include(pe => pe.ConnectedSystemObject)
+                .ThenInclude(cso => cso!.AttributeValues)
+                    .ThenInclude(av => av.Attribute)
+            .OrderBy(pe => pe.CreatedAt)
+            .ThenBy(pe => pe.Id)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Returns whether any executable exports WITHOUT unresolved references exist strictly after
+    /// the given keyset cursor. Guards the deferred-collection fast path (issue #985): deferred
+    /// and executable exports interleave in (CreatedAt, Id) order, so a wholly-deferred batch
+    /// does not prove the rest of the queue is deferred too; collecting the deferred remainder
+    /// and breaking out of the scan without this probe would silently drop any executable
+    /// exports created after the deferred run. A cheap indexed existence check (backed by
+    /// IX_PendingExports_ConnectedSystemId_CreatedAt_Id): no Includes, no ordering, no entity
+    /// materialisation.
+    /// </summary>
+    public async Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+    {
+        var query = ExecutableExportsQuery(connectedSystemId)
+            .Where(pe => !pe.HasUnresolvedReferences);
+
+        if (afterCreatedAt.HasValue && afterId.HasValue)
+        {
+            var cursorCreatedAt = afterCreatedAt.Value;
+            var cursorId = afterId.Value;
+            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
+                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
+        }
+
+        return await query.AnyAsync();
     }
 
     /// <summary>
@@ -3462,74 +3545,20 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .FirstOrDefaultAsync(pe => pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.Id == connectedSystemObjectId);
     }
 
-    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
+    /// <inheritdoc />
+    public async Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
     {
-        var csoIdList = connectedSystemObjectIds.ToList();
-        if (csoIdList.Count == 0)
-            return new Dictionary<Guid, PendingExport>();
-
-        var pendingExports = await Repository.Database.PendingExports
-            .AsSplitQuery()
-            .Include(pe => pe.ConnectedSystem)
-            .Include(pe => pe.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.AttributeValues)
-                    .ThenInclude(av => av.Attribute)
+        // Lean Include shape for the merge-and-replace path (issue #986): only AttributeValueChanges
+        // (with Attribute, needed by GetAttributeChangeMergeKey for single-vs-multi-valued dedup) are
+        // loaded. Deliberately no ConnectedSystemObject.AttributeValues or SourceMetaverseObject.AttributeValues -
+        // the merge logic in ExportEvaluationServer only reads Id and AttributeValueChanges off the
+        // fetched PendingExport, but for a large group's CSO/MVO those value collections can run into
+        // the hundreds of thousands of rows (see the heavy GetPendingExportByConnectedSystemObjectIdAsync
+        // above, which this call site used before this fix).
+        return await Repository.Database.PendingExports
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
-            .Include(pe => pe.SourceMetaverseObject)
-                .ThenInclude(mvo => mvo!.AttributeValues)
-                    .ThenInclude(av => av.Attribute)
-            .Where(pe => pe.ConnectedSystemObject != null && csoIdList.Contains(pe.ConnectedSystemObject.Id))
-            .ToListAsync();
-
-        // Build dictionary mapping CSO ID to Pending Export.
-        // There should only be one Pending Export per CSO. If duplicates are found (indicating a
-        // previous data integrity issue), self-heal by keeping the newest PE and deleting the older one(s).
-        var filteredExports = pendingExports.Where(pe => pe.ConnectedSystemObject != null).ToList();
-        var result = new Dictionary<Guid, PendingExport>();
-        var duplicatesToDelete = new List<PendingExport>();
-
-        foreach (var pe in filteredExports)
-        {
-            var csoId = pe.ConnectedSystemObject!.Id;
-            if (result.ContainsKey(csoId))
-            {
-                // Duplicate detected — keep the newer PE (by CreatedAt), queue the older one for deletion
-                var existing = result[csoId];
-                PendingExport keeper, discard;
-
-                if (pe.CreatedAt >= existing.CreatedAt)
-                {
-                    keeper = pe;
-                    discard = existing;
-                }
-                else
-                {
-                    keeper = existing;
-                    discard = pe;
-                }
-
-                Log.Warning("GetPendingExportsByConnectedSystemObjectIdsAsync: DUPLICATE PENDING EXPORT detected for CSO {CsoId}. " +
-                    "Keeping PE {KeeperId} (created {KeeperDate}), deleting stale PE {DiscardId} (created {DiscardDate}). " +
-                    "This indicates a previous data integrity issue that has been self-healed.",
-                    csoId, keeper.Id, keeper.CreatedAt, discard.Id, discard.CreatedAt);
-
-                duplicatesToDelete.Add(discard);
-                result[csoId] = keeper;
-            }
-            else
-            {
-                result[csoId] = pe;
-            }
-        }
-
-        // Delete any duplicate PEs found during dictionary building
-        foreach (var duplicate in duplicatesToDelete)
-        {
-            await DeletePendingExportAsync(duplicate);
-        }
-
-        return result;
+            .FirstOrDefaultAsync(pe => pe.ConnectedSystemObjectId == connectedSystemObjectId);
     }
 
     public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
@@ -3540,7 +3569,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         // Lightweight query: only load AttributeValueChanges with Attribute (needed for reconciliation comparison).
         // Skip ConnectedSystemObject (caller already has CSOs in memory), ConnectedSystem, and SourceMetaverseObject.
+        // AsNoTracking: every caller treats these as read-only snapshots (the duplicate self-heal
+        // below and the deferred-export reconciliation both already assume it), and tracked
+        // Pending Exports on the worker's long-lived context become a hazard once raw SQL
+        // deletes their rows (see DeletePendingExportsByConnectedSystemObjectIdsAsync).
         var pendingExports = await Repository.Database.PendingExports
+            .AsNoTracking()
             .Include(pe => pe.AttributeValueChanges)
                 .ThenInclude(avc => avc.Attribute)
             .Where(pe => pe.ConnectedSystemObjectId != null && csoIdList.Contains(pe.ConnectedSystemObjectId.Value))
@@ -4897,43 +4931,85 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
-    /// Bulk inserts ConnectedSystemObjectAttributeValue rows using parameterised multi-row INSERT.
+    /// Bulk inserts ConnectedSystemObjectAttributeValue rows using Npgsql binary COPY (#988).
     /// Uses the parent CSO ID (shadow FK) passed explicitly since it's not a C# property.
     /// </summary>
+    /// <remarks>
+    /// Replaces the previous parameterised multi-row INSERT, which measured ~10k rows/sec effective
+    /// at scale (3.88M rows = ~246s on a 209,984-object confirming import). Binary COPY is typically
+    /// 5-10x faster for bulk row volumes like this. Mirrors
+    /// <see cref="SyncRepository.PersistRpeiCsoChangesAsync"/>'s COPY helpers
+    /// (<c>BulkInsertCsoChangeAttributeValuesRawAsync</c> in
+    /// <c>SyncRepository.RpeiOperations.cs</c>) exactly: same connection handling (COPY on the
+    /// underlying <see cref="NpgsqlConnection"/> participates in any ambient EF transaction
+    /// automatically, so callers that wrap this in a transaction need no changes), same column
+    /// ordering, same per-column <see cref="NpgsqlTypes.NpgsqlDbType"/> mapping and null handling.
+    /// The non-relational (EF InMemory provider) fallback path in
+    /// <see cref="UpdateConnectedSystemObjectsAsync"/> does not call this method and is untouched.
+    /// </remarks>
     private async Task BulkInsertCsoAttributeValuesRawAsync(List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)> attributeValues)
     {
-        const int columnsPerRow = 12;
-        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+        if (attributeValues.Count == 0)
+            return;
 
-        foreach (var chunk in BulkSqlHelpers.ChunkList(attributeValues, chunkSize))
+        var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
+        if (npgsqlConn.State != System.Data.ConnectionState.Open)
+            await npgsqlConn.OpenAsync();
+
+        await using var writer = await npgsqlConn.BeginBinaryImportAsync(
+            """
+            COPY "ConnectedSystemObjectAttributeValues" (
+                "Id", "ConnectedSystemObjectId", "AttributeId", "StringValue", "DateTimeValue",
+                "IntValue", "LongValue", "ByteValue", "GuidValue", "BoolValue",
+                "ReferenceValueId", "UnresolvedReferenceValue"
+            ) FROM STDIN (FORMAT binary)
+            """);
+
+        foreach (var (csoId, av) in attributeValues)
         {
-            var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""ConnectedSystemObjectAttributeValues"" (""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""ByteValue"", ""GuidValue"", ""BoolValue"", ""ReferenceValueId"", ""UnresolvedReferenceValue"") VALUES ");
-
-            var parameters = new List<object>();
-            for (var i = 0; i < chunk.Count; i++)
-            {
-                if (i > 0) sql.Append(", ");
-                var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}})");
-
-                var (csoId, av) = chunk[i];
-                parameters.Add(av.Id);
-                parameters.Add(csoId);
-                parameters.Add(av.AttributeId);
-                parameters.Add(BulkSqlHelpers.NullableParam(av.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.ReferenceValueId, NpgsqlTypes.NpgsqlDbType.Uuid));
-                parameters.Add(BulkSqlHelpers.NullableParam(av.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
-            }
-
-            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+            await writer.StartRowAsync();
+            await writer.WriteAsync(av.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(csoId, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(av.AttributeId, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (av.StringValue is not null)
+                await writer.WriteAsync(av.StringValue, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (av.DateTimeValue.HasValue)
+                await writer.WriteAsync(av.DateTimeValue.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            else
+                await writer.WriteNullAsync();
+            if (av.IntValue.HasValue)
+                await writer.WriteAsync(av.IntValue.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (av.LongValue.HasValue)
+                await writer.WriteAsync(av.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
+            else
+                await writer.WriteNullAsync();
+            if (av.ByteValue is not null)
+                await writer.WriteAsync(av.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea);
+            else
+                await writer.WriteNullAsync();
+            if (av.GuidValue.HasValue)
+                await writer.WriteAsync(av.GuidValue.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (av.BoolValue.HasValue)
+                await writer.WriteAsync(av.BoolValue.Value, NpgsqlTypes.NpgsqlDbType.Boolean);
+            else
+                await writer.WriteNullAsync();
+            if (av.ReferenceValueId.HasValue)
+                await writer.WriteAsync(av.ReferenceValueId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (av.UnresolvedReferenceValue is not null)
+                await writer.WriteAsync(av.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
         }
+
+        await writer.CompleteAsync();
     }
 
     /// <summary>

@@ -1,6 +1,6 @@
 # OWASP Top 10:2025 Assessment
 
-- **Status:** Doing (remediation started; see issue #500 for per-gap status)
+- **Status:** Doing (remediation in progress; see [issue #500](https://github.com/TetronIO/JIM/issues/500) for current per-gap status)
 - **Issue:** [#500](https://github.com/TetronIO/JIM/issues/500)
 - **Assessed:** 2026-04-09
 - **Standard:** [OWASP Top 10:2025](https://owasp.org/Top10/2025/)
@@ -45,9 +45,11 @@ Core security configuration is sound: HSTS, HTTPS redirection, restricted develo
 | Stack traces suppressed in production | `GlobalExceptionHandler.cs:32` |
 | DbContext pooling prevents connection exhaustion | `Program.cs:76-80` |
 
-**Gap 1: No rate limiting (High priority)**
+**Gap 1: No rate limiting (High priority) - ✅ Remediated**
 
 No `UseRateLimiter()` middleware is configured. Authentication endpoints (`/api/auth`, `/api/apikeys`) are exposed to brute-force attacks with no throttle. This is the highest-priority gap in the assessment.
+
+Remediated: `Microsoft.AspNetCore.RateLimiting` (built-in; no new dependency) now protects the whole REST API with per-client partitioning (authenticated principal or client IP), HTTP 429 with `Retry-After`, and `ForwardedHeaders` handling (`JIM_TRUSTED_PROXIES`) so per-IP partitioning is correct behind a reverse proxy. Limits are runtime-tunable via Service Settings. See [Rate Limiting](../../../docs/api/rate-limiting.md).
 
 **Gap 2: No Content Security Policy header (Medium priority)**
 
@@ -209,7 +211,7 @@ A global exception handler catches all unhandled exceptions. Production response
 | # | Category | Rating | Gaps | Priority |
 |---|----------|--------|------|----------|
 | A01 | Broken Access Control | Strong | None | - |
-| A02 | Security Misconfiguration | Good | Rate limiting, CSP header | High, Medium |
+| A02 | Security Misconfiguration | Good | ~~Rate limiting~~ (remediated), CSP header | ~~High~~, Medium |
 | A03 | Software Supply Chain | Good | `packages.lock.json`, DynamicExpresso review | Medium, Low |
 | A04 | Cryptographic Failures | Strong | None | - |
 | A05 | Injection | Strong | None (pending DynamicExpresso) | - |
@@ -221,7 +223,7 @@ A global exception handler catches all unhandled exceptions. Production response
 
 ## Remediation Recommendations
 
-### 1. Rate Limiting Middleware (High)
+### 1. Rate Limiting Middleware (High) - ✅ Remediated
 
 **OWASP:** A02
 **Risk:** Authentication endpoints exposed to brute-force attacks.
@@ -240,6 +242,8 @@ A global exception handler catches all unhandled exceptions. Production response
 **Recommendation:** Option A. It is built-in, requires no new dependency, and works in all deployment topologies including air-gapped.
 
 **Effort:** Low
+
+**Implemented:** Option A, extended to the whole REST API rather than just `/api/auth`/`/api/apikeys` (any endpoint, not just the two named here, is a viable target for API key spraying). Authenticated requests are partitioned per principal (sliding window); unauthenticated requests, including failed API key attempts, per client IP (fixed window). Limits are Service Settings, not hardcoded, per product decision. `/api/health` is excluded (orchestrator probes).
 
 ---
 

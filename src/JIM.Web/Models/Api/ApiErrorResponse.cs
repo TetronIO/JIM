@@ -118,6 +118,18 @@ public class ApiErrorResponse
             Message = message
         };
     }
+
+    /// <summary>
+    /// Creates a too-many-requests (rate limited) error response.
+    /// </summary>
+    public static ApiErrorResponse TooManyRequests(string message)
+    {
+        return new ApiErrorResponse
+        {
+            Code = ApiErrorCodes.TooManyRequests,
+            Message = message
+        };
+    }
 }
 
 /// <summary>
@@ -133,4 +145,5 @@ public static class ApiErrorCodes
     public const string InternalError = "INTERNAL_ERROR";
     public const string BadRequest = "BAD_REQUEST";
     public const string ServiceUnavailable = "SERVICE_UNAVAILABLE";
+    public const string TooManyRequests = "TOO_MANY_REQUESTS";
 }

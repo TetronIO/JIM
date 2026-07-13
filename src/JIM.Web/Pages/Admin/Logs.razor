@@ -293,8 +293,15 @@
     {
         if (firstRender)
         {
-            // Hide the page footer to maximise viewing area for logs
-            await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('jim-hide-footer')");
+            try
+            {
+                // Hide the page footer to maximise viewing area for logs
+                await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('jim-hide-footer')");
+            }
+            catch (JSDisconnectedException)
+            {
+                // Ignore - circuit is disconnected and being disposed
+            }
         }
 
         if (!_preferencesLoaded)

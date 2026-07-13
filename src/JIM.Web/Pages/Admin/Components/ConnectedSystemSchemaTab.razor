@@ -565,7 +565,14 @@
                 @if (_selectedObjectTypeHasDescriptions)
                 {
                     <MudTd DataLabel="Description">
-                        @context.Description
+                        @if (string.IsNullOrEmpty(context.Description))
+                        {
+                            <EmptyValue />
+                        }
+                        else
+                        {
+                            @((MarkupString)Helpers.LinkifyRfcReferences(context.Description))
+                        }
                     </MudTd>
                 }
                 @if (ConnectedSystem.ConnectorDefinition.SupportsUserSelectedAttributeTypes)

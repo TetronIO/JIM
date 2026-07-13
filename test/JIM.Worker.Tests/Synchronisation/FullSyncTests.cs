@@ -2325,6 +2325,179 @@ public class FullSyncTests
     }
 
     /// <summary>
+    /// Arranges the given number of MVO/CSO pairs so that a Full Sync triggers 0-grace-period
+    /// synchronous deletion of every MVO: DeletionRule = WhenLastConnectorDisconnected with no
+    /// grace period, the import Synchronisation Rule disconnects on obsoletion, and each CSO is
+    /// marked Obsolete. Returns the arranged MVOs.
+    /// </summary>
+    private List<MetaverseObject> ArrangeMvosForSynchronousDeletion(int count)
+    {
+        var mvoType = MetaverseObjectTypesData.Single(t => t.Id == 1);
+        mvoType.DeletionRule = MetaverseObjectDeletionRule.WhenLastConnectorDisconnected;
+        mvoType.DeletionGracePeriod = null;
+
+        var importSyncRule = SyncRulesData.Single(sr => sr.Id == 1);
+        importSyncRule.InboundOutOfScopeAction = InboundOutOfScopeAction.Disconnect;
+
+        // The standard test data seeds only one MVO/CSO pair, so construct the pairs this
+        // scenario needs, modelled on the seeded shapes, and seed them into both the mock
+        // DbContext data lists and the InMemory sync repository.
+        var csUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_USER");
+        var displayNameMvAttribute = mvoType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.DisplayName);
+
+        var arranged = new List<MetaverseObject>();
+        for (var i = 0; i < count; i++)
+        {
+            var mvo = new MetaverseObject
+            {
+                Id = Guid.NewGuid(),
+                Type = mvoType,
+                LastConnectorDisconnectedDate = null
+            };
+            mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+            {
+                Id = Guid.NewGuid(),
+                AttributeId = (int)MockMetaverseAttributeName.DisplayName,
+                Attribute = displayNameMvAttribute,
+                StringValue = $"Deletion Target {i}"
+            });
+
+            var cso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = 1,
+                Type = csUserType,
+                TypeId = csUserType.Id,
+                MetaverseObject = mvo,
+                MetaverseObjectId = mvo.Id,
+                JoinType = ConnectedSystemObjectJoinType.Joined,
+                DateJoined = DateTime.UtcNow,
+                Status = ConnectedSystemObjectStatus.Obsolete
+            };
+            mvo.ConnectedSystemObjects.Add(cso);
+
+            MetaverseObjectsData.Add(mvo);
+            ConnectedSystemObjectsData.Add(cso);
+            SyncRepo.SeedMetaverseObject(mvo);
+            SyncRepo.SeedConnectedSystemObject(cso);
+            arranged.Add(mvo);
+        }
+
+        return arranged;
+    }
+
+    /// <summary>
+    /// Pins the set-based MVO deletion flush (issue #993): deleting a page of MVOs must not fan
+    /// out into per-object repository calls (one CSO fetch, one MVO delete and one change record
+    /// insert per MVO); the flush must use the bulk methods. Guards against regressing back to
+    /// O(N) sequential round trips per page, which at customer scale made 0-grace-period cohort
+    /// deprovisioning crawl (roughly 50 seconds per page flush).
+    /// </summary>
+    [Test]
+    public async Task MvoDeletionFlush_MultipleDeletions_UsesSetBasedRepositoryCallsAsync()
+    {
+        // re-create the repository as a counting spy, and Jim on top of it
+        var spy = new MvoDeletionCountingSyncRepository();
+        SyncRepo = TestUtilities.CreateSyncRepository(
+            csos: ConnectedSystemObjectsData,
+            mvos: MetaverseObjectsData,
+            activity: ActivitiesData.First(),
+            syncRules: SyncRulesData,
+            repository: spy);
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
+
+        var mvosToDelete = ArrangeMvosForSynchronousDeletion(3);
+        var initialMvoCount = SyncRepo.MetaverseObjects.Count;
+
+        // run sync
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var processor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        await processor.PerformFullSyncAsync();
+
+        // all MVOs deleted
+        Assert.That(SyncRepo.MetaverseObjects.Count, Is.EqualTo(initialMvoCount - mvosToDelete.Count),
+            "Expected every arranged MVO to be deleted synchronously during sync.");
+        foreach (var mvo in mvosToDelete)
+            Assert.That(SyncRepo.MetaverseObjects.ContainsKey(mvo.Id), Is.False, $"Expected MVO {mvo.Id} to be deleted.");
+
+        // and no per-object repository fan-out from the deletion flush
+        Assert.That(spy.PerMvoCsoFetchCalls, Is.Zero,
+            "The deletion flush must use the bulk CSO fetch, not one query per MVO.");
+        Assert.That(spy.PerMvoDeleteCalls, Is.Zero,
+            "The deletion flush must use the bulk MVO delete, not one delete per MVO.");
+        Assert.That(spy.DirectChangeCreateCalls, Is.Zero,
+            "The deletion flush must persist Deleted change records via the bulk path, not one insert per MVO.");
+    }
+
+    /// <summary>
+    /// The set-based deletion flush must record the same Deleted change records per MVO as the
+    /// per-object path: one record per deleted MVO carrying its ID and its final attribute values.
+    /// </summary>
+    [Test]
+    public async Task MvoDeletionFlush_MultipleDeletions_CreatesDeletedChangeRecordsAsync()
+    {
+        // the harness disables MVO change tracking by default; this test is about the change records
+        ServiceSettingItemsData.Single(s => s.Key == Constants.SettingKeys.ChangeTrackingMvoChangesEnabled).Value = "true";
+
+        var mvosToDelete = ArrangeMvosForSynchronousDeletion(2);
+
+        // run sync
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var processor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        await processor.PerformFullSyncAsync();
+
+        foreach (var mvo in mvosToDelete)
+        {
+            Assert.That(SyncRepo.MetaverseObjects.ContainsKey(mvo.Id), Is.False, $"Expected MVO {mvo.Id} to be deleted.");
+
+            var deletedChange = SyncRepo.MetaverseObjectChanges.Values.SingleOrDefault(c =>
+                c.ChangeType == ObjectChangeType.Deleted && c.DeletedMetaverseObjectId == mvo.Id);
+            Assert.That(deletedChange, Is.Not.Null, $"Expected a Deleted change record for MVO {mvo.Id}.");
+            Assert.That(deletedChange!.AttributeChanges, Is.Not.Empty,
+                "Expected the Deleted change record to carry the MVO's final attribute values.");
+        }
+    }
+
+    /// <summary>
+    /// If the set-based deletion path fails as a whole, the flush must fall back to per-MVO
+    /// deletion so one bad object cannot sink the entire page's deletions (issue #993 preserves
+    /// the pre-existing per-object error isolation semantics).
+    /// </summary>
+    [Test]
+    public async Task MvoDeletionFlush_BulkDeleteFails_FallsBackToPerMvoDeletionAsync()
+    {
+        // re-create the repository as a spy whose bulk MVO delete always fails
+        var spy = new BulkDeleteFailingSyncRepository();
+        SyncRepo = TestUtilities.CreateSyncRepository(
+            csos: ConnectedSystemObjectsData,
+            mvos: MetaverseObjectsData,
+            activity: ActivitiesData.First(),
+            syncRules: SyncRulesData,
+            repository: spy);
+        Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
+
+        var mvosToDelete = ArrangeMvosForSynchronousDeletion(2);
+
+        // run sync
+        var connectedSystem = await Jim.ConnectedSystems.GetConnectedSystemAsync(1);
+        var activity = ActivitiesData.First();
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullSynchronisation);
+        var processor = new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, connectedSystem!, runProfile, activity, new CancellationTokenSource());
+        await processor.PerformFullSyncAsync();
+
+        // the MVOs must still be deleted, via the per-object fallback
+        foreach (var mvo in mvosToDelete)
+            Assert.That(SyncRepo.MetaverseObjects.ContainsKey(mvo.Id), Is.False,
+                $"Expected MVO {mvo.Id} to be deleted by the per-MVO fallback after the bulk path failed.");
+        Assert.That(spy.PerMvoDeleteCalls, Is.EqualTo(mvosToDelete.Count),
+            "Expected the fallback to delete each MVO individually.");
+    }
+
+    /// <summary>
     /// Tests that when the DeletionRule is WhenLastConnectorDisconnected with a grace period,
     /// the MVO is NOT deleted immediately but has its LastConnectorDisconnectedDate set.
     /// </summary>
@@ -3542,4 +3715,44 @@ public class FullSyncTests
     }
 
     #endregion
+
+    /// <summary>
+    /// Spy repository that counts the per-object repository calls the set-based MVO deletion
+    /// flush must NOT make (issue #993): the singular CSO fetch, the singular MVO delete, and
+    /// the per-object change record insert.
+    /// </summary>
+    private class MvoDeletionCountingSyncRepository : SyncRepository
+    {
+        public int PerMvoCsoFetchCalls;
+        public int PerMvoDeleteCalls;
+        public int DirectChangeCreateCalls;
+
+        public override Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
+        {
+            Interlocked.Increment(ref PerMvoCsoFetchCalls);
+            return base.GetConnectedSystemObjectsByMetaverseObjectIdAsync(metaverseObjectId);
+        }
+
+        public override Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
+        {
+            Interlocked.Increment(ref PerMvoDeleteCalls);
+            return base.DeleteMetaverseObjectAsync(metaverseObject);
+        }
+
+        public override Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change)
+        {
+            Interlocked.Increment(ref DirectChangeCreateCalls);
+            return base.CreateMetaverseObjectChangeDirectAsync(change);
+        }
+    }
+
+    /// <summary>
+    /// Extends the counting spy so the bulk MVO delete always fails, proving the flush falls
+    /// back to per-object deletion for error isolation.
+    /// </summary>
+    private sealed class BulkDeleteFailingSyncRepository : MvoDeletionCountingSyncRepository
+    {
+        public override Task DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
+            => throw new InvalidOperationException("Simulated bulk MVO delete failure.");
+    }
 }

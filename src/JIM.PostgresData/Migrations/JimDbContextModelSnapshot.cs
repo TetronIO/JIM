@@ -262,6 +262,9 @@ namespace JIM.PostgresData.Migrations
                         .IsDescending()
                         .HasDatabaseName("IX_Activities_Created");
 
+                    b.HasIndex("MetaverseObjectId")
+                        .HasDatabaseName("IX_Activities_MetaverseObjectId");
+
                     b.HasIndex("SyncRuleId");
 
                     b.ToTable("Activities");
@@ -3128,6 +3131,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemId", "Status")
                         .HasDatabaseName("IX_PendingExports_ConnectedSystemId_Status");
+
+                    b.HasIndex("ConnectedSystemId", "CreatedAt", "Id")
+                        .HasDatabaseName("IX_PendingExports_ConnectedSystemId_CreatedAt_Id");
 
                     b.ToTable("PendingExports");
                 });

@@ -136,11 +136,21 @@ public class SyncExportTaskProcessor
 
         try
         {
+            // Resolve the degree of export batch parallelism (issue #985d): an explicit
+            // Max Export Parallelism setting always wins; otherwise the connector may recommend
+            // a directory-aware degree of parallelism (e.g. LdapConnector, mirroring its own
+            // Export Concurrency auto-tune); otherwise fall back to sequential.
+            var resolvedParallelism = ExportParallelismResolver.Resolve(
+                _connectedSystem.MaxExportParallelism,
+                _connector,
+                _connectedSystem.SettingValues,
+                _connectedSystem.Name);
+
             // Execute exports using the ExportExecutionServer with progress reporting
             var options = new ExportExecutionOptions
             {
                 BatchSize = 100,
-                MaxParallelism = _connectedSystem.MaxExportParallelism ?? 1
+                MaxParallelism = resolvedParallelism
             };
 
             var throughput = new ThroughputTracker();
