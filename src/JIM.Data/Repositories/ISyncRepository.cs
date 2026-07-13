@@ -412,14 +412,8 @@ public interface ISyncRepository
     Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
 
     /// <summary>
-    /// Gets Pending Exports for multiple CSOs in a single query.
-    /// Returns a dictionary keyed by CSO ID.
-    /// </summary>
-    Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
-
-    /// <summary>
-    /// Lightweight version of <see cref="GetPendingExportsByConnectedSystemObjectIdsAsync"/> for reconciliation.
-    /// Returns Pending Exports with only scalar fields loaded (no attribute value changes).
+    /// Gets Pending Exports for multiple CSOs in a single lightweight query, keyed by CSO ID.
+    /// Only AttributeValueChanges (with Attribute) are loaded; entities are untracked.
     /// </summary>
     Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 

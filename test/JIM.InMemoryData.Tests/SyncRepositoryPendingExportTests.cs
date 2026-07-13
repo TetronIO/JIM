@@ -142,14 +142,14 @@ public class SyncRepositoryPendingExportTests
     }
 
     [Test]
-    public async Task GetPendingExportsByConnectedSystemObjectIdsAsync_ReturnsDictionaryAsync()
+    public async Task GetPendingExportsLightweightByConnectedSystemObjectIdsAsync_ReturnsDictionaryAsync()
     {
         var csoId1 = Guid.NewGuid();
         var csoId2 = Guid.NewGuid();
         _repo.SeedPendingExport(CreatePe(csoId: csoId1));
         _repo.SeedPendingExport(CreatePe(csoId: csoId2));
 
-        var result = await _repo.GetPendingExportsByConnectedSystemObjectIdsAsync(new[] { csoId1, Guid.NewGuid() });
+        var result = await _repo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(new[] { csoId1, Guid.NewGuid() });
         Assert.That(result, Has.Count.EqualTo(1));
         Assert.That(result.ContainsKey(csoId1), Is.True);
     }

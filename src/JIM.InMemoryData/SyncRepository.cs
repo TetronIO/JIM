@@ -1021,21 +1021,19 @@ public class SyncRepository : ISyncRepository
     public Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
         => GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
 
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(
-        IEnumerable<Guid> connectedSystemObjectIds)
-    {
-        var result = new Dictionary<Guid, PendingExport>();
-        foreach (var csoId in connectedSystemObjectIds)
-        {
-            if (_pendingExportsByCsoId.TryGetValue(csoId, out var peId) && _pendingExports.TryGetValue(peId, out var pe))
-                result[csoId] = pe;
-        }
-        return Task.FromResult(result);
-    }
-
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(
         IEnumerable<Guid> connectedSystemObjectIds)
-        => GetPendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+    {
+        var result = connectedSystemObjectIds
+            .Distinct()
+            .Select(csoId => (csoId,
+                pe: _pendingExportsByCsoId.TryGetValue(csoId, out var peId) && _pendingExports.TryGetValue(peId, out var found)
+                    ? found
+                    : null))
+            .Where(pair => pair.pe != null)
+            .ToDictionary(pair => pair.csoId, pair => pair.pe!);
+        return Task.FromResult(result);
+    }
 
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
     {
