@@ -257,6 +257,10 @@ services:
       - LDAP_ENABLE_TLS=no
       - LDAP_SKIP_DEFAULT_TREE=no
       - LDAP_ENABLE_ACCESSLOG=yes
+      # Relaxed MDB durability (nosync) for test speed; a TEST-ONLY speed-up, not the
+      # customer experience. The runner sets OPENLDAP_FAST_WRITES=no when invoked with
+      # -DurableDirectoryWrites to run customer-representative tests.
+      - LDAP_TEST_FAST_WRITES=${OPENLDAP_FAST_WRITES:-yes}
     # No ports exposed - internal to Docker network only for testing
     volumes:
       - openldap-primary-data:/bitnami/openldap

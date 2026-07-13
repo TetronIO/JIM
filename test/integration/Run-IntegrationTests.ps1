@@ -214,6 +214,15 @@ param(
     [Parameter(Mandatory=$false)]
     [switch]$DisableChangeTracking,
 
+    # OpenLDAP integration containers default to relaxed MDB durability (nosync; no
+    # per-transaction fsync) so large-template test cycles run fast. That is a TEST-ONLY
+    # speed-up and NOT the customer experience: real directories fsync their writes and
+    # that bounds export throughput. Pass this switch to run with durable,
+    # customer-representative directory writes. Performance baselines are kept separate
+    # per mode. Has no effect on Samba AD runs (always durable).
+    [Parameter(Mandatory=$false)]
+    [switch]$DurableDirectoryWrites,
+
     [Parameter(Mandatory=$false)]
     [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
     [string]$TemplateSambaAD,
@@ -1983,6 +1992,22 @@ if ($DisableChangeTracking) {
 } else {
     Write-Host "  Change Tracking:         ${CYAN}Enabled${NC}"
 }
+if ($DirectoryType -in @("OpenLDAP", "All")) {
+    if ($DurableDirectoryWrites) {
+        Write-Host "  Directory Writes:        ${CYAN}Durable (customer-representative)${NC}"
+    } else {
+        Write-Host "  Directory Writes:        ${YELLOW}Fast/nosync (TEST-ONLY speed-up; not customer-representative)${NC}"
+    }
+}
+
+# Wire the durability mode through to the OpenLDAP container (compose reads
+# OPENLDAP_FAST_WRITES; the container's boot reconcile applies or removes the
+# MDB nosync flags accordingly). Snapshot images are mode-agnostic.
+$env:OPENLDAP_FAST_WRITES = if ($DurableDirectoryWrites) { 'no' } else { 'yes' }
+
+# Performance baselines are per durability mode: fast-write and durable runs have very
+# different export wall-clocks, so comparing across modes would mislead.
+$script:PerfModeSuffix = if ($DurableDirectoryWrites) { "-durable" } else { "" }
 
 # Metrics streaming status.
 # Hydrate JIM_BENCH_* from .env into the process env when not already set,
@@ -3196,13 +3221,14 @@ if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
 
     # Save current wall-clock metrics
     $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
-    $currentFile = Join-Path $perfDir "$Scenario-$Template-$timestamp.json"
+    $currentFile = Join-Path $perfDir "$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json"
     $wallClockMetrics | ConvertTo-Json -Depth 10 | Set-Content $currentFile
-    Write-Success "Saved wall-clock metrics to: results/performance/$hostname/$Scenario-$Template-$timestamp.json"
+    Write-Success "Saved wall-clock metrics to: results/performance/$hostname/$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json"
 
     # Find most recent previous baseline (excluding current run)
-    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template-*.json" |
-        Where-Object { $_.Name -ne "$Scenario-$Template-$timestamp.json" } |
+    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template$($script:PerfModeSuffix)-*.json" |
+        Where-Object { $_.Name -ne "$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json" } |
+        Where-Object { $script:PerfModeSuffix -ne "" -or $_.Name -notlike "*-durable-*" } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
@@ -3264,7 +3290,7 @@ if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
     else {
         Write-Host ""
         Write-Host "${YELLOW}No previous baseline found for comparison.${NC}"
-        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template on $hostname${NC}"
+        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template$($script:PerfModeSuffix) on $hostname${NC}"
     }
 }
 else {
@@ -3475,13 +3501,14 @@ else {
 
     # Save current metrics
     $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
-    $currentFile = Join-Path $perfDir "$Scenario-$Template-$timestamp.json"
+    $currentFile = Join-Path $perfDir "$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json"
     $metrics | ConvertTo-Json -Depth 10 | Set-Content $currentFile
-    Write-Success "Saved metrics to: results/performance/$hostname/$Scenario-$Template-$timestamp.json"
+    Write-Success "Saved metrics to: results/performance/$hostname/$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json"
 
     # Find most recent previous baseline (excluding current run)
-    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template-*.json" |
-        Where-Object { $_.Name -ne "$Scenario-$Template-$timestamp.json" } |
+    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template$($script:PerfModeSuffix)-*.json" |
+        Where-Object { $_.Name -ne "$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json" } |
+        Where-Object { $script:PerfModeSuffix -ne "" -or $_.Name -notlike "*-durable-*" } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
@@ -3520,7 +3547,7 @@ else {
     else {
         Write-Host ""
         Write-Host "${YELLOW}No previous baseline found for comparison.${NC}"
-        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template on $hostname${NC}"
+        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template$($script:PerfModeSuffix) on $hostname${NC}"
     }
 }
 } # end else (metrics not skipped)

@@ -116,6 +116,31 @@ public class SyncRepositoryPendingExportTests
         Assert.That(result, Is.Null);
     }
 
+    /// <summary>
+    /// The lean merge-fetch variant (issue #986) has no Include-shape distinction in this fake store -
+    /// every seeded object is already a fully wired-up graph in memory - so it must behave identically
+    /// to the heavy fetch here. The fetch-shape distinction itself is proven against real PostgreSQL in
+    /// JIM.Worker.Tests PendingExportMergeFetchDatabaseTests.
+    /// </summary>
+    [Test]
+    public async Task GetPendingExportLightweightByConnectedSystemObjectIdAsync_FindsPeAsync()
+    {
+        var csoId = Guid.NewGuid();
+        var pe = CreatePe(csoId: csoId);
+        _repo.SeedPendingExport(pe);
+
+        var result = await _repo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(csoId);
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result!.Id, Is.EqualTo(pe.Id));
+    }
+
+    [Test]
+    public async Task GetPendingExportLightweightByConnectedSystemObjectIdAsync_NotFound_ReturnsNullAsync()
+    {
+        var result = await _repo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid.NewGuid());
+        Assert.That(result, Is.Null);
+    }
+
     [Test]
     public async Task GetPendingExportsByConnectedSystemObjectIdsAsync_ReturnsDictionaryAsync()
     {

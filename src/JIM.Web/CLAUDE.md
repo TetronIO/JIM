@@ -85,6 +85,13 @@ For a table cell (or inline value) that is null/empty, render `<EmptyValue />` (
 - ALWAYS use `Variant="Variant.Outlined"` on all `<MudAlert>` components
 - This ensures a consistent outlined style across the entire UI
 
+## Date and time display
+- **Relative** ("2 hours ago"): `dateTime.ToRelativeTime()`, e.g. as the primary text under a tooltip
+- **Full, human-friendly** ("12 Jul 2026 14:30:00"): `dateTime.ToFriendlyDate()` (both in `JIM.Web.Helpers`), e.g. as `MudTooltip` text revealing the precise value behind a relative-time display, or wherever a full timestamp needs to be shown. Never hand-roll a `.ToString("...")` format string for this; it duplicates a convention that already exists and drifts from it over time (this file's history: two competing inline formats had accumulated across six call sites before being consolidated back into `ToFriendlyDate()`).
+- `ToFriendlyDate()` returns an unambiguous, culture-independent format (day-month-name-year, 24-hour clock with seconds); do not reintroduce culture-dependent short formats (`ToShortDateString()`/`ToShortTimeString()`) for this purpose.
+- Both extension methods take a `DateTime`, not a `DateTimeOffset`; per the DateTime Handling rules in `src/CLAUDE.md`, call `.ToLocalTime()` first when the stored value is UTC and the display should be in the user's local time (the common case for tooltips over `Created`/`ChangeTime`-style fields).
+- `ToShortDateString()` remains fine for a **date-only** value with no time component (e.g. `ExampleDataTemplateDetail.razor`'s Min/Max Date chips); `ToFriendlyDate()` is for full date **and** time.
+
 ## Panel spacing (target: uniform `mt-6` visual gaps between all block-level sections)
 - Use `Class="pa-4 mt-6"` on `<MudPaper Outlined="true">` panels to ensure consistent vertical spacing between sections
 - Exception: the **first** panel on a page should omit `mt-6` (use just `Class="pa-4"`) so there is no unnecessary top margin

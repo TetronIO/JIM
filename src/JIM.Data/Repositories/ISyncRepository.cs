@@ -388,6 +388,14 @@ public interface ISyncRepository
     Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
 
     /// <summary>
+    /// Lean fetch for the export evaluation merge-and-replace path: only AttributeValueChanges
+    /// (with Attribute) are loaded, skipping ConnectedSystemObject, ConnectedSystem and
+    /// SourceMetaverseObject and their attribute value graphs (issue #986). Use this instead of
+    /// <see cref="GetPendingExportByConnectedSystemObjectIdAsync"/> on the merge hot path.
+    /// </summary>
+    Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
+
+    /// <summary>
     /// Gets Pending Exports for multiple CSOs in a single query.
     /// Returns a dictionary keyed by CSO ID.
     /// </summary>
@@ -715,10 +723,34 @@ public interface ISyncRepository
     Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId);
 
     /// <summary>
-    /// Gets a batch of executable exports using paged loading.
-    /// Uses AsNoTracking in production for minimal EF overhead.
+    /// Gets a batch of executable exports using keyset pagination ordered by (CreatedAt, Id).
+    /// Pass the CreatedAt and Id of the last row of the previous batch to fetch the next one;
+    /// pass null for both to start from the beginning. Keyset (rather than offset) paging keeps
+    /// batch collection a single forward sweep even as executed rows drop out of the query and
+    /// deferred rows remain in it (issue #985). Uses AsNoTracking in production for minimal EF
+    /// overhead.
     /// </summary>
-    Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take);
+    Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId);
+
+    /// <summary>
+    /// Collects all remaining executable exports with unresolved references (deferred) strictly
+    /// after the given keyset cursor, in a single call. Used by the export batch-collection loop
+    /// to fast-path once a batch is discovered to be made up entirely of deferred exports, instead
+    /// of continuing to page through the remainder 100 rows at a time purely to build the deferred
+    /// list (issue #985). Same ordering and filtering semantics as
+    /// <see cref="GetExecutableExportBatchAsync"/>, restricted to HasUnresolvedReferences exports.
+    /// </summary>
+    Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
+
+    /// <summary>
+    /// Returns whether any executable exports WITHOUT unresolved references exist strictly after
+    /// the given keyset cursor. Guards the deferred-collection fast path (issue #985): deferred
+    /// and executable exports interleave in (CreatedAt, Id) order, so an all-deferred batch does
+    /// not prove the rest of the queue is deferred too. Same filtering semantics as
+    /// <see cref="GetExecutableExportBatchAsync"/>, restricted to non-deferred exports; a cheap
+    /// existence check with no entity materialisation.
+    /// </summary>
+    Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
 
     /// <summary>
     /// Gets lightweight summaries of executable exports for pre-export reconciliation.

@@ -61,7 +61,16 @@
             <MudTd DataLabel="Run Type">@context.RunType.ToString().SplitOnCapitalLetters()</MudTd>
             @if (ConnectedSystem.ConnectorDefinition.SupportsPartitions)
             {
-                <MudTd DataLabel="Partition">@(context.Partition != null ? context.Partition.Name : "All selected")</MudTd>
+                <MudTd DataLabel="Partition">
+                    @if (context.Partition != null)
+                    {
+                        <span class="jim-code-inline">@context.Partition.Name</span>
+                    }
+                    else
+                    {
+                        <span>All selected</span>
+                    }
+                </MudTd>
             }
             @if (ConnectedSystem.ConnectorDefinition.SupportsPaging)
             {

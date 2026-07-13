@@ -306,7 +306,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+    public virtual Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
     {
         var idSet = new HashSet<Guid>(csoIds);
         var result = GetCsosForSystem(connectedSystemId)
@@ -508,14 +508,16 @@ public class SyncRepository : ISyncRepository
                 cso.AttributeValues.Add(addition);
             }
 
-            foreach (var removal in cso.PendingAttributeValueRemovals)
+            // Single pass over cso.AttributeValues (#988) instead of one RemoveAll/Remove scan per
+            // pending removal - the latter is O(removals x AttributeValues), quadratic for a large
+            // multi-valued attribute (e.g. a big group's next Full Import replacing membership).
+            if (cso.PendingAttributeValueRemovals.Count > 0)
             {
                 // Use reference equality when Id is Guid.Empty (newly created, not yet persisted).
                 // With EF Core, these objects have DB-generated IDs. In-memory, they remain empty.
-                if (removal.Id == Guid.Empty)
-                    cso.AttributeValues.Remove(removal);
-                else
-                    cso.AttributeValues.RemoveAll(av => av.Id == removal.Id);
+                var removalIds = new HashSet<Guid>(cso.PendingAttributeValueRemovals.Where(r => r.Id != Guid.Empty).Select(r => r.Id));
+                var removalRefs = new HashSet<ConnectedSystemObjectAttributeValue>(cso.PendingAttributeValueRemovals.Where(r => r.Id == Guid.Empty));
+                cso.AttributeValues.RemoveAll(av => (av.Id != Guid.Empty && removalIds.Contains(av.Id)) || removalRefs.Contains(av));
             }
 
             cso.PendingAttributeValueAdditions = new List<ConnectedSystemObjectAttributeValue>();
@@ -997,6 +999,13 @@ public class SyncRepository : ISyncRepository
             _pendingExports.TryGetValue(peId, out result);
         return Task.FromResult(result);
     }
+
+    // This fake store has no Include-shape concept (there is no lazy loading and every seeded object
+    // is already a fully wired-up graph in memory), so the lean merge-fetch variant is behaviourally
+    // identical to the heavy one here. The distinction only exists - and is only provable - at the
+    // Postgres repository layer, where Include chains genuinely control what gets loaded.
+    public Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
+        => GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
 
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(
         IEnumerable<Guid> connectedSystemObjectIds)
@@ -1621,13 +1630,76 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
+    public virtual Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
     {
-        var result = GetExecutableExportsForSystem(connectedSystemId)
-            .Skip(skip)
+        // Keyset pagination on (CreatedAt, Id), mirroring the Postgres implementation.
+        // Guid ordering only needs to be self-consistent within this store; .NET's
+        // Guid comparison is used for both the predicate and the ordering.
+        var query = GetExecutableExportsForSystem(connectedSystemId);
+
+        if (afterCreatedAt.HasValue && afterId.HasValue)
+        {
+            var cursorCreatedAt = afterCreatedAt.Value;
+            var cursorId = afterId.Value;
+            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
+                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
+        }
+
+        var result = query
+            .OrderBy(pe => pe.CreatedAt)
+            .ThenBy(pe => pe.Id)
             .Take(take)
             .ToList();
         return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Collects all remaining executable exports with unresolved references (deferred) strictly
+    /// after the given keyset cursor, in a single call, mirroring the Postgres implementation.
+    /// Used to fast-path the export batch-collection loop once a batch is discovered to be made
+    /// up entirely of deferred exports (issue #985).
+    /// </summary>
+    public virtual Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+    {
+        var query = GetExecutableExportsForSystem(connectedSystemId)
+            .Where(pe => pe.HasUnresolvedReferences);
+
+        if (afterCreatedAt.HasValue && afterId.HasValue)
+        {
+            var cursorCreatedAt = afterCreatedAt.Value;
+            var cursorId = afterId.Value;
+            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
+                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
+        }
+
+        var result = query
+            .OrderBy(pe => pe.CreatedAt)
+            .ThenBy(pe => pe.Id)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Returns whether any executable exports WITHOUT unresolved references exist strictly after
+    /// the given keyset cursor, mirroring the Postgres implementation. Guards the
+    /// deferred-collection fast path (issue #985): deferred and executable exports interleave in
+    /// (CreatedAt, Id) order, so an all-deferred batch does not prove the rest of the queue is
+    /// deferred too.
+    /// </summary>
+    public virtual Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+    {
+        var query = GetExecutableExportsForSystem(connectedSystemId)
+            .Where(pe => !pe.HasUnresolvedReferences);
+
+        if (afterCreatedAt.HasValue && afterId.HasValue)
+        {
+            var cursorCreatedAt = afterCreatedAt.Value;
+            var cursorId = afterId.Value;
+            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
+                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
+        }
+
+        return Task.FromResult(query.Any());
     }
 
     /// <summary>

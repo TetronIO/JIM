@@ -403,6 +403,12 @@ public class JimDbContext : DbContext
             .HasIndex(pe => new { pe.ConnectedSystemId, pe.Status })
             .HasDatabaseName("IX_PendingExports_ConnectedSystemId_Status");
 
+        // PendingExport: composite index supporting keyset pagination in export batch collection
+        // (ORDER BY CreatedAt, Id with a (CreatedAt, Id) > (cursor) predicate; issue #985).
+        modelBuilder.Entity<PendingExport>()
+            .HasIndex(pe => new { pe.ConnectedSystemId, pe.CreatedAt, pe.Id })
+            .HasDatabaseName("IX_PendingExports_ConnectedSystemId_CreatedAt_Id");
+
         // PendingExport: filtered unique index to prevent duplicate Pending Exports for the same CSO.
         // Only one Pending Export should exist per CSO at any time. The filter excludes rows where
         // ConnectedSystemObjectId is NULL (e.g., PEs for unresolved references not yet matched to a CSO).

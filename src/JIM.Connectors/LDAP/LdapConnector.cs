@@ -11,7 +11,7 @@ using System.Net;
 using System.Security.Cryptography.X509Certificates;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -473,6 +473,52 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         _exportSettings = null;
         _currentExport = null;
         CloseImportConnection();
+    }
+    #endregion
+
+    #region IConnectorRecommendedExportParallelism members
+    /// <summary>
+    /// The Export Concurrency value at or above which the target is treated as a capable
+    /// directory for batch-parallelism purposes. The auto-tune only sets 16 (well above this)
+    /// for Active Directory and OpenLDAP; Samba AD and Generic directories stay at the
+    /// default of 4.
+    /// </summary>
+    internal const int CAPABLE_DIRECTORY_CONCURRENCY_THRESHOLD = 8;
+
+    /// <summary>
+    /// The deliberately conservative batch-parallelism recommendation for capable directories.
+    /// </summary>
+    internal const int RECOMMENDED_EXPORT_PARALLELISM = 2;
+
+    /// <summary>
+    /// Recommends export batch parallelism for this Connected System (issue #985d).
+    ///
+    /// The two knobs MULTIPLY: each parallel batch pipeline gets its own connector instance,
+    /// and each instance runs its own Export Concurrency concurrent LDAP operations (see
+    /// <see cref="ExportAsync"/>), so total in-flight operations = parallelism x per-instance
+    /// concurrency. Recommending anything near Export Concurrency itself would square the load
+    /// (16 x 16 = 256 in-flight operations, against a setting whose own description warns that
+    /// values above 8 may overwhelm the directory), so the recommendation is a flat, mild 2:
+    /// with an auto-tuned concurrency of 16 that is 2 x 16 = 32 in-flight operations, a safe
+    /// default.
+    ///
+    /// The directory type is not persisted anywhere readable without opening a connection
+    /// (which this method must not do), so Active Directory cannot be distinguished from
+    /// OpenLDAP here; OpenLDAP's mdb backend is single-writer and gains little from batch
+    /// parallelism, a further reason the value is deliberately conservative. An Export
+    /// Concurrency of 8 or above is used as the capable-directory signal (the auto-tune only
+    /// sets 16, for Active Directory and OpenLDAP); below that, no recommendation is made and
+    /// the resolver falls back to sequential. Issue #845 (connector-agnostic classification
+    /// storage) is the future enabler of a genuinely per-directory-type recommendation.
+    /// </summary>
+    public int? GetRecommendedExportParallelism(List<ConnectedSystemSettingValue> settingValues)
+    {
+        var exportConcurrency = settingValues
+            .FirstOrDefault(s => s.Setting.Name == _settingExportConcurrency)?.IntValue;
+
+        return exportConcurrency >= CAPABLE_DIRECTORY_CONCURRENCY_THRESHOLD
+            ? RECOMMENDED_EXPORT_PARALLELISM
+            : null;
     }
     #endregion
 
