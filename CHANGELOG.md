@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- 🔒 Every response from JIM now carries defence-in-depth security headers, including a Content Security Policy, clickjacking denial, and MIME-sniffing protection.
+
 ### Added
 
 - ✨ The REST API is now protected by configurable rate limiting: per-client request limits with sensible defaults, tunable from Service Settings without a restart, returning standard 429 responses with Retry-After guidance.
