@@ -363,12 +363,6 @@ public interface IMetaverseRepository
     public Task UpdateMetaverseAttributeAsync(MetaverseAttribute attribute);
 
     /// <summary>
-    /// Deletes a Metaverse Attribute.
-    /// </summary>
-    /// <param name="attribute">The attribute to delete.</param>
-    public Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute);
-
-    /// <summary>
     /// Counts the number of distinct Metaverse Objects that have at least one value
     /// stored for the specified attribute.
     /// </summary>
@@ -384,14 +378,6 @@ public interface IMetaverseRepository
     /// <param name="metaverseObjectTypeId">The unique identifier of the object type to filter by.</param>
     /// <returns>The count of distinct Metaverse Objects of the given type with values for this attribute.</returns>
     public Task<int> GetAttributeValueObjectCountByTypeAsync(int attributeId, int metaverseObjectTypeId);
-
-    /// <summary>
-    /// Gets the Synchronisation Rules that reference the specified metaverse attribute via
-    /// Synchronisation Rule mappings, mapping sources, Object Matching Rules, or scoping criteria.
-    /// </summary>
-    /// <param name="attributeId">The unique identifier of the attribute.</param>
-    /// <returns>A list of Synchronisation Rule references (ID and Name) that use this attribute.</returns>
-    public Task<List<SyncRuleReference>> GetSyncRulesReferencingAttributeAsync(int attributeId);
 
     /// <summary>
     /// Determines whether a Metaverse Attribute name is unique, comparing case-insensitively (so <c>CostCentre</c>

@@ -7,12 +7,13 @@ using JIM.Models.Core;
 namespace JIM.Web.Models.Api;
 
 /// <summary>
-/// Request DTO for creating a new Metaverse Attribute.
+/// Request DTO for creating a new custom Metaverse Attribute.
 /// </summary>
 public class CreateMetaverseAttributeRequest
 {
     /// <summary>
-    /// The name for the Metaverse Attribute.
+    /// The name for the Metaverse Attribute. Must be unique, compared case-insensitively (so <c>CostCentre</c> and
+    /// <c>costCentre</c> cannot coexist). Stored and returned exactly as supplied.
     /// </summary>
     [Required]
     [StringLength(200, MinimumLength = 1)]
@@ -30,7 +31,8 @@ public class CreateMetaverseAttributeRequest
     public AttributePlurality AttributePlurality { get; set; } = AttributePlurality.SingleValued;
 
     /// <summary>
-    /// Optional list of object type IDs to associate this attribute with.
+    /// Optional list of Metaverse Object Type IDs to bind this attribute to on creation. Empty or omitted creates it
+    /// unbound.
     /// </summary>
     public List<int>? ObjectTypeIds { get; set; }
 
@@ -41,31 +43,47 @@ public class CreateMetaverseAttributeRequest
 }
 
 /// <summary>
-/// Request DTO for updating an existing Metaverse Attribute.
+/// Request DTO for updating a custom Metaverse Attribute's name and rendering configuration. Type and plurality are
+/// changed via the dedicated schema endpoint (they are gated by stored values); Object Type bindings are changed via
+/// the bind / unassign endpoints. At least one of <see cref="Name"/> or <see cref="RenderingHint"/> must be supplied.
 /// </summary>
 public class UpdateMetaverseAttributeRequest
 {
     /// <summary>
-    /// The updated name for the Metaverse Attribute.
+    /// The new name for the attribute. Omitted (or null) leaves the name unchanged. Subject to the same
+    /// case-insensitive uniqueness check as creation.
     /// </summary>
     [StringLength(200, MinimumLength = 1)]
     public string? Name { get; set; }
 
     /// <summary>
-    /// The updated data type of the attribute.
+    /// The updated rendering hint for multi-valued attributes. Omitted (or null) leaves it unchanged.
     /// </summary>
-    public AttributeDataType? Type { get; set; }
+    public AttributeRenderingHint? RenderingHint { get; set; }
 
     /// <summary>
-    /// Whether the attribute is single-valued or multi-valued.
+    /// Optional reason for the change, recorded on the audit Activity and configuration change history.
     /// </summary>
-    public AttributePlurality? AttributePlurality { get; set; }
+    public string? ChangeReason { get; set; }
+}
+
+/// <summary>
+/// Request DTO for changing a custom Metaverse Attribute's data type and/or plurality. The change is refused while any
+/// Metaverse Object holds a stored value for the attribute.
+/// </summary>
+public class ChangeMetaverseAttributeSchemaRequest
+{
+    /// <summary>
+    /// The new data type.
+    /// </summary>
+    [Required]
+    public AttributeDataType Type { get; set; }
 
     /// <summary>
-    /// Optional list of object type IDs to associate this attribute with.
-    /// This will replace the existing associations.
+    /// The new plurality.
     /// </summary>
-    public List<int>? ObjectTypeIds { get; set; }
+    [Required]
+    public AttributePlurality AttributePlurality { get; set; }
 
     /// <summary>
     /// Optional reason for the change, recorded on the audit Activity and configuration change history.

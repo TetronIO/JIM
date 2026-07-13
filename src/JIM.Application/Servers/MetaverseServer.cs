@@ -262,37 +262,6 @@ public class MetaverseServer
     }
 
     /// <summary>
-    /// Deletes a Metaverse Attribute.
-    /// </summary>
-    /// <param name="attribute">The attribute to delete.</param>
-    /// <param name="initiatedBy">The user who initiated the deletion.</param>
-    /// <exception cref="MetaverseAttributeInUseException">
-    /// Thrown if the attribute is referenced by Synchronisation Rules or has stored values on Metaverse Objects.
-    /// </exception>
-    public async Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute, MetaverseObject? initiatedBy, string? changeReason = null)
-    {
-        if (attribute == null)
-            throw new ArgumentNullException(nameof(attribute));
-
-        Log.Debug("DeleteMetaverseAttributeAsync() called for {Attribute}", attribute.Name);
-
-        await ValidateAttributeDeletionAsync(attribute);
-
-        var activity = new Activity
-        {
-            TargetName = attribute.Name,
-            TargetType = ActivityTargetType.MetaverseAttribute,
-            TargetOperationType = ActivityTargetOperationType.Delete
-        };
-        await Application.Activities.CreateActivityAsync(activity, initiatedBy);
-
-        await CaptureAttributeConfigurationDeletionAsync(activity, attribute, changeReason);
-        await Application.Repository.Metaverse.DeleteMetaverseAttributeAsync(attribute);
-
-        await Application.Activities.CompleteActivityAsync(activity);
-    }
-
-    /// <summary>
     /// Creates a new Metaverse Attribute (initiated by API key).
     /// </summary>
     /// <param name="attribute">The attribute to create.</param>
@@ -344,90 +313,6 @@ public class MetaverseServer
 
         await CaptureAttributeConfigurationChangeAsync(activity, attribute.Id, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
-    }
-
-    /// <summary>
-    /// Deletes a Metaverse Attribute (initiated by API key).
-    /// </summary>
-    /// <param name="attribute">The attribute to delete.</param>
-    /// <param name="initiatedByApiKey">The API key that initiated the deletion.</param>
-    /// <exception cref="MetaverseAttributeInUseException">
-    /// Thrown if the attribute is referenced by Synchronisation Rules or has stored values on Metaverse Objects.
-    /// </exception>
-    public async Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute, ApiKey initiatedByApiKey, string? changeReason = null)
-    {
-        if (attribute == null)
-            throw new ArgumentNullException(nameof(attribute));
-
-        Log.Debug("DeleteMetaverseAttributeAsync() called for {Attribute} (API key initiated)", attribute.Name);
-
-        await ValidateAttributeDeletionAsync(attribute);
-
-        var activity = new Activity
-        {
-            TargetName = attribute.Name,
-            TargetType = ActivityTargetType.MetaverseAttribute,
-            TargetOperationType = ActivityTargetOperationType.Delete
-        };
-        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
-
-        await CaptureAttributeConfigurationDeletionAsync(activity, attribute, changeReason);
-        await Application.Repository.Metaverse.DeleteMetaverseAttributeAsync(attribute);
-
-        await Application.Activities.CompleteActivityAsync(activity);
-    }
-
-    /// <summary>
-    /// Validates that removing object types from an attribute's mappings will not orphan stored values.
-    /// Call this before modifying the attribute's MetaverseObjectTypes collection.
-    /// </summary>
-    /// <param name="attribute">The attribute with its current object type associations loaded.</param>
-    /// <param name="newObjectTypeIds">The new set of object type IDs to be associated with the attribute.</param>
-    /// <exception cref="MetaverseAttributeInUseException">
-    /// Thrown if any object type being removed has Metaverse Objects with stored values for this attribute.
-    /// </exception>
-    public async Task ValidateObjectTypeRemovalAsync(MetaverseAttribute attribute, List<int> newObjectTypeIds)
-    {
-        if (attribute == null)
-            throw new ArgumentNullException(nameof(attribute));
-
-        var currentTypeIds = attribute.MetaverseObjectTypes.Select(t => t.Id).ToHashSet();
-        var removedTypeIds = currentTypeIds.Except(newObjectTypeIds).ToList();
-
-        foreach (var removedTypeId in removedTypeIds)
-        {
-            var count = await Application.Repository.Metaverse.GetAttributeValueObjectCountByTypeAsync(attribute.Id, removedTypeId);
-            if (count > 0)
-            {
-                var objectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(removedTypeId, false);
-                var typeName = objectType?.Name ?? removedTypeId.ToString();
-                throw new MetaverseAttributeInUseException(
-                    $"Cannot remove object type '{typeName}' from attribute '{attribute.Name}': {count:N0} '{typeName}' object(s) have values for this attribute. Remove the values first.",
-                    count);
-            }
-        }
-    }
-
-    private async Task ValidateAttributeDeletionAsync(MetaverseAttribute attribute)
-    {
-        // Check Synchronisation Rule references first (higher priority: removing references is prerequisite)
-        var syncRuleRefs = await Application.Repository.Metaverse.GetSyncRulesReferencingAttributeAsync(attribute.Id);
-        if (syncRuleRefs.Count > 0)
-        {
-            var ruleNames = string.Join(", ", syncRuleRefs.Select(r => r.Name));
-            throw new MetaverseAttributeInUseException(
-                $"Cannot delete attribute '{attribute.Name}': it is referenced by {syncRuleRefs.Count} Synchronisation Rule(s) ({ruleNames}). Remove the references first.",
-                syncRuleRefs);
-        }
-
-        // Check stored values
-        var objectCount = await Application.Repository.Metaverse.GetAttributeValueObjectCountAsync(attribute.Id);
-        if (objectCount > 0)
-        {
-            throw new MetaverseAttributeInUseException(
-                $"Cannot delete attribute '{attribute.Name}': {objectCount:N0} Metaverse Object(s) have values stored for this attribute. Remove the values first.",
-                objectCount);
-        }
     }
 
     /// <summary>

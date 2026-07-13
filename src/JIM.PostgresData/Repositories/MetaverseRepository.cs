@@ -267,12 +267,6 @@ public class MetaverseRepository : IMetaverseRepository
         await Repository.Database.SaveChangesAsync();
     }
 
-    public async Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute)
-    {
-        Repository.Database.MetaverseAttributes.Remove(attribute);
-        await Repository.Database.SaveChangesAsync();
-    }
-
     public async Task<int> GetAttributeValueObjectCountAsync(int attributeId)
     {
         return await Repository.Database.MetaverseObjectAttributeValues
@@ -289,43 +283,6 @@ public class MetaverseRepository : IMetaverseRepository
             .Select(v => v.MetaverseObject)
             .Distinct()
             .CountAsync();
-    }
-
-    public async Task<List<SyncRuleReference>> GetSyncRulesReferencingAttributeAsync(int attributeId)
-    {
-        // Synchronisation Rule mappings where this attribute is the target (import rules)
-        var fromMappings = Repository.Database.SyncRuleMappings
-            .Where(m => m.TargetMetaverseAttributeId == attributeId && m.SyncRule != null)
-            .Select(m => new SyncRuleReference { Id = m.SyncRule!.Id, Name = m.SyncRule.Name });
-
-        // Synchronisation Rule mapping sources where this attribute is the source (export rules)
-        // SyncRuleMappingSource has no navigation to SyncRuleMapping, so join through the parent
-        var fromMappingSources = Repository.Database.SyncRuleMappings
-            .Where(m => m.Sources.Any(s => s.MetaverseAttributeId == attributeId) && m.SyncRule != null)
-            .Select(m => new SyncRuleReference { Id = m.SyncRule!.Id, Name = m.SyncRule.Name });
-
-        // Object Matching Rules where this attribute is the target
-        var fromMatchingRules = Repository.Database.ObjectMatchingRules
-            .Where(r => r.TargetMetaverseAttributeId == attributeId && r.SyncRule != null)
-            .Select(r => new SyncRuleReference { Id = r.SyncRule!.Id, Name = r.SyncRule.Name });
-
-        // Scoping criteria where this attribute is referenced (navigate from SyncRule down)
-        var fromScopingCriteria = Repository.Database.SyncRules
-            .Where(sr => sr.ObjectScopingCriteriaGroups
-                .Any(g => g.Criteria.Any(c => c.MetaverseAttribute != null && c.MetaverseAttribute.Id == attributeId)
-                       || g.ChildGroups.Any(cg => cg.Criteria.Any(c => c.MetaverseAttribute != null && c.MetaverseAttribute.Id == attributeId))))
-            .Select(sr => new SyncRuleReference { Id = sr.Id, Name = sr.Name });
-
-        // Union all sources and deduplicate by Synchronisation Rule ID
-        var allReferences = await fromMappings
-            .Union(fromMappingSources)
-            .Union(fromMatchingRules)
-            .Union(fromScopingCriteria)
-            .GroupBy(r => r.Id)
-            .Select(g => g.First())
-            .ToListAsync();
-
-        return allReferences;
     }
 
     public async Task<bool> IsMetaverseAttributeNameUniqueAsync(string name, int? excludeAttributeId = null)
