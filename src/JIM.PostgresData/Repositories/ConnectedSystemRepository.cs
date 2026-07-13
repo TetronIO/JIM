@@ -3480,7 +3480,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <inheritdoc />
-    public async Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdForMergeAsync(Guid connectedSystemObjectId)
+    public async Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
     {
         // Lean Include shape for the merge-and-replace path (issue #986): only AttributeValueChanges
         // (with Attribute, needed by GetAttributeChangeMergeKey for single-vs-multi-valued dedup) are

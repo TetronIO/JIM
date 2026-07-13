@@ -22,13 +22,13 @@ namespace JIM.Worker.Tests.OutboundSync;
 /// <see cref="JIM.Application.Servers.ExportEvaluationServer.EvaluateExportRulesWithNoNetChangeDetectionAsync"/>
 /// entry point. These characterise the merge outcomes that must stay byte-identical regardless of
 /// which repository method (<c>GetPendingExportByConnectedSystemObjectIdAsync</c> or the lean
-/// <c>GetPendingExportByConnectedSystemObjectIdForMergeAsync</c>) supplies the existing database
+/// <c>GetPendingExportLightweightByConnectedSystemObjectIdAsync</c>) supplies the existing database
 /// Pending Export - synchronisation integrity depends on the merge/delete-and-recreate outcome being
 /// unaffected by the fetch-shape optimisation.
 /// </summary>
 /// <remarks>
 /// The <see cref="JIM.InMemoryData.SyncRepository"/> fake used here has no Include-shape concept (see
-/// its own <c>GetPendingExportByConnectedSystemObjectIdForMergeAsync</c> comment), so these tests
+/// its own <c>GetPendingExportLightweightByConnectedSystemObjectIdAsync</c> comment), so these tests
 /// cannot themselves distinguish the heavy fetch from the lean one - that distinction is proven
 /// separately, against real PostgreSQL, in <c>PendingExportMergeFetchDatabaseTests</c>. What these
 /// tests pin is the merge *outcome*: the business logic these two fetch methods feed.

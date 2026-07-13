@@ -393,7 +393,7 @@ public interface ISyncRepository
     /// SourceMetaverseObject and their attribute value graphs (issue #986). Use this instead of
     /// <see cref="GetPendingExportByConnectedSystemObjectIdAsync"/> on the merge hot path.
     /// </summary>
-    Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdForMergeAsync(Guid connectedSystemObjectId);
+    Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
 
     /// <summary>
     /// Gets Pending Exports for multiple CSOs in a single query.

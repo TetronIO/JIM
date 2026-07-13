@@ -239,8 +239,8 @@ public partial class SyncRepository : ISyncRepository
     public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
         => _repo.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
 
-    public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdForMergeAsync(Guid connectedSystemObjectId)
-        => _repo.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdForMergeAsync(connectedSystemObjectId);
+    public Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
+        => _repo.ConnectedSystems.GetPendingExportLightweightByConnectedSystemObjectIdAsync(connectedSystemObjectId);
 
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
         => _repo.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);

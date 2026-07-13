@@ -1002,7 +1002,7 @@ public class SyncRepository : ISyncRepository
     // is already a fully wired-up graph in memory), so the lean merge-fetch variant is behaviourally
     // identical to the heavy one here. The distinction only exists - and is only provable - at the
     // Postgres repository layer, where Include chains genuinely control what gets loaded.
-    public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdForMergeAsync(Guid connectedSystemObjectId)
+    public Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
         => GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
 
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(

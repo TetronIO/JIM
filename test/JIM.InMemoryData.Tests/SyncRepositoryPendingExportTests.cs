@@ -123,21 +123,21 @@ public class SyncRepositoryPendingExportTests
     /// JIM.Worker.Tests PendingExportMergeFetchDatabaseTests.
     /// </summary>
     [Test]
-    public async Task GetPendingExportByConnectedSystemObjectIdForMergeAsync_FindsPeAsync()
+    public async Task GetPendingExportLightweightByConnectedSystemObjectIdAsync_FindsPeAsync()
     {
         var csoId = Guid.NewGuid();
         var pe = CreatePe(csoId: csoId);
         _repo.SeedPendingExport(pe);
 
-        var result = await _repo.GetPendingExportByConnectedSystemObjectIdForMergeAsync(csoId);
+        var result = await _repo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(csoId);
         Assert.That(result, Is.Not.Null);
         Assert.That(result!.Id, Is.EqualTo(pe.Id));
     }
 
     [Test]
-    public async Task GetPendingExportByConnectedSystemObjectIdForMergeAsync_NotFound_ReturnsNullAsync()
+    public async Task GetPendingExportLightweightByConnectedSystemObjectIdAsync_NotFound_ReturnsNullAsync()
     {
-        var result = await _repo.GetPendingExportByConnectedSystemObjectIdForMergeAsync(Guid.NewGuid());
+        var result = await _repo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid.NewGuid());
         Assert.That(result, Is.Null);
     }
 

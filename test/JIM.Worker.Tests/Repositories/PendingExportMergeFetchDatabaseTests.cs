@@ -12,7 +12,7 @@ using NUnit.Framework;
 namespace JIM.Worker.Tests.Repositories;
 
 /// <summary>
-/// Real-PostgreSQL verification of <see cref="JIM.PostgresData.Repositories.ConnectedSystemRepository.GetPendingExportByConnectedSystemObjectIdForMergeAsync"/>,
+/// Real-PostgreSQL verification of <see cref="JIM.PostgresData.Repositories.ConnectedSystemRepository.GetPendingExportLightweightByConnectedSystemObjectIdAsync"/>,
 /// the lean fetch added for the merge-and-replace path in
 /// <c>ExportEvaluationServer.CreateOrUpdatePendingExportWithNoNetChangeAsync</c> (issue #986).
 /// </summary>
@@ -168,14 +168,14 @@ public class PendingExportMergeFetchDatabaseTests
     /// fetch, which loads everything.
     /// </summary>
     [Test]
-    public async Task GetPendingExportByConnectedSystemObjectIdForMergeAsync_DoesNotLoadCsoOrMvoAttributeValueGraphsAsync()
+    public async Task GetPendingExportLightweightByConnectedSystemObjectIdAsync_DoesNotLoadCsoOrMvoAttributeValueGraphsAsync()
     {
         var (csoId, _) = await SeedLargeGroupWithSmallPendingExportAsync();
 
         await using var ctx = NewContext();
         var repository = new PostgresDataRepository(ctx);
 
-        var result = await repository.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdForMergeAsync(csoId);
+        var result = await repository.ConnectedSystems.GetPendingExportLightweightByConnectedSystemObjectIdAsync(csoId);
 
         Assert.That(result, Is.Not.Null);
         Assert.Multiple(() =>
@@ -200,7 +200,7 @@ public class PendingExportMergeFetchDatabaseTests
     /// swapping the merge call site to the lean method cannot change the merge outcome.
     /// </summary>
     [Test]
-    public async Task GetPendingExportByConnectedSystemObjectIdForMergeAsync_AttributeValueChangesMatchHeavyFetchAsync()
+    public async Task GetPendingExportLightweightByConnectedSystemObjectIdAsync_AttributeValueChangesMatchHeavyFetchAsync()
     {
         var (csoId, _) = await SeedLargeGroupWithSmallPendingExportAsync();
 
@@ -208,7 +208,7 @@ public class PendingExportMergeFetchDatabaseTests
         var heavyResult = await new PostgresDataRepository(heavyCtx).ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(csoId);
 
         await using var leanCtx = NewContext();
-        var leanResult = await new PostgresDataRepository(leanCtx).ConnectedSystems.GetPendingExportByConnectedSystemObjectIdForMergeAsync(csoId);
+        var leanResult = await new PostgresDataRepository(leanCtx).ConnectedSystems.GetPendingExportLightweightByConnectedSystemObjectIdAsync(csoId);
 
         Assert.That(heavyResult, Is.Not.Null);
         Assert.That(leanResult, Is.Not.Null);
