@@ -484,6 +484,106 @@ public class ExportEvaluationTests
             Is.False, "No attribute value change from the replaced PE may leak onto the replacement");
     }
 
+    /// <summary>
+    /// Tests the set-based deletion evaluation (issue #993) with a genuinely mixed batch: three
+    /// MVOs whose Provisioned CSOs are respectively fresh (no Pending Export), carrying an existing
+    /// Delete Pending Export (must be reused), and carrying an existing Create Pending Export (must
+    /// be replaced), plus a fourth MVO whose CSO is merely Joined (no Pending Export, disconnect
+    /// only). The per-CSO collision policy must be applied independently within the one call, and
+    /// every CSO must end up disconnected from its MVO.
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionsAsync_MixedCollisionStates_AppliesPolicyPerCsoAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var mvos = new List<MetaverseObject>();
+        var csos = new List<ConnectedSystemObject>();
+        for (var i = 0; i < 4; i++)
+        {
+            var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+            var cso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                MetaverseObject = mvo,
+                MetaverseObjectId = mvo.Id,
+                // the fourth CSO is Joined, not Provisioned: disconnect only, no delete PE
+                JoinType = i < 3 ? ConnectedSystemObjectJoinType.Provisioned : ConnectedSystemObjectJoinType.Joined,
+                DateJoined = DateTime.UtcNow
+            };
+            mvo.ConnectedSystemObjects.Add(cso);
+            MetaverseObjectsData.Add(mvo);
+            ConnectedSystemObjectsData.Add(cso);
+            SyncRepo.SeedMetaverseObject(mvo);
+            SyncRepo.SeedConnectedSystemObject(cso);
+            mvos.Add(mvo);
+            csos.Add(cso);
+        }
+
+        // CSO 1 carries an existing Delete PE (must be reused)
+        var existingDeletePe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystemObjectId = csos[1].Id,
+            ConnectedSystemObject = csos[1],
+            ChangeType = PendingExportChangeType.Delete,
+            Status = PendingExportStatus.Exported,
+            SourceMetaverseObjectId = mvos[1].Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        SyncRepo.SeedPendingExport(existingDeletePe);
+
+        // CSO 2 carries an existing Create PE (must be replaced with a Delete PE)
+        var existingCreatePe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystemObjectId = csos[2].Id,
+            ConnectedSystemObject = csos[2],
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Pending,
+            SourceMetaverseObjectId = mvos[2].Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        SyncRepo.SeedPendingExport(existingCreatePe);
+
+        // Act: one set-based call for the whole batch
+        var result = await Jim.ExportEvaluation.EvaluateMvoDeletionsAsync(mvos);
+
+        // Assert: three Delete PEs (fresh create, reuse, replacement); the Joined CSO gets none
+        Assert.That(result, Has.Count.EqualTo(3), "Expected one Delete PE per Provisioned CSO");
+        Assert.That(result.All(pe => pe.ChangeType == PendingExportChangeType.Delete), Is.True);
+
+        var freshPe = result.SingleOrDefault(pe => pe.ConnectedSystemObjectId == csos[0].Id);
+        Assert.That(freshPe, Is.Not.Null, "Expected a new Delete PE for the fresh CSO");
+
+        var reusedPe = result.SingleOrDefault(pe => pe.ConnectedSystemObjectId == csos[1].Id);
+        Assert.That(reusedPe, Is.Not.Null);
+        Assert.That(reusedPe!.Id, Is.EqualTo(existingDeletePe.Id), "The existing Delete PE must be reused, not duplicated");
+
+        var replacementPe = result.SingleOrDefault(pe => pe.ConnectedSystemObjectId == csos[2].Id);
+        Assert.That(replacementPe, Is.Not.Null);
+        Assert.That(replacementPe!.Id, Is.Not.EqualTo(existingCreatePe.Id), "The Create PE must be replaced by a new Delete PE");
+        Assert.That(SyncRepo.PendingExports.ContainsKey(existingCreatePe.Id), Is.False, "The replaced Create PE must be removed");
+
+        Assert.That(result.Any(pe => pe.ConnectedSystemObjectId == csos[3].Id), Is.False,
+            "The Joined (not Provisioned) CSO must not get a delete PE");
+
+        // Assert: every CSO is disconnected from its MVO
+        foreach (var cso in csos)
+        {
+            Assert.That(cso.MetaverseObjectId, Is.Null, $"CSO {cso.Id} must be disconnected from its MVO");
+            Assert.That(cso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined));
+            Assert.That(cso.DateJoined, Is.Null);
+        }
+    }
+
     #region EvaluateOutOfScopeExportsAsync (cascade) — Delete-PE collision handling
 
     /// <summary>
