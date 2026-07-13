@@ -388,6 +388,14 @@ public interface ISyncRepository
     Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
 
     /// <summary>
+    /// Lean fetch for the export evaluation merge-and-replace path: only AttributeValueChanges
+    /// (with Attribute) are loaded, skipping ConnectedSystemObject, ConnectedSystem and
+    /// SourceMetaverseObject and their attribute value graphs (issue #986). Use this instead of
+    /// <see cref="GetPendingExportByConnectedSystemObjectIdAsync"/> on the merge hot path.
+    /// </summary>
+    Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
+
+    /// <summary>
     /// Gets Pending Exports for multiple CSOs in a single query.
     /// Returns a dictionary keyed by CSO ID.
     /// </summary>
