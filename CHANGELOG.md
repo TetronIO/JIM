@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ✨ The REST API is now protected by configurable rate limiting: per-client request limits with sensible defaults, tunable from Service Settings without a restart, returning standard 429 responses with Retry-After guidance.
 - ✨ RFC references in a Connected System's schema attribute descriptions (for example "RFC2256: business category" on an LDAP Connector) are now hyperlinks to the corresponding page on the IETF Datatracker, so you can jump straight to the defining specification.
 
 ### Changed
