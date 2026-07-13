@@ -387,7 +387,13 @@ public interface ISyncRepository
     /// <summary>
     /// Deletes Pending Exports by their associated CSO IDs.
     /// Returns the count of deleted Pending Exports.
-    /// Used during obsolete CSO processing to clean up orphaned exports.
+    /// Used during obsolete CSO processing to clean up orphaned exports, and by the MVO deletion
+    /// flush's collision policy to replace a non-Delete Pending Export with a Delete one.
+    /// Implementations that delete via raw SQL must also detach any tracked instances of the
+    /// deleted rows (and their attribute value changes) from the change tracker, otherwise EF
+    /// Core's SetNull cascade fix-up on <c>PendingExport.SourceMetaverseObjectId</c> targets a
+    /// deleted row when the source Metaverse Object is deleted on the same context and throws
+    /// <c>DbUpdateConcurrencyException</c>.
     /// </summary>
     Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 

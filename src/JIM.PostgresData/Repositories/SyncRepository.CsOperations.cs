@@ -499,6 +499,21 @@ public partial class SyncRepository
         if (csoIds.Length == 0)
             return 0;
 
+        // Instances of the rows this method is about to delete may be tracked on the worker's
+        // long-lived context (reconciliation and navigation fix-up both track Pending Exports).
+        // Detach them before the raw SQL deletes: PendingExport.SourceMetaverseObject is
+        // configured SetNull-on-delete, so a tracked instance left behind makes EF Core's
+        // cascade fix-up issue an UPDATE against the already-deleted row when its source MVO is
+        // deleted in the same page flush; that matches zero rows and throws
+        // DbUpdateConcurrencyException, poisoning every later SaveChangesAsync on the context
+        // (Scenario4-DeletionRules Test 3 failure, issue #993).
+        var pendingExportIds = await _context.PendingExports
+            .Where(pe => pe.ConnectedSystemObjectId != null && csoIds.Contains(pe.ConnectedSystemObjectId.Value))
+            .Select(pe => pe.Id)
+            .ToListAsync();
+        DetachTrackedChildEntities(pendingExportIds);
+        DetachTrackedEntities<PendingExport>(pe => pendingExportIds.Contains(pe.Id));
+
         // Use raw SQL for performance and to avoid change tracker identity conflicts.
         // After ClearChangeTracker(), loading PEs with Include chains would create
         // MetaverseAttribute instances that conflict with instances already tracked by the
