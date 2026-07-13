@@ -1103,23 +1103,25 @@ public class SyncImportTaskProcessor
         var pageObjectCount = connectedSystemImportResult.ImportObjects.Count;
         using var span = Diagnostics.Sync.StartSpan("HydrateCsoPage").SetTag("pageObjectCount", pageObjectCount);
 
+        // Only import objects with a resolvable object type that carries an External Id attribute
+        // are candidates for hydration; project the resolved type alongside so the loop below does
+        // not repeat the lookup.
+        var hydrationCandidates = connectedSystemImportResult.ImportObjects
+            .Where(io => !string.IsNullOrEmpty(io.ObjectType))
+            .Select(io => (ImportObject: io, ObjectType: _connectedSystem.ObjectTypes.SingleOrDefault(
+                t => t.Name.Equals(io.ObjectType, StringComparison.OrdinalIgnoreCase))))
+            .Where(pair => pair.ObjectType != null && pair.ObjectType.Attributes.Any(a => a.IsExternalId));
+
         var csoIdsToHydrate = new HashSet<Guid>();
-        foreach (var importObject in connectedSystemImportResult.ImportObjects)
+        foreach (var (importObject, csObjectType) in hydrationCandidates)
         {
-            if (string.IsNullOrEmpty(importObject.ObjectType))
-                continue;
-
-            var csObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importObject.ObjectType, StringComparison.OrdinalIgnoreCase));
-            if (csObjectType == null || !csObjectType.Attributes.Any(a => a.IsExternalId))
-                continue;
-
             // Malformed import objects (missing/multi-valued/empty External Id attribute) are swallowed
             // here and left for the per-object loop to raise properly via its own RPEI error handling;
             // this pre-fetch pass only cares about collecting candidate IDs to hydrate in bulk.
             Guid? csoId;
             try
             {
-                csoId = LookupCsoByExternalId(importObject, csObjectType);
+                csoId = LookupCsoByExternalId(importObject, csObjectType!);
             }
             catch (MissingExternalIdAttributeException)
             {
