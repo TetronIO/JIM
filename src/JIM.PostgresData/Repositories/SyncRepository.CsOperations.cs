@@ -922,17 +922,42 @@ public partial class SyncRepository
         if (metaverseObjectIds.Count == 0)
             return new Dictionary<Guid, List<ConnectedSystemObject>>();
 
+        // Step 1: the CSO rows themselves, no children.
         var mvoIds = metaverseObjectIds.ToArray();
         var csos = await _context.ConnectedSystemObjects
-            .Include(cso => cso.AttributeValues
-                .Where(av =>
-                    av.AttributeId == cso.ExternalIdAttributeId ||
-                    av.AttributeId == cso.SecondaryExternalIdAttributeId ||
-                    av.Attribute!.IsExternalId ||
-                    av.Attribute!.IsSecondaryExternalId))
-                .ThenInclude(av => av.Attribute)
             .Where(cso => cso.MetaverseObjectId.HasValue && mvoIds.Contains(cso.MetaverseObjectId.Value))
             .ToListAsync();
+        if (csos.Count == 0)
+            return new Dictionary<Guid, List<ConnectedSystemObject>>();
+
+        // Step 2: only the external ID attribute values, matched by the CSO's external ID columns
+        // (which the delete PE stamping and reference recall actually read) OR the schema attribute
+        // flags (belt and braces should the columns and flags ever diverge). A filtered Include
+        // cannot express the column match: EF Core cannot translate a filtered Include that
+        // references the parent entity (InvalidOperationException at query translation), so this
+        // runs as a correlated subquery and the values are stitched onto the CSOs below.
+        var csoIds = csos.Select(c => c.Id).ToList();
+        var externalIdValueRows = await _context.ConnectedSystemObjects
+            .Where(cso => csoIds.Contains(cso.Id))
+            .SelectMany(cso => cso.AttributeValues
+                .Where(av => av.AttributeId == cso.ExternalIdAttributeId
+                          || av.AttributeId == cso.SecondaryExternalIdAttributeId
+                          || av.Attribute.IsExternalId
+                          || av.Attribute.IsSecondaryExternalId)
+                .Select(av => new { CsoId = cso.Id, Value = av, av.Attribute }))
+            .ToListAsync();
+
+        // Stitch in memory. Tracked-query navigation fix-up may already have added a value to its
+        // CSO's collection (or the CSO may already be tracked with its values from page processing),
+        // so guard against double-adding the same instance.
+        var csosById = csos.ToDictionary(c => c.Id);
+        foreach (var row in externalIdValueRows)
+        {
+            row.Value.Attribute = row.Attribute;
+            var attributeValues = csosById[row.CsoId].AttributeValues;
+            if (!attributeValues.Contains(row.Value))
+                attributeValues.Add(row.Value);
+        }
 
         return csos
             .GroupBy(cso => cso.MetaverseObjectId!.Value)
