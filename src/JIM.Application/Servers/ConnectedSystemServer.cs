@@ -5347,11 +5347,6 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
     }
 
-    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsForObjectsAsync(IEnumerable<Guid> connectedSystemObjectIds)
-    {
-        return await Application.Repository.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
-    }
-
     /// <summary>
     /// Retrieves the change history for a Connected System Object.
     /// </summary>

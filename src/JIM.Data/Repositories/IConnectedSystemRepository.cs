@@ -380,18 +380,7 @@ public interface IConnectedSystemRepository
     public Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
 
     /// <summary>
-    /// Retrieves Pending Exports for multiple Connected System Objects in a single query.
-    /// More efficient than calling GetPendingExportByConnectedSystemObjectIdAsync multiple times.
-    /// </summary>
-    /// <param name="connectedSystemObjectIds">The CSO IDs to retrieve Pending Exports for.</param>
-    /// <returns>A dictionary mapping CSO ID to its Pending Export (if any).</returns>
-    /// <exception cref="JIM.Models.Exceptions.DuplicatePendingExportException">
-    /// Thrown when duplicate Pending Exports are found for the same CSO, indicating a data integrity violation.
-    /// </exception>
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
-
-    /// <summary>
-    /// Lightweight version of GetPendingExportsByConnectedSystemObjectIdsAsync for reconciliation.
+    /// Retrieves Pending Exports for multiple Connected System Objects in a single lightweight query.
     /// Uses AsNoTracking and only loads AttributeValueChanges (with Attribute), avoiding the heavy
     /// Include chains for ConnectedSystemObject, ConnectedSystem, and SourceMetaverseObject.
     /// Uses the ConnectedSystemObjectId FK property for the dictionary key instead of loading the full CSO.
