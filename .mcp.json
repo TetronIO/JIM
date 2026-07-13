@@ -5,7 +5,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@playwright/mcp@0.0.77",
+        "@playwright/mcp@0.0.78",
         "--headless",
         "--isolated",
         "--no-sandbox"
