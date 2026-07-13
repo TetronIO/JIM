@@ -606,9 +606,10 @@ Configure appropriate token lifetimes in your identity provider:
 
 ### Brute-Force Protection and MFA
 
-JIM delegates interactive password authentication entirely to your identity provider; it never sees or stores a user's password. That means credential-stuffing and password-guessing defences must be configured **at the identity provider**, not in JIM:
+JIM delegates interactive authentication entirely to your identity provider and never sees or stores user credentials, whichever kind your provider is configured to require: passwords, Kerberos, smart cards or other certificate-based authentication, FIDO2 passkeys, or a combination. Defences against credential attacks therefore belong **at the identity provider**, not in JIM:
 
-- **Enable brute-force/lockout protection**<br /> Entra ID (Smart Lockout), AD FS (the built-in Extranet Lockout Policy), and Keycloak (**Realm settings > Security defenses > Brute force detection**) all offer this. The bundled devcontainer Keycloak realm ships with brute-force detection enabled by default.
+- **Where password authentication is in use, enable brute-force/lockout protection**<br /> Entra ID (Smart Lockout), AD FS (the built-in Extranet Lockout Policy), and Keycloak (**Realm settings > Security defenses > Brute force detection**) all offer this. The bundled devcontainer Keycloak realm ships with brute-force detection enabled by default.
 - **Enable multi-factor authentication where available**<br /> MFA at the identity provider protects every application behind it, including JIM, without any JIM-side configuration.
+- **Prefer phishing-resistant methods where your provider supports them**<br /> Kerberos, certificate-based authentication, and FIDO2 passkeys remove the guessable secret altogether, taking credential-stuffing and password-guessing off the table for those users.
 
-JIM's own [REST API rate limiting](../api/rate-limiting.md) throttles request volume at the application layer (see [Service Settings](../configuration/service-settings.md)); it complements, but does not replace, identity-provider-level brute-force and MFA controls for the interactive sign-in flow.
+JIM's own [REST API rate limiting](../api/rate-limiting.md) throttles request volume at the application layer (see [Service Settings](../configuration/service-settings.md)); it complements, but does not replace, identity-provider-level credential protections for the interactive sign-in flow.
