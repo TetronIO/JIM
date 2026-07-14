@@ -334,6 +334,16 @@ public interface ISyncRepository
     Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject);
 
     /// <summary>
+    /// Deletes multiple MVOs in one set-based pass: each FK cleanup statement runs once for the
+    /// whole batch (<c>= ANY</c>) instead of once per object, and the MVO rows are removed in a
+    /// single SaveChanges. Semantically equivalent to calling
+    /// <see cref="DeleteMetaverseObjectAsync"/> per object; exists because the per-object form
+    /// costs six sequential round trips per MVO, which dominates 0-grace-period deprovisioning
+    /// flushes at scale (issue #993).
+    /// </summary>
+    Task DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects);
+
+    /// <summary>
     /// Deletes MVO attribute values by their IDs using raw SQL.
     /// Used during cross-page reference resolution where the change tracker is cleared between
     /// batches — EF cannot infer collection removals after clearing, so deletions must be explicit.
@@ -377,7 +387,13 @@ public interface ISyncRepository
     /// <summary>
     /// Deletes Pending Exports by their associated CSO IDs.
     /// Returns the count of deleted Pending Exports.
-    /// Used during obsolete CSO processing to clean up orphaned exports.
+    /// Used during obsolete CSO processing to clean up orphaned exports, and by the MVO deletion
+    /// flush's collision policy to replace a non-Delete Pending Export with a Delete one.
+    /// Implementations that delete via raw SQL must also detach any tracked instances of the
+    /// deleted rows (and their attribute value changes) from the change tracker, otherwise EF
+    /// Core's SetNull cascade fix-up on <c>PendingExport.SourceMetaverseObjectId</c> targets a
+    /// deleted row when the source Metaverse Object is deleted on the same context and throws
+    /// <c>DbUpdateConcurrencyException</c>.
     /// </summary>
     Task<int> DeletePendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
@@ -388,14 +404,16 @@ public interface ISyncRepository
     Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
 
     /// <summary>
-    /// Gets Pending Exports for multiple CSOs in a single query.
-    /// Returns a dictionary keyed by CSO ID.
+    /// Lean fetch for the export evaluation merge-and-replace path: only AttributeValueChanges
+    /// (with Attribute) are loaded, skipping ConnectedSystemObject, ConnectedSystem and
+    /// SourceMetaverseObject and their attribute value graphs (issue #986). Use this instead of
+    /// <see cref="GetPendingExportByConnectedSystemObjectIdAsync"/> on the merge hot path.
     /// </summary>
-    Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
+    Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
 
     /// <summary>
-    /// Lightweight version of <see cref="GetPendingExportsByConnectedSystemObjectIdsAsync"/> for reconciliation.
-    /// Returns Pending Exports with only scalar fields loaded (no attribute value changes).
+    /// Gets Pending Exports for multiple CSOs in a single lightweight query, keyed by CSO ID.
+    /// Only AttributeValueChanges (with Attribute) are loaded; entities are untracked.
     /// </summary>
     Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
 
@@ -651,6 +669,25 @@ public interface ISyncRepository
     Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId);
 
     /// <summary>
+    /// Gets all CSOs joined to any of the given MVOs across all Connected Systems, in one query,
+    /// grouped by MVO ID. LEAN SHAPE: only the external ID and secondary external ID attribute
+    /// values (with their Attribute) are loaded, because MVO deletion and reference recall need
+    /// nothing else from the attribute graph; a full include would materialise every membership
+    /// row of any deleted group (issue #993). Do not use where the full attribute graph is needed.
+    /// </summary>
+    Task<Dictionary<Guid, List<ConnectedSystemObject>>> GetConnectedSystemObjectsForMvoDeletionAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds);
+
+    /// <summary>
+    /// Disconnects the given CSOs from their MVOs in one set-based statement: nulls
+    /// <c>MetaverseObjectId</c> and <c>DateJoined</c> and resets <c>JoinType</c> to
+    /// <c>NotJoined</c>. Any tracked instances are fixed up to match so a later SaveChanges
+    /// does not write stale join state back. Used by MVO deletion to detach CSOs without a
+    /// round trip per object (issue #993).
+    /// </summary>
+    Task DisconnectConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds);
+
+    /// <summary>
     /// Gets CSOs joined to MVOs that are targeted by the specified Connected Systems.
     /// Returns a dictionary keyed by (MvoId, ConnectedSystemId) for O(1) lookup during export evaluation.
     /// </summary>
@@ -715,10 +752,34 @@ public interface ISyncRepository
     Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId);
 
     /// <summary>
-    /// Gets a batch of executable exports using paged loading.
-    /// Uses AsNoTracking in production for minimal EF overhead.
+    /// Gets a batch of executable exports using keyset pagination ordered by (CreatedAt, Id).
+    /// Pass the CreatedAt and Id of the last row of the previous batch to fetch the next one;
+    /// pass null for both to start from the beginning. Keyset (rather than offset) paging keeps
+    /// batch collection a single forward sweep even as executed rows drop out of the query and
+    /// deferred rows remain in it (issue #985). Uses AsNoTracking in production for minimal EF
+    /// overhead.
     /// </summary>
-    Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take);
+    Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId);
+
+    /// <summary>
+    /// Collects all remaining executable exports with unresolved references (deferred) strictly
+    /// after the given keyset cursor, in a single call. Used by the export batch-collection loop
+    /// to fast-path once a batch is discovered to be made up entirely of deferred exports, instead
+    /// of continuing to page through the remainder 100 rows at a time purely to build the deferred
+    /// list (issue #985). Same ordering and filtering semantics as
+    /// <see cref="GetExecutableExportBatchAsync"/>, restricted to HasUnresolvedReferences exports.
+    /// </summary>
+    Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
+
+    /// <summary>
+    /// Returns whether any executable exports WITHOUT unresolved references exist strictly after
+    /// the given keyset cursor. Guards the deferred-collection fast path (issue #985): deferred
+    /// and executable exports interleave in (CreatedAt, Id) order, so an all-deferred batch does
+    /// not prove the rest of the queue is deferred too. Same filtering semantics as
+    /// <see cref="GetExecutableExportBatchAsync"/>, restricted to non-deferred exports; a cheap
+    /// existence check with no entity materialisation.
+    /// </summary>
+    Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
 
     /// <summary>
     /// Gets lightweight summaries of executable exports for pre-export reconciliation.

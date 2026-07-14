@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- 🔒 The expression evaluation engine has been security-reviewed and hardened with defence-in-depth guardrails, with no change to expression functionality.
+- 🔒 Every response from JIM now carries defence-in-depth security headers, including a Content Security Policy, clickjacking denial, and MIME-sniffing protection.
+- 🔒 Every NuGet dependency, including transitive packages, is now locked to exact known-good versions, making JIM's builds reproducible and tamper-evident from source through to container image.
+- 🔒 Sign-ins and API key authentication attempts now appear in the Activity audit log, with successful sign-ins logged individually and failed attempts grouped by key, IP address and reason so the log stays bounded even under a credential-spraying attack. Security events carry their own configurable retention period, defaulting to one year.
+
+### Added
+
+- ✨ The REST API is now protected by configurable rate limiting: per-client request limits with sensible defaults, tunable from Service Settings without a restart, returning standard 429 responses with Retry-After guidance.
+- ✨ RFC references in a Connected System's schema attribute descriptions (for example "RFC2256: business category" on an LDAP Connector) are now hyperlinks to the corresponding page on the IETF Datatracker, so you can jump straight to the defining specification.
+
+### Changed
+
+- 🔄 The JIM PowerShell module now returns output objects with PascalCase property names (`$obj.DisplayName`, `$obj.Type.Name`), following PowerShell convention, instead of the REST API's camelCase wire casing. PowerShell member access is case-insensitive, so most scripts are unaffected, but `Get-Member`, `ConvertTo-Json` and `Format-Table` now surface PascalCase; scripts that compare property-name strings or round-trip output through JSON may need updating. Dictionaries keyed by your own data (a Metaverse Object's Attributes, a log entry's Properties) keep their keys exactly as supplied.
+- 🔄 Exports now default to a conservative connector-recommended degree of parallelism when a Connected System's Max Export Parallelism isn't explicitly configured, instead of always defaulting to sequential. The LDAP Connector recommends two parallel batch pipelines for capable directories (those tuned to a high Export Concurrency) and stays sequential otherwise. An explicitly configured Max Export Parallelism value is always respected.
+
+### Fixed
+
+- 🐛 Large exports with many reference-bearing objects (for example thousands of groups) no longer fail partway with "the connection pool has been exhausted". Each parallel export batch previously pinned a database connection for the remainder of the run, draining the pool after around 29 batches; batch resources are now released as each batch completes.
+- 🐛 The activity progress shown while an export works through its deferred reference phase is now accurate. It previously restarted the processed count from zero against the full run total (for example "2,884 of 209,984"), producing a misleadingly low objects-per-second rate and a wildly inflated time-remaining estimate.
+- 🐛 Exports running with Max Export Parallelism above one no longer send unresolved reference values (raw internal identifiers) to the target system. Reference resolution results are now persisted before parallel export batches execute, so every batch sees the resolved values; previously group memberships could be exported as invalid values and fail (for example "invalid per syntax" from an LDAP directory).
+- 🐛 Synchronisation runs whose only outcomes were out-of-scope disconnections (for example a leaver cohort passing a relative-date scope boundary) no longer show an empty Outcomes cell in the Operations history and Activity list; new chips display out-of-scope disconnections and out-of-scope retained joins alongside the existing outcome chips.
+- 🐛 Closing the browser or navigating away while an admin page with tabs (such as Operations) was open no longer records spurious Error-level "Navigation failed" and "Unhandled exception in circuit" entries in the JIM.Web log. Any remaining browser-disconnect noise from the framework is now logged at Warning, so Error entries once again indicate genuine problems.
+
+### Performance
+
+- ⚡ Exports no longer stall between batches at large scale. Batch collection now walks the Pending Export queue in a single pass (keyset pagination, backed by a new index) instead of rescanning it from the start for every batch; at 200,000 objects with 10,000 reference-bearing groups the old behaviour spent hours re-reading already-collected rows before the first group reached the target system.
+- ⚡ The tail of a large, reference-heavy export no longer spends time paging through Pending Exports it has already identified as deferred. Once a batch turns out to be entirely reference-bearing, JIM now collects the remaining deferred exports in a single query instead of continuing to page through them 100 at a time.
+- ⚡ Full Imports at large scale are dramatically faster: matched objects are no longer hydrated one database round trip at a time, confirming a large group no longer degrades quadratically with its membership size, and bulk attribute value writes now stream via PostgreSQL binary COPY instead of parameterised inserts. A Full Import of 210,000 objects that previously took over 40 minutes now completes in around 8.
+- ⚡ Deprovisioning users who are members of large groups no longer slows synchronisation to a crawl. Updating or deleting a large group's pending changes no longer reloads the group's full membership from the database each time.
+- ⚡ Deleting Metaverse Objects during synchronisation (0-grace-period deprovisioning) is now set-based instead of object-by-object. Each page of deletions previously cost around 75 sequential database round trips per object (per-object lookups, per-attribute change record inserts, and an unindexed audit-history update); a leaver-cohort page flush that took around 50 seconds now completes in a small, fixed number of bulk operations, and a new index covers the audit-history detach that previously scanned the whole Activities table once per deleted object.
+
 ## [0.13.0] - 2026-07-10
 
 ### Added

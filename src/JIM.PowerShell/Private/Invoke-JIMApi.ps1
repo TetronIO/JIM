@@ -69,7 +69,27 @@ function Invoke-JIMApi {
     # Build and execute the request, with reactive 401 retry for OAuth
     $response = Invoke-JIMApiRequest -Endpoint $Endpoint -Method $Method -Body $Body -ContentType $ContentType
 
-    return $response
+    # An empty response (a 204 No Content, or an empty JSON array that Invoke-RestMethod
+    # enumerated into nothing) must stay empty. Passing it through the normaliser would
+    # bind as $null and come back as an explicit $null OUTPUT ITEM, which callers using
+    # @(Get-JIMXxx).Count would count as one object, breaking "is the list empty?" checks.
+    if ($null -eq $response) {
+        return
+    }
+
+    # Normalise the wire's camelCase property names to the PascalCase that PowerShell
+    # cmdlet output is expected to use, at the single choke point every cmdlet funnels
+    # through. Cmdlets read the result via case-insensitive member access, so their own
+    # internal property reads (e.g. $response.items) are unaffected. Dynamic-key
+    # dictionary values keep their keys verbatim (see ConvertTo-JIMOutputObject).
+    #
+    # Assign before returning: the normaliser wraps arrays with the comma operator to
+    # protect nested single-element and empty arrays from being unrolled away. The
+    # assignment collapses that protection at the top level, so a bare-array response
+    # emits its elements individually here, exactly as the previous `return $response`
+    # did. (A `return` of the call directly would keep the top-level array atomic.)
+    $normalised = ConvertTo-JIMOutputObject -InputObject $response
+    return $normalised
 }
 
 function Invoke-TokenRefresh {

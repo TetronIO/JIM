@@ -260,6 +260,24 @@
                                         </MudChip>
                                     </MudTooltip>
                                 }
+                                @if (context.TotalDisconnectedOutOfScope > 0)
+                                {
+                                    <MudTooltip Text="CSOs Disconnected (Out of Scope)" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Warning" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.DisconnectedOutOfScope)" Class="jim-stat-chip">
+                                            @context.TotalDisconnectedOutOfScope.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+                                @if (context.TotalOutOfScopeRetainJoin > 0)
+                                {
+                                    <MudTooltip Text="CSOs Out of Scope (Join Retained)" Arrow="true" Placement="Placement.Top">
+                                        <MudChip T="string" Color="Color.Info" Variant="Variant.Text"
+                                                 Icon="@Helpers.GetOperationIcon(ObjectChangeType.OutOfScopeRetainJoin)" Class="jim-stat-chip">
+                                            @context.TotalOutOfScopeRetainJoin.ToString("N0")
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
                                 @if (context.TotalDeleted > 0)
                                 {
                                     <MudTooltip Text="CSOs Deleted" Arrow="true" Placement="Placement.Top">
@@ -707,7 +725,7 @@
                         {
                             <tr>
                                 <td><MudText Typo="Typo.body2">Duration</MudText></td>
-                                <td><MudText Typo="Typo.body2">@_selectedActivity.ExecutionTime.Value.ToCasualString()</MudText></td>
+                                <td><MudText Typo="Typo.body2">@_selectedActivity.ExecutionTime.Value.ToAbbreviatedString(int.MaxValue)</MudText></td>
                             </tr>
                         }
                     </tbody>
@@ -730,7 +748,9 @@
                     {
                         <MudIcon Icon="@Icons.Material.Filled.Schedule" />
                     }
-                    <MudText Typo="Typo.body1">@(_selectedActivity.InitiatedByName ?? "Unknown")</MudText>
+                    <MudText Typo="Typo.body1">
+                        <AuditPrincipalLink PrincipalType="_selectedActivity.InitiatedByType" PrincipalId="_selectedActivity.InitiatedById" PrincipalName="@_selectedActivity.InitiatedByName" />
+                    </MudText>
                 </div>
             </MudPaper>
 
@@ -952,7 +972,7 @@
     private static string BuildFingerprint(IEnumerable<Activity> activities)
     {
         return string.Join("|", activities.Select(a =>
-            $"{a.Id}:{a.Status}:{a.ObjectsProcessed},{a.ObjectsToProcess},{a.TotalAdded},{a.TotalUpdated},{a.TotalDeleted},{a.TotalProjected},{a.TotalJoined},{a.TotalAttributeFlows},{a.TotalDisconnected},{a.TotalDriftCorrections},{a.TotalProvisioned},{a.TotalExported},{a.TotalDeprovisioned},{a.TotalErrors}"));
+            $"{a.Id}:{a.Status}:{a.ObjectsProcessed},{a.ObjectsToProcess},{a.TotalAdded},{a.TotalUpdated},{a.TotalDeleted},{a.TotalProjected},{a.TotalJoined},{a.TotalAttributeFlows},{a.TotalDisconnected},{a.TotalDisconnectedOutOfScope},{a.TotalOutOfScopeRetainJoin},{a.TotalDriftCorrections},{a.TotalProvisioned},{a.TotalExported},{a.TotalDeprovisioned},{a.TotalPendingExports},{a.TotalErrors}"));
     }
 
     private async Task OnConnectedSystemFilterChanged(IReadOnlyCollection<string> values)

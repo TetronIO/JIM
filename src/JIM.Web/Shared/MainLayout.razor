@@ -258,36 +258,43 @@ else
     {
         if (firstRender)
         {
-            // Check for a saved dark mode preference first, fall back to system setting
-            var savedDarkMode = await PreferenceService.GetDarkModeAsync();
-            if (savedDarkMode.HasValue)
+            try
             {
-                _isDarkMode = savedDarkMode.Value;
-            }
-            else if (_mudThemeProvider != null)
-            {
-                _isDarkMode = await _mudThemeProvider.GetSystemDarkModeAsync();
-            }
-            await UpdateDarkModeClassAsync(_isDarkMode);
-            _darkModeInitialised = true;
+                // Check for a saved dark mode preference first, fall back to system setting
+                var savedDarkMode = await PreferenceService.GetDarkModeAsync();
+                if (savedDarkMode.HasValue)
+                {
+                    _isDarkMode = savedDarkMode.Value;
+                }
+                else if (_mudThemeProvider != null)
+                {
+                    _isDarkMode = await _mudThemeProvider.GetSystemDarkModeAsync();
+                }
+                await UpdateDarkModeClassAsync(_isDarkMode);
+                _darkModeInitialised = true;
 
-            // Check for a saved drawer pinned preference, fall back to screen size
-            var savedDrawerPinned = await PreferenceService.GetDrawerPinnedAsync();
-            if (savedDrawerPinned.HasValue)
-            {
-                IsDrawerPinned = savedDrawerPinned.Value;
-                IsDrawerOpen = savedDrawerPinned.Value;
-            }
-            else
-            {
-                var windowWidth = await JSRuntime.InvokeAsync<int>("eval", "window.innerWidth");
-                var isLargeScreen = windowWidth >= LargeScreenBreakpoint;
-                IsDrawerOpen = isLargeScreen;
-                IsDrawerPinned = isLargeScreen;
-            }
-            _drawerPinnedInitialised = true;
+                // Check for a saved drawer pinned preference, fall back to screen size
+                var savedDrawerPinned = await PreferenceService.GetDrawerPinnedAsync();
+                if (savedDrawerPinned.HasValue)
+                {
+                    IsDrawerPinned = savedDrawerPinned.Value;
+                    IsDrawerOpen = savedDrawerPinned.Value;
+                }
+                else
+                {
+                    var windowWidth = await JSRuntime.InvokeAsync<int>("jimInterop.getWindowInnerWidth");
+                    var isLargeScreen = windowWidth >= LargeScreenBreakpoint;
+                    IsDrawerOpen = isLargeScreen;
+                    IsDrawerPinned = isLargeScreen;
+                }
+                _drawerPinnedInitialised = true;
 
-            StateHasChanged();
+                StateHasChanged();
+            }
+            catch (JSDisconnectedException)
+            {
+                // Ignore - circuit is disconnected and being disposed
+            }
         }
     }
 
@@ -320,14 +327,10 @@ else
             var themePath = isDark ? DarkThemePath : LightThemePath;
 
             // Swap the theme CSS file
-            await JSRuntime.InvokeVoidAsync("eval",
-                $"document.getElementById('jim-theme').setAttribute('href', '{themePath}')");
+            await JSRuntime.InvokeVoidAsync("jimInterop.setThemeStylesheet", themePath);
 
             // Maintain body class for any custom CSS selectors
-            if (isDark)
-                await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('jim-dark-mode')");
-            else
-                await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.remove('jim-dark-mode')");
+            await JSRuntime.InvokeVoidAsync("jimInterop.setBodyClass", "jim-dark-mode", isDark);
         }
         catch (JSDisconnectedException)
         {

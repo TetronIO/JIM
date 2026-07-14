@@ -52,19 +52,53 @@ public class ChangeHistoryRetentionServerTests
     {
         var generalCutoff = DateTime.UtcNow.AddDays(-90);
         var configurationCutoff = DateTime.UtcNow.AddDays(-3650);
+        var securityCutoff = DateTime.UtcNow.AddDays(-365);
         _changeHistoryRepo.Setup(r => r.DeleteExpiredCsoChangesAsync(generalCutoff, 100)).ReturnsAsync(5);
         _changeHistoryRepo.Setup(r => r.DeleteExpiredMvoChangesAsync(generalCutoff, 100)).ReturnsAsync(4);
         _changeHistoryRepo.Setup(r => r.DeleteExpiredActivitiesAsync(generalCutoff, 100)).ReturnsAsync(3);
         _changeHistoryRepo.Setup(r => r.DeleteExpiredConfigurationChangeActivitiesAsync(configurationCutoff, 100)).ReturnsAsync(2);
+        _changeHistoryRepo.Setup(r => r.DeleteExpiredSecurityEventActivitiesAsync(securityCutoff, 100)).ReturnsAsync(7);
 
-        var result = await _jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(generalCutoff, configurationCutoff, 100);
+        var result = await _jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(generalCutoff, configurationCutoff, securityCutoff, 100);
 
         Assert.That(result.ActivitiesDeleted, Is.EqualTo(3));
         Assert.That(result.ConfigurationChangeActivitiesDeleted, Is.EqualTo(2));
+        Assert.That(result.SecurityEventActivitiesDeleted, Is.EqualTo(7));
         _changeHistoryRepo.Verify(r => r.DeleteExpiredActivitiesAsync(generalCutoff, 100), Times.Once,
             "general Activities are flushed at the general retention cutoff");
         _changeHistoryRepo.Verify(r => r.DeleteExpiredConfigurationChangeActivitiesAsync(configurationCutoff, 100), Times.Once,
             "configuration-change Activities are flushed only at their own, longer cutoff");
+        _changeHistoryRepo.Verify(r => r.DeleteExpiredSecurityEventActivitiesAsync(securityCutoff, 100), Times.Once,
+            "security event Activities are flushed only at their own, dedicated cutoff");
+    }
+
+    [Test]
+    public async Task GetSecurityEventRetentionPeriodAsync_NoSettingStored_DefaultsToOneYearAsync()
+    {
+        _settingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.SecurityEventRetentionPeriod))
+            .ReturnsAsync((ServiceSetting?)null);
+
+        var period = await _jim.ServiceSettings.GetSecurityEventRetentionPeriodAsync();
+
+        Assert.That(period, Is.EqualTo(TimeSpan.FromDays(365)));
+    }
+
+    [Test]
+    public async Task GetSecurityEventRetentionPeriodAsync_ZeroConfigured_FallsBackToDefaultAsync()
+    {
+        _settingsRepo.Setup(r => r.GetSettingAsync(Constants.SettingKeys.SecurityEventRetentionPeriod))
+            .ReturnsAsync(new ServiceSetting
+            {
+                Key = Constants.SettingKeys.SecurityEventRetentionPeriod,
+                DisplayName = "Security event retention period",
+                ValueType = ServiceSettingValueType.TimeSpan,
+                Value = "00:00:00"
+            });
+
+        var period = await _jim.ServiceSettings.GetSecurityEventRetentionPeriodAsync();
+
+        Assert.That(period, Is.EqualTo(TimeSpan.FromDays(365)),
+            "a zero or negative retention period would delete all security event history and must be rejected");
     }
 
     [Test]

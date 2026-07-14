@@ -35,15 +35,25 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
     /// </summary>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
     /// <param name="search">Optional search query to filter by target name or type.</param>
+    /// <param name="targetType">Optional filter for target types (repeat the query parameter for multiple values,
+    /// e.g. <c>?targetType=Authentication&amp;targetType=ConnectedSystem</c>; additive/OR within the filter). Use
+    /// <c>Authentication</c> to poll security audit events (interactive sign-in success/failure, API key
+    /// authentication failure) for SIEM integration. An unparseable value returns 400.</param>
+    /// <param name="initiatorType">Optional filter for initiator types (User, ApiKey, System, Anonymous; repeat the
+    /// query parameter for multiple values; additive/OR within the filter). An unparseable value returns 400.</param>
     /// <returns>A paginated list of Activity headers.</returns>
     /// <response code="200">Returns the paginated list of Activities.</response>
+    /// <response code="400">If a filter value cannot be parsed.</response>
     /// <response code="401">If the user is not authenticated.</response>
     [HttpGet(Name = "GetActivities")]
     [ProducesResponseType(typeof(PaginatedResponse<ActivityHeader>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetActivitiesAsync(
         [FromQuery] PaginationRequest pagination,
-        [FromQuery] string? search = null)
+        [FromQuery] string? search = null,
+        [FromQuery] List<ActivityTargetType>? targetType = null,
+        [FromQuery] List<ActivityInitiatorType>? initiatorType = null)
     {
         _logger.LogDebug("Getting activities (Page: {Page}, PageSize: {PageSize}, Search: {Search})",
             pagination.Page, pagination.PageSize, LogSanitiser.Sanitise(search));
@@ -57,7 +67,9 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
             pageSize: pagination.PageSize,
             searchQuery: search,
             sortBy: sortBy,
-            sortDescending: sortDescending);
+            sortDescending: sortDescending,
+            typeFilter: targetType,
+            initiatorTypeFilter: initiatorType);
 
         var headers = result.Results.Select(a => ActivityHeader.FromEntity(a));
 

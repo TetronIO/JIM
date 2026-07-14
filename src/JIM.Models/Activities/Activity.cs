@@ -220,6 +220,62 @@ public class Activity
     public int PendingExportsConfirmed { get; set; }
 
     // -----------------------------------------------------------------------------------------------------------------
+    // security audit event fields (for Authentication activities: interactive sign-in and API key authentication)
+    // -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The client IP address the request originated from, populated for Authentication activities (and harmless to
+    /// leave null elsewhere). Truthful behind a reverse proxy only once ForwardedHeaders middleware is configured to
+    /// rewrite <c>HttpContext.Connection.RemoteIpAddress</c>. An IP address is personal data; retention is governed
+    /// by <see cref="JIM.Models.Core.Constants.SettingKeys.SecurityEventRetentionPeriod"/> for this target type.
+    /// </summary>
+    [MaxLength(45)]
+    public string? ClientIpAddress { get; set; }
+
+    /// <summary>
+    /// The <c>jim_ak_XXXX</c> prefix of the API key involved in an authentication event. Never the full key or its
+    /// hash. Null for interactive sign-in events. For aggregated failure rows, a null (unknown) prefix is normalised
+    /// to an empty string so the aggregation-window unique index dedupes consistently (Postgres unique indexes treat
+    /// NULLs as distinct from one another, which would otherwise defeat the aggregation upsert for the bad-format
+    /// failure path, where no prefix is available).
+    /// </summary>
+    [MaxLength(16)]
+    public string? ApiKeyPrefix { get; set; }
+
+    /// <summary>
+    /// The reason an authentication attempt failed (e.g. "Invalid API key format", "API key not found", "API key is
+    /// disabled", "API key has expired", "Authentication error", or a short sanitised OIDC failure category). Null
+    /// for successful sign-in events.
+    /// </summary>
+    [MaxLength(200)]
+    public string? SecurityEventReason { get; set; }
+
+    /// <summary>
+    /// For aggregated failed-authentication Activities: the floor of the 15-minute UTC window this row aggregates.
+    /// Null for non-aggregated Authentication activities (e.g. sign-in success) and all other target types. Part of
+    /// the partial unique index that makes the aggregation upsert race-safe.
+    /// </summary>
+    public DateTime? AggregationWindowStart { get; set; }
+
+    /// <summary>
+    /// For aggregated failed-authentication Activities: the timestamp of the first attempt recorded in this window.
+    /// Fixed at creation; never updated by subsequent increments.
+    /// </summary>
+    public DateTime? FirstSeen { get; set; }
+
+    /// <summary>
+    /// For aggregated failed-authentication Activities: the timestamp of the most recent attempt recorded in this
+    /// window. Advances on every increment.
+    /// </summary>
+    public DateTime? LastSeen { get; set; }
+
+    /// <summary>
+    /// For aggregated failed-authentication Activities: the number of failed attempts matching this
+    /// (API key prefix, client IP, failure reason, window) combination. Null for non-aggregated activities.
+    /// </summary>
+    public int? AttemptCount { get; set; }
+
+    // -----------------------------------------------------------------------------------------------------------------
     // context specific properties
     // -----------------------------------------------------------------------------------------------------------------
 

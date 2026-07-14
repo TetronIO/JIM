@@ -9,6 +9,20 @@
     <DockerfileContext>..\..\..</DockerfileContext>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591;1587</NoWarn>
+
+    <!-- Pin the ASP.NET Core shared framework version explicitly. Without this,
+         Microsoft.NET.Sdk.Web + RestorePackagesWithLockFile resolves the implicit
+         "Microsoft.AspNetCore.App.Internal.Assets" lock file entry to whichever
+         ASP.NET Core runtime patch happens to be installed on the machine that
+         performs the restore, which floats between the devcontainer's pinned SDK
+         (10.0.203 -> runtime 10.0.7) and the production Dockerfiles' pinned SDK
+         (10.0-noble digest -> runtime 10.0.9), breaking locked-mode restore
+         non-deterministically. Pinning to the exact version shipped by the
+         production base images (src/JIM.Web/Dockerfile) makes it deterministic.
+         Keep in sync with the ASP.NET Core runtime version bundled by the pinned
+         mcr.microsoft.com/dotnet/aspnet and dotnet/sdk digests whenever either is
+         bumped (see engineering/DEPENDENCY_PINNING.md). -->
+    <RuntimeFrameworkVersion>10.0.9</RuntimeFrameworkVersion>
   </PropertyGroup>
 
   <ItemGroup>

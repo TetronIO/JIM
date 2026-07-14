@@ -239,8 +239,8 @@ public partial class SyncRepository : ISyncRepository
     public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
         => _repo.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
 
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
-        => _repo.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+    public Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
+        => _repo.ConnectedSystems.GetPendingExportLightweightByConnectedSystemObjectIdAsync(connectedSystemObjectId);
 
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
         => _repo.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
@@ -451,8 +451,14 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetExecutableExportsAsync(connectedSystemId);
 
-    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
-        => _repo.ConnectedSystems.GetExecutableExportBatchAsync(connectedSystemId, skip, take);
+    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
+        => _repo.ConnectedSystems.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId);
+
+    public Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+        => _repo.ConnectedSystems.GetRemainingDeferredExportsAsync(connectedSystemId, afterCreatedAt, afterId);
+
+    public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+        => _repo.ConnectedSystems.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);
 
     public Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetExecutableExportSummariesAsync(connectedSystemId);

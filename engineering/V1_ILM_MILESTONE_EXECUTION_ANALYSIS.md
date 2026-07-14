@@ -1,6 +1,7 @@
 # v1.0-ILM-COMPLETE Milestone: Execution Analysis
 
 - **Date:** 2026-07-02
+- **Last updated:** 2026-07-11
 - **Scope:** All 57 open issues on the `v1.0-ILM-COMPLETE` milestone at time of analysis. **Update (same day):** the Priority: Low scope cut was ratified and executed; the seven Low-priority issues now sit on `v1.x-CONNECTORS`, [#154](https://github.com/TetronIO/JIM/issues/154) has since been closed by PR [#897](https://github.com/TetronIO/JIM/pull/897), [#467](https://github.com/TetronIO/JIM/issues/467) was verified and closed, and [#466](https://github.com/TetronIO/JIM/issues/466) (`Watch-JIMLog`) was merged via PR [#901](https://github.com/TetronIO/JIM/pull/901) on 2026-07-03, leaving the milestone at 47 open issues. Priority and Effort ratings have been applied to every issue using the repository's GitHub issue fields.
 - **Purpose:** Categorise the milestone by theme, prioritise for fastest route to a polished, production-safe v1.0, and define an execution plan (parallel lanes, serialisation constraints, design decisions needed) suitable for multi-agent delivery.
 
@@ -8,25 +9,18 @@
 
 ## 0. Progress at a Glance
 
-> **Snapshot:** 2026-07-02 · **Live view:** [v1.0-ILM-COMPLETE milestone](https://github.com/TetronIO/JIM/milestone/4) shows real-time open/closed counts · Keep this section current: update the bars and wave statuses whenever an issue closes, moves milestone, or a wave starts or finishes.
+> **Live view (source of truth):** [v1.0-ILM-COMPLETE milestone](https://github.com/TetronIO/JIM/milestone/4) shows real-time open/closed counts. This section is a curated snapshot; when the two disagree, trust the milestone. Keep the wave statuses and recent-activity list current as issues land.
 
-**Overall: 3 of 50 in-scope items done (6%)** - 57 analysed, minus 7 demoted to v1.x.
+**Milestone: 35 closed / 39 open (74 total, ~47% complete)** as of 2026-07-11. The milestone has grown beyond the original 57-issue analysis as new issues were raised, so the fixed "in-scope" denominator no longer tracks it; counts here follow the live milestone.
 
-`██░░░░░░░░░░░░░░░░░░░░░░░` 3/50
+`███████████░░░░░░░░░░░░░` 35/74 closed
 
-| Priority | Done | Open | Progress |
-|---|---|---|---|
-| Urgent | 2 ([#154](https://github.com/TetronIO/JIM/issues/154), [#467](https://github.com/TetronIO/JIM/issues/467)) | 12 | `████░░░░░░░░░░░░░░░░░░░░░` 2/14 |
-| High | 0 | 20 | `░░░░░░░░░░░░░░░░░░░░░░░░░` 0/20 |
-| Medium | 1 ([#466](https://github.com/TetronIO/JIM/issues/466)) | 15 | `██░░░░░░░░░░░░░░░░░░░░░░░` 1/16 |
-| **Total** | **3** | **47** | `██░░░░░░░░░░░░░░░░░░░░░░░` **3/50** |
-
-The Urgent count includes [#126](https://github.com/TetronIO/JIM/issues/126), which will close as a duplicate of [#655](https://github.com/TetronIO/JIM/issues/655) rather than through implementation.
+**New issues raised since the analysis:** [#959](https://github.com/TetronIO/JIM/issues/959) surface unresolved references clearly (v1.0); [#979](https://github.com/TetronIO/JIM/issues/979) PowerShell PascalCase output, spun out of [#813](https://github.com/TetronIO/JIM/issues/813) (v1.0); [#944](https://github.com/TetronIO/JIM/issues/944) GALSYNC cross-forest contact sync (placed on v1.x-CONNECTORS). Per-priority breakdowns are best read from the live milestone; the fixed per-priority table has been retired as unmaintainable against a moving milestone.
 
 | Wave | Focus | Status |
 |---|---|---|
-| Wave 0 | Hygiene and safety net | 🟡 In progress - done: [#154](https://github.com/TetronIO/JIM/issues/154) merge, [#467](https://github.com/TetronIO/JIM/issues/467) verify/close, scope-cut ratification, [#466](https://github.com/TetronIO/JIM/issues/466) rescoped, implemented, runtime-verified and merged (PR [#901](https://github.com/TetronIO/JIM/pull/901)); remaining: [#14](https://github.com/TetronIO/JIM/issues/14) gap-audit, [#126](https://github.com/TetronIO/JIM/issues/126) merge into [#655](https://github.com/TetronIO/JIM/issues/655), [#294](https://github.com/TetronIO/JIM/issues/294) rescope, [#861](https://github.com/TetronIO/JIM/issues/861), [#437](https://github.com/TetronIO/JIM/issues/437)/[#438](https://github.com/TetronIO/JIM/issues/438) evaluation, [#864](https://github.com/TetronIO/JIM/issues/864) |
-| Wave 1 | Launch blockers | ⚪ Not started - blocked on the Wave-1 decisions in Section 6 |
+| Wave 0 | Hygiene and safety net | 🟢 Done - [#154](https://github.com/TetronIO/JIM/issues/154), [#467](https://github.com/TetronIO/JIM/issues/467), [#466](https://github.com/TetronIO/JIM/issues/466), [#861](https://github.com/TetronIO/JIM/issues/861) and [#14](https://github.com/TetronIO/JIM/issues/14) merged; [#126](https://github.com/TetronIO/JIM/issues/126) and [#438](https://github.com/TetronIO/JIM/issues/438) consolidated (closed as duplicates); [#294](https://github.com/TetronIO/JIM/issues/294) rescoped and moved to v2.0; [#437](https://github.com/TetronIO/JIM/issues/437) assessed (recommend won't-do / defer) and removed from the milestone to the backlog; [#864](https://github.com/TetronIO/JIM/issues/864) implemented (branch pushed, PR pending) |
+| Wave 1 | Launch blockers | 🟡 In progress - [#813](https://github.com/TetronIO/JIM/issues/813) API contract normalisation merged (PR [#980](https://github.com/TetronIO/JIM/pull/980)); [#91](https://github.com/TetronIO/JIM/issues/91) MV attribute priority and [#85](https://github.com/TetronIO/JIM/issues/85) time-period searches merged; [#487](https://github.com/TetronIO/JIM/issues/487) pagination safety hardening in progress (descoped to guard rails only); PRDs drafted and pushed for [#242](https://github.com/TetronIO/JIM/issues/242), [#288](https://github.com/TetronIO/JIM/issues/288), [#827](https://github.com/TetronIO/JIM/issues/827) and [#809](https://github.com/TetronIO/JIM/issues/809)+[#134](https://github.com/TetronIO/JIM/issues/134); remaining Wave-1 design decisions in Section 6 |
 | Wave 2 | Core capability build-out | ⚪ Not started |
 | Wave 3 | Polish and completion | ⚪ Not started |
 
@@ -179,9 +173,9 @@ Batched so they can be answered in one sitting. Wave 1 cannot fully start withou
 **Blocking Wave 1:**
 1. **Scope cut:** ratify (or amend) the Priority: Low demotions in Section 3. **RATIFIED 2026-07-02:** [#307](https://github.com/TetronIO/JIM/issues/307), [#359](https://github.com/TetronIO/JIM/issues/359), [#464](https://github.com/TetronIO/JIM/issues/464), [#498](https://github.com/TetronIO/JIM/issues/498), [#880](https://github.com/TetronIO/JIM/issues/880), [#582](https://github.com/TetronIO/JIM/issues/582) and [#877](https://github.com/TetronIO/JIM/issues/877) moved to the v1.x-CONNECTORS milestone. The v1.0-ILM-COMPLETE milestone now holds 50 open issues.
 2. **[#655](https://github.com/TetronIO/JIM/issues/655):** per-Synchronisation-Rule `DeprovisionScope` setting vs honouring `OutboundDeprovisionAction` unconditionally; is a confirmation/dry-run safety net required for v1.0?
-3. **[#242](https://github.com/TetronIO/JIM/issues/242):** expression function vs dedicated generator; uniqueness scope (Metaverse vs Connected System vs live target query); collision suffix strategy; intra-batch collision handling.
-4. **[#827](https://github.com/TetronIO/JIM/issues/827):** where preview computation runs (worker job vs synchronous); how unsaved proposed config is represented; do preview results persist as Activities; which preview tiers are v1.0-mandatory.
-5. **[#288](https://github.com/TetronIO/JIM/issues/288):** approach to guaranteeing zero side effects (reuse real sync code paths read-only vs shadow evaluation); sampling strategy at 100K+ objects; UI-only for v1.0 or API/PowerShell too.
+3. **[#242](https://github.com/TetronIO/JIM/issues/242):** expression function vs dedicated generator; uniqueness scope (Metaverse vs Connected System vs live target query); collision suffix strategy; intra-batch collision handling. **PRD drafted** (`feature/242-prd`) with a recommendation for each; awaiting review.
+4. **[#827](https://github.com/TetronIO/JIM/issues/827):** where preview computation runs (worker job vs synchronous); how unsaved proposed config is represented; do preview results persist as Activities; which preview tiers are v1.0-mandatory. **PRD drafted** (`feature/827-prd`) with a recommendation for each; awaiting review.
+5. **[#288](https://github.com/TetronIO/JIM/issues/288):** approach to guaranteeing zero side effects (reuse real sync code paths read-only vs shadow evaluation); sampling strategy at 100K+ objects; UI-only for v1.0 or API/PowerShell too. **PRD drafted** (`feature/288-prd`) with a recommendation for each; awaiting review.
 6. **[#421](https://github.com/TetronIO/JIM/issues/421):** recompute-diff-on-apply vs holding the previewed diff; stale-diff behaviour.
 7. **[#9](https://github.com/TetronIO/JIM/issues/9):** exactly what a Synchronisation Reader can see (Activities, CSO/MVO detail, Pending Exports; presumably not connector credentials) - interlocks with decision 8.
 8. **[#881](https://github.com/TetronIO/JIM/issues/881):** "sensitive" as a per-attribute schema flag vs fixed list; which role gates it; read-time redaction (recommended) vs write-time.
@@ -190,8 +184,8 @@ Batched so they can be answered in one sitting. Wave 1 cannot fully start withou
 9. **[#500](https://github.com/TetronIO/JIM/issues/500):** is the privileged-operations audit trail an extension of [#14](https://github.com/TetronIO/JIM/issues/14)'s change history (recommended: one audit system) or separate; CSP strictness compatible with Blazor Server (nonce vs unsafe-inline).
 10. **[#874](https://github.com/TetronIO/JIM/issues/874):** snapshot setting default on or off (personal data exposure vs supportability); retention/size limits.
 11. **[#873](https://github.com/TetronIO/JIM/issues/873):** what "warn" means in the RPEI/Activity model; do ignored unresolved references still count in batch statistics.
-12. **[#85](https://github.com/TetronIO/JIM/issues/85):** accept that relative-date scopes only re-evaluate on full synchronisation for v1.0 (documented), with the scheduled reconciler tracked in [#892](https://github.com/TetronIO/JIM/issues/892) for v1.x?
-13. **[#813](https://github.com/TetronIO/JIM/issues/813):** adopt the nested `type: {id, name}` shape (issue's own recommendation)?
+12. ~~**[#85](https://github.com/TetronIO/JIM/issues/85):** accept that relative-date scopes only re-evaluate on full synchronisation for v1.0.~~ **Done:** [#85](https://github.com/TetronIO/JIM/issues/85) merged.
+13. ~~**[#813](https://github.com/TetronIO/JIM/issues/813):** adopt the nested `type: {id, name}` shape?~~ **Decided (yes) and done:** merged via PR [#980](https://github.com/TetronIO/JIM/pull/980); spun out [#979](https://github.com/TetronIO/JIM/issues/979) (PowerShell PascalCase output, v1.0).
 14. **[#351](https://github.com/TetronIO/JIM/issues/351):** confirm Phase 1 (OneLevel per container) only for v1.0.
 15. **[#118](https://github.com/TetronIO/JIM/issues/118):** confirm fail-safe semantics (condition unevaluable = do not delete).
 16. **[#518](https://github.com/TetronIO/JIM/issues/518):** accept a documented manual "full integration suite green against the release commit" checklist step for the v1.0 release, automation in v1.x.

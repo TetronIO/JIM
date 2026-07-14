@@ -10,7 +10,6 @@
 @using JIM.Utilities
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
-@inject IDialogService DialogService
 @inject IUserPreferenceService PreferenceService
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -233,18 +232,11 @@
                             }
                             else
                             {
-                                <div class="jim-attr-expanded">
-                                    @foreach (var val in context.Values.Take(MvaInlineThreshold))
-                                    {
-                                        <div class="jim-attr-expanded-item">
-                                            <CsoAttributeValue Value="@val" />
-                                        </div>
-                                    }
-                                    <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
-                                        OnClick="@(() => OpenMvaDialogAsync(context.AttributeName, context.TotalCount, context.IsReference))">
-                                        +@(context.TotalCount - MvaInlineThreshold) more
-                                    </MudButton>
-                                </div>
+                                <CsoMvaTable @key="context.AttributeName"
+                                             AttributeName="@context.AttributeName"
+                                             ConnectedSystemObjectId="@ConnectedSystemObject.Id"
+                                             IsReferenceAttribute="@context.IsReference"
+                                             Dense="@_dense" />
                             }
                         </MudTd>
                         <MudTd DataLabel="Type" Class="@($"jim-attr-type {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
@@ -563,28 +555,6 @@
         if (ConnectedSystemObject?.SecondaryExternalIdAttributeId == null) return false;
         var attributeId = value.AttributeId != 0 ? value.AttributeId : value.Attribute?.Id ?? 0;
         return attributeId == ConnectedSystemObject.SecondaryExternalIdAttributeId;
-    }
-
-    private async Task OpenMvaDialogAsync(string attributeName, int totalCount, bool isReference)
-    {
-        if (ConnectedSystemObject == null) return;
-
-        var parameters = new DialogParameters<CsoMvaDialog>
-        {
-            { x => x.AttributeName, attributeName },
-            { x => x.ConnectedSystemObjectId, ConnectedSystemObject.Id },
-            { x => x.TotalCount, totalCount },
-            { x => x.IsReferenceAttribute, isReference }
-        };
-
-        var options = new DialogOptions
-        {
-            CloseButton = true,
-            MaxWidth = MaxWidth.Medium,
-            FullWidth = true
-        };
-
-        await DialogService.ShowAsync<CsoMvaDialog>(attributeName, parameters, options);
     }
 
     private async Task<TableData<PendingExportAttributeValueChange>> LoadPendingExportsPagedAsync(

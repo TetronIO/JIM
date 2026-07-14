@@ -59,8 +59,18 @@ namespace JIM.PostgresData.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("AggregationWindowStart")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid?>("ApiKeyId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ApiKeyPrefix")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<int?>("AttemptCount")
+                        .HasColumnType("integer");
 
                     b.Property<string>("ChangeReason")
                         .HasColumnType("text");
@@ -70,6 +80,10 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("ClearedPendingExportCount")
                         .HasColumnType("integer");
+
+                    b.Property<string>("ClientIpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
 
                     b.Property<string>("ConfigurationChangeSnapshot")
                         .HasColumnType("jsonb");
@@ -125,6 +139,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<TimeSpan?>("ExecutionTime")
                         .HasColumnType("interval");
 
+                    b.Property<DateTime?>("FirstSeen")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid?>("InitiatedById")
                         .HasColumnType("uuid");
 
@@ -133,6 +150,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("InitiatedByType")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("LastSeen")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Message")
                         .HasColumnType("text");
@@ -172,6 +192,10 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("ScheduleStepIndex")
                         .HasColumnType("integer");
+
+                    b.Property<string>("SecurityEventReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("ServiceSettingKey")
                         .HasMaxLength(100)
@@ -262,7 +286,18 @@ namespace JIM.PostgresData.Migrations
                         .IsDescending()
                         .HasDatabaseName("IX_Activities_Created");
 
+                    b.HasIndex("MetaverseObjectId")
+                        .HasDatabaseName("IX_Activities_MetaverseObjectId");
+
                     b.HasIndex("SyncRuleId");
+
+                    b.HasIndex("TargetType", "Created")
+                        .HasDatabaseName("IX_Activities_TargetType_Created");
+
+                    b.HasIndex("TargetType", "ApiKeyPrefix", "ClientIpAddress", "SecurityEventReason", "AggregationWindowStart")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Activities_SecurityAggregation_Unique")
+                        .HasFilter("\"AggregationWindowStart\" IS NOT NULL");
 
                     b.ToTable("Activities");
                 });
@@ -3128,6 +3163,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasIndex("ConnectedSystemId", "Status")
                         .HasDatabaseName("IX_PendingExports_ConnectedSystemId_Status");
+
+                    b.HasIndex("ConnectedSystemId", "CreatedAt", "Id")
+                        .HasDatabaseName("IX_PendingExports_ConnectedSystemId_CreatedAt_Id");
 
                     b.ToTable("PendingExports");
                 });
