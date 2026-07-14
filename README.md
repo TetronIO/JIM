@@ -31,7 +31,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Modern Web Portal and REST API with interactive Scalar [API reference](https://docs.junctional.io/api/reference/)
 - PowerShell automation for Identity as Code (IDaC) - deploy JIM instances in minutes, not months
 - Realtime activity monitoring
-- [Configuration Change History](https://docs.junctional.io/configuration/activities/#configuration-change-history): versioned who/what/when audit across all configuration types, with secret redaction and a reason-for-change prompt
+- [Configuration Change History](https://docs.junctional.io/configuration/activities/#configuration-change-history): versioned who/what/when audit across all configuration types
 - Single Sign-On (SSO) using OpenID Connect
 - Dark/Light mode
 
