@@ -33,6 +33,7 @@ public static class ActivityTargetTypeCategories
         { ActivityTargetType.MetaverseObject, ActivityTargetCategory.IdentityData },
         { ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.TemporalScopeReconciliation, ActivityTargetCategory.SyncRuns },
+        { ActivityTargetType.MetaverseObjectHousekeeping, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.HistoryRetentionCleanup, ActivityTargetCategory.System },
         { ActivityTargetType.System, ActivityTargetCategory.System },
         { ActivityTargetType.SystemInitialisation, ActivityTargetCategory.System },

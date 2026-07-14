@@ -13,6 +13,17 @@ public interface IActivityRepository
 
     public Task CreateActivityAsync(Activity activity);
 
+    /// <summary>
+    /// Persists Run Profile Execution Items (including their sync outcome trees and any Connected System Object
+    /// change snapshots carried on the outcomes) for an Activity that has already been persisted via
+    /// <see cref="CreateActivityAsync"/> in the same unit of work. Items must reference related entities
+    /// (Connected System Objects, Pending Exports) by scalar foreign key only; the implementation severs any
+    /// navigation references to pre-existing entities so they cannot be re-inserted.
+    /// Intended for small batches recorded outside sync task processing (for example Metaverse Object
+    /// Housekeeping); sync processors use the bulk insert path on ISyncRepository instead.
+    /// </summary>
+    public Task CreateActivityRunProfileExecutionItemsAsync(IReadOnlyCollection<ActivityRunProfileExecutionItem> items);
+
     public Task UpdateActivityAsync(Activity activity);
 
     public Task DeleteActivityAsync(Activity activity);
