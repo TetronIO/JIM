@@ -65,6 +65,10 @@ Categorise each PR into one of three ecosystems:
      - Verify ALL pinned packages in a Dockerfile by grepping for `=` in the
        `RUN apt-get install` block, not just the ones in this list.
   4. If a pinned version is NO LONGER AVAILABLE: **Do NOT merge**. Report the version mismatch and the available versions so the user can decide whether to update the pin.
+- **CRITICAL - RuntimeFrameworkVersion sync (JIM.Web digest bumps only)**: `src/JIM.Web/JIM.Web.csproj` pins `<RuntimeFrameworkVersion>` to the exact ASP.NET Core version bundled by the pinned base image digests, keeping the JIM.Web lock file deterministic (see `engineering/DEPENDENCY_PINNING.md`). When a digest update to the aspnet/sdk images lands:
+  1. Check the .NET version in the new image: `docker run --rm <aspnet-image>@<new-digest> dotnet --list-runtimes`
+  2. If the patch version changed (e.g. 10.0.9 -> 10.0.10), the PR must ALSO bump `<RuntimeFrameworkVersion>` in `JIM.Web.csproj` and regenerate lock files (`dotnet restore JIM.sln --force-evaluate`). Dependabot will not do this itself, and CI stays green without it (locked-mode restore still passes against the old pin), so the drift between the lock file and the runtime the production image actually ships is silent; this is a review-time check only. Push that companion commit to the PR branch before merging.
+  3. If the digest bump is a same-version rebuild (no patch change), no action is needed.
 
 ### NuGet Packages
 - Check: Is this a patch or minor update (not major)?
