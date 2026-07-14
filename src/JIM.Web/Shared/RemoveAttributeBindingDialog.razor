@@ -126,7 +126,7 @@
             }
             Snackbar.Add($"Removed \"{impact.AttributeName}\" from {impact.MetaverseObjectTypeName}.", Severity.Success);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Snackbar.Add($"Failed to remove binding: {ex.Message}", Severity.Error);
             return;

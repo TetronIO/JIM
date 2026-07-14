@@ -248,7 +248,7 @@
                 Snackbar.Add($"Created attribute \"{trimmedName}\".", Severity.Success);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Snackbar.Add($"Failed to save attribute: {ex.Message}", Severity.Error);
             return;

@@ -131,7 +131,7 @@
 
             Snackbar.Add($"Added {_selectedIds.Count} attribute(s) to {MetaverseObjectTypeName}.", Severity.Success);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Snackbar.Add($"Failed to add attributes: {ex.Message}", Severity.Error);
             return;
