@@ -29,7 +29,7 @@ public class SyncExportTaskProcessor
 {
     private readonly ISyncServer _syncServer;
     private readonly ISyncRepository _syncRepo;
-    private readonly Func<ISyncRepository>? _syncRepoFactory;
+    private readonly Func<ISyncRepositoryScope>? _syncRepoFactory;
     private readonly IConnector _connector;
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _runProfile;
@@ -62,7 +62,7 @@ public class SyncExportTaskProcessor
         WorkerTask workerTask,
         CancellationTokenSource cancellationTokenSource,
         SyncRunMode runMode = SyncRunMode.PreviewAndSync,
-        Func<ISyncRepository>? syncRepoFactory = null)
+        Func<ISyncRepositoryScope>? syncRepoFactory = null)
     {
         _syncServer = syncServer;
         _syncRepo = syncRepository;

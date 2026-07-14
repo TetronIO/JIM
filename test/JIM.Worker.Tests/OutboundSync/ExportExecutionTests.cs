@@ -1677,6 +1677,363 @@ public class ExportExecutionTests
             "All 9 exports (3 immediate + 6 deferred) should be accounted for");
     }
 
+    /// <summary>
+    /// Parallel twin of the test above: the deferred PARALLEL batch phase must report cumulative
+    /// progress (immediate-phase count + deferred progress), like the sequential deferred path
+    /// already does. Reporting the phase-local count against the run-global total made the UI show
+    /// "2,884 of 209,984" with a nonsense rate and ETA during the Scale200k10kGroups export
+    /// (2026-07-13).
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredExports_ReportsCumulativeProgressAsync()
+    {
+        // Arrange - identical data shape to the sequential test: 3 immediate + 6 deferred exports
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+
+        for (var i = 0; i < 3; i++)
+        {
+            var cso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            };
+            ConnectedSystemObjectsData.Add(cso);
+            SyncRepo.SeedConnectedSystemObject(cso);
+
+            var pe = new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                ConnectedSystem = targetSystem,
+                ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
+                Status = PendingExportStatus.Pending,
+                ChangeType = PendingExportChangeType.Update,
+                CreatedAt = DateTime.UtcNow.AddMinutes(-10 + i),
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = displayNameAttr.Id,
+                        Attribute = displayNameAttr,
+                        StringValue = $"Immediate User {i}",
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    }
+                }
+            };
+            PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
+        }
+
+        var referencedMvoIds = new List<Guid>();
+        for (var i = 0; i < 6; i++)
+        {
+            var mvoId = Guid.NewGuid();
+            referencedMvoIds.Add(mvoId);
+            SyncRepo.SeedMetaverseObject(new MetaverseObject { Id = mvoId });
+
+            var targetCso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                MetaverseObjectId = mvoId,
+                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        Attribute = objectGuidAttr,
+                        AttributeId = objectGuidAttr.Id,
+                        GuidValue = Guid.NewGuid()
+                    }
+                }
+            };
+            SyncRepo.SeedConnectedSystemObject(targetCso);
+        }
+
+        for (var i = 0; i < 6; i++)
+        {
+            var cso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            };
+            ConnectedSystemObjectsData.Add(cso);
+            SyncRepo.SeedConnectedSystemObject(cso);
+
+            var pe = new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                ConnectedSystem = targetSystem,
+                ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
+                Status = PendingExportStatus.Pending,
+                ChangeType = PendingExportChangeType.Update,
+                HasUnresolvedReferences = true,
+                CreatedAt = DateTime.UtcNow.AddMinutes(i),
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = displayNameAttr.Id,
+                        Attribute = displayNameAttr,
+                        StringValue = $"Deferred User {i}",
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    },
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = managerAttr.Id,
+                        Attribute = managerAttr,
+                        UnresolvedReferenceValue = referencedMvoIds[i].ToString(),
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    }
+                }
+            };
+            PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
+        }
+
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+                exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+
+        Func<IConnector> connectorFactory = () =>
+        {
+            var factoryConnector = new Mock<IConnector>();
+            var factoryExportConnector = factoryConnector.As<IConnectorExportUsingCalls>();
+            factoryConnector.Setup(c => c.Name).Returns("Test Connector");
+            factoryExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+                    exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+            return factoryConnector.Object;
+        };
+        Func<JIM.Data.Repositories.ISyncRepositoryScope> repositoryFactory = () => new JIM.Data.Repositories.SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var progressReports = new List<ExportProgressInfo>();
+        Func<ExportProgressInfo, Task> progressCallback = info =>
+        {
+            lock (progressReports)
+            {
+                progressReports.Add(new ExportProgressInfo
+                {
+                    Phase = info.Phase,
+                    TotalExports = info.TotalExports,
+                    ProcessedExports = info.ProcessedExports,
+                    Message = info.Message
+                });
+            }
+            return Task.CompletedTask;
+        };
+
+        // BatchSize 2 spreads the 6 deferred exports over 3 batches so the parallel path engages
+        var options = new ExportExecutionOptions
+        {
+            BatchSize = 2,
+            MaxParallelism = 2
+        };
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None,
+            progressCallback,
+            connectorFactory: connectorFactory,
+            repositoryFactory: repositoryFactory);
+
+        // Assert - all exports accounted for, and the deferred parallel phase reported CUMULATIVE
+        // progress: the highest Executing-phase report must cover immediate + deferred, not reset
+        // to a phase-local count.
+        Assert.That(result.SuccessCount, Is.EqualTo(9), "All 9 exports (3 immediate + 6 deferred) should succeed");
+
+        List<ExportProgressInfo> executingReports;
+        lock (progressReports)
+        {
+            executingReports = progressReports.Where(p => p.Phase == ExportPhase.Executing).ToList();
+        }
+        Assert.That(executingReports, Is.Not.Empty, "Expected Executing-phase progress reports");
+        Assert.That(executingReports.Max(p => p.ProcessedExports), Is.EqualTo(9),
+            "The deferred parallel phase must report cumulative processed exports (immediate + deferred), not a phase-local count");
+        Assert.That(executingReports.Where(p => p.ProcessedExports > p.TotalExports), Is.Empty,
+            "Progress must never exceed the total");
+    }
+
+    /// <summary>
+    /// Every per-batch repository scope created by the deferred parallel path must be disposed by
+    /// the time the export completes. Before scopes were disposed, each batch's JimApplication and
+    /// DbContext lived until process exit and pinned one pooled connection apiece, exhausting the
+    /// Npgsql pool (Max Pool Size 30) at scale: the Scale200k10kGroups export failed from batch 29
+    /// onwards with "The connection pool has been exhausted" (2026-07-13).
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredExports_DisposesPerBatchRepositoryScopesAsync()
+    {
+        // Arrange - same shape as the cumulative progress test above: 6 deferred exports over
+        // 3 batches so the parallel path engages and creates per-batch scopes
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+
+        var referencedMvoIds = new List<Guid>();
+        for (var i = 0; i < 6; i++)
+        {
+            var mvoId = Guid.NewGuid();
+            referencedMvoIds.Add(mvoId);
+            SyncRepo.SeedMetaverseObject(new MetaverseObject { Id = mvoId });
+
+            var targetCso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                MetaverseObjectId = mvoId,
+                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        Attribute = objectGuidAttr,
+                        AttributeId = objectGuidAttr.Id,
+                        GuidValue = Guid.NewGuid()
+                    }
+                }
+            };
+            SyncRepo.SeedConnectedSystemObject(targetCso);
+        }
+
+        for (var i = 0; i < 6; i++)
+        {
+            var cso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            };
+            ConnectedSystemObjectsData.Add(cso);
+            SyncRepo.SeedConnectedSystemObject(cso);
+
+            var pe = new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                ConnectedSystem = targetSystem,
+                ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
+                Status = PendingExportStatus.Pending,
+                ChangeType = PendingExportChangeType.Update,
+                HasUnresolvedReferences = true,
+                CreatedAt = DateTime.UtcNow.AddMinutes(i),
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = displayNameAttr.Id,
+                        Attribute = displayNameAttr,
+                        StringValue = $"Deferred User {i}",
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    },
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = managerAttr.Id,
+                        Attribute = managerAttr,
+                        UnresolvedReferenceValue = referencedMvoIds[i].ToString(),
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    }
+                }
+            };
+            PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
+        }
+
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+                exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+
+        Func<IConnector> connectorFactory = () =>
+        {
+            var factoryConnector = new Mock<IConnector>();
+            var factoryExportConnector = factoryConnector.As<IConnectorExportUsingCalls>();
+            factoryConnector.Setup(c => c.Name).Returns("Test Connector");
+            factoryExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+                    exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+            return factoryConnector.Object;
+        };
+
+        var scopesCreated = 0;
+        var scopesDisposed = 0;
+        Func<JIM.Data.Repositories.ISyncRepositoryScope> repositoryFactory = () =>
+        {
+            Interlocked.Increment(ref scopesCreated);
+            return new JIM.Data.Repositories.SyncRepositoryScope(
+                TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData),
+                new DisposalCounter(() => Interlocked.Increment(ref scopesDisposed)));
+        };
+
+        var options = new ExportExecutionOptions
+        {
+            BatchSize = 2,
+            MaxParallelism = 2
+        };
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None,
+            connectorFactory: connectorFactory,
+            repositoryFactory: repositoryFactory);
+
+        // Assert - every created scope must be disposed
+        Assert.That(result.SuccessCount, Is.EqualTo(6), "All 6 deferred exports should succeed");
+        Assert.That(scopesCreated, Is.GreaterThan(0), "The deferred parallel path should create per-batch repository scopes");
+        Assert.That(scopesDisposed, Is.EqualTo(scopesCreated),
+            "Every per-batch repository scope must be disposed when its batch completes; an undisposed scope pins a pooled database connection for the process lifetime");
+    }
+
+    private sealed class DisposalCounter(Action onDispose) : IDisposable
+    {
+        public void Dispose() => onDispose();
+    }
+
     #endregion
 
     #region Exception Handling (RPEI Blind Spot Fixes)
@@ -2396,7 +2753,7 @@ public class ExportExecutionTests
             CancellationToken.None,
             progressCallback: null,
             connectorFactory: () => CreateRecordingConnector().Object,
-            repositoryFactory: () => isolatingRepo);
+            repositoryFactory: () => new JIM.Data.Repositories.SyncRepositoryScope(isolatingRepo));
 
         // Assert: every deferred export reached a connector, and every reference the connectors
         // received was RESOLVED (StringValue populated, unresolved marker cleared). Before the
