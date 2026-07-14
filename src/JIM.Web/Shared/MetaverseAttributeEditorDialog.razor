@@ -1,0 +1,309 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@using JIM.Models.Core
+@using JIM.Models.Core.DTOs
+@using JIM.Models.Staging
+@using JIM.Utilities
+@using JIM.Web.Services
+@inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @bind-IsValid="_formValid">
+            @if (_isEdit)
+            {
+                <PrefilledFormValidator />
+            }
+            <MudStack Spacing="4">
+                @* ─── Name (live uniqueness) ─── *@
+                <MudTextField @bind-Value="_name"
+                              Label="Name"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="A name is required."
+                              Immediate="true"
+                              DebounceInterval="300"
+                              OnDebounceIntervalElapsed="OnNameChangedAsync"
+                              Error="_nameError != null"
+                              ErrorText="@_nameError"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@(_checkingName ? Icons.Material.Filled.HourglassEmpty : (_nameError == null && !string.IsNullOrWhiteSpace(_name) ? Icons.Material.Filled.CheckCircle : null))"
+                              AutoFocus="true" />
+
+                <div class="d-flex gap-4">
+                    <MudSelect @bind-Value="_type" T="AttributeDataType" Label="Data Type" Variant="Variant.Outlined"
+                               Required="true" RequiredError="A data type is required." Class="flex-grow-1"
+                               Disabled="@(_isEdit && _schemaLocked)">
+                        @foreach (var type in _selectableTypes)
+                        {
+                            <MudSelectItem Value="type">@type.ToString().SplitOnCapitalLetters()</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudSelect @bind-Value="_plurality" T="AttributePlurality" Label="Plurality" Variant="Variant.Outlined"
+                               Required="true" Class="flex-grow-1" Disabled="@(_isEdit && _schemaLocked)">
+                        <MudSelectItem Value="AttributePlurality.SingleValued">Single-valued</MudSelectItem>
+                        <MudSelectItem Value="AttributePlurality.MultiValued">Multi-valued</MudSelectItem>
+                    </MudSelect>
+                </div>
+
+                @if (_isEdit && _schemaLocked)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        Data Type and Plurality are locked because @_valuesCount Metaverse Object(s) hold a stored value for this attribute. Clear the values first to change the schema.
+                    </MudAlert>
+                }
+
+                @if (_plurality == AttributePlurality.MultiValued)
+                {
+                    <MudSelect @bind-Value="_renderingHint" T="AttributeRenderingHint" Label="Rendering Hint" Variant="Variant.Outlined"
+                               HelperText="How multi-valued content is displayed on object detail pages.">
+                        <MudSelectItem Value="AttributeRenderingHint.Default">Default (auto)</MudSelectItem>
+                        <MudSelectItem Value="AttributeRenderingHint.Table">Table</MudSelectItem>
+                        <MudSelectItem Value="AttributeRenderingHint.ChipSet">Chip set</MudSelectItem>
+                        <MudSelectItem Value="AttributeRenderingHint.List">List</MudSelectItem>
+                    </MudSelect>
+                }
+
+                @* ─── Create-time bindings (create only) ─── *@
+                @if (!_isEdit)
+                {
+                    <MudSelect T="int" Label="Add to Object Types (optional)" Variant="Variant.Outlined"
+                               MultiSelection="true" @bind-SelectedValues="_selectedObjectTypeIds"
+                               MultiSelectionTextFunc="@(selected => string.Join(", ", selected.Select(s => int.TryParse(s, out var id) ? NameForObjectTypeId(id) : s)))"
+                               HelperText="Bind the new attribute to these Object Types on creation. Leave empty to create it unbound and assign later.">
+                        @foreach (var objectType in _objectTypes)
+                        {
+                            <MudSelectItem T="int" Value="objectType.Id">@objectType.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   Disabled="@(!CanSubmit())" OnClick="SubmitAsync">
+            @(_isEdit ? "Save Changes" : "Create Attribute")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    /// <summary>
+    /// The attribute being edited. Null opens the dialog in create mode.
+    /// </summary>
+    [Parameter]
+    public MetaverseAttribute? Attribute { get; set; }
+
+    private bool _isEdit;
+    private bool _formValid;
+
+    private string _name = string.Empty;
+    private AttributeDataType _type = AttributeDataType.Text;
+    private AttributePlurality _plurality = AttributePlurality.SingleValued;
+    private AttributeRenderingHint _renderingHint = AttributeRenderingHint.Default;
+    private IReadOnlyCollection<int> _selectedObjectTypeIds = new HashSet<int>();
+
+    private string? _nameError;
+    private bool _checkingName;
+    private bool _schemaLocked;
+    private int _valuesCount;
+
+    // Original values (edit) to detect what actually changed.
+    private string _originalName = string.Empty;
+    private AttributeDataType _originalType;
+    private AttributePlurality _originalPlurality;
+    private AttributeRenderingHint _originalRenderingHint;
+
+    private IList<MetaverseObjectType> _objectTypes = new List<MetaverseObjectType>();
+
+    // NotSet is an internal sentinel, never selectable by an administrator.
+    private readonly AttributeDataType[] _selectableTypes =
+        Enum.GetValues<AttributeDataType>().Where(t => t != AttributeDataType.NotSet).ToArray();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var jim = JimFactory.Create();
+
+        if (Attribute != null)
+        {
+            _isEdit = true;
+            _name = Attribute.Name;
+            _type = Attribute.Type;
+            _plurality = Attribute.AttributePlurality;
+            _renderingHint = Attribute.RenderingHint;
+            _originalName = Attribute.Name;
+            _originalType = Attribute.Type;
+            _originalPlurality = Attribute.AttributePlurality;
+            _originalRenderingHint = Attribute.RenderingHint;
+
+            // Lock the schema fields when stored values would block a change.
+            var schemaImpact = await jim.Metaverse.EvaluateAttributeSchemaChangeAsync(Attribute);
+            _schemaLocked = schemaImpact.BlockedByValues;
+            _valuesCount = schemaImpact.TotalObjectsWithValues;
+        }
+        else
+        {
+            var types = await jim.Metaverse.GetMetaverseObjectTypesAsync(false);
+            _objectTypes = types?.OrderBy(t => t.Name).ToList() ?? new List<MetaverseObjectType>();
+        }
+    }
+
+    private string NameForObjectTypeId(int id) =>
+        _objectTypes.FirstOrDefault(t => t.Id == id)?.Name ?? id.ToString();
+
+    private async Task OnNameChangedAsync()
+    {
+        var trimmed = _name?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            _nameError = null;
+            return;
+        }
+
+        // No round-trip when the name is unchanged on an edit.
+        if (_isEdit && string.Equals(trimmed, _originalName, StringComparison.OrdinalIgnoreCase))
+        {
+            _nameError = null;
+            return;
+        }
+
+        _checkingName = true;
+        StateHasChanged();
+        try
+        {
+            using var jim = JimFactory.Create();
+            var unique = await jim.Metaverse.IsMetaverseAttributeNameUniqueAsync(trimmed, Attribute?.Id);
+            _nameError = unique
+                ? null
+                : $"An attribute named \"{trimmed}\" already exists. Names are case-insensitive.";
+        }
+        finally
+        {
+            _checkingName = false;
+            StateHasChanged();
+        }
+    }
+
+    private bool CanSubmit()
+    {
+        if (!_formValid || _checkingName || _nameError != null || string.IsNullOrWhiteSpace(_name))
+            return false;
+
+        // On edit, require at least one actual change.
+        if (_isEdit && !HasChanges())
+            return false;
+
+        return true;
+    }
+
+    private bool HasChanges() =>
+        !string.Equals(_name.Trim(), _originalName, StringComparison.Ordinal) ||
+        _type != _originalType ||
+        _plurality != _originalPlurality ||
+        _renderingHint != _originalRenderingHint;
+
+    private async Task SubmitAsync()
+    {
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, _isEdit ? "Save" : "Create");
+        if (cancelled)
+            return;
+
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        var trimmedName = _name.Trim();
+
+        try
+        {
+            if (_isEdit)
+            {
+                await ApplyEditAsync(jim, user, changeReason);
+            }
+            else
+            {
+                var attribute = new MetaverseAttribute
+                {
+                    Name = trimmedName,
+                    Type = _type,
+                    AttributePlurality = _plurality,
+                    RenderingHint = _plurality == AttributePlurality.MultiValued ? _renderingHint : AttributeRenderingHint.Default
+                };
+                await jim.Metaverse.CreateMetaverseAttributeAsync(attribute, user, changeReason);
+
+                foreach (var objectTypeId in _selectedObjectTypeIds)
+                    await jim.Metaverse.BindAttributeToObjectTypeAsync(attribute.Id, objectTypeId, user, changeReason);
+
+                Snackbar.Add($"Created attribute \"{trimmedName}\".", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to save attribute: {ex.Message}", Severity.Error);
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private async Task ApplyEditAsync(JimApplication jim, MetaverseObject user, string? changeReason)
+    {
+        var attributeId = Attribute!.Id;
+        var trimmedName = _name.Trim();
+
+        // Schema change (type / plurality) via the gated path.
+        if (_type != _originalType || _plurality != _originalPlurality)
+        {
+            var impact = await jim.Metaverse.ChangeMetaverseAttributeSchemaAsync(attributeId, _type, _plurality, user, changeReason);
+            if (impact.BlockedByValues)
+            {
+                Snackbar.Add($"Cannot change the schema: {impact.TotalObjectsWithValues} object(s) hold a stored value. Clear them first.", Severity.Error);
+                return;
+            }
+        }
+
+        // Rename.
+        if (!string.Equals(trimmedName, _originalName, StringComparison.Ordinal))
+            await jim.Metaverse.RenameMetaverseAttributeAsync(attributeId, trimmedName, user, changeReason);
+
+        // Rendering hint (multi-valued only).
+        if (_plurality == AttributePlurality.MultiValued && _renderingHint != _originalRenderingHint)
+        {
+            var attribute = await jim.Metaverse.GetMetaverseAttributeAsync(attributeId);
+            if (attribute != null)
+            {
+                attribute.RenderingHint = _renderingHint;
+                await jim.Metaverse.UpdateMetaverseAttributeAsync(attribute, user, changeReason);
+            }
+        }
+
+        Snackbar.Add($"Saved changes to \"{trimmedName}\".", Severity.Success);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>
+    /// Opens the create/edit dialog. Pass an attribute to edit, or null to create. Returns true when a change was saved.
+    /// </summary>
+    public static async Task<bool> ShowAsync(IDialogService dialogService, MetaverseAttribute? attribute = null)
+    {
+        var parameters = new DialogParameters<MetaverseAttributeEditorDialog>
+        {
+            { x => x.Attribute, attribute }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var title = attribute == null ? "New Attribute" : $"Edit \"{attribute.Name}\"";
+        var dialog = await dialogService.ShowAsync<MetaverseAttributeEditorDialog>(title, parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}

@@ -1,0 +1,161 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@using JIM.Models.Core
+@using JIM.Models.Core.DTOs
+@using JIM.Utilities
+@using JIM.Web.Services
+@inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        @if (_candidates == null)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        }
+        else if (_candidates.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                Every custom attribute is already bound to @MetaverseObjectTypeName. Create a new attribute to add one.
+            </MudAlert>
+        }
+        else
+        {
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_search" Variant="Variant.Outlined" Immediate="true" DebounceInterval="200"
+                              Placeholder="Search attributes" Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search" />
+
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Not yet on this Object Type</MudText>
+                <MudList T="int" SelectionMode="SelectionMode.MultiSelection" @bind-SelectedValues="_selectedIds" Dense="true">
+                    @foreach (var candidate in Filtered())
+                    {
+                        <MudListItem T="int" Value="candidate.Id">
+                            <div class="d-flex align-center gap-2">
+                                <span>@candidate.Name</span>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                         Color="@Helpers.GetAttributeTypeChipColour(candidate.Type)">
+                                    @candidate.Type.ToString().SplitOnCapitalLetters()
+                                </MudChip>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@WhereUsed(candidate)</MudText>
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    Need one that doesn't exist yet? Create a new attribute and bind it in one step from the Schema Attributes list.
+                </MudAlert>
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   Disabled="@(!_selectedIds.Any())" OnClick="AddAsync">
+            @AddButtonText()
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    [Parameter]
+    public int MetaverseObjectTypeId { get; set; }
+
+    [Parameter]
+    public string MetaverseObjectTypeName { get; set; } = string.Empty;
+
+    private List<MetaverseAttributeHeader>? _candidates;
+    private IReadOnlyCollection<int> _selectedIds = new HashSet<int>();
+    private string _search = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var jim = JimFactory.Create();
+        var all = await jim.Metaverse.GetMetaverseAttributeHeadersAsync();
+
+        // Only custom attributes not already bound to this Object Type are candidates for assignment.
+        _candidates = (all ?? new List<MetaverseAttributeHeader>())
+            .Where(a => !a.BuiltIn)
+            .Where(a => a.MetaverseObjectTypes == null || a.MetaverseObjectTypes.All(t => t.Key != MetaverseObjectTypeId))
+            .OrderBy(a => a.Name)
+            .ToList();
+    }
+
+    private IEnumerable<MetaverseAttributeHeader> Filtered()
+    {
+        if (_candidates == null)
+            return Enumerable.Empty<MetaverseAttributeHeader>();
+        if (string.IsNullOrWhiteSpace(_search))
+            return _candidates;
+        return _candidates.Where(a => a.Name.Contains(_search, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private string WhereUsed(MetaverseAttributeHeader attribute)
+    {
+        var names = attribute.MetaverseObjectTypes?.Select(t => t.Value).ToList() ?? new List<string>();
+        return names.Count == 0 ? "Not assigned" : $"on {string.Join(", ", names)}";
+    }
+
+    private string AddButtonText()
+    {
+        var count = _selectedIds.Count;
+        return count switch
+        {
+            0 => "Add attributes",
+            1 => "Add 1 attribute",
+            _ => $"Add {count} attributes"
+        };
+    }
+
+    private async Task AddAsync()
+    {
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Add");
+        if (cancelled)
+            return;
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            foreach (var attributeId in _selectedIds)
+                await jim.Metaverse.BindAttributeToObjectTypeAsync(attributeId, MetaverseObjectTypeId, user, changeReason);
+
+            Snackbar.Add($"Added {_selectedIds.Count} attribute(s) to {MetaverseObjectTypeName}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to add attributes: {ex.Message}", Severity.Error);
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>
+    /// Opens the add-binding picker for a Metaverse Object Type. Returns true when one or more bindings were added.
+    /// </summary>
+    public static async Task<bool> ShowAsync(IDialogService dialogService, int metaverseObjectTypeId, string metaverseObjectTypeName)
+    {
+        var parameters = new DialogParameters<AddAttributeBindingDialog>
+        {
+            { x => x.MetaverseObjectTypeId, metaverseObjectTypeId },
+            { x => x.MetaverseObjectTypeName, metaverseObjectTypeName }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await dialogService.ShowAsync<AddAttributeBindingDialog>(
+            $"Add Attributes to \"{metaverseObjectTypeName}\"", parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}

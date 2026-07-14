@@ -82,6 +82,8 @@
                                   AdornmentIcon="@Icons.Material.Filled.Search"
                                   IconSize="Size.Medium"
                                   Class="mt-0" />
+                    <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                               DropShadow="false" Class="ml-3" OnClick="OpenCreateAttributeDialogAsync">New Attribute</MudButton>
                 </ToolBarContent>
                 <HeaderContent>
                     <MudTh><MudTableSortLabel SortLabel="name" T="MetaverseAttributeHeader" InitialDirection="SortDirection.Ascending"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
@@ -122,9 +124,18 @@
                         </MudTooltip>
                     </MudTd>
                     <MudTd DataLabel="Object Types">
-                        @if (context.MetaverseObjectTypes != null)
+                        @{
+                            var boundTypes = context.MetaverseObjectTypes?.ToList() ?? new List<KeyValuePair<int, string>>();
+                        }
+                        @if (boundTypes.Count == 0)
                         {
-                            foreach (var stub in context.MetaverseObjectTypes)
+                            <MudTooltip Text="This custom attribute is not bound to any Object Type, so it is not collecting data." Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Color="Color.Default" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.RemoveCircleOutline">Not assigned</MudChip>
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            foreach (var stub in boundTypes)
                             {
                                 var attributeUrl = $"/admin/schema/object-types/{stub.Key}";
                                 <MudChip T="string" Color="Color.Default" Variant="Variant.Filled" Href="@attributeUrl">@stub.Value</MudChip>
@@ -132,9 +143,20 @@
                         }
                     </MudTd>
                     <MudTd DataLabel="">
-                        <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowAttributeHistoryDialogAsync(context))" />
-                        </MudTooltip>
+                        <div class="d-flex justify-end">
+                            @if (!context.BuiltIn)
+                            {
+                                <MudTooltip Text="Edit attribute" Arrow="true" Placement="Placement.Top">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" OnClick="@(() => OpenEditAttributeDialogAsync(context))" />
+                                </MudTooltip>
+                                <MudTooltip Text="Delete attribute" Arrow="true" Placement="Placement.Top">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" OnClick="@(() => OpenDeleteAttributeDialogAsync(context))" />
+                                </MudTooltip>
+                            }
+                            <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowAttributeHistoryDialogAsync(context))" />
+                            </MudTooltip>
+                        </div>
                     </MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
@@ -239,6 +261,37 @@
     {
         await ConfigurationChangeHistoryDialog.ShowAsync(DialogService, ActivityTargetType.MetaverseAttribute,
             attribute.Id, "Metaverse Attribute", attribute.Name);
+    }
+
+    private async Task OpenCreateAttributeDialogAsync()
+    {
+        if (await MetaverseAttributeEditorDialog.ShowAsync(DialogService))
+            if (_attributeTable != null)
+                await _attributeTable.ReloadServerData();
+    }
+
+    private async Task OpenEditAttributeDialogAsync(MetaverseAttributeHeader header)
+    {
+        using var jim = JimFactory.Create();
+        var attribute = await jim.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(header.Id);
+        if (attribute == null)
+            return;
+
+        if (await MetaverseAttributeEditorDialog.ShowAsync(DialogService, attribute))
+            if (_attributeTable != null)
+                await _attributeTable.ReloadServerData();
+    }
+
+    private async Task OpenDeleteAttributeDialogAsync(MetaverseAttributeHeader header)
+    {
+        using var jim = JimFactory.Create();
+        var attribute = await jim.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(header.Id);
+        if (attribute == null)
+            return;
+
+        if (await DeleteMetaverseAttributeDialog.ShowAsync(DialogService, attribute))
+            if (_attributeTable != null)
+                await _attributeTable.ReloadServerData();
     }
 
     private (string Label, Color Color, string Icon) GetDeletionRuleDisplay(MetaverseObjectDeletionRule rule)
