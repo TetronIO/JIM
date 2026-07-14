@@ -462,10 +462,11 @@
                 @* Aggregated failure events carry an attempt count; sign-in success events do not aggregate *@
                 @if (context.AttemptCount is > 0)
                 {
+                    var attemptCount = context.AttemptCount.Value;
                     <MudTooltip Text="Failed Attempts" Arrow="true" Placement="Placement.Top">
                         <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
                                  Icon="@Icons.Material.Filled.Report" Class="jim-stat-chip">
-                            @context.AttemptCount.Value.ToString("N0")
+                            @attemptCount.ToString("N0")
                         </MudChip>
                     </MudTooltip>
                 }

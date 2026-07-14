@@ -364,9 +364,10 @@
                 }
                 @if (_activity.AttemptCount.HasValue)
                 {
+                    var attemptCount = _activity.AttemptCount.Value;
                     <MudItem xs="12" sm="6" md="4">
                         <MudText Typo="Typo.button" Class="mud-text-secondary">Attempt Count:</MudText>
-                        <MudText>@_activity.AttemptCount.Value.ToString("N0")</MudText>
+                        <MudText>@attemptCount.ToString("N0")</MudText>
                     </MudItem>
                 }
                 @if (_activity.AggregationWindowStart.HasValue)
