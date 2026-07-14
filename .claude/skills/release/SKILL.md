@@ -92,23 +92,25 @@ For each file, check whether the changes since the last release have made any co
 
 ### 3. Review and update architectural diagrams
 
-#### C4 Model (Structurizr)
+#### C4 Architecture Diagrams (hand-authored inline SVGs)
 
-1. **Review `engineering/diagrams/structurizr/workspace.dsl`** against the current codebase. Check that:
+The C4 views (System Context, Containers, and the component views) are **hand-authored inline SVGs** under `docs/assets/diagrams/`, with self-contained light/dark README copies under `.github/diagrams/`. There is no DSL and no diagram generator; edits are made by hand following `docs/CLAUDE.md` (Concept Diagrams) and `engineering/DESIGN.md` > Diagrams.
+
+1. **Review the SVGs under `docs/assets/diagrams/`** against the current codebase. Check that:
    - All containers (services, databases) are represented
    - All components within each container are current
    - Relationships between components/containers are accurate
    - Any new connectors, services, or significant components added since the last release are included
    - Removed or renamed components are cleaned up
-   - Hard-coded numbers in container/component descriptions (e.g. "Cross-platform module with N cmdlets") still match reality — verify against `src/JIM.PowerShell/JIM.psd1` `FunctionsToExport`
+   - Hard-coded numbers in container/component descriptions (e.g. "Cross-platform module with N cmdlets") still match reality; verify against `src/JIM.PowerShell/JIM.psd1` `FunctionsToExport`
 
-2. **Update the DSL** if any changes are needed.
+2. **Edit the SVGs by hand** if any changes are needed, keeping all colours as `--jimdg-*` classes (never colour literals) per the Concept Diagrams conventions in `docs/assets/stylesheets/custom.css`.
 
-3. **Regenerate the C4 SVG images**:
+3. **Regenerate the README copies** if `system-context.svg` or `containers.svg` (or the `--jimdg-*` tokens in `custom.css`) changed:
    ```
-   jim-diagrams
+   pwsh ./scripts/Export-ReadmeDiagrams.ps1
    ```
-   This exports both light and dark theme SVGs to `docs/diagrams/images/light/` and `docs/diagrams/images/dark/`.
+   This writes self-contained light/dark SVGs to `.github/diagrams/`. Commit the results.
 
 #### Mermaid Process Diagrams
 
@@ -130,7 +132,7 @@ Each diagram has a `> Last updated: <date>, JIM v<version>` line near the top. I
 #### Diagram references in documentation
 
 Verify that pages embedding or linking to diagrams are up to date:
-- `README.md` — SVG references in the Architecture section (light/dark variants under `docs/diagrams/images/`)
+- `README.md` — SVG references in the Architecture section (light/dark variants under `.github/diagrams/`)
 - `docs/concepts/architecture.md` and other docs/ pages that embed C4 diagrams
 - `engineering/DEVELOPER_GUIDE.md` — C4 and Mermaid diagram listings and links
 
@@ -173,7 +175,7 @@ Show the user a summary of all documentation and diagram changes made:
 Once confirmed, commit the documentation updates on a release branch (do NOT commit to `main` directly — branch protection blocks that). If you are not already on a release branch, create one first:
 ```bash
 git checkout -b release/v<version>
-git add README.md docs/ engineering/ docs/diagrams/images/
+git add README.md docs/ engineering/ .github/diagrams/
 git commit -m "docs: update documentation and diagrams for v<version> release"
 ```
 

@@ -934,6 +934,92 @@ public class MetaverseRepository : IMetaverseRepository
         return candidates;
     }
 
+    public async Task<List<MetaverseObjectRecallSummary>> GetMetaverseObjectRecallSummariesAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> scopingAttributeIds)
+    {
+        if (metaverseObjectIds.Count == 0)
+            return new List<MetaverseObjectRecallSummary>();
+
+        // Raw SQL into a Summary-tier DTO (sync hot path, #1003): reference recall staging needs the
+        // type id (rule routing), display name (Activity reporting) and only the scoping-criteria
+        // attribute values - never the full attribute graph a group carries (tens of thousands of
+        // member rows for a large group, the dominant cost of the pre-#1003 per-flush loads).
+        var ids = metaverseObjectIds.ToArray();
+        var summariesById = new Dictionary<Guid, MetaverseObjectRecallSummary>(metaverseObjectIds.Count);
+
+        var connection = Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                @"SELECT ""Id"", ""TypeId"", ""CachedDisplayName""
+                  FROM ""MetaverseObjects""
+                  WHERE ""Id"" = ANY(@ids)";
+            var idsParameter = command.CreateParameter();
+            idsParameter.ParameterName = "ids";
+            idsParameter.Value = ids;
+            command.Parameters.Add(idsParameter);
+
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var summary = new MetaverseObjectRecallSummary
+                {
+                    Id = reader.GetGuid(0),
+                    TypeId = reader.GetInt32(1),
+                    DisplayName = reader.IsDBNull(2) ? null : reader.GetString(2)
+                };
+                summariesById[summary.Id] = summary;
+            }
+        }
+
+        if (scopingAttributeIds.Count == 0 || summariesById.Count == 0)
+            return summariesById.Values.ToList();
+
+        // Scalar columns plus the asserted-null marker: exactly what export rule scoping criteria
+        // evaluation reads. Reference and binary attributes are not evaluable by scoping criteria.
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                @"SELECT ""MetaverseObjectId"", ""Id"", ""AttributeId"", ""StringValue"", ""IntValue"", ""LongValue"",
+                         ""DateTimeValue"", ""BoolValue"", ""GuidValue"", ""NullValue""
+                  FROM ""MetaverseObjectAttributeValues""
+                  WHERE ""MetaverseObjectId"" = ANY(@ids) AND ""AttributeId"" = ANY(@attributeIds)";
+            var idsParameter = command.CreateParameter();
+            idsParameter.ParameterName = "ids";
+            idsParameter.Value = ids;
+            command.Parameters.Add(idsParameter);
+            var attributeIdsParameter = command.CreateParameter();
+            attributeIdsParameter.ParameterName = "attributeIds";
+            attributeIdsParameter.Value = scopingAttributeIds.ToArray();
+            command.Parameters.Add(attributeIdsParameter);
+
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                if (!summariesById.TryGetValue(reader.GetGuid(0), out var summary))
+                    continue;
+
+                summary.ScopingAttributeValues.Add(new MetaverseObjectAttributeValue
+                {
+                    Id = reader.GetGuid(1),
+                    AttributeId = reader.GetInt32(2),
+                    StringValue = reader.IsDBNull(3) ? null : reader.GetString(3),
+                    IntValue = reader.IsDBNull(4) ? null : reader.GetInt32(4),
+                    LongValue = reader.IsDBNull(5) ? null : reader.GetInt64(5),
+                    DateTimeValue = reader.IsDBNull(6) ? null : reader.GetDateTime(6),
+                    BoolValue = reader.IsDBNull(7) ? null : reader.GetBoolean(7),
+                    GuidValue = reader.IsDBNull(8) ? null : reader.GetGuid(8),
+                    NullValue = reader.GetBoolean(9)
+                });
+            }
+        }
+
+        return summariesById.Values.ToList();
+    }
+
     public async Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
     {
         if (ids.Count == 0)

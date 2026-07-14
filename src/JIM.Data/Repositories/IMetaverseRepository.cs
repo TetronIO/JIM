@@ -75,6 +75,15 @@ public interface IMetaverseRepository
         IReadOnlyCollection<Guid> referencedMetaverseObjectIds);
 
     /// <summary>
+    /// Summary-tier load of referencing Metaverse Objects for reference recall staging (#1003):
+    /// id, type id and display name, plus only the attribute values whose attribute ids are in
+    /// <paramref name="scopingAttributeIds"/>. Never materialises the objects' full attribute graphs.
+    /// </summary>
+    public Task<List<MetaverseObjectRecallSummary>> GetMetaverseObjectRecallSummariesAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> scopingAttributeIds);
+
+    /// <summary>
     /// Bulk-updates the Temporal Scope Reconciler bookkeeping on a set of Metaverse Objects (issue #892):
     /// advances <c>LastScopeEvaluatedAt</c> to <paramref name="nowUtc"/> for every evaluated object, and sets
     /// <c>ScopeReviewPending</c> true for those in <paramref name="flaggedIds"/> and false for the rest (so a

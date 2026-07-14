@@ -313,6 +313,41 @@ public interface ISyncRepository
         IReadOnlyCollection<Guid> referencedMetaverseObjectIds);
 
     /// <summary>
+    /// Summary-tier load of referencing Metaverse Objects for reference recall staging (#1003):
+    /// id, type id and display name, plus only the attribute values whose attribute ids are in
+    /// <paramref name="scopingAttributeIds"/> (scalar columns and the asserted-null marker; no
+    /// navigations). Never materialises the objects' full attribute graphs.
+    /// </summary>
+    Task<List<MetaverseObjectRecallSummary>> GetMetaverseObjectRecallSummariesAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> scopingAttributeIds);
+
+    /// <summary>
+    /// Summary-tier load of the Connected System Objects joined to the given Metaverse Objects in
+    /// the given target systems, for reference recall staging (#1003). Scalars only; no attribute
+    /// values, no entity materialisation into the change tracker.
+    /// </summary>
+    Task<List<ConnectedSystemObjectRecallTarget>> GetConnectedSystemObjectRecallTargetsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> targetConnectedSystemIds);
+
+    /// <summary>
+    /// The reference recall existence query (#1003): returns the Connected System Object attribute
+    /// value rows among <paramref name="connectedSystemObjectIds"/> x <paramref name="connectedSystemAttributeIds"/>
+    /// that reference a deleted object, matched by resolved reference
+    /// (<paramref name="deletedReferenceCsoIds"/>) or by case-insensitive raw reference string
+    /// (<paramref name="loweredReferenceValues"/>, pre-lowered with ToLowerInvariant to mirror the
+    /// OrdinalIgnoreCase DN comparison export evaluation uses). Call per target Connected System so
+    /// values cannot cross-match between systems. Rows not returned are values the target does not
+    /// hold; staging nothing for them replaces no-net-change detection.
+    /// </summary>
+    Task<List<CsoReferenceValueMatch>> GetCsoReferenceValueMatchesAsync(
+        IReadOnlyCollection<Guid> connectedSystemObjectIds,
+        IReadOnlyCollection<int> connectedSystemAttributeIds,
+        IReadOnlyCollection<Guid> deletedReferenceCsoIds,
+        IReadOnlyCollection<string> loweredReferenceValues);
+
+    /// <summary>
     /// Bulk creates MVOs with their attribute values.
     /// </summary>
     Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects);

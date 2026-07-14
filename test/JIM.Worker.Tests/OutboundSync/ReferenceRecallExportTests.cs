@@ -5,6 +5,7 @@ using JIM.Application;
 using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
+using JIM.Models.Search;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.PostgresData;
@@ -29,16 +30,26 @@ public class ReferenceRecallExportTests
     private const int TargetSystemId = 5;
     private const int MvGroupTypeId = 50;
     private const int MvMemberAttributeId = 60;
+    private const int MvDisplayNameAttributeId = 61;
+    private const int MvCategoryAttributeId = 62;
+    private const int MvOwnerAttributeId = 63;
     private const int CsGroupTypeId = 70;
     private const int CsMemberAttributeId = 80;
     private const int CsDnAttributeId = 81;
+    private const int CsCnAttributeId = 82;
+    private const int CsOwnerAttributeId = 83;
 
     private JimApplication Jim { get; set; } = null!;
     private SyncRepository SyncRepo { get; set; } = null!;
     private MetaverseObjectType MvGroupType { get; set; } = null!;
     private MetaverseAttribute MvMemberAttribute { get; set; } = null!;
+    private MetaverseAttribute MvDisplayNameAttribute { get; set; } = null!;
+    private MetaverseAttribute MvCategoryAttribute { get; set; } = null!;
+    private MetaverseAttribute MvOwnerAttribute { get; set; } = null!;
     private ConnectedSystemObjectTypeAttribute CsMemberAttribute { get; set; } = null!;
     private ConnectedSystemObjectTypeAttribute CsDnAttribute { get; set; } = null!;
+    private ConnectedSystemObjectTypeAttribute CsCnAttribute { get; set; } = null!;
+    private ConnectedSystemObjectTypeAttribute CsOwnerAttribute { get; set; } = null!;
 
     [SetUp]
     public void Setup()
@@ -56,11 +67,30 @@ public class ReferenceRecallExportTests
             Type = AttributeDataType.Reference,
             AttributePlurality = AttributePlurality.MultiValued
         };
+        MvDisplayNameAttribute = new MetaverseAttribute
+        {
+            Id = MvDisplayNameAttributeId,
+            Name = "Display Name",
+            Type = AttributeDataType.Text
+        };
+        MvCategoryAttribute = new MetaverseAttribute
+        {
+            Id = MvCategoryAttributeId,
+            Name = "Group Category",
+            Type = AttributeDataType.Text
+        };
+        MvOwnerAttribute = new MetaverseAttribute
+        {
+            Id = MvOwnerAttributeId,
+            Name = "Owner",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.SingleValued
+        };
         MvGroupType = new MetaverseObjectType
         {
             Id = MvGroupTypeId,
             Name = "Group",
-            Attributes = [MvMemberAttribute]
+            Attributes = [MvMemberAttribute, MvDisplayNameAttribute, MvCategoryAttribute, MvOwnerAttribute]
         };
 
         CsMemberAttribute = new ConnectedSystemObjectTypeAttribute
@@ -77,6 +107,20 @@ public class ReferenceRecallExportTests
             Name = "distinguishedName",
             Type = AttributeDataType.Text,
             IsSecondaryExternalId = true,
+            Selected = true
+        };
+        CsCnAttribute = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = CsCnAttributeId,
+            Name = "cn",
+            Type = AttributeDataType.Text,
+            Selected = true
+        };
+        CsOwnerAttribute = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = CsOwnerAttributeId,
+            Name = "owner",
+            Type = AttributeDataType.Reference,
             Selected = true
         };
 
@@ -258,6 +302,442 @@ public class ReferenceRecallExportTests
         Assert.That(result.PendingExportsStaged, Is.EqualTo(0));
     }
 
+    #region Set-based fast path (#1003)
+
+    /// <summary>
+    /// A group with a pending Delete Pending Export (deprovisioning staged, not yet exported) that
+    /// loses a member must keep its Delete Pending Export: the object is being deleted from the
+    /// target, so a membership removal is moot, and replacing the Delete with an Update would leave
+    /// the group alive in the target system forever.
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_ExistingDeletePendingExportForGroupCso_PreservesDeleteAsync()
+    {
+        // Arrange
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+        var deletePendingExport = SeedPendingExport(groupTargetCso.Id, PendingExportChangeType.Delete);
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        Assert.That(result.SkippedDueToExistingDeletePendingExport, Is.EqualTo(1));
+        Assert.That(result.PendingExportsStaged, Is.EqualTo(0));
+        var survivingPendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id);
+        Assert.That(survivingPendingExport.Id, Is.EqualTo(deletePendingExport.Id),
+            "The Delete Pending Export must survive recall untouched (deprovisioning supersedes membership updates)");
+        Assert.That(survivingPendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
+    }
+
+    /// <summary>
+    /// The Delete-wins rule must hold on the fallback path too (a rule shape that routes the group
+    /// type through full evaluation must not resurrect the pre-#1003 merge behaviour that replaced
+    /// the Delete Pending Export with a membership-removal Update).
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_ExistingDeletePendingExportViaFallbackRule_PreservesDeleteAsync()
+    {
+        // Arrange: an expression mapping that mentions the member attribute routes the type to the fallback.
+        AddExpressionMappingMentioningMembers();
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+        var deletePendingExport = SeedPendingExport(groupTargetCso.Id, PendingExportChangeType.Delete);
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        Assert.That(result.FallbackReferencingObjects, Is.EqualTo(1));
+        var survivingPendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id);
+        Assert.That(survivingPendingExport.Id, Is.EqualTo(deletePendingExport.Id));
+        Assert.That(survivingPendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
+    }
+
+    /// <summary>
+    /// A group provisioned this run (CSO PendingProvisioning, unexported Create Pending Export)
+    /// that loses a member must keep its Create Pending Export: there is nothing in the target to
+    /// remove a member from yet, and destroying the Create leaves the CSO stranded in
+    /// PendingProvisioning with no export at all.
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_GroupCsoPendingProvisioning_LeavesCreatePendingExportUntouchedAsync()
+    {
+        // Arrange: provisioning-enabled rule, PendingProvisioning group CSO with its Create PE.
+        var exportRule = SyncRepo.SyncRules.Values.Single();
+        exportRule.ProvisionToConnectedSystem = true;
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+        groupTargetCso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+        var createPendingExport = SeedPendingExport(groupTargetCso.Id, PendingExportChangeType.Create);
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        Assert.That(result.PendingExportsStaged, Is.EqualTo(0),
+            "Recall must not provision and must not touch a pending Create export");
+        var survivingPendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id);
+        Assert.That(survivingPendingExport.Id, Is.EqualTo(createPendingExport.Id),
+            "The Create Pending Export must survive recall untouched");
+        Assert.That(survivingPendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create));
+    }
+
+    /// <summary>
+    /// The PendingProvisioning guard must hold on the fallback path too.
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_GroupCsoPendingProvisioningViaFallbackRule_LeavesCreateUntouchedAsync()
+    {
+        // Arrange
+        AddExpressionMappingMentioningMembers();
+        var exportRule = SyncRepo.SyncRules.Values.Single(r => r.Id == 900);
+        exportRule.ProvisionToConnectedSystem = true;
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+        groupTargetCso.Status = ConnectedSystemObjectStatus.PendingProvisioning;
+        var createPendingExport = SeedPendingExport(groupTargetCso.Id, PendingExportChangeType.Create);
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        Assert.That(result.FallbackReferencingObjects, Is.EqualTo(1));
+        var survivingPendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id);
+        Assert.That(survivingPendingExport.Id, Is.EqualTo(createPendingExport.Id));
+        Assert.That(survivingPendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Create));
+    }
+
+    /// <summary>
+    /// A rule whose mapping sources the member attribute through an expression cannot be handled by
+    /// the direct fast path; the whole type must route through the full-evaluation fallback and the
+    /// removal must still be staged (via the rule's direct member mapping).
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_ExpressionSourcingReferenceAttribute_RoutesToFallbackAndStagesRemovalAsync()
+    {
+        // Arrange
+        AddExpressionMappingMentioningMembers();
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        Assert.That(result.FallbackReferencingObjects, Is.EqualTo(1));
+        Assert.That(result.FastPathReferencingObjects, Is.EqualTo(0));
+        var pendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id);
+        Assert.That(pendingExport.AttributeValueChanges.Any(avc =>
+                avc.ChangeType == PendingExportAttributeChangeType.Remove &&
+                avc.AttributeId == CsMemberAttributeId &&
+                avc.StringValue == memberDn),
+            "The fallback must still stage the pre-resolved membership removal");
+    }
+
+    /// <summary>
+    /// An expression mapping that does NOT reference the member attribute must not force the type
+    /// off the fast path, and the fast path stages ONLY the reference removal: recall no longer
+    /// piggybacks incidental drift corrections from re-evaluating unrelated flows (a deliberate
+    /// #1003 semantic change; drift correction is drift detection's job).
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_UnrelatedExpressionMapping_StaysOnFastPathWithoutPiggybackAsync()
+    {
+        // Arrange: expression flows Display Name to cn; the group's CSO has no cn value, so the old
+        // behaviour would have piggybacked a cn Update onto the recall Pending Export.
+        AddUnrelatedExpressionMapping();
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        groupMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = groupMvo,
+            Attribute = MvDisplayNameAttribute,
+            AttributeId = MvDisplayNameAttribute.Id,
+            StringValue = "Team Alpha"
+        });
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        Assert.That(result.FastPathReferencingObjects, Is.EqualTo(1));
+        Assert.That(result.FallbackReferencingObjects, Is.EqualTo(0));
+        var pendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id);
+        Assert.That(pendingExport.AttributeValueChanges, Has.Count.EqualTo(1),
+            "Only the reference removal may be staged; no piggybacked changes from unrelated flows");
+        Assert.That(pendingExport.AttributeValueChanges.Single().StringValue, Is.EqualTo(memberDn));
+    }
+
+    /// <summary>
+    /// A scoped export rule whose criteria the referencing group does not meet stages nothing:
+    /// scope evaluation must survive on the fast path (lean criteria-only attribute load), not be
+    /// skipped for speed.
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_ScopedRuleGroupOutOfScope_StagesNothingAsync()
+    {
+        // Arrange
+        AddScopingCriterion(categoryValue: "distribution");
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        SetGroupCategory(groupMvo, "security");
+        SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        Assert.That(result.FastPathReferencingObjects, Is.EqualTo(1), "Scoped rules must not force the fallback path");
+        Assert.That(result.PendingExportsStaged, Is.EqualTo(0),
+            "An out-of-scope group must not receive a recall Pending Export");
+        Assert.That(SyncRepo.PendingExports, Is.Empty);
+    }
+
+    /// <summary>
+    /// The in-scope sibling of the test above: the same criteria met must stage the removal via the
+    /// fast path.
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_ScopedRuleGroupInScope_StagesRemovalAsync()
+    {
+        // Arrange
+        AddScopingCriterion(categoryValue: "distribution");
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        SetGroupCategory(groupMvo, "distribution");
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        Assert.That(result.FastPathReferencingObjects, Is.EqualTo(1));
+        Assert.That(result.PendingExportsStaged, Is.EqualTo(1));
+        var change = SyncRepo.PendingExports.Values
+            .Single(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id)
+            .AttributeValueChanges.Single();
+        Assert.That(change.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Remove));
+        Assert.That(change.StringValue, Is.EqualTo(memberDn));
+    }
+
+    /// <summary>
+    /// Merging into an existing (unexported) Update Pending Export: recall changes join the
+    /// existing ones, an unrelated pending change survives, a stale Add whose unresolved reference
+    /// is the deleted Metaverse Object is purged (it could never resolve, and would wedge the whole
+    /// Pending Export in deferred-resolution limbo), and HasUnresolvedReferences is recomputed.
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_ExistingUpdatePendingExportForGroupCso_MergesAndPurgesAsync()
+    {
+        // Arrange
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+        var existingPendingExport = SeedPendingExport(groupTargetCso.Id, PendingExportChangeType.Update);
+        existingPendingExport.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            Attribute = CsDnAttribute,
+            AttributeId = CsDnAttribute.Id,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            StringValue = "cn=Team Alpha Renamed,ou=Groups,dc=glitterband,dc=local"
+        });
+        existingPendingExport.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            Attribute = CsMemberAttribute,
+            AttributeId = CsMemberAttribute.Id,
+            ChangeType = PendingExportAttributeChangeType.Add,
+            UnresolvedReferenceValue = memberMvo.Id.ToString()
+        });
+        existingPendingExport.HasUnresolvedReferences = true;
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        Assert.That(result.FastPathReferencingObjects, Is.EqualTo(1));
+        Assert.That(result.PendingExportsStaged, Is.EqualTo(1));
+        var mergedPendingExport = SyncRepo.PendingExports.Values.Single(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id);
+        Assert.That(mergedPendingExport.ChangeType, Is.EqualTo(PendingExportChangeType.Update));
+        Assert.That(mergedPendingExport.AttributeValueChanges, Has.Count.EqualTo(2),
+            "The removal and the unrelated rename must survive; the unresolvable Add must be purged");
+        Assert.That(mergedPendingExport.AttributeValueChanges.Any(avc =>
+            avc.ChangeType == PendingExportAttributeChangeType.Remove && avc.StringValue == memberDn));
+        Assert.That(mergedPendingExport.AttributeValueChanges.Any(avc =>
+            avc.AttributeId == CsDnAttributeId && avc.ChangeType == PendingExportAttributeChangeType.Update));
+        Assert.That(mergedPendingExport.HasUnresolvedReferences, Is.False,
+            "HasUnresolvedReferences must be recomputed after the purge");
+    }
+
+    /// <summary>
+    /// A single-valued reference (for example an owner) still pointing at the deleted object must
+    /// be cleared with an all-null Update change, the same null-clearing shape normal export
+    /// evaluation produces.
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_SingleValuedReferenceStillHeld_StagesNullClearingUpdateAsync()
+    {
+        // Arrange
+        AddOwnerMapping();
+        var (ownerMvo, ownerDn) = SeedMemberWithTargetCso("uid=oscar.owner,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoOwning(ownerMvo.Id);
+        var groupTargetCso = SeedGroupTargetCsoWithOwner(groupMvo, ownerMvo.Id, ownerDn);
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([ownerMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(ownerMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [ownerMvo.Id]);
+
+        // Assert
+        Assert.That(result.FastPathReferencingObjects, Is.EqualTo(1));
+        Assert.That(result.PendingExportsStaged, Is.EqualTo(1));
+        var change = SyncRepo.PendingExports.Values
+            .Single(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id)
+            .AttributeValueChanges.Single();
+        Assert.That(change.AttributeId, Is.EqualTo(CsOwnerAttributeId));
+        Assert.That(change.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Update));
+        Assert.That(change.StringValue, Is.Null, "A single-valued reference removal is an all-null (clearing) Update");
+        Assert.That(change.UnresolvedReferenceValue, Is.Null);
+    }
+
+    /// <summary>
+    /// A single-valued reference the target has already re-pointed at someone else must NOT be
+    /// cleared: the deleted object is not the value being held, so recall has nothing to remove.
+    /// (The pre-#1003 behaviour cleared the attribute whenever it had any value; this pins the
+    /// narrower, correct predicate.)
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_SingleValuedReferenceRepointed_StagesNothingAsync()
+    {
+        // Arrange: the group MVO still references the deleted owner, but the target CSO already
+        // holds a different owner value (drifted or re-pointed out of band).
+        AddOwnerMapping();
+        var (ownerMvo, _) = SeedMemberWithTargetCso("uid=oscar.owner,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoOwning(ownerMvo.Id);
+        var groupTargetCso = SeedGroupTargetCsoWithOwner(groupMvo, ownerMvoId: null,
+            ownerDn: "uid=nadia.new,ou=People,dc=glitterband,dc=local");
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([ownerMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(ownerMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [ownerMvo.Id]);
+
+        // Assert
+        Assert.That(result.PendingExportsStaged, Is.EqualTo(0),
+            "The target no longer holds the deleted reference; clearing it would destroy the re-pointed value");
+        Assert.That(SyncRepo.PendingExports.Values.Any(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id), Is.False);
+    }
+
+    /// <summary>
+    /// A target member row that carries only the resolved reference (ReferenceValueId set, no raw
+    /// string) must still be matched and removed. The pre-#1003 string-only comparison missed these
+    /// rows entirely.
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_MemberRowKeyedByReferenceValueIdOnly_StagesRemovalAsync()
+    {
+        // Arrange
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+        var memberRow = groupTargetCso.AttributeValues.Single(av => av.AttributeId == CsMemberAttributeId);
+        memberRow.UnresolvedReferenceValue = null;
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        Assert.That(result.PendingExportsStaged, Is.EqualTo(1),
+            "A resolved-only member row references the deleted object and must be removed");
+        var change = SyncRepo.PendingExports.Values
+            .Single(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id)
+            .AttributeValueChanges.Single();
+        Assert.That(change.ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Remove));
+        Assert.That(change.StringValue, Is.EqualTo(memberDn),
+            "The removal value comes from the pre-deletion capture, not the (absent) raw row string");
+    }
+
+    /// <summary>
+    /// A caller-provided run-scoped cache must be honoured: staging must not reload Synchronisation
+    /// Rules per flush (the pre-#1003 behaviour rebuilt the rule cache on every deletion flush).
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_ProvidedCache_DoesNotReloadSyncRulesAsync()
+    {
+        // Arrange
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+        var recallCache = await Jim.ExportEvaluation.BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0);
+        var ruleLoadsAfterCacheBuild = SyncRepo.GetAllSyncRulesCallCount;
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id], recallCache);
+
+        // Assert
+        Assert.That(result.PendingExportsStaged, Is.EqualTo(1));
+        Assert.That(SyncRepo.GetAllSyncRulesCallCount, Is.EqualTo(ruleLoadsAfterCacheBuild),
+            "Staging with a provided cache must not reload Synchronisation Rules");
+    }
+
+    /// <summary>
+    /// The staged Pending Exports and referencing-object display names must be exposed on the
+    /// result so the sync flush can fold them into Activity reporting (RPEIs and outcomes).
+    /// </summary>
+    [Test]
+    public async Task StageReferenceRecallExports_StagedPendingExports_ExposedOnResultAsync()
+    {
+        // Arrange
+        var (memberMvo, memberDn) = SeedMemberWithTargetCso("uid=lena.leaver,ou=People,dc=glitterband,dc=local");
+        var groupMvo = SeedGroupMvoReferencing(memberMvo.Id);
+        groupMvo.CachedDisplayName = "Team Alpha";
+        var groupTargetCso = SeedGroupTargetCso(groupMvo, memberReferences: [(memberMvo.Id, memberDn)]);
+
+        // Act
+        var context = await Jim.ExportEvaluation.CaptureReferenceRecallContextAsync([memberMvo.Id]);
+        await SyncRepo.DeleteMetaverseObjectAsync(memberMvo);
+        var result = await Jim.ExportEvaluation.StageReferenceRecallExportsAsync(context, [memberMvo.Id]);
+
+        // Assert
+        Assert.That(result.StagedPendingExports, Has.Count.EqualTo(1));
+        Assert.That(result.StagedPendingExports.Single().ConnectedSystemObjectId, Is.EqualTo(groupTargetCso.Id));
+        Assert.That(result.ReferencingObjectDisplayNames, Contains.Key(groupMvo.Id));
+        Assert.That(result.ReferencingObjectDisplayNames[groupMvo.Id], Is.EqualTo("Team Alpha"));
+    }
+
+    #endregion
+
     #region helpers
     /// <summary>
     /// Seeds a member Metaverse Object joined to a provisioned target CSO whose secondary external ID
@@ -347,6 +827,189 @@ public class ReferenceRecallExportTests
             });
         }
 
+        SyncRepo.SeedConnectedSystemObject(groupCso);
+        return groupCso;
+    }
+
+    /// <summary>
+    /// Seeds an unexported Pending Export of the given change type for a CSO, mirroring one staged
+    /// by an earlier sync (deprovisioning, provisioning, or a prior update).
+    /// </summary>
+    private PendingExport SeedPendingExport(Guid connectedSystemObjectId, PendingExportChangeType changeType)
+    {
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystemId,
+            ConnectedSystemObjectId = connectedSystemObjectId,
+            ChangeType = changeType,
+            Status = PendingExportStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        };
+        SyncRepo.CreatePendingExportsAsync([pendingExport]).GetAwaiter().GetResult();
+        return pendingExport;
+    }
+
+    /// <summary>
+    /// Adds an expression mapping that references the member attribute by name, which must route
+    /// the group type through the full-evaluation fallback (an expression can consume the
+    /// reference attribute in ways the direct fast path cannot reproduce).
+    /// </summary>
+    private void AddExpressionMappingMentioningMembers()
+    {
+        var exportRule = SyncRepo.SyncRules.Values.Single(r => r.Id == 900);
+        exportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 903,
+            TargetConnectedSystemAttribute = CsCnAttribute,
+            TargetConnectedSystemAttributeId = CsCnAttribute.Id,
+            Sources =
+            {
+                new SyncRuleMappingSource
+                {
+                    Id = 904,
+                    Order = 0,
+                    Expression = "mv[\"Static Members\"] != null ? \"grp\" : \"empty\""
+                }
+            }
+        });
+    }
+
+    /// <summary>
+    /// Adds an expression mapping that does not touch the member attribute; the type must stay on
+    /// the fast path.
+    /// </summary>
+    private void AddUnrelatedExpressionMapping()
+    {
+        var exportRule = SyncRepo.SyncRules.Values.Single(r => r.Id == 900);
+        exportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 905,
+            TargetConnectedSystemAttribute = CsCnAttribute,
+            TargetConnectedSystemAttributeId = CsCnAttribute.Id,
+            Sources =
+            {
+                new SyncRuleMappingSource
+                {
+                    Id = 906,
+                    Order = 0,
+                    Expression = "mv[\"Display Name\"]"
+                }
+            }
+        });
+    }
+
+    /// <summary>
+    /// Scopes the export rule to groups whose Group Category equals the given value.
+    /// </summary>
+    private void AddScopingCriterion(string categoryValue)
+    {
+        var exportRule = SyncRepo.SyncRules.Values.Single(r => r.Id == 900);
+        exportRule.ObjectScopingCriteriaGroups.Add(new SyncRuleScopingCriteriaGroup
+        {
+            Id = 910,
+            Type = SearchGroupType.All,
+            Criteria =
+            {
+                new SyncRuleScopingCriteria
+                {
+                    Id = 911,
+                    MetaverseAttribute = MvCategoryAttribute,
+                    MetaverseAttributeId = MvCategoryAttribute.Id,
+                    ComparisonType = SearchComparisonType.Equals,
+                    StringValue = categoryValue
+                }
+            }
+        });
+    }
+
+    /// <summary>
+    /// Sets the group's Group Category attribute value (used by scoped-rule tests).
+    /// </summary>
+    private void SetGroupCategory(MetaverseObject groupMvo, string categoryValue)
+    {
+        groupMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = groupMvo,
+            Attribute = MvCategoryAttribute,
+            AttributeId = MvCategoryAttribute.Id,
+            StringValue = categoryValue
+        });
+    }
+
+    /// <summary>
+    /// Adds a single-valued Owner reference mapping to the export rule (Owner -> owner).
+    /// </summary>
+    private void AddOwnerMapping()
+    {
+        var exportRule = SyncRepo.SyncRules.Values.Single(r => r.Id == 900);
+        exportRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 907,
+            TargetConnectedSystemAttribute = CsOwnerAttribute,
+            TargetConnectedSystemAttributeId = CsOwnerAttribute.Id,
+            Sources =
+            {
+                new SyncRuleMappingSource
+                {
+                    Id = 908,
+                    Order = 0,
+                    MetaverseAttribute = MvOwnerAttribute,
+                    MetaverseAttributeId = MvOwnerAttribute.Id
+                }
+            }
+        });
+    }
+
+    /// <summary>
+    /// Seeds a group Metaverse Object whose single-valued Owner attribute references the given
+    /// Metaverse Object.
+    /// </summary>
+    private MetaverseObject SeedGroupMvoOwning(Guid ownerMvoId)
+    {
+        var groupMvo = new MetaverseObject { Id = Guid.NewGuid(), Type = MvGroupType };
+        groupMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = groupMvo,
+            Attribute = MvOwnerAttribute,
+            AttributeId = MvOwnerAttribute.Id,
+            ReferenceValueId = ownerMvoId
+        });
+        SyncRepo.SeedMetaverseObject(groupMvo);
+        return groupMvo;
+    }
+
+    /// <summary>
+    /// Seeds the group's provisioned target CSO with a single-valued owner attribute value. Pass a
+    /// null <paramref name="ownerMvoId"/> for a value that does not resolve to any known CSO (a
+    /// drifted or re-pointed owner).
+    /// </summary>
+    private ConnectedSystemObject SeedGroupTargetCsoWithOwner(MetaverseObject groupMvo, Guid? ownerMvoId, string ownerDn)
+    {
+        var groupCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystemId,
+            TypeId = CsGroupTypeId,
+            Status = ConnectedSystemObjectStatus.Normal,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            MetaverseObjectId = groupMvo.Id
+        };
+        var ownerCso = ownerMvoId.HasValue
+            ? SyncRepo.ConnectedSystemObjects.Values
+                .FirstOrDefault(c => c.MetaverseObjectId == ownerMvoId && c.ConnectedSystemId == TargetSystemId)
+            : null;
+        groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = groupCso,
+            Attribute = CsOwnerAttribute,
+            AttributeId = CsOwnerAttribute.Id,
+            ReferenceValueId = ownerCso?.Id,
+            UnresolvedReferenceValue = ownerDn
+        });
         SyncRepo.SeedConnectedSystemObject(groupCso);
         return groupCso;
     }
