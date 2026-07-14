@@ -1,6 +1,6 @@
 # OWASP Top 10:2025 Assessment
 
-- **Status:** Doing (Gap 1, rate limiting, remediated; Gaps 2-5 remain open, see issue for current status)
+- **Status:** Doing (remediation in progress; see [issue #500](https://github.com/TetronIO/JIM/issues/500) for current per-gap status)
 - **Issue:** [#500](https://github.com/TetronIO/JIM/issues/500)
 - **Assessed:** 2026-04-09
 - **Standard:** [OWASP Top 10:2025](https://owasp.org/Top10/2025/)
@@ -49,13 +49,13 @@ Core security configuration is sound: HSTS, HTTPS redirection, restricted develo
 
 No `UseRateLimiter()` middleware is configured. Authentication endpoints (`/api/auth`, `/api/apikeys`) are exposed to brute-force attacks with no throttle. This is the highest-priority gap in the assessment.
 
-Remediated: `Microsoft.AspNetCore.RateLimiting` (built-in; no new dependency) now protects the whole REST API with per-client partitioning (authenticated principal or client IP), HTTP 429 with `Retry-After`, and `ForwardedHeaders` handling (`JIM_TRUSTED_PROXIES`) so per-IP partitioning is correct behind a reverse proxy. Limits are runtime-tunable via Service Settings. See [Rate Limiting](../../docs/api/rate-limiting.md).
+Remediated: `Microsoft.AspNetCore.RateLimiting` (built-in; no new dependency) now protects the whole REST API with per-client partitioning (authenticated principal or client IP), HTTP 429 with `Retry-After`, and `ForwardedHeaders` handling (`JIM_TRUSTED_PROXIES`) so per-IP partitioning is correct behind a reverse proxy. Limits are runtime-tunable via Service Settings. See [Rate Limiting](../../../docs/api/rate-limiting.md).
 
 **Gap 2: No Content Security Policy header (Medium priority) - ✅ Remediated**
 
 No explicit CSP header is defined. Blazor Server uses inline scripts/styles which complicates CSP, but a policy should still be defined to mitigate XSS risks.
 
-Remediated: a new `SecurityHeadersMiddleware` (`JIM.Web/Middleware/`) now sets a stage-one Content Security Policy plus `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and `Permissions-Policy` on every response, site-wide (Blazor UI, static assets, REST API). The CSP follows recommendation Option C below (`'unsafe-inline'` for `script-src`/`style-src`, matching Blazor Server's and MudBlazor's current inline usage); the nonce-based Option A remains tracked as a future stage. See [Security Headers](../../docs/administration/security-headers.md).
+Remediated: a new `SecurityHeadersMiddleware` (`JIM.Web/Middleware/`) now sets a stage-one Content Security Policy plus `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and `Permissions-Policy` on every response, site-wide (Blazor UI, static assets, REST API). The CSP follows recommendation Option C below (`'unsafe-inline'` for `script-src`/`style-src`, matching Blazor Server's and MudBlazor's current inline usage); the nonce-based Option A remains tracked as a future stage. See [Security Headers](../../../docs/administration/security-headers.md).
 
 ---
 
@@ -261,6 +261,8 @@ A global exception handler catches all unhandled exceptions. Production response
 4. CI builds use `dotnet restore --locked-mode` to fail if lock files are out of date
 
 **Effort:** Low
+
+**Status: Implemented.** `packages.lock.json` is now committed for every project, and `Directory.Build.props` forces `RestoreLockedMode` whenever `CI=true`, with explicit `--locked-mode` / `/p:RestoreLockedMode=true` in CI, the release workflow, and all three production container image builds. Because Dependabot does not reliably regenerate lock files across project references when it bumps a NuGet version, a new `regenerate-nuget-lock-files` workflow watches Dependabot's NuGet branches and pushes a signed regeneration commit automatically. See `engineering/DEPENDENCY_PINNING.md` for the full policy.
 
 ---
 

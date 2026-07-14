@@ -1,0 +1,139 @@
+# Regenerates NuGet packages.lock.json files on Dependabot NuGet PRs.
+#
+# Why this exists: Dependabot does not reliably regenerate packages.lock.json
+# across project references when it bumps a version in a .csproj
+# (dependabot-core#12318, dependabot-core#10863). JIM enforces locked-mode
+# restore in CI (Directory.Build.props sets RestoreLockedMode when CI=true; see
+# engineering/DEPENDENCY_PINNING.md), so without this workflow every Dependabot
+# NuGet PR would fail restore the moment its csproj bump diverges from the
+# committed lock files.
+#
+# Expected transient red: the FIRST CI run triggered by a Dependabot push can
+# fail locked-mode restore (the lock files have not caught up yet). This
+# workflow then regenerates and pushes the lock files to the same branch, which
+# (because the push is authored by the jim-automation GitHub App, not
+# Dependabot) re-triggers CI on the new head; that second run is green. Do not
+# treat the first failure as a real build break; check whether this workflow
+# has since pushed a "regenerate NuGet lock files" commit before investigating.
+#
+# Self-limiting by design: the commit this workflow pushes is authored by the
+# jim-automation App, so the resulting push event has github.actor set to the
+# App's bot identity, not 'dependabot[bot]'. The job guard below only matches
+# 'dependabot[bot]', so the App's own push does not re-trigger this workflow;
+# there is no loop.
+#
+# Identity / token choice (same reasoning as apt-pin-check.yml and
+# tooling-pin-check.yml):
+#   1. `main` (and Dependabot branches, transitively, once merged) requires
+#      signed commits. Commits created via the GitHub API (the GraphQL
+#      createCommitOnBranch mutation below) are signed by GitHub and show as
+#      "Verified"; a plain `git commit` from the runner would be unsigned and
+#      is never used here.
+#   2. Pushing with the default GITHUB_TOKEN does NOT trigger downstream
+#      workflow runs, so the required CI checks would never run on the new
+#      head. Pushing with a GitHub App installation token does trigger them.
+#   The jim-automation App's credentials live in the JIM_AUTOMATION_APP_ID and
+#   JIM_AUTOMATION_PRIVATE_KEY secrets; the workflow mints a short-lived
+#   (1 hour) installation token from them per run.
+
+name: regenerate-nuget-lock-files
+
+on:
+  push:
+    branches:
+      - 'dependabot/nuget/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: regenerate-nuget-lock-files-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regenerate:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          app-id: ${{ secrets.JIM_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.JIM_AUTOMATION_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          ref: ${{ github.ref }}
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Regenerate lock files
+        run: dotnet restore JIM.sln --force-evaluate
+
+      - name: Commit regenerated lock files, if any changed
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          # Passed via env rather than interpolated into the script body, so
+          # the branch name can never be evaluated as script (CodeQL actions
+          # injection hygiene; Dependabot branch names are trusted, belt and braces).
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $status = git status --porcelain -- '**/packages.lock.json'
+          if (-not $status) {
+            Write-Host 'No lock file changes needed; Dependabot bump was already consistent.'
+            exit 0
+          }
+
+          $changed = @($status | ForEach-Object { $_.Substring(3) })
+          Write-Host "Regenerated lock files:"; $changed | ForEach-Object { Write-Host "  $_" }
+
+          # Signed commit via the GraphQL createCommitOnBranch mutation (same
+          # mechanism as .github/scripts/open-pin-pr.ps1): commits made through
+          # the GitHub API are signed by GitHub, satisfying the "main requires
+          # signed commits" rule that a plain `git commit` from the runner
+          # cannot. This pushes directly to the existing Dependabot branch
+          # rather than opening a separate PR.
+          $headOid = (git rev-parse HEAD).Trim()
+
+          $additions = foreach ($path in $changed) {
+              @{
+                  path     = $path
+                  contents = [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path (Get-Location) $path)))
+              }
+          }
+
+          $mutation = @'
+          mutation($input: CreateCommitOnBranchInput!) {
+            createCommitOnBranch(input: $input) { commit { oid url } }
+          }
+          '@
+
+          $commitInput = @{
+              branch          = @{ repositoryNameWithOwner = $env:GITHUB_REPOSITORY; branchName = $env:BRANCH_NAME }
+              message         = @{ headline = 'chore: regenerate NuGet lock files for Dependabot update' }
+              fileChanges     = @{ additions = @($additions) }
+              expectedHeadOid = $headOid
+          }
+          $payload = @{ query = $mutation; variables = @{ input = $commitInput } } | ConvertTo-Json -Depth 10 -Compress
+
+          $tmp = New-TemporaryFile
+          try {
+              $payload | Out-File -FilePath $tmp -Encoding utf8
+              $resp = Get-Content -Raw $tmp | & gh api graphql --input -
+              if ($LASTEXITCODE -ne 0) { throw "createCommitOnBranch call failed (exit $LASTEXITCODE): $resp" }
+              $commitOid = ($resp | ConvertFrom-Json).data.createCommitOnBranch.commit.oid
+              if (-not $commitOid) { throw "createCommitOnBranch returned no commit oid: $resp" }
+              Write-Host "Created signed commit $commitOid on $env:BRANCH_NAME"
+          } finally {
+              Remove-Item $tmp -ErrorAction SilentlyContinue
+          }

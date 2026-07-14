@@ -32,8 +32,9 @@ WORKDIR /src
 COPY ["Directory.Build.props", "./"]
 COPY ["VERSION", "./"]
 COPY ["src/JIM.Scheduler/JIM.Scheduler.csproj", "JIM.Scheduler/"]
+COPY ["src/JIM.Scheduler/packages.lock.json", "JIM.Scheduler/"]
 
-RUN dotnet restore "./JIM.Scheduler/JIM.Scheduler.csproj"
+RUN dotnet restore "./JIM.Scheduler/JIM.Scheduler.csproj" /p:RestoreLockedMode=true
 
 COPY src/ .
 WORKDIR "/src/JIM.Scheduler"
@@ -41,7 +42,7 @@ WORKDIR "/src/JIM.Scheduler"
 # Publish stage - optimised for production
 FROM build AS publish
 ARG VERSION_SUFFIX=
-RUN dotnet publish "JIM.Scheduler.csproj" -c Release -o /app/publish /p:VersionSuffix="${VERSION_SUFFIX}"
+RUN dotnet publish "JIM.Scheduler.csproj" -c Release -o /app/publish /p:VersionSuffix="${VERSION_SUFFIX}" /p:RestoreLockedMode=true
 
 # Final stage - use published output
 FROM base AS final

@@ -319,7 +319,7 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 
 ## OWASP Top 10:2025 Assessment
 
-A full assessment against the OWASP Top 10:2025 is documented in [`engineering/plans/OWASP_TOP_10_ASSESSMENT.md`](plans/OWASP_TOP_10_ASSESSMENT.md) (first published 2026-04-09).
+A full assessment against the OWASP Top 10:2025 is documented in [`engineering/plans/doing/OWASP_TOP_10_ASSESSMENT.md`](plans/doing/OWASP_TOP_10_ASSESSMENT.md) (first published 2026-04-09).
 
 **Overall result:** Strong. The fundamentals (authentication, access control, cryptography, injection prevention, exception handling) are solid and well-implemented. Five gaps were identified; none represent critical vulnerabilities, but all are tracked for remediation to maintain the security posture expected by JIM's target deployment environments.
 
@@ -327,7 +327,7 @@ A full assessment against the OWASP Top 10:2025 is documented in [`engineering/p
 |----------|--------|------|
 | A01:2025 - Broken Access Control | Strong | None |
 | A02:2025 - Security Misconfiguration | Strong | None (rate limiting and defence-in-depth response headers, including CSP, both remediated) |
-| A03:2025 - Software Supply Chain Failures | Good, with gap | See assessment document |
+| A03:2025 - Software Supply Chain Failures | Good, with gap | Transitive NuGet pinning implemented (see [`DEPENDENCY_PINNING.md`](DEPENDENCY_PINNING.md)); DynamicExpresso review remains open, see assessment document |
 | A04:2025 - Cryptographic Failures | Strong | None |
 | A05:2025 - Injection | Strong | None |
 | A06:2025 - Insecure Design | Strong | None |
@@ -343,7 +343,8 @@ See the assessment document for the full evidence table and remediation plan.
 As of JIM v0.10.0 the following supply chain controls are in place:
 
 - **Docker base images digest-pinned**: all `FROM` lines in `src/JIM.Web/Dockerfile`, `src/JIM.Worker/Dockerfile`, and `src/JIM.Scheduler/Dockerfile` pin `image:tag@sha256:<digest>`. Enforced by the CI `scan-base-images` job. Updates are driven by Dependabot.
-- **GitHub Actions pinned by SHA**: every reusable action referenced from `.github/workflows/` is pinned to a commit SHA rather than a mutable tag. Dependabot raises digest/SHA bumps on a daily cadence.
+- **NuGet transitive dependencies locked**: every project carries a `packages.lock.json`; `RestoreLockedMode` is enforced whenever `CI=true`, so CI, the release workflow, and production container image builds can never silently resolve a different transitive dependency graph. Dependabot NuGet PRs get their lock files regenerated automatically by the `regenerate-nuget-lock-files` workflow, since Dependabot itself does not reliably update them. See [`DEPENDENCY_PINNING.md`](DEPENDENCY_PINNING.md) for the full policy across every pinned layer.
+- **GitHub Actions pinned by SHA**: every reusable action referenced from `.github/workflows/` is pinned to a commit SHA rather than a mutable tag. Dependabot raises digest/SHA bumps on a weekly cadence.
 - **Main branch protection**: all changes to `main` must land via pull request with required status checks (build, test, CodeQL, container scan, dependency scan, automated baseline review). Direct pushes and force-pushes are blocked.
 - **Signed commits**: contributors cannot commit without signing; the pre-commit hook enforces this locally and server-side enforcement is planned.
 
