@@ -305,7 +305,7 @@ public interface ISyncServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback = null,
         Func<IConnector>? connectorFactory = null,
-        Func<ISyncRepository>? repositoryFactory = null,
+        Func<ISyncRepositoryScope>? repositoryFactory = null,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null);
 
     #endregion

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- 🔒 Every response from JIM now carries defence-in-depth security headers, including a Content Security Policy, clickjacking denial, and MIME-sniffing protection.
+- 🔒 Every NuGet dependency, including transitive packages, is now locked to exact known-good versions, making JIM's builds reproducible and tamper-evident from source through to container image.
+
 ### Added
 
 - ✨ The REST API is now protected by configurable rate limiting: per-client request limits with sensible defaults, tunable from Service Settings without a restart, returning standard 429 responses with Retry-After guidance.
@@ -19,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Large exports with many reference-bearing objects (for example thousands of groups) no longer fail partway with "the connection pool has been exhausted". Each parallel export batch previously pinned a database connection for the remainder of the run, draining the pool after around 29 batches; batch resources are now released as each batch completes.
+- 🐛 The activity progress shown while an export works through its deferred reference phase is now accurate. It previously restarted the processed count from zero against the full run total (for example "2,884 of 209,984"), producing a misleadingly low objects-per-second rate and a wildly inflated time-remaining estimate.
 - 🐛 Exports running with Max Export Parallelism above one no longer send unresolved reference values (raw internal identifiers) to the target system. Reference resolution results are now persisted before parallel export batches execute, so every batch sees the resolved values; previously group memberships could be exported as invalid values and fail (for example "invalid per syntax" from an LDAP directory).
 - 🐛 Closing the browser or navigating away while an admin page with tabs (such as Operations) was open no longer records spurious Error-level "Navigation failed" and "Unhandled exception in circuit" entries in the JIM.Web log. Any remaining browser-disconnect noise from the framework is now logged at Warning, so Error entries once again indicate genuine problems.
 
@@ -29,10 +36,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Full Imports at large scale are dramatically faster: matched objects are no longer hydrated one database round trip at a time, confirming a large group no longer degrades quadratically with its membership size, and bulk attribute value writes now stream via PostgreSQL binary COPY instead of parameterised inserts. A Full Import of 210,000 objects that previously took over 40 minutes now completes in around 8.
 - ⚡ Deprovisioning users who are members of large groups no longer slows synchronisation to a crawl. Updating or deleting a large group's pending changes no longer reloads the group's full membership from the database each time.
 - ⚡ Deleting Metaverse Objects during synchronisation (0-grace-period deprovisioning) is now set-based instead of object-by-object. Each page of deletions previously cost around 75 sequential database round trips per object (per-object lookups, per-attribute change record inserts, and an unindexed audit-history update); a leaver-cohort page flush that took around 50 seconds now completes in a small, fixed number of bulk operations, and a new index covers the audit-history detach that previously scanned the whole Activities table once per deleted object.
-
-### Security
-
-- 🔒 Every NuGet dependency, including transitive packages, is now locked to exact known-good versions, making JIM's builds reproducible and tamper-evident from source through to container image.
 
 ## [0.13.0] - 2026-07-10
 

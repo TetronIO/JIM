@@ -574,8 +574,7 @@ public partial class SyncRepository
             return result;
 
         var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
-            await connection.OpenAsync();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
 
         var transaction = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
 
