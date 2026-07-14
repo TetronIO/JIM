@@ -21,8 +21,8 @@
 JIM is a modern Identity Management system designed for organisations with complex identity synchronisation requirements. It is self-hosted, container-deployable, and works in both connected and air-gapped networks. Features include:
 
 - Hub-and-spoke architecture using a central metaverse for identity correlation
-- Bidirectional synchronisation of Users, Groups, and custom object types (e.g., Departments, Roles, Computers)
-- [Attribute Priority](https://docs.junctional.io/concepts/attribute-priority/): deterministic precedence when multiple Connected Systems contribute the same Metaverse attribute
+- Bidirectional synchronisation of Users, Groups, and custom object types
+- [Attribute Priority](https://docs.junctional.io/concepts/attribute-priority/): deterministic precedence when multiple aystems contribute the same attribute
 - Multi-directory LDAP support: AD DS, OpenLDAP, 389 Directory Server, and RFC 4512-compliant ones
 - Built-in scheduler that supports parallel operations
 - Tested at 100K+ object scale with bounded memory pipelines
