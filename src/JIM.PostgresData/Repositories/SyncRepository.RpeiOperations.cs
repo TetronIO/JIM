@@ -305,8 +305,7 @@ public partial class SyncRepository
         var csoIdArray = csoIds as Guid[] ?? csoIds.ToArray();
 
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
-        if (npgsqlConn.State != System.Data.ConnectionState.Open)
-            await npgsqlConn.OpenAsync();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
         var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
 
@@ -449,8 +448,7 @@ public partial class SyncRepository
     private async Task BulkInsertCsoChangesRawAsync(List<ConnectedSystemObjectChange> changes)
     {
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
-        if (npgsqlConn.State != System.Data.ConnectionState.Open)
-            await npgsqlConn.OpenAsync();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
             """
@@ -512,8 +510,7 @@ public partial class SyncRepository
     private async Task BulkInsertCsoChangeAttributesRawAsync(List<(Guid ChangeId, int AttributeId, ConnectedSystemObjectChangeAttribute AttrChange)> attrChanges)
     {
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
-        if (npgsqlConn.State != System.Data.ConnectionState.Open)
-            await npgsqlConn.OpenAsync();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
             """
@@ -540,8 +537,7 @@ public partial class SyncRepository
     private async Task BulkInsertCsoChangeAttributeValuesRawAsync(List<(Guid AttrChangeId, ConnectedSystemObjectChangeAttributeValue Value)> valueChanges)
     {
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
-        if (npgsqlConn.State != System.Data.ConnectionState.Open)
-            await npgsqlConn.OpenAsync();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
             """
@@ -613,8 +609,7 @@ public partial class SyncRepository
     {
         const int copyChunkSize = 10_000;
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
-        if (npgsqlConn.State != System.Data.ConnectionState.Open)
-            await npgsqlConn.OpenAsync();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
         // Get the current EF-managed transaction (if any) so raw commands participate in it
         var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();

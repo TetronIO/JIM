@@ -3,6 +3,7 @@
 
 using JIM.Application;
 using JIM.Application.Diagnostics;
+using JIM.Data.Repositories;
 using JIM.Application.Interfaces;
 using JIM.Connectors;
 using JIM.Models.Activities;
@@ -333,8 +334,11 @@ public class Worker : BackgroundService
                                                         {
                                                             var syncExportTaskProcessor = new SyncExportTaskProcessor(syncServer, syncRepo, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource,
                                                                                         syncRepoFactory: () => {
+                                                                                            // The scope owns the per-batch JimApplication; the batch disposes it,
+                                                                                            // releasing the context's pooled connection (issue: Scale200k10kGroups
+                                                                                            // export exhausted the pool with one pinned connection per batch).
                                                                                             var parallelJim = _jimFactory.Create();
-                                                                                            return parallelJim.SyncRepository;
+                                                                                            return new SyncRepositoryScope(parallelJim.SyncRepository, parallelJim);
                                                                                         });
                                                             await syncExportTaskProcessor.PerformExportAsync();
                                                             break;
