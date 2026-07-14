@@ -365,8 +365,9 @@ public class SyncServer : ISyncServer
     public Task<ReferenceRecallContext> CaptureReferenceRecallContextAsync(IReadOnlyCollection<Guid> deletionCandidateMvoIds)
         => _exportEval.CaptureReferenceRecallContextAsync(deletionCandidateMvoIds);
 
-    public Task<ReferenceRecallResult> StageReferenceRecallExportsAsync(ReferenceRecallContext context, IReadOnlyCollection<Guid> deletedMvoIds)
-        => _exportEval.StageReferenceRecallExportsAsync(context, deletedMvoIds);
+    public Task<ReferenceRecallResult> StageReferenceRecallExportsAsync(ReferenceRecallContext context, IReadOnlyCollection<Guid> deletedMvoIds,
+        ExportEvaluationCache? recallCache = null)
+        => _exportEval.StageReferenceRecallExportsAsync(context, deletedMvoIds, recallCache);
 
     #endregion
 

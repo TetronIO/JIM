@@ -30,4 +30,33 @@ public class ReferenceRecallResult
     /// target Connected System (it was never provisioned there, so there is nothing to remove).
     /// </summary>
     public int UnresolvableChangesDropped { get; set; }
+
+    /// <summary>
+    /// Referencing objects handled by the set-based fast path (#1003).
+    /// </summary>
+    public int FastPathReferencingObjects { get; set; }
+
+    /// <summary>
+    /// Referencing objects routed through the full-evaluation fallback because an applicable
+    /// export rule sources a candidate reference attribute non-directly.
+    /// </summary>
+    public int FallbackReferencingObjects { get; set; }
+
+    /// <summary>
+    /// Referencing CSOs skipped because an existing Delete Pending Export supersedes any
+    /// membership update (the object is being deprovisioned from the target).
+    /// </summary>
+    public int SkippedDueToExistingDeletePendingExport { get; set; }
+
+    /// <summary>
+    /// The Pending Exports persisted by this staging pass, for the caller to fold into Activity
+    /// reporting (RPEIs and PendingExportCreated outcomes). Bounded by removals per flush.
+    /// </summary>
+    public List<PendingExport> StagedPendingExports { get; } = [];
+
+    /// <summary>
+    /// Referencing Metaverse Object display names keyed by MVO id, for Activity reporting
+    /// snapshots without reloading the objects.
+    /// </summary>
+    public Dictionary<Guid, string?> ReferencingObjectDisplayNames { get; } = [];
 }
