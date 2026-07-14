@@ -71,7 +71,7 @@ JIM is designed to solve both enterprise-scale identity management and micro-dep
 JIM supports common Identity Governance & Administration (IGA) scenarios:
 
 - **Joiner/Mover/Leaver (JML) Automation** - Synchronise users from HR systems to directories, applications, and downstream systems
-- **Attribute Writeback** - Keep HR systems current by writing back IT attributes back (e.g., emails, phone numbers)
+- **Attribute Writeback** - Keep HR systems current by writing back IT attributes (e.g., emails, phone numbers)
 - **Domain Consolidation** - Prepare for cloud migration, simplification, or organisational mergers
 - **Domain Migration** - Support divestitures and system decommissioning
 - **Identity Correlation** - Bring together user and entitlement data from disparate business applications
