@@ -603,17 +603,16 @@ public class MetaverseServer
 
             // One child Activity per removed reference, grouped under the parent, so the audit log shows exactly
             // what was removed, by whom, under the one action.
-            foreach (var reference in impact.References)
+            foreach (var referenceChild in impact.References.Select(reference => new Activity
+                     {
+                         ParentActivityId = parent.Id,
+                         TargetName = reference.Description,
+                         TargetContext = attribute.Name,
+                         TargetType = ReferenceActivityTargetType(reference.Kind),
+                         TargetOperationType = ActivityTargetOperationType.Delete,
+                         Message = $"Removed {reference.Description} referencing Metaverse Attribute '{attribute.Name}'"
+                     }))
             {
-                var referenceChild = new Activity
-                {
-                    ParentActivityId = parent.Id,
-                    TargetName = reference.Description,
-                    TargetContext = attribute.Name,
-                    TargetType = ReferenceActivityTargetType(reference.Kind),
-                    TargetOperationType = ActivityTargetOperationType.Delete,
-                    Message = $"Removed {reference.Description} referencing Metaverse Attribute '{attribute.Name}'"
-                };
                 await createActivityAsync(referenceChild);
                 await Application.Activities.CompleteActivityAsync(referenceChild);
             }
@@ -717,17 +716,16 @@ public class MetaverseServer
         {
             // One child Activity per removed reference (the binding and each type-scoped cascade reference), grouped
             // under the parent unassign Activity, mirroring the delete cascade audit.
-            foreach (var reference in impact.References)
+            foreach (var referenceChild in impact.References.Select(reference => new Activity
+                     {
+                         ParentActivityId = parent.Id,
+                         TargetName = reference.Description,
+                         TargetContext = impact.AttributeName,
+                         TargetType = ReferenceActivityTargetType(reference.Kind),
+                         TargetOperationType = ActivityTargetOperationType.Delete,
+                         Message = $"Removed {reference.Description} scoped to Metaverse Object Type '{impact.MetaverseObjectTypeName}'"
+                     }))
             {
-                var referenceChild = new Activity
-                {
-                    ParentActivityId = parent.Id,
-                    TargetName = reference.Description,
-                    TargetContext = impact.AttributeName,
-                    TargetType = ReferenceActivityTargetType(reference.Kind),
-                    TargetOperationType = ActivityTargetOperationType.Delete,
-                    Message = $"Removed {reference.Description} scoped to Metaverse Object Type '{impact.MetaverseObjectTypeName}'"
-                };
                 await createActivityAsync(referenceChild);
                 await Application.Activities.CompleteActivityAsync(referenceChild);
             }

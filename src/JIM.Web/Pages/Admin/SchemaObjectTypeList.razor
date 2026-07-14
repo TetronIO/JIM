@@ -265,9 +265,10 @@
 
     private async Task OpenCreateAttributeDialogAsync()
     {
-        if (await MetaverseAttributeEditorDialog.ShowAsync(DialogService))
-            if (_attributeTable != null)
-                await _attributeTable.ReloadServerData();
+        if (await MetaverseAttributeEditorDialog.ShowAsync(DialogService) && _attributeTable != null)
+        {
+            await _attributeTable.ReloadServerData();
+        }
     }
 
     private async Task OpenEditAttributeDialogAsync(MetaverseAttributeHeader header)
@@ -277,9 +278,10 @@
         if (attribute == null)
             return;
 
-        if (await MetaverseAttributeEditorDialog.ShowAsync(DialogService, attribute))
-            if (_attributeTable != null)
-                await _attributeTable.ReloadServerData();
+        if (await MetaverseAttributeEditorDialog.ShowAsync(DialogService, attribute) && _attributeTable != null)
+        {
+            await _attributeTable.ReloadServerData();
+        }
     }
 
     private async Task OpenDeleteAttributeDialogAsync(MetaverseAttributeHeader header)
@@ -289,9 +291,10 @@
         if (attribute == null)
             return;
 
-        if (await DeleteMetaverseAttributeDialog.ShowAsync(DialogService, attribute))
-            if (_attributeTable != null)
-                await _attributeTable.ReloadServerData();
+        if (await DeleteMetaverseAttributeDialog.ShowAsync(DialogService, attribute) && _attributeTable != null)
+        {
+            await _attributeTable.ReloadServerData();
+        }
     }
 
     private (string Label, Color Color, string Icon) GetDeletionRuleDisplay(MetaverseObjectDeletionRule rule)

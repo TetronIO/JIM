@@ -152,7 +152,7 @@ public class MetaverseControllerAttributeTests
         _mv.Setup(r => r.IsMetaverseAttributeNameUniqueAsync("costCentre", null)).ReturnsAsync(false);
 
         var result = await _controller.GetAttributeNameAvailabilityAsync("costCentre") as OkObjectResult;
-        var dto = result!.Value as MetaverseAttributeNameAvailabilityDto;
+        var dto = (result!.Value as MetaverseAttributeNameAvailabilityDto)!;
 
         Assert.That(dto!.Available, Is.False);
         Assert.That(dto.Name, Is.EqualTo("costCentre"));
@@ -162,7 +162,7 @@ public class MetaverseControllerAttributeTests
     public async Task GetAttributeNameAvailabilityAsync_WhenAvailable_ReturnsTrueAsync()
     {
         var result = await _controller.GetAttributeNameAvailabilityAsync("newName", excludeId: 3) as OkObjectResult;
-        var dto = result!.Value as MetaverseAttributeNameAvailabilityDto;
+        var dto = (result!.Value as MetaverseAttributeNameAvailabilityDto)!;
 
         Assert.That(dto!.Available, Is.True);
         _mv.Verify(r => r.IsMetaverseAttributeNameUniqueAsync("newName", 3), Times.Once);
@@ -253,7 +253,7 @@ public class MetaverseControllerAttributeTests
         var result = await _controller.ChangeAttributeSchemaAsync(1, new ChangeMetaverseAttributeSchemaRequest { Type = AttributeDataType.Number, AttributePlurality = AttributePlurality.SingleValued });
 
         Assert.That(result, Is.InstanceOf<ConflictObjectResult>());
-        var impact = ((ConflictObjectResult)result).Value as AttributeSchemaChangeImpact;
+        var impact = (((ConflictObjectResult)result).Value as AttributeSchemaChangeImpact)!;
         Assert.That(impact!.BlockedByValues, Is.True);
         Assert.That(impact.TotalObjectsWithValues, Is.EqualTo(77));
         _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
@@ -283,7 +283,7 @@ public class MetaverseControllerAttributeTests
         ]);
 
         var result = await _controller.GetAttributeDeletionPreviewAsync(1) as OkObjectResult;
-        var impact = result!.Value as AttributeDeletionImpact;
+        var impact = (result!.Value as AttributeDeletionImpact)!;
 
         Assert.That(impact!.TotalObjectsWithValues, Is.EqualTo(3));
         Assert.That(impact.BlockedByValues, Is.True);
@@ -295,7 +295,7 @@ public class MetaverseControllerAttributeTests
         Attr(1);
 
         var result = await _controller.DeleteAttributeAsync(1) as OkObjectResult;
-        var impact = result!.Value as AttributeDeletionImpact;
+        var impact = (result!.Value as AttributeDeletionImpact)!;
 
         Assert.That(impact!.Deleted, Is.True);
         _mv.Verify(r => r.CascadeDeleteMetaverseAttributeAsync(1), Times.Once);
@@ -314,7 +314,7 @@ public class MetaverseControllerAttributeTests
         var result = await _controller.DeleteAttributeAsync(1);
 
         Assert.That(result, Is.InstanceOf<ConflictObjectResult>());
-        var impact = ((ConflictObjectResult)result).Value as AttributeDeletionImpact;
+        var impact = (((ConflictObjectResult)result).Value as AttributeDeletionImpact)!;
         Assert.That(impact!.TotalObjectsWithValues, Is.EqualTo(1523));
         Assert.That(impact.ObjectTypeValueCounts, Has.Count.EqualTo(2));
         _mv.Verify(r => r.CascadeDeleteMetaverseAttributeAsync(It.IsAny<int>()), Times.Never);
@@ -359,7 +359,7 @@ public class MetaverseControllerAttributeTests
         ]);
 
         var result = await _controller.DeleteAttributeAsync(1, confirmationName: "costCentre") as OkObjectResult;
-        var impact = result!.Value as AttributeDeletionImpact;
+        var impact = (result!.Value as AttributeDeletionImpact)!;
 
         Assert.That(impact!.Deleted, Is.True);
         Assert.That(impact.References, Has.Count.EqualTo(1));
@@ -448,7 +448,7 @@ public class MetaverseControllerAttributeTests
         SetupUnassign(1, 2, builtIn: false, objectsWithValues: 5, references: [Binding()]);
 
         var result = await _controller.GetAttributeUnassignPreviewAsync(1, 2) as OkObjectResult;
-        var impact = result!.Value as AttributeUnassignImpact;
+        var impact = (result!.Value as AttributeUnassignImpact)!;
 
         Assert.That(impact!.BlockedByValues, Is.True);
         Assert.That(impact.WasBound, Is.True);
@@ -472,7 +472,7 @@ public class MetaverseControllerAttributeTests
         var result = await _controller.UnassignAttributeFromObjectTypeAsync(1, 2);
 
         Assert.That(result, Is.InstanceOf<ConflictObjectResult>());
-        var impact = ((ConflictObjectResult)result).Value as AttributeUnassignImpact;
+        var impact = (((ConflictObjectResult)result).Value as AttributeUnassignImpact)!;
         Assert.That(impact!.ObjectsWithValues, Is.EqualTo(450));
         _mv.Verify(r => r.CascadeUnassignAttributeFromObjectTypeAsync(It.IsAny<int>(), It.IsAny<int>()), Times.Never);
     }
@@ -498,7 +498,7 @@ public class MetaverseControllerAttributeTests
         SetupUnassign(1, 2, builtIn: false, objectsWithValues: 0, references: [Binding()]);
 
         var result = await _controller.UnassignAttributeFromObjectTypeAsync(1, 2) as OkObjectResult;
-        var impact = result!.Value as AttributeUnassignImpact;
+        var impact = (result!.Value as AttributeUnassignImpact)!;
 
         Assert.That(impact!.Unassigned, Is.True);
         _mv.Verify(r => r.CascadeUnassignAttributeFromObjectTypeAsync(1, 2), Times.Once);
