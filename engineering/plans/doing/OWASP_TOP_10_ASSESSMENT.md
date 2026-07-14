@@ -61,9 +61,9 @@ Remediated: a new `SecurityHeadersMiddleware` (`JIM.Web/Middleware/`) now sets a
 
 ### A03:2025; Software Supply Chain Failures
 
-**Rating: Good, with gap**
+**Rating: Strong**
 
-Framework and packages are current. One structural gap exists around dependency pinning.
+Framework and packages are current. Two gaps were identified; both have been remediated.
 
 | Control | Evidence |
 |---------|----------|
@@ -71,13 +71,17 @@ Framework and packages are current. One structural gap exists around dependency 
 | NuGet packages appear current | e.g. `Microsoft.AspNetCore.Authentication.*` v10.0.4 |
 | Third-party dependency governance documented | `CLAUDE.md` requires approval before adding any NuGet package |
 
-**Gap 1: No `packages.lock.json` (Medium priority)**
+**Gap 1: No `packages.lock.json` (Medium priority) - ✅ Remediated**
 
 NuGet packages are not cryptographically pinned. `dotnet restore` can resolve different transitive dependency versions across environments, which undermines reproducible builds and supply chain integrity.
 
-**Gap 2: DynamicExpresso review needed (Low priority)**
+Remediated: `packages.lock.json` is committed for every project, with locked-mode restore enforced in CI, the release workflow, and all three production container image builds, and automated lock file regeneration for Dependabot NuGet PRs. See [`DEPENDENCY_PINNING.md`](../../DEPENDENCY_PINNING.md) for the full policy and section 2 below for detail.
+
+**Gap 2: DynamicExpresso review needed (Low priority) - ✅ Remediated**
 
 `DynamicExpresso.Core` v2.19.3 is used for expression evaluation in `JIM.Application`. If user-controlled input can flow into the expression interpreter, this becomes a code injection vector. The input paths need to be reviewed and documented to confirm this is safe.
+
+Remediated: all input paths traced and documented (every one is Administrator-authored; no end-user data becomes an expression), and non-subtractive defence-in-depth guardrails added with no change to expression functionality. See [`EXPRESSION_SECURITY.md`](../../EXPRESSION_SECURITY.md) and section 5 below.
 
 ---
 
@@ -116,7 +120,7 @@ All database access uses parameterised queries (EF Core LINQ or typed `NpgsqlPar
 
 **Note:** See A03 Gap 2 regarding DynamicExpresso. If user input reaches the expression interpreter, this becomes an injection risk under A05 as well.
 
-**Gaps:** None (pending DynamicExpresso review).
+**Gaps:** None (DynamicExpresso review complete; see [`EXPRESSION_SECURITY.md`](../../EXPRESSION_SECURITY.md)).
 
 ---
 
@@ -158,16 +162,16 @@ OIDC with Authorization Code + PKCE is the primary authentication mechanism. Ful
 
 ### A08:2025; Software or Data Integrity Failures
 
-**Rating: Good, with gap**
+**Rating: Strong**
 
-Data Protection keys are version-prefixed and purpose-isolated. The main gap is shared with A03: no `packages.lock.json` for reproducible builds.
+Data Protection keys are version-prefixed and purpose-isolated. Its one gap was shared with A03 (no `packages.lock.json`) and has been remediated.
 
 | Control | Evidence |
 |---------|----------|
 | Versioned Data Protection with purpose isolation | `CredentialProtectionService.cs:18,24` |
 | Blazor serves static assets from the app (no external CDN) | Default Blazor Server hosting |
 
-**Gap:** No `packages.lock.json` (same as A03 Gap 1). Build artefacts are not reproducibly tied to specific dependency versions.
+**Gap:** No `packages.lock.json` (same as A03 Gap 1) - ✅ Remediated; see A03 Gap 1 and [`DEPENDENCY_PINNING.md`](../../DEPENDENCY_PINNING.md).
 
 ---
 
@@ -330,6 +334,15 @@ A global exception handler catches all unhandled exceptions. Production response
 ---
 
 ### 5. DynamicExpresso Input Path Review (Low)
+
+**Status: Implemented.** Findings, the input path inventory, and the guardrails added are documented in
+[`engineering/EXPRESSION_SECURITY.md`](../../EXPRESSION_SECURITY.md). Summary: every expression input path is
+Administrator-authored configuration behind `[Authorize(Roles = "Administrator")]`; no user-controlled input
+reaches the evaluator. Reflection and type-escape attempts were proven to fail against the real evaluator
+(unit tests, not assumed). Two non-subtractive guardrails were added (an expression length ceiling and a bounded
+compiled-expression cache); a function/operator allowlist, removing default reference types, and evaluation
+timeouts were all considered and explicitly rejected as they would impair legitimate expression functionality
+for no matching security benefit.
 
 **OWASP:** A03, A05
 **Risk:** If user-controlled input reaches the expression evaluator, it becomes a code injection vector.
