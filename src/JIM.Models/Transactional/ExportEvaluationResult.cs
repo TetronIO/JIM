@@ -26,4 +26,11 @@ public class ExportEvaluationResult
     /// This represents true no-net-changes where the MVO had updates but the CSO matches.
     /// </summary>
     public int CsoAlreadyCurrentCount { get; set; }
+
+    /// <summary>
+    /// Ids of joined, non-PendingProvisioning Connected System Objects whose (Metaverse Object,
+    /// export rule) pair passed the scope gate during this evaluation, whether or not any attribute
+    /// changes were staged; used by the page flush to cancel stale Delete Pending Exports (#1018).
+    /// </summary>
+    public HashSet<Guid> InScopeJoinedCsoIds { get; set; } = [];
 }
