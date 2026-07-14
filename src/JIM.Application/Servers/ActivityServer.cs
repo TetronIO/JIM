@@ -144,7 +144,41 @@ public class ActivityServer
         activity.Executed = DateTime.UtcNow;
         activity.InitiatedByType = initiatorType;
         activity.InitiatedById = initiatorId;
-        activity.InitiatedByName = initiatorName ?? (initiatorType == ActivityInitiatorType.System ? "System" : "Unknown");
+        activity.InitiatedByName = initiatorName ?? initiatorType switch
+        {
+            ActivityInitiatorType.System => "System",
+            ActivityInitiatorType.Anonymous => "Anonymous",
+            _ => "Unknown"
+        };
+
+        ValidateActivity(activity);
+        await Application.Repository.Activity.CreateActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Creates and persists an Activity already in its terminal Complete state, as a single insert, attributed via
+    /// an explicit initiator triad. For point-in-time audit records (for example security audit events) that
+    /// represent an instantaneous fact rather than a long-running operation. Such records MUST NOT use the usual
+    /// create-then-complete lifecycle: completing performs a second, full-row update from the caller's in-memory
+    /// Activity, which silently overwrites any concurrent in-place changes made to the row between the two writes
+    /// (a lost update; SecurityAuditServer's aggregated AttemptCount increments were erased this way under a
+    /// concurrent authentication spray).
+    /// </summary>
+    public async Task CreateCompletedActivityWithTriadAsync(Activity activity, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
+    {
+        var now = DateTime.UtcNow;
+        activity.Status = ActivityStatus.Complete;
+        activity.Executed = now;
+        activity.ExecutionTime = TimeSpan.Zero;
+        activity.TotalActivityTime = now - activity.Created;
+        activity.InitiatedByType = initiatorType;
+        activity.InitiatedById = initiatorId;
+        activity.InitiatedByName = initiatorName ?? initiatorType switch
+        {
+            ActivityInitiatorType.System => "System",
+            ActivityInitiatorType.Anonymous => "Anonymous",
+            _ => "Unknown"
+        };
 
         ValidateActivity(activity);
         await Application.Repository.Activity.CreateActivityAsync(activity);
@@ -157,10 +191,16 @@ public class ActivityServer
         if (activity.InitiatedByType == ActivityInitiatorType.NotSet)
             throw new InvalidOperationException("Activity must be attributed to a security principal. InitiatedByType has not been set.");
 
-        // System activities have no principal entity, so InitiatedById is allowed to be null.
-        // User and ApiKey activities must have an InitiatedById.
-        if (activity.InitiatedByType != ActivityInitiatorType.System && activity.InitiatedById == null)
+        // System activities have no principal entity, so InitiatedById is allowed to be null. Anonymous activities
+        // (an unidentified, unauthenticated caller) likewise have no principal entity: InitiatedById MUST be null,
+        // enforced below. User and ApiKey activities must have an InitiatedById.
+        if (activity.InitiatedByType != ActivityInitiatorType.System
+            && activity.InitiatedByType != ActivityInitiatorType.Anonymous
+            && activity.InitiatedById == null)
             throw new InvalidOperationException("Activity must be attributed to a security principal. InitiatedById has not been set.");
+
+        if (activity.InitiatedByType == ActivityInitiatorType.Anonymous && activity.InitiatedById != null)
+            throw new InvalidOperationException("Activity attributed to Anonymous must not carry an InitiatedById.");
 
         if (string.IsNullOrWhiteSpace(activity.InitiatedByName))
             throw new InvalidOperationException("Activity must be attributed to a security principal. InitiatedByName has not been set.");

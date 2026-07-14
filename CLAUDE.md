@@ -146,6 +146,8 @@ Before adding ANY new NuGet package or third-party dependency:
 
 Preference order: Microsoft-maintained > established corporate-backed > .NET Foundation > well-maintained OSS with identifiable maintainers.
 
+For how every dependency layer (NuGet direct and transitive, container base images, apt packages, GitHub Actions, and more) is pinned and updated once approved, see `engineering/DEPENDENCY_PINNING.md`.
+
 ## Architecture Quick Reference
 
 **Layer dependencies:** JIM.Web -> JIM.Application -> JIM.Models -> JIM.Data/JIM.PostgresData. **Never bypass layers** - UI/API must only call `JimApplication`, never `Jim.Repository.*` directly.

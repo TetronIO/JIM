@@ -20,5 +20,12 @@
     <!-- Enforce code quality standards -->
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisLevel>latest</AnalysisLevel>
+
+    <!-- Supply chain integrity: pin transitive NuGet dependencies via packages.lock.json
+         and enforce locked-mode restore in CI (GitHub Actions sets CI=true), so a
+         restore never silently re-resolves a different transitive version. See
+         engineering/DEPENDENCY_PINNING.md and issue #500. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
   </PropertyGroup>
 </Project>

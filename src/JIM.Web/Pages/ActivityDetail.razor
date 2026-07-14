@@ -76,6 +76,10 @@
                             <MudIcon Icon="@Icons.Material.Filled.CleaningServices" Class="mr-1" Style="vertical-align: middle;" />
                             @(_activity.TargetName ?? "History Retention Cleanup")
                             break;
+                        case ActivityTargetType.Authentication:
+                            <MudIcon Icon="@Icons.Material.Filled.Shield" Class="mr-1" Style="vertical-align: middle;" />
+                            @(_activity.TargetName ?? "Authentication")
+                            break;
                         case ActivityTargetType.ObjectMatchingRule when Helpers.GetObjectMatchingRuleHref(_activity.SyncRuleId, _activity.ConnectedSystemId) is { } matchingRuleHref:
                             @* A rule has no page of its own; link to the owning object's Matching tab. *@
                             <MudLink Href="@matchingRuleHref">@_activity.TargetName</MudLink>
@@ -129,6 +133,14 @@
                         <MudText>
                             <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
                             <span>@(_activity.InitiatedByName ?? "System")</span>
+                        </MudText>
+                    }
+                    else if (_activity.InitiatedByType == ActivityInitiatorType.Anonymous)
+                    {
+                        @* An unidentified, unauthenticated caller (a failed sign-in attempt): plain text, never a link. *@
+                        <MudText>
+                            <MudIcon Icon="@Icons.Material.Filled.QuestionMark" Class="mr-1" Style="vertical-align: middle;" />
+                            <span>Anonymous</span>
                         </MudText>
                     }
                     else if (!string.IsNullOrEmpty(_activity.InitiatedByName))
@@ -314,6 +326,76 @@
                 </MudPaper>
             }
         </MudStack>
+    }
+
+    @if (_activity.TargetType == ActivityTargetType.Authentication)
+    {
+        var isAggregatedFailure = _activity.AggregationWindowStart.HasValue;
+
+        <MudText Typo="Typo.h5" Class="mt-5">Security Event Details</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2 mb-4">
+            @(isAggregatedFailure
+                ? "Failed authentication attempts matching the same API key prefix, client IP and reason within a 15-minute window are aggregated onto this Activity, with the attempt count updated in place."
+                : "A successful interactive sign-in, recorded once per session establishment.")
+        </MudText>
+
+        <MudPaper Class="pa-4 mt-2 mb-5" Outlined="true">
+            <MudGrid Spacing="4">
+                @if (!string.IsNullOrEmpty(_activity.SecurityEventReason))
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Reason:</MudText>
+                        <MudText>@_activity.SecurityEventReason</MudText>
+                    </MudItem>
+                }
+                @if (!string.IsNullOrEmpty(_activity.ApiKeyPrefix))
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">API Key Prefix:</MudText>
+                        <MudText Class="jim-text-code">@_activity.ApiKeyPrefix</MudText>
+                    </MudItem>
+                }
+                @if (!string.IsNullOrEmpty(_activity.ClientIpAddress))
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Client IP Address:</MudText>
+                        <MudText Class="jim-text-code">@_activity.ClientIpAddress</MudText>
+                    </MudItem>
+                }
+                @if (_activity.AttemptCount.HasValue)
+                {
+                    var attemptCount = _activity.AttemptCount.Value;
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Attempt Count:</MudText>
+                        <MudText>@attemptCount.ToString("N0")</MudText>
+                    </MudItem>
+                }
+                @if (_activity.AggregationWindowStart.HasValue)
+                {
+                    var windowStart = _activity.AggregationWindowStart.Value;
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Window Start:</MudText>
+                        <MudText title="@windowStart.ToLocalTime().ToFriendlyDate()">@windowStart.ToLocalTime().ToRelativeTime()</MudText>
+                    </MudItem>
+                }
+                @if (_activity.FirstSeen.HasValue)
+                {
+                    var firstSeen = _activity.FirstSeen.Value;
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">First Seen:</MudText>
+                        <MudText title="@firstSeen.ToLocalTime().ToFriendlyDate()">@firstSeen.ToLocalTime().ToRelativeTime()</MudText>
+                    </MudItem>
+                }
+                @if (_activity.LastSeen.HasValue)
+                {
+                    var lastSeen = _activity.LastSeen.Value;
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Last Seen:</MudText>
+                        <MudText title="@lastSeen.ToLocalTime().ToFriendlyDate()">@lastSeen.ToLocalTime().ToRelativeTime()</MudText>
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudPaper>
     }
 
     @if (_activity.TargetType == ActivityTargetType.ConnectedSystem && _activity.TargetOperationType == ActivityTargetOperationType.Clear)

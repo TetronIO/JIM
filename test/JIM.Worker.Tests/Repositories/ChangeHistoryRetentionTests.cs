@@ -61,6 +61,55 @@ public class ChangeHistoryRetentionTests
     }
 
     [Test]
+    public async Task DeleteExpiredActivitiesAsync_SparesAuthenticationActivitiesAsync()
+    {
+        var expiredPlain = NewActivity(daysOld: 100);
+        var expiredAuthentication = NewActivity(daysOld: 100, targetType: ActivityTargetType.Authentication);
+        _dbContext.Activities.AddRange(expiredPlain, expiredAuthentication);
+        await _dbContext.SaveChangesAsync();
+
+        var deleted = await _repository.ChangeHistory.DeleteExpiredActivitiesAsync(DateTime.UtcNow.AddDays(-90), 100);
+
+        Assert.That(deleted, Is.EqualTo(1), "only the expired non-security-event Activity is eligible");
+        var remainingIds = await _dbContext.Activities.Select(a => a.Id).ToListAsync();
+        Assert.That(remainingIds, Does.Not.Contain(expiredPlain.Id));
+        Assert.That(remainingIds, Does.Contain(expiredAuthentication.Id),
+            "an Authentication Activity is a security event and must be governed only by its own retention cutoff");
+    }
+
+    [Test]
+    public async Task DeleteExpiredSecurityEventActivitiesAsync_DeletesOnlyExpiredAuthenticationActivitiesAsync()
+    {
+        var expiredPlain = NewActivity(daysOld: 100);
+        var expiredAuthentication = NewActivity(daysOld: 100, targetType: ActivityTargetType.Authentication);
+        var currentAuthentication = NewActivity(daysOld: 1, targetType: ActivityTargetType.Authentication);
+        _dbContext.Activities.AddRange(expiredPlain, expiredAuthentication, currentAuthentication);
+        await _dbContext.SaveChangesAsync();
+
+        var deleted = await _repository.ChangeHistory.DeleteExpiredSecurityEventActivitiesAsync(DateTime.UtcNow.AddDays(-90), 100);
+
+        Assert.That(deleted, Is.EqualTo(1), "only the expired Authentication Activity is eligible");
+        var remainingIds = await _dbContext.Activities.Select(a => a.Id).ToListAsync();
+        Assert.That(remainingIds, Does.Contain(expiredPlain.Id), "non-security-event Activities are the general cleanup's concern");
+        Assert.That(remainingIds, Does.Not.Contain(expiredAuthentication.Id));
+        Assert.That(remainingIds, Does.Contain(currentAuthentication.Id));
+    }
+
+    [Test]
+    public async Task DeleteExpiredConfigurationChangeActivitiesAsync_LeavesAuthenticationActivitiesUntouchedAsync()
+    {
+        var expiredAuthentication = NewActivity(daysOld: 100, targetType: ActivityTargetType.Authentication);
+        _dbContext.Activities.Add(expiredAuthentication);
+        await _dbContext.SaveChangesAsync();
+
+        var deleted = await _repository.ChangeHistory.DeleteExpiredConfigurationChangeActivitiesAsync(DateTime.UtcNow.AddDays(-90), 100);
+
+        Assert.That(deleted, Is.EqualTo(0), "Authentication Activities carry no configuration snapshot, so this cleanup must never touch them");
+        var remainingIds = await _dbContext.Activities.Select(a => a.Id).ToListAsync();
+        Assert.That(remainingIds, Does.Contain(expiredAuthentication.Id));
+    }
+
+    [Test]
     public async Task DeleteExpiredConfigurationChangeActivitiesAsync_DeletesOnlyExpiredConfigurationChangesAsync()
     {
         var expiredPlain = NewActivity(daysOld: 100);
@@ -78,10 +127,10 @@ public class ChangeHistoryRetentionTests
         Assert.That(remainingIds, Does.Contain(currentConfigurationChange.Id));
     }
 
-    private static Activity NewActivity(int daysOld, int? configurationChangeVersion = null) => new()
+    private static Activity NewActivity(int daysOld, int? configurationChangeVersion = null, ActivityTargetType? targetType = null) => new()
     {
         Id = Guid.NewGuid(),
-        TargetType = configurationChangeVersion == null ? ActivityTargetType.ConnectedSystemRunProfile : ActivityTargetType.ConnectedSystem,
+        TargetType = targetType ?? (configurationChangeVersion == null ? ActivityTargetType.ConnectedSystemRunProfile : ActivityTargetType.ConnectedSystem),
         TargetOperationType = ActivityTargetOperationType.Update,
         Created = DateTime.UtcNow.AddDays(-daysOld),
         ConfigurationChangeVersion = configurationChangeVersion,

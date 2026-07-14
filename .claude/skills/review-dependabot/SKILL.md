@@ -65,6 +65,11 @@ Categorise each PR into one of three ecosystems:
      - Verify ALL pinned packages in a Dockerfile by grepping for `=` in the
        `RUN apt-get install` block, not just the ones in this list.
   4. If a pinned version is NO LONGER AVAILABLE: **Do NOT merge**. Report the version mismatch and the available versions so the user can decide whether to update the pin.
+- **CRITICAL - RuntimeFrameworkVersion sync (JIM.Web digest bumps only)**: `src/JIM.Web/JIM.Web.csproj` pins `<RuntimeFrameworkVersion>` to the exact ASP.NET Core version bundled by the pinned base image digests, keeping the JIM.Web lock file deterministic (see `engineering/DEPENDENCY_PINNING.md`). When a digest update to the aspnet/sdk images lands:
+  1. Check the .NET version in the new image: `docker run --rm <aspnet-image>@<new-digest> dotnet --list-runtimes`
+  2. If the patch version changed (e.g. 10.0.9 -> 10.0.10), the PR must ALSO bump `<RuntimeFrameworkVersion>` in `JIM.Web.csproj` and regenerate lock files (`dotnet restore JIM.sln --force-evaluate`). Dependabot will not do this itself, and CI stays green without it (locked-mode restore still passes against the old pin), so the drift between the lock file and the runtime the production image actually ships is silent; this is a review-time check only. Push that companion commit to the PR branch before merging.
+     - The same companion commit must bump `.devcontainer/Dockerfile`'s `dotnet-install.sh --version` SDK pin to the SDK that ships the new runtime (map runtime to SDK via `https://builds.dotnet.microsoft.com/dotnet/release-metadata/10.0/releases.json`), or native JIM.Web runs on dev hosts fail at launch after the pin bump while Docker builds keep working. See `engineering/DEPENDENCY_PINNING.md` for the full coupling. A devcontainer rebuild is needed to pick it up.
+  3. If the digest bump is a same-version rebuild (no patch change), no action is needed.
 
 ### NuGet Packages
 - Check: Is this a patch or minor update (not major)?
@@ -72,6 +77,10 @@ Categorise each PR into one of three ecosystems:
 - Check: Is the package from a trusted publisher?
 - Check: Run `dotnet list package --vulnerable` if concerned about transitive vulnerabilities
 - Check: Does CI build and all tests pass?
+- **Lock files**: JIM enforces locked-mode NuGet restore in CI, so every NuGet PR needs its `packages.lock.json` file(s) updated to match. Dependabot does not reliably do this itself (dependabot-core#12318, dependabot-core#10863); the `regenerate-nuget-lock-files` workflow pushes an automated `chore: regenerate NuGet lock files for Dependabot update` commit to the PR branch when needed, so **a red first CI run on a fresh Dependabot NuGet PR is expected**, not a failure to investigate. Before assessing CI status:
+  1. Confirm the regeneration commit is present (check the PR's commit list) and that CI is green on the current head, not the original Dependabot commit.
+  2. If the regeneration workflow itself failed (check its run log) and no lock-file commit landed, regenerate manually from a local checkout of the branch: `dotnet restore JIM.sln --force-evaluate`, review the diff, commit, and push.
+  3. See `engineering/DEPENDENCY_PINNING.md` for the full policy and mechanism.
 
 ### GitHub Actions
 - Check: Is this a patch or minor update within the same major version tag?
@@ -130,7 +139,7 @@ Unless running in review-only mode:
 - All dependency updates require human review - no auto-merge
 - Docker images pinned by digest (`@sha256:...`)
 - Functional apt packages pinned to exact versions
-- NuGet packages pinned in `.csproj` files
-- GitHub Actions pinned by major version tag
+- NuGet packages pinned in `.csproj` files, transitive dependencies locked via `packages.lock.json` and enforced `RestoreLockedMode`
+- GitHub Actions pinned by immutable commit SHA (with a `# vX.Y.Z` version comment)
 - Prefer Microsoft-maintained and well-established packages
-- Full details in CLAUDE.md under "Supply Chain Security" and docs/DEVELOPER_GUIDE.md under "Dependency Pinning and Updates"
+- Full details in CLAUDE.md under "Third-Party Dependency Governance", engineering/DEVELOPER_GUIDE.md under "Dependency Pinning and Updates", and engineering/DEPENDENCY_PINNING.md (canonical policy page)

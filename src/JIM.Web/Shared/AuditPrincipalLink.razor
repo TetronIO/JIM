@@ -25,6 +25,11 @@ else if (PrincipalType == ActivityInitiatorType.System)
     <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-1" Style="vertical-align: middle;" />
     <span>System</span>
 }
+else if (PrincipalType == ActivityInitiatorType.Anonymous)
+{
+    @* An unidentified, unauthenticated caller (a failed sign-in attempt): plain text, never a link. *@
+    <span>Anonymous</span>
+}
 else
 {
     <span class="mud-text-secondary">--</span>

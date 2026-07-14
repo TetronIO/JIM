@@ -37,7 +37,8 @@ public static class ActivityTargetTypeCategories
         { ActivityTargetType.System, ActivityTargetCategory.System },
         { ActivityTargetType.SystemInitialisation, ActivityTargetCategory.System },
         { ActivityTargetType.DataGeneration, ActivityTargetCategory.System },
-        { ActivityTargetType.NotSet, ActivityTargetCategory.System }
+        { ActivityTargetType.NotSet, ActivityTargetCategory.System },
+        { ActivityTargetType.Authentication, ActivityTargetCategory.Security }
     };
 
     /// <summary>
