@@ -120,4 +120,6 @@ For a table cell (or inline value) that is null/empty, render `<EmptyValue />` (
 - Do NOT use multi-line banner comments (`===`, `amamam`, or similar filler characters). One line is enough.
 
 ## Nullable dereference in Razor
-- When accessing a nullable `.Value` property in Razor markup (e.g. `context.LastUpdated.Value`), capture it into a local variable inside the `@if (x.HasValue)` block: `var lastUpdated = context.LastUpdated.Value;` then use the local variable in markup expressions. This avoids repeated nullable dereference warnings from code analysis.
+- When accessing a nullable `.Value` property in Razor markup (e.g. `context.LastUpdated.Value`), capture it into a local variable inside the `@if (x.HasValue)` block: `var lastUpdated = context.LastUpdated.Value;` then use the local variable in markup expressions.
+- This is not just a style preference: CodeQL flags the bare dereference as "Dereferenced variable may be null" (`cs/dereferenced-value-may-be-null`), and unresolved findings block the merge. Pattern-matching guards (`is > 0`, `is not null`) do not satisfy the analyser any more than `HasValue` does, and the rule applies to every nullable value type: `int?`, `bool?` and friends need the local exactly as much as `DateTime?` (two findings on PR #1013 were an `int?` beside three correctly-captured `DateTime?` fields).
+- Razor files are in scope of the pre-PR CodeQL shape sweep in `src/CLAUDE.md` (`git diff origin/main... -- '*.cs' '*.razor'`); do not treat markup as exempt from the shapes listed there.

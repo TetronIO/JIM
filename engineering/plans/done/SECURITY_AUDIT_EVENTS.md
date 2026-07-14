@@ -1,6 +1,7 @@
 # Security Audit Events via Activities
 
-- **Status:** Planned
+- **Status:** Done
+- **Note:** Tamper evidence deferred 2026-07-13; revisit on customer demand.
 - **Issue:** [#500](https://github.com/TetronIO/JIM/issues/500) (OWASP Top 10:2025 assessment, gap 3: security audit trail)
 
 ## Overview

@@ -56,12 +56,15 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
         try
         {
             // Get retention policy settings. Configuration-change Activities carry the versioned configuration
-            // snapshots, so they get their own (typically much longer) retention period than the general history.
+            // snapshots, and security event Activities (Authentication) are the security audit trail, so each gets
+            // its own (typically much longer) retention period than the general history.
             var retentionPeriod = await _application.ServiceSettings.GetHistoryRetentionPeriodAsync();
             var configurationRetentionPeriod = await _application.ServiceSettings.GetConfigurationChangeRetentionPeriodAsync();
+            var securityRetentionPeriod = await _application.ServiceSettings.GetSecurityEventRetentionPeriodAsync();
             var batchSize = await _application.ServiceSettings.GetHistoryCleanupBatchSizeAsync();
             var cutoffDate = DateTime.UtcNow - retentionPeriod;
             var configurationCutoffDate = DateTime.UtcNow - configurationRetentionPeriod;
+            var securityCutoffDate = DateTime.UtcNow - securityRetentionPeriod;
 
             // Get current API key for initiator tracking
             var apiKey = await GetCurrentApiKeyAsync();
@@ -69,13 +72,13 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
             // Perform cleanup, attributing the activity to the calling API key (or System if no key)
             ChangeHistoryServer.ChangeHistoryCleanupResult result;
             if (apiKey != null)
-                result = await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, batchSize, apiKey);
+                result = await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, securityCutoffDate, batchSize, apiKey);
             else
-                result = await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, batchSize);
+                result = await _application.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, securityCutoffDate, batchSize);
 
             _logger.LogInformation(
-                "History cleanup completed - CSO: {CsoCount}, MVO: {MvoCount}, Activity: {ActivityCount}, Configuration: {ConfigurationActivityCount}",
-                result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted);
+                "History cleanup completed - CSO: {CsoCount}, MVO: {MvoCount}, Activity: {ActivityCount}, Configuration: {ConfigurationActivityCount}, Security: {SecurityActivityCount}",
+                result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted);
 
             var response = new HistoryCleanupResponse
             {
@@ -83,11 +86,13 @@ public class HistoryController(ILogger<HistoryController> logger, JimApplication
                 MvoChangesDeleted = result.MvoChangesDeleted,
                 ActivitiesDeleted = result.ActivitiesDeleted,
                 ConfigurationChangeActivitiesDeleted = result.ConfigurationChangeActivitiesDeleted,
+                SecurityEventActivitiesDeleted = result.SecurityEventActivitiesDeleted,
                 OldestRecordDeleted = result.OldestRecordDeleted,
                 NewestRecordDeleted = result.NewestRecordDeleted,
                 CutoffDate = cutoffDate,
                 RetentionPeriodDays = (int)retentionPeriod.TotalDays,
                 ConfigurationChangeRetentionPeriodDays = (int)configurationRetentionPeriod.TotalDays,
+                SecurityEventRetentionPeriodDays = (int)securityRetentionPeriod.TotalDays,
                 BatchSize = batchSize
             };
 

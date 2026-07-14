@@ -34,16 +34,21 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
     /// </summary>
     public const string ApiKeyPrefix = "jim_ak_";
 
-    private readonly IServiceProvider _serviceProvider;
+    // IServiceScopeFactory, not IServiceProvider: authentication handlers are resolved from the request scope, so
+    // an injected IServiceProvider is the request's own provider and is disposed the moment the response completes.
+    // The fire-and-forget usage/audit recording below outlives the request (failed authentications respond almost
+    // instantly), and CreateScope() on the disposed request provider throws ObjectDisposedException, silently
+    // dropping the write. IServiceScopeFactory is a root singleton; scopes created from it survive the request.
+    private readonly IServiceScopeFactory _serviceScopeFactory;
 
     public ApiKeyAuthenticationHandler(
         IOptionsMonitor<ApiKeyAuthenticationOptions> options,
         ILoggerFactory logger,
         UrlEncoder encoder,
-        IServiceProvider serviceProvider)
+        IServiceScopeFactory serviceScopeFactory)
         : base(options, logger, encoder)
     {
-        _serviceProvider = serviceProvider;
+        _serviceScopeFactory = serviceScopeFactory;
     }
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -60,10 +65,15 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
 
         var providedKey = apiKeyHeader.ToString();
 
+        // ForwardedHeaders middleware (when configured) rewrites RemoteIpAddress to the real client address even
+        // behind a reverse proxy, so this is proxy-truthful for free; see docs/administration/security-headers.md.
+        var clientIp = Context.Connection.RemoteIpAddress?.ToString();
+
         // Validate the key format
         if (string.IsNullOrWhiteSpace(providedKey) || !providedKey.StartsWith(ApiKeyPrefix))
         {
             Log.Warning("ApiKeyAuthenticationHandler: Invalid API key format provided");
+            RecordFailedAuthenticationEvent("Invalid API key format", apiKeyPrefix: null, clientIp);
             return AuthenticateResult.Fail("Invalid API key format");
         }
 
@@ -71,7 +81,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
         {
             // Create a scope to get a fresh DbContext for this authentication operation
             // This prevents DbContext threading issues when the controller also uses the same context
-            using var scope = _serviceProvider.CreateScope();
+            using var scope = _serviceScopeFactory.CreateScope();
             var jim = scope.ServiceProvider.GetRequiredService<JimApplication>();
 
             // Hash the provided key to look it up
@@ -80,8 +90,9 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
 
             if (apiKey == null)
             {
-                Log.Warning("ApiKeyAuthenticationHandler: API key not found (prefix: {KeyPrefix})",
-                    providedKey.Length >= 12 ? providedKey[..12] : providedKey);
+                var unknownKeyPrefix = providedKey.Length >= 12 ? providedKey[..12] : providedKey;
+                Log.Warning("ApiKeyAuthenticationHandler: API key not found (prefix: {KeyPrefix})", unknownKeyPrefix);
+                RecordFailedAuthenticationEvent("API key not found", unknownKeyPrefix, clientIp);
                 return AuthenticateResult.Fail("Invalid API key");
             }
 
@@ -92,6 +103,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             if (!apiKey.IsEnabled)
             {
                 Log.Warning("ApiKeyAuthenticationHandler: API key is disabled (prefix: {KeyPrefix})", apiKey.KeyPrefix);
+                RecordFailedAuthenticationEvent("API key is disabled", apiKey.KeyPrefix, clientIp);
                 return AuthenticateResult.Fail("API key is disabled");
             }
 
@@ -99,18 +111,19 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             if (apiKey.ExpiresAt.HasValue && apiKey.ExpiresAt.Value < DateTime.UtcNow)
             {
                 Log.Warning("ApiKeyAuthenticationHandler: API key has expired (prefix: {KeyPrefix})", apiKey.KeyPrefix);
+                RecordFailedAuthenticationEvent("API key has expired", apiKey.KeyPrefix, clientIp);
                 return AuthenticateResult.Fail("API key has expired");
             }
 
             // Record usage (fire and forget - don't block authentication)
-            var ipAddress = Context.Connection.RemoteIpAddress?.ToString();
+            var ipAddress = clientIp;
             var apiKeyId = apiKey.Id;
             _ = Task.Run(async () =>
             {
                 try
                 {
                     // Create a new scope for the background task since the original scope will be disposed
-                    using var usageScope = _serviceProvider.CreateScope();
+                    using var usageScope = _serviceScopeFactory.CreateScope();
                     var usageJim = usageScope.ServiceProvider.GetRequiredService<JimApplication>();
                     await usageJim.Security.RecordApiKeyUsageAsync(apiKeyId, ipAddress);
                 }
@@ -151,8 +164,33 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
         catch (Exception ex)
         {
             Log.Error(ex, "ApiKeyAuthenticationHandler: Error during authentication");
+            RecordFailedAuthenticationEvent("Authentication error", apiKeyPrefix: null, clientIp);
             return AuthenticateResult.Fail("Authentication error");
         }
+    }
+
+    /// <summary>
+    /// Records an aggregated failed-authentication security audit event on a background task with a fresh DI scope,
+    /// mirroring the non-blocking usage-recording pattern above: authentication must never be slowed or destabilised
+    /// by audit capture. <see cref="JIM.Application.Servers.SecurityAuditServer"/>'s
+    /// <c>RecordFailedAuthenticationAsync</c> itself never throws (audit-write failures are logged and swallowed
+    /// there), so the try/catch here is defence-in-depth against failures resolving the scope/service itself.
+    /// </summary>
+    private void RecordFailedAuthenticationEvent(string reason, string? apiKeyPrefix, string? clientIp)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var auditScope = _serviceScopeFactory.CreateScope();
+                var auditJim = auditScope.ServiceProvider.GetRequiredService<JimApplication>();
+                await auditJim.SecurityAudit.RecordFailedAuthenticationAsync("API key authentication failed", reason, apiKeyPrefix, clientIp);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log.Warning(ex, "ApiKeyAuthenticationHandler: Failed to record failed authentication event");
+            }
+        });
     }
 
     /// <summary>

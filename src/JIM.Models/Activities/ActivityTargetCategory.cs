@@ -16,5 +16,7 @@ public enum ActivityTargetCategory
     /// <summary>Run Profile executions: imports, synchronisations, exports.</summary>
     SyncRuns = 2,
     /// <summary>System-level operations: housekeeping, resets, example data generation.</summary>
-    System = 3
+    System = 3,
+    /// <summary>Security audit events: interactive sign-in success/failure and API key authentication failure.</summary>
+    Security = 4
 }

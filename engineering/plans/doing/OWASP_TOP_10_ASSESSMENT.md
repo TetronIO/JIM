@@ -177,9 +177,9 @@ Data Protection keys are version-prefixed and purpose-isolated. Its one gap was 
 
 ### A09:2025; Security Logging and Alerting Failures
 
-**Rating: Good, with gap**
+**Rating: Strong**
 
-Structured logging is comprehensive: Serilog with JSON output, rolling log files, log injection prevention, and sync error reporting via RPEIs. The gap is in security-specific audit and alerting.
+Structured logging is comprehensive: Serilog with JSON output, rolling log files, log injection prevention, and sync error reporting via RPEIs. One gap was identified; it has been remediated.
 
 | Control | Evidence |
 |---------|----------|
@@ -187,10 +187,14 @@ Structured logging is comprehensive: Serilog with JSON output, rolling log files
 | Rolling log files (100 max, 50MB each) | `Program.cs:519-520` |
 | Log injection prevention (CWE-117) | `LogSanitiser.cs` enforced across codebase |
 | Sync errors logged via RPEI/Activities | Core sync operation pattern |
+| Privileged configuration changes (API key CRUD, Role changes, Connected Systems, Synchronisation Rules, Schedules, Service Settings) versioned and audited | Configuration change capture, `ConfigurationChangeCaptureService.cs` |
+| Authentication events (sign-in success/failure, API key authentication failure) audited with aggregation | `SecurityAuditServer.cs`, see remediation below |
 
-**Gap: No security audit trail (Medium priority)**
+**Gap: No security audit trail (Medium priority) - ✅ Remediated**
 
 There is no dedicated security audit log for privileged operations such as API key creation/deletion, role changes, configuration modifications, or authentication failures. For healthcare/government deployments, a tamper-evident audit trail is a compliance expectation. Current application logs mix operational and security events, making it difficult to isolate security-relevant actions for review or SIEM integration.
+
+Remediated: authentication events (interactive sign-in success/failure, API key authentication failure) are now recorded in the existing Activity system as a new `Authentication` target type, closing the remaining scope of this gap; privileged configuration operations (API key CRUD, Role definition and membership, Connected Systems, Synchronisation Rules, Schedules, Service Settings) were already covered by the pre-existing configuration change capture system. Failed authentication, written on behalf of an unauthenticated, attacker-controlled source, is aggregated (one Activity per API key prefix/client IP/failure reason per 15-minute UTC window, with an attempt counter) so a key-spraying or credential-stuffing client cannot force unbounded database writes; this is a deliberate design constraint, not an omission. Security events are queryable via the REST API (filterable by target type, for SIEM polling) and governed by their own retention period, separate from general history and configuration change retention. Tamper evidence (hash-chained audit records) is explicitly deferred pending a live compliance driver. See [Security Audit Events](../../../docs/administration/security-audit-events.md).
 
 ---
 
@@ -224,7 +228,7 @@ A global exception handler catches all unhandled exceptions. Production response
 | A06 | Insecure Design | Good | None | - |
 | A07 | Authentication Failures | Strong | None | - |
 | A08 | Software/Data Integrity | Good | `packages.lock.json` (shared with A03) | Medium |
-| A09 | Security Logging & Alerting | Good | Security audit trail | Medium |
+| A09 | Security Logging & Alerting | Strong | ~~Security audit trail~~ (remediated) | ~~Medium~~ |
 | A10 | Exceptional Conditions | Strong | None | - |
 
 ## Remediation Recommendations
@@ -270,7 +274,7 @@ A global exception handler catches all unhandled exceptions. Production response
 
 ---
 
-### 3. Security Audit Trail (Medium)
+### 3. Security Audit Trail (Medium) - ✅ Remediated
 
 **OWASP:** A09
 **Risk:** Cannot isolate security events for review or compliance evidence.
@@ -286,9 +290,18 @@ A global exception handler catches all unhandled exceptions. Production response
 - Use Serilog filtering to route security events to a separate sink (file, database, or external)
 - Lower effort but less queryable and harder to make tamper-evident
 
+**Option C: Route through the existing Activity system (Implemented)**
+- Reuse the Activity system already used for every other tracked operation, rather than a parallel `AuditLog` table
+- Privileged configuration operations were already covered by configuration change capture; the remaining gap was authentication telemetry
+- New `Authentication` Activity target type and `Anonymous` initiator type; failed authentication aggregated per (API key prefix, client IP, reason) per 15-minute window to bound writes under attack
+- Exposed via the existing Activities REST API, filterable by target type, for SIEM polling
+- Own retention period (Service Setting), independent of general history and configuration change retention
+
 **Recommendation:** Option A. A dedicated table is queryable, exportable, and can be made tamper-evident. It also serves as the foundation for a future admin UI audit viewer.
 
 **Effort:** Medium
+
+**Implemented:** Option C, agreed with the product owner on 2026-07-13 in preference to Option A: a single audit log (the existing Activity system, which the admin portal, PowerShell module and REST API already surface) beats a parallel store for discoverability and maintenance cost, and the aggregation-on-write design in Option C is what makes the write-amplification risk of the "authentication failure" event class safe to record at all. Tamper evidence (hash-chaining), the one capability Option A's "can be made tamper-evident" nods to that Option C does not yet provide, is deferred pending a live compliance driver; if required later it can chain just the security and configuration Activity classes without reworking this design. See `engineering/plans/done/SECURITY_AUDIT_EVENTS.md` and [Security Audit Events](../../../docs/administration/security-audit-events.md).
 
 ---
 

@@ -212,6 +212,7 @@ public static class Helpers
             ActivityTargetOperationType.ImportHierarchy => Color.Secondary,
             ActivityTargetOperationType.ImportSchema => Color.Secondary,
             ActivityTargetOperationType.Revert => Color.Warning,
+            ActivityTargetOperationType.Authenticate => Color.Info,
             _ => Color.Default,
         };
     }

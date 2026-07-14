@@ -35,6 +35,17 @@ public class HistoryCleanupResponse
     public int ConfigurationChangeRetentionPeriodDays { get; set; }
 
     /// <summary>
+    /// Number of security event Activity records (TargetType Authentication: interactive sign-in success/failure,
+    /// API key authentication failure) deleted, per the security event retention period.
+    /// </summary>
+    public int SecurityEventActivitiesDeleted { get; set; }
+
+    /// <summary>
+    /// Configured security event retention period in days.
+    /// </summary>
+    public int SecurityEventRetentionPeriodDays { get; set; }
+
+    /// <summary>
     /// Oldest record timestamp that was deleted (if any records were deleted).
     /// </summary>
     public DateTime? OldestRecordDeleted { get; set; }
