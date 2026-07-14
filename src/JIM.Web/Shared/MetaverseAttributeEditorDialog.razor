@@ -236,7 +236,9 @@
                     Name = trimmedName,
                     Type = _type,
                     AttributePlurality = _plurality,
-                    RenderingHint = _plurality == AttributePlurality.MultiValued ? _renderingHint : AttributeRenderingHint.Default
+                    RenderingHint = _plurality == AttributePlurality.MultiValued ? _renderingHint : AttributeRenderingHint.Default,
+                    Created = DateTime.UtcNow,
+                    MetaverseObjectTypes = new List<MetaverseObjectType>()
                 };
                 await jim.Metaverse.CreateMetaverseAttributeAsync(attribute, user, changeReason);
 

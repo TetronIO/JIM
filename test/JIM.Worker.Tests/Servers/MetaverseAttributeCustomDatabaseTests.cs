@@ -36,6 +36,20 @@ public class MetaverseAttributeCustomDatabaseTests
         return new JimDbContext(options);
     }
 
+    // Mirrors the Blazor/API host DbContext, which defaults to NoTracking. JimDbContext.OnConfiguring applies
+    // NoTracking only on the parameterless-constructor path, so a test that passes options (as NewContext does)
+    // gets EF's tracking default and cannot reproduce load-mutate-save-navigation bugs. Load-mutate-save tests
+    // that must match production tracking behaviour use this instead.
+    private JimDbContext NewNoTrackingContext()
+    {
+        var options = new DbContextOptionsBuilder<JimDbContext>()
+            .UseNpgsql(_connectionString)
+            .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
+            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+            .Options;
+        return new JimDbContext(options);
+    }
+
     [OneTimeSetUp]
     public void OneTimeSetUp()
     {
@@ -533,5 +547,84 @@ public class MetaverseAttributeCustomDatabaseTests
             .Select(t => t.Name)
             .ToListAsync();
         Assert.That(boundTypeNames, Is.EquivalentTo(new[] { "Person" }), "a values-blocked unassign makes no change");
+    }
+
+    [Test]
+    public async Task BindAttributeToObjectTypeAsync_UnderNoTrackingContext_PersistsJoinRowAsync()
+    {
+        int attributeId;
+        int objectTypeId;
+        await using (var seed = NewContext())
+        {
+            var personType = new MetaverseObjectType { Name = "Person", PluralName = "People", BuiltIn = true };
+            var costCentre = new MetaverseAttribute { Name = "costCentre", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued, MetaverseObjectTypes = new List<MetaverseObjectType>() };
+            seed.MetaverseObjectTypes.Add(personType);
+            seed.MetaverseAttributes.Add(costCentre);
+            await seed.SaveChangesAsync();
+            attributeId = costCentre.Id;
+            objectTypeId = personType.Id;
+        }
+
+        // A NoTracking context (as the Blazor/API host uses) is essential: with tracking on, the M2M mutation is
+        // detected regardless and the missing-AsTracking bug is masked. Regression guard for the silent no-op.
+        await using (var act = NewNoTrackingContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(act));
+            await jim.Metaverse.BindAttributeToObjectTypeAsync(attributeId, objectTypeId, TestUtilities.GetInitiatedBy());
+        }
+
+        await using var verify = NewContext();
+        var boundCount = await verify.MetaverseAttributes
+            .Where(a => a.Id == attributeId)
+            .SelectMany(a => a.MetaverseObjectTypes)
+            .CountAsync(t => t.Id == objectTypeId);
+        Assert.That(boundCount, Is.EqualTo(1), "the binding join row must persist under a NoTracking context");
+    }
+
+    [Test]
+    public async Task UnassignAttributeFromObjectTypeAsync_UnderNoTrackingContext_RemovesJoinRowAsync()
+    {
+        int attributeId;
+        int objectTypeId;
+        await using (var seed = NewContext())
+        {
+            var personType = new MetaverseObjectType { Name = "Person", PluralName = "People", BuiltIn = true };
+            var costCentre = new MetaverseAttribute { Name = "costCentre", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+            personType.Attributes.Add(costCentre);
+            seed.MetaverseObjectTypes.Add(personType);
+            await seed.SaveChangesAsync();
+            attributeId = costCentre.Id;
+            objectTypeId = personType.Id;
+        }
+
+        await using (var act = NewNoTrackingContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(act));
+            var impact = await jim.Metaverse.UnassignAttributeFromObjectTypeAsync(attributeId, objectTypeId, TestUtilities.GetInitiatedBy());
+            Assert.That(impact.Unassigned, Is.True);
+        }
+
+        await using var verify = NewContext();
+        var boundCount = await verify.MetaverseAttributes
+            .Where(a => a.Id == attributeId)
+            .SelectMany(a => a.MetaverseObjectTypes)
+            .CountAsync(t => t.Id == objectTypeId);
+        Assert.That(boundCount, Is.EqualTo(0), "the binding join row must be removed under a NoTracking context");
+    }
+
+    [Test]
+    public async Task CreateMetaverseAttributeAsync_WithNullObjectTypesCollection_PersistsWithoutThrowingAsync()
+    {
+        await using (var act = NewNoTrackingContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(act));
+
+            // The UI/API may build an unbound attribute and leave MetaverseObjectTypes null; creation must not NRE.
+            var attribute = new MetaverseAttribute { Name = "orphanAttr", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
+            await jim.Metaverse.CreateMetaverseAttributeAsync(attribute, TestUtilities.GetInitiatedBy());
+        }
+
+        await using var verify = NewContext();
+        Assert.That(await verify.MetaverseAttributes.AnyAsync(a => a.Name == "orphanAttr"), Is.True);
     }
 }

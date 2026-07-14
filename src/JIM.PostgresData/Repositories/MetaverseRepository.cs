@@ -248,8 +248,9 @@ public class MetaverseRepository : IMetaverseRepository
     public async Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute)
     {
         // Attach existing MetaverseObjectTypes so EF recognises them as existing entities
-        // and only creates join table entries (not duplicate object type rows).
-        foreach (var objectType in attribute.MetaverseObjectTypes)
+        // and only creates join table entries (not duplicate object type rows). The collection
+        // is optional; a caller may create an unbound attribute (null or empty).
+        foreach (var objectType in attribute.MetaverseObjectTypes ?? Enumerable.Empty<MetaverseObjectType>())
         {
             if (Repository.Database.Entry(objectType).State == EntityState.Detached)
                 Repository.Database.MetaverseObjectTypes.Attach(objectType);
@@ -796,8 +797,10 @@ public class MetaverseRepository : IMetaverseRepository
             db.ExampleDataTemplateAttributes.RemoveRange(await db.ExampleDataTemplateAttributes.Where(x => edtAttrIds.Contains(x.Id)).ToListAsync());
 
         // Finally the binding itself: remove the object type from the attribute's associations. The attribute row and
-        // its bindings to other types are untouched.
+        // its bindings to other types are untouched. AsTracking is required (the Blazor DbContext defaults to
+        // NoTracking) or the skip-navigation removal is invisible to SaveChanges and the join row silently survives.
         var attribute = await db.MetaverseAttributes
+            .AsTracking()
             .Include(a => a.MetaverseObjectTypes)
             .SingleOrDefaultAsync(a => a.Id == attributeId);
         var bound = attribute?.MetaverseObjectTypes.SingleOrDefault(t => t.Id == metaverseObjectTypeId);
@@ -810,7 +813,11 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task AddAttributeObjectTypeBindingAsync(int attributeId, int metaverseObjectTypeId)
     {
+        // AsTracking is required: the Blazor DbContext defaults to NoTracking, so a mutation to the loaded
+        // attribute's MetaverseObjectTypes skip-navigation would otherwise be invisible to SaveChanges and the
+        // join row would silently never be written.
         var attribute = await Repository.Database.MetaverseAttributes
+            .AsTracking()
             .Include(a => a.MetaverseObjectTypes)
             .SingleOrDefaultAsync(a => a.Id == attributeId)
             ?? throw new ArgumentException($"Metaverse Attribute {attributeId} not found.", nameof(attributeId));
@@ -829,7 +836,11 @@ public class MetaverseRepository : IMetaverseRepository
 
     public async Task RemoveAttributeObjectTypeBindingAsync(int attributeId, int metaverseObjectTypeId)
     {
+        // AsTracking is required: the Blazor DbContext defaults to NoTracking, so removing an item from the loaded
+        // attribute's MetaverseObjectTypes skip-navigation would otherwise be invisible to SaveChanges and the join
+        // row would silently survive.
         var attribute = await Repository.Database.MetaverseAttributes
+            .AsTracking()
             .Include(a => a.MetaverseObjectTypes)
             .SingleOrDefaultAsync(a => a.Id == attributeId)
             ?? throw new ArgumentException($"Metaverse Attribute {attributeId} not found.", nameof(attributeId));
