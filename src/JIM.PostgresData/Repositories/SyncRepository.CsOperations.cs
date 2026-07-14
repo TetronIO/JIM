@@ -628,8 +628,7 @@ public partial class SyncRepository
         // This bypasses the change tracker entirely, avoiding O(n) tracker scans per entity
         // that caused multi-minute stalls at 100K scale.
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
-        if (npgsqlConn.State != System.Data.ConnectionState.Open)
-            await npgsqlConn.OpenAsync();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
         var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
 

@@ -296,7 +296,7 @@
             try
             {
                 // Hide the page footer to maximise viewing area for logs
-                await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('jim-hide-footer')");
+                await JSRuntime.InvokeVoidAsync("jimInterop.setBodyClass", "jim-hide-footer", true);
             }
             catch (JSDisconnectedException)
             {
@@ -639,7 +639,7 @@
         // Remove the footer-hiding class when leaving the page
         try
         {
-            await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.remove('jim-hide-footer')");
+            await JSRuntime.InvokeVoidAsync("jimInterop.setBodyClass", "jim-hide-footer", false);
         }
         catch (JSDisconnectedException)
         {

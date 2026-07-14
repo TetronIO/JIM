@@ -17,6 +17,7 @@ using JIM.Models.Security;
 using JIM.PostgresData;
 using JIM.Utilities;
 using JIM.Web.Logging;
+using JIM.Web.Middleware;
 using JIM.Web.Middleware.Api;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
@@ -536,6 +537,19 @@ try
         app.UseHsts();
     }
 
+    // Defence-in-depth security response headers (issue #500, OWASP Top 10:2025 A02), applied site-wide: Blazor
+    // UI, static assets and the REST API alike. Registered here, not gated on isOpenApiGenerateMode (unlike
+    // UseRateLimiter below): the middleware needs no registered services, so there is nothing to fail at
+    // pipeline-build time, and it never actually executes in that mode anyway (document generation resolves
+    // IOpenApiDocumentProvider directly and returns before app.Run() starts accepting requests).
+    // Placement is deliberate on both sides: it must come AFTER UseExceptionHandler/UseHsts above, because
+    // ExceptionHandlerMiddleware calls Response.Clear() (wiping any headers already set) before re-running the
+    // downstream pipeline against the error path, so headers set upstream of it would be lost on a genuine 500;
+    // running downstream of it means this middleware re-applies its headers on that second pass. It must come
+    // BEFORE UseStaticFiles below, because StaticFileMiddleware short-circuits (never calls next()) once it
+    // serves a match, so anything registered after it would never run for a static asset request.
+    app.UseSecurityHeaders();
+
     // API documentation: serve Scalar API reference with the OpenAPI document.
     // Static mode: if a pre-generated file exists at wwwroot/api/openapi/v1.json (baked into
     // Docker images during build), serve it via UseStaticFiles. Works in any environment.
@@ -551,6 +565,12 @@ try
         options.WithTitle("JIM API Reference")
             .WithFavicon("/images/jim-logo.png")
             .ForceDarkMode()
+            // Scalar defaults to loading its "Inter"/"JetBrains Mono" fonts from its own CDN. JIM is air-gap
+            // deployable (no third-party network dependency, per root CLAUDE.md's design principles) and the
+            // stage-one CSP's font-src is 'self' only, so leaving the default enabled would silently degrade
+            // to system fonts under CSP; disable it outright so the API reference page never attempts the
+            // external fetch in the first place.
+            .DisableDefaultFonts()
             .WithCustomCss("""
                 .dark-mode {
                     --scalar-background-1: #051526;
