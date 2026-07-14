@@ -34,6 +34,41 @@ public class ActivityRepository : IActivityRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Atomically increments AttemptCount and advances LastSeen on the aggregated failed-authentication Activity row
+    /// matching the given window bucket. On relational providers this issues a single atomic SQL UPDATE
+    /// (<c>ExecuteUpdateAsync</c>), making concurrent increments for the same window race-safe. The in-memory test
+    /// provider does not support <c>ExecuteUpdateAsync</c> (see the identical pattern in
+    /// <c>SyncRepository.CsOperations.cs</c>), so it falls back to a tracked load/update/save.
+    /// </summary>
+    public async Task<bool> IncrementAggregatedFailedAuthenticationAsync(string apiKeyPrefix, string clientIp, string reason, DateTime windowStart, DateTime lastSeen)
+    {
+        var query = Repository.Database.Activities
+            .Where(a => a.TargetType == ActivityTargetType.Authentication
+                && a.ApiKeyPrefix == apiKeyPrefix
+                && a.ClientIpAddress == clientIp
+                && a.SecurityEventReason == reason
+                && a.AggregationWindowStart == windowStart);
+
+        if (Repository.Database.Database.IsRelational())
+        {
+            var rowsAffected = await query.ExecuteUpdateAsync(setters => setters
+                .SetProperty(a => a.AttemptCount, a => (a.AttemptCount ?? 0) + 1)
+                .SetProperty(a => a.LastSeen, lastSeen));
+            return rowsAffected > 0;
+        }
+
+        // InMemory provider (tests): ExecuteUpdateAsync not supported.
+        var existing = await query.AsTracking().SingleOrDefaultAsync();
+        if (existing == null)
+            return false;
+
+        existing.AttemptCount = (existing.AttemptCount ?? 0) + 1;
+        existing.LastSeen = lastSeen;
+        await Repository.Database.SaveChangesAsync();
+        return true;
+    }
+
     public async Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
     {
         var counts = await Repository.Database.ActivityRunProfileExecutionItems

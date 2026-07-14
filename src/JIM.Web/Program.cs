@@ -16,6 +16,8 @@ using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.PostgresData;
 using JIM.Utilities;
+using JIM.Web.Logging;
+using JIM.Web.Middleware;
 using JIM.Web.Middleware.Api;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
@@ -26,6 +28,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Microsoft.AspNetCore.OpenApi;
@@ -60,6 +63,7 @@ using System.Security.Claims;
 // JIM_INFRASTRUCTURE_API_KEY - Creates an infrastructure API key on startup for CI/CD automation (24hr expiry)
 // JIM_ENCRYPTION_KEY_PATH - Custom path for encryption key storage (default: /data/keys or app data directory)
 // JIM_THEME - Built-in colour theme name (default: refined)
+// JIM_TRUSTED_PROXIES - Comma-separated trusted proxy IPs/CIDR networks; enables X-Forwarded-For/-Proto (default: none trusted)
 
 // initial logging setup for when the application has not yet been created (bootstrapping)...
 InitialiseLogging(new LoggerConfiguration(), true);
@@ -87,6 +91,32 @@ try
     }
 
     var builder = WebApplication.CreateBuilder(args);
+
+    // Reverse proxy trust (optional; container orchestration override, per CLAUDE.md's environment-variable
+    // design principle). Unset by default: no forwarded headers are trusted and RemoteIpAddress is used as-is,
+    // which is correct when JIM is reached directly. Set JIM_TRUSTED_PROXIES to a comma-separated list of proxy
+    // IPs and/or CIDR networks when JIM sits behind a reverse proxy/load balancer, so X-Forwarded-For/-Proto are
+    // trusted only from those sources and the real client IP (used for unauthenticated API rate limiting,
+    // logging, HTTPS redirection, etc.) is recovered rather than the proxy's own address. Deliberately not part
+    // of ValidateSsoConfiguration's fail-fast checks: it is an optional deployment-topology override, not
+    // required configuration.
+    var trustedProxiesValue = Environment.GetEnvironmentVariable(Constants.Config.TrustedProxies);
+    var trustedProxies = TrustedProxyParser.Parse(trustedProxiesValue);
+    if (!trustedProxies.IsEmpty)
+    {
+        builder.Services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+            options.KnownProxies.Clear();
+            options.KnownIPNetworks.Clear();
+            foreach (var proxy in trustedProxies.KnownProxies)
+                options.KnownProxies.Add(proxy);
+            foreach (var network in trustedProxies.KnownNetworks)
+                options.KnownIPNetworks.Add(network);
+        });
+        Log.Information("Trusting forwarded headers from {ProxyCount} known proxy address(es) and {NetworkCount} known network(s)",
+            trustedProxies.KnownProxies.Count, trustedProxies.KnownNetworks.Count);
+    }
 
     // Configure database connection
     var connectionString = JimDbContext.BuildConnectionString();
@@ -293,7 +323,29 @@ try
             // intercept the user login when a token is received and validate we can map them to a JIM user
             options.Events.OnTicketReceived = async ctx =>
             {
-                await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext);
+                var user = await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext);
+                if (user != null)
+                {
+                    // One security audit Activity per session establishment (not per request), attributed to the
+                    // signed-in user. Non-blocking: a failed audit write must never fail the sign-in it instruments.
+                    RecordSuccessfulSignInEvent(ctx.HttpContext, user);
+                }
+            };
+
+            // Security audit events (issue #500): the IdP rejected the sign-in outright (e.g. access denied,
+            // provider-side error) before any token reached us.
+            options.Events.OnRemoteFailure = ctx =>
+            {
+                RecordFailedSignInEvent(ctx.HttpContext, CategoriseOidcFailure(ctx.Failure));
+                return Task.CompletedTask;
+            };
+
+            // Security audit events (issue #500): a token was returned but failed local validation (bad signature,
+            // expired, wrong audience, replayed nonce, ...).
+            options.Events.OnAuthenticationFailed = ctx =>
+            {
+                RecordFailedSignInEvent(ctx.HttpContext, CategoriseOidcFailure(ctx.Exception));
+                return Task.CompletedTask;
             };
 
             // Prevent OIDC redirects for API requests - they should return 401 instead
@@ -358,6 +410,11 @@ try
 
     // setup authorisation policies
     builder.Services.AddAuthorization();
+
+    // REST API rate limiting (issue #500, OWASP Top 10:2025 A02). Registers the settings cache and the global
+    // limiter; UseRateLimiter() below wires it into the pipeline. Not needed in OpenAPI generation mode, which
+    // never accepts requests.
+    builder.Services.AddApiRateLimiting();
     } // end of !isOpenApiGenerateMode auth block
 
     // Add services to the container.
@@ -502,6 +559,19 @@ try
         app.UseHsts();
     }
 
+    // Defence-in-depth security response headers (issue #500, OWASP Top 10:2025 A02), applied site-wide: Blazor
+    // UI, static assets and the REST API alike. Registered here, not gated on isOpenApiGenerateMode (unlike
+    // UseRateLimiter below): the middleware needs no registered services, so there is nothing to fail at
+    // pipeline-build time, and it never actually executes in that mode anyway (document generation resolves
+    // IOpenApiDocumentProvider directly and returns before app.Run() starts accepting requests).
+    // Placement is deliberate on both sides: it must come AFTER UseExceptionHandler/UseHsts above, because
+    // ExceptionHandlerMiddleware calls Response.Clear() (wiping any headers already set) before re-running the
+    // downstream pipeline against the error path, so headers set upstream of it would be lost on a genuine 500;
+    // running downstream of it means this middleware re-applies its headers on that second pass. It must come
+    // BEFORE UseStaticFiles below, because StaticFileMiddleware short-circuits (never calls next()) once it
+    // serves a match, so anything registered after it would never run for a static asset request.
+    app.UseSecurityHeaders();
+
     // API documentation: serve Scalar API reference with the OpenAPI document.
     // Static mode: if a pre-generated file exists at wwwroot/api/openapi/v1.json (baked into
     // Docker images during build), serve it via UseStaticFiles. Works in any environment.
@@ -517,6 +587,12 @@ try
         options.WithTitle("JIM API Reference")
             .WithFavicon("/images/jim-logo.png")
             .ForceDarkMode()
+            // Scalar defaults to loading its "Inter"/"JetBrains Mono" fonts from its own CDN. JIM is air-gap
+            // deployable (no third-party network dependency, per root CLAUDE.md's design principles) and the
+            // stage-one CSP's font-src is 'self' only, so leaving the default enabled would silently degrade
+            // to system fonts under CSP; disable it outright so the API reference page never attempts the
+            // external fetch in the first place.
+            .DisableDefaultFonts()
             .WithCustomCss("""
                 .dark-mode {
                     --scalar-background-1: #051526;
@@ -597,6 +673,12 @@ try
         app.Logger.LogInformation("No static OpenAPI document found; using runtime generation (development only)");
     }
 
+    // Forwarded headers (X-Forwarded-For / X-Forwarded-Proto) must be processed before anything that reads the
+    // client IP or scheme: HTTPS redirection, authentication, and rate limiting all depend on it. A no-op unless
+    // JIM_TRUSTED_PROXIES was set above (the common case: JIM reached directly, no proxy to trust).
+    if (!trustedProxies.IsEmpty)
+        app.UseForwardedHeaders();
+
     app.UseHttpsRedirection();
     app.UseStaticFiles();
     app.UseRouting();
@@ -614,6 +696,20 @@ try
         context => context.Request.Path.StartsWithSegments("/api"),
         appBuilder => appBuilder.UseJimRoleEnrichment()
     );
+
+    // REST API rate limiting (issue #500). Must run after authentication and role enrichment so the
+    // GlobalLimiter's partition factory sees a fully-resolved identity (roles, the Metaverse Object ID claim),
+    // and BEFORE authorisation: a request that will fail authorisation (missing/invalid credentials, insufficient
+    // role) must still be counted and throttled per client IP, otherwise unauthenticated brute-force/credential
+    // probing against protected endpoints would bypass the limiter entirely via authorisation's 401/403
+    // short-circuit. Applied pipeline-wide (not UseWhen-scoped to /api) because the GlobalLimiter itself already
+    // returns a no-op limiter for non-API paths; a single registration keeps that decision in one place
+    // (RateLimitPartitionResolver) instead of splitting it between the pipeline and the partition factory.
+    // Skipped in OpenAPI generation mode, matching the AddApiRateLimiting registration above: that mode never
+    // serves requests, and UseRateLimiter verifies its services are registered at pipeline-build time, so an
+    // ungated call crashes the openapi-gen Docker build stage at startup.
+    if (!isOpenApiGenerateMode)
+        app.UseRateLimiter();
 
     app.UseAuthorization();
 
@@ -728,14 +824,22 @@ static void InitialiseLogging(LoggerConfiguration loggerConfiguration, bool assi
     // Suppress EF Core SQL query logging — these are noise with no diagnostic value
     loggerConfiguration.MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Fatal);
     loggerConfiguration.Enrich.FromLogContext();
-    loggerConfiguration.WriteTo.File(
-        formatter: new RenderedCompactJsonFormatter(),
-        path: Path.Combine(loggingPath, "jim.web..log"),
-        rollingInterval: RollingInterval.Day,
-        retainedFileCountLimit: 100,
-        fileSizeLimitBytes: 50 * 1024 * 1024,  // 50MB per file — keeps files manageable for analysis
-        rollOnFileSizeLimit: true);
-    loggerConfiguration.WriteTo.Console();
+
+    // The sinks sit behind a demoting wrapper so benign Blazor circuit-disconnect noise (framework Error
+    // events caused by JSDisconnectedException when a browser disconnects mid-operation) is logged at
+    // Warning. Real circuit errors pass through unchanged. See CircuitDisconnectDemotingSink.
+    var sinkLogger = new LoggerConfiguration()
+        .MinimumLevel.Verbose()
+        .WriteTo.File(
+            formatter: new RenderedCompactJsonFormatter(),
+            path: Path.Combine(loggingPath, "jim.web..log"),
+            rollingInterval: RollingInterval.Day,
+            retainedFileCountLimit: 100,
+            fileSizeLimitBytes: 50 * 1024 * 1024,  // 50MB per file; keeps files manageable for analysis
+            rollOnFileSizeLimit: true)
+        .WriteTo.Console()
+        .CreateLogger();
+    loggerConfiguration.WriteTo.Sink(new CircuitDisconnectDemotingSink(sinkLogger));
 
     if (assignLogLogger)
         Log.Logger = loggerConfiguration.CreateLogger();
@@ -872,19 +976,22 @@ static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
 /// access JIM. The provisioning decision itself lives in the application layer (jim.Auth); this
 /// method only bridges the web layer's ClaimsPrincipal to that logic and back.
 /// </summary>
-static async Task ResolveAndAttachJimIdentityAsync(ClaimsPrincipal? principal, HttpContext httpContext)
+/// <returns>The resolved MetaverseObject, or null if no JIM identity could be established. The cookie flow
+/// (<c>OnTicketReceived</c>) uses a non-null result to record an interactive sign-in success security audit event;
+/// the bearer-token flow (<c>OnTokenValidated</c>) discards it, since bearer calls are per-request, not per-session.</returns>
+static async Task<MetaverseObject?> ResolveAndAttachJimIdentityAsync(ClaimsPrincipal? principal, HttpContext httpContext)
 {
     if (principal?.Identity == null)
     {
         Log.Error("ResolveAndAttachJimIdentityAsync: Request has no principal or identity.");
-        return;
+        return null;
     }
 
     var factory = httpContext.RequestServices.GetService<IJimApplicationFactory>();
     if (factory == null)
     {
         Log.Error("ResolveAndAttachJimIdentityAsync: Could not resolve IJimApplicationFactory.");
-        return;
+        return null;
     }
 
     using var jim = factory.Create();
@@ -894,7 +1001,7 @@ static async Task ResolveAndAttachJimIdentityAsync(ClaimsPrincipal? principal, H
     if (string.IsNullOrEmpty(serviceSettings.SSOUniqueIdentifierClaimType))
     {
         Log.Error("ResolveAndAttachJimIdentityAsync: ServiceSettings.SSOUniqueIdentifierClaimType is not configured.");
-        return;
+        return null;
     }
 
     var uniqueId = principal.FindFirstValue(serviceSettings.SSOUniqueIdentifierClaimType);
@@ -902,7 +1009,7 @@ static async Task ResolveAndAttachJimIdentityAsync(ClaimsPrincipal? principal, H
     {
         Log.Warning("ResolveAndAttachJimIdentityAsync: User '{Name}' has no '{ClaimType}' claim; cannot identify them.",
             LogSanitiser.Sanitise(principal.Identity.Name), serviceSettings.SSOUniqueIdentifierClaimType);
-        return;
+        return null;
     }
 
     // Hand a provider-agnostic identity to the application layer to resolve or provision.
@@ -921,7 +1028,7 @@ static async Task ResolveAndAttachJimIdentityAsync(ClaimsPrincipal? principal, H
         // Not a known user and not the initial admin: no roles are added, so they cannot access JIM.
         Log.Debug("ResolveAndAttachJimIdentityAsync: No JIM identity for '{ClaimType}'='{UniqueId}'.",
             serviceSettings.SSOUniqueIdentifierClaimType, LogSanitiser.Sanitise(uniqueId));
-        return;
+        return null;
     }
 
     // Build a JIM-specific identity carrying the user's role claims and MetaverseObject id, and add it
@@ -936,6 +1043,87 @@ static async Task ResolveAndAttachJimIdentityAsync(ClaimsPrincipal? principal, H
 
     var jimIdentity = new ClaimsIdentity(roleClaims, authenticationType: null, nameType: null, roleType: Constants.BuiltInRoles.RoleClaimType) { Label = "JIM" };
     principal.AddIdentity(jimIdentity);
+
+    return user;
+}
+
+/// <summary>
+/// Records an interactive sign-in success security audit event on a background task with a fresh DI scope
+/// (via <see cref="IJimApplicationFactory"/>, which is safe to call after the originating request's DI scope has
+/// been disposed, since it resolves its DbContext via <c>IDbContextFactory</c>). Non-blocking: a failed audit
+/// write must never fail a sign-in that has already succeeded.
+/// </summary>
+static void RecordSuccessfulSignInEvent(HttpContext httpContext, MetaverseObject user)
+{
+    var clientIp = httpContext.Connection.RemoteIpAddress?.ToString();
+    var factory = httpContext.RequestServices.GetService<IJimApplicationFactory>();
+    if (factory == null)
+    {
+        Log.Warning("RecordSuccessfulSignInEvent: Could not resolve IJimApplicationFactory; sign-in success event not recorded.");
+        return;
+    }
+
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            using var jim = factory.Create();
+            await jim.SecurityAudit.RecordInteractiveSignInSucceededAsync(user, clientIp);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Warning(ex, "RecordSuccessfulSignInEvent: Failed to record interactive sign-in success event");
+        }
+    });
+}
+
+/// <summary>
+/// Records an aggregated interactive sign-in failure security audit event on a background task with a fresh DI
+/// scope, mirroring <see cref="RecordSuccessfulSignInEvent"/>. Non-blocking and never throws into the caller:
+/// <c>SecurityAuditServer.RecordFailedAuthenticationAsync</c> itself swallows audit-write failures.
+/// </summary>
+static void RecordFailedSignInEvent(HttpContext httpContext, string reason)
+{
+    var clientIp = httpContext.Connection.RemoteIpAddress?.ToString();
+    var factory = httpContext.RequestServices.GetService<IJimApplicationFactory>();
+    if (factory == null)
+    {
+        Log.Warning("RecordFailedSignInEvent: Could not resolve IJimApplicationFactory; failed sign-in event not recorded.");
+        return;
+    }
+
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            using var jim = factory.Create();
+            await jim.SecurityAudit.RecordFailedAuthenticationAsync("Interactive sign-in failed", reason, apiKeyPrefix: null, clientIp);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Warning(ex, "RecordFailedSignInEvent: Failed to record failed authentication event");
+        }
+    });
+}
+
+/// <summary>
+/// Maps an OIDC sign-in failure exception to a short, sanitised reason category for the security audit log.
+/// Deliberately does not surface the raw exception message: it can carry attacker-influenced content (e.g. a
+/// manipulated OIDC <c>error_description</c>) and is unbounded in length, neither of which belongs in an
+/// aggregation-key column (see Activity.SecurityEventReason).
+/// </summary>
+static string CategoriseOidcFailure(Exception? exception)
+{
+    return exception switch
+    {
+        null => "OIDC sign-in failed",
+        SecurityTokenExpiredException => "OIDC token expired",
+        SecurityTokenValidationException => "OIDC token validation failed",
+        SecurityTokenException => "OIDC token error",
+        _ when exception.Message.Contains("Correlation failed", StringComparison.OrdinalIgnoreCase) => "OIDC correlation failed",
+        _ when exception.Message.Contains("access_denied", StringComparison.OrdinalIgnoreCase) => "OIDC access denied",
+        _ => "OIDC sign-in failed"
+    };
 }
 
 /// <summary>

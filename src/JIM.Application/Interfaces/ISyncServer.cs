@@ -119,6 +119,17 @@ public interface ISyncServer
         string? initiatorName,
         List<MetaverseObjectAttributeValue>? finalAttributeValues);
 
+    /// <summary>
+    /// Set-based form of <see cref="DeleteMetaverseObjectAsync"/> (issue #993): deletes multiple
+    /// MVOs with one FK cleanup pass and bulk change record persistence. Semantically equivalent
+    /// to calling the singular method per object.
+    /// </summary>
+    Task DeleteMetaverseObjectsAsync(
+        List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletions,
+        ActivityInitiatorType initiatorType,
+        Guid? initiatorId,
+        string? initiatorName);
+
     #endregion
 
     #region Activity Management
@@ -253,6 +264,12 @@ public interface ISyncServer
     Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo);
 
     /// <summary>
+    /// Set-based form of <see cref="EvaluateMvoDeletionAsync"/> (issue #993): one CSO fetch,
+    /// Pending Export ensure and CSO disconnect pass for the whole batch of MVOs.
+    /// </summary>
+    Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos);
+
+    /// <summary>
     /// Captures the referencing-object and resolution state reference recall needs before Metaverse
     /// Objects are deleted (issue #908). Call before <see cref="EvaluateMvoDeletionAsync"/>.
     /// </summary>
@@ -261,8 +278,11 @@ public interface ISyncServer
     /// <summary>
     /// Stages membership-removal Pending Exports for Metaverse Objects that referenced now-deleted
     /// Metaverse Objects (reference recall, issue #908). Call after the deletions have been performed.
+    /// Pass a run-scoped <paramref name="recallCache"/> (built with sourceConnectedSystemId 0) to
+    /// avoid a per-call Synchronisation Rule reload (#1003); when null, the cache is built ad hoc.
     /// </summary>
-    Task<ReferenceRecallResult> StageReferenceRecallExportsAsync(ReferenceRecallContext context, IReadOnlyCollection<Guid> deletedMvoIds);
+    Task<ReferenceRecallResult> StageReferenceRecallExportsAsync(ReferenceRecallContext context, IReadOnlyCollection<Guid> deletedMvoIds,
+        ExportEvaluationCache? recallCache = null);
 
     #endregion
 
@@ -288,7 +308,7 @@ public interface ISyncServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback = null,
         Func<IConnector>? connectorFactory = null,
-        Func<ISyncRepository>? repositoryFactory = null,
+        Func<ISyncRepositoryScope>? repositoryFactory = null,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null);
 
     #endregion

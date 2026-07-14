@@ -1,6 +1,5 @@
 @using JIM.Models.Core
 @using Utilities
-@inject IDialogService DialogService
 @inject IUserPreferenceService PreferenceService
 
 @if (MetaverseObject != null)
@@ -59,18 +58,11 @@
                                 }
                                 else
                                 {
-                                    <div class="jim-attr-expanded">
-                                        @foreach (var val in group.Values.Take(MvaInlineThreshold))
-                                        {
-                                            <div class="jim-attr-expanded-item">
-                                                @RenderValue(val)
-                                            </div>
-                                        }
-                                        <MudButton Variant="Variant.Outlined" Class="jim-attr-expand-btn"
-                                            OnClick="@(() => OpenMvaDialogAsync(group.AttributeName, group.TotalCount, group.IsReference))">
-                                            +@(group.TotalCount - MvaInlineThreshold) more
-                                        </MudButton>
-                                    </div>
+                                    <MvoMvaTable @key="group.AttributeName"
+                                                 AttributeName="@group.AttributeName"
+                                                 MetaverseObjectId="@MetaverseObject.Id"
+                                                 IsReferenceAttribute="@group.IsReference"
+                                                 Dense="@_dense" />
                                 }
                             </td>
                             <td class="jim-attr-type">
@@ -226,23 +218,4 @@
             .ToList();
     }
 
-    private async Task OpenMvaDialogAsync(string attributeName, int totalCount, bool isReference)
-    {
-        var parameters = new DialogParameters<MvoMvaDialog>
-        {
-            { x => x.AttributeName, attributeName },
-            { x => x.MetaverseObjectId, MetaverseObject.Id },
-            { x => x.TotalCount, totalCount },
-            { x => x.IsReferenceAttribute, isReference }
-        };
-
-        var options = new DialogOptions
-        {
-            CloseButton = true,
-            MaxWidth = MaxWidth.Medium,
-            FullWidth = true
-        };
-
-        await DialogService.ShowAsync<MvoMvaDialog>(attributeName, parameters, options);
-    }
 }

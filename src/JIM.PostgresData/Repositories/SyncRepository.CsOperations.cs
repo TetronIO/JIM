@@ -499,6 +499,21 @@ public partial class SyncRepository
         if (csoIds.Length == 0)
             return 0;
 
+        // Instances of the rows this method is about to delete may be tracked on the worker's
+        // long-lived context (reconciliation and navigation fix-up both track Pending Exports).
+        // Detach them before the raw SQL deletes: PendingExport.SourceMetaverseObject is
+        // configured SetNull-on-delete, so a tracked instance left behind makes EF Core's
+        // cascade fix-up issue an UPDATE against the already-deleted row when its source MVO is
+        // deleted in the same page flush; that matches zero rows and throws
+        // DbUpdateConcurrencyException, poisoning every later SaveChangesAsync on the context
+        // (Scenario4-DeletionRules Test 3 failure, issue #993).
+        var pendingExportIds = await _context.PendingExports
+            .Where(pe => pe.ConnectedSystemObjectId != null && csoIds.Contains(pe.ConnectedSystemObjectId.Value))
+            .Select(pe => pe.Id)
+            .ToListAsync();
+        DetachTrackedChildEntities(pendingExportIds);
+        DetachTrackedEntities<PendingExport>(pe => pendingExportIds.Contains(pe.Id));
+
         // Use raw SQL for performance and to avoid change tracker identity conflicts.
         // After ClearChangeTracker(), loading PEs with Include chains would create
         // MetaverseAttribute instances that conflict with instances already tracked by the
@@ -613,8 +628,7 @@ public partial class SyncRepository
         // This bypasses the change tracker entirely, avoiding O(n) tracker scans per entity
         // that caused multi-minute stalls at 100K scale.
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
-        if (npgsqlConn.State != System.Data.ConnectionState.Open)
-            await npgsqlConn.OpenAsync();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
         var npgsqlTx = (NpgsqlTransaction?)_context.Database.CurrentTransaction?.GetDbTransaction();
 
@@ -876,32 +890,264 @@ public partial class SyncRepository
     /// Used before ExecuteDeleteAsync to prevent the change tracker from interfering
     /// with direct SQL operations (e.g., ClientSetNull cascading on orphaned children).
     /// </summary>
+    /// <remarks>
+    /// Change detection is suppressed while enumerating: mid-sync, tracked entities routinely
+    /// hold navigations to untracked instances that duplicate already-tracked keys (cross-page
+    /// reference resolution builds such graphs), and ChangeTracker.Entries&lt;T&gt;() otherwise
+    /// runs DetectChanges, attaches those graphs, and throws an identity conflict. Detaching
+    /// needs only the entries already tracked, so skipping detection is safe.
+    /// </remarks>
     private void DetachTrackedEntities<T>(Func<T, bool> predicate) where T : class
     {
-        var entries = _context.ChangeTracker.Entries<T>()
-            .Where(e => predicate(e.Entity))
-            .ToList();
+        var autoDetectChanges = _context.ChangeTracker.AutoDetectChangesEnabled;
+        _context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            var entries = _context.ChangeTracker.Entries<T>()
+                .Where(e => predicate(e.Entity))
+                .ToList();
 
-        foreach (var entry in entries)
-            entry.State = EntityState.Detached;
+            foreach (var entry in entries)
+                entry.State = EntityState.Detached;
+        }
+        finally
+        {
+            _context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
     }
 
     /// <summary>
     /// Detaches tracked PendingExportAttributeValueChange entities whose PendingExportId shadow FK
     /// matches any of the given parent IDs. Accesses the shadow property via the change tracker entry.
+    /// Change detection is suppressed for the same reason as <see cref="DetachTrackedEntities{T}"/>.
     /// </summary>
     private void DetachTrackedChildEntities(List<Guid> pendingExportIds)
     {
-        var entries = _context.ChangeTracker.Entries<PendingExportAttributeValueChange>()
-            .Where(e =>
-            {
-                var fkValue = e.Property<Guid?>("PendingExportId").CurrentValue;
-                return fkValue.HasValue && pendingExportIds.Contains(fkValue.Value);
-            })
-            .ToList();
+        var autoDetectChanges = _context.ChangeTracker.AutoDetectChangesEnabled;
+        _context.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
+        {
+            var entries = _context.ChangeTracker.Entries<PendingExportAttributeValueChange>()
+                .Where(e =>
+                {
+                    var fkValue = e.Property<Guid?>("PendingExportId").CurrentValue;
+                    return fkValue.HasValue && pendingExportIds.Contains(fkValue.Value);
+                })
+                .ToList();
 
-        foreach (var entry in entries)
-            entry.State = EntityState.Detached;
+            foreach (var entry in entries)
+                entry.State = EntityState.Detached;
+        }
+        finally
+        {
+            _context.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
+        }
+    }
+
+    #endregion
+
+    #region Connected System Object - MVO Deletion Support (issue #993)
+
+    /// <summary>
+    /// Gets all CSOs joined to any of the given MVOs across all Connected Systems, in one query,
+    /// grouped by MVO ID. LEAN SHAPE: only the external ID and secondary external ID attribute
+    /// values (with their Attribute) are loaded; MVO deletion needs the secondary external ID
+    /// (e.g. the DN for LDAP) to stamp on delete Pending Exports, and reference recall needs the
+    /// external IDs to pre-resolve reference values. Loading the full attribute graph here would
+    /// materialise every membership row of any deleted group.
+    /// </summary>
+    public async Task<Dictionary<Guid, List<ConnectedSystemObject>>> GetConnectedSystemObjectsForMvoDeletionAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        if (metaverseObjectIds.Count == 0)
+            return new Dictionary<Guid, List<ConnectedSystemObject>>();
+
+        // Step 1: the CSO rows themselves, no children. The MVO ID is projected from the database
+        // row rather than read from the materialised entity afterwards: this is a tracking query
+        // on the worker's long-lived context, so identity resolution returns already-tracked
+        // instances, and earlier passes of the same page may have disconnected one in memory
+        // (MetaverseObjectId = null) ahead of persistence; grouping on the in-memory value would
+        // then throw. The ?? Guid.Empty is unreachable (the Where excludes NULL rows) and exists
+        // only to keep the projection null-safe.
+        var mvoIds = metaverseObjectIds.ToArray();
+        var csoRows = await _context.ConnectedSystemObjects
+            .Where(cso => cso.MetaverseObjectId.HasValue && mvoIds.Contains(cso.MetaverseObjectId.Value))
+            .Select(cso => new { Cso = cso, MvoId = cso.MetaverseObjectId ?? Guid.Empty })
+            .ToListAsync();
+        if (csoRows.Count == 0)
+            return new Dictionary<Guid, List<ConnectedSystemObject>>();
+
+        // Step 2: only the external ID attribute values, matched by the CSO's external ID columns
+        // (which the delete PE stamping and reference recall actually read) OR the schema attribute
+        // flags (belt and braces should the columns and flags ever diverge). A filtered Include
+        // cannot express the column match: EF Core cannot translate a filtered Include that
+        // references the parent entity (InvalidOperationException at query translation), so this
+        // runs as a correlated subquery and the values are stitched onto the CSOs below.
+        var csoIds = csoRows.Select(r => r.Cso.Id).ToList();
+        var externalIdValueRows = await _context.ConnectedSystemObjects
+            .Where(cso => csoIds.Contains(cso.Id))
+            .SelectMany(cso => cso.AttributeValues
+                .Where(av => av.AttributeId == cso.ExternalIdAttributeId
+                          || av.AttributeId == cso.SecondaryExternalIdAttributeId
+                          || av.Attribute.IsExternalId
+                          || av.Attribute.IsSecondaryExternalId)
+                .Select(av => new { CsoId = cso.Id, Value = av, av.Attribute }))
+            .ToListAsync();
+
+        // Stitch in memory. Tracked-query navigation fix-up may already have added a value to its
+        // CSO's collection (or the CSO may already be tracked with its values from page processing),
+        // so guard against double-adding the same instance.
+        var csosById = csoRows.ToDictionary(r => r.Cso.Id, r => r.Cso);
+        foreach (var row in externalIdValueRows)
+        {
+            row.Value.Attribute = row.Attribute;
+            var attributeValues = csosById[row.CsoId].AttributeValues;
+            if (!attributeValues.Contains(row.Value))
+                attributeValues.Add(row.Value);
+        }
+
+        return csoRows
+            .GroupBy(r => r.MvoId)
+            .ToDictionary(g => g.Key, g => g.Select(r => r.Cso).ToList());
+    }
+
+    /// <summary>
+    /// Summary-tier load of the CSOs joined to the given MVOs in the given target systems, for
+    /// reference recall staging (#1003). Raw SQL into scalars: nothing is materialised into the
+    /// change tracker and no attribute values are loaded (the whole point of the recall fast path
+    /// is to never touch a referencing group's membership rows).
+    /// </summary>
+    public async Task<List<ConnectedSystemObjectRecallTarget>> GetConnectedSystemObjectRecallTargetsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> targetConnectedSystemIds)
+    {
+        if (metaverseObjectIds.Count == 0 || targetConnectedSystemIds.Count == 0)
+            return new List<ConnectedSystemObjectRecallTarget>();
+
+        var targets = new List<ConnectedSystemObjectRecallTarget>();
+        var connection = _context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            @"SELECT ""Id"", ""MetaverseObjectId"", ""ConnectedSystemId"", ""Status""
+              FROM ""ConnectedSystemObjects""
+              WHERE ""MetaverseObjectId"" = ANY(@mvoIds) AND ""ConnectedSystemId"" = ANY(@systemIds)";
+        var mvoIdsParameter = command.CreateParameter();
+        mvoIdsParameter.ParameterName = "mvoIds";
+        mvoIdsParameter.Value = metaverseObjectIds.ToArray();
+        command.Parameters.Add(mvoIdsParameter);
+        var systemIdsParameter = command.CreateParameter();
+        systemIdsParameter.ParameterName = "systemIds";
+        systemIdsParameter.Value = targetConnectedSystemIds.ToArray();
+        command.Parameters.Add(systemIdsParameter);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            targets.Add(new ConnectedSystemObjectRecallTarget
+            {
+                ConnectedSystemObjectId = reader.GetGuid(0),
+                MetaverseObjectId = reader.GetGuid(1),
+                ConnectedSystemId = reader.GetInt32(2),
+                Status = (ConnectedSystemObjectStatus)reader.GetInt32(3)
+            });
+        }
+
+        return targets;
+    }
+
+    /// <summary>
+    /// The reference recall existence query (#1003). Matches by resolved reference id or by
+    /// case-insensitive raw reference string (values pre-lowered by the caller; LOWER() here
+    /// mirrors the OrdinalIgnoreCase DN comparison export evaluation uses). Driven by the
+    /// composite (ConnectedSystemObjectId, AttributeId) index, so the worst case is a scan of one
+    /// group's member rows - milliseconds - rather than materialising them all through EF Core.
+    /// Call per target Connected System so identical values cannot cross-match between systems.
+    /// </summary>
+    public async Task<List<CsoReferenceValueMatch>> GetCsoReferenceValueMatchesAsync(
+        IReadOnlyCollection<Guid> connectedSystemObjectIds,
+        IReadOnlyCollection<int> connectedSystemAttributeIds,
+        IReadOnlyCollection<Guid> deletedReferenceCsoIds,
+        IReadOnlyCollection<string> loweredReferenceValues)
+    {
+        if (connectedSystemObjectIds.Count == 0 || connectedSystemAttributeIds.Count == 0 ||
+            (deletedReferenceCsoIds.Count == 0 && loweredReferenceValues.Count == 0))
+            return new List<CsoReferenceValueMatch>();
+
+        var matches = new List<CsoReferenceValueMatch>();
+        var connection = _context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            @"SELECT ""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""ReferenceValueId"", ""UnresolvedReferenceValue""
+              FROM ""ConnectedSystemObjectAttributeValues""
+              WHERE ""ConnectedSystemObjectId"" = ANY(@csoIds)
+                AND ""AttributeId"" = ANY(@attributeIds)
+                AND (""ReferenceValueId"" = ANY(@deletedCsoIds)
+                     OR LOWER(""UnresolvedReferenceValue"") = ANY(@loweredValues))";
+        var csoIdsParameter = command.CreateParameter();
+        csoIdsParameter.ParameterName = "csoIds";
+        csoIdsParameter.Value = connectedSystemObjectIds.ToArray();
+        command.Parameters.Add(csoIdsParameter);
+        var attributeIdsParameter = command.CreateParameter();
+        attributeIdsParameter.ParameterName = "attributeIds";
+        attributeIdsParameter.Value = connectedSystemAttributeIds.ToArray();
+        command.Parameters.Add(attributeIdsParameter);
+        var deletedCsoIdsParameter = command.CreateParameter();
+        deletedCsoIdsParameter.ParameterName = "deletedCsoIds";
+        deletedCsoIdsParameter.Value = deletedReferenceCsoIds.ToArray();
+        command.Parameters.Add(deletedCsoIdsParameter);
+        var loweredValuesParameter = command.CreateParameter();
+        loweredValuesParameter.ParameterName = "loweredValues";
+        loweredValuesParameter.Value = loweredReferenceValues.ToArray();
+        command.Parameters.Add(loweredValuesParameter);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            matches.Add(new CsoReferenceValueMatch
+            {
+                AttributeValueId = reader.GetGuid(0),
+                ConnectedSystemObjectId = reader.GetGuid(1),
+                AttributeId = reader.GetInt32(2),
+                ReferenceValueId = reader.IsDBNull(3) ? null : reader.GetGuid(3),
+                UnresolvedReferenceValue = reader.IsDBNull(4) ? null : reader.GetString(4)
+            });
+        }
+
+        return matches;
+    }
+
+    /// <summary>
+    /// Disconnects the given CSOs from their MVOs in one set-based statement: nulls
+    /// <c>MetaverseObjectId</c> and <c>DateJoined</c> and resets <c>JoinType</c> to
+    /// <c>NotJoined</c>. Tracked instances are fixed up to match the database state so a later
+    /// SaveChangesAsync does not write stale join state back (same pattern as the CSO detach in
+    /// the MVO delete path).
+    /// </summary>
+    public async Task DisconnectConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        if (connectedSystemObjectIds.Count == 0)
+            return;
+
+        var csoIds = connectedSystemObjectIds.ToArray();
+        await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects""
+              SET ""MetaverseObjectId"" = NULL, ""JoinType"" = {1}, ""DateJoined"" = NULL
+              WHERE ""Id"" = ANY({0})",
+            csoIds, (int)ConnectedSystemObjectJoinType.NotJoined);
+
+        var csoIdSet = csoIds.ToHashSet();
+        foreach (var trackedCso in _context.ChangeTracker.Entries<ConnectedSystemObject>()
+            .Where(e => csoIdSet.Contains(e.Entity.Id)))
+        {
+            trackedCso.Entity.MetaverseObjectId = null;
+            trackedCso.Entity.MetaverseObject = null;
+            trackedCso.Entity.JoinType = ConnectedSystemObjectJoinType.NotJoined;
+            trackedCso.Entity.DateJoined = null;
+        }
     }
 
     #endregion

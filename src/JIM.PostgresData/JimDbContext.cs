@@ -403,6 +403,12 @@ public class JimDbContext : DbContext
             .HasIndex(pe => new { pe.ConnectedSystemId, pe.Status })
             .HasDatabaseName("IX_PendingExports_ConnectedSystemId_Status");
 
+        // PendingExport: composite index supporting keyset pagination in export batch collection
+        // (ORDER BY CreatedAt, Id with a (CreatedAt, Id) > (cursor) predicate; issue #985).
+        modelBuilder.Entity<PendingExport>()
+            .HasIndex(pe => new { pe.ConnectedSystemId, pe.CreatedAt, pe.Id })
+            .HasDatabaseName("IX_PendingExports_ConnectedSystemId_CreatedAt_Id");
+
         // PendingExport: filtered unique index to prevent duplicate Pending Exports for the same CSO.
         // Only one Pending Export should exist per CSO at any time. The filter excludes rows where
         // ConnectedSystemObjectId is NULL (e.g., PEs for unresolved references not yet matched to a CSO).
@@ -507,6 +513,33 @@ public class JimDbContext : DbContext
             .HasIndex(a => a.Created)
             .HasDatabaseName("IX_Activities_Created")
             .IsDescending(true);
+
+        // Performance index for Metaverse Object deletion (issue #993): every MVO delete nulls
+        // Activities.MetaverseObjectId to preserve audit history, and without this index that
+        // UPDATE sequentially scans the Activities table once per deletion batch.
+        modelBuilder.Entity<Activity>()
+            .HasIndex(a => a.MetaverseObjectId)
+            .HasDatabaseName("IX_Activities_MetaverseObjectId");
+
+        // Security audit events (issue #500): aggregated failed-authentication rows are upserted by matching on
+        // (TargetType, ApiKeyPrefix, ClientIpAddress, SecurityEventReason, AggregationWindowStart). The partial
+        // unique index (scoped to rows that actually carry a window, via HasFilter) makes the increment-or-insert
+        // upsert in SecurityAuditServer race-safe: a concurrent insert for the same window bucket hits this
+        // constraint instead of creating a duplicate row. ApiKeyPrefix/ClientIpAddress are normalised to "" rather
+        // than left null for aggregated rows specifically because Postgres unique indexes treat NULLs as distinct
+        // from one another, which would defeat deduplication for the bad-format failure path (no key prefix
+        // available); see Activity.ApiKeyPrefix and Activity.ClientIpAddress for the normalisation contract.
+        modelBuilder.Entity<Activity>()
+            .HasIndex(a => new { a.TargetType, a.ApiKeyPrefix, a.ClientIpAddress, a.SecurityEventReason, a.AggregationWindowStart })
+            .IsUnique()
+            .HasFilter("\"AggregationWindowStart\" IS NOT NULL")
+            .HasDatabaseName("IX_Activities_SecurityAggregation_Unique");
+
+        // Supports the security-event retention cleanup (TargetType == Authentication && Created < cutoff) and the
+        // Activities list/API filter by target type over a time range.
+        modelBuilder.Entity<Activity>()
+            .HasIndex(a => new { a.TargetType, a.Created })
+            .HasDatabaseName("IX_Activities_TargetType_Created");
 
         // Sync outcome indexes for RPEI detail loading and aggregate stats queries
         modelBuilder.Entity<ActivityRunProfileExecutionItemSyncOutcome>()

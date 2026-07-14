@@ -64,7 +64,7 @@ public class ExportExecutionServer
     /// <param name="cancellationToken">Cancellation token to stop export processing</param>
     /// <param name="progressCallback">Optional callback for progress reporting</param>
     /// <param name="connectorFactory">Optional factory to create additional connector instances for parallel batches</param>
-    /// <param name="repositoryFactory">Optional factory to create per-batch IRepository instances for parallel batches</param>
+    /// <param name="repositoryFactory">Optional factory to create disposable per-batch repository scopes for parallel batches; each batch disposes its scope on completion, releasing the scope's DbContext and pooled connection</param>
     /// <param name="batchCompletedCallback">Optional callback invoked after each batch with processed export items.
     /// Enables streaming RPEI creation per-batch instead of accumulating all items across the entire run.
     /// When provided, ProcessedExportItems on the result will be empty — items are consumed per-batch via this callback.</param>
@@ -77,7 +77,7 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback = null,
         Func<IConnector>? connectorFactory = null,
-        Func<ISyncRepository>? repositoryFactory = null,
+        Func<ISyncRepositoryScope>? repositoryFactory = null,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         options ??= new ExportExecutionOptions();
@@ -300,7 +300,7 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
-        Func<ISyncRepository>? repositoryFactory,
+        Func<ISyncRepositoryScope>? repositoryFactory,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         // Check if connector supports export using calls
@@ -360,7 +360,7 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
-        Func<ISyncRepository>? repositoryFactory,
+        Func<ISyncRepositoryScope>? repositoryFactory,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         try
@@ -377,35 +377,41 @@ public class ExportExecutionServer
             try
             {
                 // Load and process exports in batches to avoid loading all 100K+ entities at once.
-                // After processing, Update exports drop from the query (attribute changes
-                // transition to ExportedPendingConfirmation). Create exports may re-enter with
-                // Status=Exported. We track processed IDs and scan forward through query results
-                // to find unprocessed exports in each iteration.
+                // Batch collection is a single forward sweep using keyset pagination on
+                // (CreatedAt, Id). Executed exports drop out of the query mid-run (Update
+                // attribute changes transition to ExportedPendingConfirmation; Create/Delete
+                // move to Status=Exported, which the query excludes), and deferred
+                // reference-bearing exports stay Pending in the database while being
+                // collected in memory; a strictly-increasing cursor is immune to both, so
+                // nothing is ever re-read. The previous OFFSET implementation restarted its
+                // scan from zero for every batch and degraded to O(n²) page loads once
+                // thousands of deferred exports accumulated (issue #985).
+                //
+                // Known trade-off: an export whose NextRetryAt backoff elapses mid-run at a
+                // position already behind the cursor is not picked up until the next export
+                // run. The OFFSET implementation only ever caught those incidentally.
                 var deferredExports = new List<PendingExport>();
                 var processedCount = 0;
                 var processedIds = new HashSet<Guid>();
+                DateTime? cursorCreatedAt = null;
+                Guid? cursorId = null;
                 var exportPhaseStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                 while (true)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    // Scan forward through query results to find unprocessed exports.
-                    // Most processed exports drop from the query (Update type), so skip=0
-                    // typically returns fresh exports. For Create exports that re-enter,
-                    // we page forward until we find unprocessed ones or exhaust the query.
                     List<PendingExport> batch;
-                    var scanSkip = 0;
 
                     while (true)
                     {
                         List<PendingExport> rawBatch;
                         using (Diagnostics.Diagnostics.Database.StartSpan("LoadExportBatch")
-                            .SetTag("skip", scanSkip)
+                            .SetTag("afterCreatedAt", cursorCreatedAt?.ToString("O") ?? "start")
                             .SetTag("take", options.BatchSize))
                         {
-                            rawBatch = await SyncRepo
-                                .GetExecutableExportBatchAsync(connectedSystem.Id, scanSkip, options.BatchSize);
+                            rawBatch = await SyncRepo.GetExecutableExportBatchAsync(
+                                connectedSystem.Id, options.BatchSize, cursorCreatedAt, cursorId);
                         }
 
                         if (rawBatch.Count == 0)
@@ -414,7 +420,14 @@ public class ExportExecutionServer
                             break;
                         }
 
-                        // Filter out already-processed exports
+                        // Advance the cursor past everything just read, whether or not it
+                        // survives the processed filter below.
+                        var lastRow = rawBatch[^1];
+                        cursorCreatedAt = lastRow.CreatedAt;
+                        cursorId = lastRow.Id;
+
+                        // Safety net: a monotonic cursor never re-reads rows, but keep the
+                        // in-memory filter as a guard against duplicates.
                         batch = processedIds.Count > 0
                             ? rawBatch.Where(pe => !processedIds.Contains(pe.Id)).ToList()
                             : rawBatch;
@@ -422,8 +435,8 @@ public class ExportExecutionServer
                         if (batch.Count > 0)
                             break;
 
-                        // All exports in this page were already processed; scan forward
-                        scanSkip += rawBatch.Count;
+                        // Entire page was already processed (unexpected under keyset paging);
+                        // keep sweeping forward.
                     }
 
                     if (batch.Count == 0)
@@ -537,10 +550,57 @@ public class ExportExecutionServer
                         // all accumulated entities — 40K+ entities after 100 batches.
                         SyncRepo.ClearChangeTracker();
                     }
-                    // Note: no break when a batch has only ineligible/deferred exports — the outer
-                    // loop continues scanning forward since later batches (ordered by CreatedAt) may
-                    // contain eligible exports. The loop only exits when batch.Count == 0 (database
-                    // exhausted), handled above at line 352.
+                    else if (batchDeferred.Count == batch.Count
+                        && !await SyncRepo.AnyExecutableNonDeferredExportsAfterAsync(connectedSystem.Id, cursorCreatedAt, cursorId))
+                    {
+                        // Fast path (issue #985c): the whole batch just loaded was deferred
+                        // (reference-bearing) and nothing in it was executable. Continuing to
+                        // page through the remainder 100 rows at a time would only ever rebuild
+                        // the same deferred list one page slower; at group-heavy scale (10K+
+                        // deferred exports) this was the entire cost of the collection loop.
+                        // Collect everything beyond the cursor with a single set-based query and
+                        // stop scanning; a mixed batch (some immediate, some deferred) always
+                        // takes the branch above instead and keeps paging normally.
+                        //
+                        // The existence probe above is REQUIRED before breaking out: deferred and
+                        // executable exports interleave in (CreatedAt, Id) order, so a full batch
+                        // of deferred exports does not prove the remainder of the queue is
+                        // deferred too. Without the probe, executable exports created after a
+                        // contiguous deferred run would silently never execute in this run; a
+                        // behaviour regression versus page-by-page scanning. The probe is a cheap
+                        // indexed existence check (no Includes, no materialisation); when it
+                        // finds executable exports beyond the cursor, this branch is skipped and
+                        // normal paging continues for this iteration.
+                        using var span = Diagnostics.Diagnostics.Database.StartSpan("CollectRemainingDeferred")
+                            .SetTag("afterCreatedAt", cursorCreatedAt?.ToString("O") ?? "start");
+
+                        var remainingDeferred = await SyncRepo.GetRemainingDeferredExportsAsync(
+                            connectedSystem.Id, cursorCreatedAt, cursorId);
+
+                        // Safety net: mirror the in-loop processedIds guard above, even though a
+                        // strictly-increasing cursor should make duplicates impossible here.
+                        if (processedIds.Count > 0)
+                            remainingDeferred = remainingDeferred.Where(pe => !processedIds.Contains(pe.Id)).ToList();
+
+                        foreach (var pe in remainingDeferred)
+                        {
+                            processedIds.Add(pe.Id);
+                            result.ProcessedPendingExportIds.Add(pe.Id);
+                        }
+
+                        deferredExports.AddRange(remainingDeferred);
+
+                        span.SetTag("collectedCount", remainingDeferred.Count);
+                        span.SetSuccess();
+
+                        break;
+                    }
+                    // Note: no break when a batch has only ineligible/deferred exports and the
+                    // fast path above did not trigger (a mixed batch, or executable exports still
+                    // exist beyond the cursor); the outer loop continues scanning forward since
+                    // later batches (ordered by CreatedAt) may contain eligible exports. The loop
+                    // only exits when batch.Count == 0 (database exhausted, handled above) or via
+                    // the fast-path break above.
                 }
 
                 // Second pass: Exports with unresolved references (deferred)
@@ -603,7 +663,7 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
-        Func<ISyncRepository>? repositoryFactory)
+        Func<ISyncRepositoryScope>? repositoryFactory)
     {
         var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null;
 
@@ -666,6 +726,23 @@ public class ExportExecutionServer
         // Batch-export resolved deferred exports
         if (resolvedExports.Count > 0)
         {
+            // Persist the in-memory reference resolutions BEFORE executing the deferred batches.
+            // The parallel path (ProcessBatchesInParallelAsync) re-loads each batch by ID on a
+            // fresh per-batch repository/DbContext, which only sees persisted state; without
+            // persisting first, those contexts read the still-unresolved rows and send raw
+            // Metaverse Object identifiers to the target system (observed against OpenLDAP as
+            // "member: value #0 invalid per syntax" when Max Export Parallelism first defaulted
+            // above 1). The sequential path passes these in-memory instances straight to the
+            // connector and does not strictly need the persist, but doing it unconditionally
+            // also means a worker crash mid-export no longer loses completed resolution work.
+            // UpdatePendingExportsAsync persists both the parent rows and the attribute value
+            // change rows (StringValue/UnresolvedReferenceValue) via raw SQL.
+            using (Diagnostics.Diagnostics.Database.StartSpan("PersistResolvedDeferredExports")
+                .SetTag("count", resolvedExports.Count))
+            {
+                await SyncRepo.UpdatePendingExportsAsync(resolvedExports);
+            }
+
             // Clear the change tracker before exporting deferred batches.
             // The CSO lookup query above re-loaded entities into the tracker, which causes
             // identity conflicts when the EF fallback paths (used in tests with in-memory DB)
@@ -680,8 +757,14 @@ public class ExportExecutionServer
 
             if (useParallelBatches && deferredBatches.Count > 1)
             {
+                // Snapshot the immediate-phase counts, mirroring ProcessDeferredBatchesSequentiallyAsync:
+                // ProcessBatchSuccessAsync increments the result counters for deferred batches too, so
+                // progress reports add deferred-phase progress to this fixed offset rather than
+                // resetting to a phase-local count (the "2,884 of 209,984" UI regression).
+                var immediateProcessedCount = result.SuccessCount + result.FailedCount;
                 await ProcessBatchesInParallelAsync(connectedSystem, connector, deferredBatches, result, options,
-                    cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch");
+                    cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch",
+                    processedExportsOffset: immediateProcessedCount);
             }
             else
             {
@@ -789,8 +872,9 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector> connectorFactory,
-        Func<ISyncRepository> repositoryFactory,
+        Func<ISyncRepositoryScope> repositoryFactory,
         string spanName,
+        int processedExportsOffset = 0,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         Log.Information("ProcessBatchesInParallelAsync: Processing {BatchCount} batches with MaxParallelism={MaxParallelism}",
@@ -817,8 +901,11 @@ public class ExportExecutionServer
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                // Create per-batch repository with its own context
-                var batchRepo = repositoryFactory();
+                // Create a per-batch repository scope with its own context; disposing it when
+                // the batch completes releases the context and its pooled connection (undisposed
+                // scopes pinned one connection per batch and exhausted the pool at scale).
+                using var batchScope = repositoryFactory();
+                var batchRepo = batchScope.Repository;
 
                 // Re-load this batch's Pending Exports from the batch's own context
                 var batch = await batchRepo.GetPendingExportsByIdsAsync(batchIds);
@@ -901,7 +988,7 @@ public class ExportExecutionServer
                             {
                                 Phase = ExportPhase.Executing,
                                 TotalExports = result.TotalPendingExports,
-                                ProcessedExports = newProcessedCount,
+                                ProcessedExports = processedExportsOffset + newProcessedCount,
                                 CurrentBatchSize = batch.Count,
                                 Message = "Exporting"
                             });

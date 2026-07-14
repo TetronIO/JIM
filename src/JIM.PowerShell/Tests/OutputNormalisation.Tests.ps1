@@ -249,6 +249,21 @@ Describe 'Invoke-JIMApi output normalisation (wiring)' {
         }
     }
 
+    It 'Emits nothing (not a $null item) for an empty response' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            # Invoke-RestMethod enumerates an empty JSON array ([]) response and emits
+            # nothing; a 204 No Content behaves the same. The choke point must preserve
+            # that nothing-ness: emitting an explicit $null makes @(cmdlet) count one
+            # (null) object, so "is the list empty?" checks in caller scripts misfire.
+            Mock Invoke-JIMApiRequest { }
+
+            $result = @(Invoke-JIMApi -Endpoint '/api/v1/test')
+
+            $result.Count | Should -Be 0
+        }
+    }
+
     It 'Normalises a bare-array response' {
         InModuleScope JIM {
             $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }

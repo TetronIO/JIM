@@ -28,6 +28,7 @@ Settings are grouped by concern:
 - **Synchronisation**<br /> Sync pipeline and change tracking settings.
 - **Maintenance**<br /> Maintenance mode and system health settings.
 - **History**<br /> Audit history retention and cleanup settings.
+- **Security**<br /> Credential encryption and [API rate limiting](../api/rate-limiting.md) settings.
 
 The category is mostly a UI grouping; it does not change semantics.
 

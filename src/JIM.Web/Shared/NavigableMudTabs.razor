@@ -28,6 +28,8 @@
     private MudTabs _mudTabs = null!;
     private int _activePanelIndex;
     private bool _isNavigating;
+    private bool _disposed;
+    private int _renderedPanelCount;
 
     // Pass-through parameters matching MudTabs
     [Parameter] public RenderFragment? ChildContent { get; set; }
@@ -89,16 +91,27 @@
                 }
             }
         }
+
+        // Record the registered panel count while the component is live; OnTabChangedAsync uses a
+        // shrinking count to recognise panel-removal events raised during disposal.
+        _renderedPanelCount = _mudTabs?.Panels.Count ?? 0;
     }
 
     private async Task OnTabChangedAsync(int newIndex)
     {
-        if (_isNavigating)
+        if (_isNavigating || _disposed)
             return;
 
         _activePanelIndex = newIndex;
         ActivePanelIndex = newIndex;
         await ActivePanelIndexChanged.InvokeAsync(newIndex);
+
+        // MudTabs also raises this callback when panels are removed, which happens while the page (or
+        // the whole circuit) is being torn down, not just when the user switches tab. Navigating then
+        // would issue JS interop against a disposing circuit (JSDisconnectedException), so only update
+        // the URL while the full panel set from the last render is still registered.
+        if (PanelsHaveBeenRemoved())
+            return;
 
         // Push URL with ?t=slug for browser history
         var slug = GetSlugForPanelIndex(newIndex);
@@ -207,8 +220,14 @@
         return slug;
     }
 
+    private bool PanelsHaveBeenRemoved()
+    {
+        return _mudTabs?.Panels == null || _mudTabs.Panels.Count < _renderedPanelCount;
+    }
+
     public void Dispose()
     {
+        _disposed = true;
         NavManager.LocationChanged -= OnLocationChanged;
     }
 }

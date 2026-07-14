@@ -29,7 +29,7 @@ public class SyncExportTaskProcessor
 {
     private readonly ISyncServer _syncServer;
     private readonly ISyncRepository _syncRepo;
-    private readonly Func<ISyncRepository>? _syncRepoFactory;
+    private readonly Func<ISyncRepositoryScope>? _syncRepoFactory;
     private readonly IConnector _connector;
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _runProfile;
@@ -62,7 +62,7 @@ public class SyncExportTaskProcessor
         WorkerTask workerTask,
         CancellationTokenSource cancellationTokenSource,
         SyncRunMode runMode = SyncRunMode.PreviewAndSync,
-        Func<ISyncRepository>? syncRepoFactory = null)
+        Func<ISyncRepositoryScope>? syncRepoFactory = null)
     {
         _syncServer = syncServer;
         _syncRepo = syncRepository;
@@ -136,11 +136,21 @@ public class SyncExportTaskProcessor
 
         try
         {
+            // Resolve the degree of export batch parallelism (issue #985d): an explicit
+            // Max Export Parallelism setting always wins; otherwise the connector may recommend
+            // a directory-aware degree of parallelism (e.g. LdapConnector, mirroring its own
+            // Export Concurrency auto-tune); otherwise fall back to sequential.
+            var resolvedParallelism = ExportParallelismResolver.Resolve(
+                _connectedSystem.MaxExportParallelism,
+                _connector,
+                _connectedSystem.SettingValues,
+                _connectedSystem.Name);
+
             // Execute exports using the ExportExecutionServer with progress reporting
             var options = new ExportExecutionOptions
             {
                 BatchSize = 100,
-                MaxParallelism = _connectedSystem.MaxExportParallelism ?? 1
+                MaxParallelism = resolvedParallelism
             };
 
             var throughput = new ThroughputTracker();

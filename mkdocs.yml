@@ -116,7 +116,13 @@ nav:
   - Administration:
       - administration/index.md
       - Deployment: administration/deployment.md
-      - SSO Setup: administration/sso-setup.md
+      - SSO Setup:
+          - administration/sso-setup.md
+          - Microsoft Entra ID: administration/sso-setup/microsoft-entra-id.md
+          - AD FS: administration/sso-setup/ad-fs.md
+          - Keycloak: administration/sso-setup/keycloak.md
+      - Security Headers: administration/security-headers.md
+      - Security Audit Events: administration/security-audit-events.md
       - Configuration Reference: administration/configuration.md
       - Upgrading: administration/upgrading.md
       - Backup & Disaster Recovery: administration/backup-recovery.md
@@ -128,6 +134,7 @@ nav:
   - API:
       - api/index.md
       - Authentication: api/authentication.md
+      - Rate Limiting: api/rate-limiting.md
   - PowerShell Module:
       - powershell/index.md
       - System: powershell/system.md

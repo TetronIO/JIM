@@ -60,6 +60,7 @@ public class ActivityTargetCategoryTests
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.System), Is.EqualTo(ActivityTargetCategory.System));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.NotSet), Is.EqualTo(ActivityTargetCategory.System));
             Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.DataGeneration), Is.EqualTo(ActivityTargetCategory.System));
+            Assert.That(ActivityTargetTypeCategories.GetCategory(ActivityTargetType.Authentication), Is.EqualTo(ActivityTargetCategory.Security));
         });
     }
 

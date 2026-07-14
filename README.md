@@ -21,8 +21,8 @@
 JIM is a modern Identity Management system designed for organisations with complex identity synchronisation requirements. It is self-hosted, container-deployable, and works in both connected and air-gapped networks. Features include:
 
 - Hub-and-spoke architecture using a central metaverse for identity correlation
-- Bidirectional synchronisation of Users, Groups, and custom object types (e.g., Departments, Roles, Computers)
-- [Attribute Priority](https://docs.junctional.io/concepts/attribute-priority/): deterministic precedence when multiple Connected Systems contribute the same Metaverse attribute, with "Null is a value" assertion, next-contributor hand-over, and per-value provenance
+- Bidirectional synchronisation of Users, Groups, and custom object types
+- [Attribute Priority](https://docs.junctional.io/concepts/attribute-priority/): deterministic precedence when multiple aystems contribute the same attribute
 - Multi-directory LDAP support: AD DS, OpenLDAP, 389 Directory Server, and RFC 4512-compliant ones
 - Built-in scheduler that supports parallel operations
 - Tested at 100K+ object scale with bounded memory pipelines
@@ -31,7 +31,7 @@ JIM is a modern Identity Management system designed for organisations with compl
 - Modern Web Portal and REST API with interactive Scalar [API reference](https://docs.junctional.io/api/reference/)
 - PowerShell automation for Identity as Code (IDaC) - deploy JIM instances in minutes, not months
 - Realtime activity monitoring
-- [Configuration Change History](https://docs.junctional.io/configuration/activities/#configuration-change-history): versioned who/what/when audit across all configuration types, with secret redaction and a reason-for-change prompt
+- [Configuration Change History](https://docs.junctional.io/configuration/activities/#configuration-change-history): versioned who/what/when audit across all configuration types
 - Single Sign-On (SSO) using OpenID Connect
 - Dark/Light mode
 
@@ -70,8 +70,8 @@ JIM is designed to solve both enterprise-scale identity management and micro-dep
 ## Scenarios
 JIM supports common Identity Governance & Administration (IGA) scenarios:
 
-- **Joiner/Mover/Leaver (JML) Automation** - Synchronise users from HR systems to directories, applications, and downstream systems
-- **Attribute Writeback** - Keep HR systems current by writing IT-managed attributes back (e.g., email addresses, phone numbers)
+- **Joiner/Mover/Leaver (JML) Automation** - Synchronise users from HR systems to directories, dbs, etc.
+- **Attribute Writeback** - Keep HR systems current by writing back IT attributes (e.g., emails, phone numbers)
 - **Domain Consolidation** - Prepare for cloud migration, simplification, or organisational mergers
 - **Domain Migration** - Support divestitures and system decommissioning
 - **Identity Correlation** - Bring together user and entitlement data from disparate business applications

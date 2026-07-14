@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Data.Repositories;
+using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using Microsoft.EntityFrameworkCore;
@@ -69,6 +70,8 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
     /// Deletes expired Activity records older than the specified date. Configuration-change Activities (those
     /// carrying a versioned configuration snapshot) are spared: they ARE the configuration change history and are
     /// governed by their own, longer retention period via <see cref="DeleteExpiredConfigurationChangeActivitiesAsync"/>.
+    /// Authentication (security event) Activities are likewise spared, governed by their own retention period via
+    /// <see cref="DeleteExpiredSecurityEventActivitiesAsync"/>.
     /// </summary>
     /// <param name="olderThan">Delete records with Created date older than this date</param>
     /// <param name="maxRecords">Maximum number of records to delete in this batch</param>
@@ -77,7 +80,7 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
     {
         var recordsToDelete = await _database.Activities
             .AsTracking()
-            .Where(a => a.Created < olderThan && a.ConfigurationChangeVersion == null)
+            .Where(a => a.Created < olderThan && a.ConfigurationChangeVersion == null && a.TargetType != ActivityTargetType.Authentication)
             .OrderBy(a => a.Created)
             .Take(maxRecords)
             .ToListAsync();
@@ -103,6 +106,31 @@ public class ChangeHistoryRepository : IChangeHistoryRepository
         var recordsToDelete = await _database.Activities
             .AsTracking()
             .Where(a => a.Created < olderThan && a.ConfigurationChangeVersion != null)
+            .OrderBy(a => a.Created)
+            .Take(maxRecords)
+            .ToListAsync();
+
+        if (recordsToDelete.Count == 0)
+            return 0;
+
+        _database.Activities.RemoveRange(recordsToDelete);
+        await _database.SaveChangesAsync();
+
+        return recordsToDelete.Count;
+    }
+
+    /// <summary>
+    /// Deletes expired security event Activities (TargetType Authentication) older than the specified date. This is
+    /// the only path that removes security event history.
+    /// </summary>
+    /// <param name="olderThan">Delete records with Created date older than this date</param>
+    /// <param name="maxRecords">Maximum number of records to delete in this batch</param>
+    /// <returns>Count of deleted records</returns>
+    public async Task<int> DeleteExpiredSecurityEventActivitiesAsync(DateTime olderThan, int maxRecords)
+    {
+        var recordsToDelete = await _database.Activities
+            .AsTracking()
+            .Where(a => a.Created < olderThan && a.TargetType == ActivityTargetType.Authentication)
             .OrderBy(a => a.Created)
             .Take(maxRecords)
             .ToListAsync();

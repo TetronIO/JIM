@@ -91,7 +91,7 @@ olcSuffix: dc=glitterband,dc=local
 olcDbDirectory: ${REGION_B_DB_DIR}
 olcRootDN: cn=admin,dc=glitterband,dc=local
 olcRootPW: ${HASHED_PW}
-olcDbMaxSize: 1073741824
+olcDbMaxSize: 34359738368
 olcDbIndex: objectClass eq
 olcDbIndex: uid eq
 olcDbIndex: cn eq
@@ -152,12 +152,45 @@ LDIF
 
 echo "[openldap-init] Glitterband base entries loaded"
 
+# Raise the primary (Yellowstone) database's MDB mapsize. Bitnami's default is
+# 1GB, which the large-scale templates exceed: 200K users + 10K long-tail groups
+# already consume ~634MB, so Scale500k and above would hit MDB_MAP_FULL during
+# population. The Glitterband database created above gets the same 32GB via its
+# creation LDIF; both must stay in sync with MAINDB_MAXSIZE in start-openldap.sh,
+# which re-applies the value to snapshot-restored containers. MDB maps are
+# sparse, so the larger mapsize consumes no disk up front.
+echo "[openldap-init] Raising primary (Yellowstone) database mapsize..."
+
+YELLOWSTONE_DB_DN=$(ldapsearch -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" \
+    -b "cn=config" "(olcSuffix=dc=yellowstone,dc=local)" dn -LLL 2>/dev/null | grep "^dn:" | head -1 | sed 's/^dn: //')
+
+if [ -z "$YELLOWSTONE_DB_DN" ]; then
+    echo "[openldap-init] WARNING: Could not find Yellowstone database DN in cn=config. Skipping mapsize increase."
+else
+    ldapmodify -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<YSMODIFY
+dn: $YELLOWSTONE_DB_DN
+changetype: modify
+replace: olcDbMaxSize
+olcDbMaxSize: 34359738368
+YSMODIFY
+    echo "[openldap-init] Yellowstone database mapsize raised to 32GB"
+fi
+
 # Configure the accesslog database for production-like usage:
-# 1. Increase MDB mapsize from default (~10MB) to 4GB. Without this, the
+# 1. Increase MDB mapsize from default (~10MB) to 128GB. Without this, the
 #    accesslog silently stops logging once the MDB map is full (MDB_MAP_FULL),
-#    causing delta imports to miss changes. At Scale100K and above (100K+ objects),
-#    the initial population alone generates ~100K accesslog entries that exhaust
-#    smaller limits. 4GB accommodates Scale100K with multiple sync cycles.
+#    causing delta imports to miss changes: writes to the main databases still
+#    succeed, but the overlay drops their log entries, so JIM's delta import
+#    finds nothing and the miss only surfaces as a test assertion much later.
+#    Empirical sizing: one full write cycle of ~210K objects (the initial
+#    export at Scale200k10kGroups, long-tail group memberships included)
+#    consumes ~8GB. Live population plus export in the same slapd lifetime
+#    doubles that, and Scale1m60kGroups roughly quintuples it; 128GB covers
+#    the worst case with headroom. MDB maps are sparse: disk is only consumed
+#    as entries are actually written, so a large mapsize costs nothing up front.
+#    This value must stay in sync with ACCESSLOG_MAXSIZE in start-openldap.sh,
+#    which re-applies it to snapshot-restored containers whose baked config
+#    predates the current value.
 # 2. Set unlimited size limit so delta import queries are not truncated by the
 #    default olcSizeLimit (500). OpenLDAP enforces olcSizeLimit as a hard cap
 #    even with paging controls for non-rootDN clients.
@@ -174,12 +207,39 @@ else
 dn: $ACCESSLOG_DB_DN
 changetype: modify
 replace: olcDbMaxSize
-olcDbMaxSize: 8589934592
+olcDbMaxSize: 137438953472
 -
 add: olcSizeLimit
 olcSizeLimit: unlimited
 ALMODIFY
-    echo "[openldap-init] Accesslog database configured (mapsize=8GB, sizeLimit=unlimited)"
+    echo "[openldap-init] Accesslog database configured (mapsize=128GB, sizeLimit=unlimited)"
+fi
+
+# Relax MDB write durability for test speed unless explicitly disabled.
+# 'olcDbEnvFlags: nosync' skips the per-transaction fsync that otherwise caps
+# LDAP write throughput at ~70 adds/sec (single-writer MDB, two fsyncs per
+# logged write via the accesslog overlay). Test data is disposable, so fast
+# writes are the default; snapshot population in particular benefits hugely.
+#
+# *** TEST-ONLY SPEED-UP; NOT THE CUSTOMER EXPERIENCE. *** Customer directories
+# fsync their writes. start-openldap.sh re-reconciles this flag on every
+# container start from LDAP_TEST_FAST_WRITES, and the integration test runner
+# exposes -DurableDirectoryWrites to run customer-representative tests.
+if [ "${LDAP_TEST_FAST_WRITES:-yes}" = "yes" ]; then
+    echo "[openldap-init] Enabling fast (nosync) writes on all MDB databases (TEST-ONLY speed-up)..."
+    for DB_DN in "$YELLOWSTONE_DB_DN" "$GLITTERBAND_DB_DN" "$ACCESSLOG_DB_DN"; do
+        if [ -n "$DB_DN" ]; then
+            ldapmodify -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<NOSYNC || echo "[openldap-init] WARNING: failed to enable nosync on $DB_DN"
+dn: $DB_DN
+changetype: modify
+add: olcDbEnvFlags
+olcDbEnvFlags: nosync
+NOSYNC
+        fi
+    done
+    echo "[openldap-init] Fast writes enabled"
+else
+    echo "[openldap-init] LDAP_TEST_FAST_WRITES=no — keeping durable (customer-representative) writes"
 fi
 
 # Stop slapd (Bitnami will restart it after all init scripts)

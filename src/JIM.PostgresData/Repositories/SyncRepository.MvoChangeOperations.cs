@@ -101,8 +101,7 @@ public partial class SyncRepository
     private async Task BulkInsertMvoChangesRawAsync(List<MetaverseObjectChange> changes)
     {
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
-        if (npgsqlConn.State != System.Data.ConnectionState.Open)
-            await npgsqlConn.OpenAsync();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
             """
@@ -177,8 +176,7 @@ public partial class SyncRepository
     private async Task BulkInsertMvoChangeAttributesRawAsync(List<(Guid ChangeId, int? AttributeId, MetaverseObjectChangeAttribute AttrChange)> attrChanges)
     {
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
-        if (npgsqlConn.State != System.Data.ConnectionState.Open)
-            await npgsqlConn.OpenAsync();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
             """
@@ -209,8 +207,7 @@ public partial class SyncRepository
     private async Task BulkInsertMvoChangeAttributeValuesRawAsync(List<(Guid AttrChangeId, MetaverseObjectChangeAttributeValue Value)> valueChanges)
     {
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
-        if (npgsqlConn.State != System.Data.ConnectionState.Open)
-            await npgsqlConn.OpenAsync();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
             """

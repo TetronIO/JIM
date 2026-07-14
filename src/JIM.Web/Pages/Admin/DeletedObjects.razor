@@ -107,7 +107,7 @@
                     <MudLink Href="@($"/admin/connected-systems/{context.ConnectedSystemId}")">@csName</MudLink>
                 </MudTd>
                 <MudTd DataLabel="Deleted">
-                    <MudTooltip Text="@context.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@context.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                         @context.ChangeTime.ToLocalTime().Humanize()
                     </MudTooltip>
                 </MudTd>
@@ -196,7 +196,7 @@
                     @(context.DeletedObjectType?.Name ?? "Unknown")
                 </MudTd>
                 <MudTd DataLabel="Deleted">
-                    <MudTooltip Text="@context.ChangeTime.ToLocalTime().ToString("dd MMM yyyy HH:mm:ss")" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@context.ChangeTime.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                         @context.ChangeTime.ToLocalTime().Humanize()
                     </MudTooltip>
                 </MudTd>

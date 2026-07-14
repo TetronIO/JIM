@@ -119,6 +119,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         using (Diagnostics.Sync.StartSpan("LoadExportEvaluationCache"))
         {
             _exportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(_connectedSystem.Id);
+
+            // Separate run-scoped cache for reference recall staging (#1003): recall must not
+            // exclude the source system (Q3 does not apply to deletions), so the stable tier is
+            // built with sourceConnectedSystemId 0, reusing the already-loaded rules (no new query).
+            _recallExportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(
+                sourceConnectedSystemId: 0, preloadedSyncRules: allSyncRules);
         }
 
         // Load settings once at start of sync

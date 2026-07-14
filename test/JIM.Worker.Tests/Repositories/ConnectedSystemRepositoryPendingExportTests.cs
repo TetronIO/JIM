@@ -12,8 +12,11 @@ using Moq;
 namespace JIM.Worker.Tests.Repositories;
 
 /// <summary>
-/// Tests for GetPendingExportsByConnectedSystemObjectIdsAsync in ConnectedSystemRepository.
-/// Validates that duplicate Pending Exports for the same CSO are self-healed (newest kept, older deleted).
+/// Tests for GetPendingExportsLightweightByConnectedSystemObjectIdsAsync in ConnectedSystemRepository:
+/// batching, keying by the ConnectedSystemObjectId FK, and exclusion of unrequested CSOs.
+/// The duplicate self-heal behaviour deletes rows via raw SQL, which a mocked DbContext cannot
+/// execute, so it is covered by the RequiresPostgres fixture
+/// <see cref="PendingExportSelfHealDatabaseTests"/> instead.
 /// </summary>
 [TestFixture]
 public class ConnectedSystemRepositoryPendingExportTests
@@ -92,13 +95,13 @@ public class ConnectedSystemRepositoryPendingExportTests
     }
 
     [Test]
-    public async Task GetPendingExportsByConnectedSystemObjectIdsAsync_WithEmptyInput_ReturnsEmptyDictionaryAsync()
+    public async Task GetPendingExportsLightweightByConnectedSystemObjectIdsAsync_WithEmptyInput_ReturnsEmptyDictionaryAsync()
     {
         // Arrange
         var csoIds = Array.Empty<Guid>();
 
         // Act
-        var result = await _repository.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(csoIds);
+        var result = await _repository.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(csoIds);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -106,13 +109,13 @@ public class ConnectedSystemRepositoryPendingExportTests
     }
 
     [Test]
-    public async Task GetPendingExportsByConnectedSystemObjectIdsAsync_WithNoPendingExports_ReturnsEmptyDictionaryAsync()
+    public async Task GetPendingExportsLightweightByConnectedSystemObjectIdsAsync_WithNoPendingExports_ReturnsEmptyDictionaryAsync()
     {
         // Arrange - no Pending Exports in data
         var csoIds = new[] { _cso1.Id };
 
         // Act
-        var result = await _repository.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(csoIds);
+        var result = await _repository.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(csoIds);
 
         // Assert
         Assert.That(result, Is.Not.Null);
@@ -120,7 +123,7 @@ public class ConnectedSystemRepositoryPendingExportTests
     }
 
     [Test]
-    public async Task GetPendingExportsByConnectedSystemObjectIdsAsync_WithSinglePendingExportPerCso_ReturnsDictionaryAsync()
+    public async Task GetPendingExportsLightweightByConnectedSystemObjectIdsAsync_WithSinglePendingExportPerCso_ReturnsDictionaryAsync()
     {
         // Arrange - one Pending Export per CSO (normal case)
         var pe1 = CreatePendingExport(_cso1);
@@ -131,7 +134,7 @@ public class ConnectedSystemRepositoryPendingExportTests
         var csoIds = new[] { _cso1.Id, _cso2.Id };
 
         // Act
-        var result = await _repository.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(csoIds);
+        var result = await _repository.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(csoIds);
 
         // Assert
         Assert.That(result, Has.Count.EqualTo(2));
@@ -142,48 +145,7 @@ public class ConnectedSystemRepositoryPendingExportTests
     }
 
     [Test]
-    public async Task GetPendingExportsByConnectedSystemObjectIdsAsync_WithDuplicatePendingExportsForSameCso_SelfHealsKeepingNewestAsync()
-    {
-        // Arrange - TWO Pending Exports for the SAME CSO (data integrity violation to self-heal)
-        var pe1 = CreatePendingExport(_cso1, createdAt: DateTime.UtcNow.AddMinutes(-10));
-        var pe2 = CreatePendingExport(_cso1, createdAt: DateTime.UtcNow.AddMinutes(-1)); // Newer duplicate
-        _pendingExportsData.AddRange(new[] { pe1, pe2 });
-        SetUpMockContext(); // Rebuild mock with updated data
-
-        var csoIds = new[] { _cso1.Id };
-
-        // Act — should self-heal by keeping newest and deleting older
-        var result = await _repository.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(csoIds);
-
-        // Assert — should return only the newer PE
-        Assert.That(result, Has.Count.EqualTo(1));
-        Assert.That(result.ContainsKey(_cso1.Id), Is.True);
-        Assert.That(result[_cso1.Id].Id, Is.EqualTo(pe2.Id), "Should keep the newer PE");
-    }
-
-    [Test]
-    public async Task GetPendingExportsByConnectedSystemObjectIdsAsync_WithDuplicatesAmongMultipleCsos_SelfHealsOnlyDuplicatesAsync()
-    {
-        // Arrange - CSO1 has duplicates, CSO2 is fine
-        var pe1 = CreatePendingExport(_cso1, createdAt: DateTime.UtcNow.AddMinutes(-10));
-        var pe2 = CreatePendingExport(_cso2, createdAt: DateTime.UtcNow.AddMinutes(-5)); // Normal
-        var pe3 = CreatePendingExport(_cso1, createdAt: DateTime.UtcNow.AddMinutes(-1)); // Newer duplicate for CSO1
-        _pendingExportsData.AddRange(new[] { pe1, pe2, pe3 });
-        SetUpMockContext(); // Rebuild mock with updated data
-
-        var csoIds = new[] { _cso1.Id, _cso2.Id };
-
-        // Act — should self-heal CSO1's duplicates while leaving CSO2 untouched
-        var result = await _repository.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(csoIds);
-
-        // Assert
-        Assert.That(result, Has.Count.EqualTo(2));
-        Assert.That(result[_cso1.Id].Id, Is.EqualTo(pe3.Id), "Should keep the newer PE for CSO1");
-        Assert.That(result[_cso2.Id].Id, Is.EqualTo(pe2.Id), "CSO2 should be unaffected");
-    }
-
-    [Test]
-    public async Task GetPendingExportsByConnectedSystemObjectIdsAsync_WithPendingExportsForUnrequestedCsos_OnlyReturnsRequestedAsync()
+    public async Task GetPendingExportsLightweightByConnectedSystemObjectIdsAsync_WithPendingExportsForUnrequestedCsos_OnlyReturnsRequestedAsync()
     {
         // Arrange - Pending Exports exist for both CSOs, but we only request CSO1
         var pe1 = CreatePendingExport(_cso1);
@@ -194,7 +156,7 @@ public class ConnectedSystemRepositoryPendingExportTests
         var csoIds = new[] { _cso1.Id };
 
         // Act
-        var result = await _repository.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(csoIds);
+        var result = await _repository.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(csoIds);
 
         // Assert
         Assert.That(result, Has.Count.EqualTo(1));

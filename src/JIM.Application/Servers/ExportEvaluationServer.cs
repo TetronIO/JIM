@@ -316,7 +316,8 @@ public class ExportEvaluationServer
         bool deferSave = false,
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
         List<PendingExport>? existingPendingExports = null,
-        Dictionary<Guid, Dictionary<int, string>>? preResolvedReferences = null)
+        Dictionary<Guid, Dictionary<int, string>>? preResolvedReferences = null,
+        bool recallSemantics = false)
     {
         var result = new ExportEvaluationResult();
 
@@ -385,7 +386,7 @@ public class ExportEvaluationServer
             {
                 var (pendingExport, provisioningCso, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
                     mvo, exportRule, changedAttributes, cache, deferSave, removedAttributes, existingPendingExports,
-                    mvAttributeDictionary, preResolvedForSystem);
+                    mvAttributeDictionary, preResolvedForSystem, recallSemantics);
 
                 result.CsoAlreadyCurrentCount += csoAlreadyCurrentCount;
 
@@ -540,69 +541,145 @@ public class ExportEvaluationServer
     /// Also disconnects CSOs from the MVO to prevent spurious sync processing.
     /// </summary>
     public async Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo)
+        => await EvaluateMvoDeletionsAsync([mvo]);
+
+    /// <summary>
+    /// Set-based form of <see cref="EvaluateMvoDeletionAsync"/> (issue #993): evaluates all the
+    /// given MVOs' deletions with one CSO fetch, one existing Pending Export lookup, one bulk
+    /// Pending Export replace/create, and one CSO disconnect statement, instead of several round
+    /// trips per object. Per-object semantics are identical: delete Pending Exports are ensured
+    /// for Provisioned CSOs (reusing an existing Delete PE, replacing any other change type), and
+    /// every joined CSO is disconnected from its MVO.
+    /// </summary>
+    /// <param name="mvos">The Metaverse Objects about to be deleted.</param>
+    /// <returns>The Delete Pending Exports for the MVOs' Provisioned CSOs: newly created ones plus
+    /// any existing Delete Pending Exports that were reused.</returns>
+    public async Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos)
     {
         var pendingExports = new List<PendingExport>();
+        if (mvos.Count == 0)
+            return pendingExports;
 
-        // Get all CSOs joined to this MVO (includes attribute values for secondary external ID)
-        var joinedCsos = await SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdAsync(mvo.Id);
+        // One query for all CSOs joined to any of the MVOs (lean shape: external ID attribute
+        // values only, which is all the delete PE stamping below needs).
+        var csosByMvo = await SyncRepo.GetConnectedSystemObjectsForMvoDeletionAsync(
+            mvos.Select(m => m.Id).ToList());
 
-        foreach (var cso in joinedCsos)
+        // Q4 Decision: Only create delete exports for Provisioned CSOs. Non-Provisioned CSOs are
+        // still disconnected to prevent spurious sync processing after the MVO is deleted.
+        // The fetched dictionary is iterated directly: its keys are exactly the given MVOs that
+        // have joined CSOs, so no per-MVO lookup or implicit filtering is needed.
+        var csoIdsToDisconnect = new List<Guid>();
+        var provisionedCsos = new List<(ConnectedSystemObject Cso, Guid MvoId)>();
+        foreach (var (mvoId, joinedCsos) in csosByMvo)
         {
-            // Q4 Decision: Only create delete exports for Provisioned CSOs
-            if (cso.JoinType != ConnectedSystemObjectJoinType.Provisioned)
+            foreach (var cso in joinedCsos)
             {
-                Log.Debug("EvaluateMvoDeletionAsync: Skipping delete for CSO {CsoId} - JoinType is {JoinType}, not Provisioned",
-                    cso.Id, cso.JoinType);
-
-                // Still disconnect non-Provisioned CSOs to prevent spurious sync processing
-                cso.MetaverseObjectId = null;
-                cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
-                cso.DateJoined = null;
-                await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
-                Log.Debug("EvaluateMvoDeletionAsync: Disconnected non-Provisioned CSO {CsoId} from MVO {MvoId}",
-                    cso.Id, mvo.Id);
-                continue;
+                csoIdsToDisconnect.Add(cso.Id);
+                if (cso.JoinType == ConnectedSystemObjectJoinType.Provisioned)
+                {
+                    provisionedCsos.Add((cso, mvoId));
+                }
+                else
+                {
+                    Log.Debug("EvaluateMvoDeletionsAsync: Skipping delete for CSO {CsoId} - JoinType is {JoinType}, not Provisioned; disconnecting only",
+                        cso.Id, cso.JoinType);
+                }
             }
+        }
 
-            // Build the secondary external ID (e.g. DN for LDAP) as an attribute change to
-            // attach to the PE. The CSO will be disconnected from the MVO right after this and
-            // may be deleted by housekeeping before the export runs; connectors like LDAP need
-            // the DN preserved on the PE to perform the actual delete.
-            var attributeValueChanges = new List<PendingExportAttributeValueChange>();
-            var secondaryIdAttrValue = cso.SecondaryExternalIdAttributeValue;
-            if (secondaryIdAttrValue?.Attribute != null && !string.IsNullOrEmpty(secondaryIdAttrValue.StringValue))
+        if (provisionedCsos.Count > 0)
+        {
+            // Delete-PE collision policy, set-based. PendingExports has a unique index on
+            // ConnectedSystemObjectId, so only one PE per CSO is allowed: an existing Delete PE
+            // is reused; any other change type is deleted and replaced with a Delete PE (the same
+            // policy EnsureDeletePendingExportAsync applies on the singular path).
+            var existingPesByCsoId = await SyncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(
+                provisionedCsos.Select(p => p.Cso.Id).ToList());
+
+            var replacedPeCsoIds = new List<Guid>();
+            var newPendingExports = new List<PendingExport>();
+            foreach (var (cso, mvoId) in provisionedCsos)
             {
-                attributeValueChanges.Add(new PendingExportAttributeValueChange
+                if (existingPesByCsoId.TryGetValue(cso.Id, out var existingPe))
+                {
+                    if (existingPe.ChangeType == PendingExportChangeType.Delete)
+                    {
+                        Log.Information("EvaluateMvoDeletionsAsync: Delete PendingExport {ExistingPeId} already exists for CSO {CsoId} (status: {Status}). Reusing.",
+                            existingPe.Id, cso.Id, existingPe.Status);
+                        pendingExports.Add(existingPe);
+                        continue;
+                    }
+
+                    Log.Information("EvaluateMvoDeletionsAsync: Replacing existing {ChangeType} PendingExport {ExistingPeId} for CSO {CsoId} with Delete PE",
+                        existingPe.ChangeType, existingPe.Id, cso.Id);
+                    replacedPeCsoIds.Add(cso.Id);
+                }
+
+                // Build the secondary external ID (e.g. DN for LDAP) as an attribute change to
+                // attach to the PE. The CSO will be disconnected from the MVO right after this and
+                // may be deleted by housekeeping before the export runs; connectors like LDAP need
+                // the DN preserved on the PE to perform the actual delete.
+                var attributeValueChanges = new List<PendingExportAttributeValueChange>();
+                var secondaryIdAttrValue = cso.SecondaryExternalIdAttributeValue;
+                if (secondaryIdAttrValue?.Attribute != null && !string.IsNullOrEmpty(secondaryIdAttrValue.StringValue))
+                {
+                    attributeValueChanges.Add(new PendingExportAttributeValueChange
+                    {
+                        Id = Guid.NewGuid(),
+                        Attribute = secondaryIdAttrValue.Attribute,
+                        AttributeId = secondaryIdAttrValue.Attribute.Id,
+                        StringValue = secondaryIdAttrValue.StringValue,
+                        ChangeType = PendingExportAttributeChangeType.Update
+                    });
+
+                    Log.Debug("EvaluateMvoDeletionsAsync: Will store secondary external ID '{Value}' (attr {AttrName}) on delete PE for CSO {CsoId}",
+                        secondaryIdAttrValue.StringValue, secondaryIdAttrValue.Attribute.Name, cso.Id);
+                }
+                else
+                {
+                    Log.Warning("EvaluateMvoDeletionsAsync: CSO {CsoId} has no secondary external ID - delete export may fail if CSO is deleted before export",
+                        cso.Id);
+                }
+
+                // Only set the FK property (ConnectedSystemObjectId), NOT the navigation property,
+                // matching EnsureDeletePendingExportAsync.
+                var pendingExport = new PendingExport
                 {
                     Id = Guid.NewGuid(),
-                    Attribute = secondaryIdAttrValue.Attribute,
-                    AttributeId = secondaryIdAttrValue.Attribute.Id,
-                    StringValue = secondaryIdAttrValue.StringValue,
-                    ChangeType = PendingExportAttributeChangeType.Update
-                });
+                    ConnectedSystemId = cso.ConnectedSystemId,
+                    ConnectedSystemObjectId = cso.Id,
+                    ChangeType = PendingExportChangeType.Delete,
+                    Status = PendingExportStatus.Pending,
+                    SourceMetaverseObjectId = mvoId,
+                    CreatedAt = DateTime.UtcNow
+                };
+                foreach (var avc in attributeValueChanges)
+                    pendingExport.AttributeValueChanges.Add(avc);
 
-                Log.Debug("EvaluateMvoDeletionAsync: Will store secondary external ID '{Value}' (attr {AttrName}) on delete PE for CSO {CsoId}",
-                    secondaryIdAttrValue.StringValue, secondaryIdAttrValue.Attribute.Name, cso.Id);
+                newPendingExports.Add(pendingExport);
+                Log.Information("EvaluateMvoDeletionsAsync: Delete PendingExport {ExportId} staged for CSO {CsoId} in system {SystemId}",
+                    pendingExport.Id, cso.Id, cso.ConnectedSystemId);
             }
-            else
+
+            if (replacedPeCsoIds.Count > 0)
+                await SyncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(replacedPeCsoIds);
+
+            if (newPendingExports.Count > 0)
             {
-                Log.Warning("EvaluateMvoDeletionAsync: CSO {CsoId} has no secondary external ID - delete export may fail if CSO is deleted before export",
-                    cso.Id);
+                await SyncRepo.CreatePendingExportsAsync(newPendingExports);
+                pendingExports.AddRange(newPendingExports);
             }
+        }
 
-            var pendingExport = await EnsureDeletePendingExportAsync(cso, mvo.Id, attributeValueChanges);
-            pendingExports.Add(pendingExport);
-
-            // Disconnect the CSO from the MVO to prevent spurious sync processing after the MVO is deleted.
-            // The confirming import will mark the CSO as Obsolete when the object is deleted from the target,
-            // and we don't want the subsequent sync to try to "disconnect" an already-orphaned CSO.
-            cso.MetaverseObjectId = null;
-            cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
-            cso.DateJoined = null;
-            await SyncRepo.UpdateConnectedSystemObjectAsync(cso);
-
-            Log.Information("EvaluateMvoDeletionAsync: Delete PendingExport {ExportId} ensured for CSO {CsoId} in system {SystemId}, CSO disconnected from MVO",
-                pendingExport.Id, cso.Id, cso.ConnectedSystemId);
+        // Disconnect every joined CSO from its MVO in one statement, to prevent spurious sync
+        // processing after the MVOs are deleted. The confirming import will mark target CSOs as
+        // Obsolete when the objects are deleted from the target.
+        if (csoIdsToDisconnect.Count > 0)
+        {
+            await SyncRepo.DisconnectConnectedSystemObjectsAsync(csoIdsToDisconnect);
+            Log.Information("EvaluateMvoDeletionsAsync: Disconnected {CsoCount} CSO(s) across {MvoCount} MVO(s); {PeCount} delete Pending Export(s) ensured",
+                csoIdsToDisconnect.Count, mvos.Count, pendingExports.Count);
         }
 
         return pendingExports;
@@ -635,7 +712,12 @@ public class ExportEvaluationServer
         Guid sourceMetaverseObjectId,
         List<PendingExportAttributeValueChange>? attributeValueChanges = null)
     {
-        var existingPe = await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id);
+        // Lean fetch (issue #986): this method only reads ChangeType/Id/Status off the existing
+        // Pending Export and passes it to DeletePendingExportAsync, which needs AttributeValueChanges
+        // loaded for EF-tracked child-row disposal. The heavy fetch also loaded the CSO's and source
+        // Metaverse Object's full attribute value graphs, which for a large group CSO (group
+        // deprovisioning) runs into the hundreds of thousands of rows, none of them read here.
+        var existingPe = await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(cso.Id);
 
         if (existingPe != null)
         {
@@ -703,24 +785,38 @@ public class ExportEvaluationServer
 
         // Resolve the deletion candidates' per-system reference values now, while their CSOs are
         // still joined. Preference order matches export-time resolution: secondary external ID
-        // (for example the DN for LDAP) first, else the primary external ID.
+        // (for example the DN for LDAP) first, else the primary external ID. One bulk CSO fetch
+        // for all referenced MVOs (issue #993); the lean shape loads exactly the external ID
+        // attribute values this resolution reads.
         var referencedIds = context.Candidates
             .Select(c => c.ReferencedMetaverseObjectId)
             .ToHashSet();
 
-        foreach (var referencedId in referencedIds)
+        var joinedCsosByReferencedId = await SyncRepo.GetConnectedSystemObjectsForMvoDeletionAsync(referencedIds);
+        foreach (var (referencedId, joinedCsos) in joinedCsosByReferencedId)
         {
-            var joinedCsos = await SyncRepo.GetConnectedSystemObjectsByMetaverseObjectIdAsync(referencedId);
-            foreach (var (systemId, resolvedValue) in joinedCsos
-                .Select(cso => (cso.ConnectedSystemId, Value: ResolveCsoReferenceValue(cso)))
-                .Where(pair => pair.Value != null))
+            foreach (var cso in joinedCsos)
             {
+                // Record the joined CSO id per system regardless of value resolution: the set-based
+                // fast path (#1003) matches target-side reference rows by these ids, and a match
+                // without a resolvable value must be counted as dropped, not silently missed.
+                if (!context.DeletedCsoIdsBySystem.TryGetValue(referencedId, out var csoIdsBySystem))
+                {
+                    csoIdsBySystem = new Dictionary<int, Guid>();
+                    context.DeletedCsoIdsBySystem[referencedId] = csoIdsBySystem;
+                }
+                csoIdsBySystem[cso.ConnectedSystemId] = cso.Id;
+
+                var resolvedValue = ResolveCsoReferenceValue(cso);
+                if (resolvedValue == null)
+                    continue;
+
                 if (!context.ResolvedReferenceValuesBySystem.TryGetValue(referencedId, out var bySystem))
                 {
                     bySystem = new Dictionary<int, string>();
                     context.ResolvedReferenceValuesBySystem[referencedId] = bySystem;
                 }
-                bySystem[systemId] = resolvedValue!;
+                bySystem[cso.ConnectedSystemId] = resolvedValue;
             }
         }
 
@@ -761,7 +857,8 @@ public class ExportEvaluationServer
     /// skipped, for example when re-joined mid-page); only their references are recalled.</param>
     public async Task<ReferenceRecallResult> StageReferenceRecallExportsAsync(
         ReferenceRecallContext context,
-        IReadOnlyCollection<Guid> deletedMvoIds)
+        IReadOnlyCollection<Guid> deletedMvoIds,
+        ExportEvaluationCache? recallCache = null)
     {
         var result = new ReferenceRecallResult();
         if (context.Candidates.Count == 0 || deletedMvoIds.Count == 0)
@@ -775,18 +872,422 @@ public class ExportEvaluationServer
         if (byReferencingMvo.Count == 0)
             return result;
 
-        // Self-contained cache: recall is state assertion so no source system is excluded (Q3 does not
-        // apply to deletions), and the referencing objects are typically unchanged this run, so the
-        // sync page cache does not contain their CSOs. sourceConnectedSystemId 0 matches no system.
-        var cache = await BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0);
+        // Run-scoped cache preferred (#1003): the sync processors build one recall cache per run
+        // (sourceConnectedSystemId 0: recall is state assertion, so no source system is excluded;
+        // Q3 does not apply to deletions). Callers without one (housekeeping) build it ad hoc.
+        var cache = recallCache;
+        if (cache == null)
+        {
+            using var cacheSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("RecallBuildCache");
+            cache = await BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0);
+            cacheSpan.SetTag("ruleCount", cache.ExportRulesByMvoTypeId.Values.Sum(rules => rules.Count));
+            cacheSpan.SetSuccess();
+        }
 
-        const int batchSize = 500;
-        var referencingIds = byReferencingMvo.Keys.ToList();
+        // Classify the rule shapes once: types whose recall-relevant flows are all direct
+        // single-source reference mappings take the set-based fast path; types where a candidate
+        // attribute is sourced through an expression or multi-source chain keep the full
+        // per-object evaluation. The split depends only on configuration, never on data.
+        var candidateAttributeIds = byReferencingMvo.Values
+            .SelectMany(candidates => candidates)
+            .Select(candidate => candidate.MetaverseAttributeId)
+            .ToHashSet();
+        var plan = BuildReferenceRecallRulePlan(cache, candidateAttributeIds);
+
+        // Lean summaries route each referencing object to a path and carry the scoping-criteria
+        // attribute values and display names; the fast path never loads anything heavier.
+        Dictionary<Guid, MetaverseObjectRecallSummary> summariesById;
+        using (var metadataSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("RecallReferencingMetadataFetch"))
+        {
+            var summaries = await SyncRepo.GetMetaverseObjectRecallSummariesAsync(
+                byReferencingMvo.Keys.ToList(), plan.ScopingAttributeIds.ToList());
+            summariesById = summaries.ToDictionary(summary => summary.Id);
+            metadataSpan.SetTag("referencingCount", summaries.Count);
+            metadataSpan.SetTag("scopingAttributeCount", plan.ScopingAttributeIds.Count);
+            metadataSpan.SetSuccess();
+        }
+        foreach (var summary in summariesById.Values)
+            result.ReferencingObjectDisplayNames[summary.Id] = summary.DisplayName;
+
+        // Summaries only exist for referencing objects that still exist (a missing summary
+        // means a raced deletion), so routing iterates the summaries rather than the keys.
+        var fastMvoIds = new List<Guid>();
+        var fallbackMvoIds = new List<Guid>();
+        foreach (var (referencingId, summary) in summariesById)
+        {
+            if (plan.FallbackTypeIds.Contains(summary.TypeId))
+                fallbackMvoIds.Add(referencingId);
+            else
+                fastMvoIds.Add(referencingId);
+        }
+
         var stagedPendingExports = new List<PendingExport>();
 
-        for (var offset = 0; offset < referencingIds.Count; offset += batchSize)
+        if (fastMvoIds.Count > 0)
         {
-            var batchIds = referencingIds.Skip(offset).Take(batchSize).ToList();
+            using var fastSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("RecallFastPath");
+            fastSpan.SetTag("fastCount", fastMvoIds.Count);
+            await StageRecallFastPathAsync(context, deletedIds, byReferencingMvo, plan, summariesById,
+                fastMvoIds, stagedPendingExports, result);
+            fastSpan.SetSuccess();
+        }
+
+        if (fallbackMvoIds.Count > 0)
+        {
+            using var fallbackSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("RecallFallbackEvaluate");
+            fallbackSpan.SetTag("fallbackCount", fallbackMvoIds.Count);
+            await StageRecallFallbackAsync(context, deletedIds, byReferencingMvo, cache,
+                fallbackMvoIds, stagedPendingExports, result);
+            fallbackSpan.SetSuccess();
+        }
+
+        if (stagedPendingExports.Count > 0)
+        {
+            using var persistSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("RecallPersistPendingExports");
+
+            // Same delete-then-create pattern as the sync flush: prevents unique-index collisions on
+            // ConnectedSystemObjectId. Pre-existing PEs were already merged into these instances.
+            var csoIds = stagedPendingExports
+                .Where(pe => pe.ConnectedSystemObjectId.HasValue)
+                .Select(pe => pe.ConnectedSystemObjectId!.Value)
+                .Distinct()
+                .ToList();
+            if (csoIds.Count > 0)
+                await SyncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(csoIds);
+
+            await SyncRepo.CreatePendingExportsAsync(stagedPendingExports);
+
+            persistSpan.SetTag("peCount", stagedPendingExports.Count);
+            persistSpan.SetTag("changeCount", stagedPendingExports.Sum(pe => pe.AttributeValueChanges.Count));
+            persistSpan.SetSuccess();
+        }
+
+        result.StagedPendingExports.AddRange(stagedPendingExports);
+        result.PendingExportsStaged = stagedPendingExports.Count;
+        result.RemovalChangesStaged = stagedPendingExports.Sum(pe => pe.AttributeValueChanges.Count);
+        return result;
+    }
+
+    /// <summary>
+    /// The set-based recall fast path (#1003): synthesises removal changes directly from the
+    /// pre-deletion capture and a targeted existence query, sized by the number of deletions
+    /// rather than by referencing-group membership. Never loads a referencing object's full
+    /// attribute graph and never re-evaluates attribute flows.
+    /// </summary>
+    private async Task StageRecallFastPathAsync(
+        ReferenceRecallContext context,
+        HashSet<Guid> deletedIds,
+        Dictionary<Guid, List<MvoReferenceRecallCandidate>> byReferencingMvo,
+        ReferenceRecallRulePlan plan,
+        Dictionary<Guid, MetaverseObjectRecallSummary> summariesById,
+        List<Guid> fastMvoIds,
+        List<PendingExport> stagedPendingExports,
+        ReferenceRecallResult result)
+    {
+        result.FastPathReferencingObjects += fastMvoIds.Count;
+        result.ReferencingObjectsEvaluated += fastMvoIds.Count;
+
+        if (plan.FastTargetSystemIds.Count == 0)
+            return; // no direct reference flows anywhere: nothing can be staged
+
+        // The referencing objects' CSOs in the flow target systems, scalars only. CSOs still
+        // pending provisioning are excluded: nothing exists in the target to remove a member
+        // from, and their pending Create export must be left untouched (recall never provisions).
+        List<ConnectedSystemObjectRecallTarget> targets;
+        using (var targetsSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("RecallReferencingTargetsFetch"))
+        {
+            targets = await SyncRepo.GetConnectedSystemObjectRecallTargetsAsync(
+                fastMvoIds, plan.FastTargetSystemIds.ToList());
+            targetsSpan.SetTag("targetCount", targets.Count);
+            targetsSpan.SetSuccess();
+        }
+        var targetsByMvoAndSystem = new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObjectRecallTarget>();
+        foreach (var target in targets.Where(t => t.Status != ConnectedSystemObjectStatus.PendingProvisioning))
+            targetsByMvoAndSystem[(target.MetaverseObjectId, target.ConnectedSystemId)] = target;
+
+        // Aggregate the existence-query inputs per target system (per-system queries so identical
+        // reference values cannot cross-match between systems), remembering how to map matched
+        // rows back to their deleted object and flow.
+        var csoIdsBySystem = new Dictionary<int, HashSet<Guid>>();
+        var attributeIdsBySystem = new Dictionary<int, HashSet<int>>();
+        var deletedCsoToMvoBySystem = new Dictionary<int, Dictionary<Guid, Guid>>();
+        var loweredValueToMvoBySystem = new Dictionary<int, Dictionary<string, Guid>>();
+        var flowBySystemAndAttribute = new Dictionary<(int ConnectedSystemId, int AttributeId), ReferenceRecallDirectFlow>();
+        var referencingMvoByCsoId = new Dictionary<Guid, Guid>();
+        var scopeResults = new Dictionary<(Guid MvoId, int RuleId), bool>();
+
+        foreach (var mvoId in fastMvoIds)
+        {
+            var summary = summariesById[mvoId];
+            if (!plan.DirectFlowsByTypeThenAttribute.TryGetValue(summary.TypeId, out var flowsByAttribute))
+                continue; // no export rule flows any candidate attribute for this type
+
+            foreach (var candidate in byReferencingMvo[mvoId].Where(c => flowsByAttribute.ContainsKey(c.MetaverseAttributeId)))
+            {
+                var flows = flowsByAttribute[candidate.MetaverseAttributeId];
+
+                foreach (var flow in flows)
+                {
+                    var systemId = flow.ExportRule.ConnectedSystemId;
+                    if (!targetsByMvoAndSystem.TryGetValue((mvoId, systemId), out var target))
+                        continue; // the referencing object has no (exportable) presence in this target
+
+                    // Rule scoping survives on the fast path via the lean criteria-only attribute
+                    // load; an out-of-scope object must not receive recall exports (parity with
+                    // full evaluation). Memoised per (object, rule).
+                    if (flow.ExportRule.ObjectScopingCriteriaGroups.Count > 0)
+                    {
+                        var scopeKey = (mvoId, flow.ExportRule.Id);
+                        if (!scopeResults.TryGetValue(scopeKey, out var inScope))
+                        {
+                            var scopeMvo = new MetaverseObject { Id = summary.Id };
+                            scopeMvo.AttributeValues.AddRange(summary.ScopingAttributeValues);
+                            inScope = ScopingEvaluation.IsMvoInScopeForExportRule(scopeMvo, flow.ExportRule);
+                            scopeResults[scopeKey] = inScope;
+                        }
+                        if (!inScope)
+                            continue;
+                    }
+
+                    // The deleted object's identifiers in this system, captured before deletion.
+                    // Neither present means it was never provisioned there: nothing to remove.
+                    Guid? deletedCsoId = null;
+                    if (context.DeletedCsoIdsBySystem.TryGetValue(candidate.ReferencedMetaverseObjectId, out var deletedCsoIds) &&
+                        deletedCsoIds.TryGetValue(systemId, out var deletedCsoIdValue))
+                        deletedCsoId = deletedCsoIdValue;
+                    string? resolvedValue = null;
+                    if (context.ResolvedReferenceValuesBySystem.TryGetValue(candidate.ReferencedMetaverseObjectId, out var resolvedBySystem) &&
+                        resolvedBySystem.TryGetValue(systemId, out var resolvedValueForSystem))
+                        resolvedValue = resolvedValueForSystem;
+                    if (deletedCsoId == null && resolvedValue == null)
+                        continue;
+
+                    if (!csoIdsBySystem.TryGetValue(systemId, out var csoIds))
+                    {
+                        csoIds = [];
+                        csoIdsBySystem[systemId] = csoIds;
+                        attributeIdsBySystem[systemId] = [];
+                        deletedCsoToMvoBySystem[systemId] = [];
+                        loweredValueToMvoBySystem[systemId] = [];
+                    }
+                    csoIds.Add(target.ConnectedSystemObjectId);
+                    referencingMvoByCsoId[target.ConnectedSystemObjectId] = mvoId;
+                    attributeIdsBySystem[systemId].Add(flow.TargetAttribute.Id);
+                    var flowKey = (systemId, flow.TargetAttribute.Id);
+                    if (flowBySystemAndAttribute.TryGetValue(flowKey, out var existingFlow))
+                    {
+                        if (existingFlow.SourcePlurality != flow.SourcePlurality)
+                            Log.Warning("StageRecallFastPathAsync: Conflicting source pluralities flow into attribute {AttributeId} " +
+                                "in system {SystemId}; keeping the first flow's {Plurality} semantics",
+                                flow.TargetAttribute.Id, systemId, existingFlow.SourcePlurality);
+                    }
+                    else
+                    {
+                        flowBySystemAndAttribute[flowKey] = flow;
+                    }
+                    if (deletedCsoId.HasValue)
+                        deletedCsoToMvoBySystem[systemId][deletedCsoId.Value] = candidate.ReferencedMetaverseObjectId;
+                    if (resolvedValue != null)
+                        loweredValueToMvoBySystem[systemId][resolvedValue.ToLowerInvariant()] = candidate.ReferencedMetaverseObjectId;
+                }
+            }
+        }
+
+        // One existence query per target system: the rows returned are exactly the values the
+        // target still holds for the deleted objects; rows not returned need no removal (this
+        // replaces per-group no-net-change detection).
+        var changesByCso = new Dictionary<Guid, Dictionary<string, PendingExportAttributeValueChange>>();
+        var systemByCso = new Dictionary<Guid, int>();
+        foreach (var (systemId, csoIds) in csoIdsBySystem)
+        {
+            List<CsoReferenceValueMatch> matches;
+            using (var existenceSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("RecallExistenceQuery"))
+            {
+                existenceSpan.SetTag("connectedSystemId", systemId);
+                existenceSpan.SetTag("csoCount", csoIds.Count);
+                matches = await SyncRepo.GetCsoReferenceValueMatchesAsync(
+                    csoIds.ToList(),
+                    attributeIdsBySystem[systemId].ToList(),
+                    deletedCsoToMvoBySystem[systemId].Keys.ToList(),
+                    loweredValueToMvoBySystem[systemId].Keys.ToList());
+                existenceSpan.SetTag("matchCount", matches.Count);
+                existenceSpan.SetSuccess();
+            }
+
+            // A row can match both predicate arms; each target row yields at most one change.
+            foreach (var match in matches.DistinctBy(m => m.AttributeValueId))
+            {
+                Guid deletedMvoId;
+                if (match.ReferenceValueId.HasValue &&
+                    deletedCsoToMvoBySystem[systemId].TryGetValue(match.ReferenceValueId.Value, out var mvoIdByReference))
+                    deletedMvoId = mvoIdByReference;
+                else if (match.UnresolvedReferenceValue != null &&
+                         loweredValueToMvoBySystem[systemId].TryGetValue(match.UnresolvedReferenceValue.ToLowerInvariant(), out var mvoIdByValue))
+                    deletedMvoId = mvoIdByValue;
+                else
+                    continue; // defensive: the row matched an identifier not registered for this system
+
+                var flow = flowBySystemAndAttribute[(systemId, match.AttributeId)];
+
+                string? removalValue = null;
+                if (context.ResolvedReferenceValuesBySystem.TryGetValue(deletedMvoId, out var resolvedBySystem) &&
+                    resolvedBySystem.TryGetValue(systemId, out var resolvedValueForSystem))
+                    removalValue = resolvedValueForSystem;
+
+                PendingExportAttributeValueChange change;
+                if (flow.SourcePlurality == AttributePlurality.MultiValued)
+                {
+                    // A multi-valued removal must name the value to remove; a matched row with no
+                    // resolvable value (matched by resolved reference only) cannot be staged.
+                    if (removalValue == null)
+                    {
+                        result.UnresolvableChangesDropped++;
+                        continue;
+                    }
+                    change = new PendingExportAttributeValueChange
+                    {
+                        Id = Guid.NewGuid(),
+                        Attribute = flow.TargetAttribute,
+                        AttributeId = flow.TargetAttribute.Id,
+                        ChangeType = PendingExportAttributeChangeType.Remove,
+                        StringValue = removalValue
+                    };
+                }
+                else
+                {
+                    // Single-valued reference removal: an all-null clearing Update, the same shape
+                    // full evaluation produces. Staged only because the target still holds the
+                    // deleted reference (the existence query matched it).
+                    change = new PendingExportAttributeValueChange
+                    {
+                        Id = Guid.NewGuid(),
+                        Attribute = flow.TargetAttribute,
+                        AttributeId = flow.TargetAttribute.Id,
+                        ChangeType = PendingExportAttributeChangeType.Update
+                    };
+                }
+
+                if (!changesByCso.TryGetValue(match.ConnectedSystemObjectId, out var changesByMergeKey))
+                {
+                    changesByMergeKey = [];
+                    changesByCso[match.ConnectedSystemObjectId] = changesByMergeKey;
+                    systemByCso[match.ConnectedSystemObjectId] = systemId;
+                }
+                changesByMergeKey.TryAdd(GetAttributeChangeMergeKey(change), change);
+            }
+        }
+
+        if (changesByCso.Count == 0)
+            return;
+
+        // Merge with any existing unexported Pending Exports for the matched CSOs, honouring the
+        // collision policy: Delete wins (deprovisioning supersedes membership updates), Create is
+        // untouched (unreachable here after the PendingProvisioning filter; defensive), Update is
+        // merged with recall changes taking precedence on merge-key collisions.
+        using var mergeSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("RecallPendingExportMerge");
+        var existingPendingExports = await SyncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(changesByCso.Keys.ToList());
+        mergeSpan.SetTag("existingPeCount", existingPendingExports.Count);
+
+        foreach (var (csoId, changesByMergeKey) in changesByCso)
+        {
+            if (existingPendingExports.TryGetValue(csoId, out var existingPendingExport))
+            {
+                if (existingPendingExport.ChangeType == PendingExportChangeType.Delete)
+                {
+                    result.SkippedDueToExistingDeletePendingExport++;
+                    Log.Information("StageRecallFastPathAsync: CSO {CsoId} has a pending Delete export; skipping " +
+                        "{ChangeCount} recall change(s) (deprovisioning supersedes membership updates)",
+                        csoId, changesByMergeKey.Count);
+                    continue;
+                }
+                if (existingPendingExport.ChangeType == PendingExportChangeType.Create)
+                {
+                    Log.Warning("StageRecallFastPathAsync: CSO {CsoId} has a pending Create export but is not " +
+                        "PendingProvisioning; skipping recall changes to preserve the provisioning export", csoId);
+                    continue;
+                }
+
+                // Merge the existing Update export's changes in (recall wins on merge-key
+                // collisions), cloning with fresh ids because the delete-then-create persistence
+                // removes the old rows. Changes whose unresolved reference is a deleted object are
+                // purged: they can never resolve, and would wedge the merged export in
+                // deferred-resolution limbo.
+                foreach (var existingChange in existingPendingExport.AttributeValueChanges)
+                {
+                    if (existingChange.UnresolvedReferenceValue != null &&
+                        Guid.TryParse(existingChange.UnresolvedReferenceValue, out var unresolvedMvoId) &&
+                        deletedIds.Contains(unresolvedMvoId))
+                    {
+                        Log.Debug("StageRecallFastPathAsync: Purged change {ChangeId} from Pending Export {PendingExportId}: " +
+                            "its unresolved reference is deleted Metaverse Object {MvoId}",
+                            existingChange.Id, existingPendingExport.Id, unresolvedMvoId);
+                        continue;
+                    }
+
+                    var mergeKey = GetAttributeChangeMergeKey(existingChange);
+                    if (changesByMergeKey.ContainsKey(mergeKey))
+                        continue;
+
+                    changesByMergeKey[mergeKey] = new PendingExportAttributeValueChange
+                    {
+                        Id = Guid.NewGuid(),
+                        AttributeId = existingChange.AttributeId,
+                        Attribute = existingChange.Attribute,
+                        StringValue = existingChange.StringValue,
+                        DateTimeValue = existingChange.DateTimeValue,
+                        IntValue = existingChange.IntValue,
+                        LongValue = existingChange.LongValue,
+                        ByteValue = existingChange.ByteValue,
+                        GuidValue = existingChange.GuidValue,
+                        BoolValue = existingChange.BoolValue,
+                        UnresolvedReferenceValue = existingChange.UnresolvedReferenceValue,
+                        ChangeType = existingChange.ChangeType
+                    };
+                }
+            }
+
+            var attributeChanges = changesByMergeKey.Values.ToList();
+            if (attributeChanges.Count == 0)
+                continue;
+
+            stagedPendingExports.Add(new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = systemByCso[csoId],
+                ConnectedSystemObjectId = csoId,
+                ChangeType = PendingExportChangeType.Update,
+                Status = PendingExportStatus.Pending,
+                SourceMetaverseObjectId = referencingMvoByCsoId[csoId],
+                AttributeValueChanges = attributeChanges,
+                CreatedAt = DateTime.UtcNow,
+                HasUnresolvedReferences = attributeChanges.Any(avc => !string.IsNullOrEmpty(avc.UnresolvedReferenceValue))
+            });
+        }
+        mergeSpan.SetTag("deleteSkips", result.SkippedDueToExistingDeletePendingExport);
+        mergeSpan.SetSuccess();
+    }
+
+    /// <summary>
+    /// The full-evaluation recall fallback: referencing object types where a candidate reference
+    /// attribute is sourced through an expression or multi-source chain keep the pre-#1003
+    /// per-object evaluation (full object load, attribute flow recomputation with no-net-change),
+    /// with recall semantics applied (no provisioning; an existing Delete Pending Export wins).
+    /// </summary>
+    private async Task StageRecallFallbackAsync(
+        ReferenceRecallContext context,
+        HashSet<Guid> deletedIds,
+        Dictionary<Guid, List<MvoReferenceRecallCandidate>> byReferencingMvo,
+        ExportEvaluationCache cache,
+        List<Guid> fallbackMvoIds,
+        List<PendingExport> stagedPendingExports,
+        ReferenceRecallResult result)
+    {
+        const int batchSize = 500;
+        var fallbackPendingExports = new List<PendingExport>();
+
+        for (var offset = 0; offset < fallbackMvoIds.Count; offset += batchSize)
+        {
+            var batchIds = fallbackMvoIds.Skip(offset).Take(batchSize).ToList();
             var referencingMvos = await SyncRepo.GetMetaverseObjectsByIdsNoTrackingAsync(batchIds);
             await RefreshExportEvaluationCacheForPageAsync(cache, batchIds);
 
@@ -805,14 +1306,16 @@ public class ExportEvaluationServer
 
                 var evaluation = await EvaluateExportRulesWithNoNetChangeDetectionAsync(
                     referencingMvo, removedRows, sourceSystem: null, cache, deferSave: true,
-                    removedAttributes: [.. removedRows], existingPendingExports: stagedPendingExports,
-                    preResolvedReferences: context.ResolvedReferenceValuesBySystem);
+                    removedAttributes: [.. removedRows], existingPendingExports: fallbackPendingExports,
+                    preResolvedReferences: context.ResolvedReferenceValuesBySystem,
+                    recallSemantics: true);
 
                 result.ReferencingObjectsEvaluated++;
+                result.FallbackReferencingObjects++;
 
                 // Recall must not provision: a referencing object with no CSO in a target has nothing
                 // there to remove a member from. Only Update Pending Exports are kept.
-                stagedPendingExports.AddRange(
+                fallbackPendingExports.AddRange(
                     evaluation.PendingExports.Where(pe => pe.ChangeType == PendingExportChangeType.Update));
             }
         }
@@ -820,8 +1323,7 @@ public class ExportEvaluationServer
         // Drop changes that could not be pre-resolved: the deleted object had no presence in that
         // target system, so the removal is a no-op there (and could never resolve at export time).
         var deletedIdStrings = deletedIds.Select(id => id.ToString()).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var pendingExportsToPersist = new List<PendingExport>();
-        foreach (var pendingExport in stagedPendingExports)
+        foreach (var pendingExport in fallbackPendingExports)
         {
             var unresolvable = pendingExport.AttributeValueChanges
                 .Where(avc => avc.UnresolvedReferenceValue != null && deletedIdStrings.Contains(avc.UnresolvedReferenceValue))
@@ -837,28 +1339,154 @@ public class ExportEvaluationServer
 
             pendingExport.HasUnresolvedReferences = pendingExport.AttributeValueChanges
                 .Any(avc => !string.IsNullOrEmpty(avc.UnresolvedReferenceValue));
-            pendingExportsToPersist.Add(pendingExport);
+            stagedPendingExports.Add(pendingExport);
         }
+    }
 
-        if (pendingExportsToPersist.Count > 0)
+    /// <summary>
+    /// Classifies the export rule shapes for reference recall (#1003): per Metaverse Object Type,
+    /// either a map of direct single-source reference flows (fast path) or a fallback marker when
+    /// any rule sources a candidate attribute through an expression or multi-source chain. Also
+    /// collects the scoping-criteria attribute ids and target systems the fast path needs.
+    /// Expressions are matched by attribute-name mention (an expression can only read an attribute
+    /// via mv["Name"]); dynamically constructed attribute names are not supported by this
+    /// classification and land on the fallback only when the name literal appears.
+    /// </summary>
+    private static ReferenceRecallRulePlan BuildReferenceRecallRulePlan(
+        ExportEvaluationCache cache,
+        HashSet<int> candidateAttributeIds)
+    {
+        var plan = new ReferenceRecallRulePlan();
+
+        // Resolve the candidate attributes' names for the expression mention check from wherever
+        // the cached rule graph carries them. A candidate attribute that appears nowhere as a
+        // direct source and is absent from the loaded type attribute lists cannot be name-checked;
+        // in that case any expression rule is conservatively routed to the fallback.
+        var candidateNamesById = new Dictionary<int, string>();
+        foreach (var rule in cache.ExportRulesByMvoTypeId.Values.SelectMany(rules => rules))
         {
-            // Same delete-then-create pattern as the sync flush: prevents unique-index collisions on
-            // ConnectedSystemObjectId. Pre-existing PEs were already merged into these instances by
-            // the database fallback inside export evaluation.
-            var csoIds = pendingExportsToPersist
-                .Where(pe => pe.ConnectedSystemObjectId.HasValue)
-                .Select(pe => pe.ConnectedSystemObjectId!.Value)
-                .Distinct()
-                .ToList();
-            if (csoIds.Count > 0)
-                await SyncRepo.DeletePendingExportsByConnectedSystemObjectIdsAsync(csoIds);
+            foreach (var source in rule.AttributeFlowRules
+                         .SelectMany(mapping => mapping.Sources)
+                         .Where(s => s.MetaverseAttribute != null && candidateAttributeIds.Contains(s.MetaverseAttribute.Id)))
+                candidateNamesById[source.MetaverseAttribute!.Id] = source.MetaverseAttribute.Name;
 
-            await SyncRepo.CreatePendingExportsAsync(pendingExportsToPersist);
+            foreach (var attribute in (rule.MetaverseObjectType?.Attributes ?? [])
+                         .Where(a => candidateAttributeIds.Contains(a.Id)))
+                candidateNamesById[attribute.Id] = attribute.Name;
+        }
+        var hasUnresolvableCandidateNames = candidateAttributeIds.Count > candidateNamesById.Count;
+
+        foreach (var (typeId, rules) in cache.ExportRulesByMvoTypeId)
+        {
+            var flowsByAttribute = new Dictionary<int, List<ReferenceRecallDirectFlow>>();
+            var routeToFallback = false;
+
+            foreach (var rule in rules)
+            {
+                foreach (var mapping in rule.AttributeFlowRules)
+                {
+                    var singleSource = mapping.Sources.Count == 1 ? mapping.Sources[0] : null;
+                    var isDirectCandidateFlow =
+                        mapping.TargetConnectedSystemAttribute != null &&
+                        singleSource?.MetaverseAttribute != null &&
+                        string.IsNullOrWhiteSpace(singleSource.Expression) &&
+                        candidateAttributeIds.Contains(singleSource.MetaverseAttribute.Id);
+                    if (isDirectCandidateFlow)
+                    {
+                        if (!flowsByAttribute.TryGetValue(singleSource!.MetaverseAttribute!.Id, out var flows))
+                        {
+                            flows = [];
+                            flowsByAttribute[singleSource.MetaverseAttribute.Id] = flows;
+                        }
+                        flows.Add(new ReferenceRecallDirectFlow
+                        {
+                            ExportRule = rule,
+                            TargetAttribute = mapping.TargetConnectedSystemAttribute!,
+                            SourcePlurality = singleSource.MetaverseAttribute.AttributePlurality
+                        });
+                        continue;
+                    }
+
+                    if (MappingTouchesCandidateNonDirectly(mapping, candidateAttributeIds, candidateNamesById, hasUnresolvableCandidateNames))
+                    {
+                        routeToFallback = true;
+                        break;
+                    }
+                }
+                if (routeToFallback)
+                    break;
+            }
+
+            if (routeToFallback)
+            {
+                plan.FallbackTypeIds.Add(typeId);
+                continue;
+            }
+            if (flowsByAttribute.Count == 0)
+                continue; // no rule of this type touches a candidate attribute: fast no-op
+
+            plan.DirectFlowsByTypeThenAttribute[typeId] = flowsByAttribute;
+            foreach (var flow in flowsByAttribute.Values.SelectMany(flows => flows))
+            {
+                plan.FastTargetSystemIds.Add(flow.ExportRule.ConnectedSystemId);
+                CollectScopingAttributeIds(flow.ExportRule, plan.ScopingAttributeIds);
+            }
         }
 
-        result.PendingExportsStaged = pendingExportsToPersist.Count;
-        result.RemovalChangesStaged = pendingExportsToPersist.Sum(pe => pe.AttributeValueChanges.Count);
-        return result;
+        return plan;
+    }
+
+    /// <summary>
+    /// True when the mapping consumes a candidate reference attribute in a way the direct fast
+    /// path cannot reproduce: as part of a multi-source chain, or inside an expression that
+    /// mentions the attribute's name (or any expression when a candidate attribute's name could
+    /// not be resolved for checking).
+    /// </summary>
+    private static bool MappingTouchesCandidateNonDirectly(
+        SyncRuleMapping mapping,
+        HashSet<int> candidateAttributeIds,
+        Dictionary<int, string> candidateNamesById,
+        bool hasUnresolvableCandidateNames)
+    {
+        if (mapping.Sources.Count > 1 && mapping.Sources.Any(source =>
+                (source.MetaverseAttributeId.HasValue && candidateAttributeIds.Contains(source.MetaverseAttributeId.Value)) ||
+                (source.MetaverseAttribute != null && candidateAttributeIds.Contains(source.MetaverseAttribute.Id))))
+            return true;
+
+        foreach (var expression in mapping.Sources
+                     .Select(source => source.Expression)
+                     .Where(expression => !string.IsNullOrWhiteSpace(expression)))
+        {
+            if (hasUnresolvableCandidateNames)
+                return true;
+            if (candidateNamesById.Values.Any(name => expression!.Contains(name, StringComparison.OrdinalIgnoreCase)))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Collects the Metaverse Attribute ids an export rule's scoping criteria evaluate, including
+    /// nested criteria groups, so the recall fast path can lean-load exactly those values.
+    /// </summary>
+    private static void CollectScopingAttributeIds(SyncRule exportRule, HashSet<int> scopingAttributeIds)
+    {
+        foreach (var group in exportRule.ObjectScopingCriteriaGroups)
+            Collect(group);
+        return;
+
+        void Collect(SyncRuleScopingCriteriaGroup group)
+        {
+            foreach (var criterion in group.Criteria)
+            {
+                var attributeId = criterion.MetaverseAttribute?.Id ?? criterion.MetaverseAttributeId;
+                if (attributeId.HasValue)
+                    scopingAttributeIds.Add(attributeId.Value);
+            }
+            foreach (var childGroup in group.ChildGroups)
+                Collect(childGroup);
+        }
     }
 
     #endregion
@@ -1140,7 +1768,8 @@ public class ExportEvaluationServer
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
         List<PendingExport>? existingPendingExports = null,
         Dictionary<string, object?>? mvAttributeDictionary = null,
-        IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null)
+        IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null,
+        bool recallSemantics = false)
     {
         // Find existing CSO using cached lookup instead of database query
         var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
@@ -1156,6 +1785,19 @@ public class ExportEvaluationServer
         var needsProvisioning = existingCso == null ||
                                 existingCso.Status == ConnectedSystemObjectStatus.PendingProvisioning;
         var createdNewCso = false;
+
+        // Reference recall must never provision (#1003): a referencing object with no presence in
+        // the target has nothing there to remove a member from. This also protects a pending
+        // Create export: without the guard, the merge below would delete it and the recall
+        // caller's Update-only filter would then discard the merged Create, silently losing the
+        // provisioning export (a pre-#1003 defect).
+        if (recallSemantics && needsProvisioning)
+        {
+            Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: Recall skipping MVO {MvoId} for system {SystemId}: " +
+                "no exportable presence (CSO {CsoStatus})",
+                mvo.Id, exportRule.ConnectedSystemId, existingCso?.Status.ToString() ?? "absent");
+            return (null, null, 0);
+        }
 
         Log.Debug("CreateOrUpdatePendingExportWithNoNetChangeAsync: MVO {MvoId} to system {SystemId}: existingCso={ExistingCso}, csoStatus={CsoStatus}, needsProvisioning={NeedsProvisioning}",
             mvo.Id, exportRule.ConnectedSystemId,
@@ -1295,6 +1937,9 @@ public class ExportEvaluationServer
                 // For multi-valued attributes (e.g., member), both sources can have many changes
                 // for the same AttributeId, so we must merge at the individual value level.
                 // Export eval changes take precedence when both sources target the same value.
+                using var inMemoryMergeSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("MergeIntoInMemoryPendingExport")
+                    .SetTag("existingChangeCount", existingPendingExport.AttributeValueChanges.Count)
+                    .SetTag("newChangeCount", attributeChanges.Count);
                 var mergedCount = 0;
                 var addedCount = 0;
 
@@ -1359,10 +2004,35 @@ public class ExportEvaluationServer
         // If found, delete the old PE and return a new merged PE for batch creation.
         if (csoId.HasValue && (changeType == PendingExportChangeType.Update || changeType == PendingExportChangeType.Create))
         {
-            var dbPendingExport = await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(csoId.Value);
+            PendingExport? dbPendingExport;
+            using (var peLookupSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("GetPendingExportByCsoIdForMerge")
+                .SetTag("leanFetch", true))
+            {
+                // Lean fetch (issue #986): the merge logic below only ever reads Id and
+                // AttributeValueChanges off dbPendingExport, never ConnectedSystemObject,
+                // SourceMetaverseObject or ConnectedSystem. The heavy GetPendingExportByConnectedSystemObjectIdAsync
+                // also loads those CSO/MVO attribute value graphs, which for a large group can run into
+                // the hundreds of thousands of rows and dominated this fetch (measured 99.5% of merge cost).
+                dbPendingExport = await SyncRepo.GetPendingExportLightweightByConnectedSystemObjectIdAsync(csoId.Value);
+                peLookupSpan.SetTag("found", dbPendingExport != null);
+                peLookupSpan.SetTag("existingChangeCount", dbPendingExport?.AttributeValueChanges.Count ?? 0);
+                peLookupSpan.SetSuccess();
+            }
 
             if (dbPendingExport != null)
             {
+                // Reference recall: an existing Delete export wins (#1003). The object is being
+                // deprovisioned from the target, so a membership removal is moot; merging would
+                // replace the Delete with an Update and leave the object alive in the target
+                // forever (a pre-#1003 defect).
+                if (recallSemantics && dbPendingExport.ChangeType == PendingExportChangeType.Delete)
+                {
+                    Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: CSO {CsoId} has a pending Delete export; " +
+                        "recall skipping {ChangeCount} change(s) (deprovisioning supersedes membership updates)",
+                        csoId, attributeChanges.Count);
+                    return (null, provisioningCso, csoAlreadyCurrentCount);
+                }
+
                 // Build merged attribute changes: start with export eval changes (takes precedence),
                 // then add any drift-only changes not covered by export eval.
                 // Uses merge keys: single-valued attributes key by attribute ID only (so the new
@@ -1399,7 +2069,12 @@ public class ExportEvaluationServer
                     attributeChanges.Count, driftOnlyChanges.Count, mergedChanges.Count, mvo.Id);
 
                 // Delete the old PE from the database
-                await SyncRepo.DeletePendingExportAsync(dbPendingExport);
+                using (var deleteSpan = JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("DeletePendingExportForMerge")
+                    .SetTag("attributeChangeCount", dbPendingExport.AttributeValueChanges.Count))
+                {
+                    await SyncRepo.DeletePendingExportAsync(dbPendingExport);
+                    deleteSpan.SetSuccess();
+                }
 
                 // Replace attributeChanges with merged set so the new PE created below includes everything
                 attributeChanges = mergedChanges;

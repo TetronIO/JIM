@@ -248,8 +248,9 @@ public class MetaverseRepository : IMetaverseRepository
     public async Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute)
     {
         // Attach existing MetaverseObjectTypes so EF recognises them as existing entities
-        // and only creates join table entries (not duplicate object type rows).
-        foreach (var objectType in attribute.MetaverseObjectTypes)
+        // and only creates join table entries (not duplicate object type rows). The collection
+        // is optional; a caller may create an unbound attribute (null or empty).
+        foreach (var objectType in attribute.MetaverseObjectTypes ?? Enumerable.Empty<MetaverseObjectType>())
         {
             if (Repository.Database.Entry(objectType).State == EntityState.Detached)
                 Repository.Database.MetaverseObjectTypes.Attach(objectType);
@@ -264,12 +265,6 @@ public class MetaverseRepository : IMetaverseRepository
     public async Task UpdateMetaverseAttributeAsync(MetaverseAttribute attribute)
     {
         Repository.Database.Update(attribute);
-        await Repository.Database.SaveChangesAsync();
-    }
-
-    public async Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute)
-    {
-        Repository.Database.MetaverseAttributes.Remove(attribute);
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -291,41 +286,571 @@ public class MetaverseRepository : IMetaverseRepository
             .CountAsync();
     }
 
-    public async Task<List<SyncRuleReference>> GetSyncRulesReferencingAttributeAsync(int attributeId)
+    public async Task<bool> IsMetaverseAttributeNameUniqueAsync(string name, int? excludeAttributeId = null)
     {
-        // Synchronisation Rule mappings where this attribute is the target (import rules)
-        var fromMappings = Repository.Database.SyncRuleMappings
-            .Where(m => m.TargetMetaverseAttributeId == attributeId && m.SyncRule != null)
-            .Select(m => new SyncRuleReference { Id = m.SyncRule!.Id, Name = m.SyncRule.Name });
+        // Case-insensitive comparison (lower(Name) = lower(@name)); names are stored/returned as-is.
+        var lowered = name.ToLower();
+        var query = Repository.Database.MetaverseAttributes.Where(a => a.Name.ToLower() == lowered);
+        if (excludeAttributeId.HasValue)
+        {
+            var excludeId = excludeAttributeId.Value;
+            query = query.Where(a => a.Id != excludeId);
+        }
 
-        // Synchronisation Rule mapping sources where this attribute is the source (export rules)
-        // SyncRuleMappingSource has no navigation to SyncRuleMapping, so join through the parent
-        var fromMappingSources = Repository.Database.SyncRuleMappings
-            .Where(m => m.Sources.Any(s => s.MetaverseAttributeId == attributeId) && m.SyncRule != null)
-            .Select(m => new SyncRuleReference { Id = m.SyncRule!.Id, Name = m.SyncRule.Name });
+        return !await query.AnyAsync();
+    }
 
-        // Object Matching Rules where this attribute is the target
-        var fromMatchingRules = Repository.Database.ObjectMatchingRules
-            .Where(r => r.TargetMetaverseAttributeId == attributeId && r.SyncRule != null)
-            .Select(r => new SyncRuleReference { Id = r.SyncRule!.Id, Name = r.SyncRule.Name });
-
-        // Scoping criteria where this attribute is referenced (navigate from SyncRule down)
-        var fromScopingCriteria = Repository.Database.SyncRules
-            .Where(sr => sr.ObjectScopingCriteriaGroups
-                .Any(g => g.Criteria.Any(c => c.MetaverseAttribute != null && c.MetaverseAttribute.Id == attributeId)
-                       || g.ChildGroups.Any(cg => cg.Criteria.Any(c => c.MetaverseAttribute != null && c.MetaverseAttribute.Id == attributeId))))
-            .Select(sr => new SyncRuleReference { Id = sr.Id, Name = sr.Name });
-
-        // Union all sources and deduplicate by Synchronisation Rule ID
-        var allReferences = await fromMappings
-            .Union(fromMappingSources)
-            .Union(fromMatchingRules)
-            .Union(fromScopingCriteria)
-            .GroupBy(r => r.Id)
-            .Select(g => g.First())
+    public async Task<List<AttributeObjectTypeValueCount>> GetAttributeValueObjectCountsByTypeAsync(int attributeId)
+    {
+        return await Repository.Database.MetaverseObjectAttributeValues
+            .Where(v => v.AttributeId == attributeId)
+            .GroupBy(v => new { v.MetaverseObject.Type.Id, v.MetaverseObject.Type.Name })
+            .Select(g => new AttributeObjectTypeValueCount
+            {
+                MetaverseObjectTypeId = g.Key.Id,
+                MetaverseObjectTypeName = g.Key.Name,
+                // Distinct Metaverse Objects: an object holding multiple values for the attribute counts once.
+                ObjectCount = g.Select(v => v.MetaverseObject.Id).Distinct().Count()
+            })
             .ToListAsync();
+    }
 
-        return allReferences;
+    /// <summary>
+    /// Identifies the export Synchronisation Rule mappings and Object Matching Rules that would be left with no
+    /// sources at all once every source reading the attribute is removed. Such parents are invalid configuration and
+    /// must be removed as a knock-on. Excludes parents already removed wholesale for targeting the attribute. When
+    /// <paramref name="objectTypeId"/> is supplied, only parents whose owning Synchronisation Rule targets that
+    /// Metaverse Object Type are considered (the type-scoped unassign path); null considers all (the whole-delete path).
+    /// </summary>
+    private async Task<(HashSet<int> SourcelessExportMappingIds, HashSet<int> SourcelessMatchingRuleIds)> GetSourcelessParentsAsync(int attributeId, int? objectTypeId = null)
+    {
+        // Export mappings (not import mappings targeting the attribute) that have at least one source reading it, where
+        // every remaining source reads it (so removing those sources empties the mapping).
+        var exportMappingQuery = Repository.Database.SyncRuleMappings
+            .Where(m => m.TargetMetaverseAttributeId != attributeId && m.Sources.Any(s => s.MetaverseAttributeId == attributeId));
+        if (objectTypeId.HasValue)
+        {
+            var typeId = objectTypeId.Value;
+            exportMappingQuery = exportMappingQuery.Where(m => m.SyncRule != null && m.SyncRule.MetaverseObjectTypeId == typeId);
+        }
+        var exportMappingCounts = await exportMappingQuery
+            .Select(m => new { m.Id, Total = m.Sources.Count, Removing = m.Sources.Count(s => s.MetaverseAttributeId == attributeId) })
+            .ToListAsync();
+        var sourcelessExportMappingIds = exportMappingCounts.Where(x => x.Total == x.Removing).Select(x => x.Id).ToHashSet();
+
+        // Object Matching Rules (not those already removed for targeting the attribute) left with no sources.
+        var matchingRuleQuery = Repository.Database.ObjectMatchingRules
+            .Where(r => r.TargetMetaverseAttributeId != attributeId && r.Sources.Any(s => s.MetaverseAttributeId == attributeId));
+        if (objectTypeId.HasValue)
+        {
+            var typeId = objectTypeId.Value;
+            matchingRuleQuery = matchingRuleQuery.Where(r => r.SyncRule != null && r.SyncRule.MetaverseObjectTypeId == typeId);
+        }
+        var matchingRuleCounts = await matchingRuleQuery
+            .Select(r => new { r.Id, Total = r.Sources.Count, Removing = r.Sources.Count(s => s.MetaverseAttributeId == attributeId) })
+            .ToListAsync();
+        var sourcelessMatchingRuleIds = matchingRuleCounts.Where(x => x.Total == x.Removing).Select(x => x.Id).ToHashSet();
+
+        return (sourcelessExportMappingIds, sourcelessMatchingRuleIds);
+    }
+
+    public async Task<List<AttributeReference>> GetAttributeReferencesAsync(int attributeId)
+    {
+        return await BuildAttributeReferencesAsync(attributeId, null);
+    }
+
+    public async Task<List<AttributeReference>> GetAttributeReferencesForObjectTypeAsync(int attributeId, int metaverseObjectTypeId)
+    {
+        return await BuildAttributeReferencesAsync(attributeId, metaverseObjectTypeId);
+    }
+
+    /// <summary>
+    /// Builds the reference list for an attribute. When <paramref name="objectTypeId"/> is null the result is the
+    /// whole-attribute blast radius (every binding, all Synchronisation-Rule references, Predefined Searches, Example
+    /// Data templates and the global Service Settings SSO mapping). When it is supplied the result is scoped to that
+    /// Metaverse Object Type: only the one binding, references owned by Synchronisation Rules that target the type,
+    /// and Predefined Searches / Example Data templates that belong to the type; the global SSO mapping is excluded
+    /// because it references the attribute globally, not per type.
+    /// </summary>
+    private async Task<List<AttributeReference>> BuildAttributeReferencesAsync(int attributeId, int? objectTypeId)
+    {
+        var db = Repository.Database;
+        var references = new List<AttributeReference>();
+        var (sourcelessExportMappingIds, sourcelessMatchingRuleIds) = await GetSourcelessParentsAsync(attributeId, objectTypeId);
+
+        // 1. Object Type bindings. Scoped: only the target type's binding. Global: every bound type.
+        var bindingQuery = db.MetaverseObjectTypes.Where(t => t.Attributes.Any(a => a.Id == attributeId));
+        if (objectTypeId.HasValue)
+        {
+            var typeId = objectTypeId.Value;
+            bindingQuery = bindingQuery.Where(t => t.Id == typeId);
+        }
+        var bindings = await bindingQuery.Select(t => new { t.Id, t.Name }).ToListAsync();
+        references.AddRange(bindings.Select(b => new AttributeReference
+        {
+            Kind = AttributeReferenceKind.Binding,
+            Id = b.Id,
+            MetaverseObjectTypeId = b.Id,
+            MetaverseObjectTypeName = b.Name,
+            Description = $"Object Type binding: {b.Name}"
+        }));
+
+        // 2. Import Attribute Flows (mappings whose target is this attribute), scoped to the owning rule's type.
+        var importMappingQuery = db.SyncRuleMappings.Where(m => m.TargetMetaverseAttributeId == attributeId);
+        if (objectTypeId.HasValue)
+        {
+            var typeId = objectTypeId.Value;
+            importMappingQuery = importMappingQuery.Where(m => m.SyncRule != null && m.SyncRule.MetaverseObjectTypeId == typeId);
+        }
+        var importMappings = await importMappingQuery
+            .Select(m => new { m.Id, m.SyncRuleId, SyncRuleName = m.SyncRule != null ? m.SyncRule.Name : null })
+            .ToListAsync();
+        references.AddRange(importMappings.Select(m => new AttributeReference
+        {
+            Kind = AttributeReferenceKind.ImportAttributeFlow,
+            Id = m.Id,
+            SyncRuleId = m.SyncRuleId,
+            SyncRuleName = m.SyncRuleName,
+            Description = m.SyncRuleName != null
+                ? $"Import Attribute Flow in Synchronisation Rule '{m.SyncRuleName}'"
+                : $"Import Attribute Flow (mapping {m.Id})"
+        }));
+
+        // 3. Export Attribute Flow sources reading this attribute whose parent mapping survives, scoped to the type.
+        var exportMappingsQuery = db.SyncRuleMappings
+            .Where(m => m.TargetMetaverseAttributeId != attributeId && m.Sources.Any(s => s.MetaverseAttributeId == attributeId));
+        if (objectTypeId.HasValue)
+        {
+            var typeId = objectTypeId.Value;
+            exportMappingsQuery = exportMappingsQuery.Where(m => m.SyncRule != null && m.SyncRule.MetaverseObjectTypeId == typeId);
+        }
+        var exportSources = await exportMappingsQuery
+            .SelectMany(m => m.Sources
+                .Where(s => s.MetaverseAttributeId == attributeId)
+                .Select(s => new { SourceId = s.Id, MappingId = m.Id, m.SyncRuleId, SyncRuleName = m.SyncRule != null ? m.SyncRule.Name : null }))
+            .ToListAsync();
+        references.AddRange(exportSources
+            .Where(s => !sourcelessExportMappingIds.Contains(s.MappingId))
+            .Select(s => new AttributeReference
+            {
+                Kind = AttributeReferenceKind.ExportAttributeFlowSource,
+                Id = s.SourceId,
+                SyncRuleId = s.SyncRuleId,
+                SyncRuleName = s.SyncRuleName,
+                Description = s.SyncRuleName != null
+                    ? $"Export Attribute Flow source in Synchronisation Rule '{s.SyncRuleName}'"
+                    : $"Export Attribute Flow source (mapping source {s.SourceId})"
+            }));
+
+        // 4. Export mappings removed as a knock-on because they would be left source-less (already type-scoped above).
+        var sourcelessExportMappings = await db.SyncRuleMappings
+            .Where(m => sourcelessExportMappingIds.Contains(m.Id))
+            .Select(m => new { m.Id, m.SyncRuleId, SyncRuleName = m.SyncRule != null ? m.SyncRule.Name : null })
+            .ToListAsync();
+        references.AddRange(sourcelessExportMappings.Select(m => new AttributeReference
+        {
+            Kind = AttributeReferenceKind.ExportAttributeFlowMapping,
+            Id = m.Id,
+            SyncRuleId = m.SyncRuleId,
+            SyncRuleName = m.SyncRuleName,
+            Description = m.SyncRuleName != null
+                ? $"Export Attribute Flow in Synchronisation Rule '{m.SyncRuleName}' (removed: it would be left with no sources)"
+                : $"Export Attribute Flow (mapping {m.Id}) removed: it would be left with no sources"
+        }));
+
+        // 5. Scoping criteria evaluating this attribute. Scoped via the owning rule's criteria-group graph; global lists
+        //    all. Nested groups are resolved one level deep, matching GetSyncRulesReferencingAttributeAsync.
+        List<int> scopingCriterionIds;
+        if (objectTypeId.HasValue)
+        {
+            var typeId = objectTypeId.Value;
+            var directCriteria = db.SyncRules
+                .Where(sr => sr.MetaverseObjectTypeId == typeId)
+                .SelectMany(sr => sr.ObjectScopingCriteriaGroups)
+                .SelectMany(g => g.Criteria.Where(c => c.MetaverseAttributeId == attributeId))
+                .Select(c => c.Id);
+            var childCriteria = db.SyncRules
+                .Where(sr => sr.MetaverseObjectTypeId == typeId)
+                .SelectMany(sr => sr.ObjectScopingCriteriaGroups)
+                .SelectMany(g => g.ChildGroups)
+                .SelectMany(cg => cg.Criteria.Where(c => c.MetaverseAttributeId == attributeId))
+                .Select(c => c.Id);
+            scopingCriterionIds = await directCriteria.Union(childCriteria).ToListAsync();
+        }
+        else
+        {
+            scopingCriterionIds = await db.SyncRuleScopingCriteria
+                .Where(c => c.MetaverseAttributeId == attributeId)
+                .Select(c => c.Id)
+                .ToListAsync();
+        }
+        references.AddRange(scopingCriterionIds.Select(id => new AttributeReference
+        {
+            Kind = AttributeReferenceKind.ScopingCriterion,
+            Id = id,
+            Description = $"Scoping criterion {id}"
+        }));
+
+        // 6. Object Matching Rules whose target is this attribute. Scoped to Synchronisation-Rule-owned rules targeting
+        //    the type (object-type-owned rules are attribute-global and only cascade on whole-attribute delete).
+        var matchingRuleTargetQuery = db.ObjectMatchingRules.Where(r => r.TargetMetaverseAttributeId == attributeId);
+        if (objectTypeId.HasValue)
+        {
+            var typeId = objectTypeId.Value;
+            matchingRuleTargetQuery = matchingRuleTargetQuery.Where(r => r.SyncRule != null && r.SyncRule.MetaverseObjectTypeId == typeId);
+        }
+        var matchingRuleTargets = await matchingRuleTargetQuery
+            .Select(r => new { r.Id, r.SyncRuleId, SyncRuleName = r.SyncRule != null ? r.SyncRule.Name : null })
+            .ToListAsync();
+        references.AddRange(matchingRuleTargets.Select(r => new AttributeReference
+        {
+            Kind = AttributeReferenceKind.ObjectMatchingRuleTarget,
+            Id = r.Id,
+            SyncRuleId = r.SyncRuleId,
+            SyncRuleName = r.SyncRuleName,
+            Description = $"Object Matching Rule {r.Id}"
+        }));
+
+        // 7. Object Matching Rule sources reading this attribute whose parent rule survives, scoped to the type.
+        var matchingRuleSourceQuery = db.ObjectMatchingRuleSources
+            .Where(s => s.MetaverseAttributeId == attributeId && s.ObjectMatchingRule.TargetMetaverseAttributeId != attributeId);
+        if (objectTypeId.HasValue)
+        {
+            var typeId = objectTypeId.Value;
+            matchingRuleSourceQuery = matchingRuleSourceQuery.Where(s => s.ObjectMatchingRule.SyncRule != null && s.ObjectMatchingRule.SyncRule.MetaverseObjectTypeId == typeId);
+        }
+        var matchingRuleSources = await matchingRuleSourceQuery
+            .Select(s => new { s.Id, s.ObjectMatchingRuleId, s.ObjectMatchingRule.SyncRuleId, SyncRuleName = s.ObjectMatchingRule.SyncRule != null ? s.ObjectMatchingRule.SyncRule.Name : null })
+            .ToListAsync();
+        references.AddRange(matchingRuleSources
+            .Where(s => !sourcelessMatchingRuleIds.Contains(s.ObjectMatchingRuleId))
+            .Select(s => new AttributeReference
+            {
+                Kind = AttributeReferenceKind.ObjectMatchingRuleSource,
+                Id = s.Id,
+                SyncRuleId = s.SyncRuleId,
+                SyncRuleName = s.SyncRuleName,
+                Description = $"Object Matching Rule source {s.Id} (rule {s.ObjectMatchingRuleId})"
+            }));
+
+        // 8. Object Matching Rules removed as a knock-on because they would be left source-less (already type-scoped).
+        var sourcelessMatchingRules = await db.ObjectMatchingRules
+            .Where(r => sourcelessMatchingRuleIds.Contains(r.Id))
+            .Select(r => new { r.Id, r.SyncRuleId, SyncRuleName = r.SyncRule != null ? r.SyncRule.Name : null })
+            .ToListAsync();
+        references.AddRange(sourcelessMatchingRules.Select(r => new AttributeReference
+        {
+            Kind = AttributeReferenceKind.SourcelessObjectMatchingRule,
+            Id = r.Id,
+            SyncRuleId = r.SyncRuleId,
+            SyncRuleName = r.SyncRuleName,
+            Description = $"Object Matching Rule {r.Id} (removed: it would be left with no sources)"
+        }));
+
+        // 9. Predefined Search display columns showing this attribute, scoped to searches belonging to the type.
+        var predefinedSearchAttributeQuery = db.PredefinedSearchAttributes.Where(x => x.MetaverseAttribute.Id == attributeId);
+        if (objectTypeId.HasValue)
+        {
+            var typeId = objectTypeId.Value;
+            predefinedSearchAttributeQuery = predefinedSearchAttributeQuery.Where(x => x.PredefinedSearch.MetaverseObjectType.Id == typeId);
+        }
+        var predefinedSearchAttributes = await predefinedSearchAttributeQuery
+            .Select(x => new { x.Id, SearchName = x.PredefinedSearch.Name })
+            .ToListAsync();
+        references.AddRange(predefinedSearchAttributes.Select(x => new AttributeReference
+        {
+            Kind = AttributeReferenceKind.PredefinedSearchAttribute,
+            Id = x.Id,
+            Description = $"Predefined Search column in '{x.SearchName}'"
+        }));
+
+        // 10. Predefined Search criteria filtering on this attribute, scoped to searches belonging to the type via the
+        //     search's criteria-group graph (one level of nesting, as elsewhere).
+        List<int> predefinedSearchCriterionIds;
+        if (objectTypeId.HasValue)
+        {
+            var typeId = objectTypeId.Value;
+            var directSearchCriteria = db.PredefinedSearches
+                .Where(s => s.MetaverseObjectType.Id == typeId)
+                .SelectMany(s => s.CriteriaGroups)
+                .SelectMany(g => g.Criteria.Where(c => c.MetaverseAttributeId == attributeId))
+                .Select(c => c.Id);
+            var childSearchCriteria = db.PredefinedSearches
+                .Where(s => s.MetaverseObjectType.Id == typeId)
+                .SelectMany(s => s.CriteriaGroups)
+                .SelectMany(g => g.ChildGroups)
+                .SelectMany(cg => cg.Criteria.Where(c => c.MetaverseAttributeId == attributeId))
+                .Select(c => c.Id);
+            predefinedSearchCriterionIds = await directSearchCriteria.Union(childSearchCriteria).ToListAsync();
+        }
+        else
+        {
+            predefinedSearchCriterionIds = await db.PredefinedSearchCriteria
+                .Where(x => x.MetaverseAttributeId == attributeId)
+                .Select(x => x.Id)
+                .ToListAsync();
+        }
+        references.AddRange(predefinedSearchCriterionIds.Select(id => new AttributeReference
+        {
+            Kind = AttributeReferenceKind.PredefinedSearchCriterion,
+            Id = id,
+            Description = $"Predefined Search criterion {id}"
+        }));
+
+        // 11. Example Data template attributes generating values for this attribute, scoped to templates for the type.
+        List<int> exampleDataTemplateAttributeIds;
+        if (objectTypeId.HasValue)
+        {
+            var typeId = objectTypeId.Value;
+            exampleDataTemplateAttributeIds = await db.ExampleDataObjectTypes
+                .Where(o => o.MetaverseObjectType.Id == typeId)
+                .SelectMany(o => o.TemplateAttributes.Where(a => a.MetaverseAttribute != null && a.MetaverseAttribute.Id == attributeId))
+                .Select(a => a.Id)
+                .ToListAsync();
+        }
+        else
+        {
+            exampleDataTemplateAttributeIds = await db.ExampleDataTemplateAttributes
+                .Where(x => x.MetaverseAttribute != null && x.MetaverseAttribute.Id == attributeId)
+                .Select(x => x.Id)
+                .ToListAsync();
+        }
+        references.AddRange(exampleDataTemplateAttributeIds.Select(id => new AttributeReference
+        {
+            Kind = AttributeReferenceKind.ExampleDataTemplateAttribute,
+            Id = id,
+            Description = $"Example Data template attribute {id}"
+        }));
+
+        // 12. Example Data template attribute dependencies. These reference the attribute globally (no per-type owning
+        //     path), so they cascade only on whole-attribute delete, never on a type-scoped unassign.
+        if (!objectTypeId.HasValue)
+        {
+            var exampleDataTemplateAttributeDependencies = await db.ExampleDataTemplateAttributeDependencies
+                .Where(x => x.MetaverseAttribute.Id == attributeId)
+                .Select(x => x.Id)
+                .ToListAsync();
+            references.AddRange(exampleDataTemplateAttributeDependencies.Select(id => new AttributeReference
+            {
+                Kind = AttributeReferenceKind.ExampleDataTemplateAttributeDependency,
+                Id = id,
+                Description = $"Example Data template attribute dependency {id}"
+            }));
+
+            // 13. Service Settings SSO unique-identifier mapping. Global only: an unassign from one type must not clear
+            //     a mapping that identifies users across the whole Metaverse.
+            var ssoSettings = await db.ServiceSettings
+                .Where(x => x.SSOUniqueIdentifierMetaverseAttribute != null && x.SSOUniqueIdentifierMetaverseAttribute.Id == attributeId)
+                .Select(x => x.Id)
+                .ToListAsync();
+            references.AddRange(ssoSettings.Select(id => new AttributeReference
+            {
+                Kind = AttributeReferenceKind.ServiceSettingsSsoIdentifier,
+                Id = id,
+                Description = "Service Settings SSO unique-identifier mapping (cleared)"
+            }));
+        }
+
+        return references;
+    }
+
+    public async Task CascadeDeleteMetaverseAttributeAsync(int attributeId)
+    {
+        var db = Repository.Database;
+        var (sourcelessExportMappingIds, sourcelessMatchingRuleIds) = await GetSourcelessParentsAsync(attributeId);
+
+        // Leaf sources first: Object Matching Rule sources and export mapping sources that read the attribute.
+        var omrSources = await db.ObjectMatchingRuleSources.Where(s => s.MetaverseAttributeId == attributeId).ToListAsync();
+        db.ObjectMatchingRuleSources.RemoveRange(omrSources);
+
+        var exportMappingSources = await db.SyncRuleMappingSources.Where(s => s.MetaverseAttributeId == attributeId).ToListAsync();
+        db.SyncRuleMappingSources.RemoveRange(exportMappingSources);
+
+        // Scoping criteria that evaluate the attribute.
+        var scopingCriteria = await db.SyncRuleScopingCriteria.Where(c => c.MetaverseAttributeId == attributeId).ToListAsync();
+        db.SyncRuleScopingCriteria.RemoveRange(scopingCriteria);
+
+        // Import Attribute Flow mappings targeting the attribute. Their child sources have a nullable, set-null FK to
+        // the mapping, so removing them explicitly first avoids leaving orphaned source rows behind.
+        var importMappings = await db.SyncRuleMappings
+            .Include(m => m.Sources)
+            .Where(m => m.TargetMetaverseAttributeId == attributeId)
+            .ToListAsync();
+        foreach (var mapping in importMappings)
+            db.SyncRuleMappingSources.RemoveRange(mapping.Sources);
+        db.SyncRuleMappings.RemoveRange(importMappings);
+
+        // Export mappings left source-less by removing their attribute-reading source: remove the mapping and any of
+        // its remaining (now-orphaned) sources so no invalid, source-less mapping survives.
+        var sourcelessExportMappings = await db.SyncRuleMappings
+            .Include(m => m.Sources)
+            .Where(m => sourcelessExportMappingIds.Contains(m.Id))
+            .ToListAsync();
+        foreach (var mapping in sourcelessExportMappings)
+            db.SyncRuleMappingSources.RemoveRange(mapping.Sources);
+        db.SyncRuleMappings.RemoveRange(sourcelessExportMappings);
+
+        // Object Matching Rules targeting the attribute. Their sources cascade at the database (required FK), but we
+        // remove them in-context for a clean, fully-tracked delete.
+        var matchingRules = await db.ObjectMatchingRules
+            .Include(r => r.Sources)
+            .Where(r => r.TargetMetaverseAttributeId == attributeId)
+            .ToListAsync();
+        foreach (var rule in matchingRules)
+            db.ObjectMatchingRuleSources.RemoveRange(rule.Sources);
+        db.ObjectMatchingRules.RemoveRange(matchingRules);
+
+        // Object Matching Rules left source-less by removing their attribute-reading source: remove the rule (and its
+        // remaining sources) so no invalid, source-less rule survives.
+        var sourcelessMatchingRules = await db.ObjectMatchingRules
+            .Include(r => r.Sources)
+            .Where(r => sourcelessMatchingRuleIds.Contains(r.Id))
+            .ToListAsync();
+        foreach (var rule in sourcelessMatchingRules)
+            db.ObjectMatchingRuleSources.RemoveRange(rule.Sources);
+        db.ObjectMatchingRules.RemoveRange(sourcelessMatchingRules);
+
+        // Predefined Search display columns and criteria, and Example Data template attributes and dependencies. These
+        // would be removed by database cascade anyway, but we remove them explicitly so nothing changes unaudited.
+        var predefinedSearchAttributes = await db.PredefinedSearchAttributes.Where(x => x.MetaverseAttribute.Id == attributeId).ToListAsync();
+        db.PredefinedSearchAttributes.RemoveRange(predefinedSearchAttributes);
+
+        var predefinedSearchCriteria = await db.PredefinedSearchCriteria.Where(x => x.MetaverseAttributeId == attributeId).ToListAsync();
+        db.PredefinedSearchCriteria.RemoveRange(predefinedSearchCriteria);
+
+        var exampleDataTemplateAttributes = await db.ExampleDataTemplateAttributes.Where(x => x.MetaverseAttribute != null && x.MetaverseAttribute.Id == attributeId).ToListAsync();
+        db.ExampleDataTemplateAttributes.RemoveRange(exampleDataTemplateAttributes);
+
+        var exampleDataTemplateAttributeDependencies = await db.ExampleDataTemplateAttributeDependencies.Where(x => x.MetaverseAttribute.Id == attributeId).ToListAsync();
+        db.ExampleDataTemplateAttributeDependencies.RemoveRange(exampleDataTemplateAttributeDependencies);
+
+        // Service Settings SSO unique-identifier: clear the mapping (set null) rather than delete the singleton row.
+        var ssoSettings = await db.ServiceSettings
+            .Where(x => x.SSOUniqueIdentifierMetaverseAttribute != null && x.SSOUniqueIdentifierMetaverseAttribute.Id == attributeId)
+            .ToListAsync();
+        foreach (var settings in ssoSettings)
+            db.Entry(settings).Property("SSOUniqueIdentifierMetaverseAttributeId").CurrentValue = null;
+
+        // Finally the attribute itself. The Object Type bindings (many-to-many) are removed by database cascade.
+        var attribute = await db.MetaverseAttributes.FindAsync(attributeId);
+        if (attribute != null)
+            db.MetaverseAttributes.Remove(attribute);
+
+        // Single SaveChanges wraps every removal above in one database transaction, leaving nothing dangling.
+        await db.SaveChangesAsync();
+    }
+
+    public async Task CascadeUnassignAttributeFromObjectTypeAsync(int attributeId, int metaverseObjectTypeId)
+    {
+        var db = Repository.Database;
+
+        // Single source of truth: remove exactly the type-scoped reference set the preview and audit are built from.
+        var references = await BuildAttributeReferencesAsync(attributeId, metaverseObjectTypeId);
+        var idsByKind = references.GroupBy(r => r.Kind).ToDictionary(g => g.Key, g => g.Select(r => r.Id).ToList());
+        List<int> IdsOf(AttributeReferenceKind kind) => idsByKind.TryGetValue(kind, out var ids) ? ids : [];
+
+        // Leaf sources first.
+        var exportSourceIds = IdsOf(AttributeReferenceKind.ExportAttributeFlowSource);
+        if (exportSourceIds.Count > 0)
+            db.SyncRuleMappingSources.RemoveRange(await db.SyncRuleMappingSources.Where(s => exportSourceIds.Contains(s.Id)).ToListAsync());
+
+        var omrSourceIds = IdsOf(AttributeReferenceKind.ObjectMatchingRuleSource);
+        if (omrSourceIds.Count > 0)
+            db.ObjectMatchingRuleSources.RemoveRange(await db.ObjectMatchingRuleSources.Where(s => omrSourceIds.Contains(s.Id)).ToListAsync());
+
+        var scopingCriterionIds = IdsOf(AttributeReferenceKind.ScopingCriterion);
+        if (scopingCriterionIds.Count > 0)
+            db.SyncRuleScopingCriteria.RemoveRange(await db.SyncRuleScopingCriteria.Where(c => scopingCriterionIds.Contains(c.Id)).ToListAsync());
+
+        // Whole mappings (import targets and source-less exports): remove with their sources.
+        var mappingIds = IdsOf(AttributeReferenceKind.ImportAttributeFlow).Concat(IdsOf(AttributeReferenceKind.ExportAttributeFlowMapping)).ToList();
+        if (mappingIds.Count > 0)
+        {
+            var mappings = await db.SyncRuleMappings.Include(m => m.Sources).Where(m => mappingIds.Contains(m.Id)).ToListAsync();
+            foreach (var mapping in mappings)
+                db.SyncRuleMappingSources.RemoveRange(mapping.Sources);
+            db.SyncRuleMappings.RemoveRange(mappings);
+        }
+
+        // Whole Object Matching Rules (targets and source-less rules): remove with their sources.
+        var ruleIds = IdsOf(AttributeReferenceKind.ObjectMatchingRuleTarget).Concat(IdsOf(AttributeReferenceKind.SourcelessObjectMatchingRule)).ToList();
+        if (ruleIds.Count > 0)
+        {
+            var rules = await db.ObjectMatchingRules.Include(r => r.Sources).Where(r => ruleIds.Contains(r.Id)).ToListAsync();
+            foreach (var rule in rules)
+                db.ObjectMatchingRuleSources.RemoveRange(rule.Sources);
+            db.ObjectMatchingRules.RemoveRange(rules);
+        }
+
+        // Predefined Search display columns and criteria belonging to the type.
+        var psAttrIds = IdsOf(AttributeReferenceKind.PredefinedSearchAttribute);
+        if (psAttrIds.Count > 0)
+            db.PredefinedSearchAttributes.RemoveRange(await db.PredefinedSearchAttributes.Where(x => psAttrIds.Contains(x.Id)).ToListAsync());
+
+        var psCriterionIds = IdsOf(AttributeReferenceKind.PredefinedSearchCriterion);
+        if (psCriterionIds.Count > 0)
+            db.PredefinedSearchCriteria.RemoveRange(await db.PredefinedSearchCriteria.Where(x => psCriterionIds.Contains(x.Id)).ToListAsync());
+
+        // Example Data template attributes belonging to the type.
+        var edtAttrIds = IdsOf(AttributeReferenceKind.ExampleDataTemplateAttribute);
+        if (edtAttrIds.Count > 0)
+            db.ExampleDataTemplateAttributes.RemoveRange(await db.ExampleDataTemplateAttributes.Where(x => edtAttrIds.Contains(x.Id)).ToListAsync());
+
+        // Finally the binding itself: remove the object type from the attribute's associations. The attribute row and
+        // its bindings to other types are untouched. AsTracking is required (the Blazor DbContext defaults to
+        // NoTracking) or the skip-navigation removal is invisible to SaveChanges and the join row silently survives.
+        var attribute = await db.MetaverseAttributes
+            .AsTracking()
+            .Include(a => a.MetaverseObjectTypes)
+            .SingleOrDefaultAsync(a => a.Id == attributeId);
+        var bound = attribute?.MetaverseObjectTypes.SingleOrDefault(t => t.Id == metaverseObjectTypeId);
+        if (bound != null)
+            attribute!.MetaverseObjectTypes.Remove(bound);
+
+        // Single SaveChanges wraps every removal above in one database transaction, leaving nothing dangling.
+        await db.SaveChangesAsync();
+    }
+
+    public async Task AddAttributeObjectTypeBindingAsync(int attributeId, int metaverseObjectTypeId)
+    {
+        // AsTracking is required: the Blazor DbContext defaults to NoTracking, so a mutation to the loaded
+        // attribute's MetaverseObjectTypes skip-navigation would otherwise be invisible to SaveChanges and the
+        // join row would silently never be written.
+        var attribute = await Repository.Database.MetaverseAttributes
+            .AsTracking()
+            .Include(a => a.MetaverseObjectTypes)
+            .SingleOrDefaultAsync(a => a.Id == attributeId)
+            ?? throw new ArgumentException($"Metaverse Attribute {attributeId} not found.", nameof(attributeId));
+
+        // Idempotent: nothing to do if already bound.
+        if (attribute.MetaverseObjectTypes.Any(t => t.Id == metaverseObjectTypeId))
+            return;
+
+        var objectType = await Repository.Database.MetaverseObjectTypes
+            .SingleOrDefaultAsync(t => t.Id == metaverseObjectTypeId)
+            ?? throw new ArgumentException($"Metaverse Object Type {metaverseObjectTypeId} not found.", nameof(metaverseObjectTypeId));
+
+        attribute.MetaverseObjectTypes.Add(objectType);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task RemoveAttributeObjectTypeBindingAsync(int attributeId, int metaverseObjectTypeId)
+    {
+        // AsTracking is required: the Blazor DbContext defaults to NoTracking, so removing an item from the loaded
+        // attribute's MetaverseObjectTypes skip-navigation would otherwise be invisible to SaveChanges and the join
+        // row would silently survive.
+        var attribute = await Repository.Database.MetaverseAttributes
+            .AsTracking()
+            .Include(a => a.MetaverseObjectTypes)
+            .SingleOrDefaultAsync(a => a.Id == attributeId)
+            ?? throw new ArgumentException($"Metaverse Attribute {attributeId} not found.", nameof(attributeId));
+
+        var bound = attribute.MetaverseObjectTypes.SingleOrDefault(t => t.Id == metaverseObjectTypeId);
+        if (bound == null)
+            return; // Idempotent: not bound.
+
+        attribute.MetaverseObjectTypes.Remove(bound);
+        await Repository.Database.SaveChangesAsync();
     }
     #endregion
 
@@ -407,6 +932,92 @@ public class MetaverseRepository : IMetaverseRepository
         }
 
         return candidates;
+    }
+
+    public async Task<List<MetaverseObjectRecallSummary>> GetMetaverseObjectRecallSummariesAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> scopingAttributeIds)
+    {
+        if (metaverseObjectIds.Count == 0)
+            return new List<MetaverseObjectRecallSummary>();
+
+        // Raw SQL into a Summary-tier DTO (sync hot path, #1003): reference recall staging needs the
+        // type id (rule routing), display name (Activity reporting) and only the scoping-criteria
+        // attribute values - never the full attribute graph a group carries (tens of thousands of
+        // member rows for a large group, the dominant cost of the pre-#1003 per-flush loads).
+        var ids = metaverseObjectIds.ToArray();
+        var summariesById = new Dictionary<Guid, MetaverseObjectRecallSummary>(metaverseObjectIds.Count);
+
+        var connection = Repository.Database.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                @"SELECT ""Id"", ""TypeId"", ""CachedDisplayName""
+                  FROM ""MetaverseObjects""
+                  WHERE ""Id"" = ANY(@ids)";
+            var idsParameter = command.CreateParameter();
+            idsParameter.ParameterName = "ids";
+            idsParameter.Value = ids;
+            command.Parameters.Add(idsParameter);
+
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                var summary = new MetaverseObjectRecallSummary
+                {
+                    Id = reader.GetGuid(0),
+                    TypeId = reader.GetInt32(1),
+                    DisplayName = reader.IsDBNull(2) ? null : reader.GetString(2)
+                };
+                summariesById[summary.Id] = summary;
+            }
+        }
+
+        if (scopingAttributeIds.Count == 0 || summariesById.Count == 0)
+            return summariesById.Values.ToList();
+
+        // Scalar columns plus the asserted-null marker: exactly what export rule scoping criteria
+        // evaluation reads. Reference and binary attributes are not evaluable by scoping criteria.
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText =
+                @"SELECT ""MetaverseObjectId"", ""Id"", ""AttributeId"", ""StringValue"", ""IntValue"", ""LongValue"",
+                         ""DateTimeValue"", ""BoolValue"", ""GuidValue"", ""NullValue""
+                  FROM ""MetaverseObjectAttributeValues""
+                  WHERE ""MetaverseObjectId"" = ANY(@ids) AND ""AttributeId"" = ANY(@attributeIds)";
+            var idsParameter = command.CreateParameter();
+            idsParameter.ParameterName = "ids";
+            idsParameter.Value = ids;
+            command.Parameters.Add(idsParameter);
+            var attributeIdsParameter = command.CreateParameter();
+            attributeIdsParameter.ParameterName = "attributeIds";
+            attributeIdsParameter.Value = scopingAttributeIds.ToArray();
+            command.Parameters.Add(attributeIdsParameter);
+
+            await using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                if (!summariesById.TryGetValue(reader.GetGuid(0), out var summary))
+                    continue;
+
+                summary.ScopingAttributeValues.Add(new MetaverseObjectAttributeValue
+                {
+                    Id = reader.GetGuid(1),
+                    AttributeId = reader.GetInt32(2),
+                    StringValue = reader.IsDBNull(3) ? null : reader.GetString(3),
+                    IntValue = reader.IsDBNull(4) ? null : reader.GetInt32(4),
+                    LongValue = reader.IsDBNull(5) ? null : reader.GetInt64(5),
+                    DateTimeValue = reader.IsDBNull(6) ? null : reader.GetDateTime(6),
+                    BoolValue = reader.IsDBNull(7) ? null : reader.GetBoolean(7),
+                    GuidValue = reader.IsDBNull(8) ? null : reader.GetGuid(8),
+                    NullValue = reader.GetBoolean(9)
+                });
+            }
+        }
+
+        return summariesById.Values.ToList();
     }
 
     public async Task ClearMetaverseObjectScopeReviewPendingAsync(IReadOnlyCollection<Guid> ids)
@@ -1132,8 +1743,7 @@ public class MetaverseRepository : IMetaverseRepository
         // Use raw SQL for all queries — EF Core's query pipeline adds significant overhead
         // at 100k+ scale, while the underlying SQL executes in ~10-30ms.
         var connection = Repository.Database.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
-            await connection.OpenAsync();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
 
         var typeId = predefinedSearch.MetaverseObjectType.Id;
         var offset = (page - 1) * pageSize;
