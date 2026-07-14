@@ -1737,12 +1737,12 @@ public class MetaverseRepository : IMetaverseRepository
             trackedCso.Entity.MetaverseObject = null;
         }
 
-        // Null out reference attribute values on other MVOs that point to this MVO.
-        // Without this, deleting an MVO that is referenced (e.g., as a Manager) by other
-        // MVOs would violate the FK constraint on MetaverseObjectAttributeValues.ReferenceValueId.
-        await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""MetaverseObjectAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = {0}",
-            metaverseObject.Id);
+        // Reference attribute values on other MVOs that point to this MVO: valueless rows are
+        // deleted, payload-carrying rows have their reference nulled, and tracked instances are
+        // surgically detached (#1019). Without the null-out half, deleting an MVO that is referenced
+        // (e.g. as a Manager) would violate the FK constraint on
+        // MetaverseObjectAttributeValues.ReferenceValueId.
+        await MetaverseReferenceRowCleanup.CleanUpReferencesToDeletedMvosAsync(Repository.Database, [metaverseObject.Id]);
 
         // Null out reference values in change tracking attribute records that point to this MVO.
         // Change history records may reference this MVO (e.g., "Manager was set to Alice")
