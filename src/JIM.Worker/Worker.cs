@@ -743,7 +743,7 @@ public class Worker : BackgroundService
 
                     Log.Information("PerformMetaverseObjectHousekeepingAsync: Successfully deleted MVO {MvoId}", mvo.Id);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     // Per-object error isolation: one bad object must not sink the batch. The failure is
                     // recorded as an error execution item so it is visible on the Activity, not just in logs.

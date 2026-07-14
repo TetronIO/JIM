@@ -32,11 +32,8 @@ public class ActivityRepository : IActivityRepository
         if (items.Count == 0)
             return;
 
-        foreach (var item in items)
-        {
-            if (item.Id == Guid.Empty)
-                item.Id = Guid.NewGuid();
-        }
+        foreach (var item in items.Where(i => i.Id == Guid.Empty))
+            item.Id = Guid.NewGuid();
 
         // AddRange traverses each item's navigation graph and marks every untracked entity it reaches as Added.
         // Connected System Object change snapshots carried on the sync outcomes reference pre-existing entities
