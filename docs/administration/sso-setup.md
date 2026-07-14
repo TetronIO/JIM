@@ -603,3 +603,13 @@ Configure appropriate token lifetimes in your identity provider:
 - **Request only the minimum scopes needed**<br /> Follow the principle of least privilege.
 - **Regularly audit which permissions are granted**<br /> Review permissions periodically for security compliance.
 - **Use admin consent for organisation-wide deployments**<br /> For widespread deployments, use organization-level consent mechanisms.
+
+### Brute-Force Protection and MFA
+
+JIM delegates interactive authentication entirely to your identity provider and never sees or stores user credentials, whichever kind your provider is configured to require, i.e. Kerberos, passwords, smart cards, other certificate-based authentication types, FIDO2 passkeys, etc. Defences against credential attacks therefore belong **at the identity provider**, not in JIM:
+
+- **Where password authentication is in use, we recommend you enable brute-force/lockout protection**<br /> Entra ID (Smart Lockout), AD FS (the built-in Extranet Lockout Policy), and Keycloak (**Realm settings > Security defences > Brute force detection**) all offer this. The bundled devcontainer Keycloak realm ships with brute-force detection enabled by default.
+- **Enable multi-factor authentication where available**<br /> MFA at the identity provider protects every application behind it, including JIM, without any JIM-side configuration.
+- **Prefer phishing-resistant methods where your provider supports them**<br /> Kerberos, certificate-based authentication, and FIDO2 passkeys remove the guessable secret altogether, protecting users against credential-stuffing and password-guessing.
+
+JIM's own [REST API rate limiting](../api/rate-limiting.md) throttles request volume at the application layer (see [Service Settings](../configuration/service-settings.md)); it complements, but does not replace, identity-provider-level credential protections for the interactive sign-in flow.
