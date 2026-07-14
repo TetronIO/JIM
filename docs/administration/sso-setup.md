@@ -59,10 +59,10 @@ JIM uses two kinds of OAuth 2.0 clients, and depending on your identity provider
 **When are these the same registration?**
 
 - **Microsoft Entra ID**: One app registration can have both a Web platform (for the confidential flow) and a Mobile/Desktop platform (for the public flow). In this case, leave `JIM_SSO_PUBLIC_CLIENT_ID` unset; the PowerShell module uses the same Application (client) ID as the web application.
-- **AD FS**: A single Application Group can include both a web application and a native application that share a Client Identifier. Leave `JIM_SSO_PUBLIC_CLIENT_ID` unset in that case.
 
 **When must they be different?**
 
+- **AD FS**: A Server application (confidential) and a Native application (public) are distinct applications with their own Client Identifiers, even inside a single Application Group. Create both and set `JIM_SSO_PUBLIC_CLIENT_ID` to the Native application's identifier.
 - **Keycloak**: A single Keycloak client cannot be both confidential and public. You must create two clients (e.g. `jim` and `jim-powershell`) and set `JIM_SSO_PUBLIC_CLIENT_ID` to the public one.
 - **Any IdP where your security policy forbids adding loopback redirects to a confidential client**: create a dedicated public client and point `JIM_SSO_PUBLIC_CLIENT_ID` at it.
 
@@ -170,7 +170,7 @@ The most common failure modes and how to fix them:
 : The post-logout URI (`https://your-jim-url/signout-callback-oidc`) is not registered against the app. Add it to **Authentication** > **Platform configurations** > **Web** > **Redirect URIs** and save. See [Entra ID Step 1](sso-setup/microsoft-entra-id.md#step-1-register-the-application).
 
 **"Invalid post_logout_redirect_uri"** or similar (AD FS, Keycloak)
-: Same root cause as above: the URI is not in the application's registered redirect URI list. For AD FS, add `https://your-jim-url/signout-callback-oidc` to the Web Application's Redirect URIs (see [AD FS Step 2](sso-setup/ad-fs.md#step-2-configure-the-native-application)). For Keycloak, add it to **Valid post logout redirect URIs** on the client (see [Keycloak Step 2](sso-setup/keycloak.md#step-2-create-a-client-for-jim)).
+: Same root cause as above: the URI is not in the application's registered redirect URI list. For AD FS, add `https://your-jim-url/signout-callback-oidc` to the Server application's Redirect URIs (see [AD FS Step 2](sso-setup/ad-fs.md#step-2-configure-the-server-application)). For Keycloak, add it to **Valid post logout redirect URIs** on the client (see [Keycloak Step 2](sso-setup/keycloak.md#step-2-create-a-client-for-jim)).
 
 **"Missing parameters: id_token_hint"** (Keycloak and other strict providers)
 : Keycloak and other strict OIDC providers require `id_token_hint` on the end-session request per the OIDC specification. JIM persists the ID token during sign-in automatically so the middleware can include it on sign-out. If you see this error, verify your identity provider is actually issuing an ID token (the `openid` scope must be requested, which JIM does by default) and that your client configuration is not stripping it.
