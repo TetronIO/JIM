@@ -272,12 +272,12 @@ Modifies an existing metaverse attribute definition.
 
 ```powershell
 # ById (default)
-Set-JIMMetaverseAttribute -Id <int> [-Name <string>] [-Type <string>] [-AttributePlurality <string>]
-    [-ObjectTypeIds <int[]>] [-ChangeReason <string>] [-PassThru]
+Set-JIMMetaverseAttribute -Id <int> [-Name <string>] [-RenderingHint <string>] [-Type <string>]
+    [-AttributePlurality <string>] [-ChangeReason <string>] [-PassThru]
 
 # ByInputObject
-Set-JIMMetaverseAttribute -InputObject <object> [-Name <string>] [-Type <string>]
-    [-AttributePlurality <string>] [-ObjectTypeIds <int[]>] [-ChangeReason <string>] [-PassThru]
+Set-JIMMetaverseAttribute -InputObject <object> [-Name <string>] [-RenderingHint <string>]
+    [-Type <string>] [-AttributePlurality <string>] [-ChangeReason <string>] [-PassThru]
 ```
 
 #### Parameters
@@ -286,15 +286,18 @@ Set-JIMMetaverseAttribute -InputObject <object> [-Name <string>] [-Type <string>
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes (ById) | | The ID of the attribute to modify. Accepts pipeline input. |
 | `InputObject` | `object` | Yes (ByInputObject) | | An attribute object from the pipeline |
-| `Name` | `string` | No | | The new name for the attribute |
-| `Type` | `string` | No | | The new data type. Valid values: `Text`, `Integer`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
+| `Name` | `string` | No | | The new name. Subject to the same case-insensitive uniqueness check as creation. |
+| `RenderingHint` | `string` | No | | How a multi-valued attribute's values display. Valid values: `Default`, `Table`, `ChipSet`, `List` |
+| `Type` | `string` | No | | The new data type. Valid values: `Text`, `Integer`, `LongNumber`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
 | `AttributePlurality` | `string` | No | | The new plurality. Valid values: `SingleValued`, `MultiValued` |
-| `ObjectTypeIds` | `int[]` | No | | Object type IDs to associate with; replaces existing associations |
 | `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 | `PassThru` | `switch` | No | `false` | Return the updated attribute definition |
 
 !!! info "ShouldProcess"
     This cmdlet supports `ShouldProcess` with a **Medium** impact level. Use `-WhatIf` to preview changes or `-Confirm` to require confirmation.
+
+!!! note "Type and plurality changes"
+    Changing `-Type` or `-AttributePlurality` is refused while any Metaverse Object holds a stored value for the attribute; clear the values first. To change an attribute's Object Type bindings, use [`Add-JIMMetaverseObjectTypeAttribute`](#add-jimmetaverseobjecttypeattribute) and [`Remove-JIMMetaverseObjectTypeAttribute`](#remove-jimmetaverseobjecttypeattribute) rather than this cmdlet.
 
 #### Output
 
@@ -303,15 +306,15 @@ When `-PassThru` is specified, returns the updated attribute definition. Otherwi
 #### Examples
 
 ```powershell title="Rename an attribute"
-Set-JIMMetaverseAttribute -Id 42 -Name "Cost Centre Code" -PassThru
+Set-JIMMetaverseAttribute -Id 42 -Name "costCentreCode" -PassThru
 ```
 
-```powershell title="Change an attribute to multi-valued via pipeline"
-Get-JIMMetaverseAttribute -Name "Proxy Addresses" | Set-JIMMetaverseAttribute -AttributePlurality MultiValued
+```powershell title="Set the rendering hint for a multi-valued attribute"
+Get-JIMMetaverseAttribute -Name "proxyAddresses" | Set-JIMMetaverseAttribute -RenderingHint List
 ```
 
-```powershell title="Replace object type associations"
-Set-JIMMetaverseAttribute -Id 42 -ObjectTypeIds @(1, 2, 3)
+```powershell title="Change an attribute's data type (refused if any object holds a value)"
+Set-JIMMetaverseAttribute -Id 42 -Type Integer
 ```
 
 ---
@@ -342,8 +345,8 @@ Remove-JIMMetaverseAttribute -InputObject <object> [-ChangeReason <string>] [-Fo
 !!! warning "ShouldProcess"
     This cmdlet supports `ShouldProcess` with a **High** impact level. You will be prompted for confirmation unless `-Force` is specified.
 
-!!! note
-    Built-in attributes cannot be deleted. Attempting to remove a built-in attribute will result in an error.
+!!! note "Built-in attributes, stored values, and cascade"
+    Built-in attributes cannot be deleted. For a custom attribute, deletion is refused while any Metaverse Object holds a stored value for it (clear the values first). When only configuration references exist (Attribute Flows, scoping criteria, Object Matching Rules), they are cascade-removed; the cmdlet satisfies the server's type-the-name confirmation for you, so `-Force` only suppresses the interactive prompt. Use [`Get-JIMMetaverseAttributeDeletionPreview`](#get-jimmetaverseattributedeletionpreview) to inspect the impact first.
 
 #### Output
 
@@ -360,7 +363,145 @@ Remove-JIMMetaverseAttribute -Id 42 -Force
 ```
 
 ```powershell title="Delete via pipeline"
-Get-JIMMetaverseAttribute -Name "Legacy Code" | Remove-JIMMetaverseAttribute -Force
+Get-JIMMetaverseAttribute -Name "legacyCode" | Remove-JIMMetaverseAttribute -Force
+```
+
+---
+
+### Test-JIMMetaverseAttributeName
+
+Checks whether a Metaverse Attribute name is available. The comparison is case-insensitive, so "CostCentre" is reported as taken if "costCentre" already exists. Returns `$true` when the name is free, `$false` when it is in use.
+
+#### Syntax
+
+```powershell
+Test-JIMMetaverseAttributeName -Name <string> [-ExcludeId <int>]
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Name` | `string` | Yes | | The attribute name to test |
+| `ExcludeId` | `int` | No | | An existing attribute ID to exclude from the check (use when renaming, so the attribute's own name is not treated as a clash) |
+
+#### Output
+
+A `[bool]`: `$true` if the name is available, otherwise `$false`.
+
+#### Examples
+
+```powershell title="Guard a create call with an availability check"
+if (Test-JIMMetaverseAttributeName -Name "costCentre") {
+    New-JIMMetaverseAttribute -Name "costCentre" -Type Text
+}
+```
+
+```powershell title="Check availability while renaming attribute 42"
+Test-JIMMetaverseAttributeName -Name "costCentre" -ExcludeId 42
+```
+
+---
+
+### Get-JIMMetaverseAttributeDeletionPreview
+
+Returns a non-destructive assessment of what deleting a custom attribute would entail: whether it is built-in, how many Metaverse Objects hold a stored value (a hard block), the per-Object-Type value breakdown, and the configuration references that would be cascade-removed. Inspect this before calling [`Remove-JIMMetaverseAttribute`](#remove-jimmetaverseattribute).
+
+#### Syntax
+
+```powershell
+# ById (default)
+Get-JIMMetaverseAttributeDeletionPreview -Id <int>
+
+# ByInputObject
+Get-JIMMetaverseAttributeDeletionPreview -InputObject <object>
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `int` | Yes (ById) | | The ID of the attribute to preview. Accepts pipeline input. |
+| `InputObject` | `object` | Yes (ByInputObject) | | An attribute object from the pipeline |
+
+#### Output
+
+An object describing the deletion impact (`BlockedByValues`, `RequiresConfirmation`, `TotalObjectsWithValues`, `ObjectTypeValueCounts`, `References`, and so on).
+
+#### Examples
+
+```powershell title="Preview the impact of deleting an attribute"
+Get-JIMMetaverseAttribute -Name "costCentre" | Get-JIMMetaverseAttributeDeletionPreview
+```
+
+---
+
+### Add-JIMMetaverseObjectTypeAttribute
+
+Binds a custom Metaverse Attribute to a Metaverse Object Type, making the attribute available on objects of that type. Binding an already-bound attribute is a no-op; built-in attributes cannot be re-bound.
+
+#### Syntax
+
+```powershell
+Add-JIMMetaverseObjectTypeAttribute -AttributeId <int> -ObjectTypeId <int>
+    [-ChangeReason <string>] [-PassThru]
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `AttributeId` | `int` | Yes | | The ID of the attribute to bind. Accepts pipeline input by property name (`Id`). |
+| `ObjectTypeId` | `int` | Yes | | The ID of the Metaverse Object Type to bind the attribute to |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in [configuration change history](history.md#get-jimconfigurationchangehistory) |
+| `PassThru` | `switch` | No | `false` | Return the updated attribute |
+
+!!! info "ShouldProcess"
+    This cmdlet supports `ShouldProcess` with a **Medium** impact level.
+
+#### Examples
+
+```powershell title="Bind an attribute to an Object Type"
+Add-JIMMetaverseObjectTypeAttribute -AttributeId 42 -ObjectTypeId 1
+```
+
+```powershell title="Bind the pipeline attribute and return it"
+Get-JIMMetaverseAttribute -Name "costCentre" | Add-JIMMetaverseObjectTypeAttribute -ObjectTypeId 1 -PassThru
+```
+
+---
+
+### Remove-JIMMetaverseObjectTypeAttribute
+
+Unassigns a custom Metaverse Attribute from a Metaverse Object Type. Follows the same safeguard as attribute deletion: refused while any Metaverse Object of the target type holds a stored value; otherwise the binding, and any Synchronisation Rule references scoped to that type, are cascade-removed behind the server's type-the-name confirmation (which the cmdlet satisfies for you). Built-in attributes cannot be unassigned.
+
+#### Syntax
+
+```powershell
+Remove-JIMMetaverseObjectTypeAttribute -AttributeId <int> -ObjectTypeId <int>
+    [-ChangeReason <string>] [-Force]
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `AttributeId` | `int` | Yes | | The ID of the attribute to unassign. Accepts pipeline input by property name (`Id`). |
+| `ObjectTypeId` | `int` | Yes | | The ID of the Metaverse Object Type to unassign the attribute from |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in [configuration change history](history.md#get-jimconfigurationchangehistory) |
+| `Force` | `switch` | No | `false` | Suppress the interactive confirmation prompt |
+
+!!! warning "ShouldProcess"
+    This cmdlet supports `ShouldProcess` with a **High** impact level. You will be prompted for confirmation unless `-Force` is specified.
+
+#### Examples
+
+```powershell title="Unassign an attribute from an Object Type"
+Remove-JIMMetaverseObjectTypeAttribute -AttributeId 42 -ObjectTypeId 1
+```
+
+```powershell title="Unassign without a prompt"
+Remove-JIMMetaverseObjectTypeAttribute -AttributeId 42 -ObjectTypeId 1 -Force
 ```
 
 ---
