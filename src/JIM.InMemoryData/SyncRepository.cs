@@ -878,6 +878,83 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(candidates);
     }
 
+    public Task<List<MetaverseObjectRecallSummary>> GetMetaverseObjectRecallSummariesAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> scopingAttributeIds)
+    {
+        var scopingIds = scopingAttributeIds as HashSet<int> ?? [.. scopingAttributeIds];
+        var summaries = metaverseObjectIds
+            .Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null)
+            .Where(mvo => mvo != null)
+            .Select(mvo =>
+            {
+                var summary = new MetaverseObjectRecallSummary
+                {
+                    Id = mvo!.Id,
+                    TypeId = mvo.Type.Id,
+                    DisplayName = mvo.CachedDisplayName
+                };
+                summary.ScopingAttributeValues.AddRange(
+                    mvo.AttributeValues.Where(av => scopingIds.Contains(av.AttributeId)));
+                return summary;
+            })
+            .ToList();
+        return Task.FromResult(summaries);
+    }
+
+    public Task<List<ConnectedSystemObjectRecallTarget>> GetConnectedSystemObjectRecallTargetsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> targetConnectedSystemIds)
+    {
+        var mvoIds = metaverseObjectIds as HashSet<Guid> ?? [.. metaverseObjectIds];
+        var systemIds = targetConnectedSystemIds as HashSet<int> ?? [.. targetConnectedSystemIds];
+        var targets = _csos.Values
+            .Where(cso => cso.MetaverseObjectId.HasValue && mvoIds.Contains(cso.MetaverseObjectId.Value) &&
+                          systemIds.Contains(cso.ConnectedSystemId))
+            .Select(cso => new ConnectedSystemObjectRecallTarget
+            {
+                ConnectedSystemObjectId = cso.Id,
+                MetaverseObjectId = cso.MetaverseObjectId!.Value,
+                ConnectedSystemId = cso.ConnectedSystemId,
+                Status = cso.Status
+            })
+            .ToList();
+        return Task.FromResult(targets);
+    }
+
+    public Task<List<CsoReferenceValueMatch>> GetCsoReferenceValueMatchesAsync(
+        IReadOnlyCollection<Guid> connectedSystemObjectIds,
+        IReadOnlyCollection<int> connectedSystemAttributeIds,
+        IReadOnlyCollection<Guid> deletedReferenceCsoIds,
+        IReadOnlyCollection<string> loweredReferenceValues)
+    {
+        var csoIds = connectedSystemObjectIds as HashSet<Guid> ?? [.. connectedSystemObjectIds];
+        var attributeIds = connectedSystemAttributeIds as HashSet<int> ?? [.. connectedSystemAttributeIds];
+        var deletedCsoIds = deletedReferenceCsoIds as HashSet<Guid> ?? [.. deletedReferenceCsoIds];
+        var loweredValues = loweredReferenceValues.ToHashSet(StringComparer.Ordinal);
+
+        // Same comparison semantics as the SQL implementation: exact match on the resolved
+        // reference id, or the pre-lowered raw reference string against LOWER(value).
+        var matches = csoIds
+            .Select(id => _csos.TryGetValue(id, out var cso) ? cso : null)
+            .Where(cso => cso != null)
+            .SelectMany(cso => cso!.AttributeValues
+                .Where(av => attributeIds.Contains(av.AttributeId) &&
+                             ((av.ReferenceValueId.HasValue && deletedCsoIds.Contains(av.ReferenceValueId.Value)) ||
+                              (av.UnresolvedReferenceValue != null &&
+                               loweredValues.Contains(av.UnresolvedReferenceValue.ToLowerInvariant()))))
+                .Select(av => new CsoReferenceValueMatch
+                {
+                    AttributeValueId = av.Id,
+                    ConnectedSystemObjectId = cso.Id,
+                    AttributeId = av.AttributeId,
+                    ReferenceValueId = av.ReferenceValueId,
+                    UnresolvedReferenceValue = av.UnresolvedReferenceValue
+                }))
+            .ToList();
+        return Task.FromResult(matches);
+    }
+
     public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
     {
         foreach (var mvo in metaverseObjects)
@@ -913,6 +990,7 @@ public class SyncRepository : ISyncRepository
     {
         _mvos.Remove(metaverseObject.Id);
         _csosByMvo.Remove(metaverseObject.Id);
+        NullReferencesToDeletedMvos(new HashSet<Guid> { metaverseObject.Id });
         return Task.CompletedTask;
     }
 
@@ -923,7 +1001,26 @@ public class SyncRepository : ISyncRepository
             _mvos.Remove(metaverseObject.Id);
             _csosByMvo.Remove(metaverseObject.Id);
         }
+        NullReferencesToDeletedMvos(metaverseObjects.Select(mvo => mvo.Id).ToHashSet());
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Mirrors the PostgreSQL deletion path's reference FK nulling (SET "ReferenceValueId" = NULL on
+    /// surviving rows pointing at deleted MVOs). Without this, code that wrongly reads live reference
+    /// rows instead of the pre-deletion recall capture passes in-memory tests and fails only on
+    /// PostgreSQL (#1003).
+    /// </summary>
+    private void NullReferencesToDeletedMvos(IReadOnlySet<Guid> deletedMvoIds)
+    {
+        foreach (var attributeValue in _mvos.Values
+                     .SelectMany(mvo => mvo.AttributeValues)
+                     .Where(av => (av.ReferenceValueId.HasValue && deletedMvoIds.Contains(av.ReferenceValueId.Value)) ||
+                                  (av.ReferenceValue != null && deletedMvoIds.Contains(av.ReferenceValue.Id))))
+        {
+            attributeValue.ReferenceValueId = null;
+            attributeValue.ReferenceValue = null;
+        }
     }
 
     public Task DeleteMetaverseObjectAttributeValuesByIdsAsync(IReadOnlyList<Guid> attributeValueIds)
@@ -1251,8 +1348,15 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(rules);
     }
 
+    /// <summary>
+    /// Number of times <see cref="GetAllSyncRulesAsync"/> has been called. Lets tests prove that a
+    /// pre-built export evaluation cache is honoured (no per-flush rule reloads, #1003).
+    /// </summary>
+    public int GetAllSyncRulesCallCount { get; private set; }
+
     public Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false)
     {
+        GetAllSyncRulesCallCount++;
         return Task.FromResult(_syncRules.Values.ToList());
     }
 

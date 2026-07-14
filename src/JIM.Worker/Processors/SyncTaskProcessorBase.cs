@@ -46,6 +46,12 @@ public abstract class SyncTaskProcessorBase
     protected Dictionary<Guid, List<JIM.Models.Transactional.PendingExport>>? _pendingExportsByCsoId;
     protected ExportEvaluationCache? _exportEvaluationCache;
 
+    // Run-scoped export evaluation cache for reference recall staging (#1003), built once per run
+    // with sourceConnectedSystemId 0: recall is state assertion, so no source system is excluded
+    // (Q3 does not apply to deletions), which is why _exportEvaluationCache cannot be shared.
+    // Eliminates the per-flush Synchronisation Rule reload inside StageReferenceRecallExportsAsync.
+    protected ExportEvaluationCache? _recallExportEvaluationCache;
+
     // Cache for drift detection: maps (ConnectedSystemId, MvoAttributeId) to import mappings
     // Used to check if a Connected System is a legitimate contributor for an attribute
     protected Dictionary<(int ConnectedSystemId, int MvoAttributeId), List<SyncRuleMapping>>? _importMappingCache;
@@ -2833,13 +2839,49 @@ public abstract class SyncTaskProcessorBase
             using (Diagnostics.Sync.StartSpan("MvoDeletionStageRecallExports")
                 .SetTag("deletedCount", deletedMvoIds.Count))
             {
-                var recallResult = await _syncServer.StageReferenceRecallExportsAsync(referenceRecallContext, deletedMvoIds);
+                var recallResult = await _syncServer.StageReferenceRecallExportsAsync(
+                    referenceRecallContext, deletedMvoIds, _recallExportEvaluationCache);
                 Log.Information(
                     "FlushPendingMvoDeletionsAsync: Reference recall for {DeletedCount} deleted MVO(s): " +
-                    "{ReferencingCount} referencing MVO(s) evaluated, {PeCount} Pending Export(s) staged with " +
-                    "{ChangeCount} removal change(s), {DroppedCount} unresolvable change(s) dropped",
-                    deletedMvoIds.Count, recallResult.ReferencingObjectsEvaluated, recallResult.PendingExportsStaged,
-                    recallResult.RemovalChangesStaged, recallResult.UnresolvableChangesDropped);
+                    "{ReferencingCount} referencing MVO(s) evaluated ({FastCount} fast path, {FallbackCount} fallback), " +
+                    "{PeCount} Pending Export(s) staged with {ChangeCount} removal change(s), " +
+                    "{DroppedCount} unresolvable change(s) dropped, {DeleteSkipCount} skipped for pending Delete exports",
+                    deletedMvoIds.Count, recallResult.ReferencingObjectsEvaluated, recallResult.FastPathReferencingObjects,
+                    recallResult.FallbackReferencingObjects, recallResult.PendingExportsStaged,
+                    recallResult.RemovalChangesStaged, recallResult.UnresolvableChangesDropped,
+                    recallResult.SkippedDueToExistingDeletePendingExport);
+
+                // Fold the staged recall exports into Activity reporting (#1003): one RPEI per
+                // staged Pending Export with a PendingExportCreated outcome, persisted and counted
+                // by this page's FlushRpeisAsync exactly like normal export staging. Without this,
+                // deletion-staged exports were invisible on the Activity (TotalPendingExports 0).
+                foreach (var stagedPendingExport in recallResult.StagedPendingExports)
+                {
+                    var recallRpei = new ActivityRunProfileExecutionItem
+                    {
+                        Id = Guid.NewGuid(),
+                        ObjectChangeType = ObjectChangeType.PendingExport,
+                        ConnectedSystemObjectId = stagedPendingExport.ConnectedSystemObjectId,
+                        PendingExportId = stagedPendingExport.Id,
+                        DisplayNameSnapshot = stagedPendingExport.SourceMetaverseObjectId.HasValue
+                            ? recallResult.ReferencingObjectDisplayNames
+                                .GetValueOrDefault(stagedPendingExport.SourceMetaverseObjectId.Value)
+                            : null
+                    };
+
+                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                    {
+                        var recallOutcome = SyncOutcomeBuilder.AddRootOutcome(recallRpei,
+                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            targetEntityId: stagedPendingExport.Id,
+                            targetEntityDescription: recallRpei.DisplayNameSnapshot,
+                            detailCount: stagedPendingExport.AttributeValueChanges.Count,
+                            detailMessage: stagedPendingExport.ConnectedSystemId.ToString());
+                        await SnapshotPendingExportChangesAsync(recallOutcome, stagedPendingExport);
+                    }
+
+                    _activity.RunProfileExecutionItems.Add(recallRpei);
+                }
             }
         }
 

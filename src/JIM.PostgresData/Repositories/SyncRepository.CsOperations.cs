@@ -1012,6 +1012,115 @@ public partial class SyncRepository
     }
 
     /// <summary>
+    /// Summary-tier load of the CSOs joined to the given MVOs in the given target systems, for
+    /// reference recall staging (#1003). Raw SQL into scalars: nothing is materialised into the
+    /// change tracker and no attribute values are loaded (the whole point of the recall fast path
+    /// is to never touch a referencing group's membership rows).
+    /// </summary>
+    public async Task<List<ConnectedSystemObjectRecallTarget>> GetConnectedSystemObjectRecallTargetsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> targetConnectedSystemIds)
+    {
+        if (metaverseObjectIds.Count == 0 || targetConnectedSystemIds.Count == 0)
+            return new List<ConnectedSystemObjectRecallTarget>();
+
+        var targets = new List<ConnectedSystemObjectRecallTarget>();
+        var connection = _context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            @"SELECT ""Id"", ""MetaverseObjectId"", ""ConnectedSystemId"", ""Status""
+              FROM ""ConnectedSystemObjects""
+              WHERE ""MetaverseObjectId"" = ANY(@mvoIds) AND ""ConnectedSystemId"" = ANY(@systemIds)";
+        var mvoIdsParameter = command.CreateParameter();
+        mvoIdsParameter.ParameterName = "mvoIds";
+        mvoIdsParameter.Value = metaverseObjectIds.ToArray();
+        command.Parameters.Add(mvoIdsParameter);
+        var systemIdsParameter = command.CreateParameter();
+        systemIdsParameter.ParameterName = "systemIds";
+        systemIdsParameter.Value = targetConnectedSystemIds.ToArray();
+        command.Parameters.Add(systemIdsParameter);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            targets.Add(new ConnectedSystemObjectRecallTarget
+            {
+                ConnectedSystemObjectId = reader.GetGuid(0),
+                MetaverseObjectId = reader.GetGuid(1),
+                ConnectedSystemId = reader.GetInt32(2),
+                Status = (ConnectedSystemObjectStatus)reader.GetInt32(3)
+            });
+        }
+
+        return targets;
+    }
+
+    /// <summary>
+    /// The reference recall existence query (#1003). Matches by resolved reference id or by
+    /// case-insensitive raw reference string (values pre-lowered by the caller; LOWER() here
+    /// mirrors the OrdinalIgnoreCase DN comparison export evaluation uses). Driven by the
+    /// composite (ConnectedSystemObjectId, AttributeId) index, so the worst case is a scan of one
+    /// group's member rows - milliseconds - rather than materialising them all through EF Core.
+    /// Call per target Connected System so identical values cannot cross-match between systems.
+    /// </summary>
+    public async Task<List<CsoReferenceValueMatch>> GetCsoReferenceValueMatchesAsync(
+        IReadOnlyCollection<Guid> connectedSystemObjectIds,
+        IReadOnlyCollection<int> connectedSystemAttributeIds,
+        IReadOnlyCollection<Guid> deletedReferenceCsoIds,
+        IReadOnlyCollection<string> loweredReferenceValues)
+    {
+        if (connectedSystemObjectIds.Count == 0 || connectedSystemAttributeIds.Count == 0 ||
+            (deletedReferenceCsoIds.Count == 0 && loweredReferenceValues.Count == 0))
+            return new List<CsoReferenceValueMatch>();
+
+        var matches = new List<CsoReferenceValueMatch>();
+        var connection = _context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            @"SELECT ""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""ReferenceValueId"", ""UnresolvedReferenceValue""
+              FROM ""ConnectedSystemObjectAttributeValues""
+              WHERE ""ConnectedSystemObjectId"" = ANY(@csoIds)
+                AND ""AttributeId"" = ANY(@attributeIds)
+                AND (""ReferenceValueId"" = ANY(@deletedCsoIds)
+                     OR LOWER(""UnresolvedReferenceValue"") = ANY(@loweredValues))";
+        var csoIdsParameter = command.CreateParameter();
+        csoIdsParameter.ParameterName = "csoIds";
+        csoIdsParameter.Value = connectedSystemObjectIds.ToArray();
+        command.Parameters.Add(csoIdsParameter);
+        var attributeIdsParameter = command.CreateParameter();
+        attributeIdsParameter.ParameterName = "attributeIds";
+        attributeIdsParameter.Value = connectedSystemAttributeIds.ToArray();
+        command.Parameters.Add(attributeIdsParameter);
+        var deletedCsoIdsParameter = command.CreateParameter();
+        deletedCsoIdsParameter.ParameterName = "deletedCsoIds";
+        deletedCsoIdsParameter.Value = deletedReferenceCsoIds.ToArray();
+        command.Parameters.Add(deletedCsoIdsParameter);
+        var loweredValuesParameter = command.CreateParameter();
+        loweredValuesParameter.ParameterName = "loweredValues";
+        loweredValuesParameter.Value = loweredReferenceValues.ToArray();
+        command.Parameters.Add(loweredValuesParameter);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            matches.Add(new CsoReferenceValueMatch
+            {
+                AttributeValueId = reader.GetGuid(0),
+                ConnectedSystemObjectId = reader.GetGuid(1),
+                AttributeId = reader.GetInt32(2),
+                ReferenceValueId = reader.IsDBNull(3) ? null : reader.GetGuid(3),
+                UnresolvedReferenceValue = reader.IsDBNull(4) ? null : reader.GetString(4)
+            });
+        }
+
+        return matches;
+    }
+
+    /// <summary>
     /// Disconnects the given CSOs from their MVOs in one set-based statement: nulls
     /// <c>MetaverseObjectId</c> and <c>DateJoined</c> and resets <c>JoinType</c> to
     /// <c>NotJoined</c>. Tracked instances are fixed up to match the database state so a later
