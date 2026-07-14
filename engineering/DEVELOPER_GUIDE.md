@@ -967,10 +967,13 @@ docker compose up -d
 
 All dependency updates require human review before merging. Dependabot proposes weekly PRs for all ecosystems (NuGet, Docker, GitHub Actions), but there is no auto-merge - a maintainer must review and merge each PR manually.
 
+**[`engineering/DEPENDENCY_PINNING.md`](DEPENDENCY_PINNING.md) is the canonical, holistic policy page covering every pinned layer** (NuGet direct and transitive, container base images, apt packages, GitHub Actions, devcontainer features, compose infrastructure, docs tooling, integration test images) with the enforcement mechanism and update path for each. The sections below cover NuGet and Docker in more operational detail; consult the policy page for the full picture and for anything not covered here.
+
 #### NuGet Packages
 
 - All NuGet package versions are pinned in `.csproj` files (no floating versions)
 - Dependabot proposes weekly PRs for patch and minor version updates (major versions are ignored)
+- Transitive dependencies are pinned too: every project carries a `packages.lock.json`, and CI, the release workflow, and production container image builds all restore with `RestoreLockedMode` enforced, so a build can never silently resolve a different transitive graph. See [`engineering/DEPENDENCY_PINNING.md`](DEPENDENCY_PINNING.md) for the full mechanism, including how Dependabot NuGet PRs get their lock files regenerated automatically.
 - Before merging a NuGet update PR:
   1. Review the package changelog for breaking changes or behavioural differences
   2. Verify CI build and tests pass

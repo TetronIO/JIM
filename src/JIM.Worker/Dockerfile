@@ -25,7 +25,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libldap-common=2.6.10+dfsg-0ubuntu0.24.04.1 \
         libldap2=2.6.10+dfsg-0ubuntu0.24.04.1 \
-        cifs-utils=2:7.0-2ubuntu0.4 \
+        cifs-utils=2:7.0-2ubuntu0.5 \
         libgssapi-krb5-2=1.20.1-6ubuntu2.6 \
     && rm -rf /var/lib/apt/lists/* \
     # Symlink for System.DirectoryServices.Protocols compatibility
@@ -48,14 +48,21 @@ WORKDIR /src
 COPY ["Directory.Build.props", "./"]
 COPY ["VERSION", "./"]
 COPY ["src/JIM.Worker/JIM.Worker.csproj", "JIM.Worker/"]
+COPY ["src/JIM.Worker/packages.lock.json", "JIM.Worker/"]
 COPY ["src/JIM.Models/JIM.Models.csproj", "JIM.Models/"]
+COPY ["src/JIM.Models/packages.lock.json", "JIM.Models/"]
 COPY ["src/JIM.Application/JIM.Application.csproj", "JIM.Application/"]
+COPY ["src/JIM.Application/packages.lock.json", "JIM.Application/"]
 COPY ["src/JIM.PostgresData/JIM.PostgresData.csproj", "JIM.PostgresData/"]
+COPY ["src/JIM.PostgresData/packages.lock.json", "JIM.PostgresData/"]
 COPY ["src/JIM.Utilities/JIM.Utilities.csproj", "JIM.Utilities/"]
+COPY ["src/JIM.Utilities/packages.lock.json", "JIM.Utilities/"]
 COPY ["src/JIM.Connectors/JIM.Connectors.csproj", "JIM.Connectors/"]
+COPY ["src/JIM.Connectors/packages.lock.json", "JIM.Connectors/"]
 COPY ["src/JIM.Data/JIM.Data.csproj", "JIM.Data/"]
+COPY ["src/JIM.Data/packages.lock.json", "JIM.Data/"]
 
-RUN dotnet restore "./JIM.Worker/JIM.Worker.csproj"
+RUN dotnet restore "./JIM.Worker/JIM.Worker.csproj" /p:RestoreLockedMode=true
 
 COPY src/ .
 WORKDIR "/src/JIM.Worker"
@@ -63,7 +70,7 @@ WORKDIR "/src/JIM.Worker"
 # Publish stage - optimised for production
 FROM build AS publish
 ARG VERSION_SUFFIX=
-RUN dotnet publish "JIM.Worker.csproj" -c Release -o /app/publish /p:VersionSuffix="${VERSION_SUFFIX}"
+RUN dotnet publish "JIM.Worker.csproj" -c Release -o /app/publish /p:VersionSuffix="${VERSION_SUFFIX}" /p:RestoreLockedMode=true
 
 # Final stage - use published output
 FROM base AS final

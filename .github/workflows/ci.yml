@@ -23,7 +23,7 @@ jobs:
       with:
         dotnet-version: 10.0.x
     - name: Restore dependencies
-      run: dotnet restore JIM.sln
+      run: dotnet restore JIM.sln --locked-mode
     - name: Build
       run: dotnet build JIM.sln --no-restore
     - name: Test .NET
@@ -98,7 +98,7 @@ jobs:
       with:
         dotnet-version: 10.0.x
     - name: Restore dependencies
-      run: dotnet restore JIM.sln
+      run: dotnet restore JIM.sln --locked-mode
     - name: Build
       run: dotnet build JIM.sln --no-restore
     - name: Run database-backed tests (RequiresPostgres)
