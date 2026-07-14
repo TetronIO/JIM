@@ -1,6 +1,7 @@
 # OWASP Top 10:2025 Assessment
 
-- **Status:** Doing (remediation in progress; see [issue #500](https://github.com/TetronIO/JIM/issues/500) for current per-gap status)
+- **Status:** Done (all five gaps remediated: #1001, #1002, #983, #984, #1013; see [issue #500](https://github.com/TetronIO/JIM/issues/500))
+- **Note:** Tamper evidence for the audit trail deferred 2026-07-13 (no live compliance driver; revisit on customer demand). CSP remains stage one; the nonce-based stage is tracked as future work in the Security Headers documentation.
 - **Issue:** [#500](https://github.com/TetronIO/JIM/issues/500)
 - **Assessed:** 2026-04-09
 - **Standard:** [OWASP Top 10:2025](https://owasp.org/Top10/2025/)

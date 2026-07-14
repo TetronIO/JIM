@@ -10,7 +10,7 @@
 This document is the security review of JIM's expression evaluation system: every path by which an
 administrator-authored expression string reaches the DynamicExpresso evaluator, what the evaluator exposes and
 blocks, and the defence-in-depth guardrails added as a result. It closes gap 5 of the [OWASP Top
-10:2025 assessment](plans/doing/OWASP_TOP_10_ASSESSMENT.md).
+10:2025 assessment](plans/done/OWASP_TOP_10_ASSESSMENT.md).
 
 **Cardinal constraint carried through this review:** JIM's expression system is a product strength and a
 best-in-class attribute transformation capability. No guardrail may impair legitimate expression functionality,
@@ -247,4 +247,4 @@ legitimate expression functionality now or in future:
   rate limiting, security response headers/CSP, and `Program.cs` changes generally.
 
 See [issue #500](https://github.com/TetronIO/JIM/issues/500) and the [OWASP Top 10:2025
-assessment](plans/doing/OWASP_TOP_10_ASSESSMENT.md) for the wider remediation programme this review is part of.
+assessment](plans/done/OWASP_TOP_10_ASSESSMENT.md) for the wider remediation programme this review is part of.

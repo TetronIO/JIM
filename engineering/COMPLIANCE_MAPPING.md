@@ -319,7 +319,7 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 
 ## OWASP Top 10:2025 Assessment
 
-A full assessment against the OWASP Top 10:2025 is documented in [`engineering/plans/doing/OWASP_TOP_10_ASSESSMENT.md`](plans/doing/OWASP_TOP_10_ASSESSMENT.md) (first published 2026-04-09). The DynamicExpresso expression evaluation review (A03/A05 gap 5) is documented separately in [`engineering/EXPRESSION_SECURITY.md`](EXPRESSION_SECURITY.md).
+A full assessment against the OWASP Top 10:2025 is documented in [`engineering/plans/done/OWASP_TOP_10_ASSESSMENT.md`](plans/done/OWASP_TOP_10_ASSESSMENT.md) (first published 2026-04-09). The DynamicExpresso expression evaluation review (A03/A05 gap 5) is documented separately in [`engineering/EXPRESSION_SECURITY.md`](EXPRESSION_SECURITY.md).
 
 **Overall result:** Strong. The fundamentals (authentication, access control, cryptography, injection prevention, exception handling) are solid and well-implemented. Five gaps were identified; none represent critical vulnerabilities, but all are tracked for remediation to maintain the security posture expected by JIM's target deployment environments.
 
