@@ -909,14 +909,12 @@ public class ExportEvaluationServer
         foreach (var summary in summariesById.Values)
             result.ReferencingObjectDisplayNames[summary.Id] = summary.DisplayName;
 
+        // Summaries only exist for referencing objects that still exist (a missing summary
+        // means a raced deletion), so routing iterates the summaries rather than the keys.
         var fastMvoIds = new List<Guid>();
         var fallbackMvoIds = new List<Guid>();
-        foreach (var referencingId in byReferencingMvo.Keys)
+        foreach (var (referencingId, summary) in summariesById)
         {
-            // A referencing object with no summary no longer exists (raced deletion); skip it.
-            if (!summariesById.TryGetValue(referencingId, out var summary))
-                continue;
-
             if (plan.FallbackTypeIds.Contains(summary.TypeId))
                 fallbackMvoIds.Add(referencingId);
             else
@@ -1024,10 +1022,9 @@ public class ExportEvaluationServer
             if (!plan.DirectFlowsByTypeThenAttribute.TryGetValue(summary.TypeId, out var flowsByAttribute))
                 continue; // no export rule flows any candidate attribute for this type
 
-            foreach (var candidate in byReferencingMvo[mvoId])
+            foreach (var candidate in byReferencingMvo[mvoId].Where(c => flowsByAttribute.ContainsKey(c.MetaverseAttributeId)))
             {
-                if (!flowsByAttribute.TryGetValue(candidate.MetaverseAttributeId, out var flows))
-                    continue;
+                var flows = flowsByAttribute[candidate.MetaverseAttributeId];
 
                 foreach (var flow in flows)
                 {
@@ -1117,13 +1114,9 @@ public class ExportEvaluationServer
                 existenceSpan.SetSuccess();
             }
 
-            var seenRowIds = new HashSet<Guid>();
-            foreach (var match in matches)
+            // A row can match both predicate arms; each target row yields at most one change.
+            foreach (var match in matches.DistinctBy(m => m.AttributeValueId))
             {
-                // A row can match both predicate arms; each target row yields at most one change.
-                if (!seenRowIds.Add(match.AttributeValueId))
-                    continue;
-
                 Guid deletedMvoId;
                 if (match.ReferenceValueId.HasValue &&
                     deletedCsoToMvoBySystem[systemId].TryGetValue(match.ReferenceValueId.Value, out var mvoIdByReference))
