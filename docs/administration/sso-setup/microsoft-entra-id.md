@@ -108,7 +108,7 @@ Because the web and PowerShell platforms share the same **Application (client) I
     Entra ID requires exact redirect URI matching. If port 8400 is busy, the module will try ports 8401--8409. You may need to add additional redirect URIs if you encounter port conflicts.
 
 !!! note "Refresh tokens"
-    Setting **Allow public client flows** to **Yes** (step 8 above) is what lets Entra ID return a refresh token to the module. JIM requests the `offline_access` scope at runtime; it is a standard OIDC scope and does not need to be added as an API permission. The refresh token enables silent in-session renewal and optional cross-session token persistence.
+    The refresh token is issued because JIM requests the `offline_access` scope at runtime; it is a standard OIDC scope and does not need to be added as an API permission. Setting **Allow public client flows** to **Yes** (step 8 above) is a separate requirement: it marks the registration as a public client so the module can redeem the authorization code via PKCE without a client secret. This matters when the module shares the web application's registration, which already has a secret and would otherwise be treated as confidential. The refresh token enables silent in-session renewal and optional cross-session token persistence.
 
 ## Step 6: Configure JIM Environment Variables
 
