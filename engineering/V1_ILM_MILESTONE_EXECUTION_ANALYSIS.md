@@ -64,16 +64,16 @@ Priority and Effort below use the GitHub issue-field vocabulary configured for t
 
 | Issue | Why it blocks launch | Effort |
 |---|---|---|
-| [#91](https://github.com/TetronIO/JIM/issues/91) MV attribute priority (finish) | Half-shipped: engine enforces priorities but no UI to view/reorder them. Non-deterministic multi-source resolution is data corruption by another name. | High (remainder) |
+| ~~[#91](https://github.com/TetronIO/JIM/issues/91) MV attribute priority (finish)~~ **Done:** merged (engine + view/reorder UI). | ~~High (remainder)~~ |
 | [#655](https://github.com/TetronIO/JIM/issues/655) MVO deletion cascade: Provisioned-only delete exports | Leaver deprovisioning fails for Joined/Projected CSOs; breaks the core JML guarantee in the most common deployment shape. Merge [#126](https://github.com/TetronIO/JIM/issues/126) into it. | Medium |
 | [#242](https://github.com/TetronIO/JIM/issues/242) Unique value generation | Table-stakes provisioning (sAMAccountName, UPN, mail). Without it greenfield provisioning is impossible. Needs PRD first. | High |
 | [#421](https://github.com/TetronIO/JIM/issues/421) Schema refresh preview phase | One click can cascade-delete Synchronisation Rules and objects. Unacceptable in target sectors. | High |
 | [#288](https://github.com/TetronIO/JIM/issues/288) Sync Preview Mode (what-if) | Admins will not run a first sync against production AD blind; also the engine the whole preview family builds on. Needs PRD. | High |
-| [#377](https://github.com/TetronIO/JIM/issues/377) CRUD custom Metaverse Attributes | No real customer fits built-in attributes only. API/cmdlets largely exist; Web UI + safeguards remain. | Medium |
+| ~~[#377](https://github.com/TetronIO/JIM/issues/377) CRUD custom Metaverse Attributes~~ **Done:** merged via PR [#1023](https://github.com/TetronIO/JIM/pull/1023) (app layer, REST API, PowerShell, Web UI, values-block/cascade/type-the-name safeguards, docs). | ~~Medium~~ |
 | [#376](https://github.com/TetronIO/JIM/issues/376) CRUD custom Metaverse Object Types | Modelling beyond User/Group requires it; unlocks per-type deletion rules. Depends on [#377](https://github.com/TetronIO/JIM/issues/377). | High |
 | ~~[#154](https://github.com/TetronIO/JIM/issues/154) API Endpoint Coverage (merge branch)~~ | **Done:** merged via PR [#897](https://github.com/TetronIO/JIM/pull/897) on 2026-07-02; the API/PowerShell lane is unblocked. | ~~S~~ |
 | ~~[#467](https://github.com/TetronIO/JIM/issues/467) Role membership API (verify + close)~~ | **Done:** verified (endpoints, lockout rules, cmdlets, 22 green tests, docs) and closed 2026-07-02. | ~~Low~~ |
-| [#14](https://github.com/TetronIO/JIM/issues/14) Change history (gap audit + close) | Audit history is table stakes; mostly delivered. Verify retention scheduling and the five stated requirements. | Medium |
+| ~~[#14](https://github.com/TetronIO/JIM/issues/14) Change history (gap audit + close)~~ **Done:** delivered and merged (PR [#945](https://github.com/TetronIO/JIM/pull/945)). | ~~Medium~~ |
 | [#9](https://github.com/TetronIO/JIM/issues/9) Synchronisation Readers role | "Give the helpdesk read-only access" is a first-week ask; everyone-as-Administrator is unacceptable. | Medium |
 | [#500](https://github.com/TetronIO/JIM/issues/500) OWASP remediation | Rate limiting and privileged-operations audit trail are what a regulated buyer's security review checks first. Splittable; other items are cheap. | High (splittable) |
 | [#861](https://github.com/TetronIO/JIM/issues/861) DB-backed test tier in CI | Nearly-free regression protection for sync/persistence correctness; protects every other lane. Do first. | Low |
@@ -146,7 +146,7 @@ Ten parallel lanes, one agent (or agent session) per lane, serialised within eac
 | Preview (D6) | [#827](https://github.com/TetronIO/JIM/issues/827) design PRD (time-boxed); [#421](https://github.com/TetronIO/JIM/issues/421) build begins as first adapter or standalone |
 | Design/PRD lane | PRDs in parallel: [#242](https://github.com/TetronIO/JIM/issues/242), [#288](https://github.com/TetronIO/JIM/issues/288), [#809](https://github.com/TetronIO/JIM/issues/809)+[#134](https://github.com/TetronIO/JIM/issues/134) pair (PRDs do not collide with code) |
 | API (D5) | [#813](https://github.com/TetronIO/JIM/issues/813) contract normalisation → [#487](https://github.com/TetronIO/JIM/issues/487) |
-| Schema (part of D5 tail) | [#377](https://github.com/TetronIO/JIM/issues/377) Web UI + safeguards |
+| Schema (part of D5 tail) | ~~[#377](https://github.com/TetronIO/JIM/issues/377) Web UI + safeguards~~ (done, merged via PR [#1023](https://github.com/TetronIO/JIM/pull/1023)) |
 | Security (D7) | [#9](https://github.com/TetronIO/JIM/issues/9) Readers role; [#500](https://github.com/TetronIO/JIM/issues/500) rate limiting, CSP, lockfiles |
 | LDAP (D10) | [#230](https://github.com/TetronIO/JIM/issues/230) DC pinning |
 | UI (D9) | [#453](https://github.com/TetronIO/JIM/issues/453) → [#454](https://github.com/TetronIO/JIM/issues/454) |
@@ -242,7 +242,7 @@ Rows marked **Low → v1.x** were moved to the v1.x-CONNECTORS milestone on 2026
 | 351 | Container/OU selection | LDAP | High | High | LDAP | Phase 1 only; parallel-safe vs D10 |
 | 359 | Configuration migration | Config mgmt | **Low → v1.x** | High | - | Defer; design after [#376](https://github.com/TetronIO/JIM/issues/376)/[#377](https://github.com/TetronIO/JIM/issues/377) stabilise |
 | 376 | CRUD custom MV Object Types | Schema | Urgent | High | D5 tail | After [#377](https://github.com/TetronIO/JIM/issues/377) |
-| 377 | CRUD custom MV Attributes | Schema | Urgent | Medium | D5 tail | API/cmdlets largely exist; UI + safeguards |
+| ~~377~~ | CRUD custom MV Attributes | Schema | Urgent | Medium | D5 tail | **Done:** merged via PR [#1023](https://github.com/TetronIO/JIM/pull/1023) (all 4 phases + docs) |
 | 399 | Sync rule causality tracking | Observability | Medium | Medium | D2 | De-duplicate plan vs [#91](https://github.com/TetronIO/JIM/issues/91) provenance first |
 | 421 | Schema refresh preview | Safety | Urgent | High | D6 | Do not let [#827](https://github.com/TetronIO/JIM/issues/827) block it; time-box |
 | 435 | MVA to SVA import flow | Attribute flow | High | Medium | D2 | After [#91](https://github.com/TetronIO/JIM/issues/91); well-specified |
