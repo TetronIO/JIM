@@ -22,6 +22,12 @@ This section covers everything you need to deploy, configure, and maintain JIM i
 
     Step-by-step instructions for configuring OIDC authentication with Microsoft Entra ID, AD FS, or Keycloak, including testing procedures and security considerations.
 
+-   **[Security Headers](security-headers.md)**
+
+    ---
+
+    The defence-in-depth response headers JIM sends on every request, including the Content Security Policy, and what to know if you sit JIM behind a reverse proxy or corporate web proxy.
+
 -   **[Configuration Reference](configuration.md)**
 
     ---

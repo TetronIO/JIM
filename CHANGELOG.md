@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - 🔒 The expression evaluation engine has been security-reviewed and hardened with defence-in-depth guardrails, with no change to expression functionality.
+- 🔒 Every response from JIM now carries defence-in-depth security headers, including a Content Security Policy, clickjacking denial, and MIME-sniffing protection.
 
 ### Added
 
@@ -23,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Large exports with many reference-bearing objects (for example thousands of groups) no longer fail partway with "the connection pool has been exhausted". Each parallel export batch previously pinned a database connection for the remainder of the run, draining the pool after around 29 batches; batch resources are now released as each batch completes.
+- 🐛 The activity progress shown while an export works through its deferred reference phase is now accurate. It previously restarted the processed count from zero against the full run total (for example "2,884 of 209,984"), producing a misleadingly low objects-per-second rate and a wildly inflated time-remaining estimate.
 - 🐛 Exports running with Max Export Parallelism above one no longer send unresolved reference values (raw internal identifiers) to the target system. Reference resolution results are now persisted before parallel export batches execute, so every batch sees the resolved values; previously group memberships could be exported as invalid values and fail (for example "invalid per syntax" from an LDAP directory).
 - 🐛 Closing the browser or navigating away while an admin page with tabs (such as Operations) was open no longer records spurious Error-level "Navigation failed" and "Unhandled exception in circuit" entries in the JIM.Web log. Any remaining browser-disconnect noise from the framework is now logged at Warning, so Error entries once again indicate genuine problems.
 

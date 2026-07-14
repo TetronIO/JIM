@@ -282,7 +282,7 @@ else
                 }
                 else
                 {
-                    var windowWidth = await JSRuntime.InvokeAsync<int>("eval", "window.innerWidth");
+                    var windowWidth = await JSRuntime.InvokeAsync<int>("jimInterop.getWindowInnerWidth");
                     var isLargeScreen = windowWidth >= LargeScreenBreakpoint;
                     IsDrawerOpen = isLargeScreen;
                     IsDrawerPinned = isLargeScreen;
@@ -327,14 +327,10 @@ else
             var themePath = isDark ? DarkThemePath : LightThemePath;
 
             // Swap the theme CSS file
-            await JSRuntime.InvokeVoidAsync("eval",
-                $"document.getElementById('jim-theme').setAttribute('href', '{themePath}')");
+            await JSRuntime.InvokeVoidAsync("jimInterop.setThemeStylesheet", themePath);
 
             // Maintain body class for any custom CSS selectors
-            if (isDark)
-                await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('jim-dark-mode')");
-            else
-                await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.remove('jim-dark-mode')");
+            await JSRuntime.InvokeVoidAsync("jimInterop.setBodyClass", "jim-dark-mode", isDark);
         }
         catch (JSDisconnectedException)
         {

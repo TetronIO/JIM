@@ -33,9 +33,9 @@ All API controllers enforce role-based authorisation via `[Authorize]` attribute
 
 ### A02:2025; Security Misconfiguration
 
-**Rating: Good, with gaps**
+**Rating: Strong**
 
-Core security configuration is sound: HSTS, HTTPS redirection, restricted development tooling. Two gaps exist.
+Core security configuration is sound: HSTS, HTTPS redirection, restricted development tooling. Two gaps were identified; both have been remediated.
 
 | Control | Evidence |
 |---------|----------|
@@ -51,9 +51,11 @@ No `UseRateLimiter()` middleware is configured. Authentication endpoints (`/api/
 
 Remediated: `Microsoft.AspNetCore.RateLimiting` (built-in; no new dependency) now protects the whole REST API with per-client partitioning (authenticated principal or client IP), HTTP 429 with `Retry-After`, and `ForwardedHeaders` handling (`JIM_TRUSTED_PROXIES`) so per-IP partitioning is correct behind a reverse proxy. Limits are runtime-tunable via Service Settings. See [Rate Limiting](../../../docs/api/rate-limiting.md).
 
-**Gap 2: No Content Security Policy header (Medium priority)**
+**Gap 2: No Content Security Policy header (Medium priority) - ✅ Remediated**
 
 No explicit CSP header is defined. Blazor Server uses inline scripts/styles which complicates CSP, but a policy should still be defined to mitigate XSS risks.
+
+Remediated: a new `SecurityHeadersMiddleware` (`JIM.Web/Middleware/`) now sets a stage-one Content Security Policy plus `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and `Permissions-Policy` on every response, site-wide (Blazor UI, static assets, REST API). The CSP follows recommendation Option C below (`'unsafe-inline'` for `script-src`/`style-src`, matching Blazor Server's and MudBlazor's current inline usage); the nonce-based Option A remains tracked as a future stage. See [Security Headers](../../../docs/administration/security-headers.md).
 
 ---
 
@@ -211,7 +213,7 @@ A global exception handler catches all unhandled exceptions. Production response
 | # | Category | Rating | Gaps | Priority |
 |---|----------|--------|------|----------|
 | A01 | Broken Access Control | Strong | None | - |
-| A02 | Security Misconfiguration | Good | ~~Rate limiting~~ (remediated), CSP header | ~~High~~, Medium |
+| A02 | Security Misconfiguration | Strong | ~~Rate limiting~~ (remediated), ~~CSP header~~ (remediated) | ~~High~~, ~~Medium~~ |
 | A03 | Software Supply Chain | Good | `packages.lock.json`, DynamicExpresso review | Medium, Low |
 | A04 | Cryptographic Failures | Strong | None | - |
 | A05 | Injection | Strong | None (pending DynamicExpresso) | - |
@@ -284,7 +286,7 @@ A global exception handler catches all unhandled exceptions. Production response
 
 ---
 
-### 4. Content Security Policy Header (Medium)
+### 4. Content Security Policy Header (Medium) - ✅ Remediated (stage one)
 
 **OWASP:** A02
 **Risk:** No defence-in-depth against XSS via injected scripts.
@@ -307,6 +309,8 @@ A global exception handler catches all unhandled exceptions. Production response
 **Recommendation:** Start with Option C as a quick win, then migrate to Option A. Blazor Server's inline script requirements make nonce-based CSP non-trivial; a staged approach avoids breaking the UI.
 
 **Effort:** Low (Option C), Medium (Option A)
+
+**Implemented:** Option C, plus the surrounding response header set (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`) rather than CSP alone, applied via a single `SecurityHeadersMiddleware` to every response (Blazor UI, static assets, REST API). Option A (nonce-based `script-src`/`style-src`, dropping `'unsafe-inline'`) remains open as a future stage.
 
 ---
 
