@@ -333,7 +333,7 @@ A full assessment against the OWASP Top 10:2025 is documented in [`engineering/p
 | A06:2025 - Insecure Design | Strong | None |
 | A07:2025 - Identification and Authentication Failures | Strong | None |
 | A08:2025 - Software and Data Integrity Failures | Strong | Covered by supply chain hardening (see below) |
-| A09:2025 - Security Logging and Monitoring Failures | Good, with gap | See assessment document |
+| A09:2025 - Security Logging and Monitoring Failures | Strong | None (authentication events audited via the Activity system with aggregation and dedicated retention; see assessment document) |
 | A10:2025 - Server-Side Request Forgery | Strong | None |
 
 See the assessment document for the full evidence table and remediation plan.

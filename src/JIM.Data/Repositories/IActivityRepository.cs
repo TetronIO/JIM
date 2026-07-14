@@ -216,4 +216,15 @@ public interface IActivityRepository
     /// RPEIs into memory.
     /// </summary>
     public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId);
+
+    /// <summary>
+    /// Atomically increments <c>AttemptCount</c> and advances <c>LastSeen</c> on the aggregated failed-authentication
+    /// Activity row matching (TargetType Authentication, <paramref name="apiKeyPrefix"/>, <paramref name="clientIp"/>,
+    /// <paramref name="reason"/>, <paramref name="windowStart"/>). Callers must normalise a null API key prefix or
+    /// client IP to <see cref="string.Empty"/> before calling, matching the partial unique index's dedup contract
+    /// (Postgres unique indexes treat NULLs as distinct from one another).
+    /// </summary>
+    /// <returns>True if a matching row was found and incremented; false if no row exists yet for this window bucket
+    /// (the caller must then create one).</returns>
+    public Task<bool> IncrementAggregatedFailedAuthenticationAsync(string apiKeyPrefix, string clientIp, string reason, DateTime windowStart, DateTime lastSeen);
 }

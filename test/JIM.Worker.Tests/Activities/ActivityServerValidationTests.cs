@@ -227,6 +227,55 @@ public class ActivityServerValidationTests
 
     #endregion
 
+    #region Tests for Anonymous initiated activities
+
+    [Test]
+    public async Task CreateActivityWithTriadAsync_WithAnonymousInitiatorAndNullId_SetsInitiatedByNameToAnonymousAsync()
+    {
+        // Arrange
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.Authentication,
+            TargetOperationType = ActivityTargetOperationType.Read
+        };
+
+        Activity? capturedActivity = null;
+        _mockActivityRepository
+            .Setup(r => r.CreateActivityAsync(It.IsAny<Activity>()))
+            .Callback<Activity>(a => capturedActivity = a)
+            .Returns(Task.CompletedTask);
+
+        // Act
+        await _application.Activities.CreateActivityWithTriadAsync(activity, ActivityInitiatorType.Anonymous, null, null);
+
+        // Assert
+        Assert.That(capturedActivity, Is.Not.Null);
+        Assert.That(capturedActivity!.InitiatedByType, Is.EqualTo(ActivityInitiatorType.Anonymous));
+        Assert.That(capturedActivity.InitiatedById, Is.Null);
+        Assert.That(capturedActivity.InitiatedByName, Is.EqualTo("Anonymous"));
+    }
+
+    [Test]
+    public void CreateActivityWithTriadAsync_WithAnonymousInitiatorAndNonNullId_ThrowsInvalidOperationExceptionAsync()
+    {
+        // Arrange - an Anonymous activity represents an unidentified caller; carrying an id would contradict that.
+        var activity = new Activity
+        {
+            Id = Guid.NewGuid(),
+            TargetType = ActivityTargetType.Authentication,
+            TargetOperationType = ActivityTargetOperationType.Read
+        };
+
+        // Act & Assert
+        var exception = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _application.Activities.CreateActivityWithTriadAsync(activity, ActivityInitiatorType.Anonymous, Guid.NewGuid(), "Anonymous"));
+
+        Assert.That(exception!.Message, Does.Contain("Anonymous"));
+    }
+
+    #endregion
+
     #region Tests for activity status and execution time
 
     [Test]

@@ -27,5 +27,12 @@ public enum ActivityInitiatorType
     /// <summary>
     /// The action was performed by the system itself (seeding, SSO initialisation, scheduled maintenance).
     /// </summary>
-    System = 3
+    System = 3,
+
+    /// <summary>
+    /// The activity was initiated by an unauthenticated, unidentified caller: a failed authentication attempt
+    /// (interactive sign-in or API key) where no security principal could be established. Carries no
+    /// <c>InitiatedById</c>; <c>InitiatedByName</c> is always "Anonymous".
+    /// </summary>
+    Anonymous = 4
 }

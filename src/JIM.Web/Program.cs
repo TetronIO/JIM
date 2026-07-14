@@ -323,7 +323,29 @@ try
             // intercept the user login when a token is received and validate we can map them to a JIM user
             options.Events.OnTicketReceived = async ctx =>
             {
-                await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext);
+                var user = await ResolveAndAttachJimIdentityAsync(ctx.Principal, ctx.HttpContext);
+                if (user != null)
+                {
+                    // One security audit Activity per session establishment (not per request), attributed to the
+                    // signed-in user. Non-blocking: a failed audit write must never fail the sign-in it instruments.
+                    RecordSuccessfulSignInEvent(ctx.HttpContext, user);
+                }
+            };
+
+            // Security audit events (issue #500): the IdP rejected the sign-in outright (e.g. access denied,
+            // provider-side error) before any token reached us.
+            options.Events.OnRemoteFailure = ctx =>
+            {
+                RecordFailedSignInEvent(ctx.HttpContext, CategoriseOidcFailure(ctx.Failure));
+                return Task.CompletedTask;
+            };
+
+            // Security audit events (issue #500): a token was returned but failed local validation (bad signature,
+            // expired, wrong audience, replayed nonce, ...).
+            options.Events.OnAuthenticationFailed = ctx =>
+            {
+                RecordFailedSignInEvent(ctx.HttpContext, CategoriseOidcFailure(ctx.Exception));
+                return Task.CompletedTask;
             };
 
             // Prevent OIDC redirects for API requests - they should return 401 instead
@@ -954,19 +976,22 @@ static async Task InitialiseInfrastructureApiKeyAsync(JimApplication jim)
 /// access JIM. The provisioning decision itself lives in the application layer (jim.Auth); this
 /// method only bridges the web layer's ClaimsPrincipal to that logic and back.
 /// </summary>
-static async Task ResolveAndAttachJimIdentityAsync(ClaimsPrincipal? principal, HttpContext httpContext)
+/// <returns>The resolved MetaverseObject, or null if no JIM identity could be established. The cookie flow
+/// (<c>OnTicketReceived</c>) uses a non-null result to record an interactive sign-in success security audit event;
+/// the bearer-token flow (<c>OnTokenValidated</c>) discards it, since bearer calls are per-request, not per-session.</returns>
+static async Task<MetaverseObject?> ResolveAndAttachJimIdentityAsync(ClaimsPrincipal? principal, HttpContext httpContext)
 {
     if (principal?.Identity == null)
     {
         Log.Error("ResolveAndAttachJimIdentityAsync: Request has no principal or identity.");
-        return;
+        return null;
     }
 
     var factory = httpContext.RequestServices.GetService<IJimApplicationFactory>();
     if (factory == null)
     {
         Log.Error("ResolveAndAttachJimIdentityAsync: Could not resolve IJimApplicationFactory.");
-        return;
+        return null;
     }
 
     using var jim = factory.Create();
@@ -976,7 +1001,7 @@ static async Task ResolveAndAttachJimIdentityAsync(ClaimsPrincipal? principal, H
     if (string.IsNullOrEmpty(serviceSettings.SSOUniqueIdentifierClaimType))
     {
         Log.Error("ResolveAndAttachJimIdentityAsync: ServiceSettings.SSOUniqueIdentifierClaimType is not configured.");
-        return;
+        return null;
     }
 
     var uniqueId = principal.FindFirstValue(serviceSettings.SSOUniqueIdentifierClaimType);
@@ -984,7 +1009,7 @@ static async Task ResolveAndAttachJimIdentityAsync(ClaimsPrincipal? principal, H
     {
         Log.Warning("ResolveAndAttachJimIdentityAsync: User '{Name}' has no '{ClaimType}' claim; cannot identify them.",
             LogSanitiser.Sanitise(principal.Identity.Name), serviceSettings.SSOUniqueIdentifierClaimType);
-        return;
+        return null;
     }
 
     // Hand a provider-agnostic identity to the application layer to resolve or provision.
@@ -1003,7 +1028,7 @@ static async Task ResolveAndAttachJimIdentityAsync(ClaimsPrincipal? principal, H
         // Not a known user and not the initial admin: no roles are added, so they cannot access JIM.
         Log.Debug("ResolveAndAttachJimIdentityAsync: No JIM identity for '{ClaimType}'='{UniqueId}'.",
             serviceSettings.SSOUniqueIdentifierClaimType, LogSanitiser.Sanitise(uniqueId));
-        return;
+        return null;
     }
 
     // Build a JIM-specific identity carrying the user's role claims and MetaverseObject id, and add it
@@ -1018,6 +1043,87 @@ static async Task ResolveAndAttachJimIdentityAsync(ClaimsPrincipal? principal, H
 
     var jimIdentity = new ClaimsIdentity(roleClaims, authenticationType: null, nameType: null, roleType: Constants.BuiltInRoles.RoleClaimType) { Label = "JIM" };
     principal.AddIdentity(jimIdentity);
+
+    return user;
+}
+
+/// <summary>
+/// Records an interactive sign-in success security audit event on a background task with a fresh DI scope
+/// (via <see cref="IJimApplicationFactory"/>, which is safe to call after the originating request's DI scope has
+/// been disposed, since it resolves its DbContext via <c>IDbContextFactory</c>). Non-blocking: a failed audit
+/// write must never fail a sign-in that has already succeeded.
+/// </summary>
+static void RecordSuccessfulSignInEvent(HttpContext httpContext, MetaverseObject user)
+{
+    var clientIp = httpContext.Connection.RemoteIpAddress?.ToString();
+    var factory = httpContext.RequestServices.GetService<IJimApplicationFactory>();
+    if (factory == null)
+    {
+        Log.Warning("RecordSuccessfulSignInEvent: Could not resolve IJimApplicationFactory; sign-in success event not recorded.");
+        return;
+    }
+
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            using var jim = factory.Create();
+            await jim.SecurityAudit.RecordInteractiveSignInSucceededAsync(user, clientIp);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Warning(ex, "RecordSuccessfulSignInEvent: Failed to record interactive sign-in success event");
+        }
+    });
+}
+
+/// <summary>
+/// Records an aggregated interactive sign-in failure security audit event on a background task with a fresh DI
+/// scope, mirroring <see cref="RecordSuccessfulSignInEvent"/>. Non-blocking and never throws into the caller:
+/// <c>SecurityAuditServer.RecordFailedAuthenticationAsync</c> itself swallows audit-write failures.
+/// </summary>
+static void RecordFailedSignInEvent(HttpContext httpContext, string reason)
+{
+    var clientIp = httpContext.Connection.RemoteIpAddress?.ToString();
+    var factory = httpContext.RequestServices.GetService<IJimApplicationFactory>();
+    if (factory == null)
+    {
+        Log.Warning("RecordFailedSignInEvent: Could not resolve IJimApplicationFactory; failed sign-in event not recorded.");
+        return;
+    }
+
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            using var jim = factory.Create();
+            await jim.SecurityAudit.RecordFailedAuthenticationAsync("Interactive sign-in failed", reason, apiKeyPrefix: null, clientIp);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Warning(ex, "RecordFailedSignInEvent: Failed to record failed authentication event");
+        }
+    });
+}
+
+/// <summary>
+/// Maps an OIDC sign-in failure exception to a short, sanitised reason category for the security audit log.
+/// Deliberately does not surface the raw exception message: it can carry attacker-influenced content (e.g. a
+/// manipulated OIDC <c>error_description</c>) and is unbounded in length, neither of which belongs in an
+/// aggregation-key column (see Activity.SecurityEventReason).
+/// </summary>
+static string CategoriseOidcFailure(Exception? exception)
+{
+    return exception switch
+    {
+        null => "OIDC sign-in failed",
+        SecurityTokenExpiredException => "OIDC token expired",
+        SecurityTokenValidationException => "OIDC token validation failed",
+        SecurityTokenException => "OIDC token error",
+        _ when exception.Message.Contains("Correlation failed", StringComparison.OrdinalIgnoreCase) => "OIDC correlation failed",
+        _ when exception.Message.Contains("access_denied", StringComparison.OrdinalIgnoreCase) => "OIDC access denied",
+        _ => "OIDC sign-in failed"
+    };
 }
 
 /// <summary>
