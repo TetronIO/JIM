@@ -25,7 +25,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libldap-common=2.6.10+dfsg-0ubuntu0.24.04.1 \
         libldap2=2.6.10+dfsg-0ubuntu0.24.04.1 \
-        cifs-utils=2:7.0-2ubuntu0.4 \
+        cifs-utils=2:7.0-2ubuntu0.5 \
         libgssapi-krb5-2=1.20.1-6ubuntu2.6 \
     && rm -rf /var/lib/apt/lists/* \
     # Symlink for System.DirectoryServices.Protocols compatibility
