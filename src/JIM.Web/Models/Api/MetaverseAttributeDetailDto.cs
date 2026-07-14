@@ -16,6 +16,12 @@ public class MetaverseAttributeDetailDto
     public AttributeDataType Type { get; set; }
     public AttributePlurality AttributePlurality { get; set; }
     public bool BuiltIn { get; set; }
+
+    /// <summary>
+    /// The rendering hint for multi-valued attributes (Table, ChipSet, List). Ignored for single-valued attributes.
+    /// </summary>
+    public AttributeRenderingHint RenderingHint { get; set; }
+
     public List<ObjectTypeReferenceDto> ObjectTypes { get; set; } = new();
 
     /// <summary>
@@ -31,6 +37,7 @@ public class MetaverseAttributeDetailDto
             Type = entity.Type,
             AttributePlurality = entity.AttributePlurality,
             BuiltIn = entity.BuiltIn,
+            RenderingHint = entity.RenderingHint,
             ObjectTypes = entity.MetaverseObjectTypes?
                 .Select(ot => new ObjectTypeReferenceDto { Id = ot.Id, Name = ot.Name })
                 .ToList() ?? new()

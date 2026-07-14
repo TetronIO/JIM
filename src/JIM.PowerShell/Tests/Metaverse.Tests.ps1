@@ -453,3 +453,295 @@ Describe 'Move-JIMMetaverseAttributePriority' {
         }
     }
 }
+
+Describe 'Set-JIMMetaverseAttribute' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Set-JIMMetaverseAttribute
+        }
+
+        It 'Should have a RenderingHint parameter with the expected values' {
+            $set = $command.Parameters['RenderingHint'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $set.ValidValues | Should -Contain 'Default'
+            $set.ValidValues | Should -Contain 'Table'
+            $set.ValidValues | Should -Contain 'ChipSet'
+            $set.ValidValues | Should -Contain 'List'
+        }
+
+        It 'Should no longer expose an ObjectTypeIds parameter (bindings are managed separately)' {
+            $command.Parameters.Keys | Should -Not -Contain 'ObjectTypeIds'
+        }
+
+        It 'Should support ShouldProcess' {
+            $command.Parameters['WhatIf'] | Should -Not -BeNullOrEmpty
+            $command.Parameters['Confirm'] | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Requires Connection' {
+
+        BeforeEach { Disconnect-JIM }
+
+        It 'Should throw when not connected' {
+            { Set-JIMMetaverseAttribute -Id 1 -Name 'X' -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Endpoint routing' {
+
+        It 'Routes a rename to a PATCH on the attribute endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMMetaverseAttribute -Id 1 -Name 'Renamed' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1' -and $Body.name -eq 'Renamed'
+                }
+            }
+        }
+
+        It 'Routes a type change to the schema endpoint, filling plurality from the current schema' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -ne 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'Text'; attributePlurality = 'MultiValued' } }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' } { $null }
+
+                Set-JIMMetaverseAttribute -Id 1 -Type Integer -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1/schema' -and
+                    $Body.type -eq 2 -and $Body.attributePlurality -eq 1
+                }
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll { $help = Get-Help Set-JIMMetaverseAttribute -Full }
+
+        It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
+        It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
+        It 'Should have related links' { $help.RelatedLinks | Should -Not -BeNullOrEmpty }
+    }
+}
+
+Describe 'Remove-JIMMetaverseAttribute' {
+
+    Context 'Requires Connection' {
+
+        BeforeEach { Disconnect-JIM }
+
+        It 'Should throw when not connected' {
+            { Remove-JIMMetaverseAttribute -Id 1 -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Safeguards' {
+
+        It 'Refuses deletion and does not call DELETE when stored values exist' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -like '*deletion-preview*' } {
+                    [PSCustomObject]@{ attributeId = 1; attributeName = 'CostCentre'; builtIn = $false; blockedByValues = $true; totalObjectsWithValues = 3; references = @() }
+                }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'DELETE' } { $null }
+
+                Remove-JIMMetaverseAttribute -Id 1 -Force -ErrorAction SilentlyContinue
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'DELETE' }
+            }
+        }
+
+        It 'Sends the attribute name as confirmationName when references cascade' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -like '*deletion-preview*' } {
+                    [PSCustomObject]@{ attributeId = 1; attributeName = 'CostCentre'; builtIn = $false; blockedByValues = $false; totalObjectsWithValues = 0; references = @(1, 2, 3) }
+                }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'DELETE' } { $null }
+
+                Remove-JIMMetaverseAttribute -Id 1 -Force
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and $Endpoint -like '*confirmationName=CostCentre*'
+                }
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll { $help = Get-Help Remove-JIMMetaverseAttribute -Full }
+
+        It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
+        It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
+    }
+}
+
+Describe 'Add-JIMMetaverseObjectTypeAttribute' {
+
+    Context 'Requires Connection' {
+
+        BeforeEach { Disconnect-JIM }
+
+        It 'Should throw when not connected' {
+            { Add-JIMMetaverseObjectTypeAttribute -AttributeId 1 -ObjectTypeId 1 -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Endpoint routing' {
+
+        It 'Posts to the bind endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                Add-JIMMetaverseObjectTypeAttribute -AttributeId 42 -ObjectTypeId 7 -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'POST' -and $Endpoint -like '/api/v1/metaverse/attributes/42/object-types/7*'
+                }
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll { $help = Get-Help Add-JIMMetaverseObjectTypeAttribute -Full }
+
+        It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
+        It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
+    }
+}
+
+Describe 'Remove-JIMMetaverseObjectTypeAttribute' {
+
+    Context 'Requires Connection' {
+
+        BeforeEach { Disconnect-JIM }
+
+        It 'Should throw when not connected' {
+            { Remove-JIMMetaverseObjectTypeAttribute -AttributeId 1 -ObjectTypeId 1 -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Safeguards' {
+
+        It 'Does nothing when the attribute is not bound' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -like '*unassign-preview*' } {
+                    [PSCustomObject]@{ attributeName = 'CostCentre'; metaverseObjectTypeName = 'User'; builtIn = $false; wasBound = $false; blockedByValues = $false; objectsWithValues = 0; references = @() }
+                }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'DELETE' } { $null }
+
+                Remove-JIMMetaverseObjectTypeAttribute -AttributeId 1 -ObjectTypeId 1 -Force -WarningAction SilentlyContinue
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'DELETE' }
+            }
+        }
+
+        It 'Sends confirmationName when type-scoped references cascade' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -like '*unassign-preview*' } {
+                    [PSCustomObject]@{ attributeName = 'CostCentre'; metaverseObjectTypeName = 'User'; builtIn = $false; wasBound = $true; blockedByValues = $false; objectsWithValues = 0; references = @([PSCustomObject]@{ kind = 'Binding' }, [PSCustomObject]@{ kind = 'AttributeFlow' }) }
+                }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'DELETE' } { $null }
+
+                Remove-JIMMetaverseObjectTypeAttribute -AttributeId 1 -ObjectTypeId 1 -Force
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and $Endpoint -like '*confirmationName=CostCentre*'
+                }
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll { $help = Get-Help Remove-JIMMetaverseObjectTypeAttribute -Full }
+
+        It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
+        It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
+    }
+}
+
+Describe 'Test-JIMMetaverseAttributeName' {
+
+    Context 'Requires Connection' {
+
+        BeforeEach { Disconnect-JIM }
+
+        It 'Should throw when not connected' {
+            { Test-JIMMetaverseAttributeName -Name 'X' -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Behaviour' {
+
+        It 'Returns the boolean availability and forwards excludeId' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ name = 'CostCentre'; available = $false } }
+
+                $result = Test-JIMMetaverseAttributeName -Name 'CostCentre' -ExcludeId 42
+
+                $result | Should -BeOfType [bool]
+                $result | Should -BeFalse
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -like '*name-availability*name=CostCentre*' -and $Endpoint -like '*excludeId=42*'
+                }
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll { $help = Get-Help Test-JIMMetaverseAttributeName -Full }
+
+        It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
+        It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
+    }
+}
+
+Describe 'Get-JIMMetaverseAttributeDeletionPreview' {
+
+    Context 'Requires Connection' {
+
+        BeforeEach { Disconnect-JIM }
+
+        It 'Should throw when not connected' {
+            { Get-JIMMetaverseAttributeDeletionPreview -Id 1 -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Behaviour' {
+
+        It 'Gets the deletion-preview endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ attributeId = 1; attributeName = 'CostCentre' } }
+
+                Get-JIMMetaverseAttributeDeletionPreview -Id 1 | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -eq '/api/v1/metaverse/attributes/1/deletion-preview'
+                }
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll { $help = Get-Help Get-JIMMetaverseAttributeDeletionPreview -Full }
+
+        It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
+        It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
+    }
+}
