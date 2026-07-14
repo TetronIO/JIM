@@ -73,6 +73,7 @@ public class JimApplication : IDisposable
     public SchedulerServer Scheduler { get; }
     public SearchServer Search { get; }
     public SecurityServer Security { get; }
+    public SecurityAuditServer SecurityAudit { get; }
     public ServiceSettingsServer ServiceSettings { get; }
     public SystemServer System { get; }
     public TaskingServer Tasking { get; }
@@ -103,6 +104,7 @@ public class JimApplication : IDisposable
         Scheduler = new SchedulerServer(this);
         Search = new SearchServer(this);
         Security = new SecurityServer(this);
+        SecurityAudit = new SecurityAuditServer(this);
         Seeding = new SeedingServer(this);
         ServiceSettings = new ServiceSettingsServer(this);
         System = new SystemServer(this);

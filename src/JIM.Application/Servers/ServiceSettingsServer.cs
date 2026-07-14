@@ -269,6 +269,25 @@ namespace JIM.Application.Servers
         }
 
         /// <summary>
+        /// Gets the security event retention period (how long security audit event Activities - interactive sign-in
+        /// success/failure, API key authentication failure - are kept). Held separately from the general history and
+        /// configuration change retention periods, as its own retention class. Default: 365 days (~1 year).
+        /// </summary>
+        public async Task<TimeSpan> GetSecurityEventRetentionPeriodAsync()
+        {
+            var retentionPeriod = await GetSettingValueAsync(Constants.SettingKeys.SecurityEventRetentionPeriod, TimeSpan.FromDays(365));
+
+            // Guard against zero or negative retention period which would delete all security event history
+            if (retentionPeriod <= TimeSpan.Zero)
+            {
+                Log.Warning("Security event retention period is {RetentionPeriod}, which would delete all security event history. Using default of 365 days", retentionPeriod);
+                return TimeSpan.FromDays(365);
+            }
+
+            return retentionPeriod;
+        }
+
+        /// <summary>
         /// Gets the stale task timeout (how long before a processing task with no heartbeat is considered abandoned).
         /// Used by the scheduler as a safety net for crash recovery.
         /// Default: 5 minutes.

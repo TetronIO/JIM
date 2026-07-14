@@ -1,42 +1,45 @@
-FROM mcr.microsoft.com/devcontainers/dotnet:1-10.0-noble
+# Digest-pinned per the dependency pinning policy (engineering/DEPENDENCY_PINNING.md);
+# Dependabot's docker ecosystem watches this Dockerfile and proposes digest bumps.
+# The 2.x image line is the maintained GA .NET 10 family: the previous 1-10.0-noble
+# tag was frozen upstream on an October 2025, RC-era image and never rebuilt after
+# .NET 10 went GA, so it received no SDK, runtime, or OS updates.
+FROM mcr.microsoft.com/devcontainers/dotnet:2-10.0-noble@sha256:be5bd898d964c0d081cb22285c2318e488882103702c8831418fdd59218fd5dd
 
 # Install pinned .NET SDK version to match global.json's rollForward target.
-# Two reasons this is an explicit install rather than relying on the base image:
-#  1. The base image can ship with an SDK that predates global.json's pin
-#     (e.g. 10.0.100-rc.2 on arm64 at time of writing), which fails
-#     rollForward: latestFeature against 10.0.200. Layer the pinned SDK in
-#     explicitly so builds are deterministic across architectures and image
-#     refresh cycles, regardless of what the base image happens to bundle.
-#  2. The C# Dev Kit's Roslyn LSP hardcodes a runtime version lookup
-#     (currently 10.0.5). If /usr/share/dotnet doesn't satisfy that lookup,
+# Reasons this is an explicit install rather than relying on the base image:
+#  1. The base image bundles whatever SDK was current when its digest was built.
+#     Layering the pinned SDK explicitly keeps builds deterministic across
+#     architectures and image refresh cycles, regardless of the base's bundle.
+#  2. CRITICAL SYNC POINT: this pin must ship at least the ASP.NET Core runtime
+#     that src/JIM.Web/JIM.Web.csproj pins via <RuntimeFrameworkVersion> (which
+#     itself tracks the production base image digests). If it lags, native
+#     JIM.Web runs (jim-build-light, scripts/Generate-OpenApiDoc.ps1) fail at
+#     launch with "framework not found" while Docker builds keep working; this
+#     bit on 2026-07-14 when the product moved to runtime 10.0.9 and this pin
+#     still shipped 10.0.7. Bump this pin in the same commit as any
+#     RuntimeFrameworkVersion bump (the review-dependabot skill's checklist
+#     includes it), then rebuild the devcontainer.
+#  3. The C# Dev Kit's Roslyn LSP hardcodes a runtime version lookup. If
+#     /usr/share/dotnet doesn't satisfy that lookup,
 #     ms-dotnettools.vscode-dotnet-runtime falls back to acquiring its own
 #     sandbox runtime in globalStorage, which has produced MEF composition
 #     crashes (FileNotFoundException for System.Numerics.Vectors 10.0.0.0).
-#     SDK 10.0.203 ships .NET runtime + ASP.NET Core runtime 10.0.7, which
-#     covers the Dev Kit's 10.0.5 lookup with margin. Pair this with the
-#     dotnetAcquisitionExtension.existingDotnetPath setting in
-#     devcontainer.json so both ms-dotnettools.csharp and .csdevkit use
-#     this install instead of acquiring their own. Bump in lockstep when
-#     the Dev Kit's required runtime version moves past what 10.0.203 ships.
+#     Pair this with the dotnetAcquisitionExtension.existingDotnetPath setting
+#     in devcontainer.json so both ms-dotnettools.csharp and .csdevkit use this
+#     install instead of acquiring their own.
+# SDK 10.0.301 ships .NET runtime + ASP.NET Core runtime 10.0.9, matching
+# JIM.Web's current RuntimeFrameworkVersion.
 RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && chmod +x /tmp/dotnet-install.sh \
-    && /tmp/dotnet-install.sh --version 10.0.203 --install-dir /usr/share/dotnet --no-path \
+    && /tmp/dotnet-install.sh --version 10.0.301 --install-dir /usr/share/dotnet --no-path \
     && rm /tmp/dotnet-install.sh
 
-# Remove the PowerShell bundled in the base image. The
-# mcr.microsoft.com/devcontainers/dotnet:1-10.0-noble image was built during the
-# .NET 10 RC window and ships PowerShell 7.6.0-preview.4 (the only build targeting
-# .NET 10 at the time) at /usr/share/powershell, symlinked from /usr/bin/pwsh.
-# We standardise on a stable PowerShell installed as a .NET global tool in
-# setup.sh; removing the base copy leaves that as the single, unambiguous `pwsh`
-# on PATH instead of letting the preview shadow it (/usr/bin precedes
-# ~/.dotnet/tools). Re-evaluate when the base image ships a stable PowerShell.
+# Remove the PowerShell bundled in the base image (stable 7.6.x in the 2.x image
+# line). We standardise on the PowerShell version installed as a .NET global tool
+# in setup.sh, which we control and pin; removing the base copy leaves that as
+# the single, unambiguous `pwsh` on PATH instead of letting the base's copy
+# shadow it (/usr/bin precedes ~/.dotnet/tools).
 RUN rm -rf /usr/share/powershell /usr/bin/pwsh /usr/local/bin/pwsh
-
-# Remove stale Yarn apt repo that breaks feature installs (expired GPG key)
-RUN rm -f /etc/apt/sources.list.d/yarn.list 2>/dev/null; \
-    rm -f /etc/apt/keyrings/yarn.gpg 2>/dev/null; \
-    apt-get update || true
 
 # Hold moby-containerd on the 2.2.x line so the docker-in-docker Feature picks
 # a working version when it runs (Features execute after the Dockerfile, so
@@ -74,7 +77,8 @@ RUN printf 'Package: moby-containerd\nPin: version 2.2.*\nPin-Priority: 1001\n' 
 # USE_BUILTIN_RIPGREP=0 in devcontainer.json forces every environment
 # (Codespaces, Docker Desktop on Windows/macOS, native Linux) onto the same
 # distro-built ripgrep, which is page-size agnostic.
-RUN apt-get install -y --no-install-recommends \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
     socat \
     python3-pip \
     ripgrep \

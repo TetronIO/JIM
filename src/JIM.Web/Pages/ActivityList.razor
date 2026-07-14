@@ -57,6 +57,7 @@
             <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.ImportHierarchy">Import Hierarchy</MudSelectItem>
             <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.ImportSchema">Import Schema</MudSelectItem>
             <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Revert">Revert</MudSelectItem>
+            <MudSelectItem T="ActivityTargetOperationType" Value="ActivityTargetOperationType.Authenticate">Authenticate</MudSelectItem>
         </MudSelect>
     </MudItem>
     <MudItem Class="flex-grow-1">
@@ -98,6 +99,7 @@
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ObjectMatchingRule">Object Matching Rule</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.ServiceSetting">Service Setting</MudSelectItem>
             <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.HistoryRetentionCleanup">History Retention Cleanup</MudSelectItem>
+            <MudSelectItem T="ActivityTargetType" Value="ActivityTargetType.Authentication">Authentication</MudSelectItem>
         </MudSelect>
     </MudItem>
     <MudItem Class="flex-grow-1">
@@ -123,6 +125,7 @@
             <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.User">User</MudSelectItem>
             <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.ApiKey">API Key</MudSelectItem>
             <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.System">System</MudSelectItem>
+            <MudSelectItem T="ActivityInitiatorType" Value="ActivityInitiatorType.Anonymous">Anonymous</MudSelectItem>
         </MudSelect>
     </MudItem>
     <MudItem Class="flex-grow-1" Style="max-width: 280px;">
@@ -454,6 +457,24 @@
                     </MudTooltip>
                 }
             }
+            else if (context.TargetType == ActivityTargetType.Authentication)
+            {
+                @* Aggregated failure events carry an attempt count; sign-in success events do not aggregate *@
+                @if (context.AttemptCount is > 0)
+                {
+                    var attemptCount = context.AttemptCount.Value;
+                    <MudTooltip Text="Failed Attempts" Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Color="Color.Error" Variant="Variant.Text"
+                                 Icon="@Icons.Material.Filled.Report" Class="jim-stat-chip">
+                            @attemptCount.ToString("N0")
+                        </MudChip>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <EmptyValue />
+                }
+            }
             else
             {
                 @* Stats not applicable for this activity type *@
@@ -477,6 +498,11 @@
                 {
                     <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-1" Style="vertical-align: middle;" />
                     <span>@(context.InitiatedByName ?? "System")</span>
+                }
+                else if (context.InitiatedByType == ActivityInitiatorType.Anonymous)
+                {
+                    <MudIcon Icon="@Icons.Material.Filled.QuestionMark" Class="mr-1" Style="vertical-align: middle;" />
+                    <span>Anonymous</span>
                 }
                 else if (!string.IsNullOrEmpty(context.InitiatedByName))
                 {
@@ -960,6 +986,7 @@
         ActivityTargetCategory.IdentityData => "Identity",
         ActivityTargetCategory.SyncRuns => "Synchronisation",
         ActivityTargetCategory.System => "System",
+        ActivityTargetCategory.Security => "Security",
         _ => category.ToString()
     };
 

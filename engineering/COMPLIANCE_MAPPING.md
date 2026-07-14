@@ -319,7 +319,7 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 
 ## OWASP Top 10:2025 Assessment
 
-A full assessment against the OWASP Top 10:2025 is documented in [`engineering/plans/doing/OWASP_TOP_10_ASSESSMENT.md`](plans/doing/OWASP_TOP_10_ASSESSMENT.md) (first published 2026-04-09).
+A full assessment against the OWASP Top 10:2025 is documented in [`engineering/plans/done/OWASP_TOP_10_ASSESSMENT.md`](plans/done/OWASP_TOP_10_ASSESSMENT.md) (first published 2026-04-09). The DynamicExpresso expression evaluation review (A03/A05 gap 5) is documented separately in [`engineering/EXPRESSION_SECURITY.md`](EXPRESSION_SECURITY.md).
 
 **Overall result:** Strong. The fundamentals (authentication, access control, cryptography, injection prevention, exception handling) are solid and well-implemented. Five gaps were identified; none represent critical vulnerabilities, but all are tracked for remediation to maintain the security posture expected by JIM's target deployment environments.
 
@@ -327,13 +327,13 @@ A full assessment against the OWASP Top 10:2025 is documented in [`engineering/p
 |----------|--------|------|
 | A01:2025 - Broken Access Control | Strong | None |
 | A02:2025 - Security Misconfiguration | Strong | None (rate limiting and defence-in-depth response headers, including CSP, both remediated) |
-| A03:2025 - Software Supply Chain Failures | Good, with gap | Transitive NuGet pinning implemented (see [`DEPENDENCY_PINNING.md`](DEPENDENCY_PINNING.md)); DynamicExpresso review remains open, see assessment document |
+| A03:2025 - Software Supply Chain Failures | Strong | None (transitive NuGet pinning implemented, see [`DEPENDENCY_PINNING.md`](DEPENDENCY_PINNING.md); DynamicExpresso review complete, see [`EXPRESSION_SECURITY.md`](EXPRESSION_SECURITY.md)) |
 | A04:2025 - Cryptographic Failures | Strong | None |
 | A05:2025 - Injection | Strong | None |
 | A06:2025 - Insecure Design | Strong | None |
 | A07:2025 - Identification and Authentication Failures | Strong | None |
 | A08:2025 - Software and Data Integrity Failures | Strong | Covered by supply chain hardening (see below) |
-| A09:2025 - Security Logging and Monitoring Failures | Good, with gap | See assessment document |
+| A09:2025 - Security Logging and Monitoring Failures | Strong | None (authentication events audited via the Activity system with aggregation and dedicated retention; see assessment document) |
 | A10:2025 - Server-Side Request Forgery | Strong | None |
 
 See the assessment document for the full evidence table and remediation plan.

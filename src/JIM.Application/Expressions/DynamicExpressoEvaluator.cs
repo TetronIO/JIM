@@ -22,6 +22,22 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
 {
     private readonly Interpreter _interpreter;
 
+    /// <summary>
+    /// Maximum permitted expression source length, in characters. This is a sanity bound against accidental
+    /// paste bombs (an administrator pasting the wrong clipboard contents into an expression field); it sits
+    /// far above the length of any legitimate Attribute Flow, Object Matching Rule or Example Data Template
+    /// expression. See <c>engineering/EXPRESSION_SECURITY.md</c> for the full rationale.
+    /// </summary>
+    public const int MaxExpressionLength = 10_000;
+
+    /// <summary>
+    /// Maximum number of entries the static compiled-expression cache is allowed to hold before it is cleared.
+    /// Ad-hoc expressions evaluated via <see cref="Test"/> (the admin UI's expression tester) would otherwise
+    /// accumulate in the cache forever. Recompilation is cheap, so clearing and starting again is preferred
+    /// over an eviction policy. See <c>engineering/EXPRESSION_SECURITY.md</c> for the full rationale.
+    /// </summary>
+    public const int MaxCompiledExpressionCacheSize = 1_000;
+
     // Static cache shared across all instances - expressions are deterministic so cache can be shared
     // This ensures expression compilation is only done once per expression string across all sync operations
     private static readonly ConcurrentDictionary<string, Lambda> _compiledExpressions = new();
@@ -29,6 +45,13 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     // Static cache metrics for diagnostics (shared across instances)
     private static long _cacheHits;
     private static long _cacheMisses;
+
+    /// <summary>
+    /// Test-only observability hook exposing the current compiled-expression cache size, so the cache bound
+    /// guardrail can be verified without depending on log capture or timing. Internal via the
+    /// InternalsVisibleTo(JIM.Worker.Tests) grant on this project.
+    /// </summary>
+    internal static int CompiledExpressionCacheSize => _compiledExpressions.Count;
 
     // Threshold for logging slow expressions (in milliseconds)
     private const int SlowExpressionThresholdMs = 10;
@@ -56,6 +79,13 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
     {
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(context);
+
+        if (expression.Length > MaxExpressionLength)
+        {
+            throw new ArgumentException(
+                $"Expression exceeds the maximum permitted length of {MaxExpressionLength:N0} characters (actual length: {expression.Length:N0}).",
+                nameof(expression));
+        }
 
         var sw = Stopwatch.StartNew();
         try
@@ -92,6 +122,12 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
             return ExpressionValidationResult.Failure("Expression cannot be empty.");
         }
 
+        if (expression.Length > MaxExpressionLength)
+        {
+            return ExpressionValidationResult.Failure(
+                $"Expression exceeds the maximum permitted length of {MaxExpressionLength:N0} characters (actual length: {expression.Length:N0}).");
+        }
+
         try
         {
             // Create a test interpreter with mock parameters
@@ -122,6 +158,12 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
             return ExpressionTestResult.Failure("Expression cannot be empty.");
         }
 
+        if (expression.Length > MaxExpressionLength)
+        {
+            return ExpressionTestResult.Failure(
+                $"Expression exceeds the maximum permitted length of {MaxExpressionLength:N0} characters (actual length: {expression.Length:N0}).");
+        }
+
         try
         {
             var result = Evaluate(expression, context);
@@ -146,6 +188,17 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         Interlocked.Increment(ref _cacheMisses);
         Log.Debug("Expression cache miss - compiling: '{Expression}'",
             expression.Length > 50 ? expression[..50] + "..." : expression);
+
+        // Bound the cache: ad-hoc expressions evaluated via Test (the admin UI's expression tester) would
+        // otherwise accumulate forever. Recompilation is cheap, so on reaching the bound we clear and start
+        // again rather than implementing an eviction policy. See engineering/EXPRESSION_SECURITY.md.
+        if (_compiledExpressions.Count >= MaxCompiledExpressionCacheSize)
+        {
+            _compiledExpressions.Clear();
+            Log.Warning(
+                "Compiled expression cache reached its {MaxCacheSize}-entry bound and was cleared; expressions will be recompiled on next use.",
+                MaxCompiledExpressionCacheSize);
+        }
 
         return _compiledExpressions.GetOrAdd(expression, expr =>
         {

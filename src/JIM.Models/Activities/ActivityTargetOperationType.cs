@@ -32,5 +32,10 @@ public enum ActivityTargetOperationType
     /// <summary>
     /// Records a system-wide factory reset (wipe of all customer data and configuration).
     /// </summary>
-    Reset = 9
+    Reset = 9,
+    /// <summary>
+    /// An authentication event (interactive sign-in or API key authentication); used with
+    /// <see cref="ActivityTargetType.Authentication"/> security audit event Activities.
+    /// </summary>
+    Authenticate = 10
 }

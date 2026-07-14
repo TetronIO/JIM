@@ -9,8 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- 🔒 The expression evaluation engine has been security-reviewed and hardened with defence-in-depth guardrails, with no change to expression functionality.
 - 🔒 Every response from JIM now carries defence-in-depth security headers, including a Content Security Policy, clickjacking denial, and MIME-sniffing protection.
 - 🔒 Every NuGet dependency, including transitive packages, is now locked to exact known-good versions, making JIM's builds reproducible and tamper-evident from source through to container image.
+- 🔒 Sign-ins and API key authentication attempts now appear in the Activity audit log, with successful sign-ins logged individually and failed attempts grouped by key, IP address and reason so the log stays bounded even under a credential-spraying attack. Security events carry their own configurable retention period, defaulting to one year.
 
 ### Added
 

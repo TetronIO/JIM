@@ -251,6 +251,14 @@ public static class Constants
         /// </summary>
         public const string HistoryCleanupBatchSize = "History.CleanupBatchSize";
 
+        /// <summary>
+        /// How long security audit event Activities (interactive sign-in success/failure, API key authentication
+        /// failure; <see cref="JIM.Models.Activities.ActivityTargetType.Authentication"/>) are retained. Kept
+        /// separately from the general history retention period and the configuration change retention period, as
+        /// its own retention class. Default: 365 days (~1 year).
+        /// </summary>
+        public const string SecurityEventRetentionPeriod = "History.SecurityEventRetentionPeriod";
+
         // Change Tracking Settings
         /// <summary>
         /// Enables or disables change tracking for Connected System Objects.
