@@ -186,8 +186,11 @@
 
             <MudTable Items="@_metaverseObjectType.Attributes.OrderBy(a => a.Name)" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Class="mb-5" SortLabel="Sort By" Elevation="0" Outlined="true" Filter="new Func<MetaverseAttribute, bool>(FilterAttributes)" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged">
                 <ToolBarContent>
+                    <MudText Typo="Typo.h6">Attributes on this Object Type</MudText>
                     <MudSpacer />
                     <MudTextField @bind-Value="_attributeSearchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium" Class="mt-0"></MudTextField>
+                    <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                               DropShadow="false" Class="ml-3" OnClick="OpenAddAttributeBindingDialogAsync">Add Attribute</MudButton>
                 </ToolBarContent>
                 <HeaderContent>
                     <MudTh><MudTableSortLabel SortBy="new Func<MetaverseAttribute, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
@@ -257,9 +260,23 @@
                         }
                     </MudTd>
                     <MudTd DataLabel="">
-                        <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
-                            <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowAttributeHistoryDialogAsync(context))" />
-                        </MudTooltip>
+                        <div class="d-flex justify-end">
+                            <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowAttributeHistoryDialogAsync(context))" />
+                            </MudTooltip>
+                            @if (context.BuiltIn)
+                            {
+                                <MudTooltip Text="Built-in attributes cannot be unbound." Arrow="true" Placement="Placement.Top">
+                                    <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary ml-2" />
+                                </MudTooltip>
+                            }
+                            else
+                            {
+                                <MudTooltip Text="Remove this attribute from the Object Type" Arrow="true" Placement="Placement.Top">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Close" Color="Color.Error" OnClick="@(() => OpenRemoveAttributeBindingDialogAsync(context))" />
+                                </MudTooltip>
+                            }
+                        </div>
                     </MudTd>
                 </RowTemplate>
                 <ChildRowContent>
@@ -498,6 +515,32 @@
     {
         await ConfigurationChangeHistoryDialog.ShowAsync(DialogService, ActivityTargetType.MetaverseAttribute,
             attribute.Id, "Metaverse Attribute", attribute.Name);
+    }
+
+    private async Task OpenAddAttributeBindingDialogAsync()
+    {
+        if (_metaverseObjectType == null)
+            return;
+
+        if (await AddAttributeBindingDialog.ShowAsync(DialogService, Id, _metaverseObjectType.Name))
+            await ReloadObjectTypeAsync();
+    }
+
+    private async Task OpenRemoveAttributeBindingDialogAsync(MetaverseAttribute attribute)
+    {
+        if (_metaverseObjectType == null)
+            return;
+
+        if (await RemoveAttributeBindingDialog.ShowAsync(DialogService, attribute.Id, attribute.Name, Id, _metaverseObjectType.Name))
+            await ReloadObjectTypeAsync();
+    }
+
+    private async Task ReloadObjectTypeAsync()
+    {
+        using var jim = JimFactory.Create();
+        _metaverseObjectType = await jim.Metaverse.GetMetaverseObjectTypeAsync(Id, true);
+        _contributorCounts = await jim.ConnectedSystems.GetAttributeContributorCountsAsync(Id);
+        StateHasChanged();
     }
 
     private bool FilterAttributes(MetaverseAttribute attribute)

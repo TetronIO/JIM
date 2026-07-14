@@ -372,12 +372,6 @@ public interface IMetaverseRepository
     public Task UpdateMetaverseAttributeAsync(MetaverseAttribute attribute);
 
     /// <summary>
-    /// Deletes a Metaverse Attribute.
-    /// </summary>
-    /// <param name="attribute">The attribute to delete.</param>
-    public Task DeleteMetaverseAttributeAsync(MetaverseAttribute attribute);
-
-    /// <summary>
     /// Counts the number of distinct Metaverse Objects that have at least one value
     /// stored for the specified attribute.
     /// </summary>
@@ -395,12 +389,69 @@ public interface IMetaverseRepository
     public Task<int> GetAttributeValueObjectCountByTypeAsync(int attributeId, int metaverseObjectTypeId);
 
     /// <summary>
-    /// Gets the Synchronisation Rules that reference the specified metaverse attribute via
-    /// Synchronisation Rule mappings, mapping sources, Object Matching Rules, or scoping criteria.
+    /// Determines whether a Metaverse Attribute name is unique, comparing case-insensitively (so <c>CostCentre</c>
+    /// and <c>costCentre</c> are considered the same name). Names are stored and returned as-is; only the comparison
+    /// ignores case. Backs the create/rename uniqueness guard and the real-time availability check.
+    /// </summary>
+    /// <param name="name">The candidate name.</param>
+    /// <param name="excludeAttributeId">Optional attribute id to exclude from the check (the attribute being renamed).</param>
+    /// <returns>True if no other attribute already uses the name (case-insensitively); otherwise false.</returns>
+    public Task<bool> IsMetaverseAttributeNameUniqueAsync(string name, int? excludeAttributeId = null);
+
+    /// <summary>
+    /// Returns, per Metaverse Object Type, the number of Metaverse Objects of that type that hold at least one stored
+    /// value for the specified attribute. Backs the values-block reporting for destructive attribute operations.
     /// </summary>
     /// <param name="attributeId">The unique identifier of the attribute.</param>
-    /// <returns>A list of Synchronisation Rule references (ID and Name) that use this attribute.</returns>
-    public Task<List<SyncRuleReference>> GetSyncRulesReferencingAttributeAsync(int attributeId);
+    public Task<List<AttributeObjectTypeValueCount>> GetAttributeValueObjectCountsByTypeAsync(int attributeId);
+
+    /// <summary>
+    /// Returns every configuration reference to the attribute (Object Type bindings, import Attribute Flows, export
+    /// Attribute Flow sources, scoping criteria, and Object Matching Rules/sources), in dependency-removal order.
+    /// Used by the destructive-operation preview and cascade. References never block deletion; they are cascade-removed.
+    /// </summary>
+    /// <param name="attributeId">The unique identifier of the attribute.</param>
+    public Task<List<AttributeReference>> GetAttributeReferencesAsync(int attributeId);
+
+    /// <summary>
+    /// Returns the configuration references to the attribute that are <em>scoped to a single Metaverse Object Type</em>:
+    /// the one binding, references owned by Synchronisation Rules that target the type, and Predefined Searches /
+    /// Example Data templates belonging to it, with source-less-parent repair applied within that set. Attribute-global
+    /// references (rules targeting other types, and the Service Settings SSO mapping) are excluded. Backs the unassign
+    /// preview and cascade.
+    /// </summary>
+    public Task<List<AttributeReference>> GetAttributeReferencesForObjectTypeAsync(int attributeId, int metaverseObjectTypeId);
+
+    /// <summary>
+    /// Deletes the attribute and every configuration reference to it (bindings, Attribute Flow mappings and sources,
+    /// scoping criteria, Object Matching Rules and sources) in dependency order, in a single transaction, leaving
+    /// nothing dangling. Callers MUST have already confirmed no Metaverse Object holds a stored value for the
+    /// attribute (stored values are the only hard block). The attribute must not be built-in.
+    /// </summary>
+    /// <param name="attributeId">The unique identifier of the attribute to delete.</param>
+    public Task CascadeDeleteMetaverseAttributeAsync(int attributeId);
+
+    /// <summary>
+    /// Unbinds the attribute from a single Metaverse Object Type and cascade-removes the configuration references
+    /// scoped to that type (see <see cref="GetAttributeReferencesForObjectTypeAsync"/>), in dependency order, in a
+    /// single transaction. The attribute itself, references owned by rules targeting other types, and the global
+    /// Service Settings SSO mapping are left untouched. Callers MUST have already confirmed no Metaverse Object of the
+    /// type holds a stored value for the attribute.
+    /// </summary>
+    public Task CascadeUnassignAttributeFromObjectTypeAsync(int attributeId, int metaverseObjectTypeId);
+
+    /// <summary>
+    /// Binds a Metaverse Attribute to a Metaverse Object Type (adds the many-to-many association). Idempotent: does
+    /// nothing if the binding already exists.
+    /// </summary>
+    public Task AddAttributeObjectTypeBindingAsync(int attributeId, int metaverseObjectTypeId);
+
+    /// <summary>
+    /// Unbinds a Metaverse Attribute from a Metaverse Object Type (removes the many-to-many association). Idempotent:
+    /// does nothing if the binding does not exist. Callers MUST have already confirmed no Metaverse Object of that
+    /// type holds a stored value for the attribute.
+    /// </summary>
+    public Task RemoveAttributeObjectTypeBindingAsync(int attributeId, int metaverseObjectTypeId);
 
     /// <summary>
     /// Returns the IDs of Metaverse Objects of the given type whose value for the given date attribute falls

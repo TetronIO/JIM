@@ -56,9 +56,11 @@ public class MetaverseConfigurationChangeCaptureTests
         _metaverseRepo.Setup(r => r.UpdateMetaverseObjectTypeAsync(It.IsAny<MetaverseObjectType>())).Returns(Task.CompletedTask);
         _metaverseRepo.Setup(r => r.CreateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>())).Returns(Task.CompletedTask);
         _metaverseRepo.Setup(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>())).Returns(Task.CompletedTask);
-        _metaverseRepo.Setup(r => r.DeleteMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>())).Returns(Task.CompletedTask);
-        _metaverseRepo.Setup(r => r.GetSyncRulesReferencingAttributeAsync(It.IsAny<int>()))
-            .ReturnsAsync(new List<JIM.Models.Core.DTOs.SyncRuleReference>());
+        _metaverseRepo.Setup(r => r.CascadeDeleteMetaverseAttributeAsync(It.IsAny<int>())).Returns(Task.CompletedTask);
+        _metaverseRepo.Setup(r => r.GetAttributeReferencesAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<JIM.Models.Core.DTOs.AttributeReference>());
+        _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountsByTypeAsync(It.IsAny<int>()))
+            .ReturnsAsync(new List<JIM.Models.Core.DTOs.AttributeObjectTypeValueCount>());
         _metaverseRepo.Setup(r => r.GetAttributeValueObjectCountAsync(It.IsAny<int>())).ReturnsAsync(0);
 
         _protection = new FakeProtection();
@@ -211,13 +213,13 @@ public class MetaverseConfigurationChangeCaptureTests
     }
 
     [Test]
-    public async Task DeleteMetaverseAttributeAsync_RecordsUnversionedUnlinkedTombstoneAsync()
+    public async Task DeleteMetaverseAttributeWithCascadeAsync_RecordsUnversionedUnlinkedTombstoneAsync()
     {
         SetupTrackingSetting(enabled: true);
         SetupHashKeySetting();
         var attribute = SetupAttribute(BuildAttribute());
 
-        await _jim.Metaverse.DeleteMetaverseAttributeAsync(attribute, NewUser(), changeReason: "no longer needed");
+        await _jim.Metaverse.DeleteMetaverseAttributeWithCascadeAsync(attribute, NewUser(), changeReason: "no longer needed");
 
         Assert.That(_completedActivity, Is.Not.Null);
         Assert.That(_completedActivity!.TargetOperationType, Is.EqualTo(ActivityTargetOperationType.Delete));
