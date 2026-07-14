@@ -259,7 +259,7 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 | Application Control | Not directly applicable (infrastructure control) | N/A |
 | Patch Applications | Dependency management, vulnerability scanning | Aligned |
 | Configure Microsoft Office Macro Settings | Not applicable | N/A |
-| User Application Hardening | Blazor CSP headers, XSS protection | Supported |
+| User Application Hardening | Content Security Policy, MIME-sniffing protection (`X-Content-Type-Options`), clickjacking denial (`X-Frame-Options` + `frame-ancestors`), Referrer-Policy, Permissions-Policy | Aligned |
 | Restrict Administrative Privileges | RBAC, claims-based authorisation, least privilege | Aligned |
 | Patch Operating Systems | Docker base image updates, .NET runtime updates | Aligned |
 | Multi-Factor Authentication | SSO/OIDC with PKCE (MFA via identity provider) | Aligned |
@@ -326,7 +326,7 @@ A full assessment against the OWASP Top 10:2025 is documented in [`engineering/p
 | Category | Rating | Gaps |
 |----------|--------|------|
 | A01:2025 - Broken Access Control | Strong | None |
-| A02:2025 - Security Misconfiguration | Good, with gaps | No rate limiting (High); no Content Security Policy (Medium) |
+| A02:2025 - Security Misconfiguration | Strong | None (rate limiting and defence-in-depth response headers, including CSP, both remediated) |
 | A03:2025 - Software Supply Chain Failures | Good, with gap | See assessment document |
 | A04:2025 - Cryptographic Failures | Strong | None |
 | A05:2025 - Injection | Strong | None |

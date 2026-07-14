@@ -117,6 +117,7 @@ nav:
       - administration/index.md
       - Deployment: administration/deployment.md
       - SSO Setup: administration/sso-setup.md
+      - Security Headers: administration/security-headers.md
       - Configuration Reference: administration/configuration.md
       - Upgrading: administration/upgrading.md
       - Backup & Disaster Recovery: administration/backup-recovery.md
