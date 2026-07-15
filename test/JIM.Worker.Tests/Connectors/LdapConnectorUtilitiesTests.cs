@@ -278,57 +278,16 @@ public class LdapConnectorUtilitiesTests
         Assert.That(parentDn, Is.EqualTo("CN=Users,DC=testdomain,DC=local"));
     }
 
-    #endregion
-
-    #region FindUnescapedComma tests
-
     [Test]
-    public void FindUnescapedComma_StandardDn_ReturnsFirstCommaIndex()
+    public void ParseDistinguishedName_EscapedBackslashBeforeComma_TreatsCommaAsSeparator()
     {
-        var result = LdapConnectorUtilities.FindUnescapedComma("CN=John,OU=Users,DC=local");
+        // "\\" is an escaped backslash, so the following comma is a real RDN separator (an even number of
+        // preceding backslashes). The previous naive splitter treated any comma after a backslash as escaped
+        // and mis-split this DN; the parser must split it correctly.
+        var (rdn, parentDn) = LdapConnectorUtilities.ParseDistinguishedName(@"CN=foo\\,OU=Bar,DC=example,DC=local");
 
-        Assert.That(result, Is.EqualTo(7)); // Index of comma after "CN=John"
-    }
-
-    [Test]
-    public void FindUnescapedComma_NoComma_ReturnsMinusOne()
-    {
-        var result = LdapConnectorUtilities.FindUnescapedComma("DC=local");
-
-        Assert.That(result, Is.EqualTo(-1));
-    }
-
-    [Test]
-    public void FindUnescapedComma_EscapedComma_SkipsEscapedAndFindUnescaped()
-    {
-        // "CN=Smith\, John,OU=Users" - escaped comma at index 8, unescaped at index 16
-        var result = LdapConnectorUtilities.FindUnescapedComma(@"CN=Smith\, John,OU=Users");
-
-        Assert.That(result, Is.EqualTo(15)); // Index of unescaped comma after "John"
-    }
-
-    [Test]
-    public void FindUnescapedComma_OnlyEscapedCommas_ReturnsMinusOne()
-    {
-        var result = LdapConnectorUtilities.FindUnescapedComma(@"CN=Smith\, John\, Jr");
-
-        Assert.That(result, Is.EqualTo(-1));
-    }
-
-    [Test]
-    public void FindUnescapedComma_EmptyString_ReturnsMinusOne()
-    {
-        var result = LdapConnectorUtilities.FindUnescapedComma("");
-
-        Assert.That(result, Is.EqualTo(-1));
-    }
-
-    [Test]
-    public void FindUnescapedComma_CommaAtStart_ReturnsZero()
-    {
-        var result = LdapConnectorUtilities.FindUnescapedComma(",CN=Test");
-
-        Assert.That(result, Is.EqualTo(0));
+        Assert.That(rdn, Is.EqualTo(@"CN=foo\\"));
+        Assert.That(parentDn, Is.EqualTo("OU=Bar,DC=example,DC=local"));
     }
 
     #endregion
@@ -605,6 +564,20 @@ public class LdapConnectorUtilitiesTests
     public void HasValidRdnValues_WhitespaceOnlyValue_ReturnsFalse()
     {
         Assert.That(LdapConnectorUtilities.HasValidRdnValues("CN= ,OU=Users,DC=example,DC=local"), Is.False);
+    }
+
+    [Test]
+    public void HasValidRdnValues_MultiValuedRdnAllComponentsPopulated_ReturnsTrue()
+    {
+        // A multi-valued RDN joins components with '+'; every component here has a value.
+        Assert.That(LdapConnectorUtilities.HasValidRdnValues("CN=John+SN=Smith,OU=Users,DC=example,DC=local"), Is.True);
+    }
+
+    [Test]
+    public void HasValidRdnValues_MultiValuedRdnWithEmptyComponent_ReturnsFalse()
+    {
+        // One empty component within an otherwise valid multi-valued RDN must still be rejected.
+        Assert.That(LdapConnectorUtilities.HasValidRdnValues("CN=John+SN=,OU=Users,DC=example,DC=local"), Is.False);
     }
 
     #endregion
