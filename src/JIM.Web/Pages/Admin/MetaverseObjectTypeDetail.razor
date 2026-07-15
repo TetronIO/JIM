@@ -35,8 +35,9 @@
                     <MudText Typo="Typo.h5">Details</MudText>
                     @if (!_metaverseObjectType.BuiltIn)
                     {
-                        <MudButton StartIcon="@Icons.Material.Outlined.Edit" Variant="Variant.Outlined" Color="Color.Primary"
-                                   OnClick="OpenEditObjectTypeDialogAsync">Edit</MudButton>
+                        <MudTooltip Text="Edit Object Type" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit" aria-label="edit object type" OnClick="OpenEditObjectTypeDialogAsync" />
+                        </MudTooltip>
                     }
                     else
                     {
