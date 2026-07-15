@@ -6,8 +6,6 @@ using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
 using JIM.Application.Utilities;
 using JIM.Connectors;
-using JIM.Connectors.File;
-using JIM.Connectors.LDAP;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -31,6 +29,7 @@ public class SyncExportTaskProcessor
     private readonly ISyncRepository _syncRepo;
     private readonly Func<ISyncRepositoryScope>? _syncRepoFactory;
     private readonly IConnector _connector;
+    private readonly IConnectorFactory _connectorFactory;
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _runProfile;
     private readonly Activity _activity;
@@ -62,12 +61,14 @@ public class SyncExportTaskProcessor
         WorkerTask workerTask,
         CancellationTokenSource cancellationTokenSource,
         SyncRunMode runMode = SyncRunMode.PreviewAndSync,
-        Func<ISyncRepositoryScope>? syncRepoFactory = null)
+        Func<ISyncRepositoryScope>? syncRepoFactory = null,
+        IConnectorFactory? connectorFactory = null)
     {
         _syncServer = syncServer;
         _syncRepo = syncRepository;
         _syncRepoFactory = syncRepoFactory;
         _connector = connector;
+        _connectorFactory = connectorFactory ?? new ConnectorFactory();
         _connectedSystem = connectedSystem;
         _runProfile = runProfile;
         _activity = workerTask.Activity;
@@ -387,13 +388,7 @@ public class SyncExportTaskProcessor
     /// </summary>
     private IConnector CreateConnectorForParallelBatch()
     {
-        if (_connectedSystem.ConnectorDefinition.Name == ConnectorConstants.LdapConnectorName)
-            return new LdapConnector();
-        if (_connectedSystem.ConnectorDefinition.Name == ConnectorConstants.FileConnectorName)
-            return new FileConnector();
-
-        throw new NotSupportedException(
-            $"{_connectedSystem.ConnectorDefinition.Name} connector does not support parallel batch export.");
+        return _connectorFactory.Create(_connectedSystem.ConnectorDefinition.Name);
     }
 
     /// <summary>

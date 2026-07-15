@@ -41,6 +41,14 @@ public static class RateLimitPartitionResolver
 
         if (context.User.Identity?.IsAuthenticated == true)
         {
+            // Infrastructure API keys are trusted backend automation (CI/CD, integration testing, bulk
+            // configuration), authenticated from a pre-shared bootstrap secret and holding the Administrator role.
+            // Rate limiting exists to blunt untrusted/interactive/runaway abuse; such automation legitimately
+            // bursts far past the per-principal cap, so it is fully exempt. ApiKeyAuthenticationHandler attaches
+            // this claim (value "true") only for infrastructure keys, so an ordinary API key is never exempted.
+            if (context.User.HasClaim(Constants.BuiltInClaims.IsInfrastructureKey, "true"))
+                return RateLimitDecision.NoLimiter();
+
             var principalId = ResolvePrincipalId(context.User);
             // The limit is baked into the partition key: PartitionedRateLimiter.Create caches limiter instances
             // per key, so without this a Service Settings change would not affect an already-cached partition.
