@@ -156,4 +156,23 @@ public class MetaverseObjectHasAttributePresenceDatabaseTests
         Assert.That(await RunAndGetNamesAsync(searchId, hasAttributeId: ids.TagAttrId),
             Is.EqualTo(new[] { "D2", "D3" }));
     }
+
+    [Test]
+    public async Task GetMetaverseAttributeAsync_ByName_ResolvesCaseInsensitivelyAsync()
+    {
+        var ids = await SeedAsync();
+        await using var ctx = NewContext();
+        var jim = new JimApplication(new PostgresDataRepository(ctx));
+
+        // The hasAttribute: filter resolves a typed / URL name to an attribute id; a differing case must still resolve
+        // (attribute names are unique case-insensitively), so a mistyped-case deep link finds the objects rather than
+        // showing the "unknown attribute" empty state.
+        var upper = await jim.Metaverse.GetMetaverseAttributeAsync("SERIALNUMBER");
+        var lower = await jim.Metaverse.GetMetaverseAttributeAsync("serialnumber");
+
+        Assert.That(upper, Is.Not.Null);
+        Assert.That(upper!.Id, Is.EqualTo(ids.SerialNumberAttrId));
+        Assert.That(lower, Is.Not.Null);
+        Assert.That(lower!.Id, Is.EqualTo(ids.SerialNumberAttrId));
+    }
 }

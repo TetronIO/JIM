@@ -307,7 +307,12 @@ public class MetaverseRepository : IMetaverseRepository
         if (withChangeTracking)
             query = query.AsTracking();
 
-        return await query.SingleOrDefaultAsync(x => x.Name == name);
+        // Resolve case-insensitively: attribute names are unique case-insensitively (enforced on create/rename), so a
+        // differing-case lookup is unambiguous, and callers such as the hasAttribute: search resolve a typed / URL name
+        // that need not match the stored casing. LOWER() equality rather than ILIKE, because an attribute name may
+        // contain '_' or '%', which ILIKE would treat as wildcards.
+        var lowered = name.ToLower();
+        return await query.SingleOrDefaultAsync(x => x.Name.ToLower() == lowered);
     }
 
     public async Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute)

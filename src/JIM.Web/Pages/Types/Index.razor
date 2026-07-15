@@ -152,8 +152,10 @@ else if (_isInitialised)
             var attributeName = searchToken[Utilities.HasAttributeSearchToken.Length..].Trim();
             if (attributeName.Length > 0)
             {
-                _hasAttributeName = attributeName;
                 var presenceAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(attributeName);
+                // Show the attribute's stored casing in the chip and URL once resolved (the deep link may use any
+                // case); fall back to the typed name for the unknown-attribute empty state.
+                _hasAttributeName = presenceAttribute?.Name ?? attributeName;
                 _hasAttributeId = presenceAttribute?.Id;
                 _hasAttributeUnknown = presenceAttribute == null;
             }
