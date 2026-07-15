@@ -3,6 +3,7 @@
 
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
+@using JIM.Utilities
 @using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
 @inject IDialogService DialogService
@@ -24,6 +25,9 @@
                         <MudText Typo="Typo.body2" Class="mt-1">
                             A type cannot be deleted while Metaverse Objects of it exist. Delete those objects first (stop the source flows and let them deprovision, or delete them manually), then delete the type.
                         </MudText>
+                        <MudLink Href="@Utilities.GetMetaverseObjectListHref(ObjectType.PluralName)" Class="mt-1 d-inline-flex align-center">
+                            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="mr-1" />View these Metaverse Objects
+                        </MudLink>
                     </MudAlert>
                 }
                 else if (_impact.BlockedBySynchronisationRules)

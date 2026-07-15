@@ -95,13 +95,80 @@ public class MetaverseControllerSearchTests
         _mockMetaverseRepo
             .Setup(r => r.GetMetaverseObjectHeadersPagedAsync(
                 It.IsAny<PredefinedSearch>(), It.IsAny<int>(), It.IsAny<int>(),
-                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>()))
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<int?>()))
             .ReturnsAsync(pagedResult);
 
         var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
         var result = await _controller.SearchObjectsAsync("users", pagination);
 
         Assert.That(result, Is.InstanceOf<OkObjectResult>());
+    }
+
+    [Test]
+    public async Task SearchObjectsAsync_WithUnknownHasAttribute_ReturnsEmptyResultWithoutQueryingAsync()
+    {
+        var enabledSearch = new PredefinedSearch
+        {
+            Id = 1,
+            Name = "All Users",
+            Uri = "users",
+            IsEnabled = true,
+            MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "Person", PluralName = "People" }
+        };
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync("users")).ReturnsAsync(enabledSearch);
+        // The named attribute does not exist.
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(It.IsAny<string>(), It.IsAny<bool>()))
+            .ReturnsAsync((MetaverseAttribute?)null);
+
+        var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
+        var result = await _controller.SearchObjectsAsync("users", pagination, hasAttribute: "noSuchAttr");
+
+        // An unrecognised attribute yields an empty page, and the object query is never run.
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var payload = (PaginatedResponse<MetaverseObjectHeaderDto>)((OkObjectResult)result).Value!;
+        Assert.That(payload.TotalCount, Is.EqualTo(0));
+        Assert.That(payload.Items, Is.Empty);
+        _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectHeadersPagedAsync(
+            It.IsAny<PredefinedSearch>(), It.IsAny<int>(), It.IsAny<int>(),
+            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<int?>()), Times.Never);
+    }
+
+    [Test]
+    public async Task SearchObjectsAsync_WithKnownHasAttribute_PassesResolvedAttributeIdToQueryAsync()
+    {
+        var enabledSearch = new PredefinedSearch
+        {
+            Id = 1,
+            Name = "All Users",
+            Uri = "users",
+            IsEnabled = true,
+            MetaverseObjectType = new MetaverseObjectType { Id = 1, Name = "Person", PluralName = "People" }
+        };
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync("users")).ReturnsAsync(enabledSearch);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(It.IsAny<string>(), It.IsAny<bool>()))
+            .ReturnsAsync(new MetaverseAttribute { Id = 42, Name = "costCentre" });
+
+        var pagedResult = new PagedResultSet<MetaverseObjectHeader>
+        {
+            Results = new List<MetaverseObjectHeader>(),
+            TotalResults = 0,
+            CurrentPage = 1,
+            PageSize = 20
+        };
+        _mockMetaverseRepo
+            .Setup(r => r.GetMetaverseObjectHeadersPagedAsync(
+                It.IsAny<PredefinedSearch>(), It.IsAny<int>(), It.IsAny<int>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<int?>()))
+            .ReturnsAsync(pagedResult);
+
+        var pagination = new PaginationRequest { Page = 1, PageSize = 20 };
+        var result = await _controller.SearchObjectsAsync("users", pagination, hasAttribute: "costCentre");
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        // The resolved attribute id (42) is threaded into the presence-filtered query.
+        _mockMetaverseRepo.Verify(r => r.GetMetaverseObjectHeadersPagedAsync(
+            It.IsAny<PredefinedSearch>(), It.IsAny<int>(), It.IsAny<int>(),
+            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<bool>(), 42), Times.Once);
     }
 
     [Test]

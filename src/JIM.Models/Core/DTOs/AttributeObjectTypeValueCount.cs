@@ -15,6 +15,13 @@ public class AttributeObjectTypeValueCount
     public string MetaverseObjectTypeName { get; set; } = string.Empty;
 
     /// <summary>
+    /// The plural name of the Metaverse Object Type, used to build the object-list deep link
+    /// (<c>/t/{pluralName}?search=hasAttribute:{attributeName}</c>) that shows the admin exactly which objects hold a
+    /// value for the attribute.
+    /// </summary>
+    public string MetaverseObjectTypePluralName { get; set; } = string.Empty;
+
+    /// <summary>
     /// The number of Metaverse Objects of this type that hold at least one value for the attribute.
     /// </summary>
     public int ObjectCount { get; set; }

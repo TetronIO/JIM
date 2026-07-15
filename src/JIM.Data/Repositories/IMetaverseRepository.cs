@@ -182,13 +182,18 @@ public interface IMetaverseRepository
     /// <param name="searchQuery">Optional search query to filter across all string attribute values.</param>
     /// <param name="sortBy">Optional attribute name to sort by.</param>
     /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <param name="hasAttributeId">Optional attribute presence filter: restricts results to Metaverse Objects of the
+    /// type that hold at least one value row for this attribute. Matches the predicate used by
+    /// <see cref="GetAttributeValueObjectCountsByTypeAsync"/> so the "objects with a value" counts surfaced by the
+    /// attribute-deletion safeguards agree exactly with this filtered list.</param>
     public Task<PagedResultSet<MetaverseObjectHeader>> GetMetaverseObjectHeadersPagedAsync(
         PredefinedSearch predefinedSearch,
         int page,
         int pageSize,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = true);
+        bool sortDescending = true,
+        int? hasAttributeId = null);
 
     /// <summary>
     /// Gets a paginated list of Metaverse Objects with optional filtering by type, search query, or specific attribute value.

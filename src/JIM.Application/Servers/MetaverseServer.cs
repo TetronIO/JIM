@@ -757,6 +757,7 @@ public class MetaverseServer
             BuiltIn = attribute.BuiltIn,
             MetaverseObjectTypeId = metaverseObjectTypeId,
             MetaverseObjectTypeName = objectType?.Name ?? metaverseObjectTypeId.ToString(),
+            MetaverseObjectTypePluralName = objectType?.PluralName ?? string.Empty,
             WasBound = attribute.MetaverseObjectTypes.Any(t => t.Id == metaverseObjectTypeId),
             ObjectsWithValues = objectsWithValues,
             References = references
@@ -1402,10 +1403,11 @@ public class MetaverseServer
         int pageSize = 20,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        int? hasAttributeId = null)
     {
         return await Application.Repository.Metaverse.GetMetaverseObjectHeadersPagedAsync(
-            predefinedSearch, page, pageSize, searchQuery, sortBy, sortDescending);
+            predefinedSearch, page, pageSize, searchQuery, sortBy, sortDescending, hasAttributeId);
     }
 
     /// <summary>
