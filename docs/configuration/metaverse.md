@@ -88,6 +88,18 @@ JIM exposes both the list of currently pending deletions and a summary view, whi
 
 The metaverse supports filtering and a fast named-search API. The named-search API is driven by [predefined searches](predefined-searches.md), which let administrators create reusable search definitions that the portal and integrations can call by URI.
 
+### Search by attribute presence
+
+You can filter a Metaverse Object Type's list down to just the objects that **hold a value for a given Metaverse Attribute**. An object matches when it holds at least one value for the named attribute; a multi-valued attribute counts once, however many values it carries. This is the same population the deletion safeguards report as "objects with a value", so the [Object Type](#deleting-object-types) and [attribute](#deleting-attributes-and-removing-bindings) deletion and unassign flows link straight to this filter to show an administrator exactly which objects are blocking a destructive action.
+
+The attribute name is matched case-insensitively. An unrecognised name is not an error: it simply returns no objects, which the portal shows as a clear empty state.
+
+The filter is available with the same behaviour across all three interfaces:
+
+- **JIM portal**<br /> Open the object list with a `hasAttribute:` search, for example `/t/users?search=hasAttribute:costCentre` (the path uses the Object Type's plural name). The active filter appears as a chip above the list; clear the chip to return to the unfiltered list.
+- **REST API**<br /> Add the optional `hasAttribute={attributeName}` query-string parameter to the named-search endpoint, for example `GET /api/v1/metaverse/objects/search/users?hasAttribute=costCentre`. See the [interactive API reference](../../api/reference/).
+- **PowerShell**<br /> Pass `-HasAttribute` to [`Search-JIMMetaverseObject`](../powershell/metaverse.md#search-jimmetaverseobject), for example `Search-JIMMetaverseObject -PredefinedSearchUri "users" -HasAttribute "costCentre"`.
+
 ## Manage the metaverse
 
 - **JIM portal**<br /> Metaverse area of the admin UI for objects, object types, attributes, and pending deletions

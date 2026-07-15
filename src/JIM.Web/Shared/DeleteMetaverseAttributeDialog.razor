@@ -3,6 +3,7 @@
 
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
+@using JIM.Utilities
 @using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
 @inject IDialogService DialogService
@@ -24,7 +25,8 @@
                         <MudList T="string" Dense="true" Class="mt-1">
                             @foreach (var count in _impact.ObjectTypeValueCounts)
                             {
-                                <MudListItem T="string" Icon="@Icons.Material.Filled.Person">
+                                <MudListItem T="string" Icon="@Icons.Material.Filled.Person"
+                                             Href="@Utilities.GetMetaverseObjectHasAttributeSearchHref(count.MetaverseObjectTypePluralName, _impact.AttributeName)">
                                     @count.MetaverseObjectTypeName: <b>@count.ObjectCount.ToString("N0")</b> with a value
                                 </MudListItem>
                             }

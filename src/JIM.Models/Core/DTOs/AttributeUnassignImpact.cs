@@ -28,6 +28,13 @@ public class AttributeUnassignImpact
     public string MetaverseObjectTypeName { get; set; } = string.Empty;
 
     /// <summary>
+    /// The plural name of the target Metaverse Object Type, used to build the object-list deep link
+    /// (<c>/t/{pluralName}?search=hasAttribute:{attributeName}</c>) that shows the admin which objects of the type
+    /// hold a value for the attribute when the unassignment is blocked.
+    /// </summary>
+    public string MetaverseObjectTypePluralName { get; set; } = string.Empty;
+
+    /// <summary>
     /// True if the attribute was actually bound to the Object Type at evaluation time.
     /// </summary>
     public bool WasBound { get; set; }

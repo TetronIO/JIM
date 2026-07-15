@@ -369,11 +369,12 @@ public class MetaverseRepository : IMetaverseRepository
     {
         return await Repository.Database.MetaverseObjectAttributeValues
             .Where(v => v.AttributeId == attributeId)
-            .GroupBy(v => new { v.MetaverseObject.Type.Id, v.MetaverseObject.Type.Name })
+            .GroupBy(v => new { v.MetaverseObject.Type.Id, v.MetaverseObject.Type.Name, v.MetaverseObject.Type.PluralName })
             .Select(g => new AttributeObjectTypeValueCount
             {
                 MetaverseObjectTypeId = g.Key.Id,
                 MetaverseObjectTypeName = g.Key.Name,
+                MetaverseObjectTypePluralName = g.Key.PluralName,
                 // Distinct Metaverse Objects: an object holding multiple values for the attribute counts once.
                 ObjectCount = g.Select(v => v.MetaverseObject.Id).Distinct().Count()
             })
@@ -1788,7 +1789,8 @@ public class MetaverseRepository : IMetaverseRepository
         int pageSize,
         string? searchQuery = null,
         string? sortBy = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        int? hasAttributeId = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -1828,6 +1830,23 @@ public class MetaverseRepository : IMetaverseRepository
                       AND sav."StringValue" ILIKE @searchPattern)
                 """;
             sharedParams.Add(new NpgsqlParameter("searchPattern", $"%{searchQuery}%"));
+        }
+
+        // Attribute-presence filter (the hasAttribute: search token). Restricts results to objects of the type that
+        // hold at least one value row for the attribute. Uses the same "any row for the attribute" predicate as
+        // GetAttributeValueObjectCountsByTypeAsync, so the per-type "objects with a value" counts shown by the
+        // attribute-deletion safeguards (#377) match this filtered list exactly. Asserted-null marker rows are
+        // included deliberately: this is an admin-facing observability view, which surfaces positively-asserted
+        // blanks just as the Metaverse Object views do (only the synchronisation hot path treats them as absent).
+        if (hasAttributeId.HasValue)
+        {
+            whereClause += """
+                 AND EXISTS (
+                    SELECT 1 FROM "MetaverseObjectAttributeValues" hav
+                    WHERE hav."MetaverseObjectId" = m."Id"
+                      AND hav."AttributeId" = @hasAttributeId)
+                """;
+            sharedParams.Add(new NpgsqlParameter("hasAttributeId", hasAttributeId.Value));
         }
 
         // Criteria group filters.

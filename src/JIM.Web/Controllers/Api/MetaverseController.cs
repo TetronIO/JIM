@@ -1185,6 +1185,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <param name="predefinedSearchUri">The URI identifier of the predefined search (e.g. "users", "groups").</param>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection).</param>
     /// <param name="search">Optional search query to filter across all string Attribute Values (case-insensitive).</param>
+    /// <param name="hasAttribute">Optional attribute-presence filter: restricts results to Metaverse Objects that hold
+    /// a value for the named Metaverse Attribute. The name is matched case-insensitively; an unrecognised name yields
+    /// no results.</param>
     /// <returns>A paginated list of Metaverse Object headers with the predefined search Attributes.</returns>
     [HttpGet("objects/search/{predefinedSearchUri}", Name = "SearchObjects")]
     [ProducesResponseType(typeof(PaginatedResponse<MetaverseObjectHeaderDto>), StatusCodes.Status200OK)]
@@ -1193,14 +1196,33 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     public async Task<IActionResult> SearchObjectsAsync(
         [FromRoute] string predefinedSearchUri,
         [FromQuery] PaginationRequest pagination,
-        [FromQuery] string? search = null)
+        [FromQuery] string? search = null,
+        [FromQuery] string? hasAttribute = null)
     {
-        _logger.LogDebug("Searching Metaverse Objects via predefined search (Uri: {Uri}, Page: {Page}, PageSize: {PageSize}, Search: {Search})",
-            LogSanitiser.Sanitise(predefinedSearchUri), pagination.Page, pagination.PageSize, LogSanitiser.Sanitise(search));
+        _logger.LogDebug("Searching Metaverse Objects via predefined search (Uri: {Uri}, Page: {Page}, PageSize: {PageSize}, Search: {Search}, HasAttribute: {HasAttribute})",
+            LogSanitiser.Sanitise(predefinedSearchUri), pagination.Page, pagination.PageSize, LogSanitiser.Sanitise(search), LogSanitiser.Sanitise(hasAttribute));
 
         var predefinedSearch = await _application.Search.GetPredefinedSearchAsync(predefinedSearchUri);
         if (predefinedSearch == null || !predefinedSearch.IsEnabled)
             return NotFound(ApiErrorResponse.NotFound($"Predefined search '{predefinedSearchUri}' not found."));
+
+        // Resolve the optional attribute-presence filter. An unrecognised name cannot match any object, so return an
+        // empty page rather than silently dropping the filter (which would return every object of the type).
+        int? hasAttributeId = null;
+        if (!string.IsNullOrWhiteSpace(hasAttribute))
+        {
+            var presenceAttribute = await _application.Metaverse.GetMetaverseAttributeAsync(hasAttribute);
+            if (presenceAttribute == null)
+                return Ok(new PaginatedResponse<MetaverseObjectHeaderDto>
+                {
+                    Items = [],
+                    TotalCount = 0,
+                    Page = pagination.Page,
+                    PageSize = pagination.PageSize
+                });
+
+            hasAttributeId = presenceAttribute.Id;
+        }
 
         var result = await _application.Metaverse.GetMetaverseObjectHeadersPagedAsync(
             predefinedSearch,
@@ -1208,7 +1230,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             pageSize: pagination.PageSize,
             searchQuery: search,
             sortBy: pagination.SortBy,
-            sortDescending: pagination.IsDescending);
+            sortDescending: pagination.IsDescending,
+            hasAttributeId: hasAttributeId);
 
         var headers = result.Results.Select(MetaverseObjectHeaderDto.FromHeader);
 
