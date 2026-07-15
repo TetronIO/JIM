@@ -216,6 +216,34 @@ public class ActivityServer
         }
     }
 
+    /// <summary>
+    /// Attaches Run Profile Execution Items to an Activity that has already been persisted (via one of the
+    /// CreateActivity methods on this server) and persists them, including their sync outcome trees and any
+    /// Connected System Object change snapshots carried on the outcomes. Items must reference related entities
+    /// (Connected System Objects, Pending Exports) by scalar foreign key only. Intended for small batches
+    /// recorded outside sync task processing (for example Metaverse Object Housekeeping); sync processors use
+    /// the bulk insert path on ISyncRepository instead.
+    /// </summary>
+    public async Task AddRunProfileExecutionItemsAsync(Activity activity, IReadOnlyCollection<ActivityRunProfileExecutionItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+        ArgumentNullException.ThrowIfNull(items);
+
+        if (items.Count == 0)
+            return;
+
+        foreach (var item in items)
+        {
+            if (item.Id == Guid.Empty)
+                item.Id = Guid.NewGuid();
+            item.Activity = activity;
+            item.ActivityId = activity.Id;
+            activity.RunProfileExecutionItems.Add(item);
+        }
+
+        await Application.Repository.Activity.CreateActivityRunProfileExecutionItemsAsync(items);
+    }
+
     public async Task CompleteActivityAsync(Activity activity)
     {
         var now = DateTime.UtcNow;
