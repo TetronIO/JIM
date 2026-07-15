@@ -129,10 +129,10 @@ svg { font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; }
     <text class="jimdg-system-name" x="580" y="548">File Systems</text>
     <text class="jimdg-system-sub" x="580" y="569">CSV &amp; flat files</text>
     <rect class="jimdg-system-planned" x="705" y="520" width="200" height="64" rx="8"/>
-    <text class="jimdg-system-name-planned" x="805" y="548">Enterprise Databases</text>
+    <text class="jimdg-system-name-planned" x="805" y="548">Databases</text>
     <text class="jimdg-system-sub-planned" x="805" y="569">SQL (planned)</text>
     <rect class="jimdg-system-planned" x="930" y="520" width="200" height="64" rx="8"/>
-    <text class="jimdg-system-name-planned" x="1030" y="548">Cloud Applications</text>
+    <text class="jimdg-system-name-planned" x="1030" y="548">Applications</text>
     <text class="jimdg-system-sub-planned" x="1030" y="569">SCIM 2.0 (planned)</text>
   </g>
   <g id="jimdg-sc-edges">
