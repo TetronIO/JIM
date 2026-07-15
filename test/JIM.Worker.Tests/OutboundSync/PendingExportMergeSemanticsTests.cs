@@ -413,6 +413,48 @@ public class PendingExportMergeSemanticsTests
     }
 
     /// <summary>
+    /// A stale Delete Pending Export (staged when the Metaverse Object left the export rule's scope)
+    /// must be superseded when the object is evaluated back in scope WITH a relevant attribute delta:
+    /// the merge path replaces the Delete with an Update and the stale Delete is removed (#1018 pin).
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRules_ExistingDeletePendingExportWithRelevantDelta_SupersededByUpdateAsync()
+    {
+        var (_, mvo, targetCso, targetEmployeeIdAttr, cache) = ArrangeSingleValuedScenario();
+
+        var staleDeletePendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystem = targetCso.ConnectedSystem,
+            ConnectedSystemId = targetCso.ConnectedSystemId,
+            ConnectedSystemObject = targetCso,
+            ConnectedSystemObjectId = targetCso.Id,
+            ChangeType = PendingExportChangeType.Delete,
+            Status = PendingExportStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        };
+        SyncRepo.SeedPendingExport(staleDeletePendingExport);
+
+        var employeeIdMvAttr = mvo.Type!.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.EmployeeId);
+        var newEmployeeIdValue = mvo.AttributeValues.Single(av => av.AttributeId == employeeIdMvAttr.Id);
+        newEmployeeIdValue.StringValue = "E321";
+        var changedAttributes = new List<MetaverseObjectAttributeValue> { newEmployeeIdValue };
+
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, changedAttributes, sourceSystem: null, cache);
+
+        Assert.That(result.PendingExports, Has.Count.EqualTo(1));
+        var replacement = result.PendingExports.Single();
+        Assert.That(replacement.ChangeType, Is.EqualTo(PendingExportChangeType.Update),
+            "An in-scope evaluation with a relevant attribute delta must supersede the stale Delete with an Update.");
+        Assert.That(replacement.AttributeValueChanges.Single().StringValue, Is.EqualTo("E321"),
+            "The replacement Update must carry the fresh export evaluation change.");
+        Assert.That(replacement.AttributeValueChanges.Single().AttributeId, Is.EqualTo(targetEmployeeIdAttr.Id));
+        Assert.That(SyncRepo.PendingExports.ContainsKey(staleDeletePendingExport.Id), Is.False,
+            "The stale Delete Pending Export must be removed by the merge (Delete gone, Update staged).");
+    }
+
+    /// <summary>
     /// No existing database Pending Export for the CSO: the create path must be entirely unaffected
     /// by the merge-fetch change (no merge/delete/replace branch is taken at all).
     /// </summary>
