@@ -40,6 +40,10 @@ The exact field set depends on the operation; the [interactive API reference](..
 
 For Run Profile activities, JIM stores a per-object record of what happened (with any error details) for the most recent run. These let you go from a high-level error counter to the specific Connected System Objects that failed and the reason for each failure. Execution items are the right place to look when diagnosing why a particular identity didn't sync as expected.
 
+## Metaverse Object Housekeeping
+
+When a Metaverse Object's [deletion grace period](metaverse.md) expires, a background housekeeping process on the worker deletes it and stages membership-removal Pending Exports for any objects (such as groups) that referenced it. Each housekeeping batch that actually does work is recorded as a **Metaverse Object Housekeeping** activity, with an execution item per deleted Metaverse Object, per staged Pending Export, and per per-object failure, so grace-period deletions are auditable from the Activities page rather than only visible in service logs. A quiet housekeeping pass with nothing to delete records no activity.
+
 ## Parent and child activities
 
 A schedule execution typically appears as a parent activity with one child activity per step. Use the children listing to walk down a schedule's execution tree from the top-level run into the individual operations it triggered.

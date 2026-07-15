@@ -3127,32 +3127,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             @"DELETE FROM ""PendingExports"" WHERE ""Id"" = ANY({0})",
             ids);
 
-        // Best-effort detach of deleted entities from the change tracker.
-        // After ClearChangeTracker() (e.g. cross-page reference resolution), calling Entry()
-        // can trigger change detection that encounters MetaverseAttribute identity conflicts
-        // (multiple instances with the same key loaded by different queries). Since the rows
-        // are already deleted via raw SQL, a detach failure is non-critical — the entities
-        // will simply remain in the tracker as stale entries until the next clear.
-        try
-        {
-            foreach (var export in exportList)
-            {
-                foreach (var avc in export.AttributeValueChanges)
-                {
-                    var avcEntry = Repository.Database.Entry(avc);
-                    if (avcEntry.State != EntityState.Detached)
-                        avcEntry.State = EntityState.Detached;
-                }
-
-                var entry = Repository.Database.Entry(export);
-                if (entry.State != EntityState.Detached)
-                    entry.State = EntityState.Detached;
-            }
-        }
-        catch (InvalidOperationException)
-        {
-            // Identity conflict during detach — safe to ignore since rows are already deleted
-        }
+        // Detach the deleted entities so no later SaveChangesAsync on the long-lived context can
+        // act on the raw-deleted rows.
+        DetachPendingExportGraphs(exportList);
     }
 
 
@@ -3164,19 +3141,54 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         await BulkUpdatePendingExportsRawAsync(exportList);
 
-        // Detach updated entities and their children from change tracker (no-op if loaded with AsNoTracking)
-        foreach (var export in exportList)
+        // Detach updated entities and their children from the change tracker (no-op if loaded with
+        // AsNoTracking) so no later SaveChangesAsync re-persists what the raw SQL already wrote.
+        DetachPendingExportGraphs(exportList);
+    }
+
+    /// <summary>
+    /// Detaches the given Pending Exports and every tracked attribute value change belonging to
+    /// them, in one pass over the change tracker with change detection suspended (#1004).
+    /// The legacy implementation called <c>DbContext.Entry()</c> once per attribute value change;
+    /// every call ran change detection over the whole tracker, which is quadratic in change count
+    /// (a 100,000-member group's post-export bookkeeping took over ten minutes of CPU per batch,
+    /// the dominant cost of the tail of large exports) and, when the tracker held undetected
+    /// duplicate-key graphs (routine mid-sync after cross-page reference resolution), attached
+    /// them and threw "another instance with the same key value is already being tracked".
+    /// Suspending detection while enumerating <c>ChangeTracker.Entries()</c> is the established
+    /// pattern; see DetachTrackedEntities in SyncRepository.CsOperations.cs and the rationale in
+    /// src/CLAUDE.md ("Tracker surgery must not trigger DetectChanges").
+    /// </summary>
+    private void DetachPendingExportGraphs(List<PendingExport> exports)
+    {
+        var db = Repository.Database;
+        var autoDetectChanges = db.ChangeTracker.AutoDetectChangesEnabled;
+        db.ChangeTracker.AutoDetectChangesEnabled = false;
+        try
         {
-            foreach (var avc in export.AttributeValueChanges)
+            var exportIds = exports.Select(pe => pe.Id).ToHashSet();
+            // Instance identity catches tracked children whose FK scalar has not been fixed up yet
+            // (for example a change added to a tracked collection and detected, but not yet saved).
+            var childInstances = exports.SelectMany(pe => pe.AttributeValueChanges).ToHashSet();
+
+            foreach (var avcEntry in db.ChangeTracker.Entries<PendingExportAttributeValueChange>()
+                .Where(e => (e.Entity.PendingExportId is { } pendingExportId && exportIds.Contains(pendingExportId)) ||
+                            childInstances.Contains(e.Entity))
+                .ToList())
             {
-                var avcEntry = Repository.Database.Entry(avc);
-                if (avcEntry.State != EntityState.Detached)
-                    avcEntry.State = EntityState.Detached;
+                avcEntry.State = EntityState.Detached;
             }
 
-            var entry = Repository.Database.Entry(export);
-            if (entry.State != EntityState.Detached)
-                entry.State = EntityState.Detached;
+            foreach (var peEntry in db.ChangeTracker.Entries<PendingExport>()
+                .Where(e => exportIds.Contains(e.Entity.Id))
+                .ToList())
+            {
+                peEntry.State = EntityState.Detached;
+            }
+        }
+        finally
+        {
+            db.ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
         }
     }
 
