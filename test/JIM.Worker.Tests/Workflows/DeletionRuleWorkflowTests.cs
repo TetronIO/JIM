@@ -344,7 +344,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
 
         // Create Synchronisation Rules
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
-        var targetExportRule = await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export");
+        await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export");
 
         // Create matching rules
         await CreateMatchingRuleAsync(sourceType, mvType, "EmployeeId");
@@ -418,7 +418,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         // Create Synchronisation Rules; the export rule's Delete action drives the delete export
         // when the MVO is deleted (issue #655)
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
-        var targetExportRule = await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export",
+        await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export",
             deprovisionAction: OutboundDeprovisionAction.Delete);
 
         // Create matching rules
