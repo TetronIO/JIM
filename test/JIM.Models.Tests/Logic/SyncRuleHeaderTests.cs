@@ -34,7 +34,8 @@ public class SyncRuleHeaderTests
             ProvisionToConnectedSystem = false,
             ProjectToMetaverse = true,
             Enabled = true,
-            EnforceState = false
+            EnforceState = false,
+            OutboundDeprovisionAction = OutboundDeprovisionAction.Delete
         };
 
         // Act
@@ -56,6 +57,7 @@ public class SyncRuleHeaderTests
         Assert.That(header.ProjectToMetaverse, Is.True);
         Assert.That(header.Enabled, Is.True);
         Assert.That(header.EnforceState, Is.False);
+        Assert.That(header.OutboundDeprovisionAction, Is.EqualTo(OutboundDeprovisionAction.Delete));
     }
 
     [Test]

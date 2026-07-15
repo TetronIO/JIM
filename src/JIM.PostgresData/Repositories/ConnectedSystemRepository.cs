@@ -4086,21 +4086,40 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await query.ToListAsync();
     }
 
-    public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync()
+    public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync(int? metaverseObjectTypeId = null, SyncRuleDirection? direction = null)
     {
-        return await Repository.Database.SyncRules.OrderBy(a => a.Name).Select(sr => new SyncRuleHeader
+        var query = Repository.Database.SyncRules.AsQueryable();
+
+        if (metaverseObjectTypeId.HasValue)
+        {
+            var metaverseObjectTypeIdValue = metaverseObjectTypeId.Value;
+            query = query.Where(sr => sr.MetaverseObjectTypeId == metaverseObjectTypeIdValue);
+        }
+
+        if (direction.HasValue)
+        {
+            var directionValue = direction.Value;
+            query = query.Where(sr => sr.Direction == directionValue);
+        }
+
+        return await query.OrderBy(a => a.Name).Select(sr => new SyncRuleHeader
         {
             Id = sr.Id,
             Name = sr.Name,
             Description = sr.Description,
+            ConnectedSystemId = sr.ConnectedSystemId,
             ConnectedSystemName = sr.ConnectedSystem.Name,
+            ConnectedSystemObjectTypeId = sr.ConnectedSystemObjectTypeId,
             ConnectedSystemObjectTypeName = sr.ConnectedSystemObjectType.Name,
             Created = sr.Created,
             Direction = sr.Direction,
+            MetaverseObjectTypeId = sr.MetaverseObjectTypeId,
             MetaverseObjectTypeName = sr.MetaverseObjectType.Name,
             ProjectToMetaverse = sr.ProjectToMetaverse,
             ProvisionToConnectedSystem = sr.ProvisionToConnectedSystem,
-            Enabled = sr.Enabled
+            Enabled = sr.Enabled,
+            EnforceState = sr.EnforceState,
+            OutboundDeprovisionAction = sr.OutboundDeprovisionAction
         }).ToListAsync();
     }
 

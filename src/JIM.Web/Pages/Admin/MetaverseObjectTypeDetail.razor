@@ -3,6 +3,7 @@
 @using JIM.Models.Activities
 @using JIM.Models.Core
 @using JIM.Models.Logic
+@using JIM.Models.Logic.DTOs
 @using JIM.Models.Staging
 @using JIM.Utilities
 @using JIM.Web.Pages.Admin.Components
@@ -127,6 +128,59 @@
                     </MudButton>
                     <MudButton Variant="Variant.Text" OnClick="ResetDeletionRules">Reset</MudButton>
                 </MudStack>
+            </MudPaper>
+
+            <MudPaper Class="pa-4 mt-6" Outlined="true">
+                <MudText Typo="Typo.h5" Class="mb-2">Downstream Deprovisioning</MudText>
+                <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">When a Metaverse Object of this type is deleted
+                    (or leaves an export Synchronisation Rule's scope), each export Synchronisation Rule's Deprovisioning Action
+                    determines what happens to the corresponding object in its Connected System: Disconnect leaves it in place;
+                    Delete removes it. Disabled Synchronisation Rules are shown but are never evaluated.</MudText>
+
+                @if (_exportRuleHeaders == null || _exportRuleHeaders.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        No export Synchronisation Rules target this Metaverse Object Type. When Metaverse Objects of this type
+                        are deleted, no objects in Connected Systems are affected.
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudTable Items="@_exportRuleHeaders" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Elevation="0" Outlined="true">
+                        <HeaderContent>
+                            <MudTh><MudText Typo="Typo.button">Synchronisation Rule</MudText></MudTh>
+                            <MudTh><MudText Typo="Typo.button">Connected System</MudText></MudTh>
+                            <MudTh><MudText Typo="Typo.button">Enabled?</MudText></MudTh>
+                            <MudTh><MudText Typo="Typo.button">Deprovisioning Action</MudText></MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Synchronisation Rule">
+                                <MudLink Href="@($"/admin/sync-rules/{context.Id}")">@context.Name</MudLink>
+                            </MudTd>
+                            <MudTd DataLabel="Connected System">
+                                <MudLink Href="@($"/admin/connected-systems/{context.ConnectedSystemId}")">@context.ConnectedSystemName</MudLink>
+                            </MudTd>
+                            <MudTd DataLabel="Enabled?">
+                                @if (context.Enabled)
+                                {
+                                    <MudText Typo="Typo.body2">Yes</MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">No</MudText>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Deprovisioning Action">
+                                <MudSelect T="OutboundDeprovisionAction" Value="@context.OutboundDeprovisionAction"
+                                           ValueChanged="@((OutboundDeprovisionAction newAction) => OnDeprovisionActionChangedAsync(context, newAction))"
+                                           Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-0" Style="max-width: 200px;">
+                                    <MudSelectItem Value="OutboundDeprovisionAction.Disconnect">Disconnect</MudSelectItem>
+                                    <MudSelectItem Value="OutboundDeprovisionAction.Delete">Delete</MudSelectItem>
+                                </MudSelect>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
             </MudPaper>
         </MudTabPanel>
 
@@ -350,7 +404,7 @@
     private int _gracePeriodHours;
     private int _gracePeriodMinutes;
     private HashSet<int> _selectedAuthoritativeSources = new();
-    private List<ConnectedSystem> _contributingSystems = new();
+    private List<(int Id, string Name)> _contributingSystems = new();
 
     // Original values for change detection
     private MetaverseObjectDeletionRule _originalDeletionRule;
@@ -358,6 +412,10 @@
     private int _originalGracePeriodHours;
     private int _originalGracePeriodMinutes;
     private HashSet<int> _originalAuthoritativeSources = new();
+
+    // Downstream Deprovisioning (#655): export Synchronisation Rules targeting this Metaverse Object
+    // Type, with their inline-editable Deprovisioning Action.
+    private IList<SyncRuleHeader>? _exportRuleHeaders;
 
     protected override async Task OnInitializedAsync()
     {
@@ -386,27 +444,66 @@
         // Load contributing systems (systems with inbound Synchronisation Rules for this object type)
         await LoadContributingSystemsAsync();
 
+        // Downstream Deprovisioning (#655): export Synchronisation Rules targeting this object type
+        _exportRuleHeaders = await jim.ConnectedSystems.GetSyncRuleHeadersAsync(Id, SyncRuleDirection.Export);
+
         // Initialise deletion rules state
         InitialiseDeletionRulesState();
+    }
+
+    private async Task OnDeprovisionActionChangedAsync(SyncRuleHeader header, OutboundDeprovisionAction newAction)
+    {
+        if (newAction == header.OutboundDeprovisionAction)
+            return;
+
+        // offer an optional reason for the configuration change history; cancelling aborts the change
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+        if (cancelled)
+        {
+            // re-render so the select reverts to the unchanged header value
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            var rule = await jim.ConnectedSystems.GetSyncRuleAsync(header.Id);
+            if (rule == null)
+            {
+                Snackbar.Add("The Synchronisation Rule could not be found. It may have been deleted.", Severity.Error);
+                return;
+            }
+
+            rule.OutboundDeprovisionAction = newAction;
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var success = await jim.ConnectedSystems.CreateOrUpdateSyncRuleAsync(rule, user, changeReason: changeReason);
+            if (!success)
+            {
+                Snackbar.Add($"Failed to update Synchronisation Rule '{rule.Name}'.", Severity.Error);
+                StateHasChanged();
+                return;
+            }
+
+            header.OutboundDeprovisionAction = newAction;
+            Snackbar.Add($"Deprovisioning Action for '{rule.Name}' set to {newAction}.", Severity.Success);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Failed to update the Synchronisation Rule: {ex.Message}", Severity.Error);
+            StateHasChanged();
+        }
     }
 
     private async Task LoadContributingSystemsAsync()
     {
         using var jim = JimFactory.Create();
-        var allSyncRules = await jim.ConnectedSystems.GetSyncRulesAsync();
-        var inboundRulesForType = allSyncRules
-            .Where(sr => sr.Direction == SyncRuleDirection.Import && sr.MetaverseObjectTypeId == Id)
+        var importRuleHeaders = await jim.ConnectedSystems.GetSyncRuleHeadersAsync(Id, SyncRuleDirection.Import);
+        _contributingSystems = importRuleHeaders
+            .GroupBy(h => h.ConnectedSystemId)
+            .Select(g => (Id: g.Key, Name: g.First().ConnectedSystemName))
+            .OrderBy(s => s.Name)
             .ToList();
-
-        var connectedSystemIds = inboundRulesForType.Select(sr => sr.ConnectedSystemId).Distinct();
-        _contributingSystems = new List<ConnectedSystem>();
-
-        foreach (var csId in connectedSystemIds)
-        {
-            var cs = await jim.ConnectedSystems.GetConnectedSystemAsync(csId);
-            if (cs != null)
-                _contributingSystems.Add(cs);
-        }
     }
 
     private void InitialiseDeletionRulesState()

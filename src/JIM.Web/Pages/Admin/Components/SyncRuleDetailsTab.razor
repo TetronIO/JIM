@@ -146,6 +146,13 @@
             this Synchronisation Rule will not be created (provisioned) in the Connected Systems. Enabling this
             option will cause the Metaverse Object to be created in the Connected System. You would typically enable
             this option for a destination system, i.e. when trying to implement a HR to Active Directory flow.</MudText>
+
+        <MudSelect T="OutboundDeprovisionAction" Label="Deprovisioning Action" Class="mt-5"
+                   @bind-Value="@SyncRule.OutboundDeprovisionAction" @bind-Value:after="NotifyChangedAsync"
+                   Variant="Variant.Outlined" HelperText="@GetOutboundDeprovisionActionHelperText()">
+            <MudSelectItem Value="OutboundDeprovisionAction.Disconnect">Disconnect</MudSelectItem>
+            <MudSelectItem Value="OutboundDeprovisionAction.Delete">Delete</MudSelectItem>
+        </MudSelect>
     }
     <MudSwitch Class="mt-5" @bind-Value="@SyncRule.Enabled" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary" Label="Enabled?" />
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">Synchronisation Rules are not evaluated when disabled. Use
@@ -193,6 +200,17 @@
     private async Task NotifyChangedAsync()
     {
         await OnChanged.InvokeAsync();
+    }
+
+    private string GetOutboundDeprovisionActionHelperText()
+    {
+        return SyncRule.OutboundDeprovisionAction switch
+        {
+            OutboundDeprovisionAction.Delete =>
+                "When a Metaverse Object leaves this Synchronisation Rule's scope or is deleted, JIM deletes the corresponding object from the Connected System.",
+            _ =>
+                "When a Metaverse Object leaves this Synchronisation Rule's scope or is deleted, JIM breaks the join and leaves the object in place in the Connected System."
+        };
     }
 
     private async Task HandleConnectedSystemSelectedAsync(string connectedSystemId)

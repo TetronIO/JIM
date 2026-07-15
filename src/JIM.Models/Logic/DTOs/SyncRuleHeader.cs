@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
+
 namespace JIM.Models.Logic.DTOs;
 
 /// <summary>
@@ -47,6 +49,12 @@ public class SyncRuleHeader
     public bool EnforceState { get; set; }
 
     /// <summary>
+    /// For Export rules: Action taken when an MVO falls out of this rule's scope or is deleted.
+    /// Only applicable when Direction = Export.
+    /// </summary>
+    public OutboundDeprovisionAction OutboundDeprovisionAction { get; set; }
+
+    /// <summary>
     /// Creates a header from a SyncRule entity.
     /// </summary>
     public static SyncRuleHeader FromEntity(SyncRule entity)
@@ -67,7 +75,8 @@ public class SyncRuleHeader
             ProvisionToConnectedSystem = entity.ProvisionToConnectedSystem,
             ProjectToMetaverse = entity.ProjectToMetaverse,
             Enabled = entity.Enabled,
-            EnforceState = entity.EnforceState
+            EnforceState = entity.EnforceState,
+            OutboundDeprovisionAction = entity.OutboundDeprovisionAction
         };
     }
 }
