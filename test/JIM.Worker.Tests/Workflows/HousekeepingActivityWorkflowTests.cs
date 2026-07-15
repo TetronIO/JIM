@@ -180,9 +180,11 @@ public class HousekeepingActivityWorkflowTests
         Assert.That(pendingExportRpeis[0].PendingExportId, Is.EqualTo(stagedRecallPendingExport.Id));
         Assert.That(pendingExportRpeis[0].ConnectedSystemObjectId, Is.EqualTo(groupTargetCso.Id));
 
-        // Assert: summary stats reflect the staged recall export.
+        // Assert: summary stats reflect the staged recall export and the deletion itself.
         Assert.That(activity.TotalPendingExports, Is.GreaterThanOrEqualTo(1),
             "TotalPendingExports must reflect the staged recall Pending Export");
+        Assert.That(activity.TotalDeleted, Is.EqualTo(1),
+            "TotalDeleted must count MvoDeleted outcomes so list views show what the batch deleted");
     }
 
     /// <summary>
