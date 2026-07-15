@@ -84,6 +84,19 @@ public abstract class SyncTaskProcessorBase
     protected readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToDelete = [];
     protected readonly List<JIM.Models.Transactional.PendingExport> _pendingExportsToUpdate = [];
 
+    // Page-scoped set of joined, non-PendingProvisioning target CSO ids whose (Metaverse Object,
+    // export rule) pair passed the scope gate during this page's export evaluation (#1018).
+    // A full desired-state evaluation asserts the target object should exist even when it stages no
+    // attribute changes, so any Pending-status Delete Pending Export surviving for one of these CSOs
+    // is a stale deprovision from an earlier scope-out and is cancelled at the page flush.
+    private readonly HashSet<Guid> _inScopeEvaluatedCsoIds = [];
+
+    // Page-scoped set of target CSO ids deprovisioned during this page (a Delete Pending Export was
+    // staged or reused by out-of-scope evaluation). Excluded from stale Delete Pending Export
+    // cancellation so a same-page scope-out, including multi-rule same-system conflicts where another
+    // export rule still has the Metaverse Object in scope, keeps its Delete (#1018).
+    private readonly HashSet<Guid> _deprovisionedCsoIdsThisPage = [];
+
     // Batch collection for deferred CSO join/projection updates (JoinType, DateJoined, MetaverseObjectId).
     // CSO scalar property changes are NOT detected by EF during sync because AutoDetectChangesEnabled is
     // disabled at page boundaries for performance. Without explicit persistence, JoinType stays as NotJoined
@@ -1422,6 +1435,10 @@ public abstract class SyncTaskProcessorBase
                 _pendingExportsToCreate.AddRange(result.PendingExports);
             }
 
+            // Track joined CSOs evaluated in scope this page, whether or not attribute changes were
+            // staged, so the page flush can cancel stale Delete Pending Exports (#1018).
+            _inScopeEvaluatedCsoIds.UnionWith(result.InScopeJoinedCsoIds);
+
             // Attach export evaluation outcomes to the originating RPEI (Detailed mode only).
             // Causal tree structure:
             //   Root (Projected/Joined/AttributeFlow)
@@ -1568,10 +1585,18 @@ public abstract class SyncTaskProcessorBase
         // Evaluate if MVO has fallen OUT of scope for any export rules (deprovisioning), using cached data
         using (Diagnostics.Sync.StartSpan("EvaluateOutOfScopeExports"))
         {
-            await _syncServer.EvaluateOutOfScopeExportsAsync(
+            var deprovisionPendingExports = await _syncServer.EvaluateOutOfScopeExportsAsync(
                 mvo,
                 _connectedSystem,
                 _exportEvaluationCache!);
+
+            // Track CSOs deprovisioned this page (newly staged or reused Delete Pending Exports; they
+            // always reference a CSO) so the stale Delete Pending Export cancellation at the page flush
+            // does not cancel a same-page scope-out (#1018).
+            foreach (var deprovisionPendingExport in deprovisionPendingExports)
+            {
+                _deprovisionedCsoIdsThisPage.Add(deprovisionPendingExport.ConnectedSystemObjectId!.Value);
+            }
         }
     }
 
@@ -2449,11 +2474,15 @@ public abstract class SyncTaskProcessorBase
     /// Batch persists all provisioning CSOs and Pending Export creates, deletes, and updates collected during the current page.
     /// CSOs must be created before Pending Exports since Pending Exports reference CSOs by ID.
     /// This reduces database round trips from n writes to 4 writes (CSOs, creates, deletes, updates).
+    /// Also cancels stale Delete Pending Exports for CSOs evaluated back in scope this page (#1018);
+    /// that path can have work to do even when no Pending Export operations were staged, which is why
+    /// the early return also considers the page-scoped scope-evaluation sets.
     /// </summary>
     protected async Task FlushPendingExportOperationsAsync()
     {
         if (_provisioningCsosToCreate.Count == 0 && _pendingExportsToCreate.Count == 0 &&
-            _pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0)
+            _pendingExportsToDelete.Count == 0 && _pendingExportsToUpdate.Count == 0 &&
+            _inScopeEvaluatedCsoIds.Count == 0 && _deprovisionedCsoIdsThisPage.Count == 0)
             return;
 
         using var span = Diagnostics.Sync.StartSpan("FlushPendingExportOperations");
@@ -2487,6 +2516,11 @@ public abstract class SyncTaskProcessorBase
             Log.Verbose("FlushPendingExportOperationsAsync: Created {Count} provisioning CSOs in batch", _provisioningCsosToCreate.Count);
             _provisioningCsosToCreate.Clear();
         }
+
+        // Cancel stale Delete Pending Exports for CSOs whose (Metaverse Object, export rule) pair was
+        // evaluated in scope during this page (#1018). Runs before the reconcile below so a stale
+        // Delete from an earlier scope-out cannot suppress a freshly staged export for a returned object.
+        await CancelStalePendingDeleteExportsAsync();
 
         // Pre-export reconciliation: detect deferred CREATE/UPDATE PEs whose CSOs already have
         // a DELETE PE persisted to the DB (created immediately by HandleOutboundDeprovisioningAsync
@@ -2685,6 +2719,49 @@ public abstract class SyncTaskProcessorBase
             Log.Information("ReconcileDeferredExportsAgainstPersistedDeletesAsync: Reconciled {Count} CREATE/UPDATE+DELETE pairs in this page",
                 reconciledCount);
         }
+    }
+
+    /// <summary>
+    /// Cancels stale Delete Pending Exports for CSOs evaluated in scope during this page (#1018).
+    /// A full desired-state evaluation covering an in-scope, joined CSO asserts the target object
+    /// should exist; a surviving Pending-status Delete Pending Export for it is a stale deprovision
+    /// from an earlier scope-out and must not execute (it would delete a live, in-scope object's
+    /// target account). CSOs deprovisioned THIS page are excluded so a same-page scope-out
+    /// (including multi-rule same-system conflicts) keeps its Delete.
+    /// </summary>
+    private async Task CancelStalePendingDeleteExportsAsync()
+    {
+        var candidateCsoIds = _inScopeEvaluatedCsoIds.Except(_deprovisionedCsoIdsThisPage).ToList();
+
+        // Both sets are page-scoped: clear them regardless of whether any candidates were found.
+        _inScopeEvaluatedCsoIds.Clear();
+        _deprovisionedCsoIdsThisPage.Clear();
+
+        if (candidateCsoIds.Count == 0)
+            return;
+
+        using var span = Diagnostics.Sync.StartSpan("CancelStalePendingDeleteExports");
+        span.SetTag("candidateCount", candidateCsoIds.Count);
+
+        var persistedPesByCsoId = await _syncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(candidateCsoIds);
+        var staleDeletes = persistedPesByCsoId.Values
+            .Where(pe => pe.ChangeType == PendingExportChangeType.Delete &&
+                         pe.Status == PendingExportStatus.Pending)
+            .ToList();
+
+        span.SetTag("cancelledCount", staleDeletes.Count);
+
+        if (staleDeletes.Count > 0)
+        {
+            await _syncRepo.DeletePendingExportsAsync(staleDeletes);
+
+            Log.Information("CancelStalePendingDeleteExportsAsync: Cancelled {Count} stale Delete Pending Export(s) for CSO(s) evaluated back in scope this page (#1018)",
+                staleDeletes.Count);
+            Log.Debug("CancelStalePendingDeleteExportsAsync: Cancelled stale Delete Pending Exports for CSO ids {CsoIds}",
+                staleDeletes.Select(pe => pe.ConnectedSystemObjectId));
+        }
+
+        span.SetSuccess();
     }
 
     /// <summary>

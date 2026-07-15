@@ -1006,21 +1006,35 @@ public class SyncRepository : ISyncRepository
     }
 
     /// <summary>
-    /// Mirrors the PostgreSQL deletion path's reference FK nulling (SET "ReferenceValueId" = NULL on
-    /// surviving rows pointing at deleted MVOs). Without this, code that wrongly reads live reference
-    /// rows instead of the pre-deletion recall capture passes in-memory tests and fails only on
-    /// PostgreSQL (#1003).
+    /// Mirrors the PostgreSQL deletion path's reference row clean-up (#1003, #1019): valueless rows on
+    /// surviving objects that reference deleted MVOs are removed entirely (leaving them behind as
+    /// all-null "ghost" rows corrupted member lists and later exports), while rows carrying payload
+    /// keep the legacy behaviour of having only their reference nulled. Without this mirror, code that
+    /// wrongly reads live reference rows instead of the pre-deletion recall capture passes in-memory
+    /// tests and fails only on PostgreSQL. Predicate parity with the raw SQL lives in
+    /// <see cref="MetaverseObjectAttributeValue.IsValuelessReferenceRow"/>.
     /// </summary>
     private void NullReferencesToDeletedMvos(IReadOnlySet<Guid> deletedMvoIds)
     {
-        foreach (var attributeValue in _mvos.Values
-                     .SelectMany(mvo => mvo.AttributeValues)
-                     .Where(av => (av.ReferenceValueId.HasValue && deletedMvoIds.Contains(av.ReferenceValueId.Value)) ||
-                                  (av.ReferenceValue != null && deletedMvoIds.Contains(av.ReferenceValue.Id))))
+        foreach (var mvo in _mvos.Values)
         {
-            attributeValue.ReferenceValueId = null;
-            attributeValue.ReferenceValue = null;
+            if (deletedMvoIds.Contains(mvo.Id))
+                continue;
+
+            mvo.AttributeValues.RemoveAll(av => ReferencesDeletedMvo(av, deletedMvoIds) && av.IsValuelessReferenceRow());
+
+            foreach (var attributeValue in mvo.AttributeValues.Where(av => ReferencesDeletedMvo(av, deletedMvoIds)))
+            {
+                attributeValue.ReferenceValueId = null;
+                attributeValue.ReferenceValue = null;
+            }
         }
+    }
+
+    private static bool ReferencesDeletedMvo(MetaverseObjectAttributeValue attributeValue, IReadOnlySet<Guid> deletedMvoIds)
+    {
+        return (attributeValue.ReferenceValueId.HasValue && deletedMvoIds.Contains(attributeValue.ReferenceValueId.Value)) ||
+               (attributeValue.ReferenceValue != null && deletedMvoIds.Contains(attributeValue.ReferenceValue.Id));
     }
 
     public Task DeleteMetaverseObjectAttributeValuesByIdsAsync(IReadOnlyList<Guid> attributeValueIds)

@@ -1027,9 +1027,95 @@ public class ExportEvaluationNoChangeTests
     /// <summary>
     /// When multi-valued attribute values are removed and matched by persisted entity Id
     /// (second matching strategy — values that have been saved to the database and have a non-empty Id).
+    /// Uses a multi-valued Text attribute so the Remove change can carry the removed value; a reference
+    /// row without a reference value emits nothing at all (see the companion test below, #1019).
     /// </summary>
     [Test]
     public void CreateAttributeValueChanges_MultiValuedRemovals_MatchedByEntityIdAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvGroupType = MetaverseObjectTypesData.Single(q => q.Name == "Group");
+
+        var proxyAddressesMvAttr = new MetaverseAttribute
+        {
+            Id = 990,
+            Name = "ProxyAddresses",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued
+        };
+        var targetDisplayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportSyncRule.ConnectedSystemId = targetSystem.Id;
+        exportSyncRule.ConnectedSystem = targetSystem;
+        exportSyncRule.AttributeFlowRules.Clear();
+        exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
+        {
+            Id = 100,
+            SyncRule = exportSyncRule,
+            TargetConnectedSystemAttribute = targetDisplayNameAttr,
+            TargetConnectedSystemAttributeId = targetDisplayNameAttr.Id,
+            Sources = { new SyncRuleMappingSource
+            {
+                Id = 200,
+                Order = 0,
+                MetaverseAttribute = proxyAddressesMvAttr,
+                MetaverseAttributeId = proxyAddressesMvAttr.Id
+            }}
+        });
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvGroupType;
+        mvo.AttributeValues.Clear();
+
+        // Create values without ReferenceValueId but with persisted entity Ids
+        // (second matching strategy: mvoValue.Id != Guid.Empty && rv.Id == mvoValue.Id)
+        var sharedId = Guid.NewGuid();
+        var removedValue = new MetaverseObjectAttributeValue
+        {
+            Id = sharedId,
+            MetaverseObject = mvo,
+            Attribute = proxyAddressesMvAttr,
+            AttributeId = proxyAddressesMvAttr.Id,
+            StringValue = "some-value"
+        };
+
+        var changedAttributes = new List<MetaverseObjectAttributeValue> { removedValue };
+        var removedAttributes = new HashSet<MetaverseObjectAttributeValue> { removedValue };
+
+        var existingCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Type = targetUserType,
+            Status = ConnectedSystemObjectStatus.Normal
+        };
+
+        // Act
+        var changes = Jim.ExportEvaluation.CreateAttributeValueChanges(
+            mvo, exportSyncRule, changedAttributes, PendingExportChangeType.Update,
+            existingCso: existingCso, csoAttributeCache: null, csoAlreadyCurrentCount: out _,
+            removedAttributes: removedAttributes);
+
+        // Assert
+        Assert.That(changes, Has.Count.EqualTo(1));
+        Assert.That(changes[0].ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Remove),
+            "Value matched by entity Id should produce a Remove change");
+        Assert.That(changes[0].StringValue, Is.EqualTo("some-value"),
+            "The Remove change must carry the removed value so the target system knows what to remove");
+    }
+
+    /// <summary>
+    /// A removed reference row matched by entity Id but carrying no reference value cannot name what
+    /// to remove; staging an all-null Remove would be unactionable by connectors, so nothing is
+    /// emitted (#1019). Reference removals always carry their reference value in production: the
+    /// deletion flush reconstructs removed rows from the pre-deletion capture.
+    /// </summary>
+    [Test]
+    public void CreateAttributeValueChanges_MultiValuedReferenceRemoval_WithoutReferenceValue_EmitsNoChangeAsync()
     {
         // Arrange
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
@@ -1062,17 +1148,13 @@ public class ExportEvaluationNoChangeTests
         mvo.Type = mvGroupType;
         mvo.AttributeValues.Clear();
 
-        // Create values without ReferenceValueId but with persisted entity Ids
-        // (second matching strategy: mvoValue.Id != Guid.Empty && rv.Id == mvoValue.Id)
-        var sharedId = Guid.NewGuid();
         var removedValue = new MetaverseObjectAttributeValue
         {
-            Id = sharedId,
+            Id = Guid.NewGuid(),
             MetaverseObject = mvo,
             Attribute = memberMvAttr,
             AttributeId = memberMvAttr.Id,
-            ReferenceValueId = null, // no reference — forces Id-based matching
-            StringValue = "some-value"
+            ReferenceValueId = null // valueless: nothing exportable to remove
         };
 
         var changedAttributes = new List<MetaverseObjectAttributeValue> { removedValue };
@@ -1094,9 +1176,8 @@ public class ExportEvaluationNoChangeTests
             removedAttributes: removedAttributes);
 
         // Assert
-        Assert.That(changes, Has.Count.EqualTo(1));
-        Assert.That(changes[0].ChangeType, Is.EqualTo(PendingExportAttributeChangeType.Remove),
-            "Value matched by entity Id should produce a Remove change");
+        Assert.That(changes, Is.Empty,
+            "A reference removal with no reference value is unactionable and must not be staged");
     }
 
     /// <summary>

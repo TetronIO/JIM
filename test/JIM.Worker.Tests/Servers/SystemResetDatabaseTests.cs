@@ -171,6 +171,65 @@ public class SystemResetDatabaseTests
         Assert.That(adminRoleStillAssigned, Is.EqualTo(1));
     }
 
+    /// <summary>
+    /// A preserved administrator whose reference attribute (for example Manager) pointed at a wiped
+    /// object must not keep an informationless all-null ghost row after the reset (#1019): the
+    /// restore nulls references to wiped objects before re-inserting, and a valueless row asserts
+    /// nothing while rendering as a blank entry and corrupting later exports.
+    /// </summary>
+    [Test]
+    public async Task ResetSystemAsync_AdminReferencedWipedObject_NoGhostRowRestoredAsync()
+    {
+        Guid adminId;
+        await using (var seed = NewContext())
+        {
+            var adminRole = new Role { Name = Constants.BuiltInRoles.Administrator, BuiltIn = true };
+            var userType = new MetaverseObjectType { Name = Constants.BuiltInObjectTypes.User, PluralName = "Users", BuiltIn = true };
+            var displayNameAttr = new MetaverseAttribute
+            {
+                Name = Constants.BuiltInAttributes.DisplayName,
+                Type = AttributeDataType.Text,
+                AttributePlurality = AttributePlurality.SingleValued,
+                BuiltIn = true
+            };
+            var managerAttr = new MetaverseAttribute
+            {
+                Name = Constants.BuiltInAttributes.Manager,
+                Type = AttributeDataType.Reference,
+                AttributePlurality = AttributePlurality.SingleValued,
+                BuiltIn = true
+            };
+            seed.Roles.Add(adminRole);
+            seed.MetaverseObjectTypes.Add(userType);
+            seed.MetaverseAttributes.AddRange(displayNameAttr, managerAttr);
+
+            var wipedManager = new MetaverseObject { Type = userType, Roles = new List<Role>() };
+            var admin = new MetaverseObject { Type = userType, Roles = new List<Role> { adminRole } };
+            admin.AttributeValues.Add(new MetaverseObjectAttributeValue { MetaverseObject = admin, Attribute = displayNameAttr, StringValue = "Ada Admin" });
+            admin.AttributeValues.Add(new MetaverseObjectAttributeValue { MetaverseObject = admin, Attribute = managerAttr, ReferenceValue = wipedManager });
+            seed.MetaverseObjects.AddRange(admin, wipedManager);
+            seed.Add(new ServiceSettings { IsServiceInMaintenanceMode = false });
+            await seed.SaveChangesAsync();
+            adminId = admin.Id;
+        }
+
+        await using (var ctx = NewContext())
+        {
+            var repository = new PostgresDataRepository(ctx);
+            var result = await repository.System.ResetSystemAsync(includeAdministrators: false);
+            Assert.That(result.AdministratorsRetained, Is.EqualTo(1));
+        }
+
+        await using var verify = NewContext();
+        var adminRows = await verify.MetaverseObjectAttributeValues
+            .Where(av => av.MetaverseObject.Id == adminId)
+            .Include(av => av.Attribute)
+            .ToListAsync();
+        Assert.That(adminRows, Has.Count.EqualTo(1),
+            "Only the Display Name row may survive; the Manager row pointed at a wiped object and became valueless");
+        Assert.That(adminRows[0].Attribute.Name, Is.EqualTo(Constants.BuiltInAttributes.DisplayName));
+    }
+
     [Test]
     public async Task ResetSystemAsync_IncludeAdministrators_RemovesAdministratorsTooAsync()
     {

@@ -220,6 +220,21 @@ internal sealed class SystemRepository : ISystemRepository
         // Synchronisation Rules are truncated by the reset, so a preserved admin attribute value carrying
         // rule provenance (#91) would violate the ContributedBySyncRuleId foreign key on re-insert.
         await db.ExecuteSqlRawAsync(@"UPDATE _reset_admin_mvav SET ""ContributedBySyncRuleId"" = NULL WHERE ""ContributedBySyncRuleId"" IS NOT NULL;");
+        // Rows the nulling left valueless (for example a Manager reference to a wiped object) assert
+        // nothing and must not be restored as ghost rows (#1019). Predicate parity with
+        // MetaverseObjectAttributeValue.IsValuelessReferenceRow.
+        await db.ExecuteSqlRawAsync(
+            @"DELETE FROM _reset_admin_mvav
+              WHERE ""ReferenceValueId"" IS NULL
+                AND ""UnresolvedReferenceValueId"" IS NULL
+                AND ""StringValue"" IS NULL
+                AND ""DateTimeValue"" IS NULL
+                AND ""IntValue"" IS NULL
+                AND ""LongValue"" IS NULL
+                AND ""ByteValue"" IS NULL
+                AND ""GuidValue"" IS NULL
+                AND ""BoolValue"" IS NULL
+                AND ""NullValue"" = false;");
         await db.ExecuteSqlRawAsync(@"INSERT INTO ""MetaverseObjectAttributeValues"" SELECT * FROM _reset_admin_mvav;");
         await db.ExecuteSqlRawAsync(@"INSERT INTO ""MetaverseObjectRole"" SELECT * FROM _reset_admin_role;");
     }

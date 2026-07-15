@@ -6,6 +6,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Staging;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 namespace JIM.PostgresData.Repositories;
@@ -22,6 +23,64 @@ public class ActivityRepository : IActivityRepository
     public async Task CreateActivityAsync(Activity activity)
     {
         Repository.Database.Activities.Add(activity);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task CreateActivityRunProfileExecutionItemsAsync(IReadOnlyCollection<ActivityRunProfileExecutionItem> items)
+    {
+        if (items.Count == 0)
+            return;
+
+        foreach (var item in items.Where(i => i.Id == Guid.Empty))
+            item.Id = Guid.NewGuid();
+
+        // AddRange traverses each item's navigation graph and marks every untracked entity it reaches as Added.
+        // Connected System Object change snapshots carried on the sync outcomes reference pre-existing entities
+        // (the CSO the change belongs to, attribute definitions), which must not be re-inserted. Sever those
+        // navigations first, preserving their scalar/shadow foreign keys so the persisted rows keep the links.
+        var severedAttributeIds = new List<(ConnectedSystemObjectChangeAttribute AttributeChange, int AttributeId)>();
+        var severedReferenceValueIds = new List<(ConnectedSystemObjectChangeAttributeValue ValueChange, Guid ReferenceCsoId)>();
+        var changeSnapshots = items
+            .SelectMany(i => i.SyncOutcomes.Select(o => o.ConnectedSystemObjectChange))
+            .Concat(items.Select(i => i.ConnectedSystemObjectChange))
+            .Where(c => c != null)
+            .Select(c => c!)
+            .Distinct()
+            .ToList();
+
+        foreach (var change in changeSnapshots)
+        {
+            if (change.ConnectedSystemObject != null)
+            {
+                change.ConnectedSystemObjectId ??= change.ConnectedSystemObject.Id;
+                change.ConnectedSystemObject = null;
+            }
+
+            foreach (var attributeChange in change.AttributeChanges)
+            {
+                if (attributeChange.Attribute != null)
+                {
+                    severedAttributeIds.Add((attributeChange, attributeChange.Attribute.Id));
+                    attributeChange.Attribute = null;
+                }
+
+                foreach (var valueChange in attributeChange.ValueChanges.Where(vc => vc.ReferenceValue != null))
+                {
+                    severedReferenceValueIds.Add((valueChange, valueChange.ReferenceValue!.Id));
+                    valueChange.ReferenceValue = null;
+                }
+            }
+        }
+
+        Repository.Database.ActivityRunProfileExecutionItems.AddRange(items);
+
+        // Re-apply the severed foreign keys via their shadow properties now the entities are tracked.
+        foreach (var (attributeChange, attributeId) in severedAttributeIds)
+            Repository.Database.Entry(attributeChange).Property("AttributeId").CurrentValue = attributeId;
+        foreach (var (valueChange, referenceCsoId) in severedReferenceValueIds)
+            Repository.Database.Entry(valueChange).Property("ReferenceValueId").CurrentValue = referenceCsoId;
+
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -1001,6 +1060,7 @@ public class ActivityRepository : IActivityRepository
         int totalPendingExportsFromOutcomes;
         int totalDriftCorrections;
         int totalProvisioned;
+        int totalMvoDeleted;
 
         if (hasOutcomes)
         {
@@ -1039,13 +1099,22 @@ public class ActivityRepository : IActivityRepository
 
             // Provisioned from outcomes (outcome-only concept, no legacy fallback)
             outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned, out totalProvisioned);
+
+            // Metaverse Object deletions from outcomes (housekeeping batches, #1020)
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted, out totalMvoDeleted);
         }
         else
         {
-            // Legacy fallback: derive stats from RPEI ObjectChangeType (pre-outcome graph behaviour)
+            // Legacy fallback: derive stats from RPEI ObjectChangeType (pre-outcome graph behaviour).
+            // ObjectChangeType.Deleted is ambiguous between CSO and Metaverse Object deletions; the
+            // Activity's target type disambiguates: a housekeeping batch only ever deletes MVOs.
+            var isHousekeeping = activity?.TargetType == ActivityTargetType.MetaverseObjectHousekeeping;
+            var totalDeleted = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deleted).Sum(x => x.Count);
+
             totalCsoAdds = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Added).Sum(x => x.Count);
             totalCsoUpdates = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Updated).Sum(x => x.Count);
-            totalCsoDeletes = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deleted).Sum(x => x.Count);
+            totalCsoDeletes = isHousekeeping ? 0 : totalDeleted;
+            totalMvoDeleted = isHousekeeping ? totalDeleted : 0;
 
             totalProjections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Projected).Sum(x => x.Count);
             totalJoins = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Joined).Sum(x => x.Count);
@@ -1109,6 +1178,7 @@ public class ActivityRepository : IActivityRepository
             TotalOutOfScopeRetainJoin = totalOutOfScopeRetainJoin,
             TotalDriftCorrections = totalDriftCorrections,
             TotalProvisioned = totalProvisioned,
+            TotalMvoDeleted = totalMvoDeleted,
 
             // Direct creation stats
             TotalCreated = totalCreated,

@@ -365,6 +365,17 @@ public class ExportEvaluationServer
                 continue;
             }
 
+            // Record joined, non-PendingProvisioning target CSOs whose (Metaverse Object, export rule)
+            // pair passed the scope gate, whether or not any attribute changes are staged below. The page
+            // flush uses these to cancel stale Delete Pending Exports left by an earlier scope-out (#1018).
+            // Reference recall is excluded: it is not a desired-state assertion for existence.
+            if (!recallSemantics &&
+                cache.CsoLookup.TryGetValue((mvo.Id, exportRule.ConnectedSystemId), out var inScopeCso) &&
+                inScopeCso.Status != ConnectedSystemObjectStatus.PendingProvisioning)
+            {
+                result.InScopeJoinedCsoIds.Add(inScopeCso.Id);
+            }
+
             // Flatten the pre-resolved reference values for this rule's target system (reference recall, #908).
             IReadOnlyDictionary<Guid, string>? preResolvedForSystem = null;
             if (preResolvedReferences != null)
@@ -2606,17 +2617,24 @@ public class ExportEvaluationServer
                                 // MVO -> joined CSO) can never succeed for it. In that case store the resolved
                                 // target value (for example the DN) directly, exactly as export execution would.
                                 var referencedMvoId = mvoValue.ReferenceValue?.Id ?? mvoValue.ReferenceValueId;
-                                if (referencedMvoId.HasValue)
+                                if (!referencedMvoId.HasValue)
                                 {
-                                    if (preResolvedReferenceValues != null &&
-                                        preResolvedReferenceValues.TryGetValue(referencedMvoId.Value, out var preResolvedValue))
-                                    {
-                                        attributeChange.StringValue = preResolvedValue;
-                                    }
-                                    else
-                                    {
-                                        attributeChange.UnresolvedReferenceValue = referencedMvoId.Value.ToString();
-                                    }
+                                    // A reference row with no referenced object carries nothing exportable, for
+                                    // example a ghost row left by a pre-#1019 Metaverse Object deletion; emitting
+                                    // it would stage an all-null change. Single-valued removals never reach here
+                                    // (they skip value assignment entirely), so the clearing change is unaffected.
+                                    Log.Debug("CreateAttributeValueChanges: Skipping valueless reference row {MvoValueId} for attribute {AttrName}",
+                                        mvoValue.Id, source.MetaverseAttribute.Name);
+                                    continue;
+                                }
+                                if (preResolvedReferenceValues != null &&
+                                    preResolvedReferenceValues.TryGetValue(referencedMvoId.Value, out var preResolvedValue))
+                                {
+                                    attributeChange.StringValue = preResolvedValue;
+                                }
+                                else
+                                {
+                                    attributeChange.UnresolvedReferenceValue = referencedMvoId.Value.ToString();
                                 }
                                 break;
                         }
