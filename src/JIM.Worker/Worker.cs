@@ -983,7 +983,8 @@ public class Worker : BackgroundService
             activity.TotalUpdated += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated);
             activity.TotalDeleted += allOutcomes.Count(o => o.OutcomeType is
                 ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted
-                or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected);
+                or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected
+                or ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
 
             activity.TotalProjected += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
             activity.TotalJoined += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
@@ -1039,10 +1040,12 @@ public class Worker : BackgroundService
             // Import stats from outcomes
             activity.TotalAdded = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded);
             activity.TotalUpdated = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated);
-            // Deletions: CsoDeleted (sync-phase actual deletions) + DeletionDetected (import-phase detection)
+            // Deletions: CsoDeleted (sync-phase actual deletions) + DeletionDetected (import-phase
+            // detection) + MvoDeleted (Metaverse Object Housekeeping batches)
             activity.TotalDeleted = allOutcomes.Count(o => o.OutcomeType is
                 ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted
-                or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected);
+                or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected
+                or ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
 
             // Sync stats from outcomes
             activity.TotalProjected = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected);

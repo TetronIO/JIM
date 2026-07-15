@@ -44,6 +44,8 @@ For Run Profile activities, JIM stores a per-object record of what happened (wit
 
 When a Metaverse Object's [deletion grace period](metaverse.md) expires, a background housekeeping process on the worker deletes it and stages membership-removal Pending Exports for any objects (such as groups) that referenced it. Each housekeeping batch that actually does work is recorded as a **Metaverse Object Housekeeping** activity, with an execution item per deleted Metaverse Object, per staged Pending Export, and per per-object failure, so grace-period deletions are auditable from the Activities page rather than only visible in service logs. A quiet housekeeping pass with nothing to delete records no activity.
 
+The activity's detail page shows the batch like a Run Profile execution: summary cards (Metaverse Objects Deleted, Recall Pending Exports, Object Types, Errors) above a searchable, filterable table listing each deleted object by name and type, with any per-object errors alongside.
+
 ## Parent and child activities
 
 A schedule execution typically appears as a parent activity with one child activity per step. Use the children listing to walk down a schedule's execution tree from the top-level run into the individual operations it triggered.

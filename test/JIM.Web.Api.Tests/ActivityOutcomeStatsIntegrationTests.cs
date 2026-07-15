@@ -56,12 +56,15 @@ public class ActivityOutcomeStatsIntegrationTests
 
     #region Helper Methods
 
-    private async Task<Activity> CreateActivityAsync(int objectsProcessed = 0, int pendingExportsConfirmed = 0)
+    private async Task<Activity> CreateActivityAsync(
+        int objectsProcessed = 0,
+        int pendingExportsConfirmed = 0,
+        ActivityTargetType targetType = ActivityTargetType.ConnectedSystemRunProfile)
     {
         var activity = new Activity
         {
             Id = Guid.NewGuid(),
-            TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+            TargetType = targetType,
             Status = ActivityStatus.Complete,
             Created = DateTime.UtcNow,
             ObjectsProcessed = objectsProcessed,
@@ -503,6 +506,69 @@ public class ActivityOutcomeStatsIntegrationTests
 
         var itemWithoutSummary = result.Results.Single(r => r.ObjectChangeType == ObjectChangeType.Added);
         Assert.That(itemWithoutSummary.OutcomeSummary, Is.Null);
+    }
+
+    #endregion
+
+    #region Metaverse Object Housekeeping stats
+
+    [Test]
+    public async Task GetStats_HousekeepingOutcomeBased_DerivesMvoDeletedFromOutcomesAsync()
+    {
+        // Arrange: a Metaverse Object Housekeeping Activity (#1020) — deletions carry MvoDeleted
+        // outcomes and staged recall exports carry PendingExportCreated outcomes.
+        var activity = await CreateActivityAsync(objectsProcessed: 3, targetType: ActivityTargetType.MetaverseObjectHousekeeping);
+
+        for (var i = 0; i < 3; i++)
+        {
+            var rpei = await CreateRpeiAsync(activity, ObjectChangeType.Deleted);
+            await CreateOutcomeAsync(rpei, ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        }
+
+        var recallRpei = await CreateRpeiAsync(activity, ObjectChangeType.PendingExport);
+        await CreateOutcomeAsync(recallRpei, ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+
+        // Act
+        var stats = await _repository.Activity.GetActivityRunProfileExecutionStatsAsync(activity.Id);
+
+        // Assert
+        Assert.That(stats.TotalMvoDeleted, Is.EqualTo(3));
+        Assert.That(stats.TotalPendingExports, Is.EqualTo(1));
+        Assert.That(stats.TotalCsoDeletes, Is.EqualTo(0),
+            "Metaverse Object deletions must not be reported as CSO deletions");
+    }
+
+    [Test]
+    public async Task GetStats_HousekeepingLegacyFallback_CountsDeletedRpeisAsMvoDeletedAsync()
+    {
+        // Arrange: no outcomes (tracking level None) — the fallback derives from ObjectChangeType, and
+        // because the Activity is a housekeeping batch its Deleted items are Metaverse Object deletions.
+        var activity = await CreateActivityAsync(objectsProcessed: 4, targetType: ActivityTargetType.MetaverseObjectHousekeeping);
+        for (var i = 0; i < 4; i++)
+            await CreateRpeiAsync(activity, ObjectChangeType.Deleted);
+
+        // Act
+        var stats = await _repository.Activity.GetActivityRunProfileExecutionStatsAsync(activity.Id);
+
+        // Assert
+        Assert.That(stats.TotalMvoDeleted, Is.EqualTo(4));
+        Assert.That(stats.TotalCsoDeletes, Is.EqualTo(0),
+            "Metaverse Object deletions must not be reported as CSO deletions");
+    }
+
+    [Test]
+    public async Task GetStats_RunProfileLegacyFallback_DoesNotCountDeletedAsMvoDeletedAsync()
+    {
+        // Arrange: pin — a Run Profile execution's Deleted items remain CSO deletions in the fallback.
+        var activity = await CreateActivityAsync(objectsProcessed: 2);
+        await CreateRpeiAsync(activity, ObjectChangeType.Deleted);
+
+        // Act
+        var stats = await _repository.Activity.GetActivityRunProfileExecutionStatsAsync(activity.Id);
+
+        // Assert
+        Assert.That(stats.TotalMvoDeleted, Is.EqualTo(0));
+        Assert.That(stats.TotalCsoDeletes, Is.EqualTo(1));
     }
 
     #endregion
