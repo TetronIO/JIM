@@ -94,5 +94,13 @@ public enum ActivityTargetType
     /// (see <see cref="JIM.Models.Core.Constants.SettingKeys.SecurityEventRetentionPeriod"/>), separate from general
     /// history and configuration-change retention.
     /// </summary>
-    Authentication = 22
+    Authentication = 22,
+
+    /// <summary>
+    /// A Metaverse Object Housekeeping batch (issue #1020): the worker's idle-time deletion of Metaverse Objects
+    /// whose deletion grace period has expired, including the reference-recall Pending Exports staged for objects
+    /// (for example groups) that referenced them. Created only when a batch actually has work to do; a quiet idle
+    /// tick records no Activity at all.
+    /// </summary>
+    MetaverseObjectHousekeeping = 23
 }
