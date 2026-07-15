@@ -1,6 +1,10 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Linq;
+using System.Security.Claims;
+using JIM.Models.Core;
+using JIM.Models.Security;
 using JIM.Web.Middleware.Api;
 using NUnit.Framework;
 
@@ -128,6 +132,60 @@ public class ApiKeyAuthenticationTests
         var hash2 = ApiKeyAuthenticationHandler.HashApiKey(key2);
 
         Assert.That(hash1, Is.Not.EqualTo(hash2));
+    }
+
+    #endregion
+
+    #region BuildApiKeyClaims tests
+
+    [Test]
+    public void BuildApiKeyClaims_InfrastructureKey_IncludesInfrastructureClaim()
+    {
+        var apiKey = new ApiKey
+        {
+            Id = System.Guid.NewGuid(),
+            Name = "Infrastructure Key",
+            KeyPrefix = "jim_ak_abcde",
+            IsInfrastructureKey = true
+        };
+
+        var claims = ApiKeyAuthenticationHandler.BuildApiKeyClaims(apiKey);
+
+        Assert.That(claims.Any(c => c.Type == Constants.BuiltInClaims.IsInfrastructureKey && c.Value == "true"), Is.True);
+    }
+
+    [Test]
+    public void BuildApiKeyClaims_OrdinaryKey_OmitsInfrastructureClaim()
+    {
+        var apiKey = new ApiKey
+        {
+            Id = System.Guid.NewGuid(),
+            Name = "Ordinary Key",
+            KeyPrefix = "jim_ak_fghij",
+            IsInfrastructureKey = false
+        };
+
+        var claims = ApiKeyAuthenticationHandler.BuildApiKeyClaims(apiKey);
+
+        Assert.That(claims.Any(c => c.Type == Constants.BuiltInClaims.IsInfrastructureKey), Is.False);
+    }
+
+    [Test]
+    public void BuildApiKeyClaims_AlwaysIncludesIdentityAndVirtualUserRole()
+    {
+        var apiKey = new ApiKey
+        {
+            Id = System.Guid.NewGuid(),
+            Name = "Some Key",
+            KeyPrefix = "jim_ak_klmno",
+            IsInfrastructureKey = false
+        };
+
+        var claims = ApiKeyAuthenticationHandler.BuildApiKeyClaims(apiKey);
+
+        Assert.That(claims.Any(c => c.Type == ClaimTypes.NameIdentifier && c.Value == apiKey.Id.ToString()), Is.True);
+        Assert.That(claims.Any(c => c.Type == ClaimTypes.Name && c.Value == apiKey.Name), Is.True);
+        Assert.That(claims.Any(c => c.Type == Constants.BuiltInRoles.RoleClaimType && c.Value == Constants.BuiltInRoles.User), Is.True);
     }
 
     #endregion
