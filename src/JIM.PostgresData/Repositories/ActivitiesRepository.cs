@@ -1060,6 +1060,7 @@ public class ActivityRepository : IActivityRepository
         int totalPendingExportsFromOutcomes;
         int totalDriftCorrections;
         int totalProvisioned;
+        int totalMvoDeleted;
 
         if (hasOutcomes)
         {
@@ -1098,13 +1099,22 @@ public class ActivityRepository : IActivityRepository
 
             // Provisioned from outcomes (outcome-only concept, no legacy fallback)
             outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned, out totalProvisioned);
+
+            // Metaverse Object deletions from outcomes (housekeeping batches, #1020)
+            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted, out totalMvoDeleted);
         }
         else
         {
-            // Legacy fallback: derive stats from RPEI ObjectChangeType (pre-outcome graph behaviour)
+            // Legacy fallback: derive stats from RPEI ObjectChangeType (pre-outcome graph behaviour).
+            // ObjectChangeType.Deleted is ambiguous between CSO and Metaverse Object deletions; the
+            // Activity's target type disambiguates: a housekeeping batch only ever deletes MVOs.
+            var isHousekeeping = activity?.TargetType == ActivityTargetType.MetaverseObjectHousekeeping;
+            var totalDeleted = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deleted).Sum(x => x.Count);
+
             totalCsoAdds = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Added).Sum(x => x.Count);
             totalCsoUpdates = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Updated).Sum(x => x.Count);
-            totalCsoDeletes = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deleted).Sum(x => x.Count);
+            totalCsoDeletes = isHousekeeping ? 0 : totalDeleted;
+            totalMvoDeleted = isHousekeeping ? totalDeleted : 0;
 
             totalProjections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Projected).Sum(x => x.Count);
             totalJoins = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Joined).Sum(x => x.Count);
@@ -1168,6 +1178,7 @@ public class ActivityRepository : IActivityRepository
             TotalOutOfScopeRetainJoin = totalOutOfScopeRetainJoin,
             TotalDriftCorrections = totalDriftCorrections,
             TotalProvisioned = totalProvisioned,
+            TotalMvoDeleted = totalMvoDeleted,
 
             // Direct creation stats
             TotalCreated = totalCreated,

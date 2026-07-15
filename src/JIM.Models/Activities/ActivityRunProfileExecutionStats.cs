@@ -74,6 +74,12 @@ public class ActivityRunProfileExecutionStats
     /// Provisioning creates a new CSO in a target system as a result of export evaluation.
     /// </summary>
     public int TotalProvisioned { get; set; }
+
+    /// <summary>
+    /// Count of Metaverse Objects deleted. Populated for Metaverse Object Housekeeping Activities
+    /// (grace-period deletion batches) and any run whose items carry MvoDeleted outcomes.
+    /// </summary>
+    public int TotalMvoDeleted { get; set; }
     #endregion
 
     #region Export Stats

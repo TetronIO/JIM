@@ -430,13 +430,29 @@
         </MudStack>
     }
 
-    @if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute && _initialisationComplete && _preferencesLoaded)
+    @if (ShowsExecutionItems && _initialisationComplete && _preferencesLoaded)
     {
         @if (_activityRunProfileExecutionStats != null)
         {
             @* Summary Section *@
             <MudText Typo="Typo.h5" Class="mt-5">Stats</MudText>
             <MudStack Row="true" Class="mt-4 mb-5 flex-wrap" Spacing="3">
+                @* Housekeeping-specific cards - Metaverse Object deletion batches *@
+                @if (IsHousekeepingActivity)
+                {
+                    <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Red.Default}; min-width: 120px;")">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">Metaverse Objects Deleted</MudText>
+                        <MudText Typo="Typo.h4" Color="Color.Error">@_activityRunProfileExecutionStats.TotalMvoDeleted.ToString("N0")</MudText>
+                    </MudPaper>
+                    @if (_activityRunProfileExecutionStats.TotalPendingExports > 0)
+                    {
+                        <MudPaper Class="pa-4" Outlined="true" Style="@($"border-left: 4px solid {Colors.Teal.Default}; min-width: 120px;")">
+                            <MudText Typo="Typo.button" Class="mud-text-secondary">Recall Pending Exports</MudText>
+                            <MudText Typo="Typo.h4" Color="Color.Info">@_activityRunProfileExecutionStats.TotalPendingExports.ToString("N0")</MudText>
+                        </MudPaper>
+                    }
+                }
+
                 @* Import-specific cards *@
                 @if (IsImportRun())
                 {
@@ -548,11 +564,14 @@
                     </MudPaper>
                 }
 
-                @* Unchanged card - always show *@
-                <MudPaper Class="pa-4" Outlined="true" Style="border-left: 4px solid var(--mud-palette-grey-light); min-width: 120px;">
-                    <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Unchanged</MudText>
-                    <MudText Typo="Typo.h4" Class="mud-text-secondary">@_activityRunProfileExecutionStats.TotalUnchanged.ToString("N0")</MudText>
-                </MudPaper>
+                @* Unchanged card - always show for Run Profile executions (housekeeping deletes MVOs, not CSOs) *@
+                @if (!IsHousekeepingActivity)
+                {
+                    <MudPaper Class="pa-4" Outlined="true" Style="border-left: 4px solid var(--mud-palette-grey-light); min-width: 120px;">
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">CSOs Unchanged</MudText>
+                        <MudText Typo="Typo.h4" Class="mud-text-secondary">@_activityRunProfileExecutionStats.TotalUnchanged.ToString("N0")</MudText>
+                    </MudPaper>
+                }
 
                 @* Object Types card *@
                 <MudPaper Class="pa-4" Outlined="true" Style="min-width: 120px;">
@@ -572,7 +591,7 @@
         }
 
         @* Results Section with Filter and Table *@
-        <MudText Typo="Typo.h5">@Helpers.GetRunTypeResultsTitle(_activity.ConnectedSystemRunType)</MudText>
+        <MudText Typo="Typo.h5">@(IsHousekeepingActivity ? "Deletion Results" : Helpers.GetRunTypeResultsTitle(_activity.ConnectedSystemRunType))</MudText>
 
         @* Filter Chips Section *@
         @if (GetAvailableOutcomeTypes().Any() || GetAvailableObjectTypes().Any() || GetAvailableErrorTypes().Any())
@@ -921,6 +940,18 @@
         new("Activity Detail", href: null, disabled: true)
     };
 
+    /// <summary>
+    /// Whether this activity records per-object Run Profile Execution Items and so renders the
+    /// results section (stats cards, filter chips, items table). True for Run Profile executions
+    /// and for Metaverse Object Housekeeping batches (#1020), which reuse the same item model.
+    /// </summary>
+    private bool ShowsExecutionItems =>
+        _activity != null
+        && _activity.TargetOperationType == ActivityTargetOperationType.Execute
+        && _activity.TargetType is ActivityTargetType.ConnectedSystemRunProfile or ActivityTargetType.MetaverseObjectHousekeeping;
+
+    private bool IsHousekeepingActivity => _activity?.TargetType == ActivityTargetType.MetaverseObjectHousekeeping;
+
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedId == Id)
@@ -982,7 +1013,7 @@
         if (_activity.ParentActivityId.HasValue)
             _parentActivity = await jim.Activities.GetActivityAsync(_activity.ParentActivityId.Value);
 
-        if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute)
+        if (ShowsExecutionItems)
             _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
 
         // Only the count is loaded here; the Child Activities table pages its rows from the data layer on demand.
@@ -1247,6 +1278,9 @@
         if (s.TotalCsoDeletes > 0 && IsImportRun()) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected, s.TotalCsoDeletes);
         if (s.TotalCsoDeletes > 0 && IsSyncRun()) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted, s.TotalCsoDeletes);
 
+        // Metaverse Object deletions (housekeeping batches)
+        if (s.TotalMvoDeleted > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted, s.TotalMvoDeleted);
+
         // Sync outcomes
         if (s.TotalProjections > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Projected, s.TotalProjections);
         if (s.TotalJoins > 0) yield return (ActivityRunProfileExecutionItemSyncOutcomeType.Joined, s.TotalJoins);
@@ -1277,6 +1311,10 @@
     /// </summary>
     private bool IsImportRun()
     {
+        // Housekeeping batches have no run type; the heuristics below must not classify them.
+        if (IsHousekeepingActivity)
+            return false;
+
         var runType = _activity?.ConnectedSystemRunType;
         if (runType is ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport)
             return true;
@@ -1304,6 +1342,9 @@
     /// </summary>
     private bool IsSyncRun()
     {
+        if (IsHousekeepingActivity)
+            return false;
+
         var runType = _activity?.ConnectedSystemRunType;
         if (runType is ConnectedSystemRunType.FullSynchronisation or ConnectedSystemRunType.DeltaSynchronisation)
             return true;
@@ -1329,6 +1370,9 @@
     /// </summary>
     private bool IsExportRun()
     {
+        if (IsHousekeepingActivity)
+            return false;
+
         var runType = _activity?.ConnectedSystemRunType;
         if (runType == ConnectedSystemRunType.Export)
             return true;
@@ -1427,7 +1471,7 @@
 
                     // Refresh child activities and stats while in progress
                     _childActivityCount = (await jim.Activities.GetChildActivityCountsAsync([_activity.Id])).GetValueOrDefault(_activity.Id);
-                    if (_activity.TargetType == ActivityTargetType.ConnectedSystemRunProfile && _activity.TargetOperationType == ActivityTargetOperationType.Execute)
+                    if (ShowsExecutionItems)
                         _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
 
                     await InvokeAsync(StateHasChanged);
