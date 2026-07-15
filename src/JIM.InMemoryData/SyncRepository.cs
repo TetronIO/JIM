@@ -806,8 +806,9 @@ public class SyncRepository : ISyncRepository
         if (mvoAttr == null)
             return Task.FromResult<ConnectedSystemObject?>(null);
 
+        // Empty string is treated as no value, matching the Postgres implementation's IsNullOrEmpty guard.
         var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString();
-        if (mvoVal == null)
+        if (string.IsNullOrEmpty(mvoVal))
             return Task.FromResult<ConnectedSystemObject?>(null);
 
         var comparison = rule.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;

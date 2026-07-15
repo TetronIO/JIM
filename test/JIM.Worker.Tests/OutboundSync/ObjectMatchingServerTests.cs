@@ -1321,6 +1321,39 @@ public class ObjectMatchingServerTests
     }
 
     [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_PendingProvisioningCso_ReturnsNullAsync()
+    {
+        // Arrange - the only candidate CSO is PendingProvisioning (an in-flight provision that does not yet
+        // represent a live object in the target system), so it must be excluded.
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP001", status: ConnectedSystemObjectStatus.PendingProvisioning);
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule });
+
+        // Assert
+        Assert.That(result, Is.Null, "A PendingProvisioning CSO must never be returned as an export match");
+    }
+
+    [Test]
     public async Task FindMatchingConnectedSystemObjectAsync_ValueMismatch_ReturnsNullAsync()
     {
         // Arrange - the candidate CSO's value doesn't match the MVO's value.
