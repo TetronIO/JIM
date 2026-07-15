@@ -145,6 +145,25 @@ Describe 'Get-JIMMetaverseObject' {
     }
 }
 
+Describe 'Search-JIMMetaverseObject' {
+
+    Context 'Endpoint routing' {
+
+        It 'Forwards HasAttribute as a hasAttribute query parameter' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false; totalPages = 1 } }
+
+                Search-JIMMetaverseObject -PredefinedSearchUri "users" -HasAttribute "costCentre" | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -like '*hasAttribute=costCentre*'
+                }
+            }
+        }
+    }
+}
+
 Describe 'Get-JIMMetaverseObjectType' {
 
     Context 'Parameter Sets' {

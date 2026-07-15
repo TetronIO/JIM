@@ -687,12 +687,12 @@ Use this cmdlet for fast list views and searches. Use `Get-JIMMetaverseObject` w
 
 ```powershell
 # List (default)
-Search-JIMMetaverseObject -PredefinedSearchUri <string> [-Search <string>] [-SortBy <string>]
-    [-SortDirection <string>] [-Page <int>] [-PageSize <int>]
+Search-JIMMetaverseObject -PredefinedSearchUri <string> [-Search <string>] [-HasAttribute <string>]
+    [-SortBy <string>] [-SortDirection <string>] [-Page <int>] [-PageSize <int>]
 
 # ListAll
-Search-JIMMetaverseObject -PredefinedSearchUri <string> [-Search <string>] [-SortBy <string>]
-    [-SortDirection <string>] [-PageSize <int>] -All
+Search-JIMMetaverseObject -PredefinedSearchUri <string> [-Search <string>] [-HasAttribute <string>]
+    [-SortBy <string>] [-SortDirection <string>] [-PageSize <int>] -All
 ```
 
 #### Parameters
@@ -701,6 +701,7 @@ Search-JIMMetaverseObject -PredefinedSearchUri <string> [-Search <string>] [-Sor
 |------|------|----------|---------|-------------|
 | `PredefinedSearchUri` | `string` | Yes | | URI identifier of the predefined search (e.g. `users`, `groups`) |
 | `Search` | `string` | No | | Search query to filter across all string attribute values (case-insensitive, partial match) |
+| `HasAttribute` | `string` | No | | Return only objects that hold a value for the named Metaverse Attribute. Matched case-insensitively; a multi-valued attribute counts once; an unrecognised name yields no results. |
 | `SortBy` | `string` | No | | Attribute name to sort results by (defaults to creation date) |
 | `SortDirection` | `string` | No | `desc` | Sort direction: `asc` or `desc` |
 | `All` | `switch` | No | `false` | Automatically paginate through all results |
@@ -723,6 +724,10 @@ Search-JIMMetaverseObject -PredefinedSearchUri "users" -Search "Smith"
 
 ```powershell title="Get all users with auto-pagination"
 Search-JIMMetaverseObject -PredefinedSearchUri "users" -All
+```
+
+```powershell title="Find users that hold a value for an attribute"
+Search-JIMMetaverseObject -PredefinedSearchUri "users" -HasAttribute "costCentre"
 ```
 
 ```powershell title="Sort groups by display name"

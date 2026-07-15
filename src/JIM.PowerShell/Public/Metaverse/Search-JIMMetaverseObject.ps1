@@ -25,6 +25,11 @@ function Search-JIMMetaverseObject {
         Optional search query to filter across all string attribute values (case-insensitive,
         partial match).
 
+    .PARAMETER HasAttribute
+        Optional Metaverse Attribute name to filter by attribute presence: only Metaverse Objects
+        that hold a value for the named Metaverse Attribute are returned. The name is matched
+        case-insensitively. An unrecognised attribute name yields no results.
+
     .PARAMETER SortBy
         Optional attribute name to sort results by. Defaults to sorting by creation date.
 
@@ -60,6 +65,11 @@ function Search-JIMMetaverseObject {
         Searches for users with "Young" in any attribute value.
 
     .EXAMPLE
+        Search-JIMMetaverseObject -PredefinedSearchUri "users" -HasAttribute "costCentre"
+
+        Gets users that hold a value for the costCentre attribute.
+
+    .EXAMPLE
         Search-JIMMetaverseObject -PredefinedSearchUri "groups" -SortBy "Display Name"
 
         Gets groups sorted by display name.
@@ -84,6 +94,10 @@ function Search-JIMMetaverseObject {
         [Parameter(ParameterSetName = 'List')]
         [Parameter(ParameterSetName = 'ListAll')]
         [string]$Search,
+
+        [Parameter(ParameterSetName = 'List')]
+        [Parameter(ParameterSetName = 'ListAll')]
+        [string]$HasAttribute,
 
         [Parameter(ParameterSetName = 'List')]
         [Parameter(ParameterSetName = 'ListAll')]
@@ -126,6 +140,10 @@ function Search-JIMMetaverseObject {
 
         if ($Search) {
             $baseQueryParams += "search=$([System.Uri]::EscapeDataString($Search))"
+        }
+
+        if ($HasAttribute) {
+            $baseQueryParams += "hasAttribute=$([System.Uri]::EscapeDataString($HasAttribute))"
         }
 
         if ($SortBy) {

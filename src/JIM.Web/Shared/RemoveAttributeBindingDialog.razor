@@ -3,6 +3,7 @@
 
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
+@using JIM.Utilities
 @using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
 @inject IDialogService DialogService
@@ -21,6 +22,12 @@
                 {
                     <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
                         <MudText Typo="Typo.subtitle2">@_impact.ObjectsWithValues.ToString("N0") @_impact.MetaverseObjectTypeName object(s) have a value</MudText>
+                        @if (!string.IsNullOrEmpty(_impact.MetaverseObjectTypePluralName))
+                        {
+                            <MudLink Href="@Utilities.GetMetaverseObjectHasAttributeSearchHref(_impact.MetaverseObjectTypePluralName, _impact.AttributeName)" Class="mt-1 d-inline-flex align-center">
+                                <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="mr-1" />View the object(s) with a value
+                            </MudLink>
+                        }
                     </MudAlert>
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
                         Clear these values first, then remove the binding.
