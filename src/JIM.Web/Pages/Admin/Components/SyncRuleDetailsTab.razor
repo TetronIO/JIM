@@ -145,14 +145,15 @@
         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">By default, Metaverse Objects scoped to
             this Synchronisation Rule will not be created (provisioned) in the Connected Systems. Enabling this
             option will cause the Metaverse Object to be created in the Connected System. You would typically enable
-            this option for a destination system, i.e. when trying to implement a HR to Active Directory flow.</MudText>
+            this option for a destination system.</MudText>
 
-        <MudSelect T="OutboundDeprovisionAction" Label="Deprovisioning Action" Class="mt-5"
+        <MudSelect T="OutboundDeprovisionAction" Label="Deprovisioning Action" Class="mt-5 ms-12" Style="max-width: 420px;"
                    @bind-Value="@SyncRule.OutboundDeprovisionAction" @bind-Value:after="NotifyChangedAsync"
-                   Variant="Variant.Outlined" HelperText="@GetOutboundDeprovisionActionHelperText()">
+                   Variant="Variant.Outlined">
             <MudSelectItem Value="OutboundDeprovisionAction.Disconnect">Disconnect</MudSelectItem>
             <MudSelectItem Value="OutboundDeprovisionAction.Delete">Delete</MudSelectItem>
         </MudSelect>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">@GetOutboundDeprovisionActionHelperText()</MudText>
     }
     <MudSwitch Class="mt-5" @bind-Value="@SyncRule.Enabled" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary" Label="Enabled?" />
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">Synchronisation Rules are not evaluated when disabled. Use

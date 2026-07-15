@@ -135,7 +135,7 @@
                 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">When a Metaverse Object of this type is deleted
                     (or leaves an export Synchronisation Rule's scope), each export Synchronisation Rule's Deprovisioning Action
                     determines what happens to the corresponding object in its Connected System: Disconnect leaves it in place;
-                    Delete removes it. Disabled Synchronisation Rules are shown but are never evaluated.</MudText>
+                    Delete removes it. Disabled Synchronisation Rules do not apply during synchronisation.</MudText>
 
                 @if (_exportRuleHeaders == null || _exportRuleHeaders.Count == 0)
                 {
@@ -148,26 +148,26 @@
                 {
                     <MudTable Items="@_exportRuleHeaders" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" Elevation="0" Outlined="true">
                         <HeaderContent>
-                            <MudTh><MudText Typo="Typo.button">Synchronisation Rule</MudText></MudTh>
                             <MudTh><MudText Typo="Typo.button">Connected System</MudText></MudTh>
-                            <MudTh><MudText Typo="Typo.button">Enabled?</MudText></MudTh>
+                            <MudTh><MudText Typo="Typo.button">Synchronisation Rule</MudText></MudTh>
+                            <MudTh><MudText Typo="Typo.button">Status</MudText></MudTh>
                             <MudTh><MudText Typo="Typo.button">Deprovisioning Action</MudText></MudTh>
                         </HeaderContent>
                         <RowTemplate>
-                            <MudTd DataLabel="Synchronisation Rule">
-                                <MudLink Href="@($"/admin/sync-rules/{context.Id}")">@context.Name</MudLink>
-                            </MudTd>
                             <MudTd DataLabel="Connected System">
                                 <MudLink Href="@($"/admin/connected-systems/{context.ConnectedSystemId}")">@context.ConnectedSystemName</MudLink>
                             </MudTd>
-                            <MudTd DataLabel="Enabled?">
+                            <MudTd DataLabel="Synchronisation Rule">
+                                <MudLink Href="@($"/admin/sync-rules/{context.Id}")">@context.Name</MudLink>
+                            </MudTd>
+                            <MudTd DataLabel="Status">
                                 @if (context.Enabled)
                                 {
-                                    <MudText Typo="Typo.body2">Yes</MudText>
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Success">Enabled</MudChip>
                                 }
                                 else
                                 {
-                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">No</MudText>
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Default">Disabled</MudChip>
                                 }
                             </MudTd>
                             <MudTd DataLabel="Deprovisioning Action">
