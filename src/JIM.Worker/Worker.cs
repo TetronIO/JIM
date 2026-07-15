@@ -340,7 +340,8 @@ public class Worker : BackgroundService
                                                                                             // export exhausted the pool with one pinned connection per batch).
                                                                                             var parallelJim = _jimFactory.Create();
                                                                                             return new SyncRepositoryScope(parallelJim.SyncRepository, parallelJim);
-                                                                                        });
+                                                                                        },
+                                                                                        connectorFactory: _connectorFactory);
                                                             await syncExportTaskProcessor.PerformExportAsync();
                                                             break;
                                                         }
