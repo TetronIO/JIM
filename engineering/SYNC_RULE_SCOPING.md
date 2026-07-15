@@ -17,7 +17,7 @@ Scoping rules on a Synchronisation Rule determine which Connected System Objects
 - **Role or department change**: an attribute change to an MVO (typically flowed from HR) shifts the MVO in or out of scope of one or more export rules. Downstream systems gain or lose the account to match the new role, without any separate manual step.
 - **Targeted access removal**: an MVO falls out of scope of an export rule because an administrator edits the rule, or because an attribute on the MVO changes. The matching downstream CSO is either disconnected or deleted depending on configuration.
 - **Attribute contribution cut-off without breakage**: a CSO falls out of scope of an import rule, but the join to its MVO is preserved. The CSO no longer contributes attributes, but the historical linkage remains for audit, manual review, or a later back-in-scope transition.
-- **Leaver cascade**: an authoritative source stops reporting an identity. The MVO's deletion rule triggers and every downstream provisioned CSO is removed from its target system in a single coordinated pass.
+- **Leaver cascade**: an authoritative source stops reporting an identity. The MVO's deletion rule triggers and every downstream CSO whose export rule's deprovisioning action is `Delete` is removed from its target system in a single coordinated pass.
 - **Soft disconnect versus hard delete**: for both inbound and outbound deprovisioning, administrators choose whether "out of scope" means "break the link but leave the target object alone" (suitable for audit, legal hold, or shared accounts) or "remove the target object entirely".
 - **Cross-system cascade in one pass**: an inbound attribute change can trigger an outbound deprovision in the same sync page. Administrators do not have to wait for a separate export run for the effect to propagate.
 
@@ -110,15 +110,16 @@ flowchart TD
     Deferred --> Evaluate
 
     Evaluate --> PerCso{For each CSO<br/>joined to MVO}
-    PerCso -->|JoinType = Provisioned| CreateDelete[Create PendingExport<br/>with ChangeType = Delete<br/>Target object removed on<br/>next export run]
-    PerCso -->|JoinType = Joined or Projected| DisconnectOnly[Disconnect CSO from MVO<br/>Leave target object untouched<br/>See issue #655]
+    PerCso --> Match{Matching export rule?<br/>System + CSO type + MVO type}
+    Match -->|OutboundDeprovisionAction = Delete<br/>on any matching rule| CreateDelete[Create PendingExport<br/>with ChangeType = Delete<br/>Target object removed on<br/>next export run]
+    Match -->|All matching rules Disconnect,<br/>or no matching rule| DisconnectOnly[Disconnect CSO from MVO<br/>Leave target object untouched]
 ```
 
 Relevant code:
 
 - `src/JIM.Worker/Processors/SyncTaskProcessorBase.cs`: `ProcessMvoDeletionRuleAsync` (line 836), `FlushPendingMvoDeletionsAsync` (line 2398).
 - `src/JIM.Application/Servers/SyncEngine.cs`: `EvaluateMvoDeletionRule` (line 151).
-- `src/JIM.Application/Servers/ExportEvaluationServer.cs`: `EvaluateMvoDeletionAsync` (line 541). The `JoinType == Provisioned` gate at line 551 is currently under review (see [issue #655](https://github.com/TetronIO/JIM/issues/655)): administrators may want to deprovision joined or matched CSOs too, not only those JIM provisioned.
+- `src/JIM.Application/Servers/ExportEvaluationServer.cs`: `EvaluateMvoDeletionAsync` / `EvaluateMvoDeletionsAsync`. Deprovisioning is driven by each matching export Synchronisation Rule's `OutboundDeprovisionAction`, regardless of the CSO's `JoinType` ([issue #655](https://github.com/TetronIO/JIM/issues/655)); `Delete` wins when multiple matching rules disagree. This matches the out-of-scope cascade's behaviour.
 - `src/JIM.Worker/Worker.cs`: line 596, the housekeeping entry point for grace-period deletions.
 
 ## Cross-system cascade
@@ -153,7 +154,6 @@ Worked examples (export rule on a Person's termination-date attribute):
 
 The following behaviours are out of scope for the current implementation. They are captured here for administrators planning deployments and for future design work.
 
-- **Deprovision joined or matched CSOs on MVO deletion**: the cascade in `EvaluateMvoDeletionAsync` only issues delete `PendingExport`s for CSOs with `JoinType = Provisioned`. CSOs that JIM matched onto pre-existing target objects are disconnected but not removed from the target system. Review in progress in [issue #655](https://github.com/TetronIO/JIM/issues/655).
 - **Cascade back to the source Connected System**: an outbound deprovision does not trigger a write back to the originating system. This is intentional to prevent circular exports.
 - **End-to-end integration test coverage of the full scope transition matrix**: individual transitions are covered by unit tests, but no single integration scenario exercises every combination against a running stack. Tracked in [issue #656](https://github.com/TetronIO/JIM/issues/656).
 

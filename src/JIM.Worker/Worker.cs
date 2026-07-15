@@ -706,6 +706,11 @@ public class Worker : BackgroundService
                 mvosToDelete.Select(m => m.Id).ToList());
             var deletedMvoIds = new List<Guid>();
 
+            // One export evaluation cache for the batch, so per-MVO deletion evaluation (issue #655)
+            // and reference recall staging do not re-load Synchronisation Rules for every object.
+            // Source system 0: deletions must consider export rules to every system.
+            var exportEvaluationCache = await jim.ExportEvaluation.BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0);
+
             foreach (var mvo in mvosToDelete)
             {
                 try
@@ -713,9 +718,10 @@ public class Worker : BackgroundService
                     Log.Information("PerformMetaverseObjectHousekeepingAsync: Deleting MVO {MvoId} ({DisplayName}) - disconnected at {DisconnectedDate}, rule: {DeletionRule}",
                         mvo.Id, mvo.DisplayName ?? "No display name", mvo.LastConnectorDisconnectedDate, mvo.Type?.DeletionRule);
 
-                    // Evaluate export rules for the MVO deletion (create delete Pending Exports for provisioned CSOs)
-                    // WhenAuthoritativeSourceDisconnected MVOs may still have target CSOs that need delete exports
-                    await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+                    // Evaluate export rules for the MVO deletion: delete Pending Exports are created for
+                    // CSOs whose export Synchronisation Rule's OutboundDeprovisionAction is Delete (issue #655).
+                    // WhenAuthoritativeSourceDisconnected MVOs may still have target CSOs that need delete exports.
+                    await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache);
 
                     // Delete the MVO using the initiator info captured when it was marked for deletion
                     // This preserves the audit trail - the original initiator is recorded, not housekeeping
@@ -765,7 +771,7 @@ public class Worker : BackgroundService
             // referenced the deleted MVOs, so targets without referential integrity converge too.
             if (deletedMvoIds.Count > 0)
             {
-                var recallResult = await jim.ExportEvaluation.StageReferenceRecallExportsAsync(recallContext, deletedMvoIds);
+                var recallResult = await jim.ExportEvaluation.StageReferenceRecallExportsAsync(recallContext, deletedMvoIds, exportEvaluationCache);
                 Log.Information(
                     "PerformMetaverseObjectHousekeepingAsync: Reference recall for {DeletedCount} deleted MVO(s): " +
                     "{ReferencingCount} referencing MVO(s) evaluated, {PeCount} Pending Export(s) staged with " +

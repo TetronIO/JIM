@@ -3869,26 +3869,39 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var source = objectMatchingRule.Sources[0];
 
-        // For export matching, the source should reference an MVO attribute
-        if (source.MetaverseAttribute == null)
+        // The connector-space side of the comparison always comes from the source's Connected System
+        // attribute; without one there is nothing to compare CSOs on.
+        if (source.ConnectedSystemAttribute == null)
         {
-            Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: Source does not have a MetaverseAttribute, skipping rule {RuleId}", objectMatchingRule.Id);
+            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Rule {RuleId} has no Connected System attribute on its source; export matching cannot query the connector space.",
+                objectMatchingRule.Id);
+            return null;
+        }
+
+        // The MVO side of the comparison: an explicit Metaverse attribute on the source wins; otherwise
+        // invert the standard inbound rule shape (source = Connected System attribute, target = Metaverse
+        // attribute, which is what the UI, API and PowerShell configure) by reading the rule's target.
+        var metaverseAttribute = source.MetaverseAttribute ?? objectMatchingRule.TargetMetaverseAttribute;
+        if (metaverseAttribute == null)
+        {
+            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Rule {RuleId} has neither a source Metaverse attribute nor a target Metaverse attribute; cannot determine the MVO-side value for export matching.",
+                objectMatchingRule.Id);
             return null;
         }
 
         // Get the source attribute value from the MVO
         var mvoAttributeValue = metaverseObject.AttributeValues
-            .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id || av.Attribute?.Id == source.MetaverseAttribute.Id);
+            .FirstOrDefault(av => av.AttributeId == metaverseAttribute.Id || av.Attribute?.Id == metaverseAttribute.Id);
 
         if (mvoAttributeValue == null)
         {
             Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: MVO {MvoId} does not have a value for attribute {AttrId}",
-                metaverseObject.Id, source.MetaverseAttribute.Id);
+                metaverseObject.Id, metaverseAttribute.Id);
             return null;
         }
 
         // Skip null values - null is always a non-match
-        var hasValue = source.MetaverseAttribute.Type switch
+        var hasValue = metaverseAttribute.Type switch
         {
             AttributeDataType.Text => !string.IsNullOrEmpty(mvoAttributeValue.StringValue),
             AttributeDataType.Number => mvoAttributeValue.IntValue.HasValue,
@@ -3899,30 +3912,25 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (!hasValue)
         {
             Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: Skipping null/empty attribute value for {AttributeName}",
-                source.MetaverseAttribute.Name);
+                metaverseAttribute.Name);
             return null;
         }
 
-        // The target is a CS attribute (what we're looking for on the CSO)
-        var targetCsAttribute = objectMatchingRule.TargetMetaverseAttribute;
-        if (targetCsAttribute == null)
-        {
-            // For export matching, we need to find the corresponding CS attribute
-            // Since the matching rule's target is the MV attribute during import,
-            // for export we look at what CS attribute maps to that value
-            // This is typically the external ID attribute of the object type
-            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: No target attribute configured on rule {RuleId}", objectMatchingRule.Id);
-            return null;
-        }
+        var connectedSystemAttributeName = source.ConnectedSystemAttribute.Name;
 
-        // Query CSOs that match the value
+        // Query CSOs that match the value. Only unjoined, Normal-status objects are eligible: matching
+        // must never steal a CSO already joined to another Metaverse Object, and an Obsolete or
+        // PendingProvisioning CSO does not (yet, or any longer) represent a live object in the target system.
         var query = Repository.Database.ConnectedSystemObjects
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
-            .Where(cso => cso.ConnectedSystemId == connectedSystem.Id && cso.TypeId == connectedSystemObjectType.Id);
+            .Where(cso => cso.ConnectedSystemId == connectedSystem.Id &&
+                          cso.TypeId == connectedSystemObjectType.Id &&
+                          cso.MetaverseObjectId == null &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal);
 
         // Match based on attribute type
-        switch (source.MetaverseAttribute.Type)
+        switch (metaverseAttribute.Type)
         {
             case AttributeDataType.Text:
                 // Check case sensitivity setting on the matching rule
@@ -3931,7 +3939,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     // Case-sensitive comparison (default) - null check already done above
                     query = query.Where(cso => cso.AttributeValues.Any(av =>
                         av.Attribute != null &&
-                        av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                        av.Attribute.Name == connectedSystemAttributeName &&
                         av.StringValue != null &&
                         av.StringValue == mvoAttributeValue.StringValue));
                 }
@@ -3940,7 +3948,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     // Case-insensitive comparison using PostgreSQL ILike
                     query = query.Where(cso => cso.AttributeValues.Any(av =>
                         av.Attribute != null &&
-                        av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                        av.Attribute.Name == connectedSystemAttributeName &&
                         av.StringValue != null &&
                         EF.Functions.ILike(av.StringValue, mvoAttributeValue.StringValue!)));
                 }
@@ -3949,7 +3957,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 // Null check already done above
                 query = query.Where(cso => cso.AttributeValues.Any(av =>
                     av.Attribute != null &&
-                    av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                    av.Attribute.Name == connectedSystemAttributeName &&
                     av.IntValue != null &&
                     av.IntValue == mvoAttributeValue.IntValue));
                 break;
@@ -3957,12 +3965,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 // Null check already done above
                 query = query.Where(cso => cso.AttributeValues.Any(av =>
                     av.Attribute != null &&
-                    av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                    av.Attribute.Name == connectedSystemAttributeName &&
                     av.GuidValue != null &&
                     av.GuidValue == mvoAttributeValue.GuidValue));
                 break;
             default:
-                throw new NotSupportedException($"Attribute type {source.MetaverseAttribute.Type} is not supported for export matching.");
+                throw new NotSupportedException($"Attribute type {metaverseAttribute.Type} is not supported for export matching.");
         }
 
         var matches = await query.OrderBy(cso => cso.Id).Take(2).ToListAsync();
@@ -4086,21 +4094,40 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await query.ToListAsync();
     }
 
-    public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync()
+    public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync(int? metaverseObjectTypeId = null, SyncRuleDirection? direction = null)
     {
-        return await Repository.Database.SyncRules.OrderBy(a => a.Name).Select(sr => new SyncRuleHeader
+        var query = Repository.Database.SyncRules.AsQueryable();
+
+        if (metaverseObjectTypeId.HasValue)
+        {
+            var metaverseObjectTypeIdValue = metaverseObjectTypeId.Value;
+            query = query.Where(sr => sr.MetaverseObjectTypeId == metaverseObjectTypeIdValue);
+        }
+
+        if (direction.HasValue)
+        {
+            var directionValue = direction.Value;
+            query = query.Where(sr => sr.Direction == directionValue);
+        }
+
+        return await query.OrderBy(a => a.Name).Select(sr => new SyncRuleHeader
         {
             Id = sr.Id,
             Name = sr.Name,
             Description = sr.Description,
+            ConnectedSystemId = sr.ConnectedSystemId,
             ConnectedSystemName = sr.ConnectedSystem.Name,
+            ConnectedSystemObjectTypeId = sr.ConnectedSystemObjectTypeId,
             ConnectedSystemObjectTypeName = sr.ConnectedSystemObjectType.Name,
             Created = sr.Created,
             Direction = sr.Direction,
+            MetaverseObjectTypeId = sr.MetaverseObjectTypeId,
             MetaverseObjectTypeName = sr.MetaverseObjectType.Name,
             ProjectToMetaverse = sr.ProjectToMetaverse,
             ProvisionToConnectedSystem = sr.ProvisionToConnectedSystem,
-            Enabled = sr.Enabled
+            Enabled = sr.Enabled,
+            EnforceState = sr.EnforceState,
+            OutboundDeprovisionAction = sr.OutboundDeprovisionAction
         }).ToListAsync();
     }
 

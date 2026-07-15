@@ -788,39 +788,52 @@ public class SyncRepository : ISyncRepository
             return Task.FromResult<ConnectedSystemObject?>(null);
 
         var source = rule.Sources[0];
-        if (source.MetaverseAttribute == null && source.MetaverseAttributeId == null)
-            return Task.FromResult<ConnectedSystemObject?>(null);
-        if (source.ConnectedSystemAttribute == null && source.ConnectedSystemAttributeId == null)
+
+        // The connector-space side of the comparison always comes from the source's Connected System attribute.
+        var csAttrId = source.ConnectedSystemAttribute?.Id ?? source.ConnectedSystemAttributeId;
+        if (csAttrId == null)
             return Task.FromResult<ConnectedSystemObject?>(null);
 
-        var mvoAttrId = source.MetaverseAttribute?.Id ?? source.MetaverseAttributeId;
+        // The MVO side: an explicit Metaverse attribute on the source wins; otherwise invert the standard
+        // inbound rule shape by reading the rule's target Metaverse attribute (mirrors the Postgres implementation).
+        var mvoAttrId = source.MetaverseAttribute?.Id ?? source.MetaverseAttributeId
+            ?? rule.TargetMetaverseAttribute?.Id ?? rule.TargetMetaverseAttributeId;
+        if (mvoAttrId == null)
+            return Task.FromResult<ConnectedSystemObject?>(null);
+
         var mvoAttr = metaverseObject.AttributeValues?
             .FirstOrDefault(av => av.AttributeId == mvoAttrId);
         if (mvoAttr == null)
             return Task.FromResult<ConnectedSystemObject?>(null);
 
+        // Empty string is treated as no value, matching the Postgres implementation's IsNullOrEmpty guard.
         var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString();
-        if (mvoVal == null)
+        if (string.IsNullOrEmpty(mvoVal))
             return Task.FromResult<ConnectedSystemObject?>(null);
 
-        var csAttrId = source.ConnectedSystemAttribute?.Id ?? source.ConnectedSystemAttributeId;
         var comparison = rule.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 
-        foreach (var cso in _csos.Values)
+        bool ValueMatches(ConnectedSystemObject cso)
         {
-            if (cso.ConnectedSystemId != connectedSystem.Id) continue;
-            if (cso.TypeId != connectedSystemObjectType.Id) continue;
-
-            var csoAttr = cso.AttributeValues?
-                .FirstOrDefault(av => av.AttributeId == csAttrId);
-            if (csoAttr == null) continue;
-
+            var csoAttr = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == csAttrId);
+            if (csoAttr == null)
+                return false;
             var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString();
-            if (string.Equals(mvoVal, csoVal, comparison))
-                return Task.FromResult<ConnectedSystemObject?>(cso);
+            return string.Equals(mvoVal, csoVal, comparison);
         }
 
-        return Task.FromResult<ConnectedSystemObject?>(null);
+        // Only unjoined, Normal-status CSOs are eligible: matching must never steal a CSO already joined
+        // to another Metaverse Object, and an Obsolete or PendingProvisioning CSO does not represent a
+        // live, unclaimed object in the target system.
+        var match = _csos.Values
+            .Where(cso => cso.ConnectedSystemId == connectedSystem.Id &&
+                          cso.TypeId == connectedSystemObjectType.Id &&
+                          cso.MetaverseObjectId == null &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal)
+            .OrderBy(cso => cso.Id)
+            .FirstOrDefault(ValueMatches);
+
+        return Task.FromResult(match);
     }
 
     #endregion

@@ -547,7 +547,12 @@ public interface IConnectedSystemRepository
     /// <param name="includeDisabledSyncRules">Controls whether to return Synchronisation Rules that are disabled</param>
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules, bool withChangeTracking = false);
 
-    public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
+    /// <summary>
+    /// Retrieves lightweight Synchronisation Rule headers for list views, optionally filtered.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">When supplied, only rules targeting this Metaverse Object Type are returned.</param>
+    /// <param name="direction">When supplied, only rules with this direction are returned.</param>
+    public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync(int? metaverseObjectTypeId = null, SyncRuleDirection? direction = null);
 
     /// <summary>
     /// Gets the change history for a Connected System Object.

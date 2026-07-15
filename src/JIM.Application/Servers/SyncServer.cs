@@ -356,11 +356,11 @@ public class SyncServer : ISyncServer
         ExportEvaluationCache cache)
         => _exportEval.EvaluateOutOfScopeExportsAsync(mvo, sourceSystem, cache);
 
-    public Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo)
-        => _exportEval.EvaluateMvoDeletionAsync(mvo);
+    public Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo, ExportEvaluationCache? exportEvaluationCache = null)
+        => _exportEval.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache);
 
-    public Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos)
-        => _exportEval.EvaluateMvoDeletionsAsync(mvos);
+    public Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos, ExportEvaluationCache? exportEvaluationCache = null)
+        => _exportEval.EvaluateMvoDeletionsAsync(mvos, exportEvaluationCache);
 
     public Task<ReferenceRecallContext> CaptureReferenceRecallContextAsync(IReadOnlyCollection<Guid> deletionCandidateMvoIds)
         => _exportEval.CaptureReferenceRecallContextAsync(deletionCandidateMvoIds);

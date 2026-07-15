@@ -5409,9 +5409,15 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules);
     }
 
-    public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync()
+    /// <summary>
+    /// Retrieves lightweight Synchronisation Rule headers for list views, optionally filtered
+    /// by Metaverse Object Type and/or direction.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">When supplied, only rules targeting this Metaverse Object Type are returned.</param>
+    /// <param name="direction">When supplied, only rules with this direction are returned.</param>
+    public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync(int? metaverseObjectTypeId = null, SyncRuleDirection? direction = null)
     {
-        return await Application.Repository.ConnectedSystems.GetSyncRuleHeadersAsync();
+        return await Application.Repository.ConnectedSystems.GetSyncRuleHeadersAsync(metaverseObjectTypeId, direction);
     }
 
     public async Task<SyncRule?> GetSyncRuleAsync(int id)
