@@ -727,11 +727,11 @@ public partial class SyncRepository
             trackedCso.Entity.MetaverseObject = null;
         }
 
-        // Null out reference attribute values on other MVOs that point at the deleted MVOs
-        // (e.g. Manager references), and reference values in change tracking records.
-        await _context.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""MetaverseObjectAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = ANY({0})",
-            mvoIds);
+        // Reference attribute values on other MVOs that point at the deleted MVOs (e.g. Manager or
+        // member references): valueless rows are deleted, payload-carrying rows are nulled, and
+        // tracked instances are surgically detached (#1019). Reference values in change tracking
+        // records are nulled (audit rows carry their own payload and must be preserved).
+        await MetaverseReferenceRowCleanup.CleanUpReferencesToDeletedMvosAsync(_context, mvoIds);
         await _context.Database.ExecuteSqlRawAsync(
             @"UPDATE ""MetaverseObjectChangeAttributeValues"" SET ""ReferenceValueId"" = NULL WHERE ""ReferenceValueId"" = ANY({0})",
             mvoIds);
