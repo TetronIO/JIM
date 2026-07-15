@@ -2,7 +2,7 @@
 
 - **Status:** Done
 - **Created:** 2026-06-21
-- **Author:** Jay Van der Zant
+- **Author:** Jay
 - **Issue:** [#85](https://github.com/TetronIO/JIM/issues/85)
 - **Implementation plan:** [`engineering/plans/done/RELATIVE_DATE_SEARCH_CRITERIA.md`](../plans/done/RELATIVE_DATE_SEARCH_CRITERIA.md) and [`engineering/plans/done/TEMPORAL_SCOPE_REEVALUATION.md`](../plans/done/TEMPORAL_SCOPE_REEVALUATION.md) (#892)
 
