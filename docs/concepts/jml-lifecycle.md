@@ -96,15 +96,16 @@ A **leaver** event occurs when an identity is removed or marked as inactive in t
 
 ### Deprovisioning
 
-Deprovisioning is the process of disabling or removing accounts in target systems when an identity leaves. JIM supports several deprovisioning strategies:
+Deprovisioning is the process of removing or releasing accounts in target systems when an identity leaves. Each outbound Synchronisation Rule carries a **Deprovisioning Action** that applies both when a Metaverse Object falls out of the rule's scope and when it is deleted:
 
-| Strategy | Description |
-|----------|-------------|
-| **Disable** | Disables the account in the target system (e.g. set `userAccountControl` to 514 in Active Directory) |
+| Action | Description |
+|--------|-------------|
+| **Disconnect** (default) | Unlinks the CSO from the MVO but leaves the target account in place, untouched |
 | **Delete** | Removes the account from the target system entirely |
-| **Disconnect** | Unlinks the CSO from the MVO but leaves the target account unchanged |
 
-The strategy is configured per outbound Synchronisation Rule, giving you fine-grained control over what happens in each target system when an identity leaves.
+The action applies regardless of how JIM came to manage the account: accounts JIM provisioned and pre-existing accounts JIM matched (joined) are treated the same. This gives you fine-grained, per-target-system control over what happens when an identity leaves. A **Disable** action (disable the account rather than delete it, e.g. set `userAccountControl` to 514 in Active Directory) is planned for a future release.
+
+The Deprovisioning Action is configured on each export Synchronisation Rule, and can also be reviewed and changed for all of a type's export rules at once on the Metaverse Object Type page's Downstream Deprovisioning panel.
 
 ### Deletion Rules
 

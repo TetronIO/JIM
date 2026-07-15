@@ -83,13 +83,15 @@ Creates a new Synchronisation Rule for a Connected System. The rule defines how 
 New-JIMSyncRule -Name <string> -ConnectedSystemId <int>
     -ConnectedSystemObjectTypeId <int> -MetaverseObjectTypeId <int>
     -Direction <string> [-Description <string>] [-ProjectToMetaverse]
-    [-ProvisionToConnectedSystem] [-Enabled <bool>] [-ChangeReason <string>] [-PassThru]
+    [-ProvisionToConnectedSystem] [-Enabled <bool>]
+    [-OutboundDeprovisionAction <string>] [-ChangeReason <string>] [-PassThru]
 
 # By Connected System name
 New-JIMSyncRule -Name <string> -ConnectedSystemName <string>
     -ConnectedSystemObjectTypeId <int> -MetaverseObjectTypeId <int>
     -Direction <string> [-Description <string>] [-ProjectToMetaverse]
-    [-ProvisionToConnectedSystem] [-Enabled <bool>] [-ChangeReason <string>] [-PassThru]
+    [-ProvisionToConnectedSystem] [-Enabled <bool>]
+    [-OutboundDeprovisionAction <string>] [-ChangeReason <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -106,6 +108,7 @@ New-JIMSyncRule -Name <string> -ConnectedSystemName <string>
 | `ProjectToMetaverse` | `switch` | No | `$false` | When set, import rules will project new Metaverse Objects. Only applicable when Direction is `Import`. |
 | `ProvisionToConnectedSystem` | `switch` | No | `$false` | When set, export rules will provision new Connected System Objects. Only applicable when Direction is `Export`. |
 | `Enabled` | `bool` | No | `$true` | Whether the Synchronisation Rule is active |
+| `OutboundDeprovisionAction` | `string` | No | `Disconnect` | Export rules: action when an MVO falls out of the rule's scope or is deleted. `Disconnect` leaves the CSO untouched in the target system; `Delete` queues a delete so the CSO is removed from the target |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the created Synchronisation Rule object |
 
@@ -135,6 +138,16 @@ New-JIMSyncRule -Name "AD User Export" `
     -MetaverseObjectTypeId 1 `
     -Direction Export `
     -ProvisionToConnectedSystem
+```
+
+```powershell title="Create an export Synchronisation Rule that deletes leavers from the target system"
+New-JIMSyncRule -Name "AD User Export" `
+    -ConnectedSystemId 2 `
+    -ConnectedSystemObjectTypeId 3 `
+    -MetaverseObjectTypeId 1 `
+    -Direction Export `
+    -ProvisionToConnectedSystem `
+    -OutboundDeprovisionAction Delete
 ```
 
 ```powershell title="Create a disabled Synchronisation Rule"
@@ -187,7 +200,7 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <st
 | `ProjectToMetaverse` | `bool` | No | | Controls whether the rule projects new Metaverse Objects |
 | `ProvisionToConnectedSystem` | `bool` | No | | Controls whether the rule provisions new Connected System Objects |
 | `InboundOutOfScopeAction` | `string` | No | | Import rules: action when a CSO falls out of the rule's scope. `Disconnect` breaks the CSO to MVO join; `RemainJoined` keeps the join and stops further Attribute Flow |
-| `OutboundDeprovisionAction` | `string` | No | | Export rules: action when an MVO falls out of the rule's scope. `Disconnect` leaves the CSO untouched in the target system; `Delete` queues a delete so the CSO is removed from the target |
+| `OutboundDeprovisionAction` | `string` | No | | Export rules: action when an MVO falls out of the rule's scope or is deleted. `Disconnect` leaves the CSO untouched in the target system; `Delete` queues a delete so the CSO is removed from the target |
 | `EnforceState` | `bool` | No | | Enables drift detection: re-asserts the rule's expected attribute values when the target system has drifted from them |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Synchronisation Rule object |
