@@ -202,6 +202,14 @@ public static class Constants
     public static class BuiltInClaims
     {
         public static string MetaverseObjectId => "jim_mvo_id";
+
+        /// <summary>
+        /// Marks a principal authenticated by an infrastructure API key (see <c>ApiKey.IsInfrastructureKey</c>).
+        /// Attached by <c>ApiKeyAuthenticationHandler</c> only for infrastructure keys, and read by
+        /// <c>RateLimitPartitionResolver</c> to exempt trusted backend automation from REST API rate limiting.
+        /// Present with the value "true" when the claim applies; absent otherwise.
+        /// </summary>
+        public static string IsInfrastructureKey => "jim_infra_key";
     }
 
     /// <summary>

@@ -1,12 +1,14 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using JIM.Application;
 using JIM.Models.Core;
+using JIM.Models.Security;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using Serilog;
@@ -134,22 +136,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             });
 
             // Build claims for the authenticated API key
-            var claims = new List<Claim>
-            {
-                new(ClaimTypes.NameIdentifier, apiKey.Id.ToString()),
-                new(ClaimTypes.Name, apiKey.Name),
-                new("auth_method", "api_key"),
-                new("key_prefix", apiKey.KeyPrefix)
-            };
-
-            // Add role claims from the API key's assigned roles
-            foreach (var role in apiKey.Roles)
-            {
-                claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, role.Name));
-            }
-
-            // Add the virtual "User" role for basic access (consistent with SSO auth)
-            claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.User));
+            var claims = BuildApiKeyClaims(apiKey);
 
             var identity = new ClaimsIdentity(claims, SchemeName, nameType: ClaimTypes.Name, roleType: Constants.BuiltInRoles.RoleClaimType);
             var principal = new ClaimsPrincipal(identity);
@@ -191,6 +178,36 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
                 Log.Warning(ex, "ApiKeyAuthenticationHandler: Failed to record failed authentication event");
             }
         });
+    }
+
+    /// <summary>
+    /// Builds the claim set for an authenticated API key principal. Extracted as an internal static so the claim
+    /// composition (identity claims, role claims, the virtual "User" role, and the infrastructure-key marker) can
+    /// be unit tested without spinning up the ASP.NET Core authentication pipeline.
+    /// </summary>
+    /// <param name="apiKey">The validated API key entity, with its <see cref="ApiKey.Roles"/> loaded.</param>
+    public static List<Claim> BuildApiKeyClaims(ApiKey apiKey)
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, apiKey.Id.ToString()),
+            new(ClaimTypes.Name, apiKey.Name),
+            new("auth_method", "api_key"),
+            new("key_prefix", apiKey.KeyPrefix)
+        };
+
+        // Role claims from the API key's assigned roles.
+        claims.AddRange(apiKey.Roles.Select(role => new Claim(Constants.BuiltInRoles.RoleClaimType, role.Name)));
+
+        // The virtual "User" role for basic access (consistent with SSO auth).
+        claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.User));
+
+        // Infrastructure keys are trusted backend automation; mark them so the rate limiter can exempt them
+        // (see RateLimitPartitionResolver). Only attached for infrastructure keys, so an ordinary key is never exempt.
+        if (apiKey.IsInfrastructureKey)
+            claims.Add(new Claim(Constants.BuiltInClaims.IsInfrastructureKey, "true"));
+
+        return claims;
     }
 
     /// <summary>
