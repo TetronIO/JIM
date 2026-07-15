@@ -72,6 +72,31 @@ public class MetaverseObjectAttributeValue
     /// </summary>
     public bool NullValue { get; set; }
 
+    /// <summary>
+    /// True when this row would carry no information once its <see cref="ReferenceValueId"/> is discounted:
+    /// every payload column is null, no unresolved reference is staged, and the row is not an asserted-null
+    /// marker (<see cref="NullValue"/>). Deleting a Metaverse Object removes such rows from surviving
+    /// referencing objects rather than nulling their FK, which would leave an informationless "ghost" row (#1019).
+    /// Deliberately does NOT test <see cref="ReferenceValueId"/> itself; callers pair this with their own
+    /// "references a deleted object" membership test. Must stay in step with the SQL predicates in
+    /// SyncRepository.MvoOperations.DeleteMetaverseObjectsAsync, MetaverseRepository.DeleteMetaverseObjectAsync
+    /// and the DeleteGhostMetaverseReferenceAttributeValues migration (parity pinned by
+    /// MvoDeletionGhostReferenceRowDatabaseTests).
+    /// </summary>
+    public bool IsValuelessReferenceRow()
+    {
+        return StringValue == null &&
+               DateTimeValue == null &&
+               IntValue == null &&
+               LongValue == null &&
+               ByteValue == null &&
+               GuidValue == null &&
+               BoolValue == null &&
+               UnresolvedReferenceValueId == null &&
+               UnresolvedReferenceValue == null &&
+               !NullValue;
+    }
+
     public override string ToString()
     {
         var output = "";
