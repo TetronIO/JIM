@@ -33,6 +33,23 @@ public interface IMetaverseRepository
     public Task CreateMetaverseObjectTypeAsync(MetaverseObjectType metaverseObjectType);
 
     public Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType metaverseObjectType);
+
+    /// <summary>
+    /// Deletes a Metaverse Object Type. The caller (application layer) is responsible for enforcing the safeguards
+    /// (built-in protection, and refusing while Metaverse Objects of the type or Synchronisation Rules targeting it
+    /// exist); this method performs the row removal only. The database cascade-removes the type's attribute bindings,
+    /// Predefined Searches and Example Data Template entries, and sets Object Matching Rule references to null.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The id of the object type to delete.</param>
+    public Task DeleteMetaverseObjectTypeAsync(int metaverseObjectTypeId);
+
+    /// <summary>
+    /// Returns every configuration object that references the Metaverse Object Type, categorised by kind:
+    /// Synchronisation Rules targeting it (a hard block for deletion), and the softer references (Predefined Searches,
+    /// Example Data Templates, and custom attribute bindings) that are cascade-removed when a deletion proceeds. Backs
+    /// the deletion impact preview.
+    /// </summary>
+    public Task<List<ObjectTypeReference>> GetMetaverseObjectTypeReferencesAsync(int metaverseObjectTypeId);
     #endregion
 
     #region objects

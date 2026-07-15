@@ -116,6 +116,71 @@ public class MetaverseRepository : IMetaverseRepository
         Repository.Database.MetaverseObjectTypes.Update(metaverseObjectType);
         await Repository.Database.SaveChangesAsync();
     }
+
+    public async Task DeleteMetaverseObjectTypeAsync(int metaverseObjectTypeId)
+    {
+        var metaverseObjectType = await Repository.Database.MetaverseObjectTypes.SingleOrDefaultAsync(x => x.Id == metaverseObjectTypeId);
+        if (metaverseObjectType == null)
+            return;
+
+        // Row removal only; the caller enforces the safeguards. The database cascade removes the type's attribute
+        // bindings, Predefined Searches and Example Data Template entries, and sets Object Matching Rule references
+        // to null (see the FK delete behaviours in the model snapshot).
+        Repository.Database.MetaverseObjectTypes.Remove(metaverseObjectType);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task<List<ObjectTypeReference>> GetMetaverseObjectTypeReferencesAsync(int metaverseObjectTypeId)
+    {
+        var references = new List<ObjectTypeReference>();
+
+        var synchronisationRuleNames = await Repository.Database.SyncRules
+            .Where(sr => sr.MetaverseObjectTypeId == metaverseObjectTypeId)
+            .OrderBy(sr => sr.Name)
+            .Select(sr => sr.Name)
+            .ToListAsync();
+        references.AddRange(synchronisationRuleNames.Select(name => new ObjectTypeReference
+        {
+            Kind = ObjectTypeReferenceKind.SynchronisationRule,
+            Description = name
+        }));
+
+        var predefinedSearchNames = await Repository.Database.PredefinedSearches
+            .Where(ps => ps.MetaverseObjectType.Id == metaverseObjectTypeId)
+            .OrderBy(ps => ps.Name)
+            .Select(ps => ps.Name)
+            .ToListAsync();
+        references.AddRange(predefinedSearchNames.Select(name => new ObjectTypeReference
+        {
+            Kind = ObjectTypeReferenceKind.PredefinedSearch,
+            Description = name
+        }));
+
+        var exampleDataTemplateNames = await Repository.Database.ExampleDataTemplates
+            .Where(t => t.ObjectTypes.Any(ot => ot.MetaverseObjectType.Id == metaverseObjectTypeId))
+            .OrderBy(t => t.Name)
+            .Select(t => t.Name)
+            .ToListAsync();
+        references.AddRange(exampleDataTemplateNames.Select(name => new ObjectTypeReference
+        {
+            Kind = ObjectTypeReferenceKind.ExampleDataTemplate,
+            Description = name
+        }));
+
+        var boundAttributeNames = await Repository.Database.MetaverseObjectTypes
+            .Where(t => t.Id == metaverseObjectTypeId)
+            .SelectMany(t => t.Attributes)
+            .OrderBy(a => a.Name)
+            .Select(a => a.Name)
+            .ToListAsync();
+        references.AddRange(boundAttributeNames.Select(name => new ObjectTypeReference
+        {
+            Kind = ObjectTypeReferenceKind.AttributeBinding,
+            Description = name
+        }));
+
+        return references;
+    }
     #endregion
 
     #region metaverse attributes
