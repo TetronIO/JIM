@@ -11,6 +11,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 
 namespace JIM.Application.Servers;
@@ -546,26 +547,37 @@ public class ExportEvaluationServer
 
     /// <summary>
     /// Evaluates export rules for an MVO that is being deleted.
-    /// Implements Q4 decision: only create delete exports for Provisioned CSOs.
+    /// Deprovisioning is driven by each matching export Synchronisation Rule's
+    /// OutboundDeprovisionAction, regardless of the CSO's join type (issue #655).
     /// Stores the secondary external ID (e.g., DN for LDAP) in AttributeValueChanges
     /// so the delete export can be processed even after the CSO is deleted.
     /// Also disconnects CSOs from the MVO to prevent spurious sync processing.
     /// </summary>
-    public async Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo)
-        => await EvaluateMvoDeletionsAsync([mvo]);
+    /// <param name="mvo">The Metaverse Object about to be deleted.</param>
+    /// <param name="exportEvaluationCache">Optional pre-built cache carrying the export rules;
+    /// when omitted, the enabled export Synchronisation Rules are loaded from the repository.</param>
+    public async Task<List<PendingExport>> EvaluateMvoDeletionAsync(
+        MetaverseObject mvo,
+        ExportEvaluationCache? exportEvaluationCache = null)
+        => await EvaluateMvoDeletionsAsync([mvo], exportEvaluationCache);
 
     /// <summary>
-    /// Set-based form of <see cref="EvaluateMvoDeletionAsync"/> (issue #993): evaluates all the
-    /// given MVOs' deletions with one CSO fetch, one existing Pending Export lookup, one bulk
-    /// Pending Export replace/create, and one CSO disconnect statement, instead of several round
-    /// trips per object. Per-object semantics are identical: delete Pending Exports are ensured
-    /// for Provisioned CSOs (reusing an existing Delete PE, replacing any other change type), and
-    /// every joined CSO is disconnected from its MVO.
+    /// Set-based form of <see cref="EvaluateMvoDeletionAsync(MetaverseObject, ExportEvaluationCache?)"/>
+    /// (issue #993): evaluates all the given MVOs' deletions with one CSO fetch, one existing
+    /// Pending Export lookup, one bulk Pending Export replace/create, and one CSO disconnect
+    /// statement, instead of several round trips per object. Per-object semantics are identical:
+    /// delete Pending Exports are ensured for CSOs matched by an export Synchronisation Rule whose
+    /// OutboundDeprovisionAction is Delete (issue #655; reusing an existing Delete PE, replacing
+    /// any other change type), and every joined CSO is disconnected from its MVO.
     /// </summary>
     /// <param name="mvos">The Metaverse Objects about to be deleted.</param>
-    /// <returns>The Delete Pending Exports for the MVOs' Provisioned CSOs: newly created ones plus
-    /// any existing Delete Pending Exports that were reused.</returns>
-    public async Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos)
+    /// <param name="exportEvaluationCache">Optional pre-built cache carrying the export rules;
+    /// when omitted, the enabled export Synchronisation Rules are loaded from the repository.</param>
+    /// <returns>The Delete Pending Exports for the CSOs whose export Synchronisation Rule action is
+    /// Delete: newly created ones plus any existing Delete Pending Exports that were reused.</returns>
+    public async Task<List<PendingExport>> EvaluateMvoDeletionsAsync(
+        IReadOnlyCollection<MetaverseObject> mvos,
+        ExportEvaluationCache? exportEvaluationCache = null)
     {
         var pendingExports = new List<PendingExport>();
         if (mvos.Count == 0)
@@ -575,42 +587,86 @@ public class ExportEvaluationServer
         // values only, which is all the delete PE stamping below needs).
         var csosByMvo = await SyncRepo.GetConnectedSystemObjectsForMvoDeletionAsync(
             mvos.Select(m => m.Id).ToList());
+        if (csosByMvo.Count == 0)
+            return pendingExports;
 
-        // Q4 Decision: Only create delete exports for Provisioned CSOs. Non-Provisioned CSOs are
-        // still disconnected to prevent spurious sync processing after the MVO is deleted.
+        // Issue #655: deprovisioning is driven by each matching export Synchronisation Rule's
+        // OutboundDeprovisionAction, not by the CSO's join type. A rule matches a CSO on the full
+        // (Connected System, Connected System Object Type, Metaverse Object Type) triple; Delete
+        // wins when multiple matching rules disagree. CSOs with no matching rule, or whose rules
+        // all say Disconnect, are still disconnected to prevent spurious sync processing after the
+        // MVO is deleted, but nothing is exported to the Connected System.
+        var exportRulesByMvoTypeId = exportEvaluationCache?.ExportRulesByMvoTypeId
+            ?? await GetExportRulesByMvoTypeIdAsync();
+        var mvoTypeIdsByMvoId = mvos.ToDictionary(m => m.Id, m => m.Type?.Id);
+
         // The fetched dictionary is iterated directly: its keys are exactly the given MVOs that
         // have joined CSOs, so no per-MVO lookup or implicit filtering is needed.
         var csoIdsToDisconnect = new List<Guid>();
-        var provisionedCsos = new List<(ConnectedSystemObject Cso, Guid MvoId)>();
+        var csosToDelete = new List<(ConnectedSystemObject Cso, Guid MvoId)>();
+        var disconnectedByRuleCount = 0;
+        var noMatchingRuleCount = 0;
         foreach (var (mvoId, joinedCsos) in csosByMvo)
         {
+            List<SyncRule>? typeExportRules = null;
+            if (!mvoTypeIdsByMvoId.TryGetValue(mvoId, out var mvoTypeId) || mvoTypeId == null)
+            {
+                Log.Warning("EvaluateMvoDeletionsAsync: MVO {MvoId} has no Type set; cannot match export Synchronisation Rules. Its CSOs will be disconnected only.",
+                    mvoId);
+            }
+            else
+            {
+                exportRulesByMvoTypeId.TryGetValue(mvoTypeId.Value, out typeExportRules);
+            }
+
             foreach (var cso in joinedCsos)
             {
                 csoIdsToDisconnect.Add(cso.Id);
-                if (cso.JoinType == ConnectedSystemObjectJoinType.Provisioned)
+
+                var matchingRules = typeExportRules?
+                    .Where(r => r.ConnectedSystemId == cso.ConnectedSystemId && r.ConnectedSystemObjectTypeId == cso.TypeId)
+                    .ToList();
+                if (matchingRules == null || matchingRules.Count == 0)
                 {
-                    provisionedCsos.Add((cso, mvoId));
+                    noMatchingRuleCount++;
+                    Log.Debug("EvaluateMvoDeletionsAsync: No export Synchronisation Rule matches CSO {CsoId} (system {SystemId}, object type {TypeId}); disconnecting only",
+                        cso.Id, cso.ConnectedSystemId, cso.TypeId);
+                    continue;
                 }
-                else
+
+                var deleteRule = matchingRules.Find(r => r.OutboundDeprovisionAction == OutboundDeprovisionAction.Delete);
+                if (deleteRule == null)
                 {
-                    Log.Debug("EvaluateMvoDeletionsAsync: Skipping delete for CSO {CsoId} - JoinType is {JoinType}, not Provisioned; disconnecting only",
-                        cso.Id, cso.JoinType);
+                    disconnectedByRuleCount++;
+                    Log.Debug("EvaluateMvoDeletionsAsync: CSO {CsoId} matches export Synchronisation Rule(s) whose action is Disconnect; disconnecting only",
+                        cso.Id);
+                    continue;
                 }
+
+                if (matchingRules.Count > 1 && matchingRules.Exists(r => r.OutboundDeprovisionAction != OutboundDeprovisionAction.Delete))
+                {
+                    Log.Information("EvaluateMvoDeletionsAsync: {RuleCount} export Synchronisation Rules match CSO {CsoId} with conflicting deprovisioning actions; Delete wins via rule '{RuleName}'",
+                        matchingRules.Count, cso.Id, LogSanitiser.Sanitise(deleteRule.Name));
+                }
+
+                Log.Information("EvaluateMvoDeletionsAsync: Staging delete Pending Export for CSO {CsoId} (join type {JoinType}) per export Synchronisation Rule '{RuleName}'",
+                    cso.Id, cso.JoinType, LogSanitiser.Sanitise(deleteRule.Name));
+                csosToDelete.Add((cso, mvoId));
             }
         }
 
-        if (provisionedCsos.Count > 0)
+        if (csosToDelete.Count > 0)
         {
             // Delete-PE collision policy, set-based. PendingExports has a unique index on
             // ConnectedSystemObjectId, so only one PE per CSO is allowed: an existing Delete PE
             // is reused; any other change type is deleted and replaced with a Delete PE (the same
             // policy EnsureDeletePendingExportAsync applies on the singular path).
             var existingPesByCsoId = await SyncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(
-                provisionedCsos.Select(p => p.Cso.Id).ToList());
+                csosToDelete.Select(p => p.Cso.Id).ToList());
 
             var replacedPeCsoIds = new List<Guid>();
             var newPendingExports = new List<PendingExport>();
-            foreach (var (cso, mvoId) in provisionedCsos)
+            foreach (var (cso, mvoId) in csosToDelete)
             {
                 if (existingPesByCsoId.TryGetValue(cso.Id, out var existingPe))
                 {
@@ -689,11 +745,25 @@ public class ExportEvaluationServer
         if (csoIdsToDisconnect.Count > 0)
         {
             await SyncRepo.DisconnectConnectedSystemObjectsAsync(csoIdsToDisconnect);
-            Log.Information("EvaluateMvoDeletionsAsync: Disconnected {CsoCount} CSO(s) across {MvoCount} MVO(s); {PeCount} delete Pending Export(s) ensured",
-                csoIdsToDisconnect.Count, mvos.Count, pendingExports.Count);
+            Log.Information("EvaluateMvoDeletionsAsync: Disconnected {CsoCount} CSO(s) across {MvoCount} MVO(s); {PeCount} delete Pending Export(s) ensured, {ByRuleCount} disconnect-only by rule action, {NoRuleCount} with no matching export Synchronisation Rule",
+                csoIdsToDisconnect.Count, mvos.Count, pendingExports.Count, disconnectedByRuleCount, noMatchingRuleCount);
         }
 
         return pendingExports;
+    }
+
+    /// <summary>
+    /// Loads all enabled export Synchronisation Rules grouped by Metaverse Object Type ID.
+    /// Fallback for deletion-evaluation callers with no <see cref="ExportEvaluationCache"/>
+    /// (the housekeeping grace-period path); sync task processors pass their run-scoped cache.
+    /// </summary>
+    private async Task<Dictionary<int, List<SyncRule>>> GetExportRulesByMvoTypeIdAsync()
+    {
+        var allSyncRules = await SyncRepo.GetAllSyncRulesAsync();
+        return allSyncRules
+            .Where(sr => sr.Enabled && sr.Direction == SyncRuleDirection.Export)
+            .GroupBy(sr => sr.MetaverseObjectTypeId)
+            .ToDictionary(g => g.Key, g => g.ToList());
     }
 
     /// <summary>

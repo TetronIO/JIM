@@ -415,9 +415,11 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
             gracePeriod: TimeSpan.Zero,  // Zero grace period - delete synchronously
             triggerConnectedSystemIds: new List<int> { sourceSystem.Id });
 
-        // Create Synchronisation Rules
+        // Create Synchronisation Rules; the export rule's Delete action drives the delete export
+        // when the MVO is deleted (issue #655)
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
-        var targetExportRule = await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export");
+        var targetExportRule = await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export",
+            deprovisionAction: OutboundDeprovisionAction.Delete);
 
         // Create matching rules
         await CreateMatchingRuleAsync(sourceType, mvType, "EmployeeId");
@@ -602,8 +604,10 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         await CreateImportSyncRuleAsync(hrSystem.Id, hrUserType, mvType, "HR Import");
         await CreateImportSyncRuleAsync(trainingSystem.Id, trainingUserType, mvType, "Training Import");
 
-        // Create export Synchronisation Rule for AD
-        await CreateExportSyncRuleAsync(adSystem.Id, adUserType, mvType, "AD Export");
+        // Create export Synchronisation Rule for AD; its Delete action drives the delete export
+        // when the MVO is deleted (issue #655)
+        await CreateExportSyncRuleAsync(adSystem.Id, adUserType, mvType, "AD Export",
+            deprovisionAction: OutboundDeprovisionAction.Delete);
 
         // Create HR CSO and run Full Sync to project to MVO
         var hrCso = await CreateCsoAsync(hrSystem.Id, hrUserType, "John Smith", "EMP001");
@@ -991,7 +995,8 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         ConnectedSystemObjectType csoType,
         MetaverseObjectType mvType,
         string name,
-        bool enableProvisioning = true)
+        bool enableProvisioning = true,
+        OutboundDeprovisionAction deprovisionAction = OutboundDeprovisionAction.Disconnect)
     {
         var syncRule = new SyncRule
         {
@@ -1003,7 +1008,8 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
             ConnectedSystemObjectType = csoType,
             MetaverseObjectTypeId = mvType.Id,
             MetaverseObjectType = mvType,
-            ProvisionToConnectedSystem = enableProvisioning
+            ProvisionToConnectedSystem = enableProvisioning,
+            OutboundDeprovisionAction = deprovisionAction
         };
 
         DbContext.SyncRules.Add(syncRule);

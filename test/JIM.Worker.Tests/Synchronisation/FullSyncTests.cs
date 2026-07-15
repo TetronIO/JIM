@@ -3571,10 +3571,15 @@ public class FullSyncTests
         mvUserType.DeletionGracePeriod = null; // null = immediate deletion
         mvUserType.DeletionTriggerConnectedSystemIds = new List<int> { sourceSystem.Id };
 
-        // Set up export Synchronisation Rule on the TARGET system with Attribute Flow mappings
+        // Set up export Synchronisation Rule on the TARGET system with Attribute Flow mappings.
+        // The rule must match the target CSO's object type and carry a Delete deprovisioning
+        // action for the MVO-deletion cascade to create the Delete export (issue #655).
         var exportSyncRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
         exportSyncRule.ConnectedSystemId = targetSystem.Id;
         exportSyncRule.ConnectedSystem = targetSystem;
+        exportSyncRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportSyncRule.ConnectedSystemObjectType = targetUserType;
+        exportSyncRule.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
         exportSyncRule.AttributeFlowRules.Add(new SyncRuleMapping
         {
             Id = 100,
