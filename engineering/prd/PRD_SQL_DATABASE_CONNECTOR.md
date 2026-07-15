@@ -2,7 +2,7 @@
 
 - **Status:** Planned
 - **Created:** 2026-07-15
-- **Author:** Jay Van der Zant (with Claude)
+- **Author:** Jay (with Claude)
 - **Issue:** [#170](https://github.com/TetronIO/JIM/issues/170)
 
 ## Problem Statement
@@ -72,7 +72,8 @@ The integration test infrastructure already anticipates this connector: dormant 
 | DATETIMEOFFSET/TIMESTAMP WITH TIME ZONE | DateTime | Normalised to UTC |
 | UNIQUEIDENTIFIER/RAW(16) with GUID content | Guid | |
 | VARBINARY/BLOB/RAW | Binary | |
-| DECIMAL/NUMERIC/MONEY/FLOAT | Text | Lossless string round-trip; upgrades to Decimal when #1046 lands |
+| DECIMAL/NUMERIC/MONEY | Decimal | Type delivered by prerequisite #1046 |
+| FLOAT/REAL | Per #1046's decision | Decimal with a documented precision caveat, or Text; decided within #1046 |
 | Foreign-key columns holding another object type's anchor | Reference | Explicit per-column configuration, not inferred |
 
 9. Zoneless date/time columns are ambiguous at the wire level, so the connector must expose a per-Connected-System setting declaring how to interpret them (UTC, or a named IANA time zone), applied on import and inverted on export. Offset-carrying types need no setting. JIM stores all DateTime values in UTC internally; this setting resolves source semantics, it does not change JIM's storage model.
@@ -102,6 +103,10 @@ The integration test infrastructure already anticipates this connector: dormant 
 
 20. Connection strings and credentials must never be logged; the trust model must be documented: connector configuration (including any admin-supplied `SELECT`) is privileged administrator input, the injection surface to defend is value parameterisation and identifier quoting, and deployments should use least-privilege database accounts (read-only for import-only systems).
 
+**Progress reporting**
+
+21. Long-running operations must narrate their sub-phases via the callback pattern delivered by prerequisite #637 ("Executing query", "Reading rows", "Writing rows"), so operators can distinguish a healthy long-running query from a stuck one.
+
 ### Non-Functional Requirements
 
 - 100,000-row full import completes within the same order of magnitude as the LDAP Connector at equivalent scale, without unbounded memory growth (streaming reads, page-at-a-time materialisation).
@@ -124,7 +129,7 @@ Integration coverage must be a **provider × capability matrix**, not a single h
 | Export: update | Attribute changes applied; multi-valued related-table rows added and removed transactionally with the parent |
 | Export: delete | Row (and related rows) removed; per-object error isolation on failure |
 | Reference export | Anchor values written for reference attributes |
-| Type-mapping round-trip | Each mapped SQL type imports and exports losslessly, including zoneless DateTime interpretation and exact-numeric Text round-trip |
+| Type-mapping round-trip | Each mapped SQL type imports and exports losslessly, including zoneless DateTime interpretation and exact-numeric Decimal round-trip |
 | Configuration validation | Save-time connectivity test passes/fails correctly (wrong credentials, unreachable host) |
 
 The full matrix must run green for Priority 1 providers (SQL Server, Oracle) before first release, and for each Priority 2 provider before it is declared supported. Because the full matrix is expensive, the regular integration gate may run a representative subset (at minimum: one provider end-to-end plus configuration validation on all providers), with the full matrix required before release; the split is decided at plan time within the existing runner's scenario structure. At least one provider must additionally run the 100,000-row scale import.
@@ -168,7 +173,7 @@ The full matrix must run green for Priority 1 providers (SQL Server, Oracle) bef
 | Area | Impact |
 |------|--------|
 | JIM.Connectors | New `Sql/` connector (structure mirroring `LDAP/`: main class + import/export/schema/provider helpers); provider abstraction; new NuGet references (see Open Questions on project placement) |
-| JIM.Application | `ConnectorFactory` registration; `ConnectedSystemServer` dispatch sites (coordinate with #875); seeding of the new Connector Definition |
+| JIM.Application | Registration with the centralised connector dispatch delivered by prerequisite #875; seeding of the new Connector Definition |
 | Worker | None expected beyond existing processor dispatch (calls-based import/export) |
 | Database | None expected (connector state rides existing `PersistedConnectorData`/pagination-token mechanisms) |
 | UI | None expected beyond the settings framework rendering the new Connector Definition's settings |
@@ -184,14 +189,19 @@ The full matrix must run green for Priority 1 providers (SQL Server, Oracle) bef
 
 ## Dependencies
 
+**Sequencing decision (2026-07-15): the following three issues are hard prerequisites and will be implemented before the SQL connector**, so the connector is built on the final foundations rather than reworked after them:
+
+- **#875 (centralise connector dispatch)**: the connector registers with the centralised dispatch this delivers, rather than adding a third copy of every hand-coded name-based branch.
+- **#637 (connector sub-phase progress)**: the connector narrates its long-running operations from day one ("Executing query", "Reading rows", "Writing rows") via the callback pattern this delivers.
+- **#1046 (Decimal attribute data type, child issue of #170)**: the connector maps exact-numeric columns to Decimal natively from day one, avoiding a Text-to-Decimal mapping migration on live Connected Systems.
+
+Additionally:
+
 - Third-Party Dependency Governance approval for `Microsoft.Data.SqlClient` and `Oracle.ManagedDataAccess.Core` (Priority 1), then `Npgsql` and `MySqlConnector` (Priority 2).
-- #875 (centralise connector dispatch): not a hard prerequisite, but landing it first avoids adding a third copy of every hand-coded dispatch branch; decide sequencing at plan time.
-- #637 (connector sub-phase progress): designed but unimplemented; the connector should adopt the callback pattern when it lands ("Executing query", "Reading rows" narration for long-running operations).
-- #1046 (Decimal attribute data type, child issue of #170): not a blocker; the connector maps exact numerics to Text until it lands, then upgrades the mapping.
 
 ## Open Questions
 
-1. **Decimal support** (resolved; tracked as #1046, a child issue of #170): DECIMAL/NUMERIC/MONEY columns currently have no lossless JIM type, so this PRD maps them to Text. That is a proven pattern in this product class and fine for pass-through flows, but it breaks numeric semantics where JIM itself evaluates the value: scoping criteria compare Text lexicographically ("0.5" > "0.25" works, "9" > "10" fails), so a rule like "FTE less than 0.5" cannot be expressed reliably, and identity-relevant decimal data is real (FTE fraction, contracted hours, salary banding). SCIM (RFC 7643) also defines `decimal` as a core attribute type, so the planned SCIM work (#545) meets the same gap. A first-class `Decimal` `AttributeDataType` is therefore tracked as #1046 (a #245-shaped cross-cutting change); the connector ships with the Text mapping and upgrades when the type lands. The connector does not block on it.
+1. **Decimal support** (resolved; tracked as #1046, a child issue of #170 and a hard prerequisite per the Dependencies section): a Text mapping for DECIMAL/NUMERIC/MONEY columns is a proven pattern in this product class and fine for pass-through flows, but it breaks numeric semantics where JIM itself evaluates the value: scoping criteria compare Text lexicographically ("0.5" > "0.25" works, "9" > "10" fails), so a rule like "FTE less than 0.5" cannot be expressed reliably, and identity-relevant decimal data is real (FTE fraction, contracted hours, salary banding). SCIM (RFC 7643) also defines `decimal` as a core attribute type, so the planned SCIM work (#545) meets the same gap. A first-class `Decimal` `AttributeDataType` is therefore tracked as #1046 and sequenced before this connector, which maps exact-numeric columns to Decimal natively from day one.
 2. **Zoneless DateTime default**: when the administrator does not set the time-zone interpretation setting, should the connector default to UTC (predictable, sometimes wrong) or refuse to import zoneless datetime columns until configured (safe, more friction)?
 3. **Multiple multi-valued related tables per object type**: the first release supports N related tables per object type in the data model; is there a UI complexity argument for capping at one initially?
 4. **`SupportsParallelExport`**: parallel batches against one database can deadlock on hot pages and interleave parent/child writes; start sequential and revisit, or design for parallelism from the outset?
