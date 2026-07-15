@@ -31,7 +31,20 @@
 
         <MudTabPanel Text="Details">
             <MudPaper Class="pa-4" Outlined="true">
-                <MudText Typo="Typo.h5" Class="mb-4">Details</MudText>
+                <div class="d-flex justify-space-between align-center mb-4">
+                    <MudText Typo="Typo.h5">Details</MudText>
+                    @if (!_metaverseObjectType.BuiltIn)
+                    {
+                        <MudButton StartIcon="@Icons.Material.Outlined.Edit" Variant="Variant.Outlined" Color="Color.Primary"
+                                   OnClick="OpenEditObjectTypeDialogAsync">Edit</MudButton>
+                    }
+                    else
+                    {
+                        <MudTooltip Text="Built-in Object Types cannot be renamed or re-iconed." Arrow="true" Placement="Placement.Top">
+                            <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
+                        </MudTooltip>
+                    }
+                </div>
                 <MudGrid Spacing="4">
                     <MudItem xs="12" sm="6" md="4">
                         <MudField Label="Name" Variant="Variant.Outlined">@_metaverseObjectType.Name</MudField>
@@ -532,6 +545,15 @@
             return;
 
         if (await RemoveAttributeBindingDialog.ShowAsync(DialogService, attribute.Id, attribute.Name, Id, _metaverseObjectType.Name))
+            await ReloadObjectTypeAsync();
+    }
+
+    private async Task OpenEditObjectTypeDialogAsync()
+    {
+        if (_metaverseObjectType == null)
+            return;
+
+        if (await MetaverseObjectTypeEditorDialog.ShowAsync(DialogService, _metaverseObjectType))
             await ReloadObjectTypeAsync();
     }
 

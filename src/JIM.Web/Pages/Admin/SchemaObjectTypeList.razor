@@ -22,6 +22,12 @@
 <NavigableMudTabs @bind-ActivePanelIndex="_activeTabIndex" Elevation="0" Rounded="true" ApplyEffectsToContainer="false" Outlined="true" TabPanelsClass="pt-5" Class="mt-5">
     <MudTabPanel Text="Object Types" Icon="@Icons.Material.Filled.Category">
         <MudTable Items="@_metaverseObjectTypeHeaders" Hover="true" Breakpoint="Breakpoint.Sm" Loading="false" SortLabel="Sort By" Outlined="true" Elevation="0">
+            <ToolBarContent>
+                <MudText Typo="Typo.h6">Object Types</MudText>
+                <MudSpacer />
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                           DropShadow="false" Class="ml-3" OnClick="OpenCreateObjectTypeDialogAsync">New Object Type</MudButton>
+            </ToolBarContent>
             <HeaderContent>
                 <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.Name)"><MudText Typo="Typo.button">Name</MudText></MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.AttributesCount)"><MudText Typo="Typo.button">Attributes</MudText></MudTableSortLabel></MudTh>
@@ -29,6 +35,7 @@
                 <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.HasPredefinedSearches)"><MudText Typo="Typo.button">Predefined Searches?</MudText></MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.BuiltIn)"><MudText Typo="Typo.button">Built-in?</MudText></MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortBy="new Func<MetaverseObjectTypeHeader, object>(x => x.Created)"><MudText Typo="Typo.button">Created</MudText></MudTableSortLabel></MudTh>
+                <MudTh></MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Name">
@@ -50,6 +57,28 @@
                     <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                         @context.Created.ToLocalTime().ToRelativeTime()
                     </MudTooltip>
+                </MudTd>
+                <MudTd DataLabel="">
+                    <div class="d-flex justify-end">
+                        @if (!context.BuiltIn)
+                        {
+                            <MudTooltip Text="Edit Object Type" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Outlined.Edit" OnClick="@(() => OpenEditObjectTypeDialogAsync(context))" />
+                            </MudTooltip>
+                            <MudTooltip Text="Delete Object Type" Arrow="true" Placement="Placement.Top">
+                                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Color="Color.Error" OnClick="@(() => OpenDeleteObjectTypeDialogAsync(context))" />
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <MudTooltip Text="Built-in Object Types cannot be renamed or deleted." Arrow="true" Placement="Placement.Top">
+                                <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mud-text-secondary" />
+                            </MudTooltip>
+                        }
+                        <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
+                            <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowObjectTypeHistoryDialogAsync(context))" />
+                        </MudTooltip>
+                    </div>
                 </MudTd>
             </RowTemplate>
         </MudTable>
@@ -295,6 +324,47 @@
         {
             await _attributeTable.ReloadServerData();
         }
+    }
+
+    private async Task OpenCreateObjectTypeDialogAsync()
+    {
+        if (await MetaverseObjectTypeEditorDialog.ShowAsync(DialogService))
+            await ReloadObjectTypeHeadersAsync();
+    }
+
+    private async Task OpenEditObjectTypeDialogAsync(MetaverseObjectTypeHeader header)
+    {
+        using var jim = JimFactory.Create();
+        var objectType = await jim.Metaverse.GetMetaverseObjectTypeAsync(header.Id, false);
+        if (objectType == null)
+            return;
+
+        if (await MetaverseObjectTypeEditorDialog.ShowAsync(DialogService, objectType))
+            await ReloadObjectTypeHeadersAsync();
+    }
+
+    private async Task OpenDeleteObjectTypeDialogAsync(MetaverseObjectTypeHeader header)
+    {
+        using var jim = JimFactory.Create();
+        var objectType = await jim.Metaverse.GetMetaverseObjectTypeAsync(header.Id, false);
+        if (objectType == null)
+            return;
+
+        if (await DeleteMetaverseObjectTypeDialog.ShowAsync(DialogService, objectType))
+            await ReloadObjectTypeHeadersAsync();
+    }
+
+    private async Task ShowObjectTypeHistoryDialogAsync(MetaverseObjectTypeHeader header)
+    {
+        await ConfigurationChangeHistoryDialog.ShowAsync(DialogService, ActivityTargetType.MetaverseObjectType,
+            header.Id, "Metaverse Object Type", header.Name);
+    }
+
+    private async Task ReloadObjectTypeHeadersAsync()
+    {
+        using var jim = JimFactory.Create();
+        _metaverseObjectTypeHeaders = await jim.Metaverse.GetMetaverseObjectTypeHeadersAsync();
+        StateHasChanged();
     }
 
     private (string Label, Color Color, string Icon) GetDeletionRuleDisplay(MetaverseObjectDeletionRule rule)

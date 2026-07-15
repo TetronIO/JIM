@@ -195,6 +195,51 @@ public class MetaverseServer
         var existing = await Application.Repository.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, includeChildObjects: false);
         return existing == null || existing.Id == excludeObjectTypeId;
     }
+
+    /// <summary>
+    /// Updates a custom Metaverse Object Type's identity (name, plural name, icon) through the audited path, re-checking
+    /// name and plural-name uniqueness case-insensitively (excluding the type itself). Built-in types are immutable in
+    /// their identity (their deletion rules are changed via <see cref="UpdateMetaverseObjectTypeAsync(MetaverseObjectType, MetaverseObject?, string?)"/>).
+    /// This is the guarded path the UI edit dialog uses so that the built-in and uniqueness rules hold regardless of the
+    /// REST controller.
+    /// </summary>
+    /// <exception cref="ArgumentException">No object type exists with the given id, or a required name is blank.</exception>
+    /// <exception cref="InvalidOperationException">The type is built-in, or the new name / plural name is already used.</exception>
+    public Task RenameMetaverseObjectTypeAsync(int objectTypeId, string newName, string newPluralName, string? icon, MetaverseObject? initiatedBy, string? changeReason = null) =>
+        RenameMetaverseObjectTypeCoreAsync(objectTypeId, newName, newPluralName, icon, objectType => UpdateMetaverseObjectTypeAsync(objectType, initiatedBy, changeReason));
+
+    /// <summary>
+    /// Updates a custom Metaverse Object Type's identity through the audited path (API-key initiator overload).
+    /// </summary>
+    public Task RenameMetaverseObjectTypeAsync(int objectTypeId, string newName, string newPluralName, string? icon, ApiKey initiatedByApiKey, string? changeReason = null) =>
+        RenameMetaverseObjectTypeCoreAsync(objectTypeId, newName, newPluralName, icon, objectType => UpdateMetaverseObjectTypeAsync(objectType, initiatedByApiKey, changeReason));
+
+    private async Task RenameMetaverseObjectTypeCoreAsync(int objectTypeId, string newName, string newPluralName, string? icon, Func<MetaverseObjectType, Task> auditedUpdateAsync)
+    {
+        if (string.IsNullOrWhiteSpace(newName))
+            throw new ArgumentException("A Metaverse Object Type name is required.", nameof(newName));
+        if (string.IsNullOrWhiteSpace(newPluralName))
+            throw new ArgumentException("A Metaverse Object Type plural name is required.", nameof(newPluralName));
+
+        var objectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectTypeId, includeChildObjects: false)
+            ?? throw new ArgumentException($"Metaverse Object Type {objectTypeId} not found.", nameof(objectTypeId));
+
+        if (objectType.BuiltIn)
+            throw new InvalidOperationException($"Cannot rename or re-icon built-in Metaverse Object Type '{objectType.Name}'.");
+
+        var trimmedName = newName.Trim();
+        var trimmedPluralName = newPluralName.Trim();
+
+        if (!await IsMetaverseObjectTypeNameAvailableAsync(trimmedName, objectTypeId))
+            throw new InvalidOperationException($"A Metaverse Object Type named '{trimmedName}' already exists.");
+        if (!await IsMetaverseObjectTypePluralNameAvailableAsync(trimmedPluralName, objectTypeId))
+            throw new InvalidOperationException($"A Metaverse Object Type with plural name '{trimmedPluralName}' already exists.");
+
+        objectType.Name = trimmedName;
+        objectType.PluralName = trimmedPluralName;
+        objectType.Icon = string.IsNullOrWhiteSpace(icon) ? null : icon.Trim();
+        await auditedUpdateAsync(objectType);
+    }
     #endregion
 
     #region metaverse attributes
