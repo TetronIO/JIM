@@ -135,6 +135,36 @@ public class RateLimitPartitionResolverTests
     }
 
     [Test]
+    public void Resolve_AuthenticatedInfrastructureKey_ReturnsNoLimiter()
+    {
+        // Infrastructure API keys are trusted backend automation (CI/CD, integration testing, bulk configuration),
+        // authenticated from a pre-shared bootstrap secret and holding the Administrator role. The rate limiter
+        // exists to blunt untrusted/interactive/runaway abuse, not to throttle trusted automation, which
+        // legitimately bursts far past the per-principal cap. Such principals are therefore fully exempt.
+        var apiKeyId = Guid.NewGuid().ToString();
+        var context = BuildContext("/api/v1/synchronisation/sync-rules");
+        SetAuthenticated(context, metaverseObjectId: null, nameIdentifier: apiKeyId, name: "Infrastructure Key", isInfrastructureKey: true);
+
+        var decision = RateLimitPartitionResolver.Resolve(context, EnabledSettings);
+
+        Assert.That(decision.Kind, Is.EqualTo(RateLimitPartitionKind.NoLimiter));
+    }
+
+    [Test]
+    public void Resolve_AuthenticatedNonInfrastructureKey_IsStillRateLimited()
+    {
+        // The exemption is scoped strictly to the infrastructure-key claim; an ordinary API key principal that
+        // happens to share the code path must remain throttled.
+        var apiKeyId = Guid.NewGuid().ToString();
+        var context = BuildContext("/api/v1/synchronisation/sync-rules");
+        SetAuthenticated(context, metaverseObjectId: null, nameIdentifier: apiKeyId, name: "Ordinary Key", isInfrastructureKey: false);
+
+        var decision = RateLimitPartitionResolver.Resolve(context, EnabledSettings);
+
+        Assert.That(decision.Kind, Is.EqualTo(RateLimitPartitionKind.AuthenticatedSlidingWindow));
+    }
+
+    [Test]
     public void Resolve_UnauthenticatedApiRequest_UsesFixedWindowKeyedByClientIp()
     {
         var context = BuildContext("/api/v1/connected-systems");
@@ -201,7 +231,7 @@ public class RateLimitPartitionResolverTests
         return context;
     }
 
-    private static void SetAuthenticated(HttpContext context, string? metaverseObjectId, string? nameIdentifier, string? name)
+    private static void SetAuthenticated(HttpContext context, string? metaverseObjectId, string? nameIdentifier, string? name, bool isInfrastructureKey = false)
     {
         var claims = new List<Claim>();
         if (metaverseObjectId != null)
@@ -210,6 +240,8 @@ public class RateLimitPartitionResolverTests
             claims.Add(new Claim(ClaimTypes.NameIdentifier, nameIdentifier));
         if (name != null)
             claims.Add(new Claim(ClaimTypes.Name, name));
+        if (isInfrastructureKey)
+            claims.Add(new Claim(Constants.BuiltInClaims.IsInfrastructureKey, "true"));
 
         // A non-null authenticationType is what makes ClaimsIdentity.IsAuthenticated true.
         var identity = new ClaimsIdentity(claims, authenticationType: "Test", nameType: ClaimTypes.Name, roleType: null);

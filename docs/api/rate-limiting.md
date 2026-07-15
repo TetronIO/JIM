@@ -19,6 +19,12 @@ Only the REST API (paths under `/api/`) is throttled. The Blazor web UI, the Sig
 
 Each client's limit is tracked independently: one integration hitting its limit does not affect any other client.
 
+### Infrastructure API keys are exempt
+
+The [infrastructure API key](authentication.md) (the key auto-created from the `JIM_INFRASTRUCTURE_API_KEY` environment variable, shown with an **Infrastructure** badge in the API keys admin page) is **fully exempt** from rate limiting. It is trusted backend automation (CI/CD pipelines, integration tests, bulk configuration) authenticated from a pre-shared bootstrap secret, and it legitimately issues large bursts of requests, for example creating dozens of Synchronisation Rules in one script. Rate limiting exists to blunt untrusted, interactive, or runaway callers, not this trusted principal, so it is never throttled.
+
+Ordinary API keys (those you create in the admin UI) are **not** exempt: they are limited exactly like any other authenticated principal. If a script driven by an ordinary key needs to issue large bursts, either back off on `429` (see below) or, if the key is genuinely for trusted automation, raise `Security.RateLimiting.AuthenticatedRequestsPerMinute`.
+
 ## Service Settings
 
 Three built-in [Service Settings](../configuration/service-settings.md) (Security category) control rate limiting, and can be changed at runtime by an Administrator without restarting JIM:
@@ -51,6 +57,9 @@ A request that exceeds its limit receives:
 ```
 
 Well-behaved clients should back off for the duration given in `Retry-After` before retrying.
+
+!!! tip "The JIM PowerShell module retries automatically"
+    Every cmdlet in the [JIM PowerShell module](../powershell/index.md) honours `429` transparently: it waits for the `Retry-After` interval (falling back to bounded exponential backoff if the header is absent) and retries the request, up to a small fixed budget, before surfacing an error. A script that momentarily exceeds the limit therefore rides out the window and continues rather than failing; run with `-Verbose` to see the back-off messages. If the budget is exhausted, the cmdlet throws a `429` error advising you to retry later or reduce the request rate.
 
 ## Reverse proxies
 
