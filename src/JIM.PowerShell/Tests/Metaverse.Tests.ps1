@@ -745,3 +745,159 @@ Describe 'Get-JIMMetaverseAttributeDeletionPreview' {
         It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
     }
 }
+
+Describe 'Set-JIMMetaverseObjectType' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command Set-JIMMetaverseObjectType
+        }
+
+        It 'Should expose NewName, PluralName and Icon parameters' {
+            $command.Parameters.Keys | Should -Contain 'NewName'
+            $command.Parameters.Keys | Should -Contain 'PluralName'
+            $command.Parameters.Keys | Should -Contain 'Icon'
+        }
+
+        It 'Should not put ValidateNotNullOrEmpty on the clearable Icon parameter' {
+            $validators = $command.Parameters['Icon'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateNotNullOrEmptyAttribute] }
+            $validators | Should -BeNullOrEmpty
+        }
+
+        It 'Should support ShouldProcess' {
+            $command.Parameters['WhatIf'] | Should -Not -BeNullOrEmpty
+            $command.Parameters['Confirm'] | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Requires Connection' {
+
+        BeforeEach { Disconnect-JIM }
+
+        It 'Should throw when not connected' {
+            { Set-JIMMetaverseObjectType -Id 1 -NewName 'X' -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Endpoint routing' {
+
+        It 'Routes a rename to a PUT on the object type endpoint with the new name' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 5 } }
+
+                Set-JIMMetaverseObjectType -Id 5 -NewName 'Gadget' -PluralName 'Gadgets' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PUT' -and $Endpoint -eq '/api/v1/metaverse/object-types/5' -and
+                    $Body.name -eq 'Gadget' -and $Body.pluralName -eq 'Gadgets'
+                }
+            }
+        }
+
+        It 'Sends an empty icon when -Icon $null is passed (clear semantics)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 5 } }
+
+                Set-JIMMetaverseObjectType -Id 5 -Icon $null -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PUT' -and $Body.ContainsKey('icon') -and $Body.icon -eq ''
+                }
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll { $help = Get-Help Set-JIMMetaverseObjectType -Full }
+
+        It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
+        It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
+        It 'Should have related links' { $help.RelatedLinks | Should -Not -BeNullOrEmpty }
+    }
+}
+
+Describe 'Remove-JIMMetaverseObjectType' {
+
+    Context 'Requires Connection' {
+
+        BeforeEach { Disconnect-JIM }
+
+        It 'Should throw when not connected' {
+            { Remove-JIMMetaverseObjectType -Id 1 -ErrorAction Stop } | Should -Throw '*Connect-JIM*'
+        }
+    }
+
+    Context 'Safeguards' {
+
+        It 'Refuses and does not call DELETE when Metaverse Objects of the type exist' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -like '*delete-preview*' } {
+                    [PSCustomObject]@{ objectTypeId = 5; objectTypeName = 'Device'; builtIn = $false; blockedByObjects = $true; metaverseObjectCount = 12; blockedBySynchronisationRules = $false; synchronisationRules = @(); cascadeReferences = @() }
+                }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'DELETE' } { $null }
+
+                Remove-JIMMetaverseObjectType -Id 5 -Force -ErrorAction SilentlyContinue
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'DELETE' }
+            }
+        }
+
+        It 'Refuses and does not call DELETE when Synchronisation Rules target the type' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -like '*delete-preview*' } {
+                    [PSCustomObject]@{ objectTypeId = 5; objectTypeName = 'Device'; builtIn = $false; blockedByObjects = $false; metaverseObjectCount = 0; blockedBySynchronisationRules = $true; synchronisationRules = @([PSCustomObject]@{ description = 'Import Devices' }); cascadeReferences = @() }
+                }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'DELETE' } { $null }
+
+                Remove-JIMMetaverseObjectType -Id 5 -Force -ErrorAction SilentlyContinue
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'DELETE' }
+            }
+        }
+
+        It 'Refuses and does not call DELETE for a built-in type' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -like '*delete-preview*' } {
+                    [PSCustomObject]@{ objectTypeId = 1; objectTypeName = 'User'; builtIn = $true; blockedByObjects = $false; metaverseObjectCount = 0; blockedBySynchronisationRules = $false; synchronisationRules = @(); cascadeReferences = @() }
+                }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'DELETE' } { $null }
+
+                Remove-JIMMetaverseObjectType -Id 1 -Force -ErrorAction SilentlyContinue
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'DELETE' }
+            }
+        }
+
+        It 'Sends the type name as confirmationName when references cascade' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Endpoint -like '*delete-preview*' } {
+                    [PSCustomObject]@{ objectTypeId = 5; objectTypeName = 'Device'; builtIn = $false; blockedByObjects = $false; metaverseObjectCount = 0; blockedBySynchronisationRules = $false; synchronisationRules = @(); cascadeReferences = @([PSCustomObject]@{ kind = 'PredefinedSearch'; description = 'All Devices' }) }
+                }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'DELETE' } { $null }
+
+                Remove-JIMMetaverseObjectType -Id 5 -Force
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'DELETE' -and $Endpoint -like '*confirmationName=Device*'
+                }
+            }
+        }
+    }
+
+    Context 'Help Documentation' {
+
+        BeforeAll { $help = Get-Help Remove-JIMMetaverseObjectType -Full }
+
+        It 'Should have a synopsis' { $help.Synopsis | Should -Not -BeNullOrEmpty }
+        It 'Should have examples' { $help.Examples.Example.Count | Should -BeGreaterThan 0 }
+        It 'Should have related links' { $help.RelatedLinks | Should -Not -BeNullOrEmpty }
+    }
+}

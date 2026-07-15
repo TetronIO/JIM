@@ -168,6 +168,78 @@ public class MetaverseServer
         await CaptureObjectTypeConfigurationChangeAsync(activity, objectType.Id, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
+
+    /// <summary>
+    /// Determines whether a Metaverse Object Type <paramref name="name"/> is available, comparing case-insensitively.
+    /// Backs the real-time create/rename availability check. Supply <paramref name="excludeObjectTypeId"/> when
+    /// validating a rename so the type does not clash with its own current name.
+    /// </summary>
+    public async Task<bool> IsMetaverseObjectTypeNameAvailableAsync(string name, int? excludeObjectTypeId = null)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return false;
+
+        var existing = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(name, includeChildObjects: false);
+        return existing == null || existing.Id == excludeObjectTypeId;
+    }
+
+    /// <summary>
+    /// Determines whether a Metaverse Object Type <paramref name="pluralName"/> is available, comparing
+    /// case-insensitively. Supply <paramref name="excludeObjectTypeId"/> when validating a rename.
+    /// </summary>
+    public async Task<bool> IsMetaverseObjectTypePluralNameAvailableAsync(string pluralName, int? excludeObjectTypeId = null)
+    {
+        if (string.IsNullOrWhiteSpace(pluralName))
+            return false;
+
+        var existing = await Application.Repository.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, includeChildObjects: false);
+        return existing == null || existing.Id == excludeObjectTypeId;
+    }
+
+    /// <summary>
+    /// Updates a custom Metaverse Object Type's identity (name, plural name, icon) through the audited path, re-checking
+    /// name and plural-name uniqueness case-insensitively (excluding the type itself). Built-in types are immutable in
+    /// their identity (their deletion rules are changed via <see cref="UpdateMetaverseObjectTypeAsync(MetaverseObjectType, MetaverseObject?, string?)"/>).
+    /// This is the guarded path the UI edit dialog uses so that the built-in and uniqueness rules hold regardless of the
+    /// REST controller.
+    /// </summary>
+    /// <exception cref="ArgumentException">No object type exists with the given id, or a required name is blank.</exception>
+    /// <exception cref="InvalidOperationException">The type is built-in, or the new name / plural name is already used.</exception>
+    public Task RenameMetaverseObjectTypeAsync(int objectTypeId, string newName, string newPluralName, string? icon, MetaverseObject? initiatedBy, string? changeReason = null) =>
+        RenameMetaverseObjectTypeCoreAsync(objectTypeId, newName, newPluralName, icon, objectType => UpdateMetaverseObjectTypeAsync(objectType, initiatedBy, changeReason));
+
+    /// <summary>
+    /// Updates a custom Metaverse Object Type's identity through the audited path (API-key initiator overload).
+    /// </summary>
+    public Task RenameMetaverseObjectTypeAsync(int objectTypeId, string newName, string newPluralName, string? icon, ApiKey initiatedByApiKey, string? changeReason = null) =>
+        RenameMetaverseObjectTypeCoreAsync(objectTypeId, newName, newPluralName, icon, objectType => UpdateMetaverseObjectTypeAsync(objectType, initiatedByApiKey, changeReason));
+
+    private async Task RenameMetaverseObjectTypeCoreAsync(int objectTypeId, string newName, string newPluralName, string? icon, Func<MetaverseObjectType, Task> auditedUpdateAsync)
+    {
+        if (string.IsNullOrWhiteSpace(newName))
+            throw new ArgumentException("A Metaverse Object Type name is required.", nameof(newName));
+        if (string.IsNullOrWhiteSpace(newPluralName))
+            throw new ArgumentException("A Metaverse Object Type plural name is required.", nameof(newPluralName));
+
+        var objectType = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectTypeId, includeChildObjects: false)
+            ?? throw new ArgumentException($"Metaverse Object Type {objectTypeId} not found.", nameof(objectTypeId));
+
+        if (objectType.BuiltIn)
+            throw new InvalidOperationException($"Cannot rename or re-icon built-in Metaverse Object Type '{objectType.Name}'.");
+
+        var trimmedName = newName.Trim();
+        var trimmedPluralName = newPluralName.Trim();
+
+        if (!await IsMetaverseObjectTypeNameAvailableAsync(trimmedName, objectTypeId))
+            throw new InvalidOperationException($"A Metaverse Object Type named '{trimmedName}' already exists.");
+        if (!await IsMetaverseObjectTypePluralNameAvailableAsync(trimmedPluralName, objectTypeId))
+            throw new InvalidOperationException($"A Metaverse Object Type with plural name '{trimmedPluralName}' already exists.");
+
+        objectType.Name = trimmedName;
+        objectType.PluralName = trimmedPluralName;
+        objectType.Icon = string.IsNullOrWhiteSpace(icon) ? null : icon.Trim();
+        await auditedUpdateAsync(objectType);
+    }
     #endregion
 
     #region metaverse attributes
@@ -331,6 +403,24 @@ public class MetaverseServer
                 return persisted == null ? null : Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
             },
             $"Metaverse Object Type {objectTypeId}");
+    }
+
+    /// <summary>
+    /// Captures a tombstone snapshot of a Metaverse Object Type onto its delete Activity, before the type is removed.
+    /// Matching the Metaverse Attribute deletion behaviour, this does not link the Activity to the object or set a
+    /// version: the type is deleted before the Activity completes, so the snapshot is surfaced via the Activity itself
+    /// rather than the object's history.
+    /// </summary>
+    private async Task CaptureObjectTypeConfigurationDeletionAsync(Activity activity, MetaverseObjectType objectType, string? changeReason)
+    {
+        await Application.ConfigurationChangeCapture.CaptureDeletionAsync(activity, changeReason,
+            async hashKey =>
+            {
+                // Reload with associations for a complete tombstone; fall back to the caller's entity if already gone.
+                var persisted = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(objectType.Id, includeChildObjects: true) ?? objectType;
+                return Application.ConfigurationSnapshots.CreateSnapshot(persisted, hashKey);
+            },
+            $"Metaverse Object Type {objectType.Id}");
     }
 
     /// <summary>
@@ -815,6 +905,136 @@ public class MetaverseServer
         AttributeReferenceKind.ExampleDataTemplateAttributeDependency => ActivityTargetType.ExampleDataTemplate,
         AttributeReferenceKind.ServiceSettingsSsoIdentifier => ActivityTargetType.ServiceSetting,
         _ => ActivityTargetType.SynchronisationRule
+    };
+    #endregion
+
+    #region metaverse object type destructive-operation safeguards (issue #376)
+    /// <summary>
+    /// Evaluates the impact of deleting a Metaverse Object Type without making any change: the two hard blocks
+    /// (Metaverse Objects of the type, and Synchronisation Rules targeting it, both of which the database would
+    /// otherwise silently cascade-delete) and the softer references (Predefined Searches, Example Data Templates and
+    /// custom attribute bindings) that are cascade-removed when the deletion proceeds. Backs the preview the UI/API
+    /// render to drive the type-the-name confirmation.
+    /// </summary>
+    public async Task<ObjectTypeDeletionImpact> EvaluateObjectTypeDeletionAsync(MetaverseObjectType objectType)
+    {
+        ArgumentNullException.ThrowIfNull(objectType);
+
+        var metaverseObjectCount = await Application.Repository.Metaverse.GetMetaverseObjectOfTypeCountAsync(objectType.Id);
+        var references = await Application.Repository.Metaverse.GetMetaverseObjectTypeReferencesAsync(objectType.Id);
+
+        return new ObjectTypeDeletionImpact
+        {
+            ObjectTypeId = objectType.Id,
+            ObjectTypeName = objectType.Name,
+            BuiltIn = objectType.BuiltIn,
+            MetaverseObjectCount = metaverseObjectCount,
+            SynchronisationRules = references.Where(r => r.Kind == ObjectTypeReferenceKind.SynchronisationRule).ToList(),
+            CascadeReferences = references.Where(r => r.Kind != ObjectTypeReferenceKind.SynchronisationRule).ToList()
+        };
+    }
+
+    /// <summary>
+    /// Deletes a custom Metaverse Object Type, cascade-removing its softer configuration references (Predefined
+    /// Searches, Example Data Templates and custom attribute bindings) via the database delete cascade as one
+    /// transaction. Two hard blocks refuse the deletion without making any change: Metaverse Objects of the type
+    /// (identity data), and Synchronisation Rules targeting the type (deleting the type would otherwise cascade-delete
+    /// the whole rule). The delete is audited as a parent delete Activity with a tombstone snapshot. Built-in types can
+    /// never be deleted.
+    /// </summary>
+    /// <returns>The evaluated impact; <see cref="ObjectTypeDeletionImpact.Deleted"/> is true when the delete happened.</returns>
+    public Task<ObjectTypeDeletionImpact> DeleteMetaverseObjectTypeAsync(MetaverseObjectType objectType, MetaverseObject? initiatedBy, string? changeReason = null) =>
+        DeleteMetaverseObjectTypeCoreAsync(objectType, activity => Application.Activities.CreateActivityAsync(activity, initiatedBy), changeReason);
+
+    /// <summary>
+    /// Deletes a custom Metaverse Object Type with reference cascade (API-key initiator overload).
+    /// </summary>
+    public Task<ObjectTypeDeletionImpact> DeleteMetaverseObjectTypeAsync(MetaverseObjectType objectType, ApiKey initiatedByApiKey, string? changeReason = null) =>
+        DeleteMetaverseObjectTypeCoreAsync(objectType, activity => Application.Activities.CreateActivityAsync(activity, initiatedByApiKey), changeReason);
+
+    private async Task<ObjectTypeDeletionImpact> DeleteMetaverseObjectTypeCoreAsync(MetaverseObjectType objectType, Func<Activity, Task> createActivityAsync, string? changeReason)
+    {
+        ArgumentNullException.ThrowIfNull(objectType);
+
+        if (objectType.BuiltIn)
+            throw new InvalidOperationException($"Cannot delete built-in Metaverse Object Type '{objectType.Name}'.");
+
+        var impact = await EvaluateObjectTypeDeletionAsync(objectType);
+
+        // Hard blocks: live identity data, or Synchronisation Rules whose target this type is. Refuse without making
+        // any change; the caller surfaces the counts.
+        if (impact.BlockedByObjects || impact.BlockedBySynchronisationRules)
+            return impact;
+
+        Log.Debug("DeleteMetaverseObjectTypeAsync() removing {ObjectType} with {ReferenceCount} cascade reference(s)", objectType.Name, impact.CascadeReferences.Count);
+
+        var parent = new Activity
+        {
+            TargetName = objectType.Name,
+            TargetType = ActivityTargetType.MetaverseObjectType,
+            TargetOperationType = ActivityTargetOperationType.Delete
+        };
+        await createActivityAsync(parent);
+
+        try
+        {
+            // Capture the tombstone snapshot on the parent before the type is removed.
+            await CaptureObjectTypeConfigurationDeletionAsync(parent, objectType, changeReason);
+
+            // One child Activity per cascade-removed reference, grouped under the parent, so the audit log shows exactly
+            // what was removed under the one action.
+            foreach (var referenceChild in impact.CascadeReferences.Select(reference => new Activity
+                     {
+                         ParentActivityId = parent.Id,
+                         TargetName = reference.Description,
+                         TargetContext = objectType.Name,
+                         TargetType = ObjectTypeReferenceActivityTargetType(reference.Kind),
+                         TargetOperationType = ActivityTargetOperationType.Delete,
+                         Message = $"Removed {reference.Description} scoped to Metaverse Object Type '{objectType.Name}'"
+                     }))
+            {
+                await createActivityAsync(referenceChild);
+                await Application.Activities.CompleteActivityAsync(referenceChild);
+            }
+
+            // A child Activity for the object type removal itself.
+            var removalChild = new Activity
+            {
+                ParentActivityId = parent.Id,
+                TargetName = objectType.Name,
+                TargetType = ActivityTargetType.MetaverseObjectType,
+                TargetOperationType = ActivityTargetOperationType.Delete,
+                Message = $"Removed Metaverse Object Type '{objectType.Name}'"
+            };
+            await createActivityAsync(removalChild);
+            await Application.Activities.CompleteActivityAsync(removalChild);
+
+            // Execute the removal; the database cascade removes the softer references in one transaction.
+            await Application.Repository.Metaverse.DeleteMetaverseObjectTypeAsync(objectType.Id);
+
+            await Application.Activities.CompleteActivityAsync(parent);
+        }
+        catch (Exception ex)
+        {
+            // Activity execution boundary: any failure must be recorded on the parent Activity, never escape silently.
+            await Application.Activities.FailActivityWithErrorAsync(parent, ex);
+            throw;
+        }
+
+        impact.Deleted = true;
+        return impact;
+    }
+
+    /// <summary>
+    /// Maps a Metaverse Object Type reference kind to the Activity target type used for the child audit Activity that
+    /// records its cascade removal.
+    /// </summary>
+    private static ActivityTargetType ObjectTypeReferenceActivityTargetType(ObjectTypeReferenceKind kind) => kind switch
+    {
+        ObjectTypeReferenceKind.PredefinedSearch => ActivityTargetType.PredefinedSearch,
+        ObjectTypeReferenceKind.ExampleDataTemplate => ActivityTargetType.ExampleDataTemplate,
+        ObjectTypeReferenceKind.AttributeBinding => ActivityTargetType.MetaverseAttribute,
+        _ => ActivityTargetType.MetaverseObjectType
     };
     #endregion
 

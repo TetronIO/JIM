@@ -135,6 +135,7 @@
         'Get-JIMMetaverseObjectType',
         'New-JIMMetaverseObjectType',
         'Set-JIMMetaverseObjectType',
+        'Remove-JIMMetaverseObjectType',
         'Get-JIMMetaverseAttribute',
         'New-JIMMetaverseAttribute',
         'Set-JIMMetaverseAttribute',

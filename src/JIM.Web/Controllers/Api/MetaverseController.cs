@@ -190,6 +190,39 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (objectType == null)
             return NotFound(ApiErrorResponse.NotFound($"Object type with ID {id} not found."));
 
+        // Identity fields (Name, PluralName, Icon). Built-in types reject changes to these; only their deletion rules
+        // may be changed. Custom types apply the change with a case-insensitive uniqueness re-check. Icon follows the
+        // clearable-field convention: null leaves it unchanged, empty/whitespace clears it.
+        var trimmedName = request.Name?.Trim();
+        var trimmedPluralName = request.PluralName?.Trim();
+        var normalisedIcon = string.IsNullOrWhiteSpace(request.Icon) ? null : request.Icon.Trim();
+
+        var wantsNameChange = !string.IsNullOrEmpty(trimmedName) && trimmedName != objectType.Name;
+        var wantsPluralNameChange = !string.IsNullOrEmpty(trimmedPluralName) && trimmedPluralName != objectType.PluralName;
+        var wantsIconChange = request.Icon != null && normalisedIcon != objectType.Icon;
+
+        if (objectType.BuiltIn && (wantsNameChange || wantsPluralNameChange || wantsIconChange))
+            return BadRequest(ApiErrorResponse.BadRequest("Built-in Metaverse Object Types cannot be renamed or re-iconed; only their deletion rules can be changed."));
+
+        if (wantsNameChange)
+        {
+            var clashByName = await _application.Metaverse.GetMetaverseObjectTypeAsync(trimmedName!, includeChildObjects: false);
+            if (clashByName != null && clashByName.Id != objectType.Id)
+                return BadRequest(ApiErrorResponse.BadRequest($"Object type with name '{trimmedName}' already exists."));
+            objectType.Name = trimmedName!;
+        }
+
+        if (wantsPluralNameChange)
+        {
+            var clashByPluralName = await _application.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(trimmedPluralName!, includeChildObjects: false);
+            if (clashByPluralName != null && clashByPluralName.Id != objectType.Id)
+                return BadRequest(ApiErrorResponse.BadRequest($"Object type with plural name '{trimmedPluralName}' already exists."));
+            objectType.PluralName = trimmedPluralName!;
+        }
+
+        if (wantsIconChange)
+            objectType.Icon = normalisedIcon;
+
         // Apply updates
         if (request.DeletionRule.HasValue)
             objectType.DeletionRule = request.DeletionRule.Value;
@@ -233,6 +266,119 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         var result = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectType.Id, false);
         return Ok(MetaverseObjectTypeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
+    /// Check whether a Metaverse Object Type name and/or plural name are available
+    /// </summary>
+    /// <remarks>
+    /// Backs the real-time create/edit dialog validator. Comparisons are case-insensitive. Supply
+    /// <paramref name="excludeId"/> when validating an edit so the type does not clash with its own current names.
+    /// At least one of <paramref name="name"/> or <paramref name="pluralName"/> must be supplied.
+    /// </remarks>
+    /// <param name="name">The candidate singular name.</param>
+    /// <param name="pluralName">The candidate plural name.</param>
+    /// <param name="excludeId">Optional Object Type ID to exclude (the type being edited).</param>
+    [HttpGet("object-types/name-availability", Name = "GetObjectTypeNameAvailability")]
+    [ProducesResponseType(typeof(MetaverseObjectTypeNameAvailabilityDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetObjectTypeNameAvailabilityAsync([FromQuery] string? name = null, [FromQuery] string? pluralName = null, [FromQuery] int? excludeId = null)
+    {
+        if (string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(pluralName))
+            return BadRequest(ApiErrorResponse.BadRequest("Supply a name and/or pluralName to check."));
+
+        var response = new MetaverseObjectTypeNameAvailabilityDto();
+
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            response.Name = name;
+            response.NameAvailable = await _application.Metaverse.IsMetaverseObjectTypeNameAvailableAsync(name, excludeId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(pluralName))
+        {
+            response.PluralName = pluralName;
+            response.PluralNameAvailable = await _application.Metaverse.IsMetaverseObjectTypePluralNameAvailableAsync(pluralName, excludeId);
+        }
+
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Preview the impact of deleting a Metaverse Object Type
+    /// </summary>
+    /// <remarks>
+    /// Returns the two hard blocks (Metaverse Objects of the type, and Synchronisation Rules targeting it) and the
+    /// softer references (Predefined Searches, Example Data Templates, attribute bindings) that would be cascade-removed,
+    /// with <c>Blocked</c> and <c>RequiresConfirmation</c> flags. No change is made.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Object Type.</param>
+    [HttpGet("object-types/{id:int}/delete-preview", Name = "GetObjectTypeDeletePreview")]
+    [ProducesResponseType(typeof(ObjectTypeDeletionImpact), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetObjectTypeDeletePreviewAsync(int id)
+    {
+        var objectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(id, false);
+        if (objectType == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {id} not found."));
+
+        var impact = await _application.Metaverse.EvaluateObjectTypeDeletionAsync(objectType);
+        return Ok(impact);
+    }
+
+    /// <summary>
+    /// Delete a Metaverse Object Type
+    /// </summary>
+    /// <remarks>
+    /// Built-in types cannot be deleted (400). Metaverse Objects of the type, or Synchronisation Rules targeting it,
+    /// are hard blocks (409 with the impact) and must be removed first. When the deletion would cascade softer
+    /// references (Predefined Searches, Example Data Templates, attribute bindings) it requires
+    /// <paramref name="confirmationName"/> to exactly match the Object Type's name (400 otherwise). The bound attributes
+    /// themselves are not deleted; only their bindings to this type are removed.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Object Type.</param>
+    /// <param name="confirmationName">Required only when the deletion will cascade references: the Object Type's exact name.</param>
+    /// <param name="changeReason">Optional reason for the change, recorded on the audit Activity.</param>
+    /// <response code="200">Deleted; returns the impact listing what was removed.</response>
+    /// <response code="400">The Object Type is built-in, or a required confirmation name is missing or mismatched.</response>
+    /// <response code="404">Object Type not found.</response>
+    /// <response code="409">Refused because Metaverse Objects of the type or Synchronisation Rules targeting it exist; returns the blocking impact.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpDelete("object-types/{id:int}", Name = "DeleteObjectType")]
+    [ProducesResponseType(typeof(ObjectTypeDeletionImpact), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ObjectTypeDeletionImpact), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeleteObjectTypeAsync(int id, [FromQuery] string? confirmationName = null, [FromQuery] string? changeReason = null)
+    {
+        _logger.LogInformation("Deleting Metaverse Object Type: {Id}", id);
+
+        var objectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(id, false);
+        if (objectType == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {id} not found."));
+
+        if (objectType.BuiltIn)
+            return BadRequest(ApiErrorResponse.BadRequest("Built-in Metaverse Object Types cannot be deleted."));
+
+        var impact = await _application.Metaverse.EvaluateObjectTypeDeletionAsync(objectType);
+
+        if (impact.Blocked)
+            return Conflict(impact);
+
+        if (impact.RequiresConfirmation && !string.Equals(confirmationName, objectType.Name, StringComparison.Ordinal))
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"This deletion will cascade-remove references. To confirm, supply confirmationName exactly matching the Object Type name '{objectType.Name}'."));
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var result = apiKey != null
+            ? await _application.Metaverse.DeleteMetaverseObjectTypeAsync(objectType, apiKey, changeReason)
+            : await _application.Metaverse.DeleteMetaverseObjectTypeAsync(objectType, await GetCurrentUserAsync(), changeReason);
+
+        _logger.LogInformation("Deleted Metaverse Object Type: {Id} ({Name})", id, LogSanitiser.Sanitise(objectType.Name));
+        return Ok(result);
     }
 
     /// <summary>
