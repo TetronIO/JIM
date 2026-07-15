@@ -1,7 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using CPI.DirectoryServices;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Utilities;
@@ -560,39 +559,10 @@ internal static class LdapConnectorUtilities
         if (string.IsNullOrEmpty(dn))
             return (null, null);
 
-        // Find the first unescaped comma to split RDN from parent
-        var commaIndex = FindUnescapedComma(dn);
+        if (!LdapDistinguishedName.TryParse(dn, out var parsedDn))
+            return (null, null);
 
-        if (commaIndex == -1)
-        {
-            // No comma found - the entire DN is the RDN (root object)
-            return (dn, null);
-        }
-
-        var rdn = dn.Substring(0, commaIndex);
-        var parentDn = dn.Substring(commaIndex + 1);
-
-        return (rdn, parentDn);
-    }
-
-    /// <summary>
-    /// Finds the index of the first unescaped comma in a DN string.
-    /// Commas can be escaped with backslash (\,) in LDAP DNs.
-    /// </summary>
-    internal static int FindUnescapedComma(string dn)
-    {
-        for (var i = 0; i < dn.Length; i++)
-        {
-            if (dn[i] == ',')
-            {
-                // Check if this comma is escaped (preceded by backslash)
-                if (i == 0 || dn[i - 1] != '\\')
-                {
-                    return i;
-                }
-            }
-        }
-        return -1;
+        return (parsedDn.LeafRdn.Source, parsedDn.Parent?.ToString());
     }
 
     /// <summary>
@@ -606,25 +576,11 @@ internal static class LdapConnectorUtilities
         if (string.IsNullOrEmpty(dn))
             return false;
 
-        try
-        {
-            var parsedDn = new DN(dn);
-            foreach (var rdn in parsedDn.RDNs)
-            {
-                foreach (var component in rdn.Components)
-                {
-                    if (string.IsNullOrWhiteSpace(component.ComponentValue))
-                        return false;
-                }
-            }
-
-            return true;
-        }
-        catch
-        {
-            // If DNParser cannot parse the DN, it's malformed
+        if (!LdapDistinguishedName.TryParse(dn, out var parsedDn))
             return false;
-        }
+
+        // A malformed DN fails to parse above; here we reject any component whose value is empty or whitespace.
+        return parsedDn.Rdns.All(rdn => rdn.Components.All(component => !string.IsNullOrWhiteSpace(component.Value)));
     }
 
     /// <summary>

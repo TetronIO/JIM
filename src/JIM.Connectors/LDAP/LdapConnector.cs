@@ -575,12 +575,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (string.IsNullOrEmpty(containerExternalId))
             return null;
 
-        // Find the first comma (which separates the RDN from the parent DN)
-        var commaIndex = containerExternalId.IndexOf(',');
-        if (commaIndex == -1 || commaIndex == containerExternalId.Length - 1)
-            return null;
-
-        return containerExternalId.Substring(commaIndex + 1);
+        // Split off the leaf RDN (honouring escaped/quoted separators) to get the parent DN; null at the root.
+        return LdapConnectorUtilities.ParseDistinguishedName(containerExternalId).ParentDn;
     }
 
     /// <summary>
@@ -593,15 +589,11 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (string.IsNullOrEmpty(containerExternalId))
             return string.Empty;
 
-        // The name is the value of the first RDN component
-        var commaIndex = containerExternalId.IndexOf(',');
-        var rdn = commaIndex > 0 ? containerExternalId.Substring(0, commaIndex) : containerExternalId;
+        // The display name is the (unescaped) value of the leaf RDN's first component, e.g. "Sales" from "OU=Sales".
+        if (LdapDistinguishedName.TryParse(containerExternalId, out var parsedDn) && parsedDn.LeafRdn.Components.Count > 0)
+            return parsedDn.LeafRdn.Components[0].Value;
 
-        // Extract value after = sign (e.g., "OU=Sales" -> "Sales")
-        var equalsIndex = rdn.IndexOf('=');
-        return equalsIndex > 0 && equalsIndex < rdn.Length - 1
-            ? rdn.Substring(equalsIndex + 1)
-            : rdn;
+        return containerExternalId;
     }
     #endregion
 
