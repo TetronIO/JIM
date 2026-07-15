@@ -147,13 +147,19 @@
             option will cause the Metaverse Object to be created in the Connected System. You would typically enable
             this option for a destination system.</MudText>
 
-        <MudSelect T="OutboundDeprovisionAction" Label="Deprovisioning Action" Class="mt-5 ms-12" Style="max-width: 420px;"
-                   @bind-Value="@SyncRule.OutboundDeprovisionAction" @bind-Value:after="NotifyChangedAsync"
-                   Variant="Variant.Outlined">
-            <MudSelectItem Value="OutboundDeprovisionAction.Disconnect">Disconnect</MudSelectItem>
-            <MudSelectItem Value="OutboundDeprovisionAction.Delete">Delete</MudSelectItem>
-        </MudSelect>
-        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">@GetOutboundDeprovisionActionHelperText()</MudText>
+        <MudText Typo="Typo.body1" Class="mt-5">Deprovisioning Action</MudText>
+        <MudRadioGroup T="OutboundDeprovisionAction" @bind-Value="@SyncRule.OutboundDeprovisionAction" @bind-Value:after="NotifyChangedAsync">
+            <div class="mt-1">
+                <MudRadio T="OutboundDeprovisionAction" Value="OutboundDeprovisionAction.Disconnect" Color="Color.Primary">Disconnect</MudRadio>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">When a Metaverse Object leaves this Synchronisation
+                    Rule's scope or is deleted, JIM breaks the join and leaves the object in place in the Connected System.</MudText>
+            </div>
+            <div class="mt-2">
+                <MudRadio T="OutboundDeprovisionAction" Value="OutboundDeprovisionAction.Delete" Color="Color.Primary">Delete</MudRadio>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary ms-12">When a Metaverse Object leaves this Synchronisation
+                    Rule's scope or is deleted, JIM deletes the corresponding object from the Connected System.</MudText>
+            </div>
+        </MudRadioGroup>
     }
     <MudSwitch Class="mt-5" @bind-Value="@SyncRule.Enabled" @bind-Value:after="NotifyChangedAsync" Color="Color.Primary" Label="Enabled?" />
     <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1 ms-12">Synchronisation Rules are not evaluated when disabled. Use
@@ -201,17 +207,6 @@
     private async Task NotifyChangedAsync()
     {
         await OnChanged.InvokeAsync();
-    }
-
-    private string GetOutboundDeprovisionActionHelperText()
-    {
-        return SyncRule.OutboundDeprovisionAction switch
-        {
-            OutboundDeprovisionAction.Delete =>
-                "When a Metaverse Object leaves this Synchronisation Rule's scope or is deleted, JIM deletes the corresponding object from the Connected System.",
-            _ =>
-                "When a Metaverse Object leaves this Synchronisation Rule's scope or is deleted, JIM breaks the join and leaves the object in place in the Connected System."
-        };
     }
 
     private async Task HandleConnectedSystemSelectedAsync(string connectedSystemId)
