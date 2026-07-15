@@ -57,21 +57,24 @@ Get-JIMMetaverseObjectType -Page 2 -PageSize 50
 
 ### Set-JIMMetaverseObjectType
 
-Modifies an existing Metaverse Object Type. Use this cmdlet to configure automatic deletion behaviour for Metaverse Objects of a given type.
+Modifies an existing Metaverse Object Type: its identity (name, plural name, icon) and/or its automatic deletion behaviour. The built-in `User` and `Group` types accept deletion-rule changes but reject changes to their name, plural name and icon.
 
 #### Syntax
 
 ```powershell
 # ById (default)
-Set-JIMMetaverseObjectType -Id <int> [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
+Set-JIMMetaverseObjectType -Id <int> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
+    [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
     [-DeletionTriggerConnectedSystemIds <int[]>] [-ChangeReason <string>] [-PassThru]
 
 # ByName
-Set-JIMMetaverseObjectType -Name <string> [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
+Set-JIMMetaverseObjectType -Name <string> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
+    [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
     [-DeletionTriggerConnectedSystemIds <int[]>] [-ChangeReason <string>] [-PassThru]
 
 # ByInputObject
-Set-JIMMetaverseObjectType -InputObject <object> [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
+Set-JIMMetaverseObjectType -InputObject <object> [-NewName <string>] [-PluralName <string>] [-Icon <string>]
+    [-DeletionRule <string>] [-DeletionGracePeriod <TimeSpan>]
     [-DeletionTriggerConnectedSystemIds <int[]>] [-ChangeReason <string>] [-PassThru]
 ```
 
@@ -80,8 +83,11 @@ Set-JIMMetaverseObjectType -InputObject <object> [-DeletionRule <string>] [-Dele
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes (ById) | | The ID of the object type to modify. Accepts pipeline input. |
-| `Name` | `string` | Yes (ByName) | | The name of the object type to modify |
+| `Name` | `string` | Yes (ByName) | | The name of the object type to modify (used to locate it; use `NewName` to rename) |
 | `InputObject` | `object` | Yes (ByInputObject) | | An object type object from the pipeline |
+| `NewName` | `string` | No | | A new singular name (rename). Must be unique (case-insensitive). Rejected for built-in types. |
+| `PluralName` | `string` | No | | A new plural name. Must be unique (case-insensitive). Rejected for built-in types. |
+| `Icon` | `string` | No | | The MudBlazor icon name shown in the UI. Pass `$null` or `''` to clear it. Rejected for built-in types. |
 | `DeletionRule` | `string` | No | | The deletion rule to apply. Valid values: `Manual`, `WhenLastConnectorDisconnected`, `WhenAuthoritativeSourceDisconnected` |
 | `DeletionGracePeriod` | `TimeSpan` | No | | Grace period before a pending deletion is executed |
 | `DeletionTriggerConnectedSystemIds` | `int[]` | No | | Connected System IDs that trigger deletion when disconnected |
@@ -114,6 +120,14 @@ Get-JIMMetaverseObjectType -Name "Group" | Set-JIMMetaverseObjectType -DeletionR
 
 ```powershell title="Set deletion triggers for specific Connected Systems"
 Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenAuthoritativeSourceDisconnected -DeletionTriggerConnectedSystemIds @(3, 7)
+```
+
+```powershell title="Rename a custom type and set its icon"
+Set-JIMMetaverseObjectType -Id 5 -NewName "Gadget" -PluralName "Gadgets" -Icon "Devices"
+```
+
+```powershell title="Clear a custom type's icon"
+Set-JIMMetaverseObjectType -Id 5 -Icon $null
 ```
 
 ---
@@ -166,6 +180,51 @@ New-JIMMetaverseObjectType -Name "ServiceAccount" -PluralName "ServiceAccounts" 
     -DeletionRule WhenAuthoritativeSourceDisconnected `
     -DeletionTriggerConnectedSystemIds 5 `
     -DeletionGracePeriod ([TimeSpan]::FromDays(7))
+```
+
+---
+
+### Remove-JIMMetaverseObjectType
+
+Deletes a custom Metaverse Object Type. The cmdlet fetches a delete preview first and refuses when deletion is not safe, so it never silently destroys data or configuration.
+
+#### Syntax
+
+```powershell
+# ById (default)
+Remove-JIMMetaverseObjectType -Id <int> [-ChangeReason <string>] [-Force]
+
+# ByName
+Remove-JIMMetaverseObjectType -Name <string> [-ChangeReason <string>] [-Force]
+```
+
+#### Parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|----------|---------|-------------|
+| `Id` | `int` | Yes (ById) | | The ID of the object type to delete. Accepts pipeline input. |
+| `Name` | `string` | Yes (ByName) | | The name of the object type to delete |
+| `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the [configuration change history](history.md#get-jimconfigurationchangehistory) |
+| `Force` | `switch` | No | `false` | Skips the interactive confirmation prompt (the server-side type-the-name safeguard is still satisfied) |
+
+!!! info "ShouldProcess"
+    This cmdlet supports `ShouldProcess` with a **High** impact level. Use `-WhatIf` to preview or `-Confirm` to require confirmation.
+
+!!! warning "Safeguards"
+    Deletion is **refused** when the type is built-in (`User`, `Group`), when any Metaverse Object of the type exists, or when any Synchronisation Rule targets it; the cmdlet reports which. When the type is clear, its Predefined Searches, Example Data Template entries and attribute bindings are cascade-removed (the bound attributes themselves are kept), and the removal is audited.
+
+#### Output
+
+None.
+
+#### Examples
+
+```powershell title="Delete a custom type by name"
+Remove-JIMMetaverseObjectType -Name "Device" -Force
+```
+
+```powershell title="Preview what a deletion would do"
+Remove-JIMMetaverseObjectType -Id 5 -WhatIf
 ```
 
 ---

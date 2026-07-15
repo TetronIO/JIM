@@ -25,6 +25,25 @@ Each object type has its own rules for when its objects should be deleted from t
 
 The grace period is the right default for production: it protects against transient source-system glitches that would otherwise wipe identities out.
 
+### Custom object types
+
+Alongside JIM's built-in `User` and `Group` types, administrators can create their own **custom object types** to model whatever categories their organisation needs (for example `Device`, `Room`, or `Contract`). Manage them from the **Object Types** tab of the Schema area, or via [PowerShell](../powershell/metaverse.md) and the [REST API](../../api/reference/).
+
+- **Naming**<br /> Names and plural names are unique and compared case-insensitively; the portal validates both as you type. Names are shown exactly as you entered them.
+- **Create with attributes**<br /> When creating a type you can optionally bind existing attributes to it there and then, or add them later from the type's **Attributes** tab.
+- **Icon**<br /> An optional MudBlazor icon name (for example `Devices`) gives the type a recognisable glyph throughout the portal.
+- **Rename and re-icon**<br /> Edit a custom type's name, plural name and icon from the Edit action on its row in the Object Types tab, or from the Edit button on its detail page.
+- **Built-in protection**<br /> The `User` and `Group` types cannot be renamed, re-iconed or deleted; their deletion rules remain editable.
+
+### Deleting object types
+
+Deleting a custom object type has two hard blocks, because either would otherwise be silently destroyed with the type:
+
+- **Metaverse Objects of the type**<br /> If any object of the type exists, deletion is refused and the portal reports the count. Delete those objects first (for example by stopping the source flows and letting them deprovision).
+- **Synchronisation Rules targeting the type**<br /> If any Synchronisation Rule targets the type, deletion is refused and the rules are listed. Remove those Synchronisation Rules first.
+
+Once both are clear, the type can be deleted. Its softer references (its Predefined Searches, Example Data Template entries, and attribute bindings) are **cascade-removed** as a single operation behind a type-the-name confirmation; the bound attributes themselves are kept. The cascade is fully audited, with each removed reference recorded as a child Activity of the deletion.
+
 ## Attributes
 
 **Attributes** define the fields available on Metaverse Objects. Examples include `displayName`, `mail`, and `employeeId`. Attributes can be:
@@ -55,7 +74,7 @@ When no values exist, the action is allowed even if configuration still referenc
 
 ## Change history
 
-Schema changes are recorded in [configuration change history](activities.md#configuration-change-history): creating an Object Type or Attribute, changing an Object Type's deletion rules, updating an Attribute's definition or its Object Type associations, and deleting an Attribute all capture a versioned snapshot alongside who made the change, when, and an optional reason.
+Schema changes are recorded in [configuration change history](activities.md#configuration-change-history): creating, renaming or re-iconing an Object Type, changing an Object Type's deletion rules, deleting an Object Type, creating an Attribute, updating an Attribute's definition or its Object Type associations, and deleting an Attribute all capture a versioned snapshot alongside who made the change, when, and an optional reason.
 
 Open an Object Type's history from the Changes tab on its detail page; open an Attribute's history from the history button on its row in the Schema area or on an Object Type's Attributes tab. When saving deletion rules in the admin portal, an optional "Reason for change" prompt lets you record why. Automation can pass the same reason via `-ChangeReason` on the Metaverse write cmdlets, or retrieve history with `Get-JIMConfigurationChangeHistory -Type MetaverseObjectType` / `-Type MetaverseAttribute` or the REST API.
 

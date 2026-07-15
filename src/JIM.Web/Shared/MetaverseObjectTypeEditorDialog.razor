@@ -247,12 +247,10 @@
                     Attributes = new List<MetaverseAttribute>()
                 };
 
-                foreach (var attributeId in _selectedAttributeIds)
-                {
-                    var attribute = _attributes.FirstOrDefault(a => a.Id == attributeId);
-                    if (attribute != null)
-                        objectType.Attributes.Add(attribute);
-                }
+                objectType.Attributes.AddRange(_selectedAttributeIds
+                    .Select(id => _attributes.FirstOrDefault(a => a.Id == id))
+                    .Where(a => a != null)
+                    .Select(a => a!));
 
                 await jim.Metaverse.CreateMetaverseObjectTypeAsync(objectType, user, changeReason);
                 Snackbar.Add($"Created Object Type \"{trimmedName}\".", Severity.Success);
