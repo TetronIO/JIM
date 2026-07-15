@@ -2,7 +2,7 @@
 
 - **Status:** Planned
 - **Created:** 2026-04-02
-- **Author:** Jay Van der Zant
+- **Author:** Jay
 - **Issue:** [#451](https://github.com/TetronIO/JIM/issues/451)
 
 ## Problem Statement

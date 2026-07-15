@@ -2,7 +2,7 @@
 
 - **Status:** Planned
 - **Created:** 2026-04-22
-- **Author:** Jay Van der Zant
+- **Author:** Jay
 - **Issue:** #636
 
 ## Problem Statement
