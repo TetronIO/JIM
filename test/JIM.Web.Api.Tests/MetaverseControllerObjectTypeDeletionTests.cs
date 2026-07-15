@@ -101,7 +101,7 @@ public class MetaverseControllerObjectTypeDeletionTests
         var impact = result!.Value as ObjectTypeDeletionImpact;
         Assert.That(impact, Is.Not.Null);
         Assert.That(impact!.MetaverseObjectCount, Is.EqualTo(4));
-        Assert.That(impact.BlockedByObjects, Is.True);
+        Assert.That(impact!.BlockedByObjects, Is.True);
     }
 
     #endregion
@@ -271,7 +271,7 @@ public class MetaverseControllerObjectTypeDeletionTests
         Assert.That(result, Is.Not.Null);
         var dto = result!.Value as MetaverseObjectTypeNameAvailabilityDto;
         Assert.That(dto!.NameAvailable, Is.True);
-        Assert.That(dto.PluralNameAvailable, Is.False);
+        Assert.That(dto!.PluralNameAvailable, Is.False);
     }
 
     [Test]
