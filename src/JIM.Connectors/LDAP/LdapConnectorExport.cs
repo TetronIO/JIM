@@ -1409,18 +1409,15 @@ internal class LdapConnectorExport
         if (attrName.Equals("distinguishedName", StringComparison.OrdinalIgnoreCase))
             return true;
 
-        // If we have the DN, determine the actual RDN attribute by parsing the first component
-        if (!string.IsNullOrEmpty(dn))
+        // If we have the DN, the RDN attribute is the type of the leaf RDN's first component.
+        if (!string.IsNullOrEmpty(dn) &&
+            LdapDistinguishedName.TryParse(dn, out var parsedDn) &&
+            parsedDn.LeafRdn.Components.Count > 0)
         {
-            var equalsIndex = dn.IndexOf('=');
-            if (equalsIndex > 0)
-            {
-                var rdnAttr = dn[..equalsIndex].Trim();
-                return attrName.Equals(rdnAttr, StringComparison.OrdinalIgnoreCase);
-            }
+            return attrName.Equals(parsedDn.LeafRdn.Components[0].Type, StringComparison.OrdinalIgnoreCase);
         }
 
-        // Fallback: common RDN attributes (when DN is not available)
+        // Fallback: common RDN attributes (when the DN is unavailable or unparseable)
         return attrName.Equals("cn", StringComparison.OrdinalIgnoreCase) ||
                attrName.Equals("ou", StringComparison.OrdinalIgnoreCase) ||
                attrName.Equals("dc", StringComparison.OrdinalIgnoreCase) ||
