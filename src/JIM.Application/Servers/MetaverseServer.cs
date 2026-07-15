@@ -168,6 +168,33 @@ public class MetaverseServer
         await CaptureObjectTypeConfigurationChangeAsync(activity, objectType.Id, changeReason);
         await Application.Activities.CompleteActivityAsync(activity);
     }
+
+    /// <summary>
+    /// Determines whether a Metaverse Object Type <paramref name="name"/> is available, comparing case-insensitively.
+    /// Backs the real-time create/rename availability check. Supply <paramref name="excludeObjectTypeId"/> when
+    /// validating a rename so the type does not clash with its own current name.
+    /// </summary>
+    public async Task<bool> IsMetaverseObjectTypeNameAvailableAsync(string name, int? excludeObjectTypeId = null)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return false;
+
+        var existing = await Application.Repository.Metaverse.GetMetaverseObjectTypeAsync(name, includeChildObjects: false);
+        return existing == null || existing.Id == excludeObjectTypeId;
+    }
+
+    /// <summary>
+    /// Determines whether a Metaverse Object Type <paramref name="pluralName"/> is available, comparing
+    /// case-insensitively. Supply <paramref name="excludeObjectTypeId"/> when validating a rename.
+    /// </summary>
+    public async Task<bool> IsMetaverseObjectTypePluralNameAvailableAsync(string pluralName, int? excludeObjectTypeId = null)
+    {
+        if (string.IsNullOrWhiteSpace(pluralName))
+            return false;
+
+        var existing = await Application.Repository.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(pluralName, includeChildObjects: false);
+        return existing == null || existing.Id == excludeObjectTypeId;
+    }
     #endregion
 
     #region metaverse attributes

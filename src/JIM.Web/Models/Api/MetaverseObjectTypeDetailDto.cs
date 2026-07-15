@@ -99,10 +99,32 @@ public class CreateMetaverseObjectTypeRequest
 }
 
 /// <summary>
-/// Request DTO for updating a MetaverseObjectType's deletion rules.
+/// Request DTO for updating a MetaverseObjectType's identity (name, plural name, icon) and deletion rules. Every field
+/// is optional: a field that is omitted (or JSON null) leaves the stored value unchanged. Built-in types accept
+/// deletion-rule changes but reject Name, PluralName and Icon changes.
 /// </summary>
 public class UpdateMetaverseObjectTypeRequest
 {
+    /// <summary>
+    /// The singular name of the object type (e.g. "Device"). Omitted or null leaves it unchanged. Must be unique
+    /// (compared case-insensitively). Cannot be changed on a built-in type.
+    /// </summary>
+    [StringLength(200, MinimumLength = 1)]
+    public string? Name { get; set; }
+
+    /// <summary>
+    /// The plural name of the object type (e.g. "Devices"). Omitted or null leaves it unchanged. Must be unique
+    /// (compared case-insensitively). Cannot be changed on a built-in type.
+    /// </summary>
+    [StringLength(200, MinimumLength = 1)]
+    public string? PluralName { get; set; }
+
+    /// <summary>
+    /// The MudBlazor icon name shown for the type in the UI. Omitted or null leaves it unchanged; an empty or
+    /// whitespace-only string clears it. Cannot be changed on a built-in type.
+    /// </summary>
+    public string? Icon { get; set; }
+
     /// <summary>
     /// Determines when Metaverse Objects of this type should be automatically deleted.
     /// </summary>
@@ -126,6 +148,19 @@ public class UpdateMetaverseObjectTypeRequest
     /// Optional reason for the change, recorded on the audit Activity and configuration change history.
     /// </summary>
     public string? ChangeReason { get; set; }
+}
+
+/// <summary>
+/// Response DTO reporting whether a candidate Metaverse Object Type name and/or plural name are available (compared
+/// case-insensitively). Backs the real-time create/edit dialog validator. A field is null when the caller did not ask
+/// about it.
+/// </summary>
+public class MetaverseObjectTypeNameAvailabilityDto
+{
+    public string? Name { get; set; }
+    public bool? NameAvailable { get; set; }
+    public string? PluralName { get; set; }
+    public bool? PluralNameAvailable { get; set; }
 }
 
 /// <summary>
