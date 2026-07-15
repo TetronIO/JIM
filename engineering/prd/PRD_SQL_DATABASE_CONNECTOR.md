@@ -72,7 +72,7 @@ The integration test infrastructure already anticipates this connector: dormant 
 | DATETIMEOFFSET/TIMESTAMP WITH TIME ZONE | DateTime | Normalised to UTC |
 | UNIQUEIDENTIFIER/RAW(16) with GUID content | Guid | |
 | VARBINARY/BLOB/RAW | Binary | |
-| DECIMAL/NUMERIC/MONEY/FLOAT | Text | Lossless string round-trip; see Open Questions |
+| DECIMAL/NUMERIC/MONEY/FLOAT | Text | Lossless string round-trip; upgrades to Decimal when #1046 lands |
 | Foreign-key columns holding another object type's anchor | Reference | Explicit per-column configuration, not inferred |
 
 9. Zoneless date/time columns are ambiguous at the wire level, so the connector must expose a per-Connected-System setting declaring how to interpret them (UTC, or a named IANA time zone), applied on import and inverted on export. Offset-carrying types need no setting. JIM stores all DateTime values in UTC internally; this setting resolves source semantics, it does not change JIM's storage model.
@@ -107,6 +107,27 @@ The integration test infrastructure already anticipates this connector: dormant 
 - 100,000-row full import completes within the same order of magnitude as the LDAP Connector at equivalent scale, without unbounded memory growth (streaming reads, page-at-a-time materialisation).
 - Air-gap deployable: no internet access at runtime, no native driver installation, all providers bundled as managed NuGet packages.
 - Every new NuGet package passes the Third-Party Dependency Governance workflow before adoption, including licence review (the Oracle managed driver ships under Oracle's free-use distribution licence and needs explicit sign-off and customer-facing documentation of its terms).
+
+### Testing Requirements
+
+Integration coverage must be a **provider × capability matrix**, not a single happy-path scenario. Scenario logic must be parameterised by provider (one scenario implementation, executed once per supported database server), so that adding a provider extends the matrix without duplicating scenario code. Every capability row below must pass against every supported provider before that provider is declared supported:
+
+| Capability under test | Exercised behaviour |
+|---|---|
+| Full import | Table and view sources, keyset paging across multiple pages, typed attribute values per the mapping table |
+| Multi-valued import | Related-table attributes gathered onto the parent object |
+| Reference import | Anchor-carrying columns resolved to Connected System Object references (including forward references resolved late) |
+| Delta import: change-log table | Creates, updates and deletes propagated; watermark persisted and honoured across runs |
+| Delta import: watermark column | Creates and updates propagated; documented no-delete semantics verified (deletion NOT detected) |
+| Delta fallback | Missing/invalid watermark falls back to full import with the standard warning |
+| Export: create | Row inserted; database-generated key returned as external ID; auto-confirmation |
+| Export: update | Attribute changes applied; multi-valued related-table rows added and removed transactionally with the parent |
+| Export: delete | Row (and related rows) removed; per-object error isolation on failure |
+| Reference export | Anchor values written for reference attributes |
+| Type-mapping round-trip | Each mapped SQL type imports and exports losslessly, including zoneless DateTime interpretation and exact-numeric Text round-trip |
+| Configuration validation | Save-time connectivity test passes/fails correctly (wrong credentials, unreachable host) |
+
+The full matrix must run green for Priority 1 providers (SQL Server, Oracle) before first release, and for each Priority 2 provider before it is declared supported. Because the full matrix is expensive, the regular integration gate may run a representative subset (at minimum: one provider end-to-end plus configuration validation on all providers), with the full matrix required before release; the split is decided at plan time within the existing runner's scenario structure. At least one provider must additionally run the 100,000-row scale import.
 
 ## Examples and Scenarios
 
@@ -166,11 +187,11 @@ The integration test infrastructure already anticipates this connector: dormant 
 - Third-Party Dependency Governance approval for `Microsoft.Data.SqlClient` and `Oracle.ManagedDataAccess.Core` (Priority 1), then `Npgsql` and `MySqlConnector` (Priority 2).
 - #875 (centralise connector dispatch): not a hard prerequisite, but landing it first avoids adding a third copy of every hand-coded dispatch branch; decide sequencing at plan time.
 - #637 (connector sub-phase progress): designed but unimplemented; the connector should adopt the callback pattern when it lands ("Executing query", "Reading rows" narration for long-running operations).
-- Possible new issue: first-class decimal attribute data type (see Open Questions).
+- #1046 (Decimal attribute data type, child issue of #170): not a blocker; the connector maps exact numerics to Text until it lands, then upgrades the mapping.
 
 ## Open Questions
 
-1. **Decimal support**: DECIMAL/NUMERIC/MONEY columns currently have no lossless JIM type; this PRD maps them to Text. Should a first-class `Decimal` `AttributeDataType` be added (a cross-cutting change touching storage, change tracking, expressions, scoping and UI, comparable in shape to the closed Int64 work in #245)? If yes, file a dedicated issue; the connector should not block on it.
+1. **Decimal support** (resolved; tracked as #1046, a child issue of #170): DECIMAL/NUMERIC/MONEY columns currently have no lossless JIM type, so this PRD maps them to Text. That is a proven pattern in this product class and fine for pass-through flows, but it breaks numeric semantics where JIM itself evaluates the value: scoping criteria compare Text lexicographically ("0.5" > "0.25" works, "9" > "10" fails), so a rule like "FTE less than 0.5" cannot be expressed reliably, and identity-relevant decimal data is real (FTE fraction, contracted hours, salary banding). SCIM (RFC 7643) also defines `decimal` as a core attribute type, so the planned SCIM work (#545) meets the same gap. A first-class `Decimal` `AttributeDataType` is therefore tracked as #1046 (a #245-shaped cross-cutting change); the connector ships with the Text mapping and upgrades when the type lands. The connector does not block on it.
 2. **Zoneless DateTime default**: when the administrator does not set the time-zone interpretation setting, should the connector default to UTC (predictable, sometimes wrong) or refuse to import zoneless datetime columns until configured (safe, more friction)?
 3. **Multiple multi-valued related tables per object type**: the first release supports N related tables per object type in the data model; is there a UI complexity argument for capping at one initially?
 4. **`SupportsParallelExport`**: parallel batches against one database can deadlock on hot pages and interleave parent/child writes; start sequential and revisit, or design for parallelism from the outset?
@@ -186,7 +207,7 @@ The integration test infrastructure already anticipates this connector: dormant 
 - [ ] Export creates, updates and deletes rows transactionally including related-table maintenance, returning database-generated keys as external IDs, with per-object error isolation and auto-confirmation.
 - [ ] All operations are recorded as Activities with per-object Run Profile Execution Items.
 - [ ] No native drivers: fully managed providers, air-gap deployable, dependency governance completed for each provider package.
-- [ ] Integration scenarios run against real SQL Server and Oracle Database Free containers in the existing runner; unit tests cover the provider dialect layer, type mapping and query generation.
+- [ ] The full provider × capability integration matrix (see Testing Requirements) runs green against real SQL Server and Oracle Database Free containers in the existing runner; unit tests cover the provider dialect layer, type mapping and query generation.
 - [ ] Public documentation ships in the same release: per-provider configuration guide, delta mode guidance, type mapping and licensing notes.
 
 ## Additional Context
