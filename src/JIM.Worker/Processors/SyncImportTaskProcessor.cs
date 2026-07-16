@@ -460,7 +460,7 @@ public class SyncImportTaskProcessor
                 Log.Warning("About to persist {RpeiCount} RPEIs. {RpeiErrorCount} have errors: {ErrorDetails}",
                     _activityRunProfileExecutionItems.Count,
                     rpeiWithErrors.Count,
-                    string.Join("; ", rpeiWithErrors.Select(r => $"[Id={r.Id}, ErrorType={r.ErrorType}, Message={r.ErrorMessage}]")));
+                    string.Join("; ", rpeiWithErrors.Select(r => $"[Id={r.Id}, ErrorType={r.ErrorType}, Message={LogSanitiser.Sanitise(r.ErrorMessage)}]")));
             }
 
             // Pre-generate IDs for ALL CSOs before batch saves begin. This eliminates
