@@ -1,6 +1,6 @@
 # Unresolved Reference Handling per Connected System
 
-- **Status:** Doing
+- **Status:** Done
 - **Created:** 2026-07-16
 - **Author:** Claude (from issue #873, authored by Jay)
 - **Issue:** [#873](https://github.com/TetronIO/JIM/issues/873)
