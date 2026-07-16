@@ -879,7 +879,7 @@ JIM works with any OIDC-compliant Identity Provider (Entra ID, Okta, Auth0, Keyc
 
 **Development**: The devcontainer ships a bundled Keycloak instance, pre-configured with a `jim` realm and client. SSO works out of the box; sign in with `admin` / `admin`. The Keycloak admin console is available at `http://localhost:8181`. Use `jim-keycloak`, `jim-keycloak-stop`, and `jim-keycloak-logs` to manage it independently of the full stack.
 
-**Production**: Override the `JIM_SSO_*` variables with your provider's settings. See the [SSO Setup Guide](SSO_SETUP_GUIDE.md).
+**Production**: Override the `JIM_SSO_*` variables with your provider's settings. See the [SSO Setup Guide](../docs/administration/sso-setup.md).
 
 - `JIM_SSO_AUTHORITY`: OIDC authority URL (e.g., `https://login.microsoftonline.com/{tenant-id}/v2.0`)
 - `JIM_SSO_PUBLIC_AUTHORITY`: Optional client-facing authority URL. Only set when the backend and clients reach the identity provider on different URLs (dev devcontainer, split-horizon reverse proxies). Returned to interactive clients via `/api/v1/auth/config`. Backend token validation always uses `JIM_SSO_AUTHORITY`.
@@ -1209,7 +1209,7 @@ For bind-mounted host paths, ensure the host files are readable/writable by UID 
 
 The JIM PowerShell module (`src/JIM.PowerShell/`) provides cmdlets for scripting and automation. It's designed to work with the JIM API.
 
-> **For production installation** (PowerShell Gallery or air-gapped), see the [Deployment Guide - PowerShell Module](DEPLOYMENT_GUIDE.md#powershell-module). This section covers development and contribution workflows only.
+> **For production installation** (PowerShell Gallery or air-gapped), see the [Deployment Guide - PowerShell Module](../docs/administration/deployment.md#powershell-module). This section covers development and contribution workflows only.
 
 ### Module Structure
 

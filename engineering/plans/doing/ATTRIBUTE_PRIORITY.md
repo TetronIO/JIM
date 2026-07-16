@@ -45,11 +45,11 @@ Many identity management systems use fallback logic where if the top-priority so
 ### Current State
 
 **Existing Infrastructure:**
-- `ContributedBySystem` navigation property exists on `MetaverseObjectAttributeValue` ([MetaverseObjectAttributeValue.cs:45](../src/JIM.Models/Core/MetaverseObjectAttributeValue.cs#L45)) - tracks which connected system contributed each attribute value
+- `ContributedBySystem` navigation property exists on `MetaverseObjectAttributeValue` ([MetaverseObjectAttributeValue.cs:45](../../../src/JIM.Models/Core/MetaverseObjectAttributeValue.cs#L45)) - tracks which connected system contributed each attribute value
 - `ContributedBySystemId` scalar FK (added Feb 2026, commit `41116255`); explicit `int?` property that avoids the need to `.Include(ContributedBySystem)`. All 14 attribute creation paths in the inbound attribute-flow engine (`SyncEngine.AttributeFlow.cs`, formerly `SyncRuleMappingProcessor`) now set this scalar FK via a `contributingSystemId` parameter. Recall logic in `SyncTaskProcessorBase` uses the scalar FK directly (`av.ContributedBySystemId == connectedSystemId`).
 
 **Current Behaviour (Temporary):**
-The inbound attribute-flow engine ([SyncEngine.AttributeFlow.cs#L53](../src/JIM.Application/Servers/SyncEngine.AttributeFlow.cs#L53)) applies every mapping in source order with no priority resolution yet: when multiple mappings target the same MVO attribute, the last one processed wins.
+The inbound attribute-flow engine ([SyncEngine.AttributeFlow.cs#L53](../../../src/JIM.Application/Servers/SyncEngine.AttributeFlow.cs#L53)) applies every mapping in source order with no priority resolution yet: when multiple mappings target the same MVO attribute, the last one processed wins.
 
 This "last-writer-wins" behaviour is intentionally temporary and will be replaced by proper priority resolution.
 
