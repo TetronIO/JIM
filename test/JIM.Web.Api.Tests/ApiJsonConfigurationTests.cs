@@ -36,5 +36,50 @@ public class ApiJsonConfigurationTests
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<DuplicateProbe>(jsonWithDuplicateKey, options));
     }
 
+    [Test]
+    public void ConfiguredOptions_RejectOutOfRangeIntegerEnumValues_WhenDeserialising()
+    {
+        var options = new JsonSerializerOptions();
+        ApiJsonConfiguration.Configure(options);
+        // An integer that maps to no defined enum member. With the default JsonStringEnumConverter
+        // this would bind silently to an undefined enum value; the API must reject it at the boundary.
+        const string jsonWithOutOfRangeEnum = "{\"Mode\":99}";
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<EnumProbe>(jsonWithOutOfRangeEnum, options));
+    }
+
+    [Test]
+    public void ConfiguredOptions_RejectIntegerEnumValues_WhenDeserialising()
+    {
+        var options = new JsonSerializerOptions();
+        ApiJsonConfiguration.Configure(options);
+        // Even an in-range integer is rejected: the API contract is string enum values only, so that
+        // a client can never depend on the numeric ordinal (which is free to change between releases).
+        const string jsonWithIntegerEnum = "{\"Mode\":1}";
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<EnumProbe>(jsonWithIntegerEnum, options));
+    }
+
+    [Test]
+    public void ConfiguredOptions_AcceptStringEnumValues_WhenDeserialising()
+    {
+        var options = new JsonSerializerOptions();
+        ApiJsonConfiguration.Configure(options);
+        // String enum values remain the supported wire format and must still bind.
+        const string jsonWithStringEnum = "{\"Mode\":\"Second\"}";
+
+        var result = JsonSerializer.Deserialize<EnumProbe>(jsonWithStringEnum, options);
+
+        Assert.That(result!.Mode, Is.EqualTo(ProbeEnum.Second));
+    }
+
     private sealed record DuplicateProbe(string Name);
+
+    private enum ProbeEnum
+    {
+        First = 0,
+        Second = 1
+    }
+
+    private sealed record EnumProbe(ProbeEnum Mode);
 }
