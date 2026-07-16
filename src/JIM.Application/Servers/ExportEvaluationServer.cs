@@ -1908,19 +1908,39 @@ public class ExportEvaluationServer
 
                 if (matchedCso != null)
                 {
+                    // Claim the CSO atomically: the eligibility check above is a point-in-time read,
+                    // so two Metaverse Objects can both reach here for the same CSO in overlapping
+                    // evaluations (#1051). The conditional UPDATE re-checks MetaverseObjectId IS NULL
+                    // at write time, so only one caller wins the join; on failure, fall through to
+                    // provisioning below by clearing matchedCso.
+                    var dateJoined = DateTime.UtcNow;
+                    var claimed = await SyncRepo.TryClaimConnectedSystemObjectForJoinAsync(matchedCso.Id, mvo.Id, dateJoined);
+                    if (!claimed)
+                    {
+                        Log.Warning("CreateOrUpdatePendingExportWithNoNetChangeAsync: Export matching found Connected System Object {CsoId} for Metaverse Object {MvoId} in system {SystemId}, but another Metaverse Object claimed it first; falling back to provisioning",
+                            matchedCso.Id, mvo.Id, exportRule.ConnectedSystemId);
+                        matchedCso = null;
+                    }
+                    else
+                    {
+                        // Fix up the tracked instance to match the conditional UPDATE: raw SQL bypasses
+                        // the change tracker, so without this the next SaveChangesAsync could write
+                        // stale values back over the claimed row.
+                        matchedCso.MetaverseObjectId = mvo.Id;
+                        matchedCso.Status = ConnectedSystemObjectStatus.Normal;
+                        matchedCso.JoinType = ConnectedSystemObjectJoinType.Joined;
+                        matchedCso.DateJoined = dateJoined;
+
+                        Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: Export matching found existing CSO {CsoId} for MVO {MvoId} in system {SystemId}: joined instead of provisioning",
+                            matchedCso.Id, mvo.Id, exportRule.ConnectedSystemId);
+                    }
+                }
+
+                if (matchedCso != null)
+                {
                     // Join the MVO to the existing CSO instead of provisioning
-                    matchedCso.MetaverseObjectId = mvo.Id;
-                    matchedCso.Status = ConnectedSystemObjectStatus.Normal;
-                    matchedCso.JoinType = ConnectedSystemObjectJoinType.Joined;
-                    matchedCso.DateJoined = DateTime.UtcNow;
-
-                    await SyncRepo.UpdateConnectedSystemObjectAsync(matchedCso);
-
                     // Update cache so subsequent lookups find the joined CSO
                     cache.CsoLookup[lookupKey] = matchedCso;
-
-                    Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: Export matching found existing CSO {CsoId} for MVO {MvoId} in system {SystemId} — joined instead of provisioning",
-                        matchedCso.Id, mvo.Id, exportRule.ConnectedSystemId);
 
                     csoForExport = matchedCso;
                     needsProvisioning = false;
@@ -1928,7 +1948,7 @@ public class ExportEvaluationServer
                 }
                 else
                 {
-                    // No match found — create CSO with PendingProvisioning status to establish the relationship before export
+                    // No match found: create CSO with PendingProvisioning status to establish the relationship before export
                     // When deferSave is true, CSO is created in-memory and the caller batch-saves it
                     using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("CreateProvisioningCso"))
                     {

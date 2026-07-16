@@ -2308,6 +2308,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined)
+    {
+        // A single conditional UPDATE guards the join-before-provision race (#1051): two Metaverse
+        // Objects can both pass the point-in-time eligibility check in
+        // FindConnectedSystemObjectUsingMatchingRuleAsync before either writes, so the claim itself
+        // must re-check MetaverseObjectId IS NULL at write time. Raw SQL bypasses the change tracker;
+        // the caller owns fixing up any tracked instance on success.
+        var affectedRows = await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects""
+              SET ""MetaverseObjectId"" = {0}, ""JoinType"" = {1}, ""DateJoined"" = {2}, ""Status"" = {3}
+              WHERE ""Id"" = {4} AND ""MetaverseObjectId"" IS NULL",
+            metaverseObjectId, (int)ConnectedSystemObjectJoinType.Joined, dateJoined, (int)ConnectedSystemObjectStatus.Normal, connectedSystemObjectId);
+
+        return affectedRows == 1;
+    }
+
     public async Task UpdateConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,

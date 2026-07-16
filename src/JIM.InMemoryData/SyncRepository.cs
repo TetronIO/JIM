@@ -836,6 +836,24 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(match);
     }
 
+    /// <summary>
+    /// In-memory twin of the PostgreSQL conditional UPDATE (#1051): claims the CSO only if it is
+    /// still unclaimed, mirroring the "WHERE MetaverseObjectId IS NULL" guard. Test usage is
+    /// single-threaded, so no locking is required here; this method exists purely to give tests a
+    /// seam to simulate a lost race (see <c>virtual</c>), not to reproduce real concurrency.
+    /// </summary>
+    public virtual Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined)
+    {
+        if (!_csos.TryGetValue(connectedSystemObjectId, out var cso) || cso.MetaverseObjectId != null)
+            return Task.FromResult(false);
+
+        cso.MetaverseObjectId = metaverseObjectId;
+        cso.JoinType = ConnectedSystemObjectJoinType.Joined;
+        cso.DateJoined = dateJoined;
+        cso.Status = ConnectedSystemObjectStatus.Normal;
+        return Task.FromResult(true);
+    }
+
     #endregion
 
     #region Metaverse Object — Writes

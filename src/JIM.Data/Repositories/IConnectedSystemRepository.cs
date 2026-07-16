@@ -813,6 +813,17 @@ public interface IConnectedSystemRepository
         List<Guid>? pendingRemovalIds = null);
 
     /// <summary>
+    /// Atomically claims an unjoined Connected System Object for a Metaverse Object during export
+    /// matching (join-before-provision); the claim succeeds only if the object is still unclaimed
+    /// at write time, guarding against two Metaverse Objects racing to join the same object;
+    /// returns true if the claim was written, false if another Metaverse Object claimed it first.
+    /// On success the row's MetaverseObjectId, JoinType (Joined), DateJoined and Status (Normal)
+    /// are set; the caller owns fixing up any tracked instance to match (raw SQL bypasses the
+    /// change tracker).
+    /// </summary>
+    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined);
+
+    /// <summary>
     /// Batch updates only the join-related columns (JoinType, DateJoined, MetaverseObjectId) on
     /// Connected System Objects. Used during sync page flush where AutoDetectChangesEnabled is
     /// disabled and EF cannot detect CSO scalar property changes automatically.
