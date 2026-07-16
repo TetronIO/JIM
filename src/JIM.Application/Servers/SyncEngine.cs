@@ -50,7 +50,7 @@ public partial class SyncEngine : ISyncEngine
 
         if (cso.MetaverseObject == null)
         {
-            Log.Error("FlowInboundAttributes: CSO ({Cso}) has no MVO!", cso);
+            Log.Error("FlowInboundAttributes: CSO ({CsoId}) has no MVO!", cso.Id);
             return warnings;
         }
 

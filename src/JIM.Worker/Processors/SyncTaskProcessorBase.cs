@@ -404,7 +404,7 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     protected async Task ProcessObsoleteAndExportConfirmationAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
-        Log.Verbose($"ProcessObsoleteAndExportConfirmationAsync: Pass 1 for CSO: {connectedSystemObject}.");
+        Log.Verbose($"ProcessObsoleteAndExportConfirmationAsync: Pass 1 for CSO: {connectedSystemObject.Id}.");
 
         try
         {
@@ -440,8 +440,8 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ErrorStackTrace = e.StackTrace;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
-            Log.Error(e, "ProcessObsoleteAndExportConfirmationAsync: Unhandled error during pass 1 for {Cso}.",
-                connectedSystemObject);
+            Log.Error(e, "ProcessObsoleteAndExportConfirmationAsync: Unhandled error during pass 1 for {CsoId}.",
+                connectedSystemObject.Id);
         }
     }
 
@@ -471,7 +471,7 @@ public abstract class SyncTaskProcessorBase
         if (activeSyncRules.Count == 0 && _connectedSystem.ObjectMatchingRuleMode != ObjectMatchingRuleMode.ConnectedSystem)
             return;
 
-        Log.Verbose($"ProcessActiveConnectedSystemObjectAsync: Pass 2 for CSO: {connectedSystemObject}.");
+        Log.Verbose($"ProcessActiveConnectedSystemObjectAsync: Pass 2 for CSO: {connectedSystemObject.Id}.");
 
         try
         {
@@ -609,8 +609,8 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ErrorMessage = joinEx.Message;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
-            Log.Warning("ProcessActiveConnectedSystemObjectAsync: Join error for {Cso}: {Message}",
-                connectedSystemObject, joinEx.Message);
+            Log.Warning("ProcessActiveConnectedSystemObjectAsync: Join error for {CsoId}: {Message}",
+                connectedSystemObject.Id, LogSanitiser.Sanitise(joinEx.Message));
         }
         catch (SyncExpressionEvaluationException expressionEx)
         {
@@ -626,8 +626,8 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ErrorStackTrace = expressionEx.StackTrace;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
-            Log.Error(expressionEx, "ProcessActiveConnectedSystemObjectAsync: Expression evaluation error during pass 2 for {Cso}. Target attribute '{Attribute}', expression '{Expression}'.",
-                connectedSystemObject, LogSanitiser.Sanitise(expressionEx.TargetAttributeName), LogSanitiser.Sanitise(expressionEx.Expression));
+            Log.Error(expressionEx, "ProcessActiveConnectedSystemObjectAsync: Expression evaluation error during pass 2 for {CsoId}. Target attribute '{Attribute}', expression '{Expression}'.",
+                connectedSystemObject.Id, LogSanitiser.Sanitise(expressionEx.TargetAttributeName), LogSanitiser.Sanitise(expressionEx.Expression));
         }
         catch (Exception e)
         {
@@ -640,8 +640,8 @@ public abstract class SyncTaskProcessorBase
             runProfileExecutionItem.ErrorStackTrace = e.StackTrace;
             _activity.RunProfileExecutionItems.Add(runProfileExecutionItem);
 
-            Log.Error(e, "ProcessActiveConnectedSystemObjectAsync: Unhandled error during pass 2 for {Cso}.",
-                connectedSystemObject);
+            Log.Error(e, "ProcessActiveConnectedSystemObjectAsync: Unhandled error during pass 2 for {CsoId}.",
+                connectedSystemObject.Id);
         }
     }
 
@@ -1088,7 +1088,7 @@ public abstract class SyncTaskProcessorBase
     /// <returns>A result indicating what MVO changes occurred (projection, join, Attribute Flow).</returns>
     protected async Task<MetaverseObjectChangeResult> ProcessMetaverseObjectChangesAsync(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
     {
-        Log.Verbose($"ProcessMetaverseObjectChangesAsync: Executing for: {connectedSystemObject}.");
+        Log.Verbose($"ProcessMetaverseObjectChangesAsync: Executing for: {connectedSystemObject.Id}.");
         if (connectedSystemObject.Status == ConnectedSystemObjectStatus.Obsolete)
             return MetaverseObjectChangeResult.NoChanges();
 
@@ -3005,8 +3005,8 @@ public abstract class SyncTaskProcessorBase
                     finalAttributeValues);
                 deletedMvoIds.Add(mvo.Id);
                 Log.Information(
-                    "ProcessMvoDeletionsIndividuallyAsync: Deleted MVO {MvoId} ({DisplayName})",
-                    mvo.Id, mvo.DisplayName ?? "No display name");
+                    "ProcessMvoDeletionsIndividuallyAsync: Deleted MVO {MvoId}",
+                    mvo.Id);
             }
             catch (Exception ex)
             {

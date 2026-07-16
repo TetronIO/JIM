@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using JIM.Models.Staging;
+using JIM.Utilities;
 using Serilog;
 using System.Diagnostics;
 namespace JIM.Connectors.File;
@@ -234,7 +235,7 @@ internal class FileConnectorImport
                     var rowNumber = _reader.CsvReader.Context.Parser?.Row ?? 0;
                     var rawValue = _reader.CsvReader.GetField(attribute.Name);
                     _logger.Warning(ex, "Failed to parse attribute '{AttributeName}' as {AttributeType} at row {Row}. Raw value: '{RawValue}'",
-                        attribute.Name, attribute.Type, rowNumber, rawValue);
+                        attribute.Name, attribute.Type, rowNumber, LogSanitiser.Sanitise(rawValue));
 
                     importObject.ErrorType = ConnectedSystemImportObjectError.AttributeValueError;
                     importObject.ErrorMessage = $"Failed to parse '{attribute.Name}' as {attribute.Type}: {ex.Message}";

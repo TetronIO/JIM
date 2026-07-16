@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 
 namespace JIM.Application.Servers;
@@ -87,8 +88,8 @@ public partial class SyncEngine
                     attrChange.Attribute?.Name ?? "unknown",
                     attrChange.ChangeType,
                     connectedSystemObject.Id,
-                    GetExpectedValueAsString(attrChange),
-                    GetImportedValueAsString(attrValuesByAttrId, attrChange),
+                    LogSanitiser.Sanitise(GetExpectedValueAsString(attrChange)),
+                    LogSanitiser.Sanitise(GetImportedValueAsString(attrValuesByAttrId, attrChange)),
                     confirmed);
             }
 
@@ -113,7 +114,7 @@ public partial class SyncEngine
                     Log.Warning("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) failed after {Attempts} attempts. " +
                         "Expected: '{ExpectedValue}', Actual: '{ImportedValue}'",
                         attrChange.Id, attrChange.Attribute?.Name ?? "unknown", attrChange.ExportAttemptCount,
-                        expectedValue, attrChange.LastImportedValue);
+                        LogSanitiser.Sanitise(expectedValue), LogSanitiser.Sanitise(attrChange.LastImportedValue));
                 }
                 else
                 {
@@ -121,7 +122,7 @@ public partial class SyncEngine
                     Log.Debug("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) not confirmed, will retry (attempt {Attempt}). " +
                         "Expected: '{ExpectedValue}', Actual: '{ImportedValue}'",
                         attrChange.Id, attrChange.Attribute?.Name ?? "unknown", attrChange.ExportAttemptCount,
-                        expectedValue, attrChange.LastImportedValue);
+                        LogSanitiser.Sanitise(expectedValue), LogSanitiser.Sanitise(attrChange.LastImportedValue));
                 }
             }
         }

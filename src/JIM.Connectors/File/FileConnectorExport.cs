@@ -7,6 +7,7 @@ using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 using System.Globalization;
 namespace JIM.Connectors.File;
@@ -290,7 +291,7 @@ internal class FileConnectorExport
                 if (existingRows.ContainsKey(externalId))
                 {
                     _logger.Warning("FileConnectorExport.ProcessPendingExport: Create export for '{ExternalId}' but row already exists. Treating as update.",
-                        externalId);
+                        LogSanitiser.Sanitise(externalId));
                 }
 
                 // Build the row from attribute changes
@@ -316,7 +317,7 @@ internal class FileConnectorExport
                 if (!existingRows.TryGetValue(externalId, out var existingRow))
                 {
                     _logger.Warning("FileConnectorExport.ProcessPendingExport: Update for '{ExternalId}' but no existing row found. Creating new row.",
-                        externalId);
+                        LogSanitiser.Sanitise(externalId));
                     existingRow = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     existingRows[externalId] = existingRow;
                 }
@@ -339,12 +340,12 @@ internal class FileConnectorExport
 
                 if (existingRows.Remove(externalId))
                 {
-                    _logger.Debug("FileConnectorExport.ProcessPendingExport: Removed row for '{ExternalId}'", externalId);
+                    _logger.Debug("FileConnectorExport.ProcessPendingExport: Removed row for '{ExternalId}'", LogSanitiser.Sanitise(externalId));
                 }
                 else
                 {
                     _logger.Debug("FileConnectorExport.ProcessPendingExport: Delete for '{ExternalId}' but row not found in file (already removed or never exported)",
-                        externalId);
+                        LogSanitiser.Sanitise(externalId));
                 }
 
                 return ConnectedSystemExportResult.Succeeded(externalId);

@@ -281,7 +281,7 @@ public class SyncImportTaskProcessor
                     // queries on subsequent pages.
                     if (result.PersistedConnectorData != null && newPersistedData == null)
                     {
-                        Log.Debug($"ExecuteAsync: captured new persisted connector data from page {pageNumber}. old value: '{originalPersistedData}', new value: '{result.PersistedConnectorData}'");
+                        Log.Debug($"ExecuteAsync: captured new persisted connector data from page {pageNumber}. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(result.PersistedConnectorData)}'");
                         newPersistedData = result.PersistedConnectorData;
                     }
 
@@ -311,7 +311,7 @@ public class SyncImportTaskProcessor
                 // with the new watermark captured from the first page.
                 if (newPersistedData != null && newPersistedData != originalPersistedData)
                 {
-                    Log.Debug($"ExecuteAsync: updating persisted connector data after all pages. old value: '{originalPersistedData}', new value: '{newPersistedData}'");
+                    Log.Debug($"ExecuteAsync: updating persisted connector data after all pages. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(newPersistedData)}'");
                     await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, newPersistedData);
                 }
 
@@ -322,7 +322,7 @@ public class SyncImportTaskProcessor
                 if (connectorWarningMessage != null)
                 {
                     _activity.WarningMessage = connectorWarningMessage;
-                    Log.Warning("PerformImportAsync: Connector reported warning: {WarningMessage}", connectorWarningMessage);
+                    Log.Warning("PerformImportAsync: Connector reported warning: {WarningMessage}", LogSanitiser.Sanitise(connectorWarningMessage));
                 }
 
                 using (Diagnostics.Connector.StartSpan("CloseImportConnection"))
@@ -759,7 +759,7 @@ public class SyncImportTaskProcessor
                 var extId = orphanedRpei.ConnectedSystemObject?.ExternalIdAttributeValue?.StringValue ?? "[unknown]";
                 var hasCsoRef = orphanedRpei.ConnectedSystemObject != null;
                 Log.Error("VALIDATION FAILURE: RPEI has ObjectChangeType=Create but no ConnectedSystemObjectId and no error. HasCsoRef={HasCsoRef}, ExtId={ExtId}. This is a bug! Setting error type.",
-                    hasCsoRef, extId);
+                    hasCsoRef, LogSanitiser.Sanitise(extId));
                 orphanedRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.CsoCreationFailed;
                 orphanedRpei.ErrorMessage = $"Internal error: RPEI was created for import (ExtId={extId}) but CSO was not persisted. CSO reference exists={hasCsoRef}. This indicates a bug in the persistence layer.";
             }
@@ -998,7 +998,7 @@ public class SyncImportTaskProcessor
 
         if (cso == null)
         {
-            Log.Information($"ObsoleteConnectedSystemObjectAsync: CSO with external id '{connectedSystemObjectExternalId}' not found. No work to do.");
+            Log.Information($"ObsoleteConnectedSystemObjectAsync: CSO with external id '{LogSanitiser.Sanitise(connectedSystemObjectExternalId?.ToString())}' not found. No work to do.");
             return;
         }
 
@@ -1272,7 +1272,7 @@ public class SyncImportTaskProcessor
 
                         // DEBUG: Log the external ID value extracted
                         Log.Debug("ProcessImportObjectsAsync: Extracted external ID value '{ExternalIdValue}' from import object at index {Index}. Duplicate key: {DuplicateKey}",
-                            externalIdValue, importIndex, duplicateKey);
+                            LogSanitiser.Sanitise(externalIdValue), importIndex, LogSanitiser.Sanitise(duplicateKey));
 
                         // Snapshot the external ID for error reporting
                         activityRunProfileExecutionItem.ExternalIdSnapshot = externalIdValue;
@@ -1286,7 +1286,7 @@ public class SyncImportTaskProcessor
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
                             activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found across import pages. This object was already processed on a previous page. This may indicate a directory server paging issue.";
                             Log.Warning("ProcessImportObjectsAsync: Cross-page duplicate external ID '{ExternalId}' at index {Index}. Object was already imported on a previous page. Skipping.",
-                                externalIdValue, importIndex);
+                                LogSanitiser.Sanitise(externalIdValue), importIndex);
                             continue;
                         }
 
@@ -1296,7 +1296,7 @@ public class SyncImportTaskProcessor
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
                             activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.";
                             Log.Warning("ProcessImportObjectsAsync: Duplicate external ID '{ExternalId}' (3rd+ occurrence) at index {Index}. Marking as error.",
-                                externalIdValue, importIndex);
+                                LogSanitiser.Sanitise(externalIdValue), importIndex);
                             continue;
                         }
 
@@ -1304,7 +1304,7 @@ public class SyncImportTaskProcessor
                         {
                             // Duplicate found! Error BOTH objects.
                             Log.Warning("ProcessImportObjectsAsync: Duplicate external ID '{ExternalId}' found at index {CurrentIndex}. First occurrence was at index {FirstIndex}. Erroring BOTH objects.",
-                                externalIdValue, importIndex, firstOccurrence.index);
+                                LogSanitiser.Sanitise(externalIdValue), importIndex, firstOccurrence.index);
 
                             // Mark THIS object as duplicate
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
@@ -1323,7 +1323,7 @@ public class SyncImportTaskProcessor
                                 if (removed)
                                 {
                                     Log.Debug("ProcessImportObjectsAsync: Removed CSO for first occurrence of duplicate external ID '{ExternalId}' from create list.",
-                                        externalIdValue);
+                                        LogSanitiser.Sanitise(externalIdValue));
                                 }
                                 // Clear the CSO reference from the RPEI since we're not persisting it
                                 firstOccurrence.rpei.ConnectedSystemObject = null;
@@ -1458,7 +1458,7 @@ public class SyncImportTaskProcessor
                             var extIdForError = activityRunProfileExecutionItem.ExternalIdSnapshot ?? "[unknown]";
                             activityRunProfileExecutionItem.ErrorMessage = $"Failed to create Connected System Object for import object with external ID '{extIdForError}'. No specific error was recorded.";
                             Log.Error("ProcessImportObjectsAsync: CSO creation failed for external ID '{ExternalId}' with no specific error. This indicates a bug in import processing.",
-                                extIdForError);
+                                LogSanitiser.Sanitise(extIdForError));
                         }
                     }
                 }
@@ -1728,7 +1728,7 @@ public class SyncImportTaskProcessor
         if (secondaryCso != null && secondaryCso.Status == ConnectedSystemObjectStatus.PendingProvisioning)
         {
             Log.Information("HydrateCsoAsync: Found PendingProvisioning CSO {CsoId} by secondary external ID '{SecondaryId}'. This confirms a provisioned object.",
-                secondaryCso.Id, secondaryIdImportAttr.StringValues[0]);
+                secondaryCso.Id, LogSanitiser.Sanitise(secondaryIdImportAttr.StringValues[0]));
             return secondaryCso;
         }
 
@@ -1918,7 +1918,7 @@ public class SyncImportTaskProcessor
         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
 
         stopwatch.Stop();
-        Log.Debug($"CreateConnectedSystemObjectFromImportObject: completed for {connectedSystemObject.Type.Name} ExtId: '{connectedSystemObject.ExternalIdAttributeValue}', SecExtId: '{connectedSystemObject.SecondaryExternalIdAttributeValue}' in {stopwatch.Elapsed}");
+        Log.Debug($"CreateConnectedSystemObjectFromImportObject: completed for {connectedSystemObject.Type.Name} ExtId: '{LogSanitiser.Sanitise(connectedSystemObject.ExternalIdAttributeValue?.ToString())}', SecExtId: '{LogSanitiser.Sanitise(connectedSystemObject.SecondaryExternalIdAttributeValue?.ToString())}' in {stopwatch.Elapsed}");
 
         return connectedSystemObject;
     }
@@ -2248,7 +2248,7 @@ public class SyncImportTaskProcessor
                 {
                     Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate string value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
                         "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                        originalStringCount - uniqueStrings.Count, attr.Name, csoExternalId ?? "(unknown)", originalStringCount, uniqueStrings.Count);
+                        originalStringCount - uniqueStrings.Count, attr.Name, LogSanitiser.Sanitise(csoExternalId) ?? "(unknown)", originalStringCount, uniqueStrings.Count);
                     attr.StringValues.Clear();
                     attr.StringValues.AddRange(uniqueStrings);
                 }
@@ -2263,7 +2263,7 @@ public class SyncImportTaskProcessor
                 {
                     Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate int value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
                         "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                        originalIntCount - uniqueInts.Count, attr.Name, csoExternalId ?? "(unknown)", originalIntCount, uniqueInts.Count);
+                        originalIntCount - uniqueInts.Count, attr.Name, LogSanitiser.Sanitise(csoExternalId) ?? "(unknown)", originalIntCount, uniqueInts.Count);
                     attr.IntValues.Clear();
                     attr.IntValues.AddRange(uniqueInts);
                 }
@@ -2278,7 +2278,7 @@ public class SyncImportTaskProcessor
                 {
                     Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate long value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
                         "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                        originalLongCount - uniqueLongs.Count, attr.Name, csoExternalId ?? "(unknown)", originalLongCount, uniqueLongs.Count);
+                        originalLongCount - uniqueLongs.Count, attr.Name, LogSanitiser.Sanitise(csoExternalId) ?? "(unknown)", originalLongCount, uniqueLongs.Count);
                     attr.LongValues.Clear();
                     attr.LongValues.AddRange(uniqueLongs);
                 }
@@ -2293,7 +2293,7 @@ public class SyncImportTaskProcessor
                 {
                     Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate GUID value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
                         "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                        originalGuidCount - uniqueGuids.Count, attr.Name, csoExternalId ?? "(unknown)", originalGuidCount, uniqueGuids.Count);
+                        originalGuidCount - uniqueGuids.Count, attr.Name, LogSanitiser.Sanitise(csoExternalId) ?? "(unknown)", originalGuidCount, uniqueGuids.Count);
                     attr.GuidValues.Clear();
                     attr.GuidValues.AddRange(uniqueGuids);
                 }
@@ -2308,7 +2308,7 @@ public class SyncImportTaskProcessor
                 {
                     Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate reference value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
                         "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                        originalRefCount - uniqueRefs.Count, attr.Name, csoExternalId ?? "(unknown)", originalRefCount, uniqueRefs.Count);
+                        originalRefCount - uniqueRefs.Count, attr.Name, LogSanitiser.Sanitise(csoExternalId) ?? "(unknown)", originalRefCount, uniqueRefs.Count);
                     attr.ReferenceValues.Clear();
                     attr.ReferenceValues.AddRange(uniqueRefs);
                 }
@@ -2323,7 +2323,7 @@ public class SyncImportTaskProcessor
                 {
                     Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate binary value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
                         "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                        originalBinaryCount - uniqueBinaries.Count, attr.Name, csoExternalId ?? "(unknown)", originalBinaryCount, uniqueBinaries.Count);
+                        originalBinaryCount - uniqueBinaries.Count, attr.Name, LogSanitiser.Sanitise(csoExternalId) ?? "(unknown)", originalBinaryCount, uniqueBinaries.Count);
                     attr.ByteValues.Clear();
                     attr.ByteValues.AddRange(uniqueBinaries);
                 }

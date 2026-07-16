@@ -196,7 +196,7 @@ internal class LdapConnectorExport
                 $"Cannot create object: Distinguished Name '{dn}' contains empty RDN components.",
                 ConnectedSystemExportErrorType.InvalidGeneratedExternalId);
 
-        _logger.Debug("LdapConnectorExport.ProcessCreate: Creating object at DN '{Dn}'", dn);
+        _logger.Debug("LdapConnectorExport.ProcessCreate: Creating object at DN '{Dn}'", LogSanitiser.Sanitise(dn));
 
         // Ensure parent containers exist if the setting is enabled
         var createContainersAsNeeded = GetSettingBoolValue(SettingCreateContainersAsNeeded) ?? false;
@@ -232,14 +232,14 @@ internal class LdapConnectorExport
                     $"Overflow modify failed for '{dn}': {modifyResponse.ErrorMessage}");
         }
 
-        _logger.Debug("LdapConnectorExport.ProcessCreate: Successfully created object at '{Dn}'", dn);
+        _logger.Debug("LdapConnectorExport.ProcessCreate: Successfully created object at '{Dn}'", LogSanitiser.Sanitise(dn));
 
         // After successful create, fetch the system-assigned external ID (objectGUID for AD, entryUUID for OpenLDAP)
         var rootDse = new LdapConnectorRootDse { DirectoryType = _directoryType };
         var externalId = FetchExternalId(dn, rootDse);
         if (externalId != null)
         {
-            _logger.Debug("LdapConnectorExport.ProcessCreate: Retrieved external ID {ExternalId} for '{Dn}'", externalId, dn);
+            _logger.Debug("LdapConnectorExport.ProcessCreate: Retrieved external ID {ExternalId} for '{Dn}'", LogSanitiser.Sanitise(externalId), LogSanitiser.Sanitise(dn));
             return ConnectedSystemExportResult.Succeeded(externalId, dn);
         }
 
@@ -267,7 +267,7 @@ internal class LdapConnectorExport
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "LdapConnectorExport.FetchExternalId: Error fetching external ID for '{Dn}'", dn);
+            _logger.Warning(ex, "LdapConnectorExport.FetchExternalId: Error fetching external ID for '{Dn}'", LogSanitiser.Sanitise(dn));
             return null;
         }
     }
@@ -278,7 +278,7 @@ internal class LdapConnectorExport
         if (string.IsNullOrEmpty(currentDn))
             throw new InvalidOperationException("Cannot update object: Distinguished Name (DN) could not be determined.");
 
-        _logger.Debug("LdapConnectorExport.ProcessUpdate: Updating object at DN '{Dn}'", currentDn);
+        _logger.Debug("LdapConnectorExport.ProcessUpdate: Updating object at DN '{Dn}'", LogSanitiser.Sanitise(currentDn));
 
         // Check if a rename is needed (DN has changed)
         var newDn = GetNewDistinguishedName(pendingExport);
@@ -307,7 +307,7 @@ internal class LdapConnectorExport
 
         if (modifyRequests.Count == 0)
         {
-            _logger.Debug("LdapConnectorExport.ProcessUpdate: No attribute modifications to apply for '{Dn}'", workingDn);
+            _logger.Debug("LdapConnectorExport.ProcessUpdate: No attribute modifications to apply for '{Dn}'", LogSanitiser.Sanitise(workingDn));
             return wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
         }
 
@@ -319,7 +319,7 @@ internal class LdapConnectorExport
             if (modifyRequests.Count > 1)
             {
                 _logger.Debug("LdapConnectorExport.ProcessUpdate: Sending modify request chunk {Chunk}/{Total} with {Count} modifications for '{Dn}'",
-                    i + 1, modifyRequests.Count, request.Modifications.Count, workingDn);
+                    i + 1, modifyRequests.Count, request.Modifications.Count, LogSanitiser.Sanitise(workingDn));
             }
 
             try
@@ -342,7 +342,7 @@ internal class LdapConnectorExport
     /// </summary>
     private string ProcessRename(string currentDn, string newDn)
     {
-        _logger.Debug("LdapConnectorExport.ProcessRename: Renaming object from '{OldDn}' to '{NewDn}'", currentDn, newDn);
+        _logger.Debug("LdapConnectorExport.ProcessRename: Renaming object from '{OldDn}' to '{NewDn}'", LogSanitiser.Sanitise(currentDn), LogSanitiser.Sanitise(newDn));
 
         var modifyDnRequest = BuildModifyDnRequest(currentDn, newDn);
 
@@ -353,7 +353,7 @@ internal class LdapConnectorExport
         }
 
         _logger.Information("LdapConnectorExport.ProcessRename: Successfully renamed object from '{OldDn}' to '{NewDn}'",
-            currentDn, newDn);
+            LogSanitiser.Sanitise(currentDn), LogSanitiser.Sanitise(newDn));
 
         return newDn;
     }
@@ -386,7 +386,7 @@ internal class LdapConnectorExport
 
     private void ProcessHardDelete(string dn)
     {
-        _logger.Debug("LdapConnectorExport.ProcessHardDelete: Deleting object at DN '{Dn}'", dn);
+        _logger.Debug("LdapConnectorExport.ProcessHardDelete: Deleting object at DN '{Dn}'", LogSanitiser.Sanitise(dn));
 
         try
         {
@@ -395,7 +395,7 @@ internal class LdapConnectorExport
 
             if (IsNoSuchObjectResult(response.ResultCode, response.ErrorMessage))
             {
-                _logger.Information("LdapConnectorExport.ProcessHardDelete: Object at '{Dn}' does not exist (already deleted), treating as success", dn);
+                _logger.Information("LdapConnectorExport.ProcessHardDelete: Object at '{Dn}' does not exist (already deleted), treating as success", LogSanitiser.Sanitise(dn));
                 return;
             }
 
@@ -404,19 +404,19 @@ internal class LdapConnectorExport
                 throw new LdapException((int)response.ResultCode, response.ErrorMessage);
             }
 
-            _logger.Information("LdapConnectorExport.ProcessHardDelete: Successfully deleted object at '{Dn}'", dn);
+            _logger.Information("LdapConnectorExport.ProcessHardDelete: Successfully deleted object at '{Dn}'", LogSanitiser.Sanitise(dn));
         }
         catch (DirectoryOperationException ex) when (IsNoSuchObjectResult(ex.Response?.ResultCode, ex.Message))
         {
             // Samba AD and some directory implementations throw DirectoryOperationException
             // instead of returning the error code in the response. Treat as idempotent success.
-            _logger.Information("LdapConnectorExport.ProcessHardDelete: Object at '{Dn}' does not exist (already deleted), treating as success", dn);
+            _logger.Information("LdapConnectorExport.ProcessHardDelete: Object at '{Dn}' does not exist (already deleted), treating as success", LogSanitiser.Sanitise(dn));
         }
     }
 
     private void ProcessDisable(PendingExport pendingExport, string dn)
     {
-        _logger.Debug("LdapConnectorExport.ProcessDisable: Disabling object at DN '{Dn}'", dn);
+        _logger.Debug("LdapConnectorExport.ProcessDisable: Disabling object at DN '{Dn}'", LogSanitiser.Sanitise(dn));
 
         var disableAttribute = GetSettingValue(SettingDisableAttribute) ?? "userAccountControl";
 
@@ -441,7 +441,7 @@ internal class LdapConnectorExport
             }
         }
 
-        _logger.Information("LdapConnectorExport.ProcessDisable: Successfully disabled object at '{Dn}'", dn);
+        _logger.Information("LdapConnectorExport.ProcessDisable: Successfully disabled object at '{Dn}'", LogSanitiser.Sanitise(dn));
     }
 
     private void DisableUsingUserAccountControl(string dn)
@@ -546,7 +546,7 @@ internal class LdapConnectorExport
         // Track the created container for auto-selection
         _createdContainerExternalIds.Add(containerDn);
 
-        _logger.Information("LdapConnectorExport.CreateContainer: Successfully created container '{ContainerDn}'", containerDn);
+        _logger.Information("LdapConnectorExport.CreateContainer: Successfully created container '{ContainerDn}'", LogSanitiser.Sanitise(containerDn));
     }
 
     #endregion
@@ -656,7 +656,7 @@ internal class LdapConnectorExport
                 $"Cannot create object: Distinguished Name '{dn}' contains empty RDN components.",
                 ConnectedSystemExportErrorType.InvalidGeneratedExternalId);
 
-        _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Creating object at DN '{Dn}'", dn);
+        _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Creating object at DN '{Dn}'", LogSanitiser.Sanitise(dn));
 
         var createContainersAsNeeded = GetSettingBoolValue(SettingCreateContainersAsNeeded) ?? false;
         if (createContainersAsNeeded)
@@ -682,13 +682,13 @@ internal class LdapConnectorExport
                     $"Overflow modify failed for '{dn}': {modifyResponse.ErrorMessage}");
         }
 
-        _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Successfully created object at '{Dn}'", dn);
+        _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Successfully created object at '{Dn}'", LogSanitiser.Sanitise(dn));
 
         var rootDse = new LdapConnectorRootDse { DirectoryType = _directoryType };
         var externalId = await FetchExternalIdAsync(dn, rootDse);
         if (externalId != null)
         {
-            _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Retrieved external ID {ExternalId} for '{Dn}'", externalId, dn);
+            _logger.Debug("LdapConnectorExport.ProcessCreateAsync: Retrieved external ID {ExternalId} for '{Dn}'", LogSanitiser.Sanitise(externalId), LogSanitiser.Sanitise(dn));
             return ConnectedSystemExportResult.Succeeded(externalId, dn);
         }
 
@@ -711,7 +711,7 @@ internal class LdapConnectorExport
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "LdapConnectorExport.FetchExternalIdAsync: Error fetching external ID for '{Dn}'", dn);
+            _logger.Warning(ex, "LdapConnectorExport.FetchExternalIdAsync: Error fetching external ID for '{Dn}'", LogSanitiser.Sanitise(dn));
             return null;
         }
     }
@@ -722,7 +722,7 @@ internal class LdapConnectorExport
         if (string.IsNullOrEmpty(currentDn))
             throw new InvalidOperationException("Cannot update object: Distinguished Name (DN) could not be determined.");
 
-        _logger.Debug("LdapConnectorExport.ProcessUpdateAsync: Updating object at DN '{Dn}'", currentDn);
+        _logger.Debug("LdapConnectorExport.ProcessUpdateAsync: Updating object at DN '{Dn}'", LogSanitiser.Sanitise(currentDn));
 
         var newDn = GetNewDistinguishedName(pendingExport);
         var workingDn = currentDn;
@@ -747,7 +747,7 @@ internal class LdapConnectorExport
 
         if (modifyRequests.Count == 0)
         {
-            _logger.Debug("LdapConnectorExport.ProcessUpdateAsync: No attribute modifications to apply for '{Dn}'", workingDn);
+            _logger.Debug("LdapConnectorExport.ProcessUpdateAsync: No attribute modifications to apply for '{Dn}'", LogSanitiser.Sanitise(workingDn));
             return wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
         }
 
@@ -759,7 +759,7 @@ internal class LdapConnectorExport
             if (modifyRequests.Count > 1)
             {
                 _logger.Debug("LdapConnectorExport.ProcessUpdateAsync: Sending modify request chunk {Chunk}/{Total} with {Count} modifications for '{Dn}'",
-                    i + 1, modifyRequests.Count, request.Modifications.Count, workingDn);
+                    i + 1, modifyRequests.Count, request.Modifications.Count, LogSanitiser.Sanitise(workingDn));
             }
 
             var response = (ModifyResponse)await _executor.SendRequestAsync(request);
@@ -771,7 +771,7 @@ internal class LdapConnectorExport
 
     private async Task<string> ProcessRenameAsync(string currentDn, string newDn)
     {
-        _logger.Debug("LdapConnectorExport.ProcessRenameAsync: Renaming object from '{OldDn}' to '{NewDn}'", currentDn, newDn);
+        _logger.Debug("LdapConnectorExport.ProcessRenameAsync: Renaming object from '{OldDn}' to '{NewDn}'", LogSanitiser.Sanitise(currentDn), LogSanitiser.Sanitise(newDn));
 
         var modifyDnRequest = BuildModifyDnRequest(currentDn, newDn);
 
@@ -782,7 +782,7 @@ internal class LdapConnectorExport
         }
 
         _logger.Information("LdapConnectorExport.ProcessRenameAsync: Successfully renamed object from '{OldDn}' to '{NewDn}'",
-            currentDn, newDn);
+            LogSanitiser.Sanitise(currentDn), LogSanitiser.Sanitise(newDn));
 
         return newDn;
     }
@@ -815,7 +815,7 @@ internal class LdapConnectorExport
 
     private async Task ProcessHardDeleteAsync(string dn)
     {
-        _logger.Debug("LdapConnectorExport.ProcessHardDeleteAsync: Deleting object at DN '{Dn}'", dn);
+        _logger.Debug("LdapConnectorExport.ProcessHardDeleteAsync: Deleting object at DN '{Dn}'", LogSanitiser.Sanitise(dn));
 
         try
         {
@@ -824,7 +824,7 @@ internal class LdapConnectorExport
 
             if (IsNoSuchObjectResult(response.ResultCode, response.ErrorMessage))
             {
-                _logger.Information("LdapConnectorExport.ProcessHardDeleteAsync: Object at '{Dn}' does not exist (already deleted), treating as success", dn);
+                _logger.Information("LdapConnectorExport.ProcessHardDeleteAsync: Object at '{Dn}' does not exist (already deleted), treating as success", LogSanitiser.Sanitise(dn));
                 return;
             }
 
@@ -833,17 +833,17 @@ internal class LdapConnectorExport
                 throw new LdapException((int)response.ResultCode, response.ErrorMessage);
             }
 
-            _logger.Information("LdapConnectorExport.ProcessHardDeleteAsync: Successfully deleted object at '{Dn}'", dn);
+            _logger.Information("LdapConnectorExport.ProcessHardDeleteAsync: Successfully deleted object at '{Dn}'", LogSanitiser.Sanitise(dn));
         }
         catch (DirectoryOperationException ex) when (IsNoSuchObjectResult(ex.Response?.ResultCode, ex.Message))
         {
-            _logger.Information("LdapConnectorExport.ProcessHardDeleteAsync: Object at '{Dn}' does not exist (already deleted), treating as success", dn);
+            _logger.Information("LdapConnectorExport.ProcessHardDeleteAsync: Object at '{Dn}' does not exist (already deleted), treating as success", LogSanitiser.Sanitise(dn));
         }
     }
 
     private async Task ProcessDisableAsync(PendingExport pendingExport, string dn)
     {
-        _logger.Debug("LdapConnectorExport.ProcessDisableAsync: Disabling object at DN '{Dn}'", dn);
+        _logger.Debug("LdapConnectorExport.ProcessDisableAsync: Disabling object at DN '{Dn}'", LogSanitiser.Sanitise(dn));
 
         var disableAttribute = GetSettingValue(SettingDisableAttribute) ?? "userAccountControl";
 
@@ -865,7 +865,7 @@ internal class LdapConnectorExport
             }
         }
 
-        _logger.Information("LdapConnectorExport.ProcessDisableAsync: Successfully disabled object at '{Dn}'", dn);
+        _logger.Information("LdapConnectorExport.ProcessDisableAsync: Successfully disabled object at '{Dn}'", LogSanitiser.Sanitise(dn));
     }
 
     private async Task DisableUsingUserAccountControlAsync(string dn)
@@ -973,7 +973,7 @@ internal class LdapConnectorExport
 
         _createdContainerExternalIds.Add(containerDn);
 
-        _logger.Information("LdapConnectorExport.CreateContainerAsync: Successfully created container '{ContainerDn}'", containerDn);
+        _logger.Information("LdapConnectorExport.CreateContainerAsync: Successfully created container '{ContainerDn}'", LogSanitiser.Sanitise(containerDn));
     }
 
     #endregion
@@ -1038,7 +1038,7 @@ internal class LdapConnectorExport
                 _logger.Information(
                     "LdapConnectorExport.BuildAddRequestWithOverflow: Object class '{ObjectClass}' requires at least one member. " +
                     "Injecting placeholder member '{Placeholder}' for '{Dn}'.",
-                    objectClass, _placeholderMemberDn, dn);
+                    objectClass, LogSanitiser.Sanitise(_placeholderMemberDn), LogSanitiser.Sanitise(dn));
                 attributeGroups[memberAttrName] = new List<object> { _placeholderMemberDn };
             }
         }
@@ -1065,7 +1065,7 @@ internal class LdapConnectorExport
             // Attribute exceeds batch size: put first batch in the AddRequest, remainder in ModifyRequests
             _logger.Information("LdapConnectorExport.BuildAddRequestWithOverflow: Attribute '{AttrName}' has {Count} values " +
                 "exceeding batch size {BatchSize} for '{Dn}'. First {BatchSize} values in AddRequest; remainder in overflow ModifyRequests.",
-                attrName, values.Count, _modifyBatchSize, dn);
+                attrName, values.Count, _modifyBatchSize, LogSanitiser.Sanitise(dn));
 
             var firstBatch = new DirectoryAttribute(attrName);
             for (var i = 0; i < _modifyBatchSize; i++)
@@ -1124,7 +1124,7 @@ internal class LdapConnectorExport
     {
         if (searchResponse.ResultCode != ResultCode.Success || searchResponse.Entries.Count == 0)
         {
-            _logger.Warning("LdapConnectorExport.ParseExternalIdFromResponse: Failed to fetch external ID for '{Dn}'", dn);
+            _logger.Warning("LdapConnectorExport.ParseExternalIdFromResponse: Failed to fetch external ID for '{Dn}'", LogSanitiser.Sanitise(dn));
             return null;
         }
 
@@ -1294,7 +1294,7 @@ internal class LdapConnectorExport
         if (requests.Count > 1)
         {
             _logger.Information("LdapConnectorExport.ChunkModifyRequests: Split modifications for '{Dn}' into {RequestCount} " +
-                "LDAP requests (batch size: {BatchSize})", workingDn, requests.Count, _modifyBatchSize);
+                "LDAP requests (batch size: {BatchSize})", LogSanitiser.Sanitise(workingDn), requests.Count, _modifyBatchSize);
         }
 
         return requests;
@@ -1470,7 +1470,7 @@ internal class LdapConnectorExport
             {
                 _logger.Warning("LdapConnectorExport.HandleModifyResponse: Some attribute values already exist at '{Dn}'. " +
                     "This typically means a group member was already present. Treating as success. Error: {Error}",
-                    workingDn, response.ErrorMessage);
+                    LogSanitiser.Sanitise(workingDn), LogSanitiser.Sanitise(response.ErrorMessage));
                 return wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
             }
 
@@ -1486,7 +1486,7 @@ internal class LdapConnectorExport
         }
 
         _logger.Debug("LdapConnectorExport.HandleModifyResponse: Successfully updated object at '{Dn}' with {Count} modifications",
-            workingDn, modifyRequest.Modifications.Count);
+            LogSanitiser.Sanitise(workingDn), modifyRequest.Modifications.Count);
 
         return wasRenamed ? ConnectedSystemExportResult.Succeeded(null, workingDn) : ConnectedSystemExportResult.Succeeded();
     }
@@ -1508,7 +1508,7 @@ internal class LdapConnectorExport
                      !newParentDn.Equals(currentParentDn, StringComparison.OrdinalIgnoreCase);
 
         _logger.Debug("LdapConnectorExport.BuildModifyDnRequest: NewRdn: '{NewRdn}', NewParent: '{NewParent}', IsMove: {IsMove}",
-            newRdn, newParentDn ?? "(same)", isMove);
+            LogSanitiser.Sanitise(newRdn), LogSanitiser.Sanitise(newParentDn) ?? "(same)", isMove);
 
         return new ModifyDNRequest(
             currentDn,
@@ -1548,7 +1548,7 @@ internal class LdapConnectorExport
             throw new InvalidOperationException($"Cannot create container: Unable to parse RDN from DN '{containerDn}'");
         }
 
-        _logger.Information("LdapConnectorExport.BuildContainerAddRequest: Creating missing container '{ContainerDn}'", containerDn);
+        _logger.Information("LdapConnectorExport.BuildContainerAddRequest: Creating missing container '{ContainerDn}'", LogSanitiser.Sanitise(containerDn));
 
         var addRequest = new AddRequest(containerDn);
 
@@ -1761,14 +1761,14 @@ internal class LdapConnectorExport
                 foreach (var av in matchingAttrValues)
                 {
                     Log.Verbose("GetDistinguishedNameForUpdate: AttrValue Id={Id}, AttributeId={AttrId}, StringValue='{StringValue}'",
-                        av.Id, av.AttributeId, av.StringValue);
+                        av.Id, av.AttributeId, LogSanitiser.Sanitise(av.StringValue));
                 }
             }
 
             if (cso.SecondaryExternalIdAttributeValue?.StringValue != null)
             {
                 Log.Debug("GetDistinguishedNameForUpdate: Using CSO SecondaryExternalIdAttributeValue: '{DN}'",
-                    cso.SecondaryExternalIdAttributeValue.StringValue);
+                    LogSanitiser.Sanitise(cso.SecondaryExternalIdAttributeValue.StringValue));
                 return cso.SecondaryExternalIdAttributeValue.StringValue;
             }
 
@@ -1784,7 +1784,7 @@ internal class LdapConnectorExport
         var dnFromAttrChanges = GetDistinguishedNameForCreate(pendingExport);
         if (dnFromAttrChanges != null)
         {
-            Log.Debug("GetDistinguishedNameForUpdate: Using DN from attribute changes: '{DN}'", dnFromAttrChanges);
+            Log.Debug("GetDistinguishedNameForUpdate: Using DN from attribute changes: '{DN}'", LogSanitiser.Sanitise(dnFromAttrChanges));
         }
         else
         {
@@ -1838,7 +1838,7 @@ internal class LdapConnectorExport
             "LdapConnectorExport: Placeholder member '{Placeholder}' was rejected by the directory for '{Dn}'. " +
             "The directory may have referential integrity enabled. " +
             "Update the '{Setting}' connector setting to point to an existing entry.",
-            _placeholderMemberDn, dn, LdapConnectorConstants.SETTING_GROUP_PLACEHOLDER_MEMBER_DN);
+            LogSanitiser.Sanitise(_placeholderMemberDn), LogSanitiser.Sanitise(dn), LdapConnectorConstants.SETTING_GROUP_PLACEHOLDER_MEMBER_DN);
 
         return ConnectedSystemExportResult.Failed(
             $"Failed to add placeholder member '{_placeholderMemberDn}' to group '{dn}' — " +
@@ -1892,7 +1892,7 @@ internal class LdapConnectorExport
                 _logger.Information(
                     "LdapConnectorExport.InjectPlaceholderModificationsIfNeeded: Removing all members from '{ObjectClass}' group. " +
                     "Injecting placeholder member '{Placeholder}' to satisfy MUST constraint.",
-                    objectClass, _placeholderMemberDn);
+                    objectClass, LogSanitiser.Sanitise(_placeholderMemberDn));
 
                 var placeholderAttr = new ConnectedSystemObjectTypeAttribute
                 {
@@ -1920,7 +1920,7 @@ internal class LdapConnectorExport
             _logger.Information(
                 "LdapConnectorExport.InjectPlaceholderModificationsIfNeeded: Adding real members to placeholder-only '{ObjectClass}' group. " +
                 "Removing placeholder member '{Placeholder}'.",
-                objectClass, _placeholderMemberDn);
+                objectClass, LogSanitiser.Sanitise(_placeholderMemberDn));
 
             var placeholderAttr = new ConnectedSystemObjectTypeAttribute
             {

@@ -701,7 +701,7 @@ public class ExportEvaluationServer
                     });
 
                     Log.Debug("EvaluateMvoDeletionsAsync: Will store secondary external ID '{Value}' (attr {AttrName}) on delete PE for CSO {CsoId}",
-                        secondaryIdAttrValue.StringValue, secondaryIdAttrValue.Attribute.Name, cso.Id);
+                        LogSanitiser.Sanitise(secondaryIdAttrValue.StringValue), secondaryIdAttrValue.Attribute.Name, cso.Id);
                 }
                 else
                 {
@@ -2341,7 +2341,7 @@ public class ExportEvaluationServer
         }
 
         Log.Debug("AddSecondaryExternalIdToCsoAsync: Added secondary external ID value '{SecondaryIdValue}' to CSO {CsoId} for confirming import matching (deferSave={DeferSave})",
-            secondaryIdChange.StringValue ?? secondaryIdChange.IntValue?.ToString() ?? "unknown", cso.Id, deferSave);
+            LogSanitiser.Sanitise(secondaryIdChange.StringValue ?? secondaryIdChange.IntValue?.ToString() ?? "unknown"), cso.Id, deferSave);
     }
 
     /// <summary>
@@ -2924,13 +2924,13 @@ public class ExportEvaluationServer
             // Check if the pending change is also null/empty
             var isEmpty = IsPendingChangeEmpty(pendingChange);
             Log.Debug("IsSingleValueMatch: existingValue is null, pendingChange empty={IsEmpty}, IntValue={IntValue}, StringValue={StringValue}",
-                isEmpty, pendingChange.IntValue, pendingChange.StringValue);
+                isEmpty, pendingChange.IntValue, LogSanitiser.Sanitise(pendingChange.StringValue));
             return isEmpty;
         }
 
         var result = ValuesMatch(pendingChange, existingValue);
         Log.Debug("IsSingleValueMatch: Comparing pendingChange (IntValue={PendingInt}, StringValue={PendingStr}) with existingValue (IntValue={ExistingInt}, StringValue={ExistingStr}). Result={Result}",
-            pendingChange.IntValue, pendingChange.StringValue, existingValue.IntValue, existingValue.StringValue, result);
+            pendingChange.IntValue, LogSanitiser.Sanitise(pendingChange.StringValue), existingValue.IntValue, LogSanitiser.Sanitise(existingValue.StringValue), result);
         return result;
     }
 

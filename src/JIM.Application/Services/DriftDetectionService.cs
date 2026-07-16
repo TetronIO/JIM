@@ -8,6 +8,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 
 namespace JIM.Application.Services;
@@ -868,13 +869,13 @@ public class DriftDetectionService
             if (hashSet.Count == 0)
                 return "(empty set)";
 
-            var formattedValues = hashSet.Select(v => v?.ToString() ?? "(null)").Take(5);
+            var formattedValues = hashSet.Select(v => LogSanitiser.Sanitise(v?.ToString()) ?? "(null)").Take(5);
             var result = string.Join(", ", formattedValues);
             if (hashSet.Count > 5)
                 result += $"... (+{hashSet.Count - 5} more)";
             return $"[{result}] ({hashSet.Count} values)";
         }
 
-        return value.ToString() ?? "(null)";
+        return LogSanitiser.Sanitise(value.ToString()) ?? "(null)";
     }
 }
