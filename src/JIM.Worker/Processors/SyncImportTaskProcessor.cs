@@ -15,6 +15,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using JIM.Worker.Models;
@@ -459,7 +460,7 @@ public class SyncImportTaskProcessor
                 Log.Warning("About to persist {RpeiCount} RPEIs. {RpeiErrorCount} have errors: {ErrorDetails}",
                     _activityRunProfileExecutionItems.Count,
                     rpeiWithErrors.Count,
-                    string.Join("; ", rpeiWithErrors.Select(r => $"[Id={r.Id}, ErrorType={r.ErrorType}, Message={r.ErrorMessage}]")));
+                    string.Join("; ", rpeiWithErrors.Select(r => $"[Id={r.Id}, ErrorType={r.ErrorType}, Message={LogSanitiser.Sanitise(r.ErrorMessage)}]")));
             }
 
             // Pre-generate IDs for ALL CSOs before batch saves begin. This eliminates
@@ -2055,7 +2056,7 @@ public class SyncImportTaskProcessor
                         foreach (var existingRef in csoRefAttrValues.Take(3)) // Log first 3 for brevity
                         {
                             var refCsoId = existingRef.ReferenceValueId?.ToString() ?? "(null)";
-                            var unresolved = existingRef.UnresolvedReferenceValue ?? "(null)";
+                            var unresolved = LogSanitiser.Sanitise(existingRef.UnresolvedReferenceValue) ?? "(null)";
                             Log.Debug("  Existing ref: ReferenceValueId={RefCsoId}, UnresolvedRef={Unresolved}",
                                 refCsoId, unresolved);
                         }
@@ -2374,6 +2375,10 @@ public class SyncImportTaskProcessor
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
         var processedCount = 0;
 
+        // Read once, not per item: how this Connected System wants unresolved references reported.
+        var unresolvedReferenceHandling = _connectedSystem.UnresolvedReferenceHandling;
+        var unresolvedReferenceCount = 0;
+
         // Build RPEI lookup dictionary for O(1) error reporting instead of O(N) linear scans
         var rpeiLookup = new Dictionary<ConnectedSystemObject, ActivityRunProfileExecutionItem>();
         foreach (var rpei in _activityRunProfileExecutionItems)
@@ -2497,7 +2502,7 @@ public class SyncImportTaskProcessor
                 if (referencedCso != null)
                 {
                     Log.Debug("ResolveReferencesAsync: Matched an unresolved reference ({UnresolvedRef}) to CSO: {CsoId} (from database batch query)",
-                        attrValue.UnresolvedReferenceValue, referencedCso.Id);
+                        LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), referencedCso.Id);
                     attrValue.ReferenceValue = referencedCso;
                     // Also set the FK explicitly — the referencedCso was loaded from a separate DB query context
                     // and may not be tracked by the same DbContext instance that will save this attribute value,
@@ -2507,20 +2512,55 @@ public class SyncImportTaskProcessor
                 else
                 {
                     // reference not found. referenced object probably out of container scope!
-                    // todo (#873): make it a per-Connected System setting whether to raise an error, or ignore. sometimes this is desirable.
-                    rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
-                    if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
-                    {
-                        activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {attrValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
-                        activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
-                    }
-                    else
-                    {
-                        Log.Warning($"ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {cso.Id}, unresolved reference: {attrValue.UnresolvedReferenceValue}");
-                    }
+                    // how this is reported (error, warning or silently logged) is a per-Connected System setting.
+                    unresolvedReferenceCount++;
 
-                    Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {attrValue.UnresolvedReferenceValue}");
+                    switch (unresolvedReferenceHandling)
+                    {
+                        case UnresolvedReferenceHandling.Error:
+                            rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
+                            if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
+                            {
+                                activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {attrValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
+                                activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
+                            }
+                            else
+                            {
+                                Log.Warning($"ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {cso.Id}, unresolved reference: {LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue)}");
+                            }
+
+                            Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue)}");
+                            break;
+
+                        case UnresolvedReferenceHandling.Warn:
+                            // Run Profile Execution Item is deliberately left un-errored; the Activity picks up a
+                            // summary warning after the loop instead (see below).
+                            Log.Warning("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. The referenced object may be outside the configured Container Scope.",
+                                LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id);
+                            break;
+
+                        case UnresolvedReferenceHandling.Ignore:
+                        default:
+                            Log.Debug("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. Ignored per Connected System setting.",
+                                LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id);
+                            break;
+                    }
                 }
+            }
+        }
+
+        // Summary statistics: always logged when references were left unresolved, regardless of handling mode.
+        if (unresolvedReferenceCount > 0)
+        {
+            Log.Information("ResolveReferencesAsync: {Count} reference value(s) could not be resolved to Connected System Objects (handling: {UnresolvedReferenceHandling}).",
+                unresolvedReferenceCount, unresolvedReferenceHandling);
+
+            if (unresolvedReferenceHandling == UnresolvedReferenceHandling.Warn)
+            {
+                var warningSummary = $"{unresolvedReferenceCount} reference value(s) could not be resolved to Connected System Objects. The referenced objects may be outside the configured Container Scope. View the affected Connected System Objects for details.";
+                _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
+                    ? warningSummary
+                    : $"{_activity.WarningMessage}\n{warningSummary}";
             }
         }
 
@@ -2621,7 +2661,7 @@ public class SyncImportTaskProcessor
             ? referencedConnectedSystemObject.Id.ToString()
             : referencedConnectedSystemObject.ExternalIdAttributeValue?.ToString() ?? "(unknown)";
         Log.Debug("ResolveReferencesAsync: Matched an unresolved reference ({UnresolvedRef}) to CSO: {CsoIdentifier}",
-            referenceAttributeValue.UnresolvedReferenceValue, csoIdentifier);
+            LogSanitiser.Sanitise(referenceAttributeValue.UnresolvedReferenceValue), LogSanitiser.Sanitise(csoIdentifier));
         referenceAttributeValue.ReferenceValue = referencedConnectedSystemObject;
         // Also set the FK when the referenced CSO already has a real ID (existing/updated CSOs).
         // For newly-created CSOs (Id == Guid.Empty), the FK is fixed up later in

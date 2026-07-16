@@ -253,6 +253,22 @@ public class ConfigurationSnapshotServiceTests
     }
 
     [Test]
+    public void CreateSnapshot_ConnectedSystem_CapturesUnresolvedReferenceHandling()
+    {
+        // Unresolved Reference Handling is a per-Connected System behavioural setting (Error/Warn/Ignore); a change to
+        // it must be attributable via the configuration change history, so it must be part of the snapshot.
+        var connectedSystem = new ConnectedSystem
+        {
+            Id = 3, Name = "AD", ConnectorDefinitionId = 4,
+            UnresolvedReferenceHandling = UnresolvedReferenceHandling.Warn
+        };
+
+        var snapshot = _service.CreateSnapshot(connectedSystem, HashKey);
+
+        Assert.That(Child(snapshot.Root, "unresolvedReferenceHandling")!.Value, Is.EqualTo("Warn"));
+    }
+
+    [Test]
     public void CreateSnapshot_ConnectedSystem_ExcludesRuntimeStatus()
     {
         // Status (Active/Deleting) is runtime state, not configuration; snapshotting it would record phantom

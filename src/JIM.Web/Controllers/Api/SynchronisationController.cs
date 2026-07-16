@@ -973,6 +973,9 @@ public class SynchronisationController(
         if (request.MaxExportParallelism.HasValue)
             connectedSystem.MaxExportParallelism = request.MaxExportParallelism.Value;
 
+        if (request.UnresolvedReferenceHandling.HasValue)
+            connectedSystem.UnresolvedReferenceHandling = request.UnresolvedReferenceHandling.Value;
+
         // Update setting values if provided
         if (request.SettingValues != null)
         {

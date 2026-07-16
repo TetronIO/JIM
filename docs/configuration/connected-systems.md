@@ -65,6 +65,26 @@ Inside a partition, or directly inside the connector space of a connector that d
 
 In practice, selecting a partition brings an entire naming context into scope, while selecting containers narrows what is imported within that partition (or within the connector space for connectors that have no partitions).
 
+## Unresolved reference handling
+
+When an import stages a reference attribute value (for example a group member's Distinguished Name) that does not correspond to any object in the connector space, JIM cannot resolve the reference. The most common cause is the referenced object sitting outside the configured [Container Scope](#partitions-and-containers), which can be entirely deliberate: excluding foreign or out-of-remit objects from import is a normal scoping decision.
+
+Each Connected System has an **Unresolved Reference Handling** setting that controls what happens when this occurs during import:
+
+| Mode | Behaviour |
+|------|-----------|
+| **Error** (default) | Each affected object's Run Profile execution item is marked with an Unresolved Reference error, and the Activity completes with a warning status showing the errored items. Choose this when every reference is expected to resolve. |
+| **Warn** | No per-object errors are raised. The Activity completes with a warning carrying a summary of how many references could not be resolved. Choose this when unresolved references are worth a glance but should not read as failures. |
+| **Ignore** | No per-object errors and no Activity warning; the import completes successfully. Choose this when unresolved references are expected and benign. |
+
+Whichever mode is selected, genuine data-quality issues remain discoverable:
+
+- **Connected System Objects**<br /> Unresolved reference values stay stored on the affected objects, so they can be inspected on the object's detail page at any time.
+- **PowerShell**<br /> `Get-JIMConnectedSystemUnresolvedReferenceCount` reports how many unresolved references a Connected System currently holds.
+- **Service log**<br /> Every unresolved reference is logged (at Warning level in Warn mode, Debug level in Ignore mode), along with a summary count at the end of reference resolution.
+
+Set the mode from the **Import Behaviour** panel on the Connected System's Settings tab, with `Set-JIMConnectedSystem -UnresolvedReferenceHandling`, or via the REST API.
+
 ## Pending Exports
 
 Changes destined for the Connected System that have been computed by synchronisation but not yet written back. Run an export Run Profile to flush them. Inspecting Pending Exports is the right place to look when you want to know "what is JIM about to change in this system?"

@@ -116,6 +116,23 @@ Describe 'Set-JIMConnectedSystem' {
             $command.Parameters['SettingValues'] | Should -Not -BeNullOrEmpty
         }
 
+        It 'Should have a MaxExportParallelism parameter with ValidateRange' {
+            $param = $command.Parameters['MaxExportParallelism']
+            $param | Should -Not -BeNullOrEmpty
+            $validateRange = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateRangeAttribute] }
+            $validateRange | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should have an UnresolvedReferenceHandling parameter with ValidateSet' {
+            $param = $command.Parameters['UnresolvedReferenceHandling']
+            $param | Should -Not -BeNullOrEmpty
+            $validateSet = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $validateSet | Should -Not -BeNullOrEmpty
+            $validateSet.ValidValues | Should -Contain 'Error'
+            $validateSet.ValidValues | Should -Contain 'Warn'
+            $validateSet.ValidValues | Should -Contain 'Ignore'
+        }
+
         It 'Should have a PassThru switch parameter' {
             $command.Parameters['PassThru'].SwitchParameter | Should -BeTrue
         }
@@ -128,6 +145,39 @@ Describe 'Set-JIMConnectedSystem' {
         It 'Should have InputObject parameter that accepts pipeline input' {
             $param = $command.Parameters['InputObject']
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipeline } | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'Request body composition' {
+
+        It 'Sends unresolvedReferenceHandling in the PUT body when -UnresolvedReferenceHandling is specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                Set-JIMConnectedSystem -Id 1 -UnresolvedReferenceHandling 'Ignore' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.unresolvedReferenceHandling -eq 'Ignore'
+                }
+            }
+        }
+
+        It 'Omits unresolvedReferenceHandling from the PUT body when -UnresolvedReferenceHandling is not specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                Set-JIMConnectedSystem -Id 1 -Name 'Updated Name' -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('unresolvedReferenceHandling')
+                }
+            }
+        }
+
+        It 'Rejects a value outside the ValidateSet' {
+            { Set-JIMConnectedSystem -Id 1 -UnresolvedReferenceHandling 'Bogus' -Confirm:$false -ErrorAction Stop } | Should -Throw
         }
     }
 
