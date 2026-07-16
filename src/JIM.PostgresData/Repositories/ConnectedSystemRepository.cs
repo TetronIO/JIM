@@ -238,16 +238,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Object Matching Rules, loaded in a single keyed query and wired onto their owning object
         // types in memory.
         //
-        // Why not Include them as part of the query above? Before #494 we used four repeated
+        // Why not Include them as part of the query above? Before #494 we used repeated
         // .Include(ot => ot.ObjectMatchingRules).ThenInclude(...) branches inside AsSplitQuery —
-        // one per path into the rule graph (Sources.ConnectedSystemAttribute, Sources.MetaverseAttribute,
-        // TargetMetaverseAttribute, MetaverseObjectType). EF Core does not support chaining multiple
+        // one per path into the rule graph (Sources.ConnectedSystemAttribute, TargetMetaverseAttribute,
+        // MetaverseObjectType). EF Core does not support chaining multiple
         // ThenIncludes off the same collection navigation in one expression, so each branch has to be
         // re-rooted on the collection, and under AsSplitQuery each branch is emitted as a separate
-        // SQL query (four round-trips for a single graph walk).
+        // SQL query (multiple round-trips for a single graph walk).
         //
         // Loading the rules directly from DbSet<ObjectMatchingRule> with one combined Include chain
-        // reduces the fan-out from four queries to one. We then bind rules back onto their owning
+        // reduces the fan-out to one. We then bind rules back onto their owning
         // object types via ConnectedSystemObjectTypeId in memory.
         var typesById = types.ToDictionary(t => t.Id);
         if (types.Count > 0)
@@ -256,8 +256,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             IQueryable<ObjectMatchingRule> omrQuery = Repository.Database.ObjectMatchingRules
                 .Include(omr => omr.Sources)
                     .ThenInclude(s => s.ConnectedSystemAttribute)
-                .Include(omr => omr.Sources)
-                    .ThenInclude(s => s.MetaverseAttribute)
                 .Include(omr => omr.TargetMetaverseAttribute)
                 .Include(omr => omr.MetaverseObjectType)
                 .Where(omr => omr.ConnectedSystemObjectTypeId != null
@@ -690,8 +688,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .AsSplitQuery()
             .Include(omr => omr.Sources)
                 .ThenInclude(s => s.ConnectedSystemAttribute)
-            .Include(omr => omr.Sources)
-                .ThenInclude(s => s.MetaverseAttribute)
             .Include(omr => omr.TargetMetaverseAttribute)
             .Include(omr => omr.ConnectedSystemObjectType)
             .Include(omr => omr.MetaverseObjectType)
@@ -2308,6 +2304,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined)
+    {
+        // A single conditional UPDATE guards the join-before-provision race (#1051): two Metaverse
+        // Objects can both pass the point-in-time eligibility check in
+        // FindConnectedSystemObjectUsingMatchingRuleAsync before either writes, so the claim itself
+        // must re-check MetaverseObjectId IS NULL at write time. Raw SQL bypasses the change tracker;
+        // the caller owns fixing up any tracked instance on success.
+        var affectedRows = await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects""
+              SET ""MetaverseObjectId"" = {0}, ""JoinType"" = {1}, ""DateJoined"" = {2}, ""Status"" = {3}
+              WHERE ""Id"" = {4} AND ""MetaverseObjectId"" IS NULL",
+            metaverseObjectId, (int)ConnectedSystemObjectJoinType.Joined, dateJoined, (int)ConnectedSystemObjectStatus.Normal, connectedSystemObjectId);
+
+        return affectedRows == 1;
+    }
+
     public async Task UpdateConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
@@ -2508,7 +2521,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(q => q.Attributes)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.MetaverseObjectType)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.ConnectedSystemAttribute)
-            .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.MetaverseAttribute)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Where(x => x.ConnectedSystemId == connectedSystemId).OrderBy(x => x.Name)
             .ToListAsync();
@@ -3878,13 +3890,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return null;
         }
 
-        // The MVO side of the comparison: an explicit Metaverse attribute on the source wins; otherwise
-        // invert the standard inbound rule shape (source = Connected System attribute, target = Metaverse
-        // attribute, which is what the UI, API and PowerShell configure) by reading the rule's target.
-        var metaverseAttribute = source.MetaverseAttribute ?? objectMatchingRule.TargetMetaverseAttribute;
+        // The MVO side of the comparison: the standard rule shape (source = Connected System attribute,
+        // target = Metaverse attribute, which is what the UI, API and PowerShell configure) serves both
+        // import and export matching, so read the rule's Target Metaverse Attribute directly.
+        var metaverseAttribute = objectMatchingRule.TargetMetaverseAttribute;
         if (metaverseAttribute == null)
         {
-            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Rule {RuleId} has neither a source Metaverse attribute nor a target Metaverse attribute; cannot determine the MVO-side value for export matching.",
+            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Rule {RuleId} has no Target Metaverse Attribute; cannot determine the MVO-side value for export matching.",
                 objectMatchingRule.Id);
             return null;
         }
@@ -3897,22 +3909,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         {
             Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: MVO {MvoId} does not have a value for attribute {AttrId}",
                 metaverseObject.Id, metaverseAttribute.Id);
-            return null;
-        }
-
-        // Skip null values - null is always a non-match
-        var hasValue = metaverseAttribute.Type switch
-        {
-            AttributeDataType.Text => !string.IsNullOrEmpty(mvoAttributeValue.StringValue),
-            AttributeDataType.Number => mvoAttributeValue.IntValue.HasValue,
-            AttributeDataType.Guid => mvoAttributeValue.GuidValue.HasValue,
-            _ => false
-        };
-
-        if (!hasValue)
-        {
-            Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: Skipping null/empty attribute value for {AttributeName}",
-                metaverseAttribute.Name);
             return null;
         }
 
@@ -3929,9 +3925,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                           cso.MetaverseObjectId == null &&
                           cso.Status == ConnectedSystemObjectStatus.Normal);
 
-        // Match based on attribute type
+        // Match based on attribute type. Null/empty MVO-side values are always a non-match (Debug, not a
+        // misconfiguration); genuinely unsupported attribute types are a misconfiguration and must be
+        // visible at Warning level per the Synchronisation Integrity rules, not silently no-op.
         switch (metaverseAttribute.Type)
         {
+            case AttributeDataType.Text when string.IsNullOrEmpty(mvoAttributeValue.StringValue):
+            case AttributeDataType.Number when !mvoAttributeValue.IntValue.HasValue:
+            case AttributeDataType.LongNumber when !mvoAttributeValue.LongValue.HasValue:
+            case AttributeDataType.Guid when !mvoAttributeValue.GuidValue.HasValue:
+                Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: Skipping null/empty attribute value for {AttributeName}",
+                    metaverseAttribute.Name);
+                return null;
             case AttributeDataType.Text:
                 // Check case sensitivity setting on the matching rule
                 if (objectMatchingRule.CaseSensitive)
@@ -3961,6 +3966,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.IntValue != null &&
                     av.IntValue == mvoAttributeValue.IntValue));
                 break;
+            case AttributeDataType.LongNumber:
+                // Null check already done above
+                query = query.Where(cso => cso.AttributeValues.Any(av =>
+                    av.Attribute != null &&
+                    av.Attribute.Name == connectedSystemAttributeName &&
+                    av.LongValue != null &&
+                    av.LongValue == mvoAttributeValue.LongValue));
+                break;
             case AttributeDataType.Guid:
                 // Null check already done above
                 query = query.Where(cso => cso.AttributeValues.Any(av =>
@@ -3970,7 +3983,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.GuidValue == mvoAttributeValue.GuidValue));
                 break;
             default:
-                throw new NotSupportedException($"Attribute type {metaverseAttribute.Type} is not supported for export matching.");
+                Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Attribute type {AttributeType} on Metaverse attribute {AttributeName} is not supported for export matching; Object Matching Rule {RuleId} cannot match on it.",
+                    metaverseAttribute.Type, metaverseAttribute.Name, objectMatchingRule.Id);
+                return null;
         }
 
         var matches = await query.OrderBy(cso => cso.Id).Take(2).ToListAsync();
@@ -4009,10 +4024,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.ObjectMatchingRules)
-            .ThenInclude(omr => omr.Sources)
-            .ThenInclude(s => s.MetaverseAttribute)
-            .Include(sr => sr.ConnectedSystemObjectType)
-            .ThenInclude(csot => csot.ObjectMatchingRules)
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.ObjectMatchingRules)
@@ -4022,9 +4033,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))
             .ThenInclude(omr => omr.Sources)
             .ThenInclude(s => s.ConnectedSystemAttribute)
-            .Include(sr => sr.ObjectMatchingRules)
-            .ThenInclude(omr => omr.Sources)
-            .ThenInclude(s => s.MetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
@@ -4379,9 +4387,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))
             .ThenInclude(omr => omr.Sources)
             .ThenInclude(s => s.ConnectedSystemAttribute)
-            .Include(sr => sr.ObjectMatchingRules)
-            .ThenInclude(omr => omr.Sources)
-            .ThenInclude(s => s.MetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)

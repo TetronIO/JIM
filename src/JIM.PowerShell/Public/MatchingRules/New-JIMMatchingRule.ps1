@@ -22,12 +22,8 @@ function New-JIMMatchingRule {
         Required for simple mode matching rules.
 
     .PARAMETER SourceAttributeId
-        The Connected System attribute ID to use as the source for matching (import matching).
-        Either this or SourceMetaverseAttributeId must be specified.
-
-    .PARAMETER SourceMetaverseAttributeId
-        The Metaverse attribute ID to use as the source for matching (export matching).
-        Either this or SourceAttributeId must be specified.
+        The Connected System attribute ID to use as the source for matching. Matched against
+        -TargetMetaverseAttributeId, for both import and export matching.
 
     .PARAMETER TargetMetaverseAttributeId
         The Metaverse attribute ID to match against.
@@ -53,11 +49,6 @@ function New-JIMMatchingRule {
         Creates a matching rule that maps CS attribute 25 to MV attribute 5, searching MVO type 1.
 
     .EXAMPLE
-        New-JIMMatchingRule -ConnectedSystemId 1 -ObjectTypeId 10 -MetaverseObjectTypeId 1 -SourceMetaverseAttributeId 3 -TargetMetaverseAttributeId 5
-
-        Creates an export matching rule that maps MV attribute 3 to MV attribute 5.
-
-    .EXAMPLE
         New-JIMMatchingRule -ConnectedSystemId 1 -ObjectTypeId 10 -MetaverseObjectTypeId 1 -SourceAttributeId 25 -TargetMetaverseAttributeId 5 -Order 0 -PassThru
 
         Creates a matching rule at order 0 and returns the created rule.
@@ -79,11 +70,8 @@ function New-JIMMatchingRule {
         [Parameter(Mandatory)]
         [int]$MetaverseObjectTypeId,
 
-        [Parameter(ParameterSetName = 'CSAttribute')]
+        [Parameter(Mandatory)]
         [int]$SourceAttributeId,
-
-        [Parameter(ParameterSetName = 'MVAttribute')]
-        [int]$SourceMetaverseAttributeId,
 
         [Parameter(Mandatory)]
         [int]$TargetMetaverseAttributeId,
@@ -104,17 +92,9 @@ function New-JIMMatchingRule {
             return
         }
 
-        # Build source based on which attribute was specified
-        $source = @{ order = 0 }
-        if ($PSBoundParameters.ContainsKey('SourceAttributeId')) {
-            $source.connectedSystemAttributeId = $SourceAttributeId
-        }
-        elseif ($PSBoundParameters.ContainsKey('SourceMetaverseAttributeId')) {
-            $source.metaverseAttributeId = $SourceMetaverseAttributeId
-        }
-        else {
-            Write-Error "Either -SourceAttributeId or -SourceMetaverseAttributeId must be specified."
-            return
+        $source = @{
+            order = 0
+            connectedSystemAttributeId = $SourceAttributeId
         }
 
         $body = @{

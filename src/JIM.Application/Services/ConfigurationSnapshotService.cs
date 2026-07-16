@@ -193,7 +193,6 @@ public class ConfigurationSnapshotService
             var children = new List<ConfigurationSnapshotNode>();
             Add(children, "order", Render(source.Order), "Order");
             AddReference(children, "connectedSystemAttributeId", source.ConnectedSystemAttributeId, source.ConnectedSystemAttribute?.Name, "Connected System Attribute");
-            AddReference(children, "metaverseAttributeId", source.MetaverseAttributeId, source.MetaverseAttribute?.Name, "Metaverse Attribute");
             Add(children, "expression", source.Expression, "Expression");
             items.Add(ConfigurationSnapshotNode.ObjectNode("source", children, "Source", source.Id));
         }

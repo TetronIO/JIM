@@ -29,10 +29,6 @@ function Set-JIMMatchingRule {
         The new Connected System attribute ID to use as the source.
         Note: This replaces all existing sources with a single new source.
 
-    .PARAMETER SourceMetaverseAttributeId
-        The new Metaverse attribute ID to use as the source (for export matching).
-        Note: This replaces all existing sources with a single new source.
-
     .PARAMETER CaseSensitive
         Whether the matching should be case-sensitive.
         When false (default), 'emp123' matches 'EMP123'.
@@ -86,9 +82,6 @@ function Set-JIMMatchingRule {
         [int]$SourceAttributeId,
 
         [Parameter()]
-        [int]$SourceMetaverseAttributeId,
-
-        [Parameter()]
         [bool]$CaseSensitive,
 
         [switch]$PassThru
@@ -120,14 +113,6 @@ function Set-JIMMatchingRule {
                 @{
                     order = 0
                     connectedSystemAttributeId = $SourceAttributeId
-                }
-            )
-        }
-        elseif ($PSBoundParameters.ContainsKey('SourceMetaverseAttributeId')) {
-            $body.sources = @(
-                @{
-                    order = 0
-                    metaverseAttributeId = $SourceMetaverseAttributeId
                 }
             )
         }
