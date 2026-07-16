@@ -4,7 +4,7 @@
 - **Created:** 2026-06-21
 - **Author:** Jay
 - **Issue:** [#85](https://github.com/TetronIO/JIM/issues/85)
-- **Implementation plan:** [`engineering/plans/done/RELATIVE_DATE_SEARCH_CRITERIA.md`](../plans/done/RELATIVE_DATE_SEARCH_CRITERIA.md) and [`engineering/plans/done/TEMPORAL_SCOPE_REEVALUATION.md`](../plans/done/TEMPORAL_SCOPE_REEVALUATION.md) (#892)
+- **Implementation plan:** [`engineering/plans/done/RELATIVE_DATE_SEARCH_CRITERIA.md`](../../plans/done/RELATIVE_DATE_SEARCH_CRITERIA.md) and [`engineering/plans/done/TEMPORAL_SCOPE_REEVALUATION.md`](../../plans/done/TEMPORAL_SCOPE_REEVALUATION.md) (#892)
 
 ## Problem Statement
 
@@ -381,13 +381,13 @@ These were open during drafting and have been settled. The functional requiremen
 
 ## Additional Context
 
-- Scoping criteria model: [`src/JIM.Models/Logic/SyncRuleScopingCriteria.cs`](../../src/JIM.Models/Logic/SyncRuleScopingCriteria.cs)
-- Operator enum: [`src/JIM.Models/Search/SearchEnums.cs`](../../src/JIM.Models/Search/SearchEnums.cs)
+- Scoping criteria model: [`src/JIM.Models/Logic/SyncRuleScopingCriteria.cs`](../../../src/JIM.Models/Logic/SyncRuleScopingCriteria.cs)
+- Operator enum: [`src/JIM.Models/Search/SearchEnums.cs`](../../../src/JIM.Models/Search/SearchEnums.cs)
 - Scoping evaluator (literal DateTime comparison today): `src/JIM.Application/Servers/ScopingEvaluationServer.cs` (`EvaluateDateTimeComparison`)
-- Predefined-search criteria (StringValue-only today): [`src/JIM.Models/Search/PredefinedSearchCriteria.cs`](../../src/JIM.Models/Search/PredefinedSearchCriteria.cs)
+- Predefined-search criteria (StringValue-only today): [`src/JIM.Models/Search/PredefinedSearchCriteria.cs`](../../../src/JIM.Models/Search/PredefinedSearchCriteria.cs)
 - Search query translator (throws on date ordering today): `src/JIM.PostgresData/Repositories/MetaverseRepository.cs` (`GetMetaverseObjectsOfTypeAsync`)
 - Scope-criteria editor UI: `src/JIM.Web/Pages/Admin/SyncRuleDetailScopingCriteriaGroup.razor`
-- Scoping doc: [`engineering/SYNC_RULE_SCOPING.md`](../SYNC_RULE_SCOPING.md)
+- Scoping doc: [`engineering/SYNC_RULE_SCOPING.md`](../../SYNC_RULE_SCOPING.md)
 - Sub-task: predefined-search typed comparison support: [#849](https://github.com/TetronIO/JIM/issues/849)
 - Sub-task: predefined-search `All`/`Any` + nested group semantics: [#850](https://github.com/TetronIO/JIM/issues/850)
 

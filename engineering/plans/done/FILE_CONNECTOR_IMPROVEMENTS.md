@@ -346,8 +346,8 @@ public class FileConnectorTests
 
 ## References
 
-- [FileConnector.cs](../src/JIM.Connectors/File/FileConnector.cs)
-- [FileConnectorImport.cs](../src/JIM.Connectors/File/FileConnectorImport.cs)
-- [FileConnectorReader.cs](../src/JIM.Connectors/File/FileConnectorReader.cs)
-- [FileConnectorObjectTypeInfo.cs](../src/JIM.Connectors/File/FileConnectorObjectTypeInfo.cs)
-- [MockFileConnector.cs](../src/JIM.Connectors/Mock/MockFileConnector.cs) - Reference for test patterns
+- [FileConnector.cs](../../../src/JIM.Connectors/File/FileConnector.cs)
+- [FileConnectorImport.cs](../../../src/JIM.Connectors/File/FileConnectorImport.cs)
+- [FileConnectorReader.cs](../../../src/JIM.Connectors/File/FileConnectorReader.cs)
+- [FileConnectorObjectTypeInfo.cs](../../../src/JIM.Connectors/File/FileConnectorObjectTypeInfo.cs)
+- [MockFileConnector.cs](../../../src/JIM.Connectors/Mock/MockFileConnector.cs) - Reference for test patterns

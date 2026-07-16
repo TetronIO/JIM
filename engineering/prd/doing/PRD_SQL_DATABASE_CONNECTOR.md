@@ -1,6 +1,6 @@
 # SQL Database Connector
 
-- **Status:** Planned
+- **Status:** Doing
 - **Created:** 2026-07-15
 - **Author:** Jay (with Claude)
 - **Issue:** [#170](https://github.com/TetronIO/JIM/issues/170)

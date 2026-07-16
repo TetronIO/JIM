@@ -169,7 +169,9 @@ For new features or significant changes:
 2. Fill in required sections; create a GitHub issue linking to the PRD
 3. Ask Claude to generate the implementation plan from the PRD
 
-> **PRD template, plan structure, plan filing (planned/doing/done):** `engineering/CLAUDE.md`
+PRDs and plans share the same three-state lifecycle: created at the top level of `engineering/prd/` (or `engineering/plans/`) as `Status: Planned`, then `Status: Doing` + `git mv` into `doing/` when work starts, then `Status: Done` + `git mv` into `done/` when implemented. Keep the Status field and the folder in agreement, and update cross-references when moving.
+
+> **PRD template, plan structure, PRD/plan filing (planned/doing/done):** `engineering/CLAUDE.md`
 
 ## Workflow & Git
 

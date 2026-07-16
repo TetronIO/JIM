@@ -520,10 +520,10 @@ new()
 
 ## References
 
-- [LdapConnector.cs](../src/JIM.Connectors/LDAP/LdapConnector.cs)
-- [LdapConnectorImport.cs](../src/JIM.Connectors/LDAP/LdapConnectorImport.cs)
-- [LdapConnectorSchema.cs](../src/JIM.Connectors/LDAP/LdapConnectorSchema.cs)
-- [LdapConnectorPartitions.cs](../src/JIM.Connectors/LDAP/LdapConnectorPartitions.cs)
-- [LdapConnectorUtilities.cs](../src/JIM.Connectors/LDAP/LdapConnectorUtilities.cs)
+- [LdapConnector.cs](../../../src/JIM.Connectors/LDAP/LdapConnector.cs)
+- [LdapConnectorImport.cs](../../../src/JIM.Connectors/LDAP/LdapConnectorImport.cs)
+- [LdapConnectorSchema.cs](../../../src/JIM.Connectors/LDAP/LdapConnectorSchema.cs)
+- [LdapConnectorPartitions.cs](../../../src/JIM.Connectors/LDAP/LdapConnectorPartitions.cs)
+- [LdapConnectorUtilities.cs](../../../src/JIM.Connectors/LDAP/LdapConnectorUtilities.cs)
 - [MVP Definition](MVP_DEFINITION.md) - See "LDAP/Active Directory Connector - Export"
 - [System.DirectoryServices.Protocols Documentation](https://learn.microsoft.com/en-us/dotnet/api/system.directoryservices.protocols)
