@@ -70,6 +70,7 @@ public class UpdateConnectedSystemRequest
     /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
     /// is treated: Error (default), Warn, or Ignore. Null or omitted leaves the current value unchanged.
     /// </summary>
+    [EnumDataType(typeof(UnresolvedReferenceHandling))]
     public UnresolvedReferenceHandling? UnresolvedReferenceHandling { get; set; }
 
     /// <summary>

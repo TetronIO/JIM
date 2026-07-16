@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Linq;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Web.Models.Api;
@@ -94,6 +96,39 @@ public class ConnectedSystemUnresolvedReferenceHandlingTests
         var request = new UpdateConnectedSystemRequest();
 
         Assert.That(request.UnresolvedReferenceHandling, Is.Null);
+    }
+
+    [Test]
+    public void UpdateConnectedSystemRequest_UnresolvedReferenceHandlingUndefinedValue_FailsValidation()
+    {
+        // The API's JSON converter accepts integer enum values, so a client can send a number outside the defined
+        // enum range (e.g. {"unresolvedReferenceHandling": 99}). DataAnnotations validation must reject it so the
+        // controller returns 400 rather than persisting an undefined value.
+        var request = new UpdateConnectedSystemRequest
+        {
+            UnresolvedReferenceHandling = (UnresolvedReferenceHandling)99
+        };
+
+        var results = new List<ValidationResult>();
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), results, validateAllProperties: true);
+
+        Assert.That(isValid, Is.False, "Expected validation to fail for an undefined enum value.");
+        Assert.That(results.Any(r => r.MemberNames.Contains(nameof(UpdateConnectedSystemRequest.UnresolvedReferenceHandling))),
+            "Expected the validation failure to be attributed to UnresolvedReferenceHandling.");
+    }
+
+    [Test]
+    public void UpdateConnectedSystemRequest_UnresolvedReferenceHandlingDefinedValue_PassesValidation()
+    {
+        var request = new UpdateConnectedSystemRequest
+        {
+            UnresolvedReferenceHandling = UnresolvedReferenceHandling.Ignore
+        };
+
+        var results = new List<ValidationResult>();
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), results, validateAllProperties: true);
+
+        Assert.That(isValid, Is.True, "Expected validation to pass for a defined enum value.");
     }
 
     #endregion
