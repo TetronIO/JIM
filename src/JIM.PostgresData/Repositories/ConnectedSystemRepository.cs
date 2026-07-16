@@ -3900,22 +3900,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return null;
         }
 
-        // Skip null values - null is always a non-match
-        var hasValue = metaverseAttribute.Type switch
-        {
-            AttributeDataType.Text => !string.IsNullOrEmpty(mvoAttributeValue.StringValue),
-            AttributeDataType.Number => mvoAttributeValue.IntValue.HasValue,
-            AttributeDataType.Guid => mvoAttributeValue.GuidValue.HasValue,
-            _ => false
-        };
-
-        if (!hasValue)
-        {
-            Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: Skipping null/empty attribute value for {AttributeName}",
-                metaverseAttribute.Name);
-            return null;
-        }
-
         var connectedSystemAttributeName = source.ConnectedSystemAttribute.Name;
 
         // Query CSOs that match the value. Only unjoined, Normal-status objects are eligible: matching
@@ -3929,9 +3913,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                           cso.MetaverseObjectId == null &&
                           cso.Status == ConnectedSystemObjectStatus.Normal);
 
-        // Match based on attribute type
+        // Match based on attribute type. Null/empty MVO-side values are always a non-match (Debug, not a
+        // misconfiguration); genuinely unsupported attribute types are a misconfiguration and must be
+        // visible at Warning level per the Synchronisation Integrity rules, not silently no-op.
         switch (metaverseAttribute.Type)
         {
+            case AttributeDataType.Text when string.IsNullOrEmpty(mvoAttributeValue.StringValue):
+            case AttributeDataType.Number when !mvoAttributeValue.IntValue.HasValue:
+            case AttributeDataType.LongNumber when !mvoAttributeValue.LongValue.HasValue:
+            case AttributeDataType.Guid when !mvoAttributeValue.GuidValue.HasValue:
+                Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: Skipping null/empty attribute value for {AttributeName}",
+                    metaverseAttribute.Name);
+                return null;
             case AttributeDataType.Text:
                 // Check case sensitivity setting on the matching rule
                 if (objectMatchingRule.CaseSensitive)
@@ -3961,6 +3954,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.IntValue != null &&
                     av.IntValue == mvoAttributeValue.IntValue));
                 break;
+            case AttributeDataType.LongNumber:
+                // Null check already done above
+                query = query.Where(cso => cso.AttributeValues.Any(av =>
+                    av.Attribute != null &&
+                    av.Attribute.Name == connectedSystemAttributeName &&
+                    av.LongValue != null &&
+                    av.LongValue == mvoAttributeValue.LongValue));
+                break;
             case AttributeDataType.Guid:
                 // Null check already done above
                 query = query.Where(cso => cso.AttributeValues.Any(av =>
@@ -3970,7 +3971,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.GuidValue == mvoAttributeValue.GuidValue));
                 break;
             default:
-                throw new NotSupportedException($"Attribute type {metaverseAttribute.Type} is not supported for export matching.");
+                Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Attribute type {AttributeType} on Metaverse attribute {AttributeName} is not supported for export matching; Object Matching Rule {RuleId} cannot match on it.",
+                    metaverseAttribute.Type, metaverseAttribute.Name, objectMatchingRule.Id);
+                return null;
         }
 
         var matches = await query.OrderBy(cso => cso.Id).Take(2).ToListAsync();

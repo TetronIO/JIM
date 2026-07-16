@@ -807,7 +807,7 @@ public class SyncRepository : ISyncRepository
             return Task.FromResult<ConnectedSystemObject?>(null);
 
         // Empty string is treated as no value, matching the Postgres implementation's IsNullOrEmpty guard.
-        var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString();
+        var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString() ?? mvoAttr.LongValue?.ToString();
         if (string.IsNullOrEmpty(mvoVal))
             return Task.FromResult<ConnectedSystemObject?>(null);
 
@@ -818,7 +818,7 @@ public class SyncRepository : ISyncRepository
             var csoAttr = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == csAttrId);
             if (csoAttr == null)
                 return false;
-            var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString();
+            var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString() ?? csoAttr.LongValue?.ToString();
             return string.Equals(mvoVal, csoVal, comparison);
         }
 

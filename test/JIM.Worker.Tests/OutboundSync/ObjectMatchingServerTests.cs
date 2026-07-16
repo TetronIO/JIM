@@ -1539,6 +1539,121 @@ public class ObjectMatchingServerTests
         Assert.That(result, Is.Null);
     }
 
+    /// <summary>
+    /// Creates an unjoined, Normal-status CSO in the Dummy Target System's TARGET_USER type with
+    /// a single LongNumber attribute value, and seeds it into SyncRepo. Mirrors <see cref="SeedTargetCso"/>
+    /// but for the LongNumber-typed "accountExpires" attribute rather than a Text attribute.
+    /// </summary>
+    private ConnectedSystemObject SeedTargetCsoLongNumber(
+        ConnectedSystem targetSystem,
+        ConnectedSystemObjectType targetUserType,
+        ConnectedSystemObjectTypeAttribute csAccountExpiresAttr,
+        long attributeValue,
+        Guid? metaverseObjectId = null,
+        ConnectedSystemObjectStatus status = ConnectedSystemObjectStatus.Normal)
+    {
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObjectId = metaverseObjectId,
+            Status = status,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Attribute = csAccountExpiresAttr,
+                    AttributeId = csAccountExpiresAttr.Id,
+                    LongValue = attributeValue
+                }
+            }
+        };
+
+        SyncRepo.SeedConnectedSystemObject(cso);
+        return cso;
+    }
+
+    [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_LongNumberMatchingAttribute_ReturnsCsoAsync()
+    {
+        // Arrange - a LongNumber-typed matching attribute (AD's "accountExpires" is a legitimate real-world
+        // example) on both the Metaverse Object and Connected System Object sides.
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csAccountExpiresAttr = targetUserType.Attributes.Single(a => a.Name == "accountExpires");
+
+        var accountExpiresMvAttr = new MetaverseAttribute
+        {
+            Id = 9001,
+            Name = "Account Expires",
+            Type = AttributeDataType.LongNumber,
+            AttributePlurality = AttributePlurality.SingleValued,
+            BuiltIn = false
+        };
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = accountExpiresMvAttr,
+            AttributeId = accountExpiresMvAttr.Id,
+            LongValue = 9000000001
+        });
+
+        var cso = SeedTargetCsoLongNumber(targetSystem, targetUserType, csAccountExpiresAttr, 9000000001);
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csAccountExpiresAttr, accountExpiresMvAttr);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule });
+
+        // Assert
+        Assert.That(result, Is.Not.Null, "A LongNumber matching attribute should resolve an export match");
+        Assert.That(result!.Id, Is.EqualTo(cso.Id));
+    }
+
+    [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_LongNumberValueMismatch_ReturnsNullAsync()
+    {
+        // Arrange - same LongNumber matching shape as above, but the candidate CSO's LongValue differs.
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csAccountExpiresAttr = targetUserType.Attributes.Single(a => a.Name == "accountExpires");
+
+        var accountExpiresMvAttr = new MetaverseAttribute
+        {
+            Id = 9001,
+            Name = "Account Expires",
+            Type = AttributeDataType.LongNumber,
+            AttributePlurality = AttributePlurality.SingleValued,
+            BuiltIn = false
+        };
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = accountExpiresMvAttr,
+            AttributeId = accountExpiresMvAttr.Id,
+            LongValue = 9000000001
+        });
+
+        SeedTargetCsoLongNumber(targetSystem, targetUserType, csAccountExpiresAttr, 8000000002);
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csAccountExpiresAttr, accountExpiresMvAttr);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule });
+
+        // Assert
+        Assert.That(result, Is.Null, "A LongNumber value mismatch must never be returned as an export match");
+    }
+
     #endregion
 
     #region GetSourceType Tests
