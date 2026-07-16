@@ -9,6 +9,7 @@ using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 
 namespace JIM.Application.Servers;
@@ -1222,7 +1223,7 @@ public class ExportExecutionServer
 
                 needsUpdate = true;
                 Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
-                    cso.Id, exportResult.ExternalId, externalIdAttribute?.Type.ToString() ?? "Unknown");
+                    cso.Id, LogSanitiser.Sanitise(exportResult.ExternalId), externalIdAttribute?.Type.ToString() ?? "Unknown");
             }
 
             // Update secondary external ID if provided
@@ -1254,7 +1255,7 @@ public class ExportExecutionServer
 
                 needsUpdate = true;
                 Log.Debug("BatchUpdateCsosAfterSuccessfulExportAsync: Set CSO {CsoId} secondary external ID to {SecondaryExternalId}",
-                    cso.Id, exportResult.SecondaryExternalId);
+                    cso.Id, LogSanitiser.Sanitise(exportResult.SecondaryExternalId));
             }
 
             if (needsUpdate)
@@ -1305,7 +1306,7 @@ public class ExportExecutionServer
             // Keep as Pending while we're still retrying
             export.Status = PendingExportStatus.Pending;
             Log.Warning("MarkExportFailed: Export {ExportId} failed (attempt {Attempt}/{MaxRetries}). Next retry at {NextRetry}. Error: {Error}",
-                export.Id, export.ErrorCount, export.MaxRetries, export.NextRetryAt, errorMessage);
+                export.Id, export.ErrorCount, export.MaxRetries, export.NextRetryAt, LogSanitiser.Sanitise(errorMessage));
         }
     }
 
@@ -1364,7 +1365,7 @@ public class ExportExecutionServer
 
             needsUpdate = true;
             Log.Information("UpdateCsoAfterSuccessfulExportAsync: Set CSO {CsoId} external ID to {ExternalId} (type: {AttrType})",
-                cso.Id, exportResult.ExternalId, externalIdAttribute?.Type.ToString() ?? "Unknown");
+                cso.Id, LogSanitiser.Sanitise(exportResult.ExternalId), externalIdAttribute?.Type.ToString() ?? "Unknown");
         }
 
         // Update secondary external ID if provided
@@ -1387,7 +1388,7 @@ public class ExportExecutionServer
             secondaryExternalIdAttrValue.StringValue = exportResult.SecondaryExternalId;
             needsUpdate = true;
             Log.Debug("UpdateCsoAfterSuccessfulExportAsync: Set CSO {CsoId} secondary external ID to {SecondaryExternalId}",
-                cso.Id, exportResult.SecondaryExternalId);
+                cso.Id, LogSanitiser.Sanitise(exportResult.SecondaryExternalId));
         }
 
         if (needsUpdate)
@@ -1663,7 +1664,7 @@ public class ExportExecutionServer
 
                     Log.Debug("Resolved reference for MVO {MvoId} to {Value} using {IdType}",
                         referencedMvoId,
-                        attrChange.StringValue,
+                        LogSanitiser.Sanitise(attrChange.StringValue),
                         secondaryExternalIdAttr != null ? "secondary external ID (DN)" : "primary external ID");
                 }
                 else
@@ -1681,7 +1682,7 @@ public class ExportExecutionServer
                     "Attribute: {AttrName}, UnresolvedValue: {UnresolvedValue}",
                     pendingExport.Id, referencedMvoId,
                     attrChange.Attribute?.Name ?? $"AttrId={attrChange.AttributeId}",
-                    attrChange.UnresolvedReferenceValue);
+                    LogSanitiser.Sanitise(attrChange.UnresolvedReferenceValue));
                 allResolved = false;
             }
         }
@@ -1862,7 +1863,7 @@ public class ExportExecutionServer
             // ExportNotConfirmed is for when export succeeded but some values didn't persist
             export.Status = PendingExportStatus.Pending;
             Log.Warning("MarkExportFailedAsync: Export {ExportId} failed (attempt {Attempt}/{MaxRetries}). Next retry at {NextRetry}. Error: {Error}",
-                export.Id, export.ErrorCount, export.MaxRetries, export.NextRetryAt, errorMessage);
+                export.Id, export.ErrorCount, export.MaxRetries, export.NextRetryAt, LogSanitiser.Sanitise(errorMessage));
         }
 
         await SyncRepo.UpdatePendingExportAsync(export);

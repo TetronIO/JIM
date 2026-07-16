@@ -10,6 +10,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Utility;
+using JIM.Utilities;
 using Serilog;
 using System.Globalization;
 using System.Text.RegularExpressions;
@@ -40,7 +41,7 @@ public partial class SyncEngine
     {
         if (cso.MetaverseObject == null)
         {
-            Log.Error("ProcessMapping: CSO ({Cso}) is not joined to an MVO!", cso);
+            Log.Error("ProcessMapping: CSO ({CsoId}) is not joined to an MVO!", cso.Id);
             return;
         }
 
@@ -113,7 +114,7 @@ public partial class SyncEngine
                                 "ProcessMapping: Multi-valued source attribute '{SourceAttr}' has {ValueCount} values but target " +
                                 "attribute '{TargetAttr}' is single-valued. Using first value: '{SelectedValue}'. CSO {CsoId}",
                                 csotAttribute.Name, csoAttributeValues.Count,
-                                syncRuleMapping.TargetMetaverseAttribute.Name, selectedValueDescription, cso.Id);
+                                syncRuleMapping.TargetMetaverseAttribute.Name, LogSanitiser.Sanitise(selectedValueDescription), cso.Id);
 
                             warnings?.Add(new AttributeFlowWarning
                             {
@@ -404,7 +405,7 @@ public partial class SyncEngine
                 {
                     mvo.PendingAttributeValueAdditions.Add(newMvoValue);
                     Log.Debug("ProcessExpressionMapping: Expression-based mapping set {AttributeName} to '{Value}' on MVO {MvoId}",
-                        syncRuleMapping.TargetMetaverseAttribute!.Name, resultString, mvo.Id);
+                        syncRuleMapping.TargetMetaverseAttribute!.Name, LogSanitiser.Sanitise(resultString), mvo.Id);
                 }
             }
         }
@@ -950,7 +951,7 @@ public partial class SyncEngine
                     newMvoValue.IntValue = parsedInt;
                 else
                 {
-                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Number", result);
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Number", LogSanitiser.Sanitise(result?.ToString()));
                     return null;
                 }
                 break;
@@ -961,7 +962,7 @@ public partial class SyncEngine
                     newMvoValue.DateTimeValue = parsedDt;
                 else
                 {
-                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to DateTime", result);
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to DateTime", LogSanitiser.Sanitise(result?.ToString()));
                     return null;
                 }
                 break;
@@ -972,7 +973,7 @@ public partial class SyncEngine
                     newMvoValue.BoolValue = parsedBool;
                 else
                 {
-                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Boolean", result);
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Boolean", LogSanitiser.Sanitise(result?.ToString()));
                     return null;
                 }
                 break;
@@ -983,7 +984,7 @@ public partial class SyncEngine
                     newMvoValue.GuidValue = parsedGuid;
                 else
                 {
-                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Guid", result);
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Guid", LogSanitiser.Sanitise(result?.ToString()));
                     return null;
                 }
                 break;

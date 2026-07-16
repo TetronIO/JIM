@@ -715,8 +715,8 @@ public class Worker : BackgroundService
             {
                 try
                 {
-                    Log.Information("PerformMetaverseObjectHousekeepingAsync: Deleting MVO {MvoId} ({DisplayName}) - disconnected at {DisconnectedDate}, rule: {DeletionRule}",
-                        mvo.Id, mvo.DisplayName ?? "No display name", mvo.LastConnectorDisconnectedDate, mvo.Type?.DeletionRule);
+                    Log.Information("PerformMetaverseObjectHousekeepingAsync: Deleting MVO {MvoId} - disconnected at {DisconnectedDate}, rule: {DeletionRule}",
+                        mvo.Id, mvo.LastConnectorDisconnectedDate, mvo.Type?.DeletionRule);
 
                     // Evaluate export rules for the MVO deletion: delete Pending Exports are created for
                     // CSOs whose export Synchronisation Rule's OutboundDeprovisionAction is Delete (issue #655).
