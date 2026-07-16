@@ -358,7 +358,9 @@ function Get-LDAPUserCount {
         return 0
     }
 
-    $count = ($result -split "`n" | Where-Object { $_ -match "^dn:" }).Count
+    # @() guards the single-match case: Where-Object returns a scalar string for one match, and
+    # .Count on a scalar fails under Set-StrictMode -Version Latest (which scenario scripts set).
+    $count = @($result -split "`n" | Where-Object { $_ -match "^dn:" }).Count
     return $count
 }
 
@@ -508,7 +510,9 @@ function Get-LDAPGroupCount {
         return 0
     }
 
-    $count = ($result -split "`n" | Where-Object { $_ -match "^dn:" }).Count
+    # @() guards the single-match case: Where-Object returns a scalar string for one match, and
+    # .Count on a scalar fails under Set-StrictMode -Version Latest (which scenario scripts set).
+    $count = @($result -split "`n" | Where-Object { $_ -match "^dn:" }).Count
     return $count
 }
 

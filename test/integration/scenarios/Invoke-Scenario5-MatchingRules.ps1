@@ -12,6 +12,8 @@
     - Duplicate prevention: join fails when MVO already has connector from same CS
     - Multiple matching rules: fallback to subsequent rules when earlier rules don't match
     - Edge cases: null values, case sensitivity
+    - Outbound (export-time) matching: a Metaverse Object provisioned into a Connected System
+      JOINS a pre-existing, unjoined account created out-of-band instead of provisioning a duplicate
 
 .PARAMETER Step
     Which test step to execute (Projection, Join, DuplicatePrevention, MultiplRules, All)
@@ -37,7 +39,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Projection", "Join", "DuplicatePrevention", "MultipleRules", "JoinConflict", "SamePageJoinConflict", "CaseSensitivity", "All")]
+    [ValidateSet("Projection", "Join", "DuplicatePrevention", "MultipleRules", "JoinConflict", "SamePageJoinConflict", "CaseSensitivity", "ExportMatchJoin", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -122,7 +124,7 @@ try {
 
     # Clean up test-specific directory users from previous test runs
     Write-Host "Cleaning up test-specific directory users from previous runs..." -ForegroundColor Gray
-    $testUsers = @("test.projection", "test.join", "test.duplicate1", "test.duplicate2", "test.multirule.first", "test.multirule.second", "baseline.user1")
+    $testUsers = @("test.projection", "test.join", "test.duplicate1", "test.duplicate2", "test.multirule.first", "test.multirule.second", "baseline.user1", "test.match.outbound")
     $deletedCount = 0
     foreach ($user in $testUsers) {
         if ($isOpenLDAP) {
@@ -1127,6 +1129,242 @@ try {
                 Write-Host "  ✓ Cleaned up case sensitivity test data" -ForegroundColor Gray
             }
         }
+    }
+
+    # Test 7: Export Match Join (Outbound Matching)
+    # Covers the OUTBOUND (bidirectional) direction of Object Matching Rules: when a Metaverse Object is
+    # evaluated for provisioning into the LDAP Connected System and a matching, unjoined account ALREADY
+    # exists there (created directly in the directory, out-of-band, not by JIM), the export evaluator must
+    # JOIN to the existing Connected System Object instead of provisioning a duplicate.
+    #
+    # Engine path under test: ExportEvaluationServer.AttemptExportMatchingAsync ->
+    # FindConnectedSystemObjectUsingMatchingRuleAsync, using the LDAP object matching rule that
+    # Setup-Scenario1.ps1 configures (employeeID for Samba AD / employeeNumber for OpenLDAP -> Employee ID).
+    #
+    # Arrange: create the account directly in the directory (ldbadd for Samba AD, ldapadd for OpenLDAP) at
+    # the EXACT DN the export attribute flow will compute (CN=<Display Name>,OU=<Department>,OU=Users,OU=Corp
+    # for Samba AD; uid=<Account Name>,ou=People for OpenLDAP - see Setup-Scenario1.ps1's distinguishedName
+    # expression mappings), so a correct join needs no incidental rename to prove itself.
+    if ($Step -eq "ExportMatchJoin" -or $Step -eq "All") {
+        Write-TestSection "Test 7: Export Match Join (Outbound Matching)"
+
+        Write-Host "Testing: export evaluation should JOIN to a pre-existing, unjoined directory account instead of provisioning a duplicate" -ForegroundColor Gray
+
+        $omjSamAccountName = "test.match.outbound"
+        $omjEmployeeId = "OMJ001"
+        $omjDisplayName = "Test Match Outbound"
+        $omjFirstName = "TestMatch"
+        $omjLastName = "Outbound"
+        $omjEmail = "$omjSamAccountName@panoply.local"
+        # "Information Technology" is one of the department OUs Scenario 5 pre-creates for Samba AD (see
+        # above); using it keeps the out-of-band DN and the CSV-driven export DN identical.
+        $omjDepartment = "Information Technology"
+        $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+
+        Write-Host "  Creating out-of-band directory account (not provisioned by JIM)..." -ForegroundColor Gray
+
+        if ($isOpenLDAP) {
+            $omjUserDN = "$($DirectoryConfig.UserRdnAttr)=$omjSamAccountName,$($DirectoryConfig.UserContainer)"
+            $omjLdif = @"
+dn: $omjUserDN
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+uid: $omjSamAccountName
+cn: $omjDisplayName
+sn: $omjLastName
+givenName: $omjFirstName
+displayName: $omjDisplayName
+mail: $omjEmail
+employeeNumber: $omjEmployeeId
+userPassword: Password123!
+"@
+            $omjCreateResult = $omjLdif | docker exec -i $DirectoryConfig.ContainerName ldapadd -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" 2>&1
+
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  ✓ Created out-of-band account $omjSamAccountName in OpenLDAP (DN: $omjUserDN)" -ForegroundColor Green
+            }
+            elseif ($omjCreateResult -match "already exists") {
+                Write-Host "  Out-of-band account $omjSamAccountName already exists" -ForegroundColor Yellow
+            }
+            else {
+                throw "Failed to create out-of-band OpenLDAP account: $omjCreateResult"
+            }
+        }
+        else {
+            # Samba AD: samba-tool user create does not accept an arbitrary DN or an employeeID value, and
+            # its default CN would not match the DN the export attribute flow computes from Display Name.
+            # Use ldbadd against the local sam.ldb (the same mechanism Populate-SambaAD.ps1 uses for bulk
+            # user seeding) so the object lands at the exact target DN with employeeID set in one step.
+            $omjUserDN = "CN=$omjDisplayName,OU=$omjDepartment,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)"
+            $omjLdif = @"
+dn: $omjUserDN
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: $omjDisplayName
+sn: $omjLastName
+givenName: $omjFirstName
+sAMAccountName: $omjSamAccountName
+displayName: $omjDisplayName
+userPrincipalName: $omjEmail
+mail: $omjEmail
+department: $omjDepartment
+employeeID: $omjEmployeeId
+
+"@
+            $omjLdifPath = [System.IO.Path]::GetTempFileName()
+            try {
+                [System.IO.File]::WriteAllText($omjLdifPath, $omjLdif)
+                docker cp $omjLdifPath "$($DirectoryConfig.ContainerName):/tmp/omj-user.ldif" 2>&1 | Out-Null
+                $omjCreateResult = docker exec $DirectoryConfig.ContainerName ldbadd -H /usr/local/samba/private/sam.ldb /tmp/omj-user.ldif 2>&1
+                docker exec $DirectoryConfig.ContainerName rm -f /tmp/omj-user.ldif 2>&1 | Out-Null
+                $omjCreateText = if ($omjCreateResult -is [array]) { $omjCreateResult -join "`n" } else { "$omjCreateResult" }
+
+                if ($omjCreateText -match "Added 1 record" -or ($LASTEXITCODE -eq 0 -and [string]::IsNullOrWhiteSpace($omjCreateText))) {
+                    Write-Host "  ✓ Created out-of-band account $omjSamAccountName in Samba AD (DN: $omjUserDN)" -ForegroundColor Green
+                }
+                elseif ($omjCreateText -match "already exists") {
+                    Write-Host "  Out-of-band account $omjSamAccountName already exists" -ForegroundColor Yellow
+                }
+                else {
+                    throw "Failed to create out-of-band Samba AD account via ldbadd: $omjCreateText"
+                }
+            }
+            finally {
+                Remove-Item $omjLdifPath -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        # Step: full import from LDAP and confirm the CSO exists but is genuinely unjoined - this proves the
+        # account really was created out-of-band, not via JIM (otherwise the "join" assertion below would be
+        # meaningless).
+        Write-Host "  Running LDAP full import..." -ForegroundColor Gray
+        $omjLdapImport1 = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $omjLdapImport1.activityId -Name "LDAP Import (ExportMatchJoin - arrange)"
+
+        $omjUnjoinedCsos = @(Get-JIMConnectedSystemObject -ConnectedSystemId $config.LDAPSystemId -Search $omjDisplayName -JoinType NotJoined -PageSize 10)
+        $omjUnjoinedCso = $omjUnjoinedCsos | Where-Object { $_.displayName -eq $omjDisplayName } | Select-Object -First 1
+        $omjArrangeOk = $false
+
+        if (-not $omjUnjoinedCso) {
+            Write-Host "  ✗ Could not find an unjoined LDAP CSO for '$omjDisplayName' after import - arrange step failed" -ForegroundColor Red
+            $testResults.Steps += @{ Name = "ExportMatchJoin"; Success = $false; Error = "Out-of-band account did not import as an unjoined CSO" }
+        }
+        else {
+            Write-Host "  ✓ Out-of-band account imported as an unjoined Connected System Object (proves genuine out-of-band arrange)" -ForegroundColor Green
+            $omjArrangeOk = $true
+        }
+
+        if ($omjArrangeOk) {
+            # Act: add the HR CSV row with the SAME employeeId. Import + sync projects the MVO and runs
+            # export evaluation, where export matching should find and JOIN the existing CSO instead of
+            # provisioning a new one.
+            $upn = "$omjSamAccountName@panoply.local"
+            $csv = Import-Csv $csvPath
+            $omjHrRow = [PSCustomObject]@{
+                hrId = "00009040-0000-0000-0000-000000000000"
+                employeeId = $omjEmployeeId
+                firstName = $omjFirstName
+                lastName = $omjLastName
+                email = $omjEmail
+                department = $omjDepartment
+                title = "Engineer"
+                company = "Panoply"
+                pronouns = ""
+                samAccountName = $omjSamAccountName
+                displayName = $omjDisplayName
+                status = "Active"
+                userPrincipalName = $upn
+                employeeType = "Employee"
+                employeeEndDate = ""
+            }
+            $csv = @($csv) + $omjHrRow
+            $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+            Copy-CsvToConnectorFiles -SourcePath $csvPath
+            Write-Host "  Added $omjSamAccountName to HR CSV with EmployeeId=$omjEmployeeId..." -ForegroundColor Gray
+
+            $omjCsvImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $omjCsvImport.activityId -Name "CSV Import (ExportMatchJoin)"
+            $omjCsvSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $omjCsvSync.activityId -Name "Full Sync (ExportMatchJoin)"
+
+            Write-Host "  Running LDAP export (export matching should join the existing CSO)..." -ForegroundColor Gray
+            $omjExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+            Assert-ExportSuccess -ActivityId $omjExport.activityId -Name "LDAP Export (ExportMatchJoin)"
+
+            Write-Host "  Running confirming LDAP import..." -ForegroundColor Gray
+            $omjLdapImport2 = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $omjLdapImport2.activityId -Name "LDAP Import (ExportMatchJoin - confirm)"
+
+            # Assert: the CSO is now Joined (not Provisioned); exactly one LDAP CSO and one directory account
+            # exist for this identity - no duplicate was provisioned.
+            $omjCsosAfter = @(Get-JIMConnectedSystemObject -ConnectedSystemId $config.LDAPSystemId -Search $omjDisplayName -PageSize 10)
+            $omjMatchingCsos = @($omjCsosAfter | Where-Object { $_.displayName -eq $omjDisplayName })
+
+            if ($omjMatchingCsos.Count -eq 1 -and "$($omjMatchingCsos[0].joinType)" -eq 'Joined') {
+                Write-Host "  ✓ Connected System Object JoinType=Joined (existing directory account was joined, not provisioned)" -ForegroundColor Green
+
+                $omjDirCount = if ($isOpenLDAP) {
+                    Get-LDAPUserCount -DirectoryConfig $DirectoryConfig -Filter "(employeeNumber=$omjEmployeeId)"
+                } else {
+                    Get-LDAPUserCount -DirectoryConfig $DirectoryConfig -Filter "(employeeID=$omjEmployeeId)"
+                }
+
+                if ($omjDirCount -eq 1) {
+                    Write-Host "  ✓ Exactly one directory account exists for EmployeeId=$omjEmployeeId (no duplicate provisioned)" -ForegroundColor Green
+                    $testResults.Steps += @{ Name = "ExportMatchJoin"; Success = $true }
+                }
+                else {
+                    Write-Host "  ✗ Found $omjDirCount directory account(s) for EmployeeId=$omjEmployeeId (expected 1)" -ForegroundColor Red
+                    $testResults.Steps += @{ Name = "ExportMatchJoin"; Success = $false; Error = "Found $omjDirCount directory accounts (expected 1) - possible duplicate provisioning" }
+                }
+            }
+            elseif ($omjMatchingCsos.Count -gt 1) {
+                Write-Host "  ✗ Found $($omjMatchingCsos.Count) LDAP Connected System Objects for '$omjDisplayName' (expected 1) - export matching provisioned a duplicate instead of joining" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "ExportMatchJoin"; Success = $false; Error = "Duplicate CSO created ($($omjMatchingCsos.Count) found) - export matching did not join" }
+            }
+            elseif ($omjMatchingCsos.Count -eq 1) {
+                Write-Host "  ✗ Connected System Object exists but JoinType=$($omjMatchingCsos[0].joinType) (expected Joined)" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "ExportMatchJoin"; Success = $false; Error = "CSO JoinType=$($omjMatchingCsos[0].joinType), expected Joined" }
+            }
+            else {
+                Write-Host "  ✗ No LDAP Connected System Object found for '$omjDisplayName' after export" -ForegroundColor Red
+                $testResults.Steps += @{ Name = "ExportMatchJoin"; Success = $false; Error = "No LDAP CSO found after export" }
+            }
+        }
+
+        # Clean up: remove the HR CSV row and the directory account. The Metaverse Object Type's default
+        # deletion rule (WhenLastConnectorDisconnected, 7-day grace period - set in Setup-Scenario1.ps1) means
+        # removing only the CSV connector will NOT deprovision the LDAP side (the LDAP connector is still
+        # attached), so the out-of-band-created directory account must be deleted directly rather than
+        # relying on the export sync rule's OutboundDeprovisionAction=Delete cascade.
+        Copy-Item -Path "$scenarioDataPath/scenario5-hr-users.csv" -Destination $csvPath -Force
+        Copy-CsvToConnectorFiles -SourcePath $csvPath
+        $omjCleanupImport = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+        $omjCleanupSync = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVSyncProfileId -Wait -PassThru
+
+        if ($isOpenLDAP) {
+            $omjDeleteResult = docker exec $DirectoryConfig.ContainerName ldapdelete -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" "$omjUserDN" 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  ✓ Deleted out-of-band directory account $omjSamAccountName" -ForegroundColor Gray
+            }
+            else {
+                Write-Host "  ⚠ Could not delete out-of-band directory account: $omjDeleteResult" -ForegroundColor Yellow
+            }
+        }
+        else {
+            $omjDeleteResult = docker exec $DirectoryConfig.ContainerName bash -c "samba-tool user delete '$omjSamAccountName' 2>&1; echo EXIT_CODE:`$?"
+            if ($omjDeleteResult -match "Deleted user") {
+                Write-Host "  ✓ Deleted out-of-band directory account $omjSamAccountName" -ForegroundColor Gray
+            }
+            else {
+                Write-Host "  ⚠ Could not delete out-of-band directory account: $omjDeleteResult" -ForegroundColor Yellow
+            }
+        }
+        Write-Host "  ✓ Reset CSV to baseline and ran cleanup import/sync for subsequent tests" -ForegroundColor Gray
     }
 
     # Summary

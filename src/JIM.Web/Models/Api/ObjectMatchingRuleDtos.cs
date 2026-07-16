@@ -31,16 +31,6 @@ public class ObjectMatchingRuleSourceDto
     public string? ConnectedSystemAttributeName { get; set; }
 
     /// <summary>
-    /// The Metaverse attribute ID (for export matching).
-    /// </summary>
-    public int? MetaverseAttributeId { get; set; }
-
-    /// <summary>
-    /// The Metaverse attribute name (for display).
-    /// </summary>
-    public string? MetaverseAttributeName { get; set; }
-
-    /// <summary>
     /// Creates a DTO from an ObjectMatchingRuleSource entity.
     /// </summary>
     public static ObjectMatchingRuleSourceDto FromEntity(ObjectMatchingRuleSource source)
@@ -50,9 +40,7 @@ public class ObjectMatchingRuleSourceDto
             Id = source.Id,
             Order = source.Order,
             ConnectedSystemAttributeId = source.ConnectedSystemAttributeId,
-            ConnectedSystemAttributeName = source.ConnectedSystemAttribute?.Name,
-            MetaverseAttributeId = source.MetaverseAttributeId,
-            MetaverseAttributeName = source.MetaverseAttribute?.Name
+            ConnectedSystemAttributeName = source.ConnectedSystemAttribute?.Name
         };
     }
 }

@@ -402,6 +402,9 @@ public partial class SyncRepository : ISyncRepository
         List<ConnectedSystemObjectAttributeValue> newAttributeValues)
         => _repo.ConnectedSystems.UpdateConnectedSystemObjectWithNewAttributeValuesAsync(connectedSystemObject, newAttributeValues);
 
+    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined)
+        => _repo.ConnectedSystems.TryClaimConnectedSystemObjectForJoinAsync(connectedSystemObjectId, metaverseObjectId, dateJoined);
+
     #endregion
 
     #region Pending Export — Singular Convenience Methods

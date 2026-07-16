@@ -794,10 +794,10 @@ public class SyncRepository : ISyncRepository
         if (csAttrId == null)
             return Task.FromResult<ConnectedSystemObject?>(null);
 
-        // The MVO side: an explicit Metaverse attribute on the source wins; otherwise invert the standard
-        // inbound rule shape by reading the rule's target Metaverse attribute (mirrors the Postgres implementation).
-        var mvoAttrId = source.MetaverseAttribute?.Id ?? source.MetaverseAttributeId
-            ?? rule.TargetMetaverseAttribute?.Id ?? rule.TargetMetaverseAttributeId;
+        // The MVO side: the standard rule shape (source = Connected System attribute, target = Metaverse
+        // attribute) serves both import and export matching, so read the rule's Target Metaverse Attribute
+        // directly (mirrors the Postgres implementation).
+        var mvoAttrId = rule.TargetMetaverseAttribute?.Id ?? rule.TargetMetaverseAttributeId;
         if (mvoAttrId == null)
             return Task.FromResult<ConnectedSystemObject?>(null);
 
@@ -807,7 +807,7 @@ public class SyncRepository : ISyncRepository
             return Task.FromResult<ConnectedSystemObject?>(null);
 
         // Empty string is treated as no value, matching the Postgres implementation's IsNullOrEmpty guard.
-        var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString();
+        var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString() ?? mvoAttr.LongValue?.ToString();
         if (string.IsNullOrEmpty(mvoVal))
             return Task.FromResult<ConnectedSystemObject?>(null);
 
@@ -818,7 +818,7 @@ public class SyncRepository : ISyncRepository
             var csoAttr = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == csAttrId);
             if (csoAttr == null)
                 return false;
-            var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString();
+            var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString() ?? csoAttr.LongValue?.ToString();
             return string.Equals(mvoVal, csoVal, comparison);
         }
 
@@ -834,6 +834,24 @@ public class SyncRepository : ISyncRepository
             .FirstOrDefault(ValueMatches);
 
         return Task.FromResult(match);
+    }
+
+    /// <summary>
+    /// In-memory twin of the PostgreSQL conditional UPDATE (#1051): claims the CSO only if it is
+    /// still unclaimed, mirroring the "WHERE MetaverseObjectId IS NULL" guard. Test usage is
+    /// single-threaded, so no locking is required here; this method exists purely to give tests a
+    /// seam to simulate a lost race (see <c>virtual</c>), not to reproduce real concurrency.
+    /// </summary>
+    public virtual Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined)
+    {
+        if (!_csos.TryGetValue(connectedSystemObjectId, out var cso) || cso.MetaverseObjectId != null)
+            return Task.FromResult(false);
+
+        cso.MetaverseObjectId = metaverseObjectId;
+        cso.JoinType = ConnectedSystemObjectJoinType.Joined;
+        cso.DateJoined = dateJoined;
+        cso.Status = ConnectedSystemObjectStatus.Normal;
+        return Task.FromResult(true);
     }
 
     #endregion
@@ -1748,52 +1766,6 @@ public class SyncRepository : ISyncRepository
         }
 
         return Task.FromResult(result);
-    }
-
-    public Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
-        MetaverseObject metaverseObject,
-        ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType,
-        List<ObjectMatchingRule> matchingRules)
-    {
-        // Simplified export matching: iterate rules, find CSO with matching attribute value
-        foreach (var rule in matchingRules.OrderBy(r => r.Order))
-        {
-            if (rule.Sources.Count == 0) continue;
-            var source = rule.Sources[0];
-
-            if (source.MetaverseAttribute == null && source.MetaverseAttributeId == null) continue;
-            if (source.ConnectedSystemAttribute == null && source.ConnectedSystemAttributeId == null) continue;
-
-            // Get the MVO attribute value to match against
-            var mvoAttrId = source.MetaverseAttribute?.Id ?? source.MetaverseAttributeId;
-            var mvoAttr = metaverseObject.AttributeValues?
-                .FirstOrDefault(av => av.AttributeId == mvoAttrId);
-            if (mvoAttr == null) continue;
-
-            var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString();
-            if (mvoVal == null) continue;
-
-            // Find a CSO in the target system with a matching CS attribute value
-            var csAttrId = source.ConnectedSystemAttribute?.Id ?? source.ConnectedSystemAttributeId;
-            var comparison = rule.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-
-            foreach (var cso in _csos.Values)
-            {
-                if (cso.ConnectedSystemId != connectedSystem.Id) continue;
-                if (cso.TypeId != connectedSystemObjectType.Id) continue;
-
-                var csoAttr = cso.AttributeValues?
-                    .FirstOrDefault(av => av.AttributeId == csAttrId);
-                if (csoAttr == null) continue;
-
-                var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString();
-                if (string.Equals(mvoVal, csoVal, comparison))
-                    return Task.FromResult<ConnectedSystemObject?>(cso);
-            }
-        }
-
-        return Task.FromResult<ConnectedSystemObject?>(null);
     }
 
     #endregion

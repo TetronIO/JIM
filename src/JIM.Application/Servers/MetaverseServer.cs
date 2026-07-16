@@ -898,8 +898,6 @@ public class MetaverseServer
     {
         AttributeReferenceKind.Binding => ActivityTargetType.MetaverseObjectType,
         AttributeReferenceKind.ObjectMatchingRuleTarget => ActivityTargetType.ObjectMatchingRule,
-        AttributeReferenceKind.ObjectMatchingRuleSource => ActivityTargetType.ObjectMatchingRule,
-        AttributeReferenceKind.SourcelessObjectMatchingRule => ActivityTargetType.ObjectMatchingRule,
         AttributeReferenceKind.PredefinedSearchAttribute => ActivityTargetType.PredefinedSearch,
         AttributeReferenceKind.PredefinedSearchCriterion => ActivityTargetType.PredefinedSearch,
         AttributeReferenceKind.ExampleDataTemplateAttribute => ActivityTargetType.ExampleDataTemplate,
