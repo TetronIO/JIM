@@ -1732,7 +1732,8 @@ public class SynchronisationController(
             ProjectToMetaverse = request.ProjectToMetaverse,
             ProvisionToConnectedSystem = request.ProvisionToConnectedSystem,
             Enabled = request.Enabled,
-            EnforceState = request.EnforceState
+            EnforceState = request.EnforceState,
+            OutboundDeprovisionAction = request.OutboundDeprovisionAction ?? OutboundDeprovisionAction.Disconnect
         };
 
         var apiKey = await GetCurrentApiKeyAsync();

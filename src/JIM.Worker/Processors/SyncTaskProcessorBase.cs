@@ -2868,8 +2868,11 @@ public abstract class SyncTaskProcessorBase
                 using (Diagnostics.Sync.StartSpan("MvoDeletionEvaluateBulk")
                     .SetTag("mvoCount", deletionsToProcess.Count))
                 {
+                    // The recall cache (source system 0) is the right one here: deletions must
+                    // consider export Synchronisation Rules to every system, including this
+                    // run's source (Q3 does not apply to deletions).
                     var deleteExports = await _syncServer.EvaluateMvoDeletionsAsync(
-                        deletionsToProcess.Select(d => d.Mvo).ToList());
+                        deletionsToProcess.Select(d => d.Mvo).ToList(), _recallExportEvaluationCache);
                     if (deleteExports.Count > 0)
                     {
                         Log.Information(
@@ -2981,9 +2984,10 @@ public abstract class SyncTaskProcessorBase
         {
             try
             {
-                // Create delete Pending Exports for any remaining Provisioned CSOs
-                // This handles WhenAuthoritativeSourceDisconnected where target CSOs still exist
-                var deleteExports = await _syncServer.EvaluateMvoDeletionAsync(mvo);
+                // Create delete Pending Exports for CSOs whose export Synchronisation Rule action
+                // is Delete (issue #655). This handles WhenAuthoritativeSourceDisconnected where
+                // target CSOs still exist. Recall cache: Q3 does not apply to deletions.
+                var deleteExports = await _syncServer.EvaluateMvoDeletionAsync(mvo, _recallExportEvaluationCache);
                 if (deleteExports.Count > 0)
                 {
                     Log.Information(

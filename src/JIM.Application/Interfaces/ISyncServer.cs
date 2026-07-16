@@ -258,16 +258,18 @@ public interface ISyncServer
         ExportEvaluationCache cache);
 
     /// <summary>
-    /// Evaluates export rules for an MVO being deleted.
-    /// Creates delete exports for provisioned CSOs and disconnects them.
+    /// Evaluates export rules for an MVO being deleted. Creates delete exports for CSOs matched by
+    /// an export Synchronisation Rule whose OutboundDeprovisionAction is Delete (issue #655) and
+    /// disconnects every joined CSO. Pass the run-scoped cache where one exists; otherwise the
+    /// enabled export rules are loaded from the repository.
     /// </summary>
-    Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo);
+    Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo, ExportEvaluationCache? exportEvaluationCache = null);
 
     /// <summary>
     /// Set-based form of <see cref="EvaluateMvoDeletionAsync"/> (issue #993): one CSO fetch,
     /// Pending Export ensure and CSO disconnect pass for the whole batch of MVOs.
     /// </summary>
-    Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos);
+    Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos, ExportEvaluationCache? exportEvaluationCache = null);
 
     /// <summary>
     /// Captures the referencing-object and resolution state reference recall needs before Metaverse
