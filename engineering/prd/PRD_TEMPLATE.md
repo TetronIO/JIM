@@ -5,14 +5,22 @@
   =====================================================
   This template defines WHAT to build and WHY. It is the input that a developer
   writes to communicate their requirements. Claude then uses it to generate an
-  implementation plan (the HOW) in the standard docs/plans/ format.
+  implementation plan (the HOW) in the standard engineering/plans/ format.
 
   Workflow:
-    1. Copy this template to a new file: docs/plans/YOUR_FEATURE_NAME.md
+    1. Run `jim-prd`; it creates engineering/prd/PRD_YOUR_FEATURE_NAME.md from
+       this template. New PRDs start at the top level as Status: Planned.
     2. Fill in all required sections (marked REQUIRED)
     3. Fill in optional sections where relevant
     4. Delete this comment block and any unused optional sections
-    5. Ask Claude to create the implementation plan from this PRD
+    5. Create a GitHub issue and link it in the Issue field below
+    6. Ask Claude to create the implementation plan from this PRD
+
+  Lifecycle: the Status field below drives which folder the PRD lives in.
+    Planned -> engineering/prd/        (not yet started)
+    Doing   -> engineering/prd/doing/  (work has started)
+    Done    -> engineering/prd/done/   (implemented and issue closed)
+  Update Status and `git mv` the file together; see engineering/CLAUDE.md.
 
   Tips:
     - Be specific: "filter the activity list by outcome type" is better than
@@ -25,6 +33,7 @@
 -->
 
 - **Status:** Planned
+<!-- Planned | Doing | Done - must match the folder this PRD lives in (see Lifecycle above) -->
 - **Created:** YYYY-MM-DD
 - **Author:** [Name]
 - **Issue:** #[number] *(create a GitHub issue and link it here)*
