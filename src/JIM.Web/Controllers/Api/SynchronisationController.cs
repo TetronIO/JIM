@@ -2995,17 +2995,9 @@ public class SynchronisationController(
                 source.ConnectedSystemAttributeId = csAttr.Id;
                 source.ConnectedSystemAttribute = csAttr;
             }
-            else if (sourceRequest.MetaverseAttributeId.HasValue)
-            {
-                var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
-                if (mvAttr == null)
-                    return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
-                source.MetaverseAttributeId = mvAttr.Id;
-                source.MetaverseAttribute = mvAttr;
-            }
             else
             {
-                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
             }
 
             rule.Sources.Add(source);
@@ -3102,7 +3094,6 @@ public class SynchronisationController(
         if (request.Sources != null)
         {
             var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == rule.ConnectedSystemObjectTypeId);
-            var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
 
             // Clear existing sources and add new ones
             rule.Sources.Clear();
@@ -3123,17 +3114,9 @@ public class SynchronisationController(
                     source.ConnectedSystemAttributeId = csAttr.Id;
                     source.ConnectedSystemAttribute = csAttr;
                 }
-                else if (sourceRequest.MetaverseAttributeId.HasValue)
-                {
-                    var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
-                    if (mvAttr == null)
-                        return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
-                    source.MetaverseAttributeId = mvAttr.Id;
-                    source.MetaverseAttribute = mvAttr;
-                }
                 else
                 {
-                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
                 }
 
                 rule.Sources.Add(source);
@@ -3335,17 +3318,9 @@ public class SynchronisationController(
                 source.ConnectedSystemAttributeId = csAttr.Id;
                 source.ConnectedSystemAttribute = csAttr;
             }
-            else if (sourceRequest.MetaverseAttributeId.HasValue)
-            {
-                var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
-                if (mvAttr == null)
-                    return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
-                source.MetaverseAttributeId = mvAttr.Id;
-                source.MetaverseAttribute = mvAttr;
-            }
             else
             {
-                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
             }
 
             rule.Sources.Add(source);
@@ -3431,7 +3406,6 @@ public class SynchronisationController(
         if (request.Sources != null)
         {
             var objectType = syncRule.ConnectedSystemObjectType;
-            var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
 
             rule.Sources.Clear();
 
@@ -3451,17 +3425,9 @@ public class SynchronisationController(
                     source.ConnectedSystemAttributeId = csAttr.Id;
                     source.ConnectedSystemAttribute = csAttr;
                 }
-                else if (sourceRequest.MetaverseAttributeId.HasValue)
-                {
-                    var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
-                    if (mvAttr == null)
-                        return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
-                    source.MetaverseAttributeId = mvAttr.Id;
-                    source.MetaverseAttribute = mvAttr;
-                }
                 else
                 {
-                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
                 }
 
                 rule.Sources.Add(source);

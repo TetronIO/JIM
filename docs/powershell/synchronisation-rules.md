@@ -910,20 +910,13 @@ Get-JIMMatchingRule -ConnectedSystemId 1 -Id 5
 
 ### New-JIMMatchingRule
 
-Creates a new matching rule for a Connected System Object Type. Rules can match on a Connected System attribute or a metaverse attribute as the source.
+Creates a new matching rule for a Connected System Object Type. The source is a Connected System attribute, matched against the rule's target metaverse attribute.
 
 #### Syntax
 
 ```powershell
-# Source: Connected System attribute
 New-JIMMatchingRule -ConnectedSystemId <int> -ObjectTypeId <int>
     -MetaverseObjectTypeId <int> -SourceAttributeId <int>
-    -TargetMetaverseAttributeId <int> [-Order <int>]
-    [-CaseSensitive <bool>] [-PassThru]
-
-# Source: metaverse attribute
-New-JIMMatchingRule -ConnectedSystemId <int> -ObjectTypeId <int>
-    -MetaverseObjectTypeId <int> -SourceMetaverseAttributeId <int>
     -TargetMetaverseAttributeId <int> [-Order <int>]
     [-CaseSensitive <bool>] [-PassThru]
 ```
@@ -935,8 +928,7 @@ New-JIMMatchingRule -ConnectedSystemId <int> -ObjectTypeId <int>
 | `ConnectedSystemId` | `int` | Yes | | The ID of the Connected System |
 | `ObjectTypeId` | `int` | Yes | | The Connected System Object Type ID |
 | `MetaverseObjectTypeId` | `int` | Yes | | The Metaverse Object Type ID to match against |
-| `SourceAttributeId` | `int` | Yes (CSAttribute set) | | The Connected System attribute ID to use as the match source |
-| `SourceMetaverseAttributeId` | `int` | Yes (MVAttribute set) | | The metaverse attribute ID to use as the match source |
+| `SourceAttributeId` | `int` | Yes | | The Connected System attribute ID to use as the match source |
 | `TargetMetaverseAttributeId` | `int` | Yes | | The metaverse attribute ID to match against |
 | `Order` | `int` | No | | Evaluation order; lower numbers are evaluated first |
 | `CaseSensitive` | `bool` | No | `$false` | Whether the match comparison is case-sensitive |
@@ -972,7 +964,7 @@ Modifies an existing per-object-type matching rule. Setting a source attribute r
 Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int>
     [-Order <int>] [-MetaverseObjectTypeId <int>]
     [-TargetMetaverseAttributeId <int>] [-SourceAttributeId <int>]
-    [-SourceMetaverseAttributeId <int>] [-CaseSensitive <bool>] [-PassThru]
+    [-CaseSensitive <bool>] [-PassThru]
 ```
 
 #### Parameters
@@ -985,13 +977,12 @@ Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int>
 | `MetaverseObjectTypeId` | `int` | No | | New Metaverse Object Type ID |
 | `TargetMetaverseAttributeId` | `int` | No | | New target metaverse attribute ID |
 | `SourceAttributeId` | `int` | No | | New Connected System source attribute ID |
-| `SourceMetaverseAttributeId` | `int` | No | | New metaverse source attribute ID |
 | `CaseSensitive` | `bool` | No | | Whether the match comparison is case-sensitive |
 | `PassThru` | `switch` | No | `$false` | Returns the updated matching rule object |
 
 #### Notes
 
-- Setting `SourceAttributeId` or `SourceMetaverseAttributeId` replaces all existing source attributes on the rule.
+- Setting `SourceAttributeId` replaces all existing source attributes on the rule.
 
 #### Examples
 
@@ -1089,14 +1080,8 @@ Creates a new matching rule on a specific Synchronisation Rule. The Metaverse Ob
 #### Syntax
 
 ```powershell
-# Source: Connected System attribute
 New-JIMSyncRuleMatchingRule -SyncRuleId <int>
     -SourceAttributeId <int> -TargetMetaverseAttributeId <int>
-    [-Order <int>] [-CaseSensitive <bool>] [-PassThru]
-
-# Source: metaverse attribute
-New-JIMSyncRuleMatchingRule -SyncRuleId <int>
-    -SourceMetaverseAttributeId <int> -TargetMetaverseAttributeId <int>
     [-Order <int>] [-CaseSensitive <bool>] [-PassThru]
 ```
 
@@ -1105,8 +1090,7 @@ New-JIMSyncRuleMatchingRule -SyncRuleId <int>
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule |
-| `SourceAttributeId` | `int` | Yes (CSAttribute set) | | The Connected System attribute ID to use as the match source |
-| `SourceMetaverseAttributeId` | `int` | Yes (MVAttribute set) | | The metaverse attribute ID to use as the match source |
+| `SourceAttributeId` | `int` | Yes | | The Connected System attribute ID to use as the match source |
 | `TargetMetaverseAttributeId` | `int` | Yes | | The metaverse attribute ID to match against |
 | `Order` | `int` | No | | Evaluation order; lower numbers are evaluated first |
 | `CaseSensitive` | `bool` | No | `$false` | Whether the match comparison is case-sensitive |
@@ -1143,7 +1127,7 @@ Modifies an existing per-Synchronisation-Rule matching rule.
 ```powershell
 Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int>
     [-Order <int>] [-TargetMetaverseAttributeId <int>]
-    [-SourceAttributeId <int>] [-SourceMetaverseAttributeId <int>]
+    [-SourceAttributeId <int>]
     [-CaseSensitive <bool>] [-PassThru]
 ```
 
@@ -1156,7 +1140,6 @@ Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int>
 | `Order` | `int` | No | | New evaluation order |
 | `TargetMetaverseAttributeId` | `int` | No | | New target metaverse attribute ID |
 | `SourceAttributeId` | `int` | No | | New Connected System source attribute ID |
-| `SourceMetaverseAttributeId` | `int` | No | | New metaverse source attribute ID |
 | `CaseSensitive` | `bool` | No | | Whether the match comparison is case-sensitive |
 | `PassThru` | `switch` | No | `$false` | Returns the updated matching rule object |
 

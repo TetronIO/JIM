@@ -37,21 +37,10 @@ public enum AttributeReferenceKind
     ObjectMatchingRuleTarget = 4,
 
     /// <summary>
-    /// An Object Matching Rule source that reads this Metaverse Attribute.
-    /// </summary>
-    ObjectMatchingRuleSource = 5,
-
-    /// <summary>
     /// An export Synchronisation Rule mapping removed as a knock-on because removing its attribute-reading source
     /// would leave it with no sources at all. A source-less mapping is invalid configuration and cannot survive.
     /// </summary>
     ExportAttributeFlowMapping = 6,
-
-    /// <summary>
-    /// An Object Matching Rule removed as a knock-on because removing its attribute-reading source would leave it
-    /// with no sources at all. A source-less rule is invalid configuration and cannot survive.
-    /// </summary>
-    SourcelessObjectMatchingRule = 7,
 
     /// <summary>
     /// A Predefined Search display column (PredefinedSearchAttribute) that shows this Metaverse Attribute.

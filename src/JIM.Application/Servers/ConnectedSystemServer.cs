@@ -810,7 +810,6 @@ public class ConnectedSystemServer
                     {
                         Order = s.Order,
                         ConnectedSystemAttributeId = s.ConnectedSystemAttributeId,
-                        MetaverseAttributeId = s.MetaverseAttributeId,
                         Expression = s.Expression
                     }).ToList()
                 };
@@ -897,7 +896,6 @@ public class ConnectedSystemServer
                             {
                                 Order = s.Order,
                                 ConnectedSystemAttributeId = s.ConnectedSystemAttributeId,
-                                MetaverseAttributeId = s.MetaverseAttributeId,
                                 Expression = s.Expression
                             }).ToList()
                         };
@@ -944,7 +942,7 @@ public class ConnectedSystemServer
             {
                 var sourceSignatures = r.Sources
                     .OrderBy(s => s.Order)
-                    .Select(s => $"{s.ConnectedSystemAttributeId}:{s.MetaverseAttributeId}:{s.Expression}")
+                    .Select(s => $"{s.ConnectedSystemAttributeId}:{s.Expression}")
                     .ToList();
 
                 return $"{r.TargetMetaverseAttributeId}|{r.CaseSensitive}|{string.Join(",", sourceSignatures)}";
@@ -4989,11 +4987,6 @@ public class ConnectedSystemServer
                 {
                     source.ConnectedSystemAttributeId = source.ConnectedSystemAttribute.Id;
                     source.ConnectedSystemAttribute = null;
-                }
-                if (source.MetaverseAttribute != null)
-                {
-                    source.MetaverseAttributeId = source.MetaverseAttribute.Id;
-                    source.MetaverseAttribute = null;
                 }
             }
         }

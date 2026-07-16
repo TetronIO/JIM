@@ -148,7 +148,7 @@ public class ObjectMatchingRule : IAuditable
         if (Sources.Count == 0)
             return SyncRuleMappingSourcesType.NotSet;
 
-        if (Sources.All(s => s.ConnectedSystemAttribute != null || s.MetaverseAttribute != null))
+        if (Sources.All(s => s.ConnectedSystemAttribute != null))
             return SyncRuleMappingSourcesType.AttributeMapping;
 
         if (Sources.All(s => !string.IsNullOrWhiteSpace(s.Expression)))

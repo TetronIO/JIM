@@ -238,16 +238,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Object Matching Rules, loaded in a single keyed query and wired onto their owning object
         // types in memory.
         //
-        // Why not Include them as part of the query above? Before #494 we used four repeated
+        // Why not Include them as part of the query above? Before #494 we used repeated
         // .Include(ot => ot.ObjectMatchingRules).ThenInclude(...) branches inside AsSplitQuery —
-        // one per path into the rule graph (Sources.ConnectedSystemAttribute, Sources.MetaverseAttribute,
-        // TargetMetaverseAttribute, MetaverseObjectType). EF Core does not support chaining multiple
+        // one per path into the rule graph (Sources.ConnectedSystemAttribute, TargetMetaverseAttribute,
+        // MetaverseObjectType). EF Core does not support chaining multiple
         // ThenIncludes off the same collection navigation in one expression, so each branch has to be
         // re-rooted on the collection, and under AsSplitQuery each branch is emitted as a separate
-        // SQL query (four round-trips for a single graph walk).
+        // SQL query (multiple round-trips for a single graph walk).
         //
         // Loading the rules directly from DbSet<ObjectMatchingRule> with one combined Include chain
-        // reduces the fan-out from four queries to one. We then bind rules back onto their owning
+        // reduces the fan-out to one. We then bind rules back onto their owning
         // object types via ConnectedSystemObjectTypeId in memory.
         var typesById = types.ToDictionary(t => t.Id);
         if (types.Count > 0)
@@ -256,8 +256,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             IQueryable<ObjectMatchingRule> omrQuery = Repository.Database.ObjectMatchingRules
                 .Include(omr => omr.Sources)
                     .ThenInclude(s => s.ConnectedSystemAttribute)
-                .Include(omr => omr.Sources)
-                    .ThenInclude(s => s.MetaverseAttribute)
                 .Include(omr => omr.TargetMetaverseAttribute)
                 .Include(omr => omr.MetaverseObjectType)
                 .Where(omr => omr.ConnectedSystemObjectTypeId != null
@@ -690,8 +688,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .AsSplitQuery()
             .Include(omr => omr.Sources)
                 .ThenInclude(s => s.ConnectedSystemAttribute)
-            .Include(omr => omr.Sources)
-                .ThenInclude(s => s.MetaverseAttribute)
             .Include(omr => omr.TargetMetaverseAttribute)
             .Include(omr => omr.ConnectedSystemObjectType)
             .Include(omr => omr.MetaverseObjectType)
@@ -2525,7 +2521,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(q => q.Attributes)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.MetaverseObjectType)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.ConnectedSystemAttribute)
-            .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.MetaverseAttribute)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Where(x => x.ConnectedSystemId == connectedSystemId).OrderBy(x => x.Name)
             .ToListAsync();
@@ -3895,13 +3890,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             return null;
         }
 
-        // The MVO side of the comparison: an explicit Metaverse attribute on the source wins; otherwise
-        // invert the standard inbound rule shape (source = Connected System attribute, target = Metaverse
-        // attribute, which is what the UI, API and PowerShell configure) by reading the rule's target.
-        var metaverseAttribute = source.MetaverseAttribute ?? objectMatchingRule.TargetMetaverseAttribute;
+        // The MVO side of the comparison: the standard rule shape (source = Connected System attribute,
+        // target = Metaverse attribute, which is what the UI, API and PowerShell configure) serves both
+        // import and export matching, so read the rule's Target Metaverse Attribute directly.
+        var metaverseAttribute = objectMatchingRule.TargetMetaverseAttribute;
         if (metaverseAttribute == null)
         {
-            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Rule {RuleId} has neither a source Metaverse attribute nor a target Metaverse attribute; cannot determine the MVO-side value for export matching.",
+            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Rule {RuleId} has no Target Metaverse Attribute; cannot determine the MVO-side value for export matching.",
                 objectMatchingRule.Id);
             return null;
         }
@@ -4029,10 +4024,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.ObjectMatchingRules)
-            .ThenInclude(omr => omr.Sources)
-            .ThenInclude(s => s.MetaverseAttribute)
-            .Include(sr => sr.ConnectedSystemObjectType)
-            .ThenInclude(csot => csot.ObjectMatchingRules)
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.ObjectMatchingRules)
@@ -4042,9 +4033,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))
             .ThenInclude(omr => omr.Sources)
             .ThenInclude(s => s.ConnectedSystemAttribute)
-            .Include(sr => sr.ObjectMatchingRules)
-            .ThenInclude(omr => omr.Sources)
-            .ThenInclude(s => s.MetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
@@ -4399,9 +4387,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))
             .ThenInclude(omr => omr.Sources)
             .ThenInclude(s => s.ConnectedSystemAttribute)
-            .Include(sr => sr.ObjectMatchingRules)
-            .ThenInclude(omr => omr.Sources)
-            .ThenInclude(s => s.MetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
