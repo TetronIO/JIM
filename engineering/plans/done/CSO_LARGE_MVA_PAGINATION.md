@@ -1,8 +1,8 @@
 # CSO Large Multi-Valued Attribute Pagination
 
-**GitHub Issue:** #320
-**Status:** Done (Phases 1–2 complete; Phase 3 deferred to separate issue)
-**Date:** 2026-03-06
+- **Status:** Done (Phases 1–2 complete; Phase 3 deferred to separate issue)
+- **Issue:** #320
+- **Date:** 2026-03-06
 
 ## Problem Statement
 

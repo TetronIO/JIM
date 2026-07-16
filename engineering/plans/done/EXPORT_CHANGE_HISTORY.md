@@ -1,7 +1,7 @@
 # Export Change History & Pending Export Snapshot Persistence
 
+- **Status:** Done
 - **Issue:** #TBD
-- **Status:** Complete
 - **Created:** 2026-03-04
 
 ## Problem Statement
