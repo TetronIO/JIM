@@ -106,6 +106,31 @@
             }
         }
 
+        @* Only show the Import Behaviour panel if the connector supports full or delta import *@
+        @if (ConnectedSystem.ConnectorDefinition is { } connectorDefinition && (connectorDefinition.SupportsFullImport || connectorDefinition.SupportsDeltaImport))
+        {
+            <MudExpansionPanel Expanded="@GetCategoryExpanded("Import Behaviour")"
+                               ExpandedChanged="@(expanded => OnCategoryExpandedChanged("Import Behaviour", expanded))">
+                <TitleContent>
+                    <MudText Typo="Typo.h5">Import Behaviour</MudText>
+                </TitleContent>
+                <ChildContent>
+                    <MudText Class="mud-text-secondary mb-5">
+                        These settings control how JIM processes imports, independently of connector-specific settings above.
+                    </MudText>
+                    <MudSelect T="UnresolvedReferenceHandling"
+                               Label="Unresolved Reference Handling"
+                               @bind-Value="ConnectedSystem.UnresolvedReferenceHandling"
+                               HelperText="Controls what happens when an imported reference value (for example a group member) cannot be resolved to a Connected System Object, commonly because the referenced object is outside the configured Container Scope."
+                               Variant="Variant.Outlined">
+                        <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Error">Error (default): record an error on each affected object</MudSelectItem>
+                        <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Warn">Warn: complete with a warning summary</MudSelectItem>
+                        <MudSelectItem T="UnresolvedReferenceHandling" Value="UnresolvedReferenceHandling.Ignore">Ignore: log only</MudSelectItem>
+                    </MudSelect>
+                </ChildContent>
+            </MudExpansionPanel>
+        }
+
         @if (ConnectedSystem.ConnectorDefinition is { SupportsExport: true, SupportsParallelExport: true })
         {
             <MudExpansionPanel Expanded="@GetCategoryExpanded("Export Performance")"
@@ -173,7 +198,7 @@
     private MudForm? _settingsForm;
 
     /// <summary>
-    /// Per-category (and Export Performance) expanded state for the settings accordion.
+    /// Per-category (and Import Behaviour / Export Performance) expanded state for the settings accordion.
     /// Not persisted; defaults to expanded so settings remain visible without extra clicks.
     /// </summary>
     private readonly Dictionary<string, bool> _categoryExpandedStates = new();
