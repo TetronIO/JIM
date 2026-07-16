@@ -1,8 +1,9 @@
 # Service Name and Service ID — Design
 
-**Issue:** [#583](https://github.com/TetronIO/JIM/issues/583)
-**Milestone:** v0.9-STABILISATION
-**Date:** 2026-04-18
+- **Status:** Done
+- **Issue:** [#583](https://github.com/TetronIO/JIM/issues/583)
+- **Milestone:** v0.9-STABILISATION
+- **Date:** 2026-04-18
 
 ## Problem
 
