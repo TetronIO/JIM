@@ -25,6 +25,13 @@ public class ConnectedSystemDetailDto
     public int? MaxExportParallelism { get; set; }
 
     /// <summary>
+    /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
+    /// is treated. Default is Error (current behaviour); Warn downgrades to an Activity warning; Ignore suppresses
+    /// both the per-object error and the Activity warning while still logging the occurrence.
+    /// </summary>
+    public UnresolvedReferenceHandling UnresolvedReferenceHandling { get; set; }
+
+    /// <summary>
     /// Creates a detailed DTO from a ConnectedSystem entity.
     /// </summary>
     /// <param name="entity">The Connected System entity.</param>
@@ -48,6 +55,7 @@ public class ConnectedSystemDetailDto
             Status = entity.Status,
             SettingValuesValid = entity.SettingValuesValid,
             MaxExportParallelism = entity.MaxExportParallelism,
+            UnresolvedReferenceHandling = entity.UnresolvedReferenceHandling,
             Connector = new ConnectorReferenceDto
             {
                 Id = entity.ConnectorDefinition?.Id ?? 0,

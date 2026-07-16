@@ -125,14 +125,14 @@ public class ImportUnresolvedReferenceHandlingTests
             "Expected the default Connected System setting to be Error.");
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await importProcessor.PerformImportAsync();
 
         var errorItem = activity.RunProfileExecutionItems.FirstOrDefault(item => item.ErrorType == ActivityRunProfileExecutionItemErrorType.UnresolvedReference);
         Assert.That(errorItem, Is.Not.Null, "Expected an error item for the unresolved reference.");
         Assert.That(errorItem!.ErrorMessage, Does.Contain(unresolvedMemberRef), "Expected the error message to mention the unresolved reference value.");
-        Assert.That(errorItem.ErrorMessage, Does.Contain("Container Scope"), "Expected the existing error message text to be preserved.");
+        Assert.That(errorItem!.ErrorMessage, Does.Contain("Container Scope"), "Expected the existing error message text to be preserved.");
         Assert.That(activity.WarningMessage, Is.Null.Or.Empty, "Error mode must not set the Activity warning message.");
     }
 
@@ -152,7 +152,7 @@ public class ImportUnresolvedReferenceHandlingTests
         connectedSystem!.UnresolvedReferenceHandling = UnresolvedReferenceHandling.Warn;
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await importProcessor.PerformImportAsync();
 
@@ -184,7 +184,7 @@ public class ImportUnresolvedReferenceHandlingTests
         var activity = ActivitiesData.First();
         activity.WarningMessage = existingConnectorWarning;
 
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await importProcessor.PerformImportAsync();
 
@@ -210,7 +210,7 @@ public class ImportUnresolvedReferenceHandlingTests
         connectedSystem!.UnresolvedReferenceHandling = UnresolvedReferenceHandling.Ignore;
 
         var activity = ActivitiesData.First();
-        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem.Id && q.RunType == ConnectedSystemRunType.FullImport);
+        var runProfile = ConnectedSystemRunProfilesData.Single(q => q.ConnectedSystemId == connectedSystem!.Id && q.RunType == ConnectedSystemRunType.FullImport);
         var importProcessor = new SyncImportTaskProcessor(Jim, SyncRepo, new SyncServer(Jim), new JIM.Application.Servers.SyncEngine(), mockFileConnector, connectedSystem, runProfile, TestUtilities.CreateTestWorkerTask(activity, InitiatedBy), new CancellationTokenSource());
         await importProcessor.PerformImportAsync();
 

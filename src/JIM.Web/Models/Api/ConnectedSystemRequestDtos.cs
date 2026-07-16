@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System.ComponentModel.DataAnnotations;
+using JIM.Models.Staging;
 
 namespace JIM.Web.Models.Api;
 
@@ -64,6 +65,12 @@ public class UpdateConnectedSystemRequest
     /// </summary>
     [Range(1, 16)]
     public int? MaxExportParallelism { get; set; }
+
+    /// <summary>
+    /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
+    /// is treated: Error (default), Warn, or Ignore. Null or omitted leaves the current value unchanged.
+    /// </summary>
+    public UnresolvedReferenceHandling? UnresolvedReferenceHandling { get; set; }
 
     /// <summary>
     /// An optional reason for the change, recorded against this Connected System's change history.
