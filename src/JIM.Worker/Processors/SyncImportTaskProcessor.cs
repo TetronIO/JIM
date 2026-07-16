@@ -2374,6 +2374,10 @@ public class SyncImportTaskProcessor
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
         var processedCount = 0;
 
+        // Read once, not per item: how this Connected System wants unresolved references reported.
+        var unresolvedReferenceHandling = _connectedSystem.UnresolvedReferenceHandling;
+        var unresolvedReferenceCount = 0;
+
         // Build RPEI lookup dictionary for O(1) error reporting instead of O(N) linear scans
         var rpeiLookup = new Dictionary<ConnectedSystemObject, ActivityRunProfileExecutionItem>();
         foreach (var rpei in _activityRunProfileExecutionItems)
@@ -2507,20 +2511,55 @@ public class SyncImportTaskProcessor
                 else
                 {
                     // reference not found. referenced object probably out of container scope!
-                    // todo (#873): make it a per-Connected System setting whether to raise an error, or ignore. sometimes this is desirable.
-                    rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
-                    if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
-                    {
-                        activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {attrValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
-                        activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
-                    }
-                    else
-                    {
-                        Log.Warning($"ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {cso.Id}, unresolved reference: {attrValue.UnresolvedReferenceValue}");
-                    }
+                    // how this is reported (error, warning or silently logged) is a per-Connected System setting.
+                    unresolvedReferenceCount++;
 
-                    Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {attrValue.UnresolvedReferenceValue}");
+                    switch (unresolvedReferenceHandling)
+                    {
+                        case UnresolvedReferenceHandling.Error:
+                            rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
+                            if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
+                            {
+                                activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {attrValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
+                                activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
+                            }
+                            else
+                            {
+                                Log.Warning($"ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {cso.Id}, unresolved reference: {attrValue.UnresolvedReferenceValue}");
+                            }
+
+                            Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {attrValue.UnresolvedReferenceValue}");
+                            break;
+
+                        case UnresolvedReferenceHandling.Warn:
+                            // Run Profile Execution Item is deliberately left un-errored; the Activity picks up a
+                            // summary warning after the loop instead (see below).
+                            Log.Warning("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. The referenced object may be outside the configured Container Scope.",
+                                attrValue.UnresolvedReferenceValue, cso.Id);
+                            break;
+
+                        case UnresolvedReferenceHandling.Ignore:
+                        default:
+                            Log.Debug("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. Ignored per Connected System setting.",
+                                attrValue.UnresolvedReferenceValue, cso.Id);
+                            break;
+                    }
                 }
+            }
+        }
+
+        // Summary statistics: always logged when references were left unresolved, regardless of handling mode.
+        if (unresolvedReferenceCount > 0)
+        {
+            Log.Information("ResolveReferencesAsync: {Count} reference value(s) could not be resolved to Connected System Objects (handling: {UnresolvedReferenceHandling}).",
+                unresolvedReferenceCount, unresolvedReferenceHandling);
+
+            if (unresolvedReferenceHandling == UnresolvedReferenceHandling.Warn)
+            {
+                var warningSummary = $"{unresolvedReferenceCount} reference value(s) could not be resolved to Connected System Objects. The referenced objects may be outside the configured Container Scope. View the affected Connected System Objects for details.";
+                _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
+                    ? warningSummary
+                    : $"{_activity.WarningMessage}\n{warningSummary}";
             }
         }
 
