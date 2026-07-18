@@ -9,15 +9,22 @@
     },
     "cSpell.words": [
         "Blazor",
+        "CIFS",
+        "dialog",
         "Dockerfiles",
+        "healthcheck",
+        "isready",
         "jsmith",
+        "jsonlog",
         "Junctional",
+        "NVME",
         "Obsoletion",
         "RPEIs",
         "SCIM",
         "secretless",
         "serviceaccount",
         "SPIFFE",
-        "Tetron"
+        "Tetron",
+        "tmpfs"
     ]
 }
