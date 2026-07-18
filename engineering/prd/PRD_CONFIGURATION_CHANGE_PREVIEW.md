@@ -86,7 +86,8 @@ This PRD defines that framework. The design is deliberately **UX-first**: the ar
 ### Non-Functional Requirements
 
 - Preview generation MUST NOT block or degrade JIM.Web for other users; anything beyond a per-adapter cost threshold dispatches to JIM.Worker
-- Must operate at customer scale (100K+ objects): count queries as set-based SQL, never object-at-a-time materialisation; object-level analysis for very large populations may use sampling or capped top-N strategies, always labelled as such in the UI (per FR4)
+- Must operate at customer scale (100K+ objects): count queries as set-based SQL, never object-at-a-time materialisation
+- **Large previews are an informed choice, never a silent limit (decided Jul 2026):** before generation, the framework estimates the object-level result-set size; above a threshold it recommends a capped/sampled data set as the default, stating the estimated row count and disk consumption, and the administrator may choose the full data set instead. Grouped summaries are always computed exactly either way; only drill-down completeness is affected by capping, and sampled or capped results are always labelled as such in the UI (per FR4)
 - No new external dependencies; air-gap deployable (LISTEN/NOTIFY and the Blazor circuit are already in-stack)
 - Preview is read-only by construction: adapters and the engine MUST NOT mutate synchronisation state; enforced by the framework running analysis on read-only paths
 - Preview requests are authorised the same as the configuration change itself; a user who cannot change the config cannot preview it (previews reveal data about the population)
@@ -121,19 +122,26 @@ The core scenario governs the whole framework; the rest exercise specific surfac
 **Then** I see grouped patterns such as "3,700 objects: email domain changes from @contoso.example to @fabrikam.example" and "500 objects: value becomes empty", rather than a raw list of 4,200 rows
 **And** drilling into the "value becomes empty" group shows those 500 objects as a paginated, searchable list.
 
-### Scenario 5: Long-running preview via the Worker, invisible dispatch
+### Scenario 5: Very large preview offers a capped default, admin may go full
+
+**Given** a proposed matching rule change whose estimated object-level result set is 1M objects (roughly 2 GB of preview data)
+**When** I request the preview
+**Then** before generation begins I am told the estimated size and offered a capped/sampled data set as the recommended default, with the option to generate the full data set instead
+**And** whichever I choose, the grouped change summary is exact; if I chose the cap, drill-down lists are labelled as sampled.
+
+### Scenario 6: Long-running preview via the Worker, invisible dispatch
 
 **Given** a preview whose affected population exceeds the in-process threshold
 **When** generation is dispatched to JIM.Worker
 **Then** my preview panel behaves identically to a synchronous preview (progress, staged arrival, cancel), the work is visible on the Operations page as an Activity, and other users' UI performance is unaffected.
 
-### Scenario 6: Preview retained for audit
+### Scenario 7: Preview retained for audit
 
 **Given** I generated a preview showing 312 objects would become deletion-eligible and applied the change anyway
 **When** an auditor later reviews the change
 **Then** the apply Activity references the preview Activity, and the preview's summary and object-level results are retrievable as they were at preview time.
 
-### Scenario 7: Surface without an adapter still protects
+### Scenario 8: Surface without an adapter still protects
 
 **Given** a sync-affecting surface whose preview adapter is not yet built
 **When** I save a change on it
@@ -175,7 +183,7 @@ The core scenario governs the whole framework; the rest exercise specific surfac
 
 ## Open Questions
 
-1. Sampling strategy specifics for very large populations at stage 4 (top-N per group? fixed sample with confidence labelling?); propose in the implementation plan
+1. Sampling and persistence-cap specifics for very large populations at stage 4 (the threshold that triggers the capped-default recommendation, per-group sample sizes, top-N strategies); the behaviour is decided (informed choice, cap recommended as default, full data set always available; see Scenario 5 and the NFRs); the mechanics are proposed in the implementation plan
 2. ~~Housekeeping/retention period for preview result rows~~ **DECIDED (Jul 2026): governed by the existing RPEI retention period control; no new setting** (see FR14)
 3. Cost-estimation heuristic per adapter (population count thresholds? measured elapsed-time feedback?); propose in the implementation plan
 4. ~~Does the interim messaging (FR17) ship as its own small issue ahead of the framework?~~ **DECIDED (Jul 2026): yes; its own small issue, delivered ahead of the framework**
@@ -191,6 +199,6 @@ The core scenario governs the whole framework; the rest exercise specific surfac
 ## Additional Context
 
 - Decision record (Jun 2026, on #827): framework-first, holistic; per-surface previews must not be built independently
-- Decision record (Jul 2026, this PRD): UX-first framing; progressive disclosure stages replace administrator-facing "tiers"; dispatch is invisible; deterministic grouping in v1 with a curated pattern detector registry as fast-follow; results persisted as queryable rows for pagination/filter/group-by and audit; notification abstraction polling-first in #307's decided shape; preview result retention governed by the existing RPEI retention period control; interim apply-time messaging delivered as its own small issue ahead of the framework
+- Decision record (Jul 2026, this PRD): UX-first framing; progressive disclosure stages replace administrator-facing "tiers"; dispatch is invisible; deterministic grouping in v1 with a curated pattern detector registry as fast-follow; results persisted as queryable rows for pagination/filter/group-by and audit; notification abstraction polling-first in #307's decided shape; preview result retention governed by the existing RPEI retention period control; interim apply-time messaging delivered as its own small issue ahead of the framework; very large previews offer a capped/sampled data set as an informed-choice default (estimated size stated up-front) rather than any hard limit, with exact summaries either way
 - Prior art precedents: #465 (validation stage), #135 (count stage), #134's proposed detailed analysis and #288 (object-level stage)
 - MIM 2016 operator experience motivating the summarisation requirements: spot-checking raw change lists was the only option; grouped/pattern summaries are the assurance capability that was always missing
