@@ -2432,6 +2432,28 @@ if ($DirectoryType -eq "OpenLDAP") {
         }
     }
 
+    # Scale the OpenLDAP container's memory limit with template size. back-mdb has
+    # no internal entry cache; it relies entirely on the OS page cache over its
+    # memory-mapped databases, so the limit must accommodate the working set (both
+    # suffixes plus the hot accesslog tail) or large-template runs thrash: the
+    # Scale500k25kGroups big-group export measurably degraded at the old fixed 2G
+    # cap with slapd pinned at 1.94G. Unlike the Samba scaling above, this applies
+    # regardless of snapshots; the memory pressure comes at run time (import and
+    # export), not during population. Limits are caps, not reservations, so the
+    # low default keeps small templates safe on modest dev machines while costing
+    # scale runs nothing.
+    $env:OPENLDAP_PRIMARY_MEMORY = switch -Wildcard ($Template) {
+        "Scale1m*"   { "12G"; break }
+        "Scale750k*" { "10G"; break }
+        "Scale500k*" { "8G"; break }
+        "Scale200k*" { "4G"; break }
+        "Scale100k*" { "3G"; break }
+        default      { "2G" }
+    }
+    if ($env:OPENLDAP_PRIMARY_MEMORY -ne "2G") {
+        Write-Host "  OpenLDAP memory limit scaled to $($env:OPENLDAP_PRIMARY_MEMORY) for $Template template" -ForegroundColor Gray
+    }
+
     Write-Step "Starting OpenLDAP (Primary)..."
     $openldapResult = docker compose -f test/integration/docker/docker-compose.integration-tests.yml --profile openldap up -d 2>&1
     if ($LASTEXITCODE -ne 0) {

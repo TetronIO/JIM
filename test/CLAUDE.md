@@ -244,6 +244,20 @@ OpenLDAP's MDB databases have a fixed maximum map size (`olcDbMaxSize`). A full 
 
 Both are configured in `test/integration/docker/openldap/scripts/01-add-second-suffix.sh` (fresh builds) and reconciled at every container start by `start-openldap.sh` via offline `slapmodify`, so snapshot images baked with older, smaller values converge automatically. Current settings: **accesslog 128 GB, main databases (Yellowstone/Glitterband) 32 GB each**, sized for the full long-tail template range up to Scale1m60kGroups (measured: one ~210K-object write cycle consumes ~8 GB of accesslog; 200K users + 10K groups consume ~634 MB of main database). MDB maps are sparse: disk is only consumed as data is written, so the large caps cost nothing on small templates or small machines. Keep the two scripts' values in sync when changing them.
 
+**OpenLDAP sorted multi-valued attributes (`sortvals member`):**
+
+The test image enables `olcSortVals: member` (on `olcDatabase={-1}frontend,cn=config`, applied by `01-add-second-suffix.sh` at image build). Without it, slapd duplicate-checks each added member against every existing value with a linear scan, so appending members to a large group costs O(current size) per modify and big-group exports degrade quadratically (measured on Scale500k25kGroups: ~0.02s per 100-member modify on a small entry, rising to ~1.3s at 350K members). `sortvals` stores the values sorted, making the check a binary search. Customer-facing guidance for this lives in `docs/connectors/jim-ldap-connector.md` (Directory Tuning for Large Groups).
+
+Unlike the map sizes above, `sortvals` is deliberately **NOT** reconciled by `start-openldap.sh`: it only affects entries written while active, and applying it to snapshot data stored unsorted breaks value lookups (binary search over unsorted values, causing silent duplicate misdetection and failing value deletes). The init script is part of the OpenLDAP snapshot content hash, so pre-sortvals snapshots invalidate and rebuild automatically with sorted data. Never "fix" this by adding a reconcile.
+
+**OpenLDAP accesslog `logold` write amplification (known cost, do not remove):**
+
+Both suffixes' accesslog overlays set `olcAccessLogOld: (objectClass=*)`, which logs the **old values of every modified attribute** into the accesslog. On large-group membership modifies this writes the entire pre-modification member list per operation (a 500K-member group generates tens of GB of accesslog over a full export; measured 93 GB at Scale500k25kGroups with batch size 100). It cannot be removed yet: JIM's delta import types deleted objects from `reqOld` (`BuildDeleteImportObjectFromAccesslog` in `LdapConnectorImport.cs` returns null without it, silently dropping the delete), and slapo-accesslog has no per-operation-type `logold` control. The larger Modify Batch Size default (1000) cuts the amplification ~10x. Removing JIM's `reqOld` dependency (resolving the deleted object's type from the existing CSO by entryUUID/DN instead) is the structural fix that would let both test images and customers drop `logold`.
+
+**OpenLDAP container memory scales per template:**
+
+`Run-IntegrationTests.ps1` sets `OPENLDAP_PRIMARY_MEMORY` from the template size before compose up (2G default; 3G at Scale100k, 4G at Scale200k, 8G at Scale500k, 10G at Scale750k, 12G at Scale1m). back-mdb has no internal entry cache; it relies wholly on the OS page cache over its memory-mapped databases, so the cap must fit the working set (both suffixes plus the hot accesslog tail) or scale runs thrash. Limits are caps, not reservations: small templates on modest dev machines are unaffected.
+
 **OpenLDAP write durability: tests run ARTIFICIALLY FAST by default (IMPORTANT):**
 
 The OpenLDAP integration containers default to relaxed MDB durability (`olcDbEnvFlags: nosync` on all three databases), skipping the per-transaction fsync. Measured effect: ~34 adds/sec durable vs ~308 adds/sec relaxed on the same host. Test data is disposable, so this is the right default for iteration speed, especially at the large templates where the initial export writes 200K+ entries.

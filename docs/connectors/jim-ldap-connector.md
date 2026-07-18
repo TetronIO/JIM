@@ -108,8 +108,27 @@ JIM automatically detects the directory type during schema discovery by inspecti
 | Delete Behaviour | How to handle object deletions: Delete (remove the object) or Disable (set the disable attribute). | `Delete` |
 | Disable Attribute | Attribute to set when disabling objects. Only shown, and required, when Delete Behaviour is Disable. | `userAccountControl` |
 | Export Concurrency | Maximum number of concurrent LDAP operations during export. Recommended range: 2--8. | `4` |
-| Modify Batch Size | Maximum number of values per multi-valued attribute modification in a single LDAP request. Lower values improve compatibility; higher values improve throughput. Recommended range: 50--500. | `100` |
+| Modify Batch Size | Maximum number of values per multi-valued attribute modification in a single LDAP request. Lower values improve compatibility; higher values improve throughput, especially for very large groups. Recommended range: 100--2000. | `1000` |
 | Group Placeholder Member DN | Placeholder DN used for group classes that require at least one member (e.g. groupOfNames). Automatically filtered during import. Only applies to non-AD directories. | `cn=placeholder` |
+
+### Directory Tuning for Large Groups (OpenLDAP)
+
+When provisioning groups with very large memberships (tens of thousands of members and up) to OpenLDAP, the directory's own write path becomes the bottleneck: each membership modification makes slapd duplicate-check the new values against every existing value with a linear scan, so the cost of appending members grows with the group's current size.
+
+OpenLDAP's `sortvals` directive addresses this by storing the values of the listed attributes in sorted order, turning the duplicate check into a binary search:
+
+```text
+# slapd.conf
+sortvals member
+
+# or cn=config (on the frontend database entry)
+dn: olcDatabase={-1}frontend,cn=config
+changetype: modify
+add: olcSortVals
+olcSortVals: member
+```
+
+JIM's own large-scale integration testing (up to 1 million users and 500,000-member groups) runs OpenLDAP with `sortvals member` enabled, and we recommend it for any deployment where large group memberships are provisioned. Note that `sortvals` only affects entries written after it is enabled; enable it before loading data, or reload existing data (`slapcat`/`slapadd`) afterwards. See the [OpenLDAP tuning guide](https://www.openldap.org/doc/admin26/tuning.html) and the `slapd.conf(5)` man page for details.
 
 ## Security Considerations
 
