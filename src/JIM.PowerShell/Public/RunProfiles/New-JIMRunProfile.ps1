@@ -117,18 +117,12 @@ function New-JIMRunProfile {
         if ($PSCmdlet.ShouldProcess($Name, "Create Run Profile")) {
             Write-Verbose "Creating Run Profile: $Name for Connected System $ConnectedSystemId"
 
-            # Map RunType string to API enum value
-            $runTypeValue = switch ($RunType) {
-                'FullImport' { 1 }
-                'DeltaImport' { 2 }
-                'FullSynchronisation' { 3 }
-                'DeltaSynchronisation' { 4 }
-                'Export' { 5 }
-            }
-
             $body = @{
                 name = $Name
-                runType = $runTypeValue
+                # Send the enum as its string name; -RunType is ValidateSet-constrained
+                # to the exact ConnectedSystemRunType member names. The API rejects numeric
+                # ordinals (JsonStringEnumConverter allowIntegerValues:false, PR #1060).
+                runType = $RunType
                 pageSize = $PageSize
             }
 

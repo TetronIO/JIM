@@ -122,14 +122,10 @@ function Get-JIMScheduleExecution {
                 }
 
                 if ($Status) {
-                    $statusValue = switch ($Status) {
-                        'Queued' { 0 }
-                        'InProgress' { 1 }
-                        'Completed' { 2 }
-                        'Failed' { 3 }
-                        'Cancelled' { 4 }
-                    }
-                    $queryParams += "status=$statusValue"
+                    # Send the enum as its string name; -Status is ValidateSet-constrained
+                    # to the exact ScheduleExecutionStatus member names. Keeps the query
+                    # string aligned with the API's string-only enum contract (PR #1060).
+                    $queryParams += "status=$Status"
                 }
 
                 $allExecutions = @()
