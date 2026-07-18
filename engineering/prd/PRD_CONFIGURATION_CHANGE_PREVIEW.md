@@ -72,7 +72,7 @@ This PRD defines that framework. The design is deliberately **UX-first**: the ar
 
 **Retention and audit**
 
-14. Preview results are retained, attached to the preview Activity, so that "previewed at 14:02, applied at 14:05" is reconstructable, including what the preview reported. Retention is subject to the same housekeeping policy as other Activity data.
+14. Preview results are retained, attached to the preview Activity, so that "previewed at 14:02, applied at 14:05" is reconstructable, including what the preview reported. Retention is governed by the **existing RPEI retention period control** (decided Jul 2026); no new retention setting is introduced.
 15. When a previewed change is applied, the apply Activity references the preview Activity (if one exists), so audit can distinguish "previewed then applied" from "applied blind".
 
 **Progress notification**
@@ -176,21 +176,21 @@ The core scenario governs the whole framework; the rest exercise specific surfac
 ## Open Questions
 
 1. Sampling strategy specifics for very large populations at stage 4 (top-N per group? fixed sample with confidence labelling?); propose in the implementation plan
-2. Housekeeping/retention period for preview result rows (align with RPEI retention? separate, shorter default?)
+2. ~~Housekeeping/retention period for preview result rows~~ **DECIDED (Jul 2026): governed by the existing RPEI retention period control; no new setting** (see FR14)
 3. Cost-estimation heuristic per adapter (population count thresholds? measured elapsed-time feedback?); propose in the implementation plan
-4. Does the interim messaging (FR17) ship as its own small issue ahead of the framework, per #827's "consistent apply-time messaging" section? (Recommended: yes)
+4. ~~Does the interim messaging (FR17) ship as its own small issue ahead of the framework?~~ **DECIDED (Jul 2026): yes; its own small issue, delivered ahead of the framework**
 
 ## Acceptance Criteria
 
 - [ ] Framework design agreed (this PRD reviewed and approved)
 - [ ] Implementation plan generated from this PRD (adapter contract, result schema, dispatch, notification abstraction, UI shell) and approved
 - [ ] Per-surface adapter issues split out in severity order: G5 and G3-destructive first, then G4, then G1/G2, then G6 and remaining toggles; #204, #134, #421, #91 mode 2 re-scoped as adapter issues
-- [ ] Interim apply-time messaging issue created (or folded into an early phase) covering all surfaces awaiting adapters
+- [ ] Interim apply-time messaging issue created as its own small issue, delivered ahead of the framework, covering all surfaces awaiting adapters
 - [ ] #307/#202 alignment recorded on those issues (notification abstraction shape, upgrade path)
 
 ## Additional Context
 
 - Decision record (Jun 2026, on #827): framework-first, holistic; per-surface previews must not be built independently
-- Decision record (Jul 2026, this PRD): UX-first framing; progressive disclosure stages replace administrator-facing "tiers"; dispatch is invisible; deterministic grouping in v1 with a curated pattern detector registry as fast-follow; results persisted as queryable rows for pagination/filter/group-by and audit; notification abstraction polling-first in #307's decided shape
+- Decision record (Jul 2026, this PRD): UX-first framing; progressive disclosure stages replace administrator-facing "tiers"; dispatch is invisible; deterministic grouping in v1 with a curated pattern detector registry as fast-follow; results persisted as queryable rows for pagination/filter/group-by and audit; notification abstraction polling-first in #307's decided shape; preview result retention governed by the existing RPEI retention period control; interim apply-time messaging delivered as its own small issue ahead of the framework
 - Prior art precedents: #465 (validation stage), #135 (count stage), #134's proposed detailed analysis and #288 (object-level stage)
 - MIM 2016 operator experience motivating the summarisation requirements: spot-checking raw change lists was the only option; grouped/pattern summaries are the assurance capability that was always missing
