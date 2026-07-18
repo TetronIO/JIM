@@ -144,4 +144,99 @@ Describe 'Request enum serialisation (string names, not numeric ordinals)' {
             }
         }
     }
+
+    Context 'New-JIMMetaverseObjectType' {
+
+        It 'Sends deletionRule as the string enum name' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMMetaverseObjectType -Name 'Test' -PluralName 'Tests' -DeletionRule WhenLastConnectorDisconnected -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.deletionRule -is [string] -and $Body.deletionRule -eq 'WhenLastConnectorDisconnected'
+                }
+            }
+        }
+    }
+
+    Context 'Set-JIMMetaverseObjectType' {
+
+        It 'Sends deletionRule as the string enum name' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                Set-JIMMetaverseObjectType -Id 1 -DeletionRule WhenAuthoritativeSourceDisconnected -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -ParameterFilter {
+                    $Body -and $Body.ContainsKey('deletionRule') -and $Body.deletionRule -is [string] -and $Body.deletionRule -eq 'WhenAuthoritativeSourceDisconnected'
+                }
+            }
+        }
+    }
+
+    Context 'New-JIMMetaverseAttribute' {
+
+        It 'Sends attributePlurality as the string enum name' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMMetaverseAttribute -Name 'Test' -Type Text -AttributePlurality MultiValued -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.type -is [string] -and $Body.type -eq 'Text' -and
+                    $Body.attributePlurality -is [string] -and $Body.attributePlurality -eq 'MultiValued'
+                }
+            }
+        }
+
+        It "Normalises the 'Integer' alias to the enum member name 'Number'" {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMMetaverseAttribute -Name 'Test' -Type Integer -AttributePlurality SingleValued -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.type -is [string] -and $Body.type -eq 'Number'
+                }
+            }
+        }
+    }
+
+    Context 'Set-JIMMetaverseAttribute' {
+
+        It 'Sends type (alias-normalised) and attributePlurality as string enum names to the schema endpoint' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                # The schema change first GETs the current attribute (enums come back as names).
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Existing'; type = 'Text'; attributePlurality = 'SingleValued' } }
+
+                Set-JIMMetaverseAttribute -Id 1 -Type Integer -AttributePlurality MultiValued -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -like '*/schema' -and
+                    $Body.type -is [string] -and $Body.type -eq 'Number' -and
+                    $Body.attributePlurality -is [string] -and $Body.attributePlurality -eq 'MultiValued'
+                }
+            }
+        }
+
+        It 'Sends renderingHint as the string enum name' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Existing'; type = 'Text'; attributePlurality = 'SingleValued' } }
+
+                Set-JIMMetaverseAttribute -Id 1 -RenderingHint ChipSet -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -notlike '*/schema' -and
+                    $Body.renderingHint -is [string] -and $Body.renderingHint -eq 'ChipSet'
+                }
+            }
+        }
+    }
 }
