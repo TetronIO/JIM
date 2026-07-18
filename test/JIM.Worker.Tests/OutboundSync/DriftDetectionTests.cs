@@ -396,6 +396,129 @@ public class DriftDetectionTests
         Assert.That(result.DriftedAttributes[0].ActualValue, Is.EqualTo("Jane Doe"));
     }
 
+    /// <summary>
+    /// An Initial Export Only mapping (#223) leaves its target attribute unmanaged once the Connected
+    /// System Object is past provisioning, so a diverged value must not be flagged as drift.
+    /// </summary>
+    [Test]
+    public void EvaluateDrift_InitialExportOnlyMapping_DivergedValueIsNotDrift()
+    {
+        // Arrange
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = DisplayNameMvAttr,
+            AttributeId = DisplayNameMvAttr.Id,
+            StringValue = "John Doe"
+        });
+
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            Attribute = DisplayNameCsoAttr,
+            AttributeId = DisplayNameCsoAttr.Id,
+            StringValue = "Jane Doe" // Diverged from the MVO, but the attribute is unmanaged
+        });
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        var exportRule = CreateExportRule(enforceState: true);
+        exportRule.AttributeFlowRules[0].InitialExportOnly = true;
+
+        // Act
+        var result = Jim.DriftDetection.EvaluateDrift(
+            cso,
+            mvo,
+            new List<SyncRule> { exportRule },
+            null);
+
+        // Assert
+        Assert.That(result.HasDrift, Is.False,
+            "A diverged value on an Initial Export Only attribute must not be treated as drift");
+        Assert.That(result.DriftedAttributes, Is.Empty);
+    }
+
+    /// <summary>
+    /// Sibling mappings on the same rule stay drift-corrected when only one mapping is Initial Export
+    /// Only: the carve-out is per mapping, not per rule.
+    /// </summary>
+    [Test]
+    public void EvaluateDrift_MixedMappings_OnlyManagedAttributeIsFlagged()
+    {
+        // Arrange
+        var emailMvAttr = MvoUserType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.Email);
+        var mailCsoAttr = TargetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Mail.ToString());
+
+        var mvo = CreateTestMvo();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = DisplayNameMvAttr,
+            AttributeId = DisplayNameMvAttr.Id,
+            StringValue = "John Doe"
+        });
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = emailMvAttr,
+            AttributeId = emailMvAttr.Id,
+            StringValue = "john.doe@example.com"
+        });
+
+        var cso = CreateTestCso(mvo);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            Attribute = DisplayNameCsoAttr,
+            AttributeId = DisplayNameCsoAttr.Id,
+            StringValue = "Jane Doe" // Diverged, but unmanaged (Initial Export Only)
+        });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            ConnectedSystemObject = cso,
+            Attribute = mailCsoAttr,
+            AttributeId = mailCsoAttr.Id,
+            StringValue = "impostor@example.com" // Diverged and managed - genuine drift
+        });
+        mvo.ConnectedSystemObjects.Add(cso);
+
+        var exportRule = CreateExportRule(enforceState: true);
+        exportRule.AttributeFlowRules[0].InitialExportOnly = true;
+
+        var mailMapping = new SyncRuleMapping
+        {
+            Id = 1001,
+            TargetConnectedSystemAttribute = mailCsoAttr,
+            TargetConnectedSystemAttributeId = mailCsoAttr.Id
+        };
+        mailMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 10001,
+            MetaverseAttribute = emailMvAttr,
+            MetaverseAttributeId = emailMvAttr.Id
+        });
+        exportRule.AttributeFlowRules.Add(mailMapping);
+
+        // Act
+        var result = Jim.DriftDetection.EvaluateDrift(
+            cso,
+            mvo,
+            new List<SyncRule> { exportRule },
+            null);
+
+        // Assert
+        Assert.That(result.HasDrift, Is.True,
+            "Drift on the managed sibling mapping must still be detected");
+        Assert.That(result.DriftedAttributes, Has.Count.EqualTo(1),
+            "Only the managed mapping must be flagged; the Initial Export Only mapping is unmanaged");
+        Assert.That(result.DriftedAttributes[0].ExpectedValue, Is.EqualTo("john.doe@example.com"));
+        Assert.That(result.DriftedAttributes[0].ActualValue, Is.EqualTo("impostor@example.com"));
+    }
+
     [Test]
     public void EvaluateDrift_WhenEnforceStateFalse_SkipsRule()
     {

@@ -179,6 +179,22 @@ The transforms run in a fixed order: **trim, then collapse, then case normalisat
 
 When **Treat whitespace as no value** is switched off and a whitespace-only value is therefore stored, the portal flags it with a `(whitespace)` indicator rather than rendering a misleading blank cell, so administrators can tell a real-but-invisible value apart from an absent one.
 
+### Initial Export Only (outbound)
+
+Some attributes should be set once when JIM creates an object, then left alone: an initial password or API token, a one-time setup value, or any attribute the target system should own after provisioning. For **export** mappings, enabling **Initial Export Only** on a mapping does exactly that:
+
+- The attribute flows only when JIM **provisions** the object into the Connected System (the create export), and JIM retries until the initial export is confirmed.
+- Once the object is provisioned, the attribute becomes **unmanaged** on that Connected System Object: later Metaverse changes are not exported for it, and Drift Correction ([enforce state](#export-outbound)) leaves it alone, so the value can be changed freely in the Connected System.
+- Objects that **join** to pre-existing objects in the Connected System never receive the value; the external system already owns it.
+- Import mappings for the same attribute are unaffected, so the externally-owned value can still flow back into the metaverse if you map it inbound.
+
+Configure it per mapping in the Attribute Flow editor (the option appears for export Synchronisation Rules only), via `New-JIMSyncRuleMapping -InitialExportOnly` in PowerShell, or via the REST API. The Connector Space object page marks affected attributes with an **Unmanaged** indicator once the object is past provisioning.
+
+Two behaviours to be aware of:
+
+- The setting is honoured live: enabling it on an existing rule stops future exports of that attribute to already-provisioned objects, and disabling it resumes normal management (the next synchronisation and Drift Correction re-assert the Metaverse value).
+- If several export mappings target the same attribute for an object type, the attribute only becomes unmanaged when **every** such mapping is Initial Export Only; a single normally-managed mapping keeps it managed.
+
 ## Attribute Priority
 
 When more than one import rule maps to the same Metaverse Object attribute, **Attribute Priority** decides which contributor wins, so the result never depends on the order your synchronisations happen to run in. It is an inbound concern: it governs how values flow from Connected Systems into the metaverse, and does not change how the metaverse is exported back out.

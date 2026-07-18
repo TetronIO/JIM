@@ -148,6 +148,10 @@ public class ConfigurationSnapshotService
                 Add(children, "priority", Render(mapping.Priority), "Priority");
             Add(children, "nullIsValue", Render(mapping.NullIsValue), "Null is a value");
 
+            // Initial Export Only (#223) governs whether the attribute keeps being exported after provisioning,
+            // so a toggle must appear in the configuration change history.
+            Add(children, "initialExportOnly", Render(mapping.InitialExportOnly), "Initial Export Only");
+
             children.Add(BuildMappingSources(mapping.Sources));
             items.Add(ConfigurationSnapshotNode.ObjectNode("attributeFlowRule", children, "Attribute Flow", mapping.Id));
         }

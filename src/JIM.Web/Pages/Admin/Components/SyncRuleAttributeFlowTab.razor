@@ -171,6 +171,12 @@
                                 <ChildContent>@context.TargetConnectedSystemAttribute.Name</ChildContent>
                             </MudChip>
                         </MudTooltip>
+                        @if (context.InitialExportOnly)
+                        {
+                            <MudTooltip Text="Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Initial Export Only</MudChip>
+                            </MudTooltip>
+                        }
                     }
                 </MudTd>
                 <MudTd DataLabel="Created">
@@ -310,6 +316,13 @@
                                 </AvatarContent>
                                 <ChildContent>@attributeFlowRule.TargetConnectedSystemAttribute?.Name</ChildContent>
                             </MudChip>
+
+                            @if (attributeFlowRule.InitialExportOnly)
+                            {
+                                <MudTooltip Text="Initial Export Only: flows when JIM creates the object, then the attribute becomes unmanaged" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Initial Export Only</MudChip>
+                                </MudTooltip>
+                            }
                         </div>
                     }
                 </MudPaper>
@@ -449,6 +462,14 @@
                             </MudSelectItem>
                         }
                     </MudSelect>
+
+                    @* ─── Initial Export Only (#223) ─── *@
+                    <MudCheckBox T="bool" Dense="true" Class="mt-5"
+                        @bind-Value="_attributeFlowMapping.InitialExportOnly"
+                        Label="Initial Export Only" />
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Only flow this attribute when JIM creates the object in the Connected System. Once provisioned, the attribute becomes unmanaged: Metaverse changes are not exported and Drift Correction leaves it alone, allowing the Connected System to own the value. Objects that join to pre-existing Connected System objects never receive the value.
+                    </MudText>
                 }
             }
         }

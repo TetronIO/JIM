@@ -2429,7 +2429,9 @@ public class ExportEvaluationServer
             }
         }
 
-        foreach (var mapping in exportRule.AttributeFlowRules)
+        // Initial Export Only mappings (#223) flow solely during the provisioning (Create) export; for
+        // Update exports the target attribute is unmanaged by JIM and must be skipped before any evaluation.
+        foreach (var mapping in exportRule.AttributeFlowRules.Where(m => isCreateOperation || !m.InitialExportOnly))
         {
             // For export rules, the target is the CSO attribute
             if (mapping.TargetConnectedSystemAttribute == null)
