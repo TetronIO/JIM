@@ -1190,8 +1190,10 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId)
+    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null)
     {
+        // chunkSize only affects the PostgreSQL implementation's statement chunking; the in-memory
+        // load below is a single pass either way.
         var result = new Dictionary<Guid, PendingExport>();
         foreach (var pe in GetPendingExportsForSystem(connectedSystemId))
         {

@@ -409,10 +409,14 @@ public interface IConnectedSystemRepository
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId);
 
     /// <summary>
-    /// Loads all Pending Exports for a Connected System in a single bulk query, keyed by CSO ID.
-    /// More efficient than per-page loading for large-scale reconciliation.
+    /// Loads all Pending Exports for a Connected System, keyed by CSO ID. More efficient than
+    /// per-page loading for large-scale reconciliation. Loads in bounded keyset-paginated chunks
+    /// so each statement stays inside the database's statement timeout regardless of backlog size
+    /// (a Scale500k25kGroups run holds 525K Pending Exports with 9.8M attribute value changes).
     /// </summary>
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId);
+    /// <param name="connectedSystemId">The Connected System whose Pending Exports to load.</param>
+    /// <param name="chunkSize">Pending Exports loaded per statement; null uses the implementation default.</param>
+    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null);
 
     /// <summary>
     /// Gets all Connected System Objects that are joined to a specific Metaverse Object.

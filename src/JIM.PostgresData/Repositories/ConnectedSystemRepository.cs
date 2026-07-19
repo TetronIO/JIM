@@ -3662,15 +3662,87 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
 
-    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId)
+    /// <summary>
+    /// Pending Exports loaded per statement by <see cref="GetPendingExportsLightweightByConnectedSystemIdAsync"/>
+    /// when the caller does not specify a chunk size. Sized so each statement completes comfortably
+    /// inside the database's statement timeout: the Scale500k25kGroups confirming import (2026-07-19)
+    /// showed a single statement loading 525K Pending Exports joined to 9.8M attribute value changes
+    /// exceeds the 5 minute server-side statement_timeout.
+    /// </summary>
+    private const int PendingExportPreloadChunkSize = 50_000;
+
+    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null)
     {
-        // Single bulk query: load ALL Pending Exports for this Connected System in one round-trip.
-        // Far more efficient than per-page WHERE IN queries for large-scale reconciliation (100K+ CSOs).
-        var pendingExports = await Repository.Database.PendingExports
-            .Include(pe => pe.AttributeValueChanges)
-                .ThenInclude(avc => avc.Attribute)
-            .Where(pe => pe.ConnectedSystemId == connectedSystemId && pe.ConnectedSystemObjectId != null)
-            .ToListAsync();
+        // Loads ALL Pending Exports for this Connected System for whole-system reconciliation, in
+        // bounded keyset-paginated chunks rather than one statement: a single collection-Include
+        // query at Scale500k25kGroups joins 525K Pending Exports to 9.8M attribute value changes
+        // and is killed by the server-side statement_timeout. Each chunk issues small statements:
+        // a page of Pending Export headers (no Includes), then their value changes by
+        // PendingExportId, with Attribute navigations stitched from a shared lookup rather than a
+        // per-row Include (which under AsNoTracking would materialise a duplicate attribute
+        // instance per value change).
+        //
+        // AsNoTracking throughout: callers only read the results (the reconciliation pre-load runs
+        // on a background context that is disposed immediately, which already detached these
+        // entities), and the duplicate self-heal below deletes via raw SQL, not SaveChanges.
+        var effectiveChunkSize = chunkSize ?? PendingExportPreloadChunkSize;
+        if (effectiveChunkSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(chunkSize), chunkSize, "Chunk size must be positive.");
+
+        var pendingExports = new List<PendingExport>();
+        var attributesById = new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
+        var lastPendingExportId = Guid.Empty;
+
+        while (true)
+        {
+            var page = await Repository.Database.PendingExports
+                .AsNoTracking()
+                .Where(pe => pe.ConnectedSystemId == connectedSystemId && pe.ConnectedSystemObjectId != null &&
+                             pe.Id.CompareTo(lastPendingExportId) > 0)
+                .OrderBy(pe => pe.Id)
+                .Take(effectiveChunkSize)
+                .ToListAsync();
+
+            if (page.Count == 0)
+                break;
+            lastPendingExportId = page[^1].Id;
+
+            var pageIds = page.Select(pe => (Guid?)pe.Id).ToArray();
+            var valueChanges = await Repository.Database.PendingExportAttributeValueChanges
+                .AsNoTracking()
+                .Where(avc => pageIds.Contains(avc.PendingExportId))
+                .ToListAsync();
+
+            // Stitch Attribute navigations from a shared lookup, fetching only attributes not seen
+            // in earlier chunks (the same few attributes repeat across millions of value changes).
+            var missingAttributeIds = valueChanges
+                .Select(avc => avc.AttributeId)
+                .Distinct()
+                .Where(id => !attributesById.ContainsKey(id))
+                .ToList();
+            if (missingAttributeIds.Count > 0)
+            {
+                var fetchedAttributes = await Repository.Database.ConnectedSystemAttributes
+                    .AsNoTracking()
+                    .Where(a => missingAttributeIds.Contains(a.Id))
+                    .ToListAsync();
+                foreach (var attribute in fetchedAttributes)
+                    attributesById[attribute.Id] = attribute;
+            }
+
+            foreach (var valueChange in valueChanges.Where(avc => attributesById.ContainsKey(avc.AttributeId)))
+                valueChange.Attribute = attributesById[valueChange.AttributeId];
+
+            var valueChangesByPendingExportId = valueChanges
+                .Where(avc => avc.PendingExportId.HasValue)
+                .GroupBy(avc => avc.PendingExportId!.Value)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var pe in page.Where(pe => valueChangesByPendingExportId.ContainsKey(pe.Id)))
+                pe.AttributeValueChanges = valueChangesByPendingExportId[pe.Id];
+
+            pendingExports.AddRange(page);
+        }
 
         // Build dictionary mapping CSO ID to Pending Export, with duplicate self-healing.
         var result = new Dictionary<Guid, PendingExport>();
