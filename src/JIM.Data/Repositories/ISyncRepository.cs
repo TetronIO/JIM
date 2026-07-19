@@ -245,9 +245,13 @@ public interface ISyncRepository
     /// Resolves cross-batch reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues)
     /// that were nulled during COPY binary persistence to avoid FK violations. The DN string is preserved
     /// in StringValue and is matched against the secondary external ID attribute values of CSOs in the
-    /// same Connected System using case-insensitive comparison.
+    /// same Connected System using case-insensitive comparison. Resolutions are applied in bounded
+    /// batches so each statement stays inside the bulk command timeout regardless of backlog size
+    /// (a Scale500k25kGroups run accumulates millions of unresolved rows).
     /// </summary>
-    Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId);
+    /// <param name="connectedSystemId">The Connected System whose change records to resolve.</param>
+    /// <param name="batchSize">Rows updated per statement; null uses the implementation default.</param>
+    Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId, int? batchSize = null);
 
     /// <summary>
     /// Tactical fixup: populates ReferenceValueId on MetaverseObjectAttributeValues where the FK is

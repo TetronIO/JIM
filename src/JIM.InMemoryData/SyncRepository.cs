@@ -617,8 +617,10 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(resolved);
     }
 
-    public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId)
+    public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId, int? batchSize = null)
     {
+        // batchSize only affects the PostgreSQL implementation's statement chunking; the in-memory
+        // resolution below is a single pass either way.
         // Build a lookup of secondary external ID values → CSO for the Connected System
         var secondaryIdLookup = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
