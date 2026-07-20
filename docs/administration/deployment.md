@@ -32,13 +32,17 @@ These figures are for the **host machine** (or VM) running the Docker stack -- t
 | Up to 10,000 objects        | 4 GB             | 8 GB                 |
 | 10,000 -- 50,000 objects    | 8 GB             | 16 GB                |
 | 50,000 -- 100,000 objects   | 20 GB            | 24 GB                |
-| 100,000+ objects            | 24 GB            | 32 GB                |
+| 100,000 -- 250,000 objects  | 24 GB            | 32 GB                |
+| 250,000 -- 500,000 objects  | 48 GB            | 64 GB                |
 
 !!! info "Why large imports need significant memory"
     During a full import, the worker loads all imported objects with their attributes into memory before the save phase begins (for duplicate detection, deletion detection, and reference resolution). A full import of 100,000 objects with 20 attributes each produces a worker peak working set of approximately 2.3 GB. The database requires an additional 1--2 GB during bulk inserts. Combined with the web, scheduler, and operating system overhead, total system memory consumption reaches 8--10 GB for 100K objects.
 
 !!! note
     These requirements apply to the largest single full import. If you have multiple Connected Systems of 50K objects each but import them sequentially (not concurrently), size for 50K, not the sum. Delta imports process only changed objects and require significantly less memory.
+
+!!! info "Large group memberships drive memory more than object count"
+    A group is loaded with its full member list during processing, so a single large group can dominate the working set: a group with 495,000 members loads 495,000 reference values. JIM's largest validated scenario (a cross-domain synchronisation between two directories of roughly 500,000 objects each, with groups of up to 495,000 members) peaked at approximately **55 GB total host RAM** with the full stack, database, and both directories resident. Size toward the upper figure in the table when provisioning or synchronising very large groups; a deployment of the same object count with only small groups needs considerably less.
 
 ### Software Requirements
 
