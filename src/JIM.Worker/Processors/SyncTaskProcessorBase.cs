@@ -1425,6 +1425,19 @@ public abstract class SyncTaskProcessorBase
             // Aggregate no-net-change counts for statistics
             _totalCsoAlreadyCurrentCount += result.CsoAlreadyCurrentCount;
 
+            // Create error RPEIs for MVA->SVA export violations (#435): a multi-valued Metaverse source with more
+            // than one value targeting a single-valued Connected System attribute. No Pending Export is generated
+            // for that attribute; the object's other attributes still export.
+            foreach (var attributeFlowError in result.AttributeFlowErrors)
+            {
+                var errorRpei = _activity.PrepareRunProfileExecutionItem();
+                errorRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued;
+                errorRpei.ErrorMessage = $"Multi-valued Metaverse source attribute '{attributeFlowError.SourceAttributeName}' has {attributeFlowError.ValueCount} values " +
+                    $"but target attribute '{attributeFlowError.TargetAttributeName}' on '{_connectedSystem.Name}' is single-valued, so no value was exported for this attribute. " +
+                    "Map to a multi-valued attribute, reduce the source to a single value, or use an Expression to select one value.";
+                _activity.RunProfileExecutionItems.Add(errorRpei);
+            }
+
             // Collect provisioning CSOs for batch creation at end of page (must be created before Pending Exports)
             if (result.ProvisioningCsosToCreate.Count > 0)
             {
