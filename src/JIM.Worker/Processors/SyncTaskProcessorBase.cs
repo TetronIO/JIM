@@ -1168,27 +1168,29 @@ public abstract class SyncTaskProcessorBase
             // IMPORTANT: Skip reference attributes in the first pass. Reference attributes (e.g., group members)
             // may point to CSOs that haven't been processed yet (processed later in this page).
             // Reference attributes will be processed in a second pass after all CSOs have MVOs.
-            var attributeFlowWarnings = new List<AttributeFlowWarning>();
+            var attributeFlowErrors = new List<AttributeFlowError>();
             using (Diagnostics.Sync.StartSpan("ProcessInboundAttributeFlow"))
             {
                 foreach (var inboundSyncRule in inboundSyncRules)
                 {
                     // evaluate inbound Attribute Flow Rules, skipping reference attributes
-                    attributeFlowWarnings.AddRange(
+                    attributeFlowErrors.AddRange(
                         ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule, skipReferenceAttributes: true));
                 }
             }
 
-            // Create warning RPEIs for MVA->SVA truncations (#435)
-            foreach (var warning in attributeFlowWarnings)
+            // Create error RPEIs for MVA->SVA violations (#435): a multi-valued source with more than one value
+            // targeting a single-valued attribute. The attribute does not flow; the object's other attributes do.
+            foreach (var attributeFlowError in attributeFlowErrors)
             {
-                var warningRpei = _activity.PrepareRunProfileExecutionItem();
-                warningRpei.ConnectedSystemObject = connectedSystemObject;
-                warningRpei.ConnectedSystemObjectId = connectedSystemObject.Id;
-                warningRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.MultiValuedAttributeTruncated;
-                warningRpei.ErrorMessage = $"Multi-valued source attribute '{warning.SourceAttributeName}' has {warning.ValueCount} values " +
-                    $"but target attribute '{warning.TargetAttributeName}' is single-valued. First value used: '{warning.SelectedValue}'.";
-                _activity.RunProfileExecutionItems.Add(warningRpei);
+                var errorRpei = _activity.PrepareRunProfileExecutionItem();
+                errorRpei.ConnectedSystemObject = connectedSystemObject;
+                errorRpei.ConnectedSystemObjectId = connectedSystemObject.Id;
+                errorRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued;
+                errorRpei.ErrorMessage = $"Multi-valued source attribute '{attributeFlowError.SourceAttributeName}' has {attributeFlowError.ValueCount} values " +
+                    $"but target attribute '{attributeFlowError.TargetAttributeName}' is single-valued, so no value was flowed for this attribute. " +
+                    "Map to a multi-valued attribute, reduce the source to a single value, or use an Expression to select one value.";
+                _activity.RunProfileExecutionItems.Add(errorRpei);
             }
 
             // Queue this CSO for deferred reference attribute processing
@@ -1771,10 +1773,10 @@ public abstract class SyncTaskProcessorBase
 
             // Process ONLY reference attributes (onlyReferenceAttributes = true)
             // This is more efficient than re-processing all attributes
-            // Note: reference attributes are inherently multi-valued so MVA->SVA warnings are unlikely here
+            // Note: reference attributes are inherently multi-valued and out of scope for the MVA->SVA guard
             foreach (var syncRule in syncRules)
             {
-                // Warnings already captured in the first pass; reference-only pass does not repeat them
+                // Errors already captured in the first pass; reference-only pass does not repeat them
                 ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true);
             }
 
@@ -3521,7 +3523,7 @@ public abstract class SyncTaskProcessorBase
     /// <param name="onlyReferenceAttributes">If true, process ONLY reference attributes (for deferred second pass). Takes precedence over skipReferenceAttributes.</param>
     /// <exception cref="InvalidDataException">Can be thrown if a Synchronisation Rule Mapping Source is not properly formed.</exception>
     /// <exception cref="NotImplementedException">Will be thrown whilst Functions have not been implemented, but are being used in the Synchronisation Rule.</exception>
-    protected List<AttributeFlowWarning> ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false, bool isFinalReferencePass = false)
+    protected List<AttributeFlowError> ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false, bool isFinalReferencePass = false)
     {
         if (_objectTypes == null)
             throw new MissingMemberException("_objectTypes is null!");
