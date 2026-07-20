@@ -371,7 +371,7 @@
                         {
                             <MudSelect T="MetaverseAttribute" @bind-Value="_attributeFlowMappingSource.MetaverseAttribute"
                                 Label="Metaverse Attribute" Placeholder="Please select the source Metaverse attribute" Required="true"
-                                Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@(a => a?.Name ?? string.Empty)">
+                                Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@MetaverseAttributeLabel">
                                 @foreach (var metaverseAttribute in SyncRule.MetaverseObjectType.Attributes)
                                 {
                                     <MudSelectItem Value="@metaverseAttribute">@metaverseAttribute.Name <span
@@ -466,7 +466,7 @@
                 }
 
                 @* ─── Multi-Valued to Single-Valued warning (#435) ─── *@
-                @if (EditedMappingIsMvaToSva())
+                @if (DialogMappingIsMvaToSva())
                 {
                     <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-5">
                         @GetMvaToSvaWarningText()
@@ -591,12 +591,23 @@
     }
 
     /// <summary>
-    /// Whether the mapping currently being edited flows a Multi-Valued source attribute to a Single-Valued
-    /// target attribute (#435). Only Attribute mappings are considered (an Expression's plurality is unknown
-    /// at design time). On import, Reference sources are excluded because the runtime guard does not apply to
-    /// them; on export, every data type is in scope.
+    /// Label for a Metaverse Attribute in the source/target selects, including its data type and plurality
+    /// (for example "Account Name (Text : Single Valued)"), so the plurality is visible once selected. Matches
+    /// the format shown for Connected System attributes.
     /// </summary>
-    private bool EditedMappingIsMvaToSva()
+    private static string MetaverseAttributeLabel(MetaverseAttribute? attribute)
+        => attribute == null
+            ? string.Empty
+            : $"{attribute.Name} ({attribute.Type} : {attribute.AttributePlurality.ToString().SplitOnCapitalLetters()})";
+
+    /// <summary>
+    /// Whether the mapping currently being added or edited in the dialog flows a Multi-Valued source attribute
+    /// to a Single-Valued target attribute (#435). Add and edit share this dialog, so this covers both. Only
+    /// Attribute mappings are considered (an Expression's plurality is unknown at design time). On import,
+    /// Reference sources are excluded because the runtime guard does not apply to them; on export, every data
+    /// type is in scope.
+    /// </summary>
+    private bool DialogMappingIsMvaToSva()
     {
         if (_attributeFlowMappingSourceType != "Attribute" || _attributeFlowMapping == null || _attributeFlowMappingSource == null)
             return false;
