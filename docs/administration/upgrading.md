@@ -179,30 +179,35 @@ See [PowerShell Module](deployment.md#powershell-module) in the Deployment Guide
 
 ## ↩️ Rolling back
 
-Docker images are immutable, so reverting the application is fast: point `JIM_VERSION` back at the previous release and restart.
+Rolling back means putting **both** halves of JIM back to their pre-upgrade state: the application version, and the database it runs against. A release can upgrade the database, leaving the schema ahead of what the older version understands, so reverting the images alone is not a rollback. This is what the pre-upgrade backup is for.
 
-```bash
-# In .env
-JIM_VERSION=0.13.0
-```
-
-```bash
-docker compose up -d
-```
-
-The complication is the database. If the release upgraded the database, the schema is now ahead of the older application version:
-
-- **If the migrations are reversible**, roll the schema back to the migration that was active before the upgrade:
+1. **Stop the services:**
 
     ```bash
-    docker compose exec jim.web dotnet ef migrations list
-    docker compose exec jim.web dotnet ef database update <PreviousMigrationName>
+    docker compose stop jim.web jim.worker jim.scheduler
     ```
 
-- **If they are not reversible**, restore from your pre-upgrade backup instead: both the database *and* the encryption key set, from the same backup set. This is the scenario the pre-upgrade backup exists for.
+2. **Restore your pre-upgrade backup**, database and encryption keys together from the same backup set, following the restore procedure in [Backup & Disaster Recovery](backup-recovery.md#restoring).
+
+3. **Point `JIM_VERSION` back** at the previous release in `.env`:
+
+    ```bash
+    JIM_VERSION=0.13.0
+    ```
+
+4. **Start the services:**
+
+    ```bash
+    docker compose up -d
+    ```
+
+5. **Verify** as you would after an upgrade, per [Verifying the upgrade](#verifying), and re-enable your Schedules.
+
+!!! danger "Do not run an older JIM against an upgraded database"
+    Starting the previous version without restoring the database leaves the older application reading a schema built for the newer one. Always restore the backup first. If you have no usable pre-upgrade backup, do not roll back at all: stay on the new version and resolve the problem there, because an older JIM against a newer schema fails in subtle ways rather than refusing to start.
 
 !!! tip "Roll back promptly, or not at all"
-    A rollback discards everything JIM has written since the upgrade. If the upgraded instance has been synchronising for hours, restoring a pre-upgrade backup rolls the connector space back with it, and the next run will re-evaluate a large amount of drift. Decide quickly, and prefer fixing forwards once real synchronisation work has happened on the new version.
+    A rollback discards everything JIM has written since the upgrade. If the upgraded instance has been synchronising for hours, restoring the pre-upgrade backup rolls the connector space back with it, and the next run will re-evaluate a large amount of drift. Decide quickly, and prefer fixing forwards once real synchronisation work has happened on the new version.
 
 ## ✅ Upgrade checklist
 
