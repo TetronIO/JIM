@@ -81,7 +81,7 @@ This PRD defines that framework. The design is deliberately **UX-first**: the ar
 
 **Interim apply-time messaging (before adapters exist)**
 
-17. Until a surface has its adapter, it MUST apply the #91 mode 1 pattern: save-time acknowledgement of consequences, a recommendation to run a full synchronisation, and a "configuration changed since last full synchronisation" indicator. This is the uniform fallback UX and ships early, independent of the framework.
+17. Until a surface has its adapter, it MUST apply the #91 mode 1 pattern: save-time acknowledgement of consequences, a recommendation to run a full synchronisation, and a "configuration changed since last full synchronisation" indicator. Delivered as an **early phase of the framework implementation**, not a standalone pre-framework feature (decided Jul 2026): the acknowledgement component and the indicator are permanent parts of the end-state UX, so this phase builds them once and rolls them across surfaces; adapters then layer the preview on top.
 
 ### Non-Functional Requirements
 
@@ -175,10 +175,12 @@ The core scenario governs the whole framework; the rest exercise specific surfac
 
 ## Dependencies
 
-- #288 Sync Preview Mode: the evaluation engine consumed by stage 4 (object-level); stages 1 to 3 do not depend on it, so framework delivery is not blocked by #288
-- #363 `SyncOutcome` model (shipped): outcome vocabulary
-- #307 / #202: designated upgrade path for the notification abstraction's internals (not a dependency)
-- #91 mode 1 pattern: source of the interim apply-time messaging UX
+**Sequencing rule (decided Jul 2026): highlighted dependencies are implemented first.** Framework implementation begins with its true dependencies; no adapter starts before they are in place.
+
+- #288 Sync Preview Mode: the evaluation engine consumed by stage 4 (object-level). **The only true build dependency; implemented first**, before any adapter. Stages 1 to 3 do not depend on it, so framework plumbing can proceed in parallel with engine work
+- #363 `SyncOutcome` model (shipped): outcome vocabulary; nothing outstanding
+- #307 / #202: designated upgrade path for the notification abstraction's internals; **deliberately not blocking** (the polling-first abstraction exists precisely so this framework does not wait on them)
+- #91 mode 1 pattern: source of the apply-time messaging UX, delivered as an early framework phase (FR17); coordinate with the #91 plan so both consume the same shared component and indicator
 - Adapter candidates gated on this design: #204, #134/#809, #421, #91 mode 2, plus #827 gaps G1 to G6
 
 ## Open Questions
@@ -186,19 +188,19 @@ The core scenario governs the whole framework; the rest exercise specific surfac
 1. Sampling and persistence-cap specifics for very large populations at stage 4 (the threshold that triggers the capped-default recommendation, per-group sample sizes, top-N strategies); the behaviour is decided (informed choice, cap recommended as default, full data set always available; see Scenario 5 and the NFRs); the mechanics are proposed in the implementation plan
 2. ~~Housekeeping/retention period for preview result rows~~ **DECIDED (Jul 2026): governed by the existing RPEI retention period control; no new setting** (see FR14)
 3. Cost-estimation heuristic per adapter (population count thresholds? measured elapsed-time feedback?); propose in the implementation plan
-4. ~~Does the interim messaging (FR17) ship as its own small issue ahead of the framework?~~ **DECIDED (Jul 2026): yes; its own small issue, delivered ahead of the framework**
+4. ~~Does the interim messaging (FR17) ship as its own small issue ahead of the framework?~~ **DECIDED (Jul 2026, revised): no standalone issue; delivered as an early phase of the framework implementation plan.** No preview-adjacent work ships independently of the holistic capability; the acknowledgement component and changed-since indicator are permanent end-state components, built once in that phase
 
 ## Acceptance Criteria
 
 - [ ] Framework design agreed (this PRD reviewed and approved)
 - [ ] Implementation plan generated from this PRD (adapter contract, result schema, dispatch, notification abstraction, UI shell) and approved
 - [ ] Per-surface adapter issues split out in severity order: G5 and G3-destructive first, then G4, then G1/G2, then G6 and remaining toggles; #204, #134, #421, #91 mode 2 re-scoped as adapter issues
-- [ ] Interim apply-time messaging issue created as its own small issue, delivered ahead of the framework, covering all surfaces awaiting adapters
+- [ ] Interim apply-time messaging delivered as an early phase of the framework implementation plan, covering all surfaces awaiting adapters
 - [ ] #307/#202 alignment recorded on those issues (notification abstraction shape, upgrade path)
 
 ## Additional Context
 
 - Decision record (Jun 2026, on #827): framework-first, holistic; per-surface previews must not be built independently
-- Decision record (Jul 2026, this PRD): UX-first framing; progressive disclosure stages replace administrator-facing "tiers"; dispatch is invisible; deterministic grouping in v1 with a curated pattern detector registry as fast-follow; results persisted as queryable rows for pagination/filter/group-by and audit; notification abstraction polling-first in #307's decided shape; preview result retention governed by the existing RPEI retention period control; interim apply-time messaging delivered as its own small issue ahead of the framework; very large previews offer a capped/sampled data set as an informed-choice default (estimated size stated up-front) rather than any hard limit, with exact summaries either way
+- Decision record (Jul 2026, this PRD): UX-first framing; progressive disclosure stages replace administrator-facing "tiers"; dispatch is invisible; deterministic grouping in v1 with a curated pattern detector registry as fast-follow; results persisted as queryable rows for pagination/filter/group-by and audit; notification abstraction polling-first in #307's decided shape; preview result retention governed by the existing RPEI retention period control; interim apply-time messaging delivered as an early phase of the framework implementation (revised from an earlier standalone-issue decision; no preview-adjacent work ships independently of the holistic capability); dependencies implemented first (#288 engine core before any adapter); very large previews offer a capped/sampled data set as an informed-choice default (estimated size stated up-front) rather than any hard limit, with exact summaries either way
 - Prior art precedents: #465 (validation stage), #135 (count stage), #134's proposed detailed analysis and #288 (object-level stage)
 - Operator experience with traditional ILM solutions motivating the summarisation requirements: spot-checking raw change lists was the only option; grouped/pattern summaries are the assurance capability that was always missing
