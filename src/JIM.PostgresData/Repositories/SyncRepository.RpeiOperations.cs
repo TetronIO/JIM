@@ -60,6 +60,10 @@ public partial class SyncRepository
             .Select(o => o.ConnectedSystemObjectChange!)
             .ToList();
 
+        // Stat counter deltas for this batch (#1078): computed once from the in-memory RPEIs and
+        // outcomes, upserted alongside the batch so the Activity stats read stays O(counter rows).
+        var counterDeltas = ActivityStatCounterCalculator.CalculateRpeiInsertDeltas(rpeis, allOutcomes);
+
         // Use parallel writes for large batches; fall back to single connection for small ones.
         var useParallel = rpeis.Count >= parallelism * 50 && connectionString != null;
 
@@ -115,6 +119,11 @@ public partial class SyncRepository
                         await tx.CommitAsync();
                     });
             }
+
+            // Step 4: Upsert the batch's stat counter deltas on the main EF connection. Not
+            // transactional with the COPY partitions (which have already committed); a crash
+            // between the two leaves advisory drift that completion-time finalisation reconciles.
+            await ActivityStatCounterWriter.UpsertDeltasAsync(_context, counterDeltas);
         }
         else
         {
@@ -138,6 +147,8 @@ public partial class SyncRepository
 
                 if (allOutcomes.Count > 0)
                     await BulkInsertSyncOutcomesRawAsync(allOutcomes);
+
+                await ActivityStatCounterWriter.UpsertDeltasAsync(_context, counterDeltas);
 
                 if (transaction != null)
                     await transaction.CommitAsync();
@@ -426,9 +437,16 @@ public partial class SyncRepository
             // Bulk UPDATE OutcomeSummary and error fields on existing RPEIs
             await BulkUpdateRpeiFieldsRawAsync(rpeis);
 
-            // Bulk INSERT new sync outcomes
+            // Bulk INSERT new sync outcomes, counting them into the stat counters (#1078).
+            // The field updates above are not counter-adjusted: post-insert ErrorType changes
+            // drift the advisory in-flight counters slightly and completion-time finalisation
+            // reconciles them exactly.
             if (newOutcomes.Count > 0)
+            {
                 await BulkInsertSyncOutcomesRawAsync(newOutcomes);
+                await ActivityStatCounterWriter.UpsertDeltasAsync(
+                    _context, ActivityStatCounterCalculator.CalculateOutcomeInsertDeltas(rpeis, newOutcomes));
+            }
 
             if (transaction != null)
                 await transaction.CommitAsync();

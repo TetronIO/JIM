@@ -219,6 +219,15 @@ public class Activity
     /// </summary>
     public int PendingExportsConfirmed { get; set; }
 
+    /// <summary>
+    /// True once this Activity's Run Profile execution stat counters (<see cref="ActivityStatCounter"/>)
+    /// have been finalised: recomputed exactly from the persisted Run Profile Execution Items at
+    /// completion (or lazily on first stats read for Activities predating the counter table) and
+    /// stored as the authoritative values. While false and in progress, the counters are advisory
+    /// incremental values maintained by the persistence paths.
+    /// </summary>
+    public bool RunProfileExecutionStatsFinalised { get; set; }
+
     // -----------------------------------------------------------------------------------------------------------------
     // security audit event fields (for Authentication activities: interactive sign-in and API key authentication)
     // -----------------------------------------------------------------------------------------------------------------
