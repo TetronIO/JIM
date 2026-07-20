@@ -358,6 +358,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             // Flush any RPEIs from cross-page resolution
             await FlushRpeisAsync();
 
+            // Emit the deduplicated reference-recall Pending Export RPEIs accumulated across all page
+            // deletions (one per referencing group CSO, not one per page-flush that touched it).
+            await FlushDeferredRecallRpeisAsync();
+
             // Outbound Temporal Scope Reconciler apply step (#892): re-evaluate export scope for Metaverse
             // Objects the reconciler flagged, whose export-rule scope drifted with the clock without a data
             // change (the change-driven export path never revisits them). Runs after all inbound-driven changes

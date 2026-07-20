@@ -131,6 +131,14 @@ public interface ISyncRepository
     Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
 
     /// <summary>
+    /// Summary-tier lookup of the external ID and object type name for the given CSOs, keyed by CSO ID.
+    /// Projects only the external-ID attribute value (correlated scalar subqueries keyed on the CSO's
+    /// external-ID attribute) and the type name, never the full attribute-value collection, so it stays
+    /// cheap even for large-membership group CSOs. Used to snapshot reference-recall RPEIs at end of run.
+    /// </summary>
+    Task<Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>> GetConnectedSystemObjectDisplaySnapshotsAsync(IReadOnlyCollection<Guid> csoIds);
+
+    /// <summary>
     /// Gets multiple CSOs by their external ID attribute values (batch lookup).
     /// Returns a dictionary keyed by the string representation of the attribute value.
     /// Used during import to batch-match incoming objects.

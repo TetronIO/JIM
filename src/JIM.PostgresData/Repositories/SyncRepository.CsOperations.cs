@@ -1137,6 +1137,62 @@ public partial class SyncRepository
         return targets;
     }
 
+    public async Task<Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>> GetConnectedSystemObjectDisplaySnapshotsAsync(IReadOnlyCollection<Guid> csoIds)
+    {
+        if (csoIds.Count == 0)
+            return new Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>();
+
+        var idList = csoIds as IList<Guid> ?? csoIds.ToList();
+
+        // Correlated single-column scalar subqueries keyed on the CSO's external-ID attribute; a
+        // single-column projection emits a clean correlated subquery rather than the whole-table
+        // ROW_NUMBER() a multi-column projection would produce, and filtering by ExternalIdAttributeId
+        // rides the (ConnectedSystemObjectId, AttributeId) index instead of scanning member values.
+        var rows = await _context.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => idList.Contains(cso.Id))
+            .Select(cso => new
+            {
+                cso.Id,
+                ExtIdString = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.StringValue).FirstOrDefault(),
+                ExtIdDateTime = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.DateTimeValue).FirstOrDefault(),
+                ExtIdInt = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.IntValue).FirstOrDefault(),
+                ExtIdLong = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.LongValue).FirstOrDefault(),
+                ExtIdGuid = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.GuidValue).FirstOrDefault(),
+                ExtIdBool = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.BoolValue).FirstOrDefault(),
+                TypeName = cso.Type!.Name
+            })
+            .ToListAsync();
+
+        return rows.ToDictionary(r => r.Id, r => new ConnectedSystemObjectDisplaySnapshot
+        {
+            ConnectedSystemObjectId = r.Id,
+            ExternalId = FormatExternalIdSnapshotValue(r.ExtIdString, r.ExtIdDateTime, r.ExtIdInt, r.ExtIdLong, r.ExtIdGuid, r.ExtIdBool),
+            TypeName = r.TypeName
+        });
+    }
+
+    /// <summary>
+    /// Formats a Connected System Object external-ID attribute value from its typed columns, mirroring
+    /// the priority order in <see cref="ConnectedSystemObjectAttributeValue.ToStringNoName"/>.
+    /// </summary>
+    private static string? FormatExternalIdSnapshotValue(string? stringValue, DateTime? dateTimeValue, int? intValue, long? longValue, Guid? guidValue, bool? boolValue)
+    {
+        if (!string.IsNullOrEmpty(stringValue))
+            return stringValue;
+        if (dateTimeValue != null)
+            return dateTimeValue.ToString();
+        if (intValue != null)
+            return intValue.ToString();
+        if (longValue != null)
+            return longValue.ToString();
+        if (guidValue != null)
+            return guidValue.ToString();
+        if (boolValue != null)
+            return boolValue.ToString();
+        return null;
+    }
+
     /// <summary>
     /// The reference recall existence query (#1003). Matches by resolved reference id or by
     /// case-insensitive raw reference string (values pre-lowered by the caller; LOWER() here

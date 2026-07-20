@@ -318,6 +318,24 @@ public class SyncRepository : ISyncRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
 
+    public Task<Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>> GetConnectedSystemObjectDisplaySnapshotsAsync(IReadOnlyCollection<Guid> csoIds)
+    {
+        var result = new Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>();
+        foreach (var id in csoIds)
+        {
+            if (!_csos.TryGetValue(id, out var cso))
+                continue;
+            FixupCsoNavigationProperties(cso);
+            result[id] = new ConnectedSystemObjectDisplaySnapshot
+            {
+                ConnectedSystemObjectId = id,
+                ExternalId = cso.ExternalIdAttributeValue?.ToStringNoName(),
+                TypeName = cso.Type?.Name
+            };
+        }
+        return Task.FromResult(result);
+    }
+
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(
         int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
     {

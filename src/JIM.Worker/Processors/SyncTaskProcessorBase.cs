@@ -135,6 +135,16 @@ public abstract class SyncTaskProcessorBase
     // rule evaluation determines whether the MVO should actually be deleted.
     private readonly Dictionary<Guid, List<MetaverseObjectAttributeValue>> _preRecallAttributeSnapshots = new();
 
+    // Deferred reference-recall RPEIs, keyed by the referencing (group) target CSO id (#1003 dedup).
+    // Reference recall stages a membership-removal Pending Export for a referencing group on EVERY page
+    // that deletes one of its members, and the delete-then-create persistence merges each page's removals
+    // into a single coalesced Pending Export. Emitting one RPEI per page-flush therefore reported a single
+    // Pending Export as many RPEIs (a ~4x, and for hub groups >100x, over-count on large-scale runs, e.g.
+    // 21,824 RPEIs for 5,421 real Pending Exports on Scale500k25kGroups). Collect the final staged Pending
+    // Export per CSO here (last write wins: the latest flush's Pending Export already carries every prior
+    // page's removals) and emit exactly one RPEI per CSO at end of run via FlushDeferredRecallRpeisAsync.
+    private readonly Dictionary<Guid, (PendingExport PendingExport, string? DisplayName)> _deferredRecallRpeisByCsoId = new();
+
     // Batch collection for MVO change object creation (deferred to page boundary for performance)
     // Stores: (MVO, Additions, Removals, ChangeType, RPEI) - captured BEFORE applying pending changes
     // ChangeType indicates how the MVO was created/modified (Projected, Joined, AttributeFlow, Updated)
@@ -2931,42 +2941,94 @@ public abstract class SyncTaskProcessorBase
                     recallResult.RemovalChangesStaged, recallResult.UnresolvableChangesDropped,
                     recallResult.SkippedDueToExistingDeletePendingExport);
 
-                // Fold the staged recall exports into Activity reporting (#1003): one RPEI per
-                // staged Pending Export with a PendingExportCreated outcome, persisted and counted
-                // by this page's FlushRpeisAsync exactly like normal export staging. Without this,
-                // deletion-staged exports were invisible on the Activity (TotalPendingExports 0).
-                foreach (var stagedPendingExport in recallResult.StagedPendingExports)
+                // Fold the staged recall exports into Activity reporting (#1003): one RPEI per staged
+                // Pending Export with a PendingExportCreated outcome. Deduplicated per referencing target
+                // CSO and deferred to end of run (FlushDeferredRecallRpeisAsync): a group whose deleted
+                // members span N pages stages N times, but the delete-then-create merge means each flush's
+                // Pending Export already carries the prior removals, so only the final one matters. Last
+                // write wins; emitting per page-flush inflated TotalPendingExports on large-scale runs.
+                foreach (var stagedPendingExport in recallResult.StagedPendingExports.Where(pe => pe.ConnectedSystemObjectId.HasValue))
                 {
-                    var recallRpei = new ActivityRunProfileExecutionItem
-                    {
-                        Id = Guid.NewGuid(),
-                        ObjectChangeType = ObjectChangeType.PendingExport,
-                        ConnectedSystemObjectId = stagedPendingExport.ConnectedSystemObjectId,
-                        PendingExportId = stagedPendingExport.Id,
-                        DisplayNameSnapshot = stagedPendingExport.SourceMetaverseObjectId.HasValue
-                            ? recallResult.ReferencingObjectDisplayNames
-                                .GetValueOrDefault(stagedPendingExport.SourceMetaverseObjectId.Value)
-                            : null
-                    };
-
-                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                    {
-                        var recallOutcome = SyncOutcomeBuilder.AddRootOutcome(recallRpei,
-                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
-                            targetEntityId: stagedPendingExport.Id,
-                            targetEntityDescription: recallRpei.DisplayNameSnapshot,
-                            detailCount: stagedPendingExport.AttributeValueChanges.Count,
-                            detailMessage: stagedPendingExport.ConnectedSystemId.ToString());
-                        await SnapshotPendingExportChangesAsync(recallOutcome, stagedPendingExport);
-                    }
-
-                    _activity.RunProfileExecutionItems.Add(recallRpei);
+                    var displayName = stagedPendingExport.SourceMetaverseObjectId.HasValue
+                        ? recallResult.ReferencingObjectDisplayNames
+                            .GetValueOrDefault(stagedPendingExport.SourceMetaverseObjectId.Value)
+                        : null;
+                    StageDeferredRecallRpei(stagedPendingExport, displayName);
                 }
             }
         }
 
         _pendingMvoDeletions.Clear();
         _preRecallAttributeSnapshots.Clear();
+        span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Records the final staged reference-recall Pending Export for a referencing target Connected System
+    /// Object, to be emitted as a single RPEI at end of run by <see cref="FlushDeferredRecallRpeisAsync"/>.
+    /// Last write wins per CSO: the latest flush's Pending Export already carries every prior page's
+    /// removals (delete-then-create merge), so re-staging the same CSO across pages must not accumulate
+    /// duplicate RPEIs. Called once per staged Pending Export from <see cref="FlushPendingMvoDeletionsAsync"/>.
+    /// </summary>
+    protected void StageDeferredRecallRpei(PendingExport stagedPendingExport, string? displayName)
+    {
+        if (stagedPendingExport.ConnectedSystemObjectId.HasValue)
+            _deferredRecallRpeisByCsoId[stagedPendingExport.ConnectedSystemObjectId.Value] = (stagedPendingExport, displayName);
+    }
+
+    /// <summary>
+    /// Emits the reference-recall Pending Export RPEIs accumulated across every page's
+    /// <see cref="FlushPendingMvoDeletionsAsync"/>, exactly one per referencing target Connected System
+    /// Object (deduplicated in <see cref="_deferredRecallRpeisByCsoId"/>), then persists them through the
+    /// normal RPEI flush. Called once at end of run by each sync processor. Emitting here rather than per
+    /// page-flush is what collapses a group whose deleted members spanned many pages from many Pending
+    /// Export RPEIs to one; the retained Pending Export is the final flush's, which the delete-then-create
+    /// merge guarantees already carries every page's removals. Also populates the external-ID and object
+    /// type snapshots (one Summary-tier lookup for all referencing CSOs) so each RPEI stays self-describing
+    /// if its group CSO is later deleted, and persists the Pending Export id (previously dropped).
+    /// </summary>
+    protected async Task FlushDeferredRecallRpeisAsync()
+    {
+        if (_deferredRecallRpeisByCsoId.Count == 0)
+            return;
+
+        using var span = Diagnostics.Sync.StartSpan("FlushDeferredRecallRpeis");
+        span.SetTag("recallRpeiCount", _deferredRecallRpeisByCsoId.Count);
+
+        // One Summary-tier lookup of the referencing CSOs' external id and object type (no attribute-value
+        // collections materialised, so it is cheap even for large-membership group CSOs).
+        var csoSnapshots = await _syncRepo.GetConnectedSystemObjectDisplaySnapshotsAsync(_deferredRecallRpeisByCsoId.Keys.ToList());
+
+        foreach (var (csoId, (stagedPendingExport, displayName)) in _deferredRecallRpeisByCsoId)
+        {
+            csoSnapshots.TryGetValue(csoId, out var snapshot);
+            var recallRpei = new ActivityRunProfileExecutionItem
+            {
+                Id = Guid.NewGuid(),
+                ObjectChangeType = ObjectChangeType.PendingExport,
+                ConnectedSystemObjectId = csoId,
+                PendingExportId = stagedPendingExport.Id,
+                DisplayNameSnapshot = displayName,
+                ExternalIdSnapshot = snapshot?.ExternalId,
+                ObjectTypeSnapshot = snapshot?.TypeName
+            };
+
+            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            {
+                var recallOutcome = SyncOutcomeBuilder.AddRootOutcome(recallRpei,
+                    ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                    targetEntityId: stagedPendingExport.Id,
+                    targetEntityDescription: recallRpei.DisplayNameSnapshot,
+                    detailCount: stagedPendingExport.AttributeValueChanges.Count,
+                    detailMessage: stagedPendingExport.ConnectedSystemId.ToString());
+                await SnapshotPendingExportChangesAsync(recallOutcome, stagedPendingExport);
+            }
+
+            _activity.RunProfileExecutionItems.Add(recallRpei);
+        }
+
+        _deferredRecallRpeisByCsoId.Clear();
+        await FlushRpeisAsync();
         span.SetSuccess();
     }
 
