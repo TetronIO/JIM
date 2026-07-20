@@ -32,7 +32,7 @@ Get-JIMRunProfile -ConnectedSystemName <string> [-Name <string>]
 
 ### Output
 
-Returns one or more `PSCustomObject` instances representing Run Profiles, each containing properties such as `Id`, `Name`, `Type`, `ConnectedSystemId`, and `PartitionId`.
+Returns one or more `PSCustomObject` instances representing Run Profiles, each containing `Id`, `Name`, `ConnectedSystemId`, `RunType`, `PageSize`, `PartitionName`, and `FilePath`.
 
 ### Examples
 
@@ -275,7 +275,7 @@ Write-Host "Task ID: $($result.TaskId)"
 
 ```powershell title="Pipeline: start all full imports for a Connected System"
 Get-JIMRunProfile -ConnectedSystemId 1 |
-    Where-Object { $_.Type -eq "FullImport" } |
+    Where-Object { $_.RunType -eq "FullImport" } |
     ForEach-Object { Start-JIMRunProfile -RunProfileId $_.Id -Wait }
 ```
 

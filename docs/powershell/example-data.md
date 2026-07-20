@@ -49,7 +49,7 @@ Get-JIMExampleDataSet -Page 2 -PageSize 50
 ```
 
 ```powershell title="Select specific properties"
-Get-JIMExampleDataSet | Select-Object Name, Description, ObjectCount
+Get-JIMExampleDataSet | Select-Object Name, Culture, ValueCount
 ```
 
 ---
@@ -182,7 +182,7 @@ Get-JIMExampleDataTemplate -Name <string>
 
 ### Output
 
-Returns one or more `PSCustomObject` instances representing data generation templates, each containing properties such as `Id`, `Name`, `Description`, and generation configuration details.
+Returns one or more `PSCustomObject` instances representing data generation templates. The list form returns `Id`, `Name`, `BuiltIn`, `Created`, and `ObjectTypeCount`; retrieving a single template by ID or name returns the full template including its Object Types.
 
 ### Examples
 

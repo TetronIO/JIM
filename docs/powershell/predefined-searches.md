@@ -56,7 +56,7 @@ The list view and wildcard `-Uri` lookups return one or more header `PSCustomObj
 | `MetaverseAttributeCount` | `int` | Number of attributes surfaced in the search results |
 | `Created` | `datetime` | When the search was created |
 
-`-Id` and literal `-Uri` lookups return a single full search with all of the header fields plus:
+`-Id` and literal `-Uri` lookups return the full search rather than a header. It carries the header fields above except `MetaverseObjectTypeName` and `MetaverseAttributeCount`, which have no equivalent on the full object; use `$search.MetaverseObjectType.Name` and `$search.Attributes.Count` instead. It also adds:
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -106,11 +106,11 @@ Set-JIMPredefinedSearch [-Id] <int> [-IsEnabled <bool>] [-ChangeReason <string>]
 | `Id` | `int` | Yes | | Unique identifier of the search to update. Accepts pipeline input by property name. |
 | `IsEnabled` | `bool` | No | | When specified, sets whether the search is visible to end users. Pass `$true` to enable, `$false` to disable. Omit to leave unchanged. |
 | `ChangeReason` | `string` | No | | Optional reason for the change, recorded on the audit Activity and shown in the search's [configuration change history](history.md). |
-| `PassThru` | `switch` | No | `$false` | If specified, emits the updated search header after the update. |
+| `PassThru` | `switch` | No | `$false` | If specified, emits the updated search after the update. |
 
 ### Output
 
-When `-PassThru` is specified, returns the updated search header. Otherwise, no output.
+When `-PassThru` is specified, returns the updated search in its full form (as `-Id` returns it), not a header. Otherwise, no output.
 
 ### Examples
 

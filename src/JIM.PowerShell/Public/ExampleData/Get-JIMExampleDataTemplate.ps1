@@ -42,7 +42,7 @@ function Get-JIMExampleDataTemplate {
         Gets a specific template by name.
 
     .EXAMPLE
-        Get-JIMExampleDataTemplate | Select-Object Id, Name, Description
+        Get-JIMExampleDataTemplate | Select-Object Id, Name, ObjectTypeCount
 
         Gets all templates with specific properties.
 
