@@ -603,10 +603,10 @@
         "type": "Project",
         "dependencies": {
           "DynamicExpresso.Core": "[2.19.3, )",
-          "JIM.Connectors": "[0.13.0, )",
-          "JIM.Data": "[0.13.0, )",
-          "JIM.Models": "[0.13.0, )",
-          "JIM.Utilities": "[0.13.0, )",
+          "JIM.Connectors": "[0.13.0-dev.20260720.994, )",
+          "JIM.Data": "[0.13.0-dev.20260720.994, )",
+          "JIM.Models": "[0.13.0-dev.20260720.994, )",
+          "JIM.Utilities": "[0.13.0-dev.20260720.994, )",
           "Microsoft.AspNetCore.DataProtection": "[10.0.9, )",
           "Microsoft.AspNetCore.DataProtection.Extensions": "[10.0.9, )",
           "NCrontab": "[3.4.0, )",
@@ -617,22 +617,22 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.13.0, )",
-          "JIM.Utilities": "[0.13.0, )",
+          "JIM.Models": "[0.13.0-dev.20260720.994, )",
+          "JIM.Utilities": "[0.13.0-dev.20260720.994, )",
           "System.DirectoryServices.Protocols": "[10.0.9, )"
         }
       },
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0, )"
+          "JIM.Models": "[0.13.0-dev.20260720.994, )"
         }
       },
       "jim.inmemorydata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.13.0, )",
-          "JIM.Models": "[0.13.0, )"
+          "JIM.Data": "[0.13.0-dev.20260720.994, )",
+          "JIM.Models": "[0.13.0-dev.20260720.994, )"
         }
       },
       "jim.models": {
@@ -645,9 +645,9 @@
       "jim.postgresdata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.13.0, )",
-          "JIM.Models": "[0.13.0, )",
-          "JIM.Utilities": "[0.13.0, )",
+          "JIM.Data": "[0.13.0-dev.20260720.994, )",
+          "JIM.Models": "[0.13.0-dev.20260720.994, )",
+          "JIM.Utilities": "[0.13.0-dev.20260720.994, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "Serilog": "[4.4.0, )"
@@ -662,17 +662,17 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0, )",
+          "JIM.Models": "[0.13.0-dev.20260720.994, )",
           "Serilog": "[4.4.0, )"
         }
       },
       "jim.worker": {
         "type": "Project",
         "dependencies": {
-          "JIM.Application": "[0.13.0, )",
-          "JIM.Models": "[0.13.0, )",
-          "JIM.PostgresData": "[0.13.0, )",
-          "JIM.Utilities": "[0.13.0, )",
+          "JIM.Application": "[0.13.0-dev.20260720.994, )",
+          "JIM.Models": "[0.13.0-dev.20260720.994, )",
+          "JIM.PostgresData": "[0.13.0-dev.20260720.994, )",
+          "JIM.Utilities": "[0.13.0-dev.20260720.994, )",
           "Microsoft.AspNetCore.DataProtection.Extensions": "[10.0.9, )",
           "Microsoft.Extensions.Hosting": "[10.0.9, )",
           "Microsoft.VisualStudio.Azure.Containers.Tools.Targets": "[1.23.0, )",
