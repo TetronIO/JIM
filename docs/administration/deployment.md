@@ -308,7 +308,11 @@ JIM automatically applies any pending database migrations on first startup; no m
 docker compose logs jim.worker --tail=50
 ```
 
-Look for "Database migrations applied" or "Database is up to date" in the worker logs. The web interface will show a loading screen until migrations complete and the worker signals readiness.
+The worker applies migrations before it starts accepting work, and `jim.web` will not serve requests until that has finished; while it waits, `jim.web` logs `JIM.Application is not ready yet. Sleeping...` once per second. The definitive signal is the readiness endpoint, which returns `503 Service Unavailable` until JIM is ready and `200 OK` afterwards:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/ready
+```
 
 !!! warning "Troubleshooting"
     If migrations fail (e.g. due to a permissions issue), the worker logs will contain the full error. Fix the underlying issue and restart the services.
@@ -503,7 +507,7 @@ Use this checklist before going live:
 - [ ] Health endpoint monitored by your alerting system
 - [ ] Firewall rules restrict access to JIM's port to authorised networks
 - [ ] Docker restart policy is `unless-stopped` (set by production override)
-- [ ] Upgrade procedure documented and tested in staging
+- [ ] Upgrade procedure documented and tested in staging (see [Upgrading](upgrading.md))
 - [ ] PowerShell module installed and connected (if using automation/IDaC)
 
 ### Air-Gapped Network Checklist
