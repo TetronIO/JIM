@@ -830,14 +830,17 @@ public class ActivityRepository : IActivityRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        // Header-tier read: do NOT eager-load the ConnectedSystemObject graph. The previous
+        // implementation Include()d each RPEI's CSO plus its entire (multi-valued) AttributeValues
+        // collection and then projected in memory, so a page that landed on a few large group CSOs
+        // pulled tens of thousands of attribute-value rows into memory just to render 100 grid rows
+        // (the 100% CPU seen on large activities). Instead, resolve the live display name / external
+        // id / type via correlated subqueries in the SQL projection below. Filters and sorts still
+        // reference the CSO navigations; EF Core translates those to SQL without an Include.
+        // AsNoTracking because this is a read-only projection.
         var query = Repository.Database.ActivityRunProfileExecutionItems
-            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
-            .Include(a => a.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.Type)
-            .Include(a => a.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.AttributeValues)
-                    .ThenInclude(av => av.Attribute)
-            .Where(a => a.Activity.Id == activityId);
+            .AsNoTracking()
+            .Where(a => a.ActivityId == activityId);
 
         // Apply object type filter if specified (falls back to ObjectTypeSnapshot when CSO/Type is null)
         if (objectTypeFilter != null)
@@ -869,14 +872,15 @@ public class ActivityRepository : IActivityRepository
         // Apply outcome type filter if specified — matches against the denormalised OutcomeSummary string
         if (outcomeTypeFilter != null)
         {
-            var outcomeTypes = outcomeTypeFilter.ToList();
-            if (outcomeTypes.Count > 0)
+            // Pre-compute the "<OutcomeType>:" tokens client-side. Embedding ot.ToString() inside the
+            // predicate makes EF Core try (and fail) to translate object.ToString() to SQL; hoisting it
+            // out yields captured constant strings that translate to OutcomeSummary LIKE '%token%'.
+            var outcomeTokens = outcomeTypeFilter.Select(ot => ot.ToString() + ":").ToList();
+            if (outcomeTokens.Count > 0)
             {
-                // Build a predicate that requires at least one of the selected outcome types
-                // to appear in the OutcomeSummary string (e.g., "Projected:" prefix match)
                 query = query.Where(a =>
                     a.OutcomeSummary != null &&
-                    outcomeTypes.Any(ot => a.OutcomeSummary.Contains(ot.ToString() + ":")));
+                    outcomeTokens.Any(token => a.OutcomeSummary.Contains(token)));
             }
         }
 
@@ -954,23 +958,68 @@ public class ActivityRepository : IActivityRepository
         // Get total count before pagination
         var totalCount = await query.CountAsync();
 
-        // Apply pagination and materialise
+        // Apply pagination, then project in SQL to only the columns the header needs. The live
+        // display name and external-id value are pulled with correlated subqueries against the CSO's
+        // AttributeValues (no full-collection materialisation), falling back to the RPEI snapshot
+        // columns when the CSO is gone or the value is absent. External-id formatting mirrors
+        // ConnectedSystemObjectAttributeValue.ToStringNoName and runs in memory over the <= pageSize
+        // projected rows.
         var offset = (page - 1) * pageSize;
-        var entities = await query.Skip(offset).Take(pageSize).ToListAsync();
+        var projected = await query
+            .Skip(offset).Take(pageSize)
+            .Select(i => new
+            {
+                i.Id,
+                i.ErrorType,
+                i.ObjectChangeType,
+                i.OutcomeSummary,
+                i.DisplayNameSnapshot,
+                i.ExternalIdSnapshot,
+                i.ObjectTypeSnapshot,
+                DisplayNameLive = i.ConnectedSystemObject!.AttributeValues
+                    .Where(av => av.Attribute.Name.ToLower() == "displayname")
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault(),
+                TypeLive = i.ConnectedSystemObject!.Type!.Name,
+                // External id resolved as per-column scalar subqueries. A single multi-column
+                // projection here (`.Select(av => new {...}).FirstOrDefault()`) makes EF Core emit a
+                // ROW_NUMBER() window over the WHOLE AttributeValues table instead of a correlated
+                // subquery, which is catastrophic at scale; separate single-column subqueries each
+                // translate to a cheap correlated scalar subquery run only for the page's rows.
+                ExtIdString = i.ConnectedSystemObject!.AttributeValues
+                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
+                    .Select(av => av.StringValue).FirstOrDefault(),
+                ExtIdDateTime = i.ConnectedSystemObject!.AttributeValues
+                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
+                    .Select(av => av.DateTimeValue).FirstOrDefault(),
+                ExtIdInt = i.ConnectedSystemObject!.AttributeValues
+                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
+                    .Select(av => av.IntValue).FirstOrDefault(),
+                ExtIdLong = i.ConnectedSystemObject!.AttributeValues
+                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
+                    .Select(av => av.LongValue).FirstOrDefault(),
+                ExtIdGuid = i.ConnectedSystemObject!.AttributeValues
+                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
+                    .Select(av => av.GuidValue).FirstOrDefault(),
+                ExtIdBool = i.ConnectedSystemObject!.AttributeValues
+                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
+                    .Select(av => av.BoolValue).FirstOrDefault()
+            })
+            .ToListAsync();
 
-        // Project to DTO in memory
-        // Use snapshot fields as fallback if CSO was deleted (preserves historical display data)
-        var results = entities.Select(i => new ActivityRunProfileExecutionItemHeader
+        // Project to the header DTO in memory (fallback to snapshot fields when the live CSO value
+        // is absent, preserving historical display data for deleted objects).
+        var results = projected.Select(p => new ActivityRunProfileExecutionItemHeader
         {
-            Id = i.Id,
-            ExternalIdValue = i.ConnectedSystemObject?.ExternalIdAttributeValue?.ToStringNoName() ?? i.ExternalIdSnapshot,
-            DisplayName = i.ConnectedSystemObject?.AttributeValues.FirstOrDefault(av => av.Attribute.Name.Equals("displayname", StringComparison.OrdinalIgnoreCase))?.StringValue
-                ?? i.DisplayNameSnapshot,
-            ConnectedSystemObjectType = i.ConnectedSystemObject?.Type?.Name
-                ?? i.ObjectTypeSnapshot,
-            ErrorType = i.ErrorType,
-            ObjectChangeType = i.ObjectChangeType,
-            OutcomeSummary = i.OutcomeSummary
+            Id = p.Id,
+            ExternalIdValue = FormatExternalIdValue(
+                p.ExtIdString, p.ExtIdDateTime, p.ExtIdInt,
+                p.ExtIdLong, p.ExtIdGuid, p.ExtIdBool) ?? p.ExternalIdSnapshot,
+            DisplayName = p.DisplayNameLive ?? p.DisplayNameSnapshot,
+            ConnectedSystemObjectType = p.TypeLive ?? p.ObjectTypeSnapshot,
+            ErrorType = p.ErrorType,
+            ObjectChangeType = p.ObjectChangeType,
+            OutcomeSummary = p.OutcomeSummary
         }).ToList();
 
         // Build paged result set
@@ -993,7 +1042,31 @@ public class ActivityRepository : IActivityRepository
         pagedResultSet.Results.Clear();
         return pagedResultSet;
     }
-        
+
+    /// <summary>
+    /// Formats an external-id attribute value from its raw value columns, mirroring
+    /// <see cref="JIM.Models.Staging.ConnectedSystemObjectAttributeValue.ToStringNoName"/> for the
+    /// scalar column set an external id can use (string, date, int, long, guid, bool; reference and
+    /// binary do not apply to an external id). Returns null when no value column is populated, so the
+    /// caller can fall back to the RPEI external-id snapshot column.
+    /// </summary>
+    private static string? FormatExternalIdValue(string? stringValue, DateTime? dateTimeValue, int? intValue, long? longValue, Guid? guidValue, bool? boolValue)
+    {
+        if (!string.IsNullOrEmpty(stringValue))
+            return stringValue;
+        if (dateTimeValue != null)
+            return dateTimeValue.ToString();
+        if (intValue != null)
+            return intValue.ToString();
+        if (longValue != null)
+            return longValue.ToString();
+        if (guidValue != null)
+            return guidValue.ToString();
+        if (boolValue != null)
+            return boolValue.ToString();
+        return null;
+    }
+
     public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)
     {
         // Get total objects processed from the activity itself (tracks all objects in scope)
