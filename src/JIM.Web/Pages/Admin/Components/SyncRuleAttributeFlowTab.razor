@@ -400,7 +400,7 @@
                 {
                     <MudSelect T="MetaverseAttribute" @bind-Value="_attributeFlowMapping.TargetMetaverseAttribute"
                         Label="Metaverse Attribute" Placeholder="Please select the target Metaverse attribute" Required="true"
-                        Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@(a => a?.Name ?? string.Empty)">
+                        Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@MetaverseAttributeLabel">
                         @foreach (var metaverseAttribute in SyncRule.MetaverseObjectType.Attributes.Where(q =>
                                     !SyncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping &&
                                     afr.TargetMetaverseAttribute != null &&
