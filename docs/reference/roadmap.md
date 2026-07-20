@@ -1,6 +1,6 @@
 # Product Roadmap
 
-JIM has completed **pre-release stabilisation**. The core identity lifecycle -- Import, Sync, Export, and Schedule -- is fully functional, and the platform has been hardened for production with bounded-memory pipelines proven at 100K+ object scale, an OWASP Top 10:2025 assessment, supply chain hardening, and comprehensive integration test coverage across all sync scenarios. The roadmap below outlines the milestones ahead as JIM progresses towards its first stable release and beyond.
+JIM has completed **pre-release stabilisation**. The core identity lifecycle -- Import, Sync, Export, and Schedule -- is fully functional, and the platform has been hardened for production with bounded-memory pipelines validated at 500,000-user scale (synchronised cross-domain across two directories, with groups of up to 495,000 members), an OWASP Top 10:2025 assessment, supply chain hardening, and comprehensive integration test coverage across all sync scenarios. The roadmap below outlines the milestones ahead as JIM progresses towards its first stable release and beyond.
 
 For the latest status and issue tracking, see the public [JIM Roadmap project board](https://github.com/orgs/TetronIO/projects/1).
 
