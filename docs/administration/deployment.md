@@ -302,20 +302,20 @@ docker compose logs -f
 
 ### Step 8: Verify Startup
 
-JIM automatically applies any pending database migrations on first startup; no manual migration step is required. Watch the logs to confirm:
+JIM sets the database up automatically on first startup; there is no manual database step. Watch the logs to confirm:
 
 ```bash
 docker compose logs jim.worker --tail=50
 ```
 
-The worker applies migrations before it starts accepting work, and `jim.web` will not serve requests until that has finished; while it waits, `jim.web` logs `JIM.Application is not ready yet. Sleeping...` once per second. The definitive signal is the readiness endpoint, which returns `503 Service Unavailable` until JIM is ready and `200 OK` afterwards:
+The worker prepares the database before it starts accepting work, and `jim.web` will not serve requests until that has finished; while it waits, `jim.web` logs `JIM.Application is not ready yet. Sleeping...` once per second. The definitive signal is the readiness endpoint, which returns `503 Service Unavailable` until JIM is ready and `200 OK` afterwards:
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/ready
 ```
 
 !!! warning "Troubleshooting"
-    If migrations fail (e.g. due to a permissions issue), the worker logs will contain the full error. Fix the underlying issue and restart the services.
+    If the database setup fails (e.g. due to a permissions issue), the worker logs will contain the full error. Fix the underlying issue and restart the services.
 
 ### Step 9: Access JIM
 
@@ -515,7 +515,7 @@ Use this checklist before going live:
 For air-gapped deployments, also verify:
 
 - [ ] All Docker images loaded successfully (`docker images | grep jim`)
-- [ ] PostgreSQL is accessible and migrations applied
+- [ ] PostgreSQL is accessible and the database has been set up
 - [ ] SSO/OIDC identity provider is accessible from JIM server
 - [ ] DNS resolves JIM server name correctly
 - [ ] TLS certificates are valid and trusted (if using HTTPS)

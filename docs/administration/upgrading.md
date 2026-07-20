@@ -4,7 +4,7 @@ title: Upgrading
 
 # Upgrading
 
-Upgrading JIM means replacing the `jim.web`, `jim.worker` and `jim.scheduler` container images with a newer release. Your data stays where it is: the database and the encryption key volume are not modified by the image swap itself, and any pending database migrations are applied automatically when the new worker starts.
+Upgrading JIM means replacing the `jim.web`, `jim.worker` and `jim.scheduler` container images with a newer release. Your data stays where it is: the database and the encryption key volume are not modified by the image swap itself, and any pending database upgrades are applied automatically when the new worker starts.
 
 This page covers connected and air-gapped upgrades, what happens during the upgrade window, and how to roll back.
 
@@ -112,14 +112,14 @@ The procedure mirrors a first-time air-gapped deployment, minus the initial conf
 
 Understanding the startup sequence explains why the web interface is briefly unavailable after an upgrade:
 
-- **The worker leads.** `jim.worker` is the first service to initialise. It applies any pending Entity Framework Core migrations automatically; there is no manual migration step.
-- **The web and scheduler wait.** `jim.web` and `jim.scheduler` poll the application's readiness state and do not begin serving until migrations have completed and JIM has left maintenance mode. `jim.web` logs `JIM.Application is not ready yet. Sleeping...` once per second while it waits.
+- **The worker leads.** `jim.worker` is the first service to initialise. It applies any database upgrades automatically.
+- **The web and scheduler wait.** `jim.web` and `jim.scheduler` poll the application's readiness state and do not begin serving until the database upgrade has completed and JIM has left maintenance mode. `jim.web` logs `JIM.Application is not ready yet. Sleeping...` once per second while it waits.
 - **Readiness is externally observable.** `GET /api/v1/health/ready` returns `503 Service Unavailable` with `"status": "not_ready"` throughout, then `200 OK` with `"status": "ready"` once JIM is serving.
 
-How long this takes depends on the migrations in the release. Most are near-instant; a migration that rewrites a large table scales with your object count, which is one reason to time the upgrade against a production-sized staging environment first.
+How long this takes depends on what the release changes in the database. Most upgrades are near-instant; one that rewrites a large table scales with your object count, which is one reason to time the upgrade against a production-sized staging environment first.
 
-!!! warning "If migrations fail"
-    The worker logs the full error and JIM stays unready, so the web interface never opens up. Fix the underlying cause (a permissions problem on the database user is the usual culprit) and restart the services. Do not restore a backup unless the migration has left the schema in a state you cannot move forwards from.
+!!! warning "If the database upgrade fails"
+    The worker logs the full error and JIM stays unready, so the web interface never opens up. Fix the underlying cause (a permissions problem on the database user is the usual culprit) and restart the services. Do not restore a backup unless the upgrade has left the schema in a state you cannot move forwards from.
 
 ## ✅ Verifying the upgrade {#verifying}
 
@@ -190,7 +190,7 @@ JIM_VERSION=0.13.0
 docker compose up -d
 ```
 
-The complication is the database. If the release applied migrations, the schema is now ahead of the older application version:
+The complication is the database. If the release upgraded the database, the schema is now ahead of the older application version:
 
 - **If the migrations are reversible**, roll the schema back to the migration that was active before the upgrade:
 
