@@ -188,8 +188,24 @@ public class SyncRepository : ISyncRepository
     }
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
-        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null)
+        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null)
     {
+        if (afterId.HasValue)
+        {
+            // Keyset path: order by Id (matching the production loader's keyset ordering) and
+            // return the first page of rows sorting after the cursor. .NET Guid comparison is
+            // used for both the ordering and the filter, so the cursor chain is self-consistent
+            // within this provider, mirroring the production contract.
+            var afterIdValue = afterId.Value;
+            var remaining = GetCsosForSystem(connectedSystemId)
+                .OrderBy(c => c.Id)
+                .Where(c => c.Id.CompareTo(afterIdValue) > 0)
+                .ToList();
+            var keysetResult = BuildPagedResult(remaining, 1, pageSize);
+            keysetResult.CurrentPage = page;
+            return Task.FromResult(keysetResult);
+        }
+
         var all = GetCsosForSystem(connectedSystemId)
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
@@ -443,6 +459,16 @@ public class SyncRepository : ISyncRepository
             }
         }
         return Task.FromResult(result);
+    }
+
+    public async Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds)
+    {
+        // Mirrors the production contract: every requested ID gets an entry, empty when the
+        // CSO has no reference lookups.
+        var result = new Dictionary<Guid, Dictionary<Guid, string>>();
+        foreach (var csoId in csoIds)
+            result[csoId] = await GetReferenceExternalIdsAsync(csoId);
+        return result;
     }
 
     public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)

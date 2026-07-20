@@ -1023,7 +1023,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         int page,
         int pageSize,
         int? knownTotalCount = null,
-        DateTime? lastSyncTimestamp = null)
+        DateTime? lastSyncTimestamp = null,
+        Guid? afterId = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -1041,6 +1042,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             ?? await Repository.Database.ConnectedSystemObjects.CountAsync(q => q.ConnectedSystemId == connectedSystemId);
         var offset = (page - 1) * pageSize;
 
+        // Keyset pagination for sequential callers (full sync): filtering on Id > cursor keeps
+        // every page O(pageSize), where OFFSET re-scans and discards all prior rows so per-page
+        // cost grows with page number (measured at Scale500k25kGroups: 977s across 1,050 page
+        // loads, ~200ms early pages degrading to ~1.5s late ones). The cursor must be the last
+        // row of the previous page exactly as the database returned it: PostgreSQL orders uuids
+        // bytewise, which differs from .NET's Guid.CompareTo, so a client-side "max" would skip
+        // rows. Guid.CompareTo below translates to the native uuid comparison in SQL; the
+        // in-memory provider orders and compares with the same .NET semantics, so each engine
+        // is self-consistent.
+        var afterIdValue = afterId ?? Guid.Empty;
+
         List<ConnectedSystemObject> results;
 
         if (lastSyncTimestamp.HasValue)
@@ -1051,11 +1063,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             var watermark = lastSyncTimestamp.Value;
 
             // Step 1: Load all CSOs for this page WITHOUT attribute values (scalars + Type only)
-            var allCsos = await Repository.Database.ConnectedSystemObjects
+            var csoScalarQuery = Repository.Database.ConnectedSystemObjects
                 .Include(cso => cso.Type)
                 .Where(q => q.ConnectedSystemId == connectedSystemId)
                 .OrderBy(cso => cso.Id)
-                .Skip(offset)
+                .AsQueryable();
+            csoScalarQuery = afterId.HasValue
+                ? csoScalarQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0)
+                : csoScalarQuery.Skip(offset);
+            var allCsos = await csoScalarQuery
                 .Take(pageSize)
                 .ToListAsync();
 
@@ -1117,10 +1133,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .Include(cso => cso.AttributeValues)
                     .ThenInclude(av => av.Attribute)
                 .Where(q => q.ConnectedSystemId == connectedSystemId)
-                .OrderBy(cso => cso.Id);
+                .OrderBy(cso => cso.Id)
+                .AsQueryable();
 
-            var pagedCsoQuery = csoQuery.Skip(offset).Take(pageSize);
-            results = await pagedCsoQuery.ToListAsync();
+            csoQuery = afterId.HasValue
+                ? csoQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0)
+                : csoQuery.Skip(offset);
+            results = await csoQuery.Take(pageSize).ToListAsync();
 
             // Populate ReferenceValue navigations via direct SQL — bypasses EF Include materialisation.
             await PopulateReferenceValuesAsync(results);
@@ -1465,6 +1484,53 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             if (row.ExternalId != null)
                 result.TryAdd(row.ReferenceValueId, row.ExternalId);
         }
+        return result;
+    }
+
+    /// <summary>
+    /// DTO for the batched reference external ID lookup SQL query.
+    /// </summary>
+    private record ReferenceExternalIdBatchRow(Guid ConnectedSystemObjectId, Guid ReferenceValueId, string? ExternalId);
+
+    /// <inheritdoc/>
+    public async Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds)
+    {
+        var result = new Dictionary<Guid, Dictionary<Guid, string>>();
+        if (csoIds.Count == 0)
+            return result;
+
+        // Same query shape as GetReferenceExternalIdsAsync, widened to a page of owning CSOs via
+        // = ANY so import processing pays one round trip per hydration page instead of one per CSO
+        // (535K single-CSO round trips measured at Scale500k25kGroups, 2026-07-20).
+        var rows = await Repository.Database.Database
+            .SqlQueryRaw<ReferenceExternalIdBatchRow>(
+                """
+                SELECT av."ConnectedSystemObjectId",
+                       av."ReferenceValueId",
+                       COALESCE(sec_av."StringValue", pri_av."StringValue") AS "ExternalId"
+                FROM "ConnectedSystemObjectAttributeValues" av
+                JOIN "ConnectedSystemObjects" ref_cso ON av."ReferenceValueId" = ref_cso."Id"
+                LEFT JOIN "ConnectedSystemObjectAttributeValues" sec_av
+                    ON sec_av."ConnectedSystemObjectId" = ref_cso."Id"
+                   AND sec_av."AttributeId" = ref_cso."SecondaryExternalIdAttributeId"
+                LEFT JOIN "ConnectedSystemObjectAttributeValues" pri_av
+                    ON pri_av."ConnectedSystemObjectId" = ref_cso."Id"
+                   AND pri_av."AttributeId" = ref_cso."ExternalIdAttributeId"
+                WHERE av."ConnectedSystemObjectId" = ANY({0})
+                  AND av."ReferenceValueId" IS NOT NULL
+                """,
+                csoIds.ToArray())
+            .ToListAsync();
+
+        // Every requested ID gets an entry (empty when the CSO has no resolved references) so
+        // callers never need a per-CSO fallback query to distinguish "no references" from
+        // "not fetched".
+        foreach (var csoId in csoIds)
+            result.TryAdd(csoId, new Dictionary<Guid, string>());
+
+        foreach (var row in rows.Where(r => r.ExternalId != null))
+            result[row.ConnectedSystemObjectId].TryAdd(row.ReferenceValueId, row.ExternalId!);
+
         return result;
     }
 

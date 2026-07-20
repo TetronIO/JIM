@@ -65,8 +65,8 @@ public partial class SyncRepository : ISyncRepository
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
         => _repo.ConnectedSystems.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
 
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null)
-        => _repo.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp, afterId);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
         int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null)
@@ -129,6 +129,9 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId)
         => _repo.ConnectedSystems.GetReferenceExternalIdsAsync(csoId);
+
+    public Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds)
+        => _repo.ConnectedSystems.GetReferenceExternalIdsForCsosAsync(csoIds);
 
     public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(metaverseObjectId);

@@ -61,7 +61,12 @@ public interface ISyncRepository
     /// <param name="knownTotalCount">When provided, skips the per-page COUNT query and uses this value
     /// for paging metadata. Callers that already know the total (e.g. full sync) should pass it to
     /// eliminate redundant COUNT(*) queries at scale.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null);
+    /// <param name="afterId">Keyset cursor: when provided, returns the page of CSOs whose ID sorts
+    /// after this value (in the database engine's ordering) instead of using OFFSET, keeping every
+    /// page O(pageSize) at scale. Sequential callers must pass the ID of the last row of the previous
+    /// page exactly as returned. Null behaves as the offset-based page requested via
+    /// <paramref name="page"/>.</param>
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
 
     /// <summary>
     /// Loads a page of CSOs modified since the specified date, with full attribute values.
@@ -183,6 +188,15 @@ public interface ISyncRepository
     /// Used during cross-page reference resolution to find unresolved references.
     /// </summary>
     Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId);
+
+    /// <summary>
+    /// Batched form of <see cref="GetReferenceExternalIdsAsync"/>: gets the reference external ID
+    /// lookups for a whole page of CSOs in one query, keyed by owning CSO ID. Every requested ID
+    /// is present in the result (empty dictionary when the CSO has no resolved references).
+    /// Import processing previously issued the single-CSO variant once per existing object
+    /// (535K round trips at Scale500k25kGroups); callers with a hydrated page should use this instead.
+    /// </summary>
+    Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds);
 
     /// <summary>
     /// Gets the count of CSOs joined to a specific MVO across all Connected Systems.

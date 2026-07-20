@@ -679,7 +679,7 @@ public interface IConnectedSystemRepository
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null);
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
 
     /// <summary>
     /// Batch loads Connected System Objects by their IDs with the full Include chain needed for
@@ -698,6 +698,16 @@ public interface IConnectedSystemRepository
     /// <param name="csoId">The CSO whose reference attribute values should be looked up.</param>
     /// <returns>Dictionary mapping referenced CSO GUIDs to their external ID strings.</returns>
     public Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId);
+
+    /// <summary>
+    /// Batched form of <see cref="GetReferenceExternalIdsAsync"/>: returns the reference external ID
+    /// lookups for a whole page of CSOs in one query, keyed by owning CSO ID. Every requested ID is
+    /// present in the result; owners with no resolved reference values map to an empty dictionary,
+    /// so callers can distinguish "no references" from "not fetched" without a fallback query.
+    /// </summary>
+    /// <param name="csoIds">The CSOs whose reference attribute values should be looked up.</param>
+    /// <returns>Dictionary keyed by owning CSO ID; each value maps referenced CSO GUIDs to their external ID strings.</returns>
+    public Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds);
 
     /// <summary>
     /// Returns all the CSOs for a Connected System that are marked as Obsolete.
