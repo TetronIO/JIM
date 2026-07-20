@@ -289,7 +289,7 @@ Enable-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 ```powershell title="Enable and verify"
 Enable-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -PassThru |
-    Select-Object Name, Enabled
+    Select-Object Name, IsEnabled
 ```
 
 ---

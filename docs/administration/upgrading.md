@@ -16,15 +16,34 @@ This page covers connected and air-gapped upgrades, what happens during the upgr
 - [ ] **Read the release notes.** Check the `CHANGELOG.md` for the target release (on the [releases page](https://github.com/TetronIO/JIM/releases), or under `docs/` in an air-gapped bundle) for breaking changes, new configuration variables, and security fixes.
 - [ ] **Rehearse in staging** against a copy of production data where practical.
 - [ ] **Take a full backup: database plus encryption keys**, as a matched pair, following [Backup & Disaster Recovery](backup-recovery.md). Take it after stopping the services (below) so the two artefacts are consistent with each other.
-- [ ] **Let in-flight work finish.** Check for running Activities in the administration UI and wait for any Run Profile executions to complete. See [Stopping cleanly](#stopping-cleanly) for what happens if you do not.
+- [ ] **Disable all Schedules**, and record which ones you disabled. This stops new runs starting under you while you work. See [Pausing work first](#pausing-work).
+- [ ] **Let in-flight work finish.** With Schedules disabled, wait for any running Activities to complete before stopping the services. See [Pausing work first](#pausing-work) for what happens if you do not.
 - [ ] **Keep the outgoing images.** Do not run `docker image prune` before the new version has been verified; the previous images are your fastest rollback path.
 - [ ] **Compare `.env.example` with your `.env`.** New releases can introduce configuration variables. See the [Configuration Reference](configuration.md).
 
-### Stopping cleanly {#stopping-cleanly}
+### Pausing work first {#pausing-work}
 
-If the worker is stopped part-way through a Run Profile execution, the work is not silently lost, but the run does not resume where it left off. On restart the worker detects the abandoned task, fails its Activity with an explanatory error, and removes the task from the queue. The failed Activity is a record of the interruption, not a sign of data corruption: JIM's synchronisation state lives in the database, so the next run continues from the current state.
+Bring the system to a standstill in two steps, in this order.
 
-Waiting for running Activities to finish therefore avoids avoidable noise in your Activity history, but an interrupted upgrade does not put your data at risk.
+**1. Disable all Schedules.** A Schedule that fires while you are mid-upgrade starts a Run Profile execution you are about to interrupt. Disabling stops the trigger without touching the definition, so nothing is lost. Built-in Schedules can be disabled too; they cannot be deleted, but disabling them is supported.
+
+Do this from **Configuration > Schedules** in the administration UI, or from PowerShell. Capture the list of Schedules that were enabled *before* you disable them, so you can re-enable exactly those afterwards:
+
+```powershell
+# Record what is currently enabled, then disable it
+$wasEnabled = Get-JIMSchedule | Where-Object { $_.IsEnabled }
+$wasEnabled | Select-Object Id, Name | Export-Csv ./schedules-enabled-before-upgrade.csv -NoTypeInformation
+$wasEnabled | Disable-JIMSchedule -ChangeReason "Paused for upgrade to 0.14.0"
+```
+
+!!! warning "Record the list, do not re-enable everything afterwards"
+    Some Schedules are likely to have been deliberately disabled long before the upgrade. If you skip the record and simply enable everything at the end, you will switch those back on and they will start synchronising. Keep the list.
+
+**2. Let running Activities finish.** With no new runs starting, wait for in-flight work to drain. Check **Activities** in the administration UI and wait until nothing is In Progress. Large imports or synchronisation runs can take a while; this wait is the main reason to schedule an upgrade window rather than upgrading on demand.
+
+If you do stop the worker part-way through a Run Profile execution anyway, the work is not silently lost, but the run does not resume where it left off. On restart the worker detects the abandoned task, fails its Activity with an explanatory error, and removes the task from the queue. The failed Activity is a record of the interruption, not a sign of data corruption: JIM's synchronisation state lives in the database, so the next run continues from the current state.
+
+Draining properly therefore avoids noise in your Activity history and a needlessly long first run afterwards, but an interrupted upgrade does not put your data at risk.
 
 ## 🔄 Upgrading a connected deployment
 
@@ -130,7 +149,19 @@ How long this takes depends on the migrations in the release. Most are near-inst
 
 4. **Secrets still decrypt.** Run an import against a Connected System that authenticates with a stored credential. A successful connection confirms the services found the encryption key volume and can decrypt what is in the database. A "Failed to decrypt credential" error means the key volume did not come across; stop and resolve that before running any synchronisation.
 
-5. **Scheduled work resumes.** Confirm the Scheduler is picking up Schedules and that the next expected run fires.
+5. **Re-enable the Schedules you disabled.** Only once the checks above pass. Use the list you recorded in [Pausing work first](#pausing-work), so Schedules that were already disabled before the upgrade stay that way:
+
+    ```powershell
+    Import-Csv ./schedules-enabled-before-upgrade.csv |
+        Enable-JIMSchedule -ChangeReason "Re-enabled after upgrade to 0.14.0"
+    ```
+
+    Or re-enable them individually from **Configuration > Schedules** in the administration UI.
+
+6. **Scheduled work resumes.** Confirm the Scheduler is picking up the re-enabled Schedules, that each shows a sensible next run time, and that the next expected run actually fires.
+
+!!! danger "An upgrade is not finished until the Schedules are back on"
+    Leaving Schedules disabled is a silent failure mode: JIM appears healthy, the version check passes, and nothing synchronises. Drift accumulates unnoticed until someone reports stale data days later. Make re-enabling them an explicit, checked-off step, not something you intend to do later.
 
 ## 🧩 Upgrading the PowerShell module
 
@@ -177,6 +208,7 @@ The complication is the database. If the release applied migrations, the schema 
 
 - [ ] Release notes reviewed for breaking changes and new configuration.
 - [ ] Upgrade rehearsed in staging.
+- [ ] Enabled Schedules recorded, then disabled.
 - [ ] Running Activities allowed to complete.
 - [ ] Services stopped, then database **and** encryption keys backed up as a matched pair.
 - [ ] Previous images retained for rollback.
@@ -184,6 +216,7 @@ The complication is the database. If the release applied migrations, the schema 
 - [ ] New version confirmed via `/api/v1/health/version`.
 - [ ] Readiness confirmed via `/api/v1/health/ready`.
 - [ ] A Connected System with a stored credential confirmed to connect (proves the keys survived).
+- [ ] **Previously-enabled Schedules re-enabled**, and the next run confirmed to fire.
 - [ ] PowerShell module upgraded to match.
 
 ## Related
