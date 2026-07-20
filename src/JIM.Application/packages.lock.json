@@ -205,15 +205,15 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.13.0-dev.20260711.1020, )",
-          "JIM.Utilities": "[0.13.0-dev.20260711.1020, )",
+          "JIM.Models": "[0.13.0-dev.20260720.997, )",
+          "JIM.Utilities": "[0.13.0-dev.20260720.997, )",
           "System.DirectoryServices.Protocols": "[10.0.9, )"
         }
       },
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0-dev.20260711.1020, )"
+          "JIM.Models": "[0.13.0-dev.20260720.997, )"
         }
       },
       "jim.models": {
@@ -226,7 +226,7 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0-dev.20260711.1020, )",
+          "JIM.Models": "[0.13.0-dev.20260720.997, )",
           "Serilog": "[4.4.0, )"
         }
       }
