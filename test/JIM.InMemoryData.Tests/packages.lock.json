@@ -204,14 +204,14 @@
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0, )"
+          "JIM.Models": "[0.13.0-dev.20260720.995, )"
         }
       },
       "jim.inmemorydata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.13.0, )",
-          "JIM.Models": "[0.13.0, )"
+          "JIM.Data": "[0.13.0-dev.20260720.995, )",
+          "JIM.Models": "[0.13.0-dev.20260720.995, )"
         }
       },
       "jim.models": {
