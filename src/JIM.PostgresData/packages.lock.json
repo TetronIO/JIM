@@ -316,7 +316,7 @@
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0-dev.20260720.994, )"
+          "JIM.Models": "[0.13.0-dev.20260721.510, )"
         }
       },
       "jim.models": {
@@ -329,7 +329,7 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0-dev.20260720.994, )",
+          "JIM.Models": "[0.13.0-dev.20260721.510, )",
           "Serilog": "[4.4.0, )"
         }
       }
