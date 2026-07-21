@@ -242,4 +242,75 @@ public class OptimisticExportApplyDatabaseTests
         Assert.That(delta.Additions, Is.Empty, "the persisted round-trip must satisfy the calculator's existence check");
         Assert.That(delta.RemovalValueIds, Is.Empty);
     }
+
+    /// <summary>
+    /// (4) GetSecondaryExternalIdLookupAsync (issue #1079, regression A: the D5 fallback used to
+    /// page through GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync's unindexed
+    /// case-folding scan once per batch, measured at 10-15s per call over 500+ calls at scale).
+    /// This run-scoped replacement must return the correct value-to-CsoId pairs for the requested
+    /// Connected System, keyed case-insensitively (Distinguished Names are case-insensitive), and
+    /// must ignore rows belonging to other Connected Systems.
+    /// </summary>
+    [Test]
+    public async Task GetSecondaryExternalIdLookupAsync_ReturnsCorrectPairsCaseInsensitiveAndIgnoresOtherSystemsAsync()
+    {
+        await using var seed = NewContext();
+
+        var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+        var systemA = new ConnectedSystem { Name = "System A", ConnectorDefinition = connectorDefinition };
+        var systemB = new ConnectedSystem { Name = "System B", ConnectorDefinition = connectorDefinition };
+        var csTypeA = new ConnectedSystemObjectType { Name = "USER", ConnectedSystem = systemA, Selected = true };
+        var csTypeB = new ConnectedSystemObjectType { Name = "USER", ConnectedSystem = systemB, Selected = true };
+        var dnAttrA = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "distinguishedName", ConnectedSystemObjectType = csTypeA, Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued, Selected = true, IsSecondaryExternalId = true
+        };
+        var dnAttrB = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "distinguishedName", ConnectedSystemObjectType = csTypeB, Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued, Selected = true, IsSecondaryExternalId = true
+        };
+        csTypeA.Attributes.Add(dnAttrA);
+        csTypeB.Attributes.Add(dnAttrB);
+        seed.AddRange(connectorDefinition, systemA, systemB, csTypeA, csTypeB, dnAttrA, dnAttrB);
+        await seed.SaveChangesAsync();
+
+        var csoA1 = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(), Type = csTypeA, ConnectedSystem = systemA,
+            Status = ConnectedSystemObjectStatus.Normal, ExternalIdAttributeId = dnAttrA.Id,
+            SecondaryExternalIdAttributeId = dnAttrA.Id
+        };
+        var csoA2 = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(), Type = csTypeA, ConnectedSystem = systemA,
+            Status = ConnectedSystemObjectStatus.Normal, ExternalIdAttributeId = dnAttrA.Id,
+            SecondaryExternalIdAttributeId = dnAttrA.Id
+        };
+        var csoB1 = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(), Type = csTypeB, ConnectedSystem = systemB,
+            Status = ConnectedSystemObjectStatus.Normal, ExternalIdAttributeId = dnAttrB.Id,
+            SecondaryExternalIdAttributeId = dnAttrB.Id
+        };
+        seed.AddRange(csoA1, csoA2, csoB1);
+        await seed.SaveChangesAsync();
+
+        seed.ConnectedSystemObjectAttributeValues.AddRange(
+            new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = csoA1, AttributeId = dnAttrA.Id, StringValue = "CN=Alice,DC=test" },
+            new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = csoA2, AttributeId = dnAttrA.Id, StringValue = "CN=Bob,DC=test" },
+            new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = csoB1, AttributeId = dnAttrB.Id, StringValue = "CN=Other,DC=test" });
+        await seed.SaveChangesAsync();
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var lookup = await repository.Sync.GetSecondaryExternalIdLookupAsync(systemA.Id);
+
+        Assert.That(lookup, Has.Count.EqualTo(2), "must only include System A's rows");
+        Assert.That(lookup["CN=Alice,DC=test"], Is.EqualTo(csoA1.Id));
+        Assert.That(lookup["cn=bob,dc=test"], Is.EqualTo(csoA2.Id), "the dictionary must match case-insensitively");
+        Assert.That(lookup.ContainsKey("CN=Other,DC=test"), Is.False, "rows from other Connected Systems must be excluded");
+    }
 }

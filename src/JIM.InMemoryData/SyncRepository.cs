@@ -385,6 +385,25 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    /// <summary>
+    /// Issue #1079 (D5 fallback): whole-Connected-System projection, keyed case-insensitively.
+    /// Virtual so tests can override it to count invocations (proving it is built once per export
+    /// run, not once per batch).
+    /// </summary>
+    public virtual Task<Dictionary<string, Guid>> GetSecondaryExternalIdLookupAsync(int connectedSystemId)
+    {
+        var lookup = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cso in GetCsosForSystem(connectedSystemId))
+        {
+            if (!cso.SecondaryExternalIdAttributeId.HasValue) continue;
+            var secIdAv = cso.AttributeValues
+                .FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId.Value);
+            if (secIdAv?.StringValue != null)
+                lookup.TryAdd(secIdAv.StringValue, cso.Id);
+        }
+        return Task.FromResult(lookup);
+    }
+
     public Task<List<int>> GetAllExternalIdAttributeValuesOfTypeIntAsync(int connectedSystemId, int objectTypeId, int? partitionId = null)
     {
         var csos = GetCsosForSystem(connectedSystemId).Where(c => c.TypeId == objectTypeId);

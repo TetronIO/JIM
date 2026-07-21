@@ -157,6 +157,19 @@ public interface ISyncRepository
     Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(int connectedSystemId, IEnumerable<string> secondaryExternalIdValues);
 
     /// <summary>
+    /// Issue #1079 (optimistic export apply, D5 fallback): a run-scoped, whole-Connected-System
+    /// projection of secondary external Id value to Connected System Object Id, keyed
+    /// case-insensitively (Distinguished Names are case-insensitive). Built once per export run
+    /// (not once per batch): a per-batch paged lookup via
+    /// <see cref="GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync"/> measured
+    /// 10-15 seconds per call over an unindexed case-folding scan at 500+ calls in one run
+    /// (Scale500k25kGroups, 2026-07-21), and additionally materialised and tracked matched CSOs on
+    /// the worker's long-lived context. This method is a raw SQL projection: no entity
+    /// materialisation, no tracking.
+    /// </summary>
+    Task<Dictionary<string, Guid>> GetSecondaryExternalIdLookupAsync(int connectedSystemId);
+
+    /// <summary>
     /// Gets all external ID attribute values of type int for a Connected System and object type.
     /// Used during import to build the full set of known external IDs for deletion detection.
     /// </summary>

@@ -2712,12 +2712,12 @@ public class ExportExecutionTests
     }
 
     /// <summary>
-    /// Orchestrator review finding #3: the D5 fallback dictionary that maps a Reference change's
-    /// Distinguished Name to a resolved CSO Id is built from
-    /// GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync's returned keys. Distinguished
-    /// Names are case-insensitive (the import's own DN resolution, SyncImportTaskProcessor Phase 2,
-    /// matches case-insensitively for exactly this reason), so a stored DN cased differently from
-    /// the Pending Export's own recorded DN must still resolve.
+    /// Orchestrator review finding #3 (now served by GetSecondaryExternalIdLookupAsync, regression
+    /// A's replacement for the per-batch paged fallback): the D5 fallback dictionary that maps a
+    /// Reference change's Distinguished Name to a resolved CSO Id must match case-insensitively.
+    /// Distinguished Names are case-insensitive (the import's own DN resolution,
+    /// SyncImportTaskProcessor Phase 2, matches case-insensitively for exactly this reason), so a
+    /// stored DN cased differently from the Pending Export's own recorded DN must still resolve.
     /// </summary>
     [Test]
     public async Task ExecuteExportsAsync_DnFallbackLookupReturnsDifferentCase_StillResolvesReferenceValueIdAsync()
@@ -2802,9 +2802,9 @@ public class ExportExecutionTests
     }
 
     /// <summary>
-    /// Repository whose D5 fallback DN lookup returns the resolved DN in different case than the
-    /// Pending Export's own recorded DN, to prove ApplyOptimisticExportUpdatesAsync's fallback
-    /// dictionary matches case-insensitively.
+    /// Repository whose D5 fallback lookup (GetSecondaryExternalIdLookupAsync, issue #1079
+    /// regression A) returns the resolved DN in different case than the Pending Export's own
+    /// recorded DN, to prove the lookup still resolves case-insensitively end to end.
     /// </summary>
     private sealed class DifferentCaseDnSyncRepository : SyncRepository
     {
@@ -2812,14 +2812,117 @@ public class ExportExecutionTests
 
         public string ReturnedDn { get; set; } = null!;
 
-        public override Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(
-            int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
+        public override Task<Dictionary<string, Guid>> GetSecondaryExternalIdLookupAsync(int connectedSystemId)
         {
-            var resolvedCso = new ConnectedSystemObject { Id = ResolvedCsoId };
-            return Task.FromResult(new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal)
+            return Task.FromResult(new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase)
             {
-                [ReturnedDn] = resolvedCso
+                [ReturnedDn] = ResolvedCsoId
             });
+        }
+    }
+
+    /// <summary>
+    /// Regression A (2026-07-21 scale run, Scale500k25kGroups): the per-batch paged D5 fallback
+    /// (GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync) measured 10-15 seconds per
+    /// call over an unindexed case-folding scan, at 500+ calls across one export run (users exported
+    /// in 32m, then ~26.5k groups took ~149m). GetSecondaryExternalIdLookupAsync must be built ONCE
+    /// per export run and reused across every batch that needs it, not rebuilt per batch.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_MultipleBatchesNeedingFallbackResolution_BuildsSecondaryExternalIdLookupOnceAsync()
+    {
+        // Arrange
+        var resolvedCsoId = Guid.NewGuid();
+        var countingRepo = new CountingSecondaryExternalIdLookupSyncRepository
+        {
+            ReturnValue = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["CN=Manager,DC=Test"] = resolvedCsoId
+            }
+        };
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: countingRepo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+
+        // 6 immediate (non-deferred) exports, each carrying an already-resolved-to-DN Reference
+        // change (mirroring how group Pending Exports arrive at export: member references resolved
+        // to DNs at export evaluation in a prior phase, so ResolvedReferenceCsoId is unset and every
+        // one of them falls into the D5 fallback bucket).
+        const int exportCount = 6;
+        for (var i = 0; i < exportCount; i++)
+        {
+            var cso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            };
+            syncRepo.SeedConnectedSystemObject(cso);
+
+            var pendingExport = new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                ConnectedSystem = targetSystem,
+                ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
+                Status = PendingExportStatus.Pending,
+                ChangeType = PendingExportChangeType.Update,
+                CreatedAt = DateTime.UtcNow.AddMinutes(i),
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = managerAttr.Id,
+                        Attribute = managerAttr,
+                        StringValue = "CN=Manager,DC=Test",
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    }
+                }
+            };
+            syncRepo.SeedPendingExport(pendingExport);
+        }
+
+        var mockConnector = CreateSucceedingCallsConnector();
+        var options = new ExportExecutionOptions { BatchSize = 2 }; // forces 3 sequential batches
+
+        // Act
+        var result = await jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None);
+
+        // Assert
+        Assert.That(result.SuccessCount, Is.EqualTo(exportCount));
+        Assert.That(countingRepo.CallCount, Is.EqualTo(1),
+            "the secondary external Id lookup must be built once per export run, not once per batch");
+    }
+
+    /// <summary>
+    /// Repository that counts calls to GetSecondaryExternalIdLookupAsync, to prove it is built once
+    /// per export run (issue #1079 regression A) rather than once per batch.
+    /// </summary>
+    private sealed class CountingSecondaryExternalIdLookupSyncRepository : SyncRepository
+    {
+        private int _callCount;
+
+        public int CallCount => _callCount;
+
+        public Dictionary<string, Guid> ReturnValue { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public override Task<Dictionary<string, Guid>> GetSecondaryExternalIdLookupAsync(int connectedSystemId)
+        {
+            Interlocked.Increment(ref _callCount);
+            return Task.FromResult(ReturnValue);
         }
     }
 

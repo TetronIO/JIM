@@ -476,6 +476,47 @@ public partial class SyncRepository
         await writer.CompleteAsync();
     }
 
+    /// <summary>
+    /// Issue #1079 (D5 fallback, regression A): a run-scoped, whole-Connected-System projection of
+    /// secondary external Id value to Connected System Object Id, keyed case-insensitively
+    /// (Distinguished Names are case-insensitive). Raw SQL projection: no entity materialisation, no
+    /// change tracking. Replaces the per-batch paged
+    /// <see cref="ConnectedSystemRepository.GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync"/>
+    /// call, which measured 10-15 seconds per call over an unindexed <c>LOWER()</c> case-folding
+    /// scan of a ~10M-row attribute value table, at 500+ calls in one export run
+    /// (Scale500k25kGroups, 2026-07-21) - and additionally materialised and tracked matched CSOs on
+    /// the worker's long-lived context. Built once per export run instead (~525k tuples, one pass).
+    /// </summary>
+    public async Task<Dictionary<string, Guid>> GetSecondaryExternalIdLookupAsync(int connectedSystemId)
+    {
+        var lookup = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+
+        var connection = _context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT av."StringValue", av."ConnectedSystemObjectId"
+            FROM "ConnectedSystemObjectAttributeValues" av
+            INNER JOIN "ConnectedSystemObjects" cso
+                ON av."ConnectedSystemObjectId" = cso."Id"
+                AND av."AttributeId" = cso."SecondaryExternalIdAttributeId"
+            WHERE cso."ConnectedSystemId" = @connectedSystemId
+                AND av."StringValue" IS NOT NULL
+            """;
+        var connectedSystemIdParameter = command.CreateParameter();
+        connectedSystemIdParameter.ParameterName = "connectedSystemId";
+        connectedSystemIdParameter.Value = connectedSystemId;
+        command.Parameters.Add(connectedSystemIdParameter);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            lookup.TryAdd(reader.GetString(0), reader.GetGuid(1));
+
+        return lookup;
+    }
+
     #endregion
 
     #region Cross-Batch Reference Fixup

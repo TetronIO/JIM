@@ -31,6 +31,14 @@ public class ExportExecutionServer
     /// </summary>
     public const int DefaultBatchSize = 100;
 
+    /// <summary>
+    /// Shared empty D5 fallback lookup (issue #1079), reused whenever a batch's
+    /// CollectUnresolvedReferenceDns probe finds nothing needing the whole-Connected-System
+    /// lookup, so that case allocates nothing and never touches
+    /// <see cref="ISyncRepository.GetSecondaryExternalIdLookupAsync"/>.
+    /// </summary>
+    private static readonly Dictionary<string, Guid> EmptySecondaryExternalIdLookup = new(StringComparer.OrdinalIgnoreCase);
+
     private JimApplication Application { get; }
     private ISyncRepository SyncRepo { get; }
 
@@ -152,9 +160,19 @@ public class ExportExecutionServer
             return result;
         }
 
+        // Issue #1079 regression A (Scale500k25kGroups, 2026-07-21): the D5 fallback used to page
+        // through a per-batch database call (10-15s per call over an unindexed scan, 500+ calls in
+        // one run). Built lazily instead: the first batch whose Pending Exports need fallback
+        // resolution triggers exactly one whole-Connected-System lookup, and every other batch in
+        // this run (sequential or parallel) awaits the SAME cached Task rather than rebuilding it.
+        // Lazy<T>'s default thread safety mode (ExecutionAndPublication) makes this safe for
+        // concurrent parallel batches without any extra locking here.
+        var secondaryExternalIdLookup = new Lazy<Task<Dictionary<string, Guid>>>(
+            () => BuildSecondaryExternalIdLookupAsync(connectedSystem.Id));
+
         // Execute exports using the connector with batch-loading
         await ExecuteExportsViaConnectorAsync(connectedSystem, connector, result, options,
-            cancellationToken, progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
+            cancellationToken, progressCallback, connectorFactory, repositoryFactory, secondaryExternalIdLookup, batchCompletedCallback);
 
         // Second pass: retry any exports with deferred references that might now be resolvable
         if (!cancellationToken.IsCancellationRequested)
@@ -191,6 +209,22 @@ public class ExportExecutionServer
         });
 
         return result;
+    }
+
+    /// <summary>
+    /// Builds the run-scoped D5 fallback lookup (issue #1079 regression A): a single raw-SQL
+    /// projection of every secondary external Id value in the Connected System to its Connected
+    /// System Object Id, built once and reused for the whole export run. See the remark on
+    /// <see cref="ISyncRepository.GetSecondaryExternalIdLookupAsync"/> for the per-batch paged
+    /// approach this replaces and why.
+    /// </summary>
+    private async Task<Dictionary<string, Guid>> BuildSecondaryExternalIdLookupAsync(int connectedSystemId)
+    {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("BuildSecondaryExternalIdLookup")
+            .SetTag("connectedSystemId", connectedSystemId);
+        var lookup = await SyncRepo.GetSecondaryExternalIdLookupAsync(connectedSystemId);
+        span.SetTag("count", lookup.Count);
+        return lookup;
     }
 
     /// <summary>
@@ -309,13 +343,14 @@ public class ExportExecutionServer
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
         Func<ISyncRepositoryScope>? repositoryFactory,
+        Lazy<Task<Dictionary<string, Guid>>> secondaryExternalIdLookup,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         // Check if connector supports export using calls
         if (connector is IConnectorExportUsingCalls callsConnector)
         {
             await ExecuteUsingCallsWithBatchingAsync(connectedSystem, callsConnector, result, options,
-                cancellationToken, progressCallback, connectorFactory, repositoryFactory, batchCompletedCallback);
+                cancellationToken, progressCallback, connectorFactory, repositoryFactory, secondaryExternalIdLookup, batchCompletedCallback);
         }
         // File-based connectors load all Pending Exports upfront because the connector writes the
         // full output file in a single pass. Batching the DB load would only help if the write
@@ -369,6 +404,7 @@ public class ExportExecutionServer
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
         Func<ISyncRepositoryScope>? repositoryFactory,
+        Lazy<Task<Dictionary<string, Guid>>> secondaryExternalIdLookup,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
     {
         try
@@ -503,7 +539,7 @@ public class ExportExecutionServer
                                 .SetTag("batchSize", immediateExports.Count))
                             {
                                 await ProcessBatchSuccessAsync(immediateExports, exportResults, result,
-                                    SyncRepo);
+                                    SyncRepo, secondaryExternalIdLookup);
                             }
                         }
                         catch (OperationCanceledException)
@@ -615,7 +651,7 @@ public class ExportExecutionServer
                 if (deferredExports.Count > 0)
                 {
                     await ProcessDeferredExportsAsync(connectedSystem, connector, deferredExports, result, options,
-                        cancellationToken, progressCallback, connectorFactory, repositoryFactory);
+                        cancellationToken, progressCallback, connectorFactory, repositoryFactory, secondaryExternalIdLookup);
 
                     // Drain any remaining deferred export items via callback
                     if (batchCompletedCallback != null && result.ProcessedExportItems.Count > 0)
@@ -671,7 +707,8 @@ public class ExportExecutionServer
         CancellationToken cancellationToken,
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector>? connectorFactory,
-        Func<ISyncRepositoryScope>? repositoryFactory)
+        Func<ISyncRepositoryScope>? repositoryFactory,
+        Lazy<Task<Dictionary<string, Guid>>> secondaryExternalIdLookup)
     {
         var useParallelBatches = options.MaxParallelism > 1 && connectorFactory != null && repositoryFactory != null;
 
@@ -771,12 +808,12 @@ public class ExportExecutionServer
                 // resetting to a phase-local count (the "2,884 of 209,984" UI regression).
                 var immediateProcessedCount = result.SuccessCount + result.FailedCount;
                 await ProcessBatchesInParallelAsync(connectedSystem, connector, deferredBatches, result, options,
-                    cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, "ExportDeferredBatch",
+                    cancellationToken, progressCallback, connectorFactory!, repositoryFactory!, secondaryExternalIdLookup, "ExportDeferredBatch",
                     processedExportsOffset: immediateProcessedCount);
             }
             else
             {
-                await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken, progressCallback);
+                await ProcessDeferredBatchesSequentiallyAsync(connector, deferredBatches, result, cancellationToken, progressCallback, secondaryExternalIdLookup);
             }
         }
 
@@ -820,7 +857,8 @@ public class ExportExecutionServer
         List<List<PendingExport>> batches,
         ExportExecutionResult result,
         CancellationToken cancellationToken,
-        Func<ExportProgressInfo, Task>? progressCallback)
+        Func<ExportProgressInfo, Task>? progressCallback,
+        Lazy<Task<Dictionary<string, Guid>>> secondaryExternalIdLookup)
     {
         // Snapshot the counts from the immediate export phase. ProcessBatchSuccessAsync
         // increments result.SuccessCount/FailedCount for deferred batches too, so using
@@ -857,7 +895,7 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
                 .SetTag("batchSize", batch.Count))
             {
-                await ProcessBatchSuccessAsync(batch, exportResults, result, SyncRepo);
+                await ProcessBatchSuccessAsync(batch, exportResults, result, SyncRepo, secondaryExternalIdLookup);
             }
 
             processedCount += batch.Count;
@@ -881,6 +919,7 @@ public class ExportExecutionServer
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<IConnector> connectorFactory,
         Func<ISyncRepositoryScope> repositoryFactory,
+        Lazy<Task<Dictionary<string, Guid>>> secondaryExternalIdLookup,
         string spanName,
         int processedExportsOffset = 0,
         Func<List<ProcessedExportItem>, Task>? batchCompletedCallback = null)
@@ -954,7 +993,7 @@ public class ExportExecutionServer
 
                     // Process results using the batch's own repository
                     var batchResult = new ExportExecutionResult();
-                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo);
+                    await ProcessBatchSuccessAsync(batch, exportResults, batchResult, batchRepo, secondaryExternalIdLookup);
 
                     // Capture created containers from this batch's connector
                     List<string>? batchContainerIds = null;
@@ -1076,7 +1115,8 @@ public class ExportExecutionServer
         List<PendingExport> batch,
         List<ConnectedSystemExportResult> exportResults,
         ExportExecutionResult result,
-        ISyncRepository repository)
+        ISyncRepository repository,
+        Lazy<Task<Dictionary<string, Guid>>> secondaryExternalIdLookup)
     {
         var exportsToUpdate = new List<PendingExport>();
         var csosToUpdate = new List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)>();
@@ -1167,7 +1207,7 @@ public class ExportExecutionServer
         // (D9's dedupe guarantee depends on this ordering; see D11).
         if (successfulNonDeleteExports.Count > 0)
         {
-            await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, repository);
+            await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, repository, secondaryExternalIdLookup);
         }
     }
 
@@ -1185,34 +1225,25 @@ public class ExportExecutionServer
     private async Task ApplyOptimisticExportUpdatesAsync(
         List<PendingExport> successfulNonDeleteExports,
         ExportExecutionResult result,
-        ISyncRepository repository)
+        ISyncRepository repository,
+        Lazy<Task<Dictionary<string, Guid>>> secondaryExternalIdLookup)
     {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("OptimisticApply")
+            .SetTag("count", successfulNonDeleteExports.Count);
         try
         {
-            // D5 fallback: batch-resolve, via the same lookup the import uses, any Reference
-            // change whose transient ResolvedReferenceCsoId hint is unset (already resolved in an
-            // earlier export run, or never routed through TryResolveReferencesFromLookup at all).
+            // D5 fallback: any Reference change whose transient ResolvedReferenceCsoId hint is
+            // unset (already resolved in an earlier export run, or never routed through
+            // TryResolveReferencesFromLookup at all - e.g. group Pending Exports whose member
+            // references were already resolved to DNs at export evaluation, in a prior phase)
+            // needs the whole-Connected-System lookup. CollectUnresolvedReferenceDns is a cheap,
+            // pure, in-memory check (issue #1079 regression A: querying per batch to answer this
+            // measured 10-15s per call over an unindexed scan at 500+ calls in one run), so only
+            // touch the (lazily built, run-scoped, cached) lookup when this batch actually needs it.
             var dnsNeedingResolution = OptimisticExportApplyCalculator.CollectUnresolvedReferenceDns(successfulNonDeleteExports);
-            // OrdinalIgnoreCase: Distinguished Names are case-insensitive, and the repository lookup's
-            // returned key casing (the stored secondary external Id value) is not guaranteed to match
-            // the casing recorded on the Pending Export's own attribute change. The import's own DN
-            // resolution (SyncImportTaskProcessor Phase 2, dbSecondaryResults) uses the same comparer
-            // for the same reason.
-            var resolvedReferenceCsoIdsByDn = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-
-            if (dnsNeedingResolution.Count > 0)
-            {
-                var connectedSystemId = successfulNonDeleteExports[0].ConnectedSystemId;
-                var pageSize = await Application.ServiceSettings.GetSyncPageSizeAsync();
-                var dnList = dnsNeedingResolution.ToList();
-                for (var i = 0; i < dnList.Count; i += pageSize)
-                {
-                    var page = dnList.Skip(i).Take(pageSize);
-                    var pageResults = await repository.GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(connectedSystemId, page);
-                    foreach (var (dn, referencedCso) in pageResults)
-                        resolvedReferenceCsoIdsByDn.TryAdd(dn, referencedCso.Id);
-                }
-            }
+            var resolvedReferenceCsoIdsByDn = dnsNeedingResolution.Count > 0
+                ? await secondaryExternalIdLookup.Value
+                : EmptySecondaryExternalIdLookup;
 
             var delta = OptimisticExportApplyCalculator.CalculateDelta(successfulNonDeleteExports, resolvedReferenceCsoIdsByDn);
 
