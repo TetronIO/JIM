@@ -110,29 +110,29 @@ Recommendations should be one of:
 - **Hold** - Needs investigation (explain why)
 - **Reject** - Fails assessment (explain why)
 
-## Step 6: Merge
+## Step 6: Merge (serial merge train)
 
-Unless running in review-only mode:
+Unless running in review-only mode. Assessment (Steps 1 to 5) is batched because reading diffs costs no CI; merging is **strictly serial**: one PR at a time, in order. Branch protection requires every PR to be up to date with `main`, so each merge invalidates the rest of the batch; updating or triggering CI on any PR other than the next in the queue wastes CI minutes (a rebase-everything-after-every-merge pattern costs roughly N-squared/2 CI runs per batch of N, against a floor of N).
 
-1. **Check branch is up to date**: Before merging, check whether the PR branch is behind `main` (`gh pr view <number> --json mergeStateStatus`). Branch protection requires the branch to be current. If the branch is behind:
-   - Comment `@dependabot rebase` on the PR and wait — do not use any other mechanism
-   - **Never use `update_pull_request_branch` (the API "Update branch" endpoint) or the GitHub "Update branch" button.** This creates a *merge commit* instead of a proper git rebase. Merge commits on Dependabot branches cause cascading conflicts when multiple PRs share the same files (e.g. `JIM.Web.csproj` is referenced by several grouped NuGet update PRs), and — critically — once an external merge commit is on the branch, Dependabot ignores all subsequent `@dependabot rebase` and `@dependabot recreate` commands, leaving the PR permanently stuck.
-   - `@dependabot rebase` is the only safe mechanism: it replays the Dependabot commit cleanly on top of current `main` without these side-effects.
-   - Accept the wait: multiple CI rounds are normal when merging a batch of PRs that share files. After each merge, comment `@dependabot rebase` on the remaining PRs and let CI run.
-   - Once Dependabot rebases and CI passes, the merge can proceed (the user can re-run this skill or merge manually)
-2. Identify any merge ordering constraints (multiple PRs touching the same file)
-3. Merge approved PRs in the correct order using `gh pr merge <number> --merge`
-4. Include a merge comment noting what was verified (pinning, security advisory, etc.)
-5. If a PR has merge conflicts after earlier merges, comment `@dependabot rebase` and wait for the rebase before merging
-6. **Recovery if a PR is `dirty`**: If a branch ended up `dirty` because an external merge commit was added (e.g. via `update_pull_request_branch`), Dependabot will not respond to any further commands. The only fix is a manual rebase from a local clone:
+1. **Pick the next PR only.** Order: security fixes first, then any ordering constraint from the assessment (PRs sharing files), then oldest first. Do not comment on, update, or otherwise trigger CI on any other PR in the batch.
+2. **Bring it up to date and fix lock files in ONE push** (each push costs a full CI run, so never push a lock-file fix and a branch update separately):
+   - If the branch carries only Dependabot's own commits, comment `@dependabot rebase` and wait up to ~5 minutes (it normally responds in under a minute). If it responds, lock files may still need regenerating (see below) - do that on the rebased head in the same pass as any further update.
+   - If the branch has external commits (lock-file regeneration, an earlier update), or Dependabot does not respond within the timeout: update locally instead. `git fetch origin`, `git checkout <branch>`, `git pull --no-rebase` (absorbs any remote drift, e.g. a stray "Update branch" click), `git merge origin/main --no-edit`. **Merge, don't rebase**: `main` squash-merges so branch history is discarded anyway, and a merge needs only a plain push (root `CLAUDE.md`). Dependabot stops maintaining a branch once it has external commits; that is expected - the train owns the branch from that point.
+   - **Conflicts**: resolve conflicted `.csproj` files manually, keeping BOTH sides' version bumps (`git diff HEAD origin/main -- <file>` shows what each side changed). Never hand-merge a `packages.lock.json` conflict - lock content derives from the csproj set, so regenerate instead.
+   - **Regenerate and verify before committing**: run `dotnet restore JIM.sln --force-evaluate` as its own command and check its exit status directly - do not bury it in a `&&`/pipe chain where a piped `tail` masks the exit code. Then `grep -rln '<<<<<<<' src/ test/` must return nothing (a marker-laden csproj otherwise gets committed silently; this happened). Then `git add -A`, commit, plain push.
+3. **Arm auto-merge**: `gh pr merge <number> --squash --auto`. Include a merge comment noting what was verified (pinning, security advisory) where the assessment found anything noteworthy.
+4. **Wait for the merge before touching the next PR** (background until-loop on the merge state per root `CLAUDE.md`, or a PR-activity subscription). Investigate red required checks on the current PR only; checks on queued PRs are stale by construction and not worth reading.
+5. **Advance** to the next PR and repeat from step 2.
+6. **Avoid the API "Update branch" endpoint (`update_pull_request_branch`) on branches Dependabot still maintains**: the merge commit it creates makes Dependabot ignore all subsequent `@dependabot rebase`/`recreate` commands. On a branch that already has external commits it is functionally equivalent to the local merge in step 2, but prefer the local merge for conflict control and the single-push discipline.
+7. **Recovery (last resort)**: for a branch that is truly wedged, a manual rebase replays only the version-bump commit on top of current `main`:
    ```bash
    git fetch origin
    git checkout <dependabot-branch-name>
    git rebase origin/main
    git push --force-with-lease origin <dependabot-branch-name>
    ```
-   This replays only the Dependabot version-bump commit on top of current `main`. CI will then run cleanly and the PR can be merged normally.
-7. Report final status of all PRs
+   Prefer the merge path in step 2; force-push only when a plain push cannot represent the fix, and expect the harness to require explicit user approval for it.
+8. Report final status of all PRs
 
 ## Reference: JIM's Supply Chain Security Requirements
 
