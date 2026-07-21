@@ -33,7 +33,41 @@
 #
 # JIM also does not use EncryptedXml (the affected class) at runtime.
 #
-# Review by: 2026-07-15 (re-check whether Microsoft has re-rolled the SDK
+# Review by: 2026-10-21 (re-check whether Microsoft has re-rolled the SDK
 # image or Trivy's matching has been corrected).
+# Re-evaluated 2026-07-21: situation unchanged. The current sdk:10.0-noble
+# digest (ed034a8, runtime 10.0.10 / SDK 10.0.302) is the newest available
+# and the file-version matching gotcha persists (see the July 2026 entry
+# below, which is the same failure mode for the next servicing wave).
 CVE-2026-26171
 CVE-2026-33116
+
+# ----------------------------------------------------------------------------
+# CVE-2026-47302 / CVE-2026-47304 / CVE-2026-50525 / CVE-2026-50648
+# (.NET July 2026 servicing wave, flagged only in the SDK build-stage image)
+# ----------------------------------------------------------------------------
+# All four are part of the July 2026 .NET security release (Ubuntu advisory
+# USN-8553-1, published 2026-07-15) and are fixed in .NET runtime 10.0.10 /
+# SDK 10.0.302: XML-encryption resource-exhaustion DoS and SMTP header
+# handling in the runtime, plus SDK tooling variants.
+#
+# The production images (aspnet/runtime 10.0-noble) were bumped to the
+# 10.0.10 digests (1fa23fc / ed5d539) in the same commit as this entry; their
+# scans pass, so shipped JIM containers carry the fixes.
+#
+# The sdk:10.0-noble image digest ed034a8 IS the patched build (runtime
+# 10.0.10, SDK 10.0.302 - verified via the image config's DOTNET_VERSION),
+# yet Trivy still flags these CVEs against components bundled inside the SDK
+# image. This is the same in-box assembly file-version matching gotcha
+# documented in the entry above; no newer SDK image exists to pull.
+#
+# The SDK image is a build stage only: no SDK-image content ships in the
+# final runtime images beyond JIM's own published output, so there is no
+# exploit surface in deployed containers.
+#
+# Review by: 2026-10-21 (re-check whether Microsoft has re-rolled the SDK
+# image; remove once a clean sdk:10.0-noble digest exists).
+CVE-2026-47302
+CVE-2026-47304
+CVE-2026-50525
+CVE-2026-50648

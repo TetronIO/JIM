@@ -11,7 +11,7 @@ ARG VERSION=dev
 # to skip the expensive generation step in local dev builds.
 ARG OPENAPI_STAGE=openapi-gen
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:ddcf70ad1ab963a4fcd41fbd722a6b660e404e87567cfbd46fd2809c21b02088 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:1fa23fc4872d95fd71c2833ebe65d7e84a43b2d51a31d119516852f13d9505a7 AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Web"
@@ -105,7 +105,7 @@ RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=fal
 #
 # The output is written under /app/publish so that the final stage can pull
 # from either openapi-gen or publish using the same path.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:ddcf70ad1ab963a4fcd41fbd722a6b660e404e87567cfbd46fd2809c21b02088 AS openapi-gen
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:1fa23fc4872d95fd71c2833ebe65d7e84a43b2d51a31d119516852f13d9505a7 AS openapi-gen
 WORKDIR /app/publish
 COPY --from=publish /app/publish .
 ENV JIM_OPENAPI_GENERATE=true \
