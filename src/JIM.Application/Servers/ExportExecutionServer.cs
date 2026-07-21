@@ -1662,6 +1662,12 @@ public class ExportExecutionServer
                                              resolvedAttr.IntValue?.ToString();
                     attrChange.UnresolvedReferenceValue = null;
 
+                    // Issue #1079 (optimistic export apply): the referenced CSO is in hand right
+                    // here, so stamp its Id as an in-memory-only hint. This lets optimistic apply
+                    // populate ConnectedSystemObjectAttributeValue.ReferenceValueId without a
+                    // further database round-trip when this same export run applies the value.
+                    attrChange.ResolvedReferenceCsoId = referencedCso.Id;
+
                     Log.Debug("Resolved reference for MVO {MvoId} to {Value} using {IdType}",
                         referencedMvoId,
                         LogSanitiser.Sanitise(attrChange.StringValue),

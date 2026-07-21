@@ -2242,6 +2242,105 @@ public class ExportExecutionTests
 
     #endregion
 
+    #region Reference Resolution Transient Stamp (issue #1079)
+
+    /// <summary>
+    /// Issue #1079 (optimistic export apply): when a deferred export's Reference attribute change
+    /// is resolved via TryResolveReferencesFromLookup, the referenced CSO is in hand at that
+    /// moment. The transient ResolvedReferenceCsoId hint must be stamped onto the attribute change
+    /// so optimistic apply can populate ConnectedSystemObjectAttributeValue.ReferenceValueId
+    /// without a further database round-trip.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeferredReferenceResolves_StampsResolvedReferenceCsoIdAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+
+        // The referenced CSO (the "manager") that the deferred reference resolves to.
+        var managerMvoId = Guid.NewGuid();
+        SyncRepo.SeedMetaverseObject(new MetaverseObject { Id = managerMvoId });
+        var managerCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObjectId = managerMvoId,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Attribute = objectGuidAttr,
+                    AttributeId = objectGuidAttr.Id,
+                    GuidValue = Guid.NewGuid()
+                }
+            }
+        };
+        SyncRepo.SeedConnectedSystemObject(managerCso);
+
+        // The CSO with the deferred (unresolved) reference to the manager.
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+        SyncRepo.SeedConnectedSystemObject(cso);
+
+        var managerChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportAttributeChangeType.Update,
+            AttributeId = managerAttr.Id,
+            Attribute = managerAttr,
+            UnresolvedReferenceValue = managerMvoId.ToString(),
+            Status = PendingExportAttributeChangeStatus.Pending
+        };
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            HasUnresolvedReferences = true,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange> { managerChange }
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+                exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+
+        // Act
+        await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert
+        Assert.That(managerChange.ResolvedReferenceCsoId, Is.EqualTo(managerCso.Id),
+            "Resolving a deferred reference must stamp the transient ResolvedReferenceCsoId hint " +
+            "with the referenced CSO's Id so optimistic apply can use it without a further lookup.");
+    }
+
+    #endregion
+
     #region batch scan efficiency (issue #985)
 
     /// <summary>
