@@ -41,7 +41,10 @@ public interface IApiKeyRepository
     Task DeleteAsync(Guid id);
 
     /// <summary>
-    /// Records usage of an API key (updates last used timestamp and IP).
+    /// Records usage of an API key (updates last used timestamp and IP). Best-effort, throttled
+    /// bookkeeping: implementations persist at most one stamp per key per short interval (see the
+    /// implementation's <c>UsageStampInterval</c>), so continuous API polling does not translate
+    /// into a write per request; LastUsedAt is a coarse recently-used indicator, not a request log.
     /// </summary>
     Task RecordUsageAsync(Guid id, string? ipAddress);
 }
