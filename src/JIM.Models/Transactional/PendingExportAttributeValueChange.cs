@@ -1,11 +1,26 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Staging;
 namespace JIM.Models.Transactional;
 
 public class PendingExportAttributeValueChange
 {
+    /// <summary>
+    /// In-memory only (never persisted): the Id of the Connected System Object that this Reference
+    /// attribute change's Distinguished Name was resolved to, when that resolution happened within
+    /// the current export run (<c>ExportExecutionServer.TryResolveReferencesFromLookup</c>). Used by
+    /// optimistic export apply (issue #1079) to populate
+    /// <see cref="JIM.Models.Staging.ConnectedSystemObjectAttributeValue.ReferenceValueId"/> without a
+    /// further database round-trip. Left null when the reference was already resolved in an earlier
+    /// export run (this run never looked the referenced Connected System Object up, even though
+    /// <see cref="StringValue"/> already holds the resolved Distinguished Name); optimistic apply
+    /// falls back to a batched database lookup in that case.
+    /// </summary>
+    [NotMapped]
+    public Guid? ResolvedReferenceCsoId { get; set; }
+
     public Guid Id { get; set; }
 
     /// <summary>
