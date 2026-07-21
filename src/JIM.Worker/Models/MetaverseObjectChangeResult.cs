@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Logic;
 using JIM.Models.Sync;
 
 namespace JIM.Worker.Models;
@@ -78,6 +79,21 @@ public readonly struct MetaverseObjectChangeResult
     public MetaverseObject? DisconnectedMvo { get; init; }
 
     /// <summary>
+    /// The id of the Synchronisation Rule attributed to this change, when one was determinable at
+    /// decision time (#1085): the scoping rule the Connected System Object fell out of scope of for
+    /// DisconnectedOutOfScope, or the projecting rule for Projected. Threaded through to the sync
+    /// outcome node so the causality tree records which rule drove the change. Null when no single
+    /// rule is attributable (e.g. Joined, AttributeFlow).
+    /// </summary>
+    public int? SyncRuleId { get; init; }
+
+    /// <summary>
+    /// Snapshot of the attributed Synchronisation Rule's name at decision time, paired with
+    /// <see cref="SyncRuleId"/> so the outcome's attribution survives later rule renames or deletions.
+    /// </summary>
+    public string? SyncRuleName { get; init; }
+
+    /// <summary>
     /// Creates a result indicating no changes occurred.
     /// </summary>
     public static MetaverseObjectChangeResult NoChanges() => new() { HasChanges = false };
@@ -85,11 +101,15 @@ public readonly struct MetaverseObjectChangeResult
     /// <summary>
     /// Creates a result indicating a projection (new MVO created).
     /// </summary>
-    public static MetaverseObjectChangeResult Projected(int attributesAdded) => new()
+    /// <param name="attributesAdded">The number of MVO attributes that were added by the projection.</param>
+    /// <param name="projectionSyncRule">The Synchronisation Rule that caused the projection, when known, for outcome attribution (#1085).</param>
+    public static MetaverseObjectChangeResult Projected(int attributesAdded, SyncRule? projectionSyncRule = null) => new()
     {
         HasChanges = true,
         ChangeType = ObjectChangeType.Projected,
-        AttributesAdded = attributesAdded
+        AttributesAdded = attributesAdded,
+        SyncRuleId = projectionSyncRule?.Id,
+        SyncRuleName = projectionSyncRule?.Name
     };
 
     /// <summary>
@@ -131,12 +151,15 @@ public readonly struct MetaverseObjectChangeResult
     /// <param name="mvoDeletionFate">The fate of the MVO after the disconnection.</param>
     /// <param name="recalledAttributeValues">MVO attribute values that were recalled, for change tracking.</param>
     /// <param name="recalledAttributeAdditions">MVO attribute values re-elected from a surviving contributor, for change tracking.</param>
+    /// <param name="disconnectedMvo">The MVO that was disconnected, for change tracking.</param>
+    /// <param name="scopingSyncRule">The Synchronisation Rule whose scope the CSO fell out of, when determinable, for outcome attribution (#1085).</param>
     public static MetaverseObjectChangeResult DisconnectedOutOfScope(
         int? attributeFlowCount = null,
         MvoDeletionFate mvoDeletionFate = MvoDeletionFate.NotDeleted,
         List<MetaverseObjectAttributeValue>? recalledAttributeValues = null,
         List<MetaverseObjectAttributeValue>? recalledAttributeAdditions = null,
-        MetaverseObject? disconnectedMvo = null) => new()
+        MetaverseObject? disconnectedMvo = null,
+        SyncRule? scopingSyncRule = null) => new()
     {
         HasChanges = true,
         ChangeType = ObjectChangeType.DisconnectedOutOfScope,
@@ -144,7 +167,9 @@ public readonly struct MetaverseObjectChangeResult
         MvoDeletionFate = mvoDeletionFate,
         RecalledAttributeValues = recalledAttributeValues,
         RecalledAttributeAdditions = recalledAttributeAdditions,
-        DisconnectedMvo = disconnectedMvo
+        DisconnectedMvo = disconnectedMvo,
+        SyncRuleId = scopingSyncRule?.Id,
+        SyncRuleName = scopingSyncRule?.Name
     };
 
     /// <summary>

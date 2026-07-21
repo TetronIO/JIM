@@ -564,10 +564,14 @@ public abstract class SyncTaskProcessorBase
                             or ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope
                             ? changeResult.AttributeFlowCount : null;
 
+                        // Attribute the Synchronisation Rule carried on the change result (#1085): the
+                        // scoping rule for DisconnectedOutOfScope, the projecting rule for Projected.
                         var rootOutcome = SyncOutcomeBuilder.AddRootOutcome(runProfileExecutionItem, outcomeType,
                             targetEntityId: mvoId,
                             targetEntityDescription: mvoDescription,
-                            detailCount: rootDetailCount);
+                            detailCount: rootDetailCount,
+                            syncRuleId: changeResult.SyncRuleId,
+                            syncRuleName: changeResult.SyncRuleName);
 
                         // In Detailed mode, add AttributeFlow child under DisconnectedOutOfScope when attributes were recalled.
                         if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
@@ -1110,6 +1114,7 @@ public abstract class SyncTaskProcessorBase
         // Track what kind of change occurred
         var wasJoined = false;
         var wasProjected = false;
+        SyncRule? projectionSyncRule = null;
 
         // Get import Synchronisation Rules for this CSO type
         var importSyncRules = activeSyncRules
@@ -1159,7 +1164,7 @@ public abstract class SyncTaskProcessorBase
                 // Only use in-scope Synchronisation Rules for projection
                 using (Diagnostics.Sync.StartSpan("AttemptProjection"))
                 {
-                    wasProjected = AttemptProjection(scopedSyncRules, connectedSystemObject);
+                    wasProjected = AttemptProjection(scopedSyncRules, connectedSystemObject, out projectionSyncRule);
                     if (wasProjected)
                         _pendingCsoJoinUpdates.Add(connectedSystemObject);
                 }
@@ -1281,9 +1286,13 @@ public abstract class SyncTaskProcessorBase
                     var mvoId = mvo.Id != Guid.Empty ? mvo.Id : (Guid?)null;
                     var mvoDescription = mvo.DisplayName;
 
+                    // Attribute the projecting Synchronisation Rule on Projected outcomes (#1085);
+                    // Joined/AttributeFlow roots have no single attributable rule here.
                     var rootOutcome = SyncOutcomeBuilder.AddRootOutcome(rpei, outcomeType,
                         targetEntityId: mvoId,
-                        targetEntityDescription: mvoDescription);
+                        targetEntityDescription: mvoDescription,
+                        syncRuleId: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Id : null,
+                        syncRuleName: changeType == ObjectChangeType.Projected ? projectionSyncRule?.Name : null);
 
                     // In Detailed mode, add a separate AttributeFlow child under Projected/Joined
                     if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed
@@ -1361,7 +1370,7 @@ public abstract class SyncTaskProcessorBase
             // Return appropriate result based on what happened
             if (wasProjected)
             {
-                return MetaverseObjectChangeResult.Projected(attributesAdded);
+                return MetaverseObjectChangeResult.Projected(attributesAdded, projectionSyncRule);
             }
             if (wasJoined)
             {
@@ -1516,6 +1525,10 @@ public abstract class SyncTaskProcessorBase
 
                     csNameLookup.TryGetValue(provisioningCso.ConnectedSystemId, out var csName);
 
+                    // Attribute the export Synchronisation Rule that provisioned this CSO (#1085);
+                    // the export evaluation records it per provisioning CSO id.
+                    result.ProvisioningSyncRulesByCsoId.TryGetValue(provisioningCso.Id, out var provisioningSyncRule);
+
                     ActivityRunProfileExecutionItemSyncOutcome provisionedOutcome;
                     if (exportParent != null)
                     {
@@ -1523,7 +1536,9 @@ public abstract class SyncTaskProcessorBase
                             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
                             targetEntityId: provisioningCso.Id,
                             targetEntityDescription: csName,
-                            detailMessage: detailMessage);
+                            detailMessage: detailMessage,
+                            syncRuleId: provisioningSyncRule?.Id,
+                            syncRuleName: provisioningSyncRule?.Name);
                     }
                     else
                     {
@@ -1531,7 +1546,9 @@ public abstract class SyncTaskProcessorBase
                             ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
                             targetEntityId: provisioningCso.Id,
                             targetEntityDescription: csName,
-                            detailMessage: detailMessage);
+                            detailMessage: detailMessage,
+                            syncRuleId: provisioningSyncRule?.Id,
+                            syncRuleName: provisioningSyncRule?.Name);
                     }
 
                     provisionedByCs[provisioningCso.ConnectedSystemId] = provisionedOutcome;
@@ -1586,11 +1603,15 @@ public abstract class SyncTaskProcessorBase
             else if (_syncOutcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Standard
                 && _mvoIdToRpei.TryGetValue(mvo.Id, out var standardRpei))
             {
-                // Standard mode: add root-level outcomes only (no children)
-                foreach (var _ in result.ProvisioningCsosToCreate)
+                // Standard mode: add root-level outcomes only (no children). Still attribute the
+                // export Synchronisation Rule that provisioned each CSO (#1085).
+                foreach (var provisioningSyncRule in result.ProvisioningCsosToCreate
+                    .Select(cso => result.ProvisioningSyncRulesByCsoId.GetValueOrDefault(cso.Id)))
                 {
                     SyncOutcomeBuilder.AddRootOutcome(standardRpei,
-                        ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
+                        ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
+                        syncRuleId: provisioningSyncRule?.Id,
+                        syncRuleName: provisioningSyncRule?.Name);
                 }
 
                 foreach (var pe in result.PendingExports)
@@ -3344,12 +3365,14 @@ public abstract class SyncTaskProcessorBase
     /// </summary>
     /// <param name="activeSyncRules">The active Synchronisation Rules that contain projection and Attribute Flow information.</param>
     /// <param name="connectedSystemObject">The Connected System Object to attempt to project to the Metaverse.</param>
+    /// <param name="projectionSyncRule">Set to the Synchronisation Rule that caused the projection when one occurred, for sync outcome attribution (#1085); null otherwise.</param>
     /// <returns>True if projection occurred, false otherwise.</returns>
     /// <exception cref="InvalidDataException">Will be thrown if not all required properties are populated on the Synchronisation Rule.</exception>
     /// <exception cref="NotImplementedException">Will be thrown if a Synchronisation Rule attempts to use a Function as a source.</exception>
-    protected bool AttemptProjection(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject)
+    protected bool AttemptProjection(List<SyncRule> activeSyncRules, ConnectedSystemObject connectedSystemObject, out SyncRule? projectionSyncRule)
     {
         var decision = _syncEngine.EvaluateProjection(connectedSystemObject, activeSyncRules);
+        projectionSyncRule = decision.ShouldProject ? decision.ProjectionSyncRule : null;
         if (!decision.ShouldProject)
             return false;
 
@@ -3821,11 +3844,13 @@ public abstract class SyncTaskProcessorBase
             return MetaverseObjectChangeResult.NoChanges();
         }
 
-        // Find the first Synchronisation Rule's InboundOutOfScopeAction (or default to Disconnect)
-        var inboundOutOfScopeAction = importSyncRules
-            .Where(sr => sr.ObjectScopingCriteriaGroups.Count > 0)
-            .Select(sr => sr.InboundOutOfScopeAction)
-            .FirstOrDefault();
+        // Find the first import Synchronisation Rule with scoping criteria: it both supplies the
+        // InboundOutOfScopeAction (or the default, Disconnect, when none exists) and is attributed as
+        // the scoping rule on the DisconnectedOutOfScope outcome (#1085). The CSO fell out of scope of
+        // ALL import rules with scoping criteria, so when several exist the attribution is the
+        // deterministic first applicable rule; the same rule whose action governs the disconnect.
+        var scopingSyncRule = importSyncRules.FirstOrDefault(sr => sr.ObjectScopingCriteriaGroups.Count > 0);
+        var inboundOutOfScopeAction = scopingSyncRule?.InboundOutOfScopeAction ?? default;
 
         switch (inboundOutOfScopeAction)
         {
@@ -3954,7 +3979,8 @@ public abstract class SyncTaskProcessorBase
                     mvoDeletionFate: mvoDeletionFate,
                     recalledAttributeValues: recalledAttributeValues,
                     recalledAttributeAdditions: recalledAttributeAdditions,
-                    disconnectedMvo: recalledAttributeValues != null ? mvo : null);
+                    disconnectedMvo: recalledAttributeValues != null ? mvo : null,
+                    scopingSyncRule: scopingSyncRule);
         }
     }
 

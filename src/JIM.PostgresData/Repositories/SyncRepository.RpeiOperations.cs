@@ -347,7 +347,8 @@ public partial class SyncRepository
             """
             SELECT so."Id", so."ActivityRunProfileExecutionItemId", so."ParentSyncOutcomeId",
                    so."OutcomeType", so."TargetEntityId", so."TargetEntityDescription",
-                   so."DetailCount", so."DetailMessage", so."Ordinal", so."ConnectedSystemObjectChangeId"
+                   so."DetailCount", so."DetailMessage", so."Ordinal", so."ConnectedSystemObjectChangeId",
+                   so."SyncRuleId", so."SyncRuleName"
             FROM "ActivityRunProfileExecutionItemSyncOutcomes" so
             INNER JOIN "ActivityRunProfileExecutionItems" rpei
                 ON rpei."Id" = so."ActivityRunProfileExecutionItemId"
@@ -413,7 +414,9 @@ public partial class SyncRepository
                 DetailCount = reader.IsDBNull(6) ? null : reader.GetInt32(6),
                 DetailMessage = reader.IsDBNull(7) ? null : reader.GetString(7),
                 Ordinal = reader.GetInt32(8),
-                ConnectedSystemObjectChangeId = reader.IsDBNull(9) ? null : reader.GetGuid(9)
+                ConnectedSystemObjectChangeId = reader.IsDBNull(9) ? null : reader.GetGuid(9),
+                SyncRuleId = reader.IsDBNull(10) ? null : reader.GetInt32(10),
+                SyncRuleName = reader.IsDBNull(11) ? null : reader.GetString(11)
             });
         }
 
@@ -749,20 +752,20 @@ public partial class SyncRepository
     /// </summary>
     private async Task BulkInsertSyncOutcomesRawAsync(List<ActivityRunProfileExecutionItemSyncOutcome> outcomes)
     {
-        const int columnsPerRow = 10;
+        const int columnsPerRow = 12;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(outcomes, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItemSyncOutcomes"" (""Id"", ""ActivityRunProfileExecutionItemId"", ""ParentSyncOutcomeId"", ""OutcomeType"", ""TargetEntityId"", ""TargetEntityDescription"", ""DetailCount"", ""DetailMessage"", ""Ordinal"", ""ConnectedSystemObjectChangeId"") VALUES ");
+            sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItemSyncOutcomes"" (""Id"", ""ActivityRunProfileExecutionItemId"", ""ParentSyncOutcomeId"", ""OutcomeType"", ""TargetEntityId"", ""TargetEntityDescription"", ""DetailCount"", ""DetailMessage"", ""Ordinal"", ""ConnectedSystemObjectChangeId"", ""SyncRuleId"", ""SyncRuleName"") VALUES ");
 
             var parameters = new List<NpgsqlParameter>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9})");
+                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11})");
 
                 var outcome = chunk[i];
                 parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = outcome.Id });
@@ -775,6 +778,8 @@ public partial class SyncRepository
                 parameters.Add(new NpgsqlParameter($"p{offset + 7}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)outcome.DetailMessage ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 8}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = outcome.Ordinal });
                 parameters.Add(new NpgsqlParameter($"p{offset + 9}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)outcome.ConnectedSystemObjectChangeId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)outcome.SyncRuleId ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 11}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)outcome.SyncRuleName ?? DBNull.Value });
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -867,7 +872,8 @@ public partial class SyncRepository
             COPY "ActivityRunProfileExecutionItemSyncOutcomes" (
                 "Id", "ActivityRunProfileExecutionItemId", "ParentSyncOutcomeId",
                 "OutcomeType", "TargetEntityId", "TargetEntityDescription",
-                "DetailCount", "DetailMessage", "Ordinal", "ConnectedSystemObjectChangeId"
+                "DetailCount", "DetailMessage", "Ordinal", "ConnectedSystemObjectChangeId",
+                "SyncRuleId", "SyncRuleName"
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -900,6 +906,14 @@ public partial class SyncRepository
             await writer.WriteAsync(outcome.Ordinal, NpgsqlTypes.NpgsqlDbType.Integer);
             if (outcome.ConnectedSystemObjectChangeId.HasValue)
                 await writer.WriteAsync(outcome.ConnectedSystemObjectChangeId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (outcome.SyncRuleId.HasValue)
+                await writer.WriteAsync(outcome.SyncRuleId.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (outcome.SyncRuleName is not null)
+                await writer.WriteAsync(outcome.SyncRuleName, NpgsqlTypes.NpgsqlDbType.Text);
             else
                 await writer.WriteNullAsync();
         }
