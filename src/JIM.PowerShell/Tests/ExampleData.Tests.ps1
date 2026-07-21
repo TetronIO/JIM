@@ -497,8 +497,8 @@ Describe 'Invoke-JIMExampleDataTemplate' {
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipelineByPropertyName } | Should -Not -BeNullOrEmpty
         }
 
-        It 'Should have Wait switch parameter' {
-            $command.Parameters['Wait'].SwitchParameter | Should -BeTrue
+        It 'Should not have a Wait parameter' {
+            $command.Parameters.ContainsKey('Wait') | Should -BeFalse
         }
 
         It 'Should have PassThru switch parameter' {
@@ -522,6 +522,21 @@ Describe 'Invoke-JIMExampleDataTemplate' {
         }
     }
 
+    Context 'PassThru output' {
+
+        It 'Should return an object with exactly TemplateId, Status and Message properties' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { $null }
+
+                $result = Invoke-JIMExampleDataTemplate -Id 1 -PassThru -Confirm:$false
+
+                $result | Should -Not -BeNullOrEmpty
+                @($result.PSObject.Properties.Name | Sort-Object) | Should -Be @('Message', 'Status', 'TemplateId')
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {
@@ -538,6 +553,10 @@ Describe 'Invoke-JIMExampleDataTemplate' {
 
         It 'Should have related links' {
             $help.RelatedLinks | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should not mention the removed -Wait parameter' {
+            $help.Parameters.Parameter.Name | Should -Not -Contain 'Wait'
         }
     }
 }

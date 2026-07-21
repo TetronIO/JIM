@@ -47,7 +47,7 @@ Get-JIMConfigurationChangeHistory -Type <string> -Id <int|guid|string>
 
 ### Output
 
-In the summary modes, returns one `PSCustomObject` per change with `Version`, `Operation`, `InitiatedBy`, `When`, `Reason`, and a one-line `Summary`. With `-Version`, returns the change detail (metadata, the redacted snapshot, and the diff against the previous version). With `-CompareFrom` / `-CompareTo`, returns the structured diff. With `-AsDiff`, returns the rendered diff as coloured strings.
+In the summary modes, returns one `PSCustomObject` per change with `Version`, `Operation`, `InitiatedByName`, `When`, `Reason`, and a one-line `Summary`. With `-Version`, returns the change detail (metadata, the redacted snapshot, and the diff against the previous version). With `-CompareFrom` / `-CompareTo`, returns the structured diff. With `-AsDiff`, returns the rendered diff as coloured strings.
 
 ### Examples
 

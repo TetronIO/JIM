@@ -409,10 +409,14 @@ public interface IConnectedSystemRepository
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId);
 
     /// <summary>
-    /// Loads all Pending Exports for a Connected System in a single bulk query, keyed by CSO ID.
-    /// More efficient than per-page loading for large-scale reconciliation.
+    /// Loads all Pending Exports for a Connected System, keyed by CSO ID. More efficient than
+    /// per-page loading for large-scale reconciliation. Loads in bounded keyset-paginated chunks
+    /// so each statement stays inside the database's statement timeout regardless of backlog size
+    /// (a Scale500k25kGroups run holds 525K Pending Exports with 9.8M attribute value changes).
     /// </summary>
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId);
+    /// <param name="connectedSystemId">The Connected System whose Pending Exports to load.</param>
+    /// <param name="chunkSize">Pending Exports loaded per statement; null uses the implementation default.</param>
+    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null);
 
     /// <summary>
     /// Gets all Connected System Objects that are joined to a specific Metaverse Object.
@@ -675,7 +679,7 @@ public interface IConnectedSystemRepository
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null);
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
 
     /// <summary>
     /// Batch loads Connected System Objects by their IDs with the full Include chain needed for
@@ -694,6 +698,16 @@ public interface IConnectedSystemRepository
     /// <param name="csoId">The CSO whose reference attribute values should be looked up.</param>
     /// <returns>Dictionary mapping referenced CSO GUIDs to their external ID strings.</returns>
     public Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId);
+
+    /// <summary>
+    /// Batched form of <see cref="GetReferenceExternalIdsAsync"/>: returns the reference external ID
+    /// lookups for a whole page of CSOs in one query, keyed by owning CSO ID. Every requested ID is
+    /// present in the result; owners with no resolved reference values map to an empty dictionary,
+    /// so callers can distinguish "no references" from "not fetched" without a fallback query.
+    /// </summary>
+    /// <param name="csoIds">The CSOs whose reference attribute values should be looked up.</param>
+    /// <returns>Dictionary keyed by owning CSO ID; each value maps referenced CSO GUIDs to their external ID strings.</returns>
+    public Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds);
 
     /// <summary>
     /// Returns all the CSOs for a Connected System that are marked as Obsolete.

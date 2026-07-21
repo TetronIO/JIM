@@ -6,6 +6,7 @@ This file holds cross-cutting rules and pointers. Detailed conventions live in f
 - `src/CLAUDE.md` - code style, copyright headers, layer rules, common dev tasks
 - `src/JIM.Web/CLAUDE.md` - Blazor/MudBlazor UI conventions, shared UI components
 - `src/JIM.Application/CLAUDE.md` - synchronisation integrity (full requirements)
+- `src/JIM.PowerShell/CLAUDE.md` - cmdlet parameter aliases, documenting output shapes, destructive examples, Pester
 - `test/CLAUDE.md` - TDD patterns, test data, integration testing
 - `.devcontainer/CLAUDE.md` - commands, aliases, Docker, environment
 - `engineering/CLAUDE.md` - PRDs, plans, changelog, release process
@@ -181,6 +182,10 @@ PRDs and plans share the same three-state lifecycle: created at the top level of
 - Never automatically create a PR or merge to `main` - the user must explicitly instruct
 - Build and test pass before commit (per Critical Rules); push and PR only when the user asks
 - Before filing a new GitHub issue, ALWAYS search existing open and closed issues for duplicates: `gh issue list --state all --search "<keywords>"`. Surface any close matches to the user before creating a new one.
+- **Record issue relationships with GitHub's native features, never as comments or body-text markers.** The plain `gh issue` commands have no flags for these; use the API directly:
+  - Sequencing ("must land first"): the blocked-by relationship, via REST: `gh api -X POST repos/TetronIO/JIM/issues/<blocked>/dependencies/blocked_by -F issue_id=<id>` where `<id>` is the blocking issue's database id (`gh api repos/TetronIO/JIM/issues/<n> --jq .id`). Inspect with `GET .../dependencies/blocked_by`; remove with `DELETE .../dependencies/blocked_by/<id>`.
+  - Containment (epic → part): parent/sub-issue, via GraphQL `addSubIssue` / `removeSubIssue` mutations with the two issues' node ids (`--jq .node_id`).
+  - Pick blocked-by for ordering and parent/sub-issue for hierarchy; they are not interchangeable. Issue bodies may state the *rationale* for a relationship, but the relationship itself must exist as the native link (it shows in the sidebar, rolls up, and is queryable; prose goes stale).
 - Dependabot does not auto-rebase PRs when they fall behind `main`. After merging any PR in a batch, comment `@dependabot rebase` on each remaining open Dependabot PR via `gh pr comment <num> --body '@dependabot rebase'`.
 
 ### Bringing a feature branch up to date with `main`

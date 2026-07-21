@@ -185,20 +185,15 @@ function Set-JIMSchedule {
                 $body.steps = @()
             }
 
-            # Apply overrides
+            # Apply overrides. Enum values are sent as their string names (the parameters
+            # are ValidateSet-constrained to the exact enum member names); the API rejects
+            # numeric ordinals (JsonStringEnumConverter allowIntegerValues:false, PR #1060).
             if ($TriggerType) {
-                $body.triggerType = switch ($TriggerType) {
-                    'Cron' { 0 }
-                    'Manual' { 1 }
-                }
+                $body.triggerType = $TriggerType
             }
 
             if ($PatternType) {
-                $body.patternType = switch ($PatternType) {
-                    'SpecificTimes' { 0 }
-                    'Interval' { 1 }
-                    'Custom' { 2 }
-                }
+                $body.patternType = $PatternType
             }
 
             if ($PSBoundParameters.ContainsKey('DaysOfWeek')) {
@@ -214,10 +209,7 @@ function Set-JIMSchedule {
             }
 
             if ($IntervalUnit) {
-                $body.intervalUnit = switch ($IntervalUnit) {
-                    'Minutes' { 0 }
-                    'Hours' { 1 }
-                }
+                $body.intervalUnit = $IntervalUnit
             }
 
             if ($PSBoundParameters.ContainsKey('IntervalWindowStart')) {

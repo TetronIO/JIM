@@ -146,18 +146,15 @@ function New-JIMSyncRule {
         if ($PSCmdlet.ShouldProcess($Name, "Create Synchronisation Rule")) {
             Write-Verbose "Creating Synchronisation Rule: $Name"
 
-            # Map direction string to API enum value
-            $directionValue = switch ($Direction) {
-                'Import' { 1 }
-                'Export' { 2 }
-            }
-
             $body = @{
                 name = $Name
                 connectedSystemId = $ConnectedSystemId
                 connectedSystemObjectTypeId = $ConnectedSystemObjectTypeId
                 metaverseObjectTypeId = $MetaverseObjectTypeId
-                direction = $directionValue
+                # Send the enum as its string name; -Direction is ValidateSet-constrained
+                # to the exact SyncRuleDirection member names. The API rejects numeric
+                # ordinals (JsonStringEnumConverter allowIntegerValues:false, PR #1060).
+                direction = $Direction
                 enabled = $Enabled
             }
 

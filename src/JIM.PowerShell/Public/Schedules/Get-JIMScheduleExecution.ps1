@@ -16,6 +16,10 @@ function Get-JIMScheduleExecution {
     .PARAMETER ScheduleId
         Filter executions by Schedule ID.
 
+    .PARAMETER InputObject
+        A Schedule object from the pipeline (e.g., from Get-JIMSchedule). Its Id is used
+        to filter executions, equivalent to specifying -ScheduleId directly.
+
     .PARAMETER Status
         Filter executions by status:
         - Queued: Waiting to start
@@ -50,6 +54,11 @@ function Get-JIMScheduleExecution {
 
         Gets failed executions for the "Delta Sync" schedule.
 
+    .EXAMPLE
+        Get-JIMSchedule -Name "Weekday Sync" | Get-JIMScheduleExecution -Active
+
+        Gets active (running or queued) executions for the "Weekday Sync" schedule.
+
     .LINK
         Start-JIMSchedule
         Stop-JIMScheduleExecution
@@ -66,6 +75,18 @@ function Get-JIMScheduleExecution {
         [Parameter(ParameterSetName = 'Active', ValueFromPipelineByPropertyName)]
         [guid]$ScheduleId,
 
+        # A Schedule object (e.g. from Get-JIMSchedule) exposes Id, not ScheduleId, so it
+        # cannot bind to -ScheduleId by property name. Binding the whole object here and
+        # reading its Id below is the fix: ScheduleId cannot carry an [Alias('Id')] to
+        # cover this, because the -Id parameter above is itself literally named "Id" in
+        # this cmdlet (used to look up a specific execution) and PowerShell rejects a
+        # parameter alias that collides with another parameter's own name, even across
+        # mutually exclusive parameter sets (confirmed: the command fails to bind at all,
+        # not just ambiguously, the moment such an alias is declared).
+        [Parameter(ParameterSetName = 'List', ValueFromPipeline)]
+        [Parameter(ParameterSetName = 'Active', ValueFromPipeline)]
+        [PSCustomObject]$InputObject,
+
         [Parameter(ParameterSetName = 'List')]
         [ValidateSet('Queued', 'InProgress', 'Completed', 'Failed', 'Cancelled')]
         [string]$Status,
@@ -79,6 +100,18 @@ function Get-JIMScheduleExecution {
         if (-not $script:JIMConnection) {
             Write-Error "You are not connected to JIM. Run Connect-JIM -Url <your JIM URL> to authenticate, then try again."
             return
+        }
+
+        # -ScheduleId (direct or bound by property name) takes precedence; otherwise fall
+        # back to the piped Schedule object's Id (see -InputObject above).
+        $effectiveScheduleId = if ($ScheduleId) {
+            $ScheduleId
+        }
+        elseif ($InputObject -and $InputObject.PSObject.Properties['Id']) {
+            [guid]$InputObject.Id
+        }
+        else {
+            $null
         }
 
         if ($PSCmdlet.ParameterSetName -eq 'ById') {
@@ -97,8 +130,8 @@ function Get-JIMScheduleExecution {
                 $results = Invoke-JIMApi -Endpoint "/api/v1/schedule-executions/active"
 
                 # Filter by ScheduleId if specified
-                if ($ScheduleId) {
-                    $results = $results | Where-Object { $_.scheduleId -eq $ScheduleId }
+                if ($effectiveScheduleId) {
+                    $results = $results | Where-Object { $_.scheduleId -eq $effectiveScheduleId }
                 }
 
                 foreach ($execution in $results) {
@@ -117,19 +150,15 @@ function Get-JIMScheduleExecution {
                 $pageSize = 100
                 $page = 1
 
-                if ($ScheduleId) {
-                    $queryParams += "scheduleId=$ScheduleId"
+                if ($effectiveScheduleId) {
+                    $queryParams += "scheduleId=$effectiveScheduleId"
                 }
 
                 if ($Status) {
-                    $statusValue = switch ($Status) {
-                        'Queued' { 0 }
-                        'InProgress' { 1 }
-                        'Completed' { 2 }
-                        'Failed' { 3 }
-                        'Cancelled' { 4 }
-                    }
-                    $queryParams += "status=$statusValue"
+                    # Send the enum as its string name; -Status is ValidateSet-constrained
+                    # to the exact ScheduleExecutionStatus member names. Keeps the query
+                    # string aligned with the API's string-only enum contract (PR #1060).
+                    $queryParams += "status=$Status"
                 }
 
                 $allExecutions = @()

@@ -349,6 +349,20 @@ public class SyncExportTaskProcessor
     /// </summary>
     private async Task ProcessExportResultAsync(ExportExecutionResult result, ThroughputTracker throughput)
     {
+        // Resolve reference FKs on the change records this export wrote, plus any left over from the
+        // preceding sync stage for this system (both persist reference DNs with ReferenceValueId
+        // nulled for cross-batch FK safety). Paying the debt here keeps it from accumulating for the
+        // next import's fixup, which previously inherited millions of unresolved rows at scale and
+        // blew the bulk command timeout (Scale500k25kGroups, 2026-07-18). The fixup applies bounded
+        // batches, so its statements stay inside the timeout regardless of volume.
+        if (_csoChangeTrackingEnabled && _runMode != SyncRunMode.PreviewOnly)
+        {
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "Resolving change history references");
+            var changeRecordsResolved = await _syncRepo.FixupCrossBatchChangeRecordReferenceIdsAsync(_connectedSystem.Id);
+            if (changeRecordsResolved > 0)
+                Log.Information("ProcessExportResultAsync: Resolved {Count} cross-batch change record reference FKs after export completion.", changeRecordsResolved);
+        }
+
         // Update activity progress
         _activity.ObjectsProcessed = result.TotalPendingExports;
 

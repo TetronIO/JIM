@@ -1141,9 +1141,11 @@ This protects against tag-rewrite attacks: the `v4` tag is mutable and can be si
 **Ongoing updates** are handled by Dependabot, which natively understands SHA-pinned actions. When a new version tag moves the underlying commit, Dependabot opens a PR that updates both the SHA and the version comment. Before merging, review the action's changelog for any changes to inputs, outputs, or behaviour.
 
 ### Migrations
-Apply migrations on first run:
+There is no manual step: `jim.worker` applies any pending migrations when it starts, and `jim.web` and `jim.scheduler` wait for it before serving. To pick up a new migration, rebuild and restart the worker (`jim-build-worker`).
+
+To add a migration, run EF on the host against the project, not inside a container; the service images are built on the ASP.NET runtime base and carry no .NET SDK or `dotnet-ef` tool:
 ```bash
-docker compose exec jim.web dotnet ef database update
+dotnet ef migrations add MigrationName --project src/JIM.PostgresData
 ```
 
 ## File Connector Setup

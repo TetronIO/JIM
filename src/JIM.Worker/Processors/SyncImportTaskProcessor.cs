@@ -41,6 +41,11 @@ public class SyncImportTaskProcessor
     // so that ReconcilePendingExportsAsync can merge outcomes onto already-persisted RPEIs.
     // Only contains RPEIs for updated CSOs (not created CSOs, which can't have Pending Exports).
     private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _reconciliationRpeiLookup = new();
+    // Companion ID set for the connectedSystemObjectsToBeUpdated list, giving O(1) membership
+    // checks. The previous linear List.Any scan per existing object was O(n^2) across the import:
+    // ~1.4x10^11 Guid comparisons at Scale500k25kGroups (524,997 existing CSOs). Maintain this set
+    // at every site that appends to the update list.
+    private readonly HashSet<Guid> _csoIdsQueuedForUpdate = new();
     private readonly CancellationTokenSource _cancellationTokenSource;
 
     /// <summary>
@@ -1045,6 +1050,7 @@ public class SyncImportTaskProcessor
         }
 
         // add it to the list of objects to be updated. this will persist and create a change object in the activity tree.
+        _csoIdsQueuedForUpdate.Add(cso.Id);
         connectedSystemObjectsToBeUpdated.Add(cso);
     }
 
@@ -1167,6 +1173,15 @@ public class SyncImportTaskProcessor
         // Batch-hydrate this page's matched CSOs in one pass (#988), instead of relying on
         // per-object hydration inside the loop below.
         var hydratedCsoPage = await HydrateCsoPageAsync(connectedSystemImportResult);
+
+        // Batch-fetch the reference external ID lookups for the whole hydrated page in one query.
+        // The per-object loop below previously issued GetReferenceExternalIdsAsync once per
+        // existing CSO: 535K individual round trips at Scale500k25kGroups. Every hydrated CSO ID
+        // is guaranteed a (possibly empty) entry, so only CSOs matched outside the hydrated page
+        // fall back to the single-CSO query.
+        var pageReferenceExternalIds = hydratedCsoPage.Count > 0
+            ? await _syncRepo.GetReferenceExternalIdsForCsosAsync(hydratedCsoPage.Keys)
+            : new Dictionary<Guid, Dictionary<Guid, string>>();
 
         // Track external IDs seen in THIS batch to detect same-batch duplicates.
         // Key: "objectTypeId:externalIdValue" (composite key to handle multiple object types)
@@ -1366,6 +1381,7 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
+                        _csoIdsQueuedForUpdate.Add(connectedSystemObject.Id);
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
 
                         // Record a DeletionDetected outcome so the outcome tree shows what happened during import.
@@ -1496,7 +1512,10 @@ public class SyncImportTaskProcessor
                     // This provides a reliable fallback when EF's AsSplitQuery() fails to materialise
                     // ReferenceValue navigations (dotnet/efcore#33826), preventing spurious
                     // removal and re-addition of resolved reference attribute values.
-                    var refExternalIds = await _syncRepo.GetReferenceExternalIdsAsync(connectedSystemObject.Id);
+                    // Served from the page-level batch fetch above; only CSOs matched outside the
+                    // hydrated page (e.g. per-object cache-miss lookups) query individually.
+                    if (!pageReferenceExternalIds.TryGetValue(connectedSystemObject.Id, out var refExternalIds))
+                        refExternalIds = await _syncRepo.GetReferenceExternalIdsAsync(connectedSystemObject.Id);
 
                     // Calculate attribute changes before processing
                     UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem, refExternalIds);
@@ -1507,7 +1526,7 @@ public class SyncImportTaskProcessor
 
                     // Always add to update list - needed for reference resolution even if no attribute changes
                     // The update list is used by ResolveReferencesAsync to resolve references between objects
-                    if (!connectedSystemObjectsToBeUpdated.Any(cso => cso.Id == connectedSystemObject.Id))
+                    if (_csoIdsQueuedForUpdate.Add(connectedSystemObject.Id))
                     {
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
                     }

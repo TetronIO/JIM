@@ -60,6 +60,10 @@ public partial class SyncRepository
             .Select(o => o.ConnectedSystemObjectChange!)
             .ToList();
 
+        // Stat counter deltas for this batch (#1078): computed once from the in-memory RPEIs and
+        // outcomes, upserted alongside the batch so the Activity stats read stays O(counter rows).
+        var counterDeltas = ActivityStatCounterCalculator.CalculateRpeiInsertDeltas(rpeis, allOutcomes);
+
         // Use parallel writes for large batches; fall back to single connection for small ones.
         var useParallel = rpeis.Count >= parallelism * 50 && connectionString != null;
 
@@ -115,6 +119,11 @@ public partial class SyncRepository
                         await tx.CommitAsync();
                     });
             }
+
+            // Step 4: Upsert the batch's stat counter deltas on the main EF connection. Not
+            // transactional with the COPY partitions (which have already committed); a crash
+            // between the two leaves advisory drift that completion-time finalisation reconciles.
+            await ActivityStatCounterWriter.UpsertDeltasAsync(_context, counterDeltas);
         }
         else
         {
@@ -138,6 +147,8 @@ public partial class SyncRepository
 
                 if (allOutcomes.Count > 0)
                     await BulkInsertSyncOutcomesRawAsync(allOutcomes);
+
+                await ActivityStatCounterWriter.UpsertDeltasAsync(_context, counterDeltas);
 
                 if (transaction != null)
                     await transaction.CommitAsync();
@@ -426,9 +437,16 @@ public partial class SyncRepository
             // Bulk UPDATE OutcomeSummary and error fields on existing RPEIs
             await BulkUpdateRpeiFieldsRawAsync(rpeis);
 
-            // Bulk INSERT new sync outcomes
+            // Bulk INSERT new sync outcomes, counting them into the stat counters (#1078).
+            // The field updates above are not counter-adjusted: post-insert ErrorType changes
+            // drift the advisory in-flight counters slightly and completion-time finalisation
+            // reconciles them exactly.
             if (newOutcomes.Count > 0)
+            {
                 await BulkInsertSyncOutcomesRawAsync(newOutcomes);
+                await ActivityStatCounterWriter.UpsertDeltasAsync(
+                    _context, ActivityStatCounterCalculator.CalculateOutcomeInsertDeltas(rpeis, newOutcomes));
+            }
 
             if (transaction != null)
                 await transaction.CommitAsync();
@@ -689,20 +707,20 @@ public partial class SyncRepository
     /// </summary>
     private async Task BulkInsertRpeisRawAsync(List<ActivityRunProfileExecutionItem> rpeis)
     {
-        const int columnsPerRow = 13;
+        const int columnsPerRow = 14;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(rpeis, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItems"" (""Id"", ""ActivityId"", ""ObjectChangeType"", ""NoChangeReason"", ""ConnectedSystemObjectId"", ""ExternalIdSnapshot"", ""DisplayNameSnapshot"", ""ObjectTypeSnapshot"", ""ErrorType"", ""ErrorMessage"", ""ErrorStackTrace"", ""AttributeFlowCount"", ""OutcomeSummary"") VALUES ");
+            sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItems"" (""Id"", ""ActivityId"", ""ObjectChangeType"", ""NoChangeReason"", ""ConnectedSystemObjectId"", ""ExternalIdSnapshot"", ""DisplayNameSnapshot"", ""ObjectTypeSnapshot"", ""ErrorType"", ""ErrorMessage"", ""ErrorStackTrace"", ""AttributeFlowCount"", ""OutcomeSummary"", ""PendingExportId"") VALUES ");
 
             var parameters = new List<NpgsqlParameter>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11}, @p{offset + 12})");
+                sql.Append($"(@p{offset}, @p{offset + 1}, @p{offset + 2}, @p{offset + 3}, @p{offset + 4}, @p{offset + 5}, @p{offset + 6}, @p{offset + 7}, @p{offset + 8}, @p{offset + 9}, @p{offset + 10}, @p{offset + 11}, @p{offset + 12}, @p{offset + 13})");
 
                 var rpei = chunk[i];
                 parameters.Add(new NpgsqlParameter($"p{offset}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = rpei.Id });
@@ -718,6 +736,7 @@ public partial class SyncRepository
                 parameters.Add(new NpgsqlParameter($"p{offset + 10}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.ErrorStackTrace ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 11}", NpgsqlTypes.NpgsqlDbType.Integer) { Value = (object?)rpei.AttributeFlowCount ?? DBNull.Value });
                 parameters.Add(new NpgsqlParameter($"p{offset + 12}", NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)rpei.OutcomeSummary ?? DBNull.Value });
+                parameters.Add(new NpgsqlParameter($"p{offset + 13}", NpgsqlTypes.NpgsqlDbType.Uuid) { Value = (object?)rpei.PendingExportId ?? DBNull.Value });
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -776,7 +795,7 @@ public partial class SyncRepository
                 "Id", "ActivityId", "ObjectChangeType", "NoChangeReason",
                 "ConnectedSystemObjectId", "ExternalIdSnapshot", "DisplayNameSnapshot",
                 "ObjectTypeSnapshot", "ErrorType", "ErrorMessage", "ErrorStackTrace",
-                "AttributeFlowCount", "OutcomeSummary"
+                "AttributeFlowCount", "OutcomeSummary", "PendingExportId"
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -824,6 +843,10 @@ public partial class SyncRepository
                 await writer.WriteNullAsync();
             if (rpei.OutcomeSummary is not null)
                 await writer.WriteAsync(rpei.OutcomeSummary, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (rpei.PendingExportId.HasValue)
+                await writer.WriteAsync(rpei.PendingExportId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
             else
                 await writer.WriteNullAsync();
         }

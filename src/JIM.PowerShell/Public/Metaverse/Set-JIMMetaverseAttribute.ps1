@@ -112,15 +112,11 @@ function Set-JIMMetaverseAttribute {
 
         $attrId = if ($InputObject) { $InputObject.id } else { $Id }
 
-        # Name/int maps (AttributeDataType and AttributePlurality enums). The API accepts integers
-        # for enum request fields; responses return enum names, so the maps below also normalise a
-        # current schema value (name or int) back to its integer for the schema endpoint.
-        $typeMap = @{
-            'Text' = 1; 'Number' = 2; 'Integer' = 2; 'DateTime' = 3; 'Binary' = 4
-            'Reference' = 5; 'Guid' = 6; 'Boolean' = 7; 'LongNumber' = 8
-        }
-        $pluralityMap = @{ 'SingleValued' = 0; 'MultiValued' = 1 }
-        $renderingHintMap = @{ 'Default' = 0; 'Table' = 1; 'ChipSet' = 2; 'List' = 3 }
+        # Enum request fields are sent as their string names; the API rejects numeric ordinals
+        # (JsonStringEnumConverter allowIntegerValues:false, PR #1060). Responses already return
+        # enum names, so a value read back from the current schema is used as-is. -Type's
+        # ValidateSet exposes 'Integer' as an alias for the AttributeDataType member 'Number';
+        # that is normalised where -Type is applied below. Other values are exact member names.
 
         $metadataChanged = $PSBoundParameters.ContainsKey('Name') -or $PSBoundParameters.ContainsKey('RenderingHint')
         $schemaChanged = $PSBoundParameters.ContainsKey('Type') -or $PSBoundParameters.ContainsKey('AttributePlurality')
@@ -142,8 +138,12 @@ function Set-JIMMetaverseAttribute {
             if ($schemaChanged) {
                 $current = Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes/$attrId"
 
-                $typeValue = if ($PSBoundParameters.ContainsKey('Type')) { $typeMap[$Type] } else { $typeMap["$($current.type)"] }
-                $pluralityValue = if ($PSBoundParameters.ContainsKey('AttributePlurality')) { $pluralityMap[$AttributePlurality] } else { $pluralityMap["$($current.attributePlurality)"] }
+                $typeValue = if ($PSBoundParameters.ContainsKey('Type')) {
+                    if ($Type -eq 'Integer') { 'Number' } else { $Type }
+                } else {
+                    $current.type
+                }
+                $pluralityValue = if ($PSBoundParameters.ContainsKey('AttributePlurality')) { $AttributePlurality } else { $current.attributePlurality }
 
                 $schemaBody = @{
                     type               = $typeValue
@@ -159,7 +159,7 @@ function Set-JIMMetaverseAttribute {
             if ($metadataChanged) {
                 $body = @{}
                 if ($PSBoundParameters.ContainsKey('Name')) { $body.name = $Name }
-                if ($PSBoundParameters.ContainsKey('RenderingHint')) { $body.renderingHint = $renderingHintMap[$RenderingHint] }
+                if ($PSBoundParameters.ContainsKey('RenderingHint')) { $body.renderingHint = $RenderingHint }
                 if ($ChangeReason) { $body.changeReason = $ChangeReason }
 
                 Write-Verbose "Updating name/rendering for Metaverse Attribute $attrId"

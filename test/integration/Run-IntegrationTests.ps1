@@ -2324,6 +2324,42 @@ Write-Section "Step 3: Starting Services"
 # it. See utils/Initialize-WorkerLogDirectories.ps1 for the full rationale.
 Initialize-WorkerLogDirectories -LogDirectory (Join-Path $scriptRoot "results" "logs")
 
+# Scale PostgreSQL with template size (mirrors the per-template OpenLDAP memory scaling
+# further below). docker-compose.override.yml parameterises the database's command with
+# JIM_DB_* variables, defaulting to the low-footprint dev profile (256MB shared_buffers,
+# 1GB max_wal_size) when unset, so small templates stay laptop-friendly. At scale that
+# profile is punishing: the Scale500k25kGroups run triggered WAL-pressure checkpoints
+# every ~12 seconds (PostgreSQL logged "checkpoints are occurring too frequently" 1,488
+# times) and each checkpoint's fsync storm stalled bulk COPY streams for up to 78s.
+# Frequent checkpoints also amplify WAL volume itself (every checkpoint resets full-page
+# writes), so spacing them out reduces total I/O, not just stalls. lz4 WAL compression
+# shrinks the full-page images that dominate bulk-load WAL. shm_size must exceed
+# shared_buffers with ~25% headroom (see docker-compose.yml).
+$jimDbProfile = switch -Wildcard ($Template) {
+    "Scale1m*"   { @{ SharedBuffers = "8GB"; EffectiveCache = "16GB"; ShmSize = "10gb"; MaxWal = "24GB"; MinWal = "2GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
+    "Scale750k*" { @{ SharedBuffers = "6GB"; EffectiveCache = "12GB"; ShmSize = "8gb";  MaxWal = "20GB"; MinWal = "2GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
+    "Scale500k*" { @{ SharedBuffers = "4GB"; EffectiveCache = "8GB";  ShmSize = "5gb";  MaxWal = "16GB"; MinWal = "1GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
+    "Scale200k*" { @{ SharedBuffers = "2GB"; EffectiveCache = "4GB";  ShmSize = "3gb";  MaxWal = "8GB";  MinWal = "1GB"; MaintenanceWorkMem = "512MB"; WorkMem = "32MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
+    "Scale100k*" { @{ SharedBuffers = "1GB"; EffectiveCache = "2GB";  ShmSize = "1536mb"; MaxWal = "6GB"; MinWal = "512MB"; MaintenanceWorkMem = "256MB"; WorkMem = "16MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
+    default      { @{ SharedBuffers = $null; EffectiveCache = $null; ShmSize = $null; MaxWal = $null; MinWal = $null; MaintenanceWorkMem = $null; WorkMem = $null; WalBuffers = $null; CheckpointTimeout = $null; WalCompression = $null } }
+}
+# Always assign (clearing to $null removes the variable), so a Scale run in this shell
+# cannot leak its profile into a later small-template run; compose then falls back to
+# the dev defaults in docker-compose.override.yml. Mirrors OPENLDAP_PRIMARY_MEMORY below.
+$env:JIM_DB_SHARED_BUFFERS       = $jimDbProfile.SharedBuffers
+$env:JIM_DB_EFFECTIVE_CACHE_SIZE = $jimDbProfile.EffectiveCache
+$env:JIM_DB_SHM_SIZE             = $jimDbProfile.ShmSize
+$env:JIM_DB_MAX_WAL_SIZE         = $jimDbProfile.MaxWal
+$env:JIM_DB_MIN_WAL_SIZE         = $jimDbProfile.MinWal
+$env:JIM_DB_MAINTENANCE_WORK_MEM = $jimDbProfile.MaintenanceWorkMem
+$env:JIM_DB_WORK_MEM             = $jimDbProfile.WorkMem
+$env:JIM_DB_WAL_BUFFERS          = $jimDbProfile.WalBuffers
+$env:JIM_DB_CHECKPOINT_TIMEOUT   = $jimDbProfile.CheckpointTimeout
+$env:JIM_DB_WAL_COMPRESSION      = $jimDbProfile.WalCompression
+if ($jimDbProfile.SharedBuffers) {
+    Write-Host "  PostgreSQL scaled for $Template template: shared_buffers=$($jimDbProfile.SharedBuffers), max_wal_size=$($jimDbProfile.MaxWal), checkpoint_timeout=$($jimDbProfile.CheckpointTimeout), wal_compression=$($jimDbProfile.WalCompression)" -ForegroundColor Gray
+}
+
 Write-Step "Starting JIM stack..."
 $jimResult = docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d 2>&1
 if ($LASTEXITCODE -ne 0) {
@@ -2430,6 +2466,28 @@ if ($DirectoryType -eq "OpenLDAP") {
                 Write-Host "  ${GREEN}OpenLDAP snapshot built and ready: $olTag${NC}"
             }
         }
+    }
+
+    # Scale the OpenLDAP container's memory limit with template size. back-mdb has
+    # no internal entry cache; it relies entirely on the OS page cache over its
+    # memory-mapped databases, so the limit must accommodate the working set (both
+    # suffixes plus the hot accesslog tail) or large-template runs thrash: the
+    # Scale500k25kGroups big-group export measurably degraded at the old fixed 2G
+    # cap with slapd pinned at 1.94G. Unlike the Samba scaling above, this applies
+    # regardless of snapshots; the memory pressure comes at run time (import and
+    # export), not during population. Limits are caps, not reservations, so the
+    # low default keeps small templates safe on modest dev machines while costing
+    # scale runs nothing.
+    $env:OPENLDAP_PRIMARY_MEMORY = switch -Wildcard ($Template) {
+        "Scale1m*"   { "12G"; break }
+        "Scale750k*" { "10G"; break }
+        "Scale500k*" { "8G"; break }
+        "Scale200k*" { "4G"; break }
+        "Scale100k*" { "3G"; break }
+        default      { "2G" }
+    }
+    if ($env:OPENLDAP_PRIMARY_MEMORY -ne "2G") {
+        Write-Host "  OpenLDAP memory limit scaled to $($env:OPENLDAP_PRIMARY_MEMORY) for $Template template" -ForegroundColor Gray
     }
 
     Write-Step "Starting OpenLDAP (Primary)..."
