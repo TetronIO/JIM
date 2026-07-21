@@ -202,7 +202,7 @@ git merge origin/main      # then git push (no force needed)
 
 ### Merging via gh CLI
 
-`main` is protected by a ruleset that requires eight status checks to pass before a merge is allowed: `build-and-test`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), `claude-review`, and `changelog-lint`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.
+`main` is protected by a ruleset that requires seven status checks to pass before a merge is allowed: `build-and-test`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), and `changelog-lint`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.
 
 - Default merge command: `gh pr merge <n> --squash --delete-branch --auto`. The `--auto` flag queues the merge so it lands the moment all required checks go green.
 - An immediate `gh pr merge` failure right after `gh pr create` is **expected**, not a blocker. The checks haven't started yet. Don't escalate it; just use `--auto`.
