@@ -592,6 +592,7 @@ function Show-ScenarioMenu {
                 "*Scenario12*" { "Relative-date inbound scoping (joiner / leaver)" }
                 "*Scenario13*" { "Relative-date outbound scoping (staged provisioning)" }
                 "*Scenario14*" { "Attribute priority (multi-source winner resolution)" }
+                "*Scenario15*" { "Initial Export Only attribute flows (one-time provisioning)" }
                 default { "Integration test scenario" }
             }
         }

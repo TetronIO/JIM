@@ -81,6 +81,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario12-RelativeDateScoping"       # Relative-date inbound scoping (joiner/leaver)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario13-RelativeDateOutboundScoping" # Relative-date outbound scoping (staged provisioning)
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario14-AttributePriority"        # Attribute Priority multi-source winner resolution (#91, OpenLDAP only)
+./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario15-InitialExportOnly"        # Initial Export Only attribute flows (#223)
 
 # Run with a specific template size (see Data Scale Templates for the full list)
 ./test/integration/Run-IntegrationTests.ps1 -Template Nano                    # smallest; fast dev iteration
@@ -146,6 +147,7 @@ In **Containers Used**, `samba-* / openldap-primary` means the scenario runs aga
 | `Scenario12-RelativeDateScoping` | Relative-date inbound scoping: date-driven joiner provisioning and leaver deprovisioning, plus per-run re-evaluation against the live clock | file (HR CSV, metaverse-only) |
 | `Scenario13-RelativeDateOutboundScoping` | Relative-date outbound scoping: downstream provisioning held until a joiner's start date arrives, released via the Temporal Scope Reconciler's outbound lane | file (HR CSV source, CSV export target) |
 | `Scenario14-AttributePriority` | Attribute Priority multi-source winner resolution (#91): two import Synchronisation Rules contribute the same Metaverse attributes (Description, Job Title, Manager reference, multi-valued Other Telephones) at different priorities; validates winner-takes-all for scalars, multi-valued handling, recall/re-election, and null/withdrawal/priority-reorder behaviour. OpenLDAP only (two-suffix topology: dc=yellowstone Primary + dc=glitterband Secondary in one container) | openldap-primary (two suffixes) |
+| `Scenario15-InitialExportOnly` | Initial Export Only attribute flows (#223): reuses Scenario 1's HR CSV -> directory configuration plus an Employee Type -> employeeType mapping marked Initial Export Only; validates the value flows on the provisioning export, a Metaverse change is not re-exported afterwards, and an external directory edit survives Drift Detection while a managed sibling attribute is corrected in the same run | samba-ad-primary / openldap-primary |
 
 **Available Templates (`-Template` parameter):**
 
