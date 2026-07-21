@@ -621,6 +621,16 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Issue #1079 (optimistic export apply): a no-op here. Unlike the Postgres implementation,
+    /// there is no separate persisted store to reconcile - <see cref="_csos"/> IS the live graph,
+    /// so <c>ExportExecutionServer</c> mutating <see cref="ConnectedSystemObject.AttributeValues"/>
+    /// directly (D10) is sufficient. Virtual so tests can override it to simulate a persistence
+    /// failure (D7's failure-containment guarantee).
+    /// </summary>
+    public virtual Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds)
+        => Task.CompletedTask;
+
     public Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
     {
         foreach (var cso in connectedSystemObjects)

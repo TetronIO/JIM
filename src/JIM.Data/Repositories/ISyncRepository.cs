@@ -251,6 +251,16 @@ public interface ISyncRepository
     Task UpdateConnectedSystemObjectsWithNewAttributeValuesAsync(List<(ConnectedSystemObject cso, List<ConnectedSystemObjectAttributeValue> newAttributeValues)> updates);
 
     /// <summary>
+    /// Persists an optimistic export apply delta (issue #1079): bulk-inserts newly exported
+    /// attribute value rows and bulk-deletes superseded ones. Touches NO parent CSO row (Status,
+    /// LastUpdated and every other CSO field are left exactly as they were): re-arming the Full
+    /// Synchronisation unchanged-object watermark for a no-op confirming import depends on
+    /// LastUpdated staying untouched here. Callers are responsible for keeping the in-memory
+    /// Connected System Object graph in sync with the persisted delta afterwards.
+    /// </summary>
+    Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds);
+
+    /// <summary>
     /// Deletes CSOs and their attribute values without change tracking.
     /// Used for quiet deletions (e.g., pre-disconnected CSOs).
     /// </summary>
