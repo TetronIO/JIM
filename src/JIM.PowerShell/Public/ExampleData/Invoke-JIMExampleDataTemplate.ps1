@@ -8,19 +8,16 @@ function Invoke-JIMExampleDataTemplate {
 
     .DESCRIPTION
         Executes a data generation template to create identity objects in the
-        Metaverse according to the template configuration. The operation runs
-        asynchronously on the server.
+        Metaverse according to the template configuration. Execution is
+        asynchronous: this cmdlet returns as soon as the server has accepted
+        the request, before data generation has finished. Monitor progress and
+        completion via Activities (Get-JIMActivity).
 
     .PARAMETER Id
         The unique identifier of the template to execute.
 
     .PARAMETER Name
         The name of the template to execute.
-
-    .PARAMETER Wait
-        If specified, waits for the operation to complete before returning.
-        Note: The API returns 202 Accepted immediately; this parameter will
-        poll for completion if supported.
 
     .PARAMETER PassThru
         If specified, returns information about the execution.
@@ -51,6 +48,7 @@ function Invoke-JIMExampleDataTemplate {
     .LINK
         Get-JIMExampleDataTemplate
         Get-JIMExampleDataSet
+        Get-JIMActivity
     #>
     [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName = 'ById')]
     [OutputType([PSCustomObject])]
@@ -61,8 +59,6 @@ function Invoke-JIMExampleDataTemplate {
         [Parameter(Mandatory, ParameterSetName = 'ByName')]
         [ValidateNotNullOrEmpty()]
         [string]$Name,
-
-        [switch]$Wait,
 
         [switch]$PassThru
     )
@@ -95,13 +91,6 @@ function Invoke-JIMExampleDataTemplate {
                 $response = Invoke-JIMApi -Endpoint "/api/v1/example-data/templates/$Id/execute" -Method 'POST'
 
                 Write-Verbose "Data generation template execution started"
-
-                if ($Wait) {
-                    Write-Verbose "Waiting for data generation to complete..."
-                    # The API returns 202 Accepted - we could poll for completion
-                    # but currently the API doesn't provide a status endpoint
-                    Write-Warning "The -Wait parameter is not fully implemented. The operation has been started but completion status cannot be determined."
-                }
 
                 if ($PassThru) {
                     [PSCustomObject]@{

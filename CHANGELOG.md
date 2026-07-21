@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Piping a Schedule into `Get-JIMScheduleExecution` now filters executions to that Schedule. Previously the piped Schedule did not bind, so the cmdlet silently returned every execution in the system whilst appearing to filter.
+- 🐛 `Reset-JIMServiceSetting` now accepts Service Settings from the pipeline, as its documentation described.
 - 🐛 Recording an API key's last-used timestamp can no longer surface error-level log entries when the database is briefly saturated by a large synchronisation run. The stamp was written on every authenticated API request as a tracked read-then-save on the same row, so continuous API polling during heavy import write bursts queued stamp writes behind each other until they timed out, and the resulting failures logged as errors despite being tolerated best-effort bookkeeping. The stamp is now a single set-based update, throttled to at most one write per key per 30 seconds; the last-used display is unaffected beyond that coarser precision.
 - 🐛 The Activity Operations tab no longer pegs the server at 100% CPU and take many seconds (or fail) to load for Activities with tens of thousands of execution items. The page's paginated query previously loaded each item's full Connected System Object and its entire attribute-value collection into memory just to render one hundred rows, so a page landing on large groups pulled tens of thousands of member values per request; it now reads only the columns the grid needs (measured: a 26,824-item Activity page dropped from effectively unusable to about a second).
 - 🐛 Very large imports no longer fail with a database statement timeout whilst Pending Exports are loaded for reconciliation. The load now runs in bounded chunks (measured: under a second per chunk at 525,000 Pending Exports with 9.8 million attribute value changes, where the previous single query exceeded the five-minute database timeout and aborted the run).
@@ -70,6 +72,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ⚡ Full Imports at large scale are dramatically faster: matched objects are no longer hydrated one database round trip at a time, confirming a large group no longer degrades quadratically with its membership size, and bulk attribute value writes now stream via PostgreSQL binary COPY instead of parameterised inserts. A Full Import of 210,000 objects that previously took over 40 minutes now completes in around 8.
 - ⚡ Deprovisioning users who are members of large groups no longer slows synchronisation to a crawl. Updating or deleting a large group's pending changes no longer reloads the group's full membership from the database each time.
 - ⚡ Deleting Metaverse Objects during synchronisation (0-grace-period deprovisioning) is now set-based instead of object-by-object. Each page of deletions previously cost around 75 sequential database round trips per object (per-object lookups, per-attribute change record inserts, and an unindexed audit-history update); a leaver-cohort page flush that took around 50 seconds now completes in a small, fixed number of bulk operations, and a new index covers the audit-history detach that previously scanned the whole Activities table once per deleted object.
+
+### Removed
+
+- 🗑️ The JIM PowerShell module's `Invoke-JIMExampleDataTemplate` cmdlet no longer has a `-Wait` parameter, since it never actually waited; monitor progress via Activities instead.
 
 ## [0.13.0] - 2026-07-10
 
