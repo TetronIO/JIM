@@ -78,9 +78,9 @@
       },
       "Microsoft.OpenApi": {
         "type": "Direct",
-        "requested": "[2.10.0, )",
-        "resolved": "2.10.0",
-        "contentHash": "tD7ve8JrWfJ+aRfW7J9yDj8t6pbMOzdr8nSc5BlIZaIRxqZZ67RJ8J69//Tx6HHSNFsqomBbipkPP20opnqvMg=="
+        "requested": "[2.11.0, )",
+        "resolved": "2.11.0",
+        "contentHash": "/ignjfdeKT2SGLIR7QEv19KnI0rvoxRG/TYDOZdK9EsWLjKK9IK8i1Mo5NRm9PRV3i64DzlTqnIflWvoyfljLg=="
       },
       "Microsoft.VisualStudio.Azure.Containers.Tools.Targets": {
         "type": "Direct",
@@ -459,10 +459,10 @@
         "type": "Project",
         "dependencies": {
           "DynamicExpresso.Core": "[2.19.3, )",
-          "JIM.Connectors": "[0.13.0-dev.20260721.521, )",
-          "JIM.Data": "[0.13.0-dev.20260721.521, )",
-          "JIM.Models": "[0.13.0-dev.20260721.521, )",
-          "JIM.Utilities": "[0.13.0-dev.20260721.521, )",
+          "JIM.Connectors": "[0.13.0-dev.20260721.530, )",
+          "JIM.Data": "[0.13.0-dev.20260721.530, )",
+          "JIM.Models": "[0.13.0-dev.20260721.530, )",
+          "JIM.Utilities": "[0.13.0-dev.20260721.530, )",
           "NCrontab": "[3.4.0, )",
           "Serilog": "[4.4.0, )"
         }
@@ -471,15 +471,15 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.13.0-dev.20260721.521, )",
-          "JIM.Utilities": "[0.13.0-dev.20260721.521, )",
+          "JIM.Models": "[0.13.0-dev.20260721.530, )",
+          "JIM.Utilities": "[0.13.0-dev.20260721.530, )",
           "System.DirectoryServices.Protocols": "[10.0.9, )"
         }
       },
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0-dev.20260721.521, )"
+          "JIM.Models": "[0.13.0-dev.20260721.530, )"
         }
       },
       "jim.models": {
@@ -492,9 +492,9 @@
       "jim.postgresdata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.13.0-dev.20260721.521, )",
-          "JIM.Models": "[0.13.0-dev.20260721.521, )",
-          "JIM.Utilities": "[0.13.0-dev.20260721.521, )",
+          "JIM.Data": "[0.13.0-dev.20260721.530, )",
+          "JIM.Models": "[0.13.0-dev.20260721.530, )",
+          "JIM.Utilities": "[0.13.0-dev.20260721.530, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "Serilog": "[4.4.0, )"
@@ -503,7 +503,7 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0-dev.20260721.521, )",
+          "JIM.Models": "[0.13.0-dev.20260721.530, )",
           "Serilog": "[4.4.0, )"
         }
       }
