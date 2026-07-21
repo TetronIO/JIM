@@ -21,12 +21,12 @@
       },
       "Microsoft.NET.Test.Sdk": {
         "type": "Direct",
-        "requested": "[18.7.0, )",
-        "resolved": "18.7.0",
-        "contentHash": "49xH9j4UzCh2hMohJp53g3wUTvyycECw7CtVht4gfCz5ykudB1uBcF6D0TtgJPjCtP76UPW53bQElKdCeX+dUg==",
+        "requested": "[18.8.1, )",
+        "resolved": "18.8.1",
+        "contentHash": "dknJL3/9Y3t4XuCBqnc0PevPxgLsUMmVhjwup/b1HNovA8zWcj3XsfIf7c6p05363DWcqL7X/YhDL9B+Zymv1w==",
         "dependencies": {
-          "Microsoft.CodeCoverage": "18.7.0",
-          "Microsoft.TestPlatform.TestHost": "18.7.0"
+          "Microsoft.CodeCoverage": "18.8.1",
+          "Microsoft.TestPlatform.TestHost": "18.8.1"
         }
       },
       "Moq": {
@@ -230,8 +230,8 @@
       },
       "Microsoft.CodeCoverage": {
         "type": "Transitive",
-        "resolved": "18.7.0",
-        "contentHash": "+wFfx9s7D9wegM0RziXMj2kvYDT4qcqXXtyjiQwSZOGQ2wwcOAJQcD6eQXk02jt0MvRNawtp8TJxTrV+wD8X1g=="
+        "resolved": "18.8.1",
+        "contentHash": "Eclse/ZZjr4lmWzZFNN9h/OluhKL+SK/QbUyKUewgX139aGeyMEO/DkMPwuFs2MixvanTnz6891rF8UHDg+W4Q=="
       },
       "Microsoft.EntityFrameworkCore": {
         "type": "Transitive",
@@ -538,16 +538,15 @@
       },
       "Microsoft.TestPlatform.ObjectModel": {
         "type": "Transitive",
-        "resolved": "18.7.0",
-        "contentHash": "6rmgU4q3/WOpOPcncI0YW0Q/QpcQtwR2TTEXDR5+4TfSimPBAk6Z/BgKLeGgp1SOun0ROVUCCafXhRLwsHaPpA=="
+        "resolved": "18.8.1",
+        "contentHash": "qLbktNB1+b1XZLNJBTzaWVVJAd6PEzD7cgD406geMb6PcFZhp3EDNa1tctWx1+mtMU6MP/6ozVvFPC9vs2a9rw=="
       },
       "Microsoft.TestPlatform.TestHost": {
         "type": "Transitive",
-        "resolved": "18.7.0",
-        "contentHash": "kYwfmebCs8992zaxEDkvG7S+YEouTeKfYVKUFEkwh1W2dIoOaevBt80XSKVXCUFEhusjOIm1sFfHBnoJgygrRA==",
+        "resolved": "18.8.1",
+        "contentHash": "FaQHPDTUOcE+SFTjssNPfrub2lT9Zyon4J2W/KLHt/efLJACb1TCeWXyOgh0D/4Q1e4n+S3E6mOKud+9nLZlEA==",
         "dependencies": {
-          "Microsoft.TestPlatform.ObjectModel": "18.7.0",
-          "Newtonsoft.Json": "13.0.3"
+          "Microsoft.TestPlatform.ObjectModel": "18.8.1"
         }
       },
       "Microsoft.VisualStudio.Azure.Containers.Tools.Targets": {
@@ -569,11 +568,6 @@
         "type": "Transitive",
         "resolved": "3.4.0",
         "contentHash": "t3okCB6odi64mZvhetBPSR/ejKib3uSnmyCqj8M0mf2S3yFxbDFZLjxfWqcwvmS3zzgXR6LAIi0XlBU4oqxTlg=="
-      },
-      "Newtonsoft.Json": {
-        "type": "Transitive",
-        "resolved": "13.0.3",
-        "contentHash": "HrC5BXdl00IP9zeV+0Z848QWPAoCr9P3bDEZguI+gkLcBKAOxix/tLEAAHC+UvDNPv4a2d18lOReHMOagPa+zQ=="
       },
       "Npgsql": {
         "type": "Transitive",
@@ -716,10 +710,10 @@
         "type": "Project",
         "dependencies": {
           "DynamicExpresso.Core": "[2.19.3, )",
-          "JIM.Connectors": "[0.13.0-dev.20260721.510, )",
-          "JIM.Data": "[0.13.0-dev.20260721.510, )",
-          "JIM.Models": "[0.13.0-dev.20260721.510, )",
-          "JIM.Utilities": "[0.13.0-dev.20260721.510, )",
+          "JIM.Connectors": "[0.13.0-dev.20260721.521, )",
+          "JIM.Data": "[0.13.0-dev.20260721.521, )",
+          "JIM.Models": "[0.13.0-dev.20260721.521, )",
+          "JIM.Utilities": "[0.13.0-dev.20260721.521, )",
           "Microsoft.AspNetCore.DataProtection": "[10.0.10, )",
           "Microsoft.AspNetCore.DataProtection.Extensions": "[10.0.10, )",
           "NCrontab": "[3.4.0, )",
@@ -730,15 +724,15 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.13.0-dev.20260721.510, )",
-          "JIM.Utilities": "[0.13.0-dev.20260721.510, )",
+          "JIM.Models": "[0.13.0-dev.20260721.521, )",
+          "JIM.Utilities": "[0.13.0-dev.20260721.521, )",
           "System.DirectoryServices.Protocols": "[10.0.9, )"
         }
       },
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0-dev.20260721.510, )"
+          "JIM.Models": "[0.13.0-dev.20260721.521, )"
         }
       },
       "jim.models": {
@@ -751,9 +745,9 @@
       "jim.postgresdata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.13.0-dev.20260721.510, )",
-          "JIM.Models": "[0.13.0-dev.20260721.510, )",
-          "JIM.Utilities": "[0.13.0-dev.20260721.510, )",
+          "JIM.Data": "[0.13.0-dev.20260721.521, )",
+          "JIM.Models": "[0.13.0-dev.20260721.521, )",
+          "JIM.Utilities": "[0.13.0-dev.20260721.521, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "Serilog": "[4.4.0, )"
@@ -768,7 +762,7 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0-dev.20260721.510, )",
+          "JIM.Models": "[0.13.0-dev.20260721.521, )",
           "Serilog": "[4.4.0, )"
         }
       },
@@ -778,10 +772,10 @@
           "Asp.Versioning.Mvc": "[10.0.0, )",
           "Asp.Versioning.Mvc.ApiExplorer": "[10.0.0, )",
           "Humanizer.Core": "[3.0.10, )",
-          "JIM.Application": "[0.13.0-dev.20260721.510, )",
-          "JIM.Models": "[0.13.0-dev.20260721.510, )",
-          "JIM.PostgresData": "[0.13.0-dev.20260721.510, )",
-          "JIM.Utilities": "[0.13.0-dev.20260721.510, )",
+          "JIM.Application": "[0.13.0-dev.20260721.521, )",
+          "JIM.Models": "[0.13.0-dev.20260721.521, )",
+          "JIM.PostgresData": "[0.13.0-dev.20260721.521, )",
+          "JIM.Utilities": "[0.13.0-dev.20260721.521, )",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.10, )",
           "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.10, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.10, )",

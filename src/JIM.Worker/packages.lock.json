@@ -467,10 +467,10 @@
         "type": "Project",
         "dependencies": {
           "DynamicExpresso.Core": "[2.19.3, )",
-          "JIM.Connectors": "[0.13.0-dev.20260721.510, )",
-          "JIM.Data": "[0.13.0-dev.20260721.510, )",
-          "JIM.Models": "[0.13.0-dev.20260721.510, )",
-          "JIM.Utilities": "[0.13.0-dev.20260721.510, )",
+          "JIM.Connectors": "[0.13.0-dev.20260721.521, )",
+          "JIM.Data": "[0.13.0-dev.20260721.521, )",
+          "JIM.Models": "[0.13.0-dev.20260721.521, )",
+          "JIM.Utilities": "[0.13.0-dev.20260721.521, )",
           "Microsoft.AspNetCore.DataProtection": "[10.0.10, )",
           "Microsoft.AspNetCore.DataProtection.Extensions": "[10.0.10, )",
           "NCrontab": "[3.4.0, )",
@@ -481,15 +481,15 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.13.0-dev.20260721.510, )",
-          "JIM.Utilities": "[0.13.0-dev.20260721.510, )",
+          "JIM.Models": "[0.13.0-dev.20260721.521, )",
+          "JIM.Utilities": "[0.13.0-dev.20260721.521, )",
           "System.DirectoryServices.Protocols": "[10.0.9, )"
         }
       },
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0-dev.20260721.510, )"
+          "JIM.Models": "[0.13.0-dev.20260721.521, )"
         }
       },
       "jim.models": {
@@ -502,9 +502,9 @@
       "jim.postgresdata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.13.0-dev.20260721.510, )",
-          "JIM.Models": "[0.13.0-dev.20260721.510, )",
-          "JIM.Utilities": "[0.13.0-dev.20260721.510, )",
+          "JIM.Data": "[0.13.0-dev.20260721.521, )",
+          "JIM.Models": "[0.13.0-dev.20260721.521, )",
+          "JIM.Utilities": "[0.13.0-dev.20260721.521, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "Serilog": "[4.4.0, )"
@@ -513,7 +513,7 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0-dev.20260721.510, )",
+          "JIM.Models": "[0.13.0-dev.20260721.521, )",
           "Serilog": "[4.4.0, )"
         }
       }

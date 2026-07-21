@@ -96,7 +96,7 @@
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0-dev.20260721.510, )"
+          "JIM.Models": "[0.13.0-dev.20260721.521, )"
         }
       },
       "jim.models": {
