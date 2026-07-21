@@ -135,6 +135,16 @@ public abstract class SyncTaskProcessorBase
     // rule evaluation determines whether the MVO should actually be deleted.
     private readonly Dictionary<Guid, List<MetaverseObjectAttributeValue>> _preRecallAttributeSnapshots = new();
 
+    // Deferred reference-recall RPEIs, keyed by the referencing (group) target CSO id (#1003 dedup).
+    // Reference recall stages a membership-removal Pending Export for a referencing group on EVERY page
+    // that deletes one of its members, and the delete-then-create persistence merges each page's removals
+    // into a single coalesced Pending Export. Emitting one RPEI per page-flush therefore reported a single
+    // Pending Export as many RPEIs (a ~4x, and for hub groups >100x, over-count on large-scale runs, e.g.
+    // 21,824 RPEIs for 5,421 real Pending Exports on Scale500k25kGroups). Collect the final staged Pending
+    // Export per CSO here (last write wins: the latest flush's Pending Export already carries every prior
+    // page's removals) and emit exactly one RPEI per CSO at end of run via FlushDeferredRecallRpeisAsync.
+    private readonly Dictionary<Guid, (PendingExport PendingExport, string? DisplayName)> _deferredRecallRpeisByCsoId = new();
+
     // Batch collection for MVO change object creation (deferred to page boundary for performance)
     // Stores: (MVO, Additions, Removals, ChangeType, RPEI) - captured BEFORE applying pending changes
     // ChangeType indicates how the MVO was created/modified (Projected, Joined, AttributeFlow, Updated)
@@ -1168,27 +1178,29 @@ public abstract class SyncTaskProcessorBase
             // IMPORTANT: Skip reference attributes in the first pass. Reference attributes (e.g., group members)
             // may point to CSOs that haven't been processed yet (processed later in this page).
             // Reference attributes will be processed in a second pass after all CSOs have MVOs.
-            var attributeFlowWarnings = new List<AttributeFlowWarning>();
+            var attributeFlowErrors = new List<AttributeFlowError>();
             using (Diagnostics.Sync.StartSpan("ProcessInboundAttributeFlow"))
             {
                 foreach (var inboundSyncRule in inboundSyncRules)
                 {
                     // evaluate inbound Attribute Flow Rules, skipping reference attributes
-                    attributeFlowWarnings.AddRange(
+                    attributeFlowErrors.AddRange(
                         ProcessInboundAttributeFlow(connectedSystemObject, inboundSyncRule, skipReferenceAttributes: true));
                 }
             }
 
-            // Create warning RPEIs for MVA->SVA truncations (#435)
-            foreach (var warning in attributeFlowWarnings)
+            // Create error RPEIs for MVA->SVA violations (#435): a multi-valued source with more than one value
+            // targeting a single-valued attribute. The attribute does not flow; the object's other attributes do.
+            foreach (var attributeFlowError in attributeFlowErrors)
             {
-                var warningRpei = _activity.PrepareRunProfileExecutionItem();
-                warningRpei.ConnectedSystemObject = connectedSystemObject;
-                warningRpei.ConnectedSystemObjectId = connectedSystemObject.Id;
-                warningRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.MultiValuedAttributeTruncated;
-                warningRpei.ErrorMessage = $"Multi-valued source attribute '{warning.SourceAttributeName}' has {warning.ValueCount} values " +
-                    $"but target attribute '{warning.TargetAttributeName}' is single-valued. First value used: '{warning.SelectedValue}'.";
-                _activity.RunProfileExecutionItems.Add(warningRpei);
+                var errorRpei = _activity.PrepareRunProfileExecutionItem();
+                errorRpei.ConnectedSystemObject = connectedSystemObject;
+                errorRpei.ConnectedSystemObjectId = connectedSystemObject.Id;
+                errorRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued;
+                errorRpei.ErrorMessage = $"Multi-valued source attribute '{attributeFlowError.SourceAttributeName}' has {attributeFlowError.ValueCount} values " +
+                    $"but target attribute '{attributeFlowError.TargetAttributeName}' is single-valued, so no value was flowed for this attribute. " +
+                    "Map to a multi-valued attribute, reduce the source to a single value, or use an Expression to select one value.";
+                _activity.RunProfileExecutionItems.Add(errorRpei);
             }
 
             // Queue this CSO for deferred reference attribute processing
@@ -1422,6 +1434,19 @@ public abstract class SyncTaskProcessorBase
 
             // Aggregate no-net-change counts for statistics
             _totalCsoAlreadyCurrentCount += result.CsoAlreadyCurrentCount;
+
+            // Create error RPEIs for MVA->SVA export violations (#435): a multi-valued Metaverse source with more
+            // than one value targeting a single-valued Connected System attribute. No Pending Export is generated
+            // for that attribute; the object's other attributes still export.
+            foreach (var attributeFlowError in result.AttributeFlowErrors)
+            {
+                var errorRpei = _activity.PrepareRunProfileExecutionItem();
+                errorRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued;
+                errorRpei.ErrorMessage = $"Multi-valued Metaverse source attribute '{attributeFlowError.SourceAttributeName}' has {attributeFlowError.ValueCount} values " +
+                    $"but target attribute '{attributeFlowError.TargetAttributeName}' on '{_connectedSystem.Name}' is single-valued, so no value was exported for this attribute. " +
+                    "Map to a multi-valued attribute, reduce the source to a single value, or use an Expression to select one value.";
+                _activity.RunProfileExecutionItems.Add(errorRpei);
+            }
 
             // Collect provisioning CSOs for batch creation at end of page (must be created before Pending Exports)
             if (result.ProvisioningCsosToCreate.Count > 0)
@@ -1771,10 +1796,10 @@ public abstract class SyncTaskProcessorBase
 
             // Process ONLY reference attributes (onlyReferenceAttributes = true)
             // This is more efficient than re-processing all attributes
-            // Note: reference attributes are inherently multi-valued so MVA->SVA warnings are unlikely here
+            // Note: reference attributes are inherently multi-valued and out of scope for the MVA->SVA guard
             foreach (var syncRule in syncRules)
             {
-                // Warnings already captured in the first pass; reference-only pass does not repeat them
+                // Errors already captured in the first pass; reference-only pass does not repeat them
                 ProcessInboundAttributeFlow(cso, syncRule, skipReferenceAttributes: false, onlyReferenceAttributes: true);
             }
 
@@ -2931,42 +2956,94 @@ public abstract class SyncTaskProcessorBase
                     recallResult.RemovalChangesStaged, recallResult.UnresolvableChangesDropped,
                     recallResult.SkippedDueToExistingDeletePendingExport);
 
-                // Fold the staged recall exports into Activity reporting (#1003): one RPEI per
-                // staged Pending Export with a PendingExportCreated outcome, persisted and counted
-                // by this page's FlushRpeisAsync exactly like normal export staging. Without this,
-                // deletion-staged exports were invisible on the Activity (TotalPendingExports 0).
-                foreach (var stagedPendingExport in recallResult.StagedPendingExports)
+                // Fold the staged recall exports into Activity reporting (#1003): one RPEI per staged
+                // Pending Export with a PendingExportCreated outcome. Deduplicated per referencing target
+                // CSO and deferred to end of run (FlushDeferredRecallRpeisAsync): a group whose deleted
+                // members span N pages stages N times, but the delete-then-create merge means each flush's
+                // Pending Export already carries the prior removals, so only the final one matters. Last
+                // write wins; emitting per page-flush inflated TotalPendingExports on large-scale runs.
+                foreach (var stagedPendingExport in recallResult.StagedPendingExports.Where(pe => pe.ConnectedSystemObjectId.HasValue))
                 {
-                    var recallRpei = new ActivityRunProfileExecutionItem
-                    {
-                        Id = Guid.NewGuid(),
-                        ObjectChangeType = ObjectChangeType.PendingExport,
-                        ConnectedSystemObjectId = stagedPendingExport.ConnectedSystemObjectId,
-                        PendingExportId = stagedPendingExport.Id,
-                        DisplayNameSnapshot = stagedPendingExport.SourceMetaverseObjectId.HasValue
-                            ? recallResult.ReferencingObjectDisplayNames
-                                .GetValueOrDefault(stagedPendingExport.SourceMetaverseObjectId.Value)
-                            : null
-                    };
-
-                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                    {
-                        var recallOutcome = SyncOutcomeBuilder.AddRootOutcome(recallRpei,
-                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
-                            targetEntityId: stagedPendingExport.Id,
-                            targetEntityDescription: recallRpei.DisplayNameSnapshot,
-                            detailCount: stagedPendingExport.AttributeValueChanges.Count,
-                            detailMessage: stagedPendingExport.ConnectedSystemId.ToString());
-                        await SnapshotPendingExportChangesAsync(recallOutcome, stagedPendingExport);
-                    }
-
-                    _activity.RunProfileExecutionItems.Add(recallRpei);
+                    var displayName = stagedPendingExport.SourceMetaverseObjectId.HasValue
+                        ? recallResult.ReferencingObjectDisplayNames
+                            .GetValueOrDefault(stagedPendingExport.SourceMetaverseObjectId.Value)
+                        : null;
+                    StageDeferredRecallRpei(stagedPendingExport, displayName);
                 }
             }
         }
 
         _pendingMvoDeletions.Clear();
         _preRecallAttributeSnapshots.Clear();
+        span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Records the final staged reference-recall Pending Export for a referencing target Connected System
+    /// Object, to be emitted as a single RPEI at end of run by <see cref="FlushDeferredRecallRpeisAsync"/>.
+    /// Last write wins per CSO: the latest flush's Pending Export already carries every prior page's
+    /// removals (delete-then-create merge), so re-staging the same CSO across pages must not accumulate
+    /// duplicate RPEIs. Called once per staged Pending Export from <see cref="FlushPendingMvoDeletionsAsync"/>.
+    /// </summary>
+    protected void StageDeferredRecallRpei(PendingExport stagedPendingExport, string? displayName)
+    {
+        if (stagedPendingExport.ConnectedSystemObjectId.HasValue)
+            _deferredRecallRpeisByCsoId[stagedPendingExport.ConnectedSystemObjectId.Value] = (stagedPendingExport, displayName);
+    }
+
+    /// <summary>
+    /// Emits the reference-recall Pending Export RPEIs accumulated across every page's
+    /// <see cref="FlushPendingMvoDeletionsAsync"/>, exactly one per referencing target Connected System
+    /// Object (deduplicated in <see cref="_deferredRecallRpeisByCsoId"/>), then persists them through the
+    /// normal RPEI flush. Called once at end of run by each sync processor. Emitting here rather than per
+    /// page-flush is what collapses a group whose deleted members spanned many pages from many Pending
+    /// Export RPEIs to one; the retained Pending Export is the final flush's, which the delete-then-create
+    /// merge guarantees already carries every page's removals. Also populates the external-ID and object
+    /// type snapshots (one Summary-tier lookup for all referencing CSOs) so each RPEI stays self-describing
+    /// if its group CSO is later deleted, and persists the Pending Export id (previously dropped).
+    /// </summary>
+    protected async Task FlushDeferredRecallRpeisAsync()
+    {
+        if (_deferredRecallRpeisByCsoId.Count == 0)
+            return;
+
+        using var span = Diagnostics.Sync.StartSpan("FlushDeferredRecallRpeis");
+        span.SetTag("recallRpeiCount", _deferredRecallRpeisByCsoId.Count);
+
+        // One Summary-tier lookup of the referencing CSOs' external id and object type (no attribute-value
+        // collections materialised, so it is cheap even for large-membership group CSOs).
+        var csoSnapshots = await _syncRepo.GetConnectedSystemObjectDisplaySnapshotsAsync(_deferredRecallRpeisByCsoId.Keys.ToList());
+
+        foreach (var (csoId, (stagedPendingExport, displayName)) in _deferredRecallRpeisByCsoId)
+        {
+            csoSnapshots.TryGetValue(csoId, out var snapshot);
+            var recallRpei = new ActivityRunProfileExecutionItem
+            {
+                Id = Guid.NewGuid(),
+                ObjectChangeType = ObjectChangeType.PendingExport,
+                ConnectedSystemObjectId = csoId,
+                PendingExportId = stagedPendingExport.Id,
+                DisplayNameSnapshot = displayName,
+                ExternalIdSnapshot = snapshot?.ExternalId,
+                ObjectTypeSnapshot = snapshot?.TypeName
+            };
+
+            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            {
+                var recallOutcome = SyncOutcomeBuilder.AddRootOutcome(recallRpei,
+                    ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                    targetEntityId: stagedPendingExport.Id,
+                    targetEntityDescription: recallRpei.DisplayNameSnapshot,
+                    detailCount: stagedPendingExport.AttributeValueChanges.Count,
+                    detailMessage: stagedPendingExport.ConnectedSystemId.ToString());
+                await SnapshotPendingExportChangesAsync(recallOutcome, stagedPendingExport);
+            }
+
+            _activity.RunProfileExecutionItems.Add(recallRpei);
+        }
+
+        _deferredRecallRpeisByCsoId.Clear();
+        await FlushRpeisAsync();
         span.SetSuccess();
     }
 
@@ -3521,7 +3598,7 @@ public abstract class SyncTaskProcessorBase
     /// <param name="onlyReferenceAttributes">If true, process ONLY reference attributes (for deferred second pass). Takes precedence over skipReferenceAttributes.</param>
     /// <exception cref="InvalidDataException">Can be thrown if a Synchronisation Rule Mapping Source is not properly formed.</exception>
     /// <exception cref="NotImplementedException">Will be thrown whilst Functions have not been implemented, but are being used in the Synchronisation Rule.</exception>
-    protected List<AttributeFlowWarning> ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false, bool isFinalReferencePass = false)
+    protected List<AttributeFlowError> ProcessInboundAttributeFlow(ConnectedSystemObject connectedSystemObject, SyncRule syncRule, bool skipReferenceAttributes = false, bool onlyReferenceAttributes = false, bool isFinalReferencePass = false)
     {
         if (_objectTypes == null)
             throw new MissingMemberException("_objectTypes is null!");

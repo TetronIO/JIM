@@ -73,12 +73,15 @@ internal static class LdapConnectorConstants
     // Export modify batch size settings
     // Controls the maximum number of values per multi-valued attribute modification in a single LDAP ModifyRequest.
     // Large batch sizes can exceed LDAP server limits (especially Samba AD) causing partial or failed operations.
-    // Default of 100 balances throughput vs compatibility:
-    // - Each member DN is typically 60-150 bytes, so 100 values ≈ 6-15 KB payload
-    // - Well within AD's 5,000-operation transaction limit and typical LDAP message size limits
-    // - Avoids excessive round-trips for large groups (10,000-member group = 100 requests)
-    // - Compatible with Samba AD, Microsoft AD, OpenLDAP, and 389DS
-    internal const int DEFAULT_MODIFY_BATCH_SIZE = 100;
+    // Default of 1000 balances throughput vs compatibility:
+    // - Each member DN is typically 60-150 bytes, so 1000 values ≈ 60-150 KB payload; well within AD's
+    //   5,000-operation transaction limit and default LDAP message size limits (AD MaxReceiveBuffer ~10 MB)
+    // - Round trips matter more than payload: some servers rewrite the whole entry per modify (OpenLDAP MDB),
+    //   so per-modify cost grows with the entry's current value count and small batches make large-group
+    //   exports quadratic. A 500,000-member group is 500 requests at 1000/batch vs 5,000 at 100/batch.
+    // - Compatible with Samba AD, Microsoft AD, OpenLDAP, and 389DS; constrained servers can lower the
+    //   "Modify Batch Size" Connected System setting (minimum 10)
+    internal const int DEFAULT_MODIFY_BATCH_SIZE = 1000;
     internal const int MIN_MODIFY_BATCH_SIZE = 10;
     internal const int MAX_MODIFY_BATCH_SIZE = 5000;
 

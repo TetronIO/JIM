@@ -398,7 +398,7 @@ public class ExportEvaluationServer
             {
                 var (pendingExport, provisioningCso, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
                     mvo, exportRule, changedAttributes, cache, deferSave, removedAttributes, existingPendingExports,
-                    mvAttributeDictionary, preResolvedForSystem, recallSemantics);
+                    mvAttributeDictionary, preResolvedForSystem, recallSemantics, result.AttributeFlowErrors);
 
                 result.CsoAlreadyCurrentCount += csoAlreadyCurrentCount;
 
@@ -1850,7 +1850,8 @@ public class ExportEvaluationServer
         List<PendingExport>? existingPendingExports = null,
         Dictionary<string, object?>? mvAttributeDictionary = null,
         IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null,
-        bool recallSemantics = false)
+        bool recallSemantics = false,
+        List<AttributeFlowError>? flowErrors = null)
     {
         // Find existing CSO using cached lookup instead of database query
         var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
@@ -1999,7 +2000,7 @@ public class ExportEvaluationServer
             attributeChanges = CreateAttributeValueChanges(mvo, exportRule, changedAttributes, changeType,
                 existingCso: existingCso, csoAttributeCache: cache.CsoAttributeValues, out csoAlreadyCurrentCount,
                 removedAttributes: removedAttributes, mvAttributeDictionary: mvAttributeDictionary,
-                preResolvedReferenceValues: preResolvedReferenceValues);
+                preResolvedReferenceValues: preResolvedReferenceValues, flowErrors: flowErrors);
 
             attrSpan.SetTag("changeCount", attributeChanges.Count);
             attrSpan.SetTag("skippedNoNetChange", csoAlreadyCurrentCount);
@@ -2391,7 +2392,8 @@ public class ExportEvaluationServer
         out int csoAlreadyCurrentCount,
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
         Dictionary<string, object?>? mvAttributeDictionary = null,
-        IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null)
+        IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null,
+        List<AttributeFlowError>? flowErrors = null)
     {
         var changes = new List<PendingExportAttributeValueChange>();
         var isCreateOperation = changeType == PendingExportChangeType.Create;
@@ -2544,6 +2546,32 @@ public class ExportEvaluationServer
                 // Handle direct Attribute Flow mappings
                 if (source.MetaverseAttribute == null)
                     continue;
+
+                // MVA -> SVA guard (#435): a multi-valued Metaverse source flowing to a single-valued Connected
+                // System attribute can only carry one value. If the Metaverse Object holds more than one value for
+                // the source attribute, JIM will not pick one arbitrarily; an arbitrary export could never be
+                // reconciled on the next import (JIM would not know which value is authoritative). No Pending Export
+                // is generated for this attribute and an error is recorded; the object's other attributes still export.
+                if (mapping.TargetConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued &&
+                    source.MetaverseAttribute.AttributePlurality == AttributePlurality.MultiValued)
+                {
+                    var mvoValueCount = mvo.AttributeValues.Count(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue);
+                    if (mvoValueCount > 1)
+                    {
+                        Log.Error("CreateAttributeValueChanges: Multi-valued source attribute '{SourceAttr}' has {ValueCount} values but " +
+                            "target attribute '{TargetAttr}' is single-valued. No Pending Export generated for this attribute. MVO {MvoId}",
+                            source.MetaverseAttribute.Name, mvoValueCount, mapping.TargetConnectedSystemAttribute.Name, mvo.Id);
+
+                        flowErrors?.Add(new AttributeFlowError
+                        {
+                            SourceAttributeName = source.MetaverseAttribute.Name,
+                            TargetAttributeName = mapping.TargetConnectedSystemAttribute.Name,
+                            ValueCount = mvoValueCount
+                        });
+
+                        continue;
+                    }
+                }
 
                 // Get attribute values - handling differs for single-valued vs multi-valued attributes
                 // Multi-valued attributes (like member) have multiple MVO attribute values with the same attribute ID

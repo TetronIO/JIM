@@ -32,13 +32,17 @@ These figures are for the **host machine** (or VM) running the Docker stack -- t
 | Up to 10,000 objects        | 4 GB             | 8 GB                 |
 | 10,000 -- 50,000 objects    | 8 GB             | 16 GB                |
 | 50,000 -- 100,000 objects   | 20 GB            | 24 GB                |
-| 100,000+ objects            | 24 GB            | 32 GB                |
+| 100,000 -- 250,000 objects  | 24 GB            | 32 GB                |
+| 250,000 -- 500,000 objects  | 48 GB            | 64 GB                |
 
 !!! info "Why large imports need significant memory"
     During a full import, the worker loads all imported objects with their attributes into memory before the save phase begins (for duplicate detection, deletion detection, and reference resolution). A full import of 100,000 objects with 20 attributes each produces a worker peak working set of approximately 2.3 GB. The database requires an additional 1--2 GB during bulk inserts. Combined with the web, scheduler, and operating system overhead, total system memory consumption reaches 8--10 GB for 100K objects.
 
 !!! note
     These requirements apply to the largest single full import. If you have multiple Connected Systems of 50K objects each but import them sequentially (not concurrently), size for 50K, not the sum. Delta imports process only changed objects and require significantly less memory.
+
+!!! info "Large group memberships drive memory more than object count"
+    A group is loaded with its full member list during processing, so a single large group can dominate the working set: a group with 495,000 members loads 495,000 reference values. JIM's largest validated scenario (a cross-domain synchronisation between two directories of roughly 500,000 objects each, with groups of up to 495,000 members) peaked at approximately **55 GB total host RAM** with the full stack, database, and both directories resident. Size toward the upper figure in the table when provisioning or synchronising very large groups; a deployment of the same object count with only small groups needs considerably less.
 
 ### Software Requirements
 
@@ -298,16 +302,20 @@ docker compose logs -f
 
 ### Step 8: Verify Startup
 
-JIM automatically applies any pending database migrations on first startup; no manual migration step is required. Watch the logs to confirm:
+JIM sets the database up automatically on first startup; there is no manual database step. Watch the logs to confirm:
 
 ```bash
 docker compose logs jim.worker --tail=50
 ```
 
-Look for "Database migrations applied" or "Database is up to date" in the worker logs. The web interface will show a loading screen until migrations complete and the worker signals readiness.
+The worker prepares the database before it starts accepting work, and `jim.web` will not serve requests until that has finished; while it waits, `jim.web` logs `JIM.Application is not ready yet. Sleeping...` once per second. The definitive signal is the readiness endpoint, which returns `503 Service Unavailable` until JIM is ready and `200 OK` afterwards:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/ready
+```
 
 !!! warning "Troubleshooting"
-    If migrations fail (e.g. due to a permissions issue), the worker logs will contain the full error. Fix the underlying issue and restart the services.
+    If the database setup fails (e.g. due to a permissions issue), the worker logs will contain the full error. Fix the underlying issue and restart the services.
 
 ### Step 9: Access JIM
 
@@ -499,7 +507,7 @@ Use this checklist before going live:
 - [ ] Health endpoint monitored by your alerting system
 - [ ] Firewall rules restrict access to JIM's port to authorised networks
 - [ ] Docker restart policy is `unless-stopped` (set by production override)
-- [ ] Upgrade procedure documented and tested in staging
+- [ ] Upgrade procedure documented and tested in staging (see [Upgrading](upgrading.md))
 - [ ] PowerShell module installed and connected (if using automation/IDaC)
 
 ### Air-Gapped Network Checklist
@@ -507,7 +515,7 @@ Use this checklist before going live:
 For air-gapped deployments, also verify:
 
 - [ ] All Docker images loaded successfully (`docker images | grep jim`)
-- [ ] PostgreSQL is accessible and migrations applied
+- [ ] PostgreSQL is accessible and the database has been set up
 - [ ] SSO/OIDC identity provider is accessible from JIM server
 - [ ] DNS resolves JIM server name correctly
 - [ ] TLS certificates are valid and trusted (if using HTTPS)

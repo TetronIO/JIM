@@ -57,7 +57,7 @@ If you set `JIM_ENCRYPTION_KEY_PATH` to a bind-mounted host directory instead of
 
 Keep the database dump and the key archive from the same point in time as a single labelled backup set, so a restore never mixes a database with a mismatched key set.
 
-## ♻️ Restoring
+## ♻️ Restoring {#restoring}
 
 Restore both artefacts from the **same backup set**, then start the services.
 

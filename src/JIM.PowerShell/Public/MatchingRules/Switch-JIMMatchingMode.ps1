@@ -61,14 +61,11 @@ function Switch-JIMMatchingMode {
             return
         }
 
-        # Map string to numeric mode value
-        $modeValue = switch ($Mode) {
-            'ConnectedSystem' { 0 }
-            'SyncRule' { 1 }
-        }
-
         $body = @{
-            mode = $modeValue
+            # Send the enum as its string name; -Mode is ValidateSet-constrained to the
+            # exact ObjectMatchingRuleMode member names. The API rejects numeric ordinals
+            # (JsonStringEnumConverter allowIntegerValues:false, PR #1060).
+            mode = $Mode
         }
 
         $modeDescription = if ($Mode -eq 'SyncRule') { 'Advanced (per-Synchronisation Rule)' } else { 'Simple (per-Object Type)' }

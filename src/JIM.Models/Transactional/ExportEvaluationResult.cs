@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Staging;
+using JIM.Models.Sync;
 
 namespace JIM.Models.Transactional;
 
@@ -33,4 +34,11 @@ public class ExportEvaluationResult
     /// changes were staged; used by the page flush to cancel stale Delete Pending Exports (#1018).
     /// </summary>
     public HashSet<Guid> InScopeJoinedCsoIds { get; set; } = [];
+
+    /// <summary>
+    /// Attribute Flow errors raised during evaluation: a multi-valued Metaverse source attribute held more
+    /// than one value but the target Connected System attribute is single-valued (#435). No Pending Export
+    /// change was generated for those attributes; the worker surfaces each as a MultiValuedToSingleValued RPEI.
+    /// </summary>
+    public List<AttributeFlowError> AttributeFlowErrors { get; set; } = [];
 }

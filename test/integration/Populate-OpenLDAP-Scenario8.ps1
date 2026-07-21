@@ -832,27 +832,40 @@ $flushBatch = {
 }
 
 # Stream work items into a single LDIF buffer, flush at $flushBatchSize lines.
+#
+# CRITICAL: emit ONE modify operation per group-chunk carrying all of that
+# chunk's member values, NOT one modify per member. back-mdb stores a group as
+# a single entry, so every "add: member" rewrites the whole entry; issuing one
+# modify per member makes building an N-member group O(N^2). At 500k users the
+# 315k-member AllStaff group ground slapd for hours at ~0.1s/member and never
+# finished. A single multi-valued modify applies all values in one entry
+# rewrite, restoring ~O(N) behaviour. Do NOT "simplify" this back to one modify
+# per member. Chunking at $flushBatchSize also keeps each request under
+# OpenLDAP's authenticated socket-buffer cap (olcSockbufMaxIncomingAuth, ~4MB)
+# and bounds the temp-file size for very large groups.
 $batch = [System.Text.StringBuilder]::new()
 $batchMemberLineCount = 0
 
 foreach ($wi in $workItems) {
     $members = $wi.Members
-    # If the group's member set alone exceeds the batch size, chunk it across
-    # multiple ldapmodify blocks but still keep them in a single docker exec
-    # where possible.
+    # Chunk very large groups so each modify request stays within the socket
+    # buffer limit; each chunk is still a single multi-valued modify. Chunk
+    # members are distinct (Get-LongTailGroupSize never exceeds the user count,
+    # so the wrapped index window cannot repeat) and the initial member is
+    # excluded above, so the atomic add never trips "Type or value exists".
     $chunkSize = $flushBatchSize
     for ($c = 0; $c -lt $members.Count; $c += $chunkSize) {
         $end = [Math]::Min($c + $chunkSize, $members.Count) - 1
         $chunk = $members[$c..$end]
 
+        [void]$batch.AppendLine("dn: $($wi.GroupDN)")
+        [void]$batch.AppendLine("changetype: modify")
+        [void]$batch.AppendLine("add: member")
         foreach ($memberDn in $chunk) {
-            [void]$batch.AppendLine("dn: $($wi.GroupDN)")
-            [void]$batch.AppendLine("changetype: modify")
-            [void]$batch.AppendLine("add: member")
             [void]$batch.AppendLine("member: $memberDn")
-            [void]$batch.AppendLine("")
-            $batchMemberLineCount++
         }
+        [void]$batch.AppendLine("")
+        $batchMemberLineCount += $chunk.Count
 
         $totalMemberships += $chunk.Count
 

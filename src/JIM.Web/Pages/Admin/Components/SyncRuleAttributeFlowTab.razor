@@ -178,6 +178,12 @@
                             </MudTooltip>
                         }
                     }
+                    @if (MappingIsMvaToSva(context))
+                    {
+                        <MudTooltip Text="@MvaToSvaIndicatorTooltip" Arrow="true" Placement="Placement.Top">
+                            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="ml-2" />
+                        </MudTooltip>
+                    }
                 </MudTd>
                 <MudTd DataLabel="Created">
                     <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
@@ -220,8 +226,16 @@
             {
                 <MudPaper Class="pa-3" Elevation="0" Outlined="true" Style="min-width: 200px;">
                     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Class="mb-2">
-                        <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
-                            @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudText Typo="Typo.overline"><span class="mud-text-secondary">TYPE:</span>
+                                @attributeFlowRule.GetSourceType().ToString().SplitOnCapitalLetters().ToUpper()</MudText>
+                            @if (MappingIsMvaToSva(attributeFlowRule))
+                            {
+                                <MudTooltip Text="@MvaToSvaIndicatorTooltip" Arrow="true" Placement="Placement.Top">
+                                    <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" />
+                                </MudTooltip>
+                            }
+                        </MudStack>
                         <div class="d-flex gap-2" style="flex-shrink: 0;">
                             <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Color="Color.Primary"
                                 Size="Size.Small" aria-label="edit"
@@ -370,7 +384,7 @@
                         {
                             <MudSelect T="MetaverseAttribute" @bind-Value="_attributeFlowMappingSource.MetaverseAttribute"
                                 Label="Metaverse Attribute" Placeholder="Please select the source Metaverse attribute" Required="true"
-                                Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@(a => a?.Name ?? string.Empty)">
+                                Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@MetaverseAttributeLabel">
                                 @foreach (var metaverseAttribute in SyncRule.MetaverseObjectType.Attributes)
                                 {
                                     <MudSelectItem Value="@metaverseAttribute">@metaverseAttribute.Name <span
@@ -399,7 +413,7 @@
                 {
                     <MudSelect T="MetaverseAttribute" @bind-Value="_attributeFlowMapping.TargetMetaverseAttribute"
                         Label="Metaverse Attribute" Placeholder="Please select the target Metaverse attribute" Required="true"
-                        Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@(a => a?.Name ?? string.Empty)">
+                        Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@MetaverseAttributeLabel">
                         @foreach (var metaverseAttribute in SyncRule.MetaverseObjectType.Attributes.Where(q =>
                                     !SyncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping &&
                                     afr.TargetMetaverseAttribute != null &&
@@ -471,6 +485,14 @@
                         Only flow this attribute when JIM creates the object in the Connected System. Once provisioned, the attribute becomes unmanaged: Metaverse changes are not exported and Drift Correction leaves it alone, allowing the Connected System to own the value. Objects that join to pre-existing Connected System objects never receive the value.
                     </MudText>
                 }
+
+                @* ─── Multi-Valued to Single-Valued warning (#435) ─── *@
+                @if (DialogMappingIsMvaToSva())
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-5">
+                        @GetMvaToSvaWarningText()
+                    </MudAlert>
+                }
             }
         }
     </DialogContent>
@@ -499,6 +521,11 @@
     private string? _attributeFlowMappingSourceType;
     private bool _attributeFlowTableView = true;
     private bool _isEditingAttributeFlow;
+
+    // Tooltip for the Multi-Valued to Single-Valued indicator in the Attribute Flow list (#435).
+    private const string MvaToSvaIndicatorTooltip =
+        "This mapping flows a Multi-Valued source to a Single-Valued target. Any object with more than one value will " +
+        "not flow this attribute and will be recorded as an error; a single value flows normally.";
 
     protected override async Task OnInitializedAsync()
     {
@@ -582,6 +609,94 @@
             _attributeFlowMapping.InboundValueProcessing |= flag;
         else
             _attributeFlowMapping.InboundValueProcessing &= ~flag;
+    }
+
+    /// <summary>
+    /// Label for a Metaverse Attribute in the source/target selects, including its data type and plurality
+    /// (for example "Account Name (Text : Single Valued)"), so the plurality is visible once selected. Matches
+    /// the format shown for Connected System attributes.
+    /// </summary>
+    private static string MetaverseAttributeLabel(MetaverseAttribute? attribute)
+        => attribute == null
+            ? string.Empty
+            : $"{attribute.Name} ({attribute.Type} : {attribute.AttributePlurality.ToString().SplitOnCapitalLetters()})";
+
+    /// <summary>
+    /// Whether the mapping currently being added or edited in the dialog flows a Multi-Valued source attribute
+    /// to a Single-Valued target attribute (#435). Add and edit share this dialog, so this covers both. Only
+    /// Attribute mappings are considered (an Expression's plurality is unknown at design time). On import,
+    /// Reference sources are excluded because the runtime guard does not apply to them; on export, every data
+    /// type is in scope.
+    /// </summary>
+    private bool DialogMappingIsMvaToSva()
+    {
+        if (_attributeFlowMappingSourceType != "Attribute" || _attributeFlowMapping == null || _attributeFlowMappingSource == null)
+            return false;
+
+        if (SyncRule.Direction == SyncRuleDirection.Import)
+        {
+            var source = _attributeFlowMappingSource.ConnectedSystemAttribute;
+            var target = _attributeFlowMapping.TargetMetaverseAttribute;
+            return source is { AttributePlurality: AttributePlurality.MultiValued } &&
+                   source.Type != AttributeDataType.Reference &&
+                   target is { AttributePlurality: AttributePlurality.SingleValued };
+        }
+
+        var exportSource = _attributeFlowMappingSource.MetaverseAttribute;
+        var exportTarget = _attributeFlowMapping.TargetConnectedSystemAttribute;
+        return exportSource is { AttributePlurality: AttributePlurality.MultiValued } &&
+               exportTarget is { AttributePlurality: AttributePlurality.SingleValued };
+    }
+
+    /// <summary>
+    /// The direction-specific warning shown when the mapping being added or edited is Multi-Valued to
+    /// Single-Valued (#435). The attribute names are rendered as inline code, so the result is raw markup;
+    /// each name is HTML-encoded because it is Connected System / Metaverse schema data.
+    /// </summary>
+    private MarkupString GetMvaToSvaWarningText()
+    {
+        static string Code(string? name) => $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(name)}</code>";
+
+        if (SyncRule.Direction == SyncRuleDirection.Import)
+        {
+            var source = Code(_attributeFlowMappingSource?.ConnectedSystemAttribute?.Name);
+            var target = Code(_attributeFlowMapping?.TargetMetaverseAttribute?.Name);
+            return (MarkupString)(
+                $"{source} is Multi-Valued but {target} is Single-Valued. If a synchronised object has more than one value, " +
+                "no value will flow for this attribute and an error will be recorded against that object (a single value flows normally). " +
+                "To always flow a value, target a Multi-Valued attribute or use an Expression to select one.");
+        }
+
+        var mvSource = Code(_attributeFlowMappingSource?.MetaverseAttribute?.Name);
+        var csTarget = Code(_attributeFlowMapping?.TargetConnectedSystemAttribute?.Name);
+        return (MarkupString)(
+            $"{mvSource} is Multi-Valued but {csTarget} is Single-Valued. If an object has more than one value, " +
+            "no value will be exported for this attribute and an error will be recorded against that object (a single value exports normally). " +
+            "To always export a value, target a Multi-Valued attribute or use an Expression to select one.");
+    }
+
+    /// <summary>
+    /// Whether an existing Attribute mapping flows a Multi-Valued source to a Single-Valued target (#435),
+    /// used to flag the row/card in the Attribute Flow list.
+    /// </summary>
+    private bool MappingIsMvaToSva(SyncRuleMapping mapping)
+    {
+        if (mapping.GetSourceType() != SyncRuleMappingSourcesType.AttributeMapping)
+            return false;
+
+        var source = mapping.Sources.FirstOrDefault();
+        if (source == null)
+            return false;
+
+        if (SyncRule.Direction == SyncRuleDirection.Import)
+        {
+            return source.ConnectedSystemAttribute is { AttributePlurality: AttributePlurality.MultiValued } csSource &&
+                   csSource.Type != AttributeDataType.Reference &&
+                   mapping.TargetMetaverseAttribute is { AttributePlurality: AttributePlurality.SingleValued };
+        }
+
+        return source.MetaverseAttribute is { AttributePlurality: AttributePlurality.MultiValued } &&
+               mapping.TargetConnectedSystemAttribute is { AttributePlurality: AttributePlurality.SingleValued };
     }
 
     private bool DisableAddAttributeFlowMappingButton()

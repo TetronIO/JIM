@@ -289,7 +289,7 @@ Enable-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 
 ```powershell title="Enable and verify"
 Enable-JIMSchedule -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -PassThru |
-    Select-Object Name, Enabled
+    Select-Object Name, IsEnabled
 ```
 
 ---
@@ -522,21 +522,22 @@ Retrieves schedule execution records. Use this to monitor running executions, re
 
 ```powershell
 # List (default)
-Get-JIMScheduleExecution [-ScheduleId <Guid>] [-Status <String>]
+Get-JIMScheduleExecution [-ScheduleId <Guid>] [-InputObject <PSCustomObject>] [-Status <String>]
 
 # ById
 Get-JIMScheduleExecution -Id <Guid>
 
 # Active
-Get-JIMScheduleExecution [-ScheduleId <Guid>] -Active
+Get-JIMScheduleExecution [-ScheduleId <Guid>] [-InputObject <PSCustomObject>] -Active
 ```
 
 #### Parameters
 
 | Parameter | Type | Required | Pipeline | Parameter Set | Description |
 |---|---|---|---|---|---|
-| `Id` | `Guid` | Yes | ByValue, ByPropertyName | ById | The unique identifier of the execution. Alias: `ExecutionId`. |
+| `Id` | `Guid` | Yes | ByPropertyName | ById | The unique identifier of the execution. Alias: `ExecutionId`. |
 | `ScheduleId` | `Guid` | No | ByPropertyName | List, Active | Filters executions to a specific schedule. |
+| `InputObject` | `PSCustomObject` | No | ByValue | List, Active | A Schedule object from the pipeline (e.g. from `Get-JIMSchedule`); its `Id` is used to filter executions, equivalent to specifying `-ScheduleId` directly. |
 | `Status` | `String` | No | No | List | Filters by execution status. Valid values: `Queued`, `InProgress`, `Completed`, `Failed`, `Cancelled`. |
 | `Active` | `Switch` | Yes | No | Active | Returns only currently active executions (queued or in progress). |
 

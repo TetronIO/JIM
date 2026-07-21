@@ -8,6 +8,7 @@ using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Security;
 using JIM.Models.Utility;
+using Serilog;
 namespace JIM.Application.Servers;
 
 public class ActivityServer
@@ -244,12 +245,32 @@ public class ActivityServer
         await Application.Repository.Activity.CreateActivityRunProfileExecutionItemsAsync(items);
     }
 
+    /// <summary>
+    /// Finalises the Activity's Run Profile execution stat counters (#1078) ahead of persisting a
+    /// terminal status, so completed Activities serve their stats from exact stored counters. A
+    /// finalisation failure must not leave the Activity stuck InProgress: the counters stay
+    /// advisory and the lazy finalise-on-first-read path repairs them, so the error is logged and
+    /// completion proceeds.
+    /// </summary>
+    private async Task TryFinaliseRunProfileExecutionStatsAsync(Activity activity)
+    {
+        try
+        {
+            await Application.Repository.Activity.FinaliseActivityRunProfileExecutionStatsAsync(activity);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Error(ex, "TryFinaliseRunProfileExecutionStatsAsync: Failed to finalise stat counters for Activity {ActivityId}; stats will be finalised lazily on first read", activity.Id);
+        }
+    }
+
     public async Task CompleteActivityAsync(Activity activity)
     {
         var now = DateTime.UtcNow;
         activity.Status = ActivityStatus.Complete;
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 
@@ -260,6 +281,7 @@ public class ActivityServer
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
         activity.Status = ActivityStatus.CompleteWithWarning;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 
@@ -277,6 +299,7 @@ public class ActivityServer
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
         activity.Status = ActivityStatus.CompleteWithError;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 
@@ -287,6 +310,7 @@ public class ActivityServer
         activity.TotalActivityTime = now - activity.Created;
         activity.ErrorMessage = errorMessage;
         activity.Status = ActivityStatus.CompleteWithError;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 
@@ -298,6 +322,7 @@ public class ActivityServer
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
         activity.Status = ActivityStatus.FailedWithError;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 
@@ -314,6 +339,7 @@ public class ActivityServer
         activity.Status = ActivityStatus.FailedWithError;
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 
@@ -338,6 +364,7 @@ public class ActivityServer
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
         activity.Status = ActivityStatus.Cancelled;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 

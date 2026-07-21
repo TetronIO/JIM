@@ -20,6 +20,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<Activity> Activities { get; set; } = null!;
     public virtual DbSet<ActivityRunProfileExecutionItem> ActivityRunProfileExecutionItems { get; set; } = null!;
     public virtual DbSet<ActivityRunProfileExecutionItemSyncOutcome> ActivityRunProfileExecutionItemSyncOutcomes { get; set; } = null!;
+    public virtual DbSet<ActivityStatCounter> ActivityStatCounters { get; set; } = null!;
     public virtual DbSet<ClearConnectedSystemObjectsWorkerTask> ClearConnectedSystemObjectsTasks { get; set; } = null!;
     public virtual DbSet<ConnectedSystem> ConnectedSystems { get; set; } = null!;
     public virtual DbSet<ConnectedSystemContainer> ConnectedSystemContainers { get; set; } = null!;
@@ -178,6 +179,17 @@ public class JimDbContext : DbContext
             .HasMany(cso => cso.Changes)
             .WithOne(c => c.ConnectedSystemObject)
             .OnDelete(DeleteBehavior.SetNull); // let the db clear the fk value to the CSO.
+
+        // Activity stat counters (#1078): composite natural key so the incremental upsert has a
+        // conflict target, cascading away with the owning Activity.
+        modelBuilder.Entity<ActivityStatCounter>(entity =>
+        {
+            entity.HasKey(c => new { c.ActivityId, c.Dimension, c.Key });
+            entity.HasOne<Activity>()
+                .WithMany()
+                .HasForeignKey(c => c.ActivityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
         // ActivityRunProfileExecutionItemSyncOutcome: cascade delete when parent RPEI is deleted
         modelBuilder.Entity<ActivityRunProfileExecutionItem>()

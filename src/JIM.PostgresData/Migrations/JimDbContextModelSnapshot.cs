@@ -184,6 +184,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int?>("RoleId")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("RunProfileExecutionStatsFinalised")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid?>("ScheduleExecutionId")
                         .HasColumnType("uuid");
 
@@ -402,6 +405,26 @@ namespace JIM.PostgresData.Migrations
                         .HasDatabaseName("IX_ActivityRunProfileExecutionItemSyncOutcomes_RpeiId_OutcomeType");
 
                     b.ToTable("ActivityRunProfileExecutionItemSyncOutcomes");
+                });
+
+            modelBuilder.Entity("JIM.Models.Activities.ActivityStatCounter", b =>
+                {
+                    b.Property<Guid>("ActivityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Dimension")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<long>("Count")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("ActivityId", "Dimension", "Key");
+
+                    b.ToTable("ActivityStatCounters");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseAttribute", b =>
@@ -3426,6 +3449,15 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystemObjectChange");
 
                     b.Navigation("ParentSyncOutcome");
+                });
+
+            modelBuilder.Entity("JIM.Models.Activities.ActivityStatCounter", b =>
+                {
+                    b.HasOne("JIM.Models.Activities.Activity", null)
+                        .WithMany()
+                        .HasForeignKey("ActivityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>

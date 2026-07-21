@@ -101,3 +101,27 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel
     /// </summary>
     Detailed
 }
+
+/// <summary>
+/// The dimension a persisted Activity stat counter row counts along. Each Run Profile Activity's
+/// execution stats are maintained as incremental (ActivityId, Dimension, Key) counter rows so the
+/// stats read is O(counter rows) instead of aggregating every Run Profile Execution Item; see
+/// <see cref="ActivityStatCounter"/>.
+/// </summary>
+public enum ActivityStatDimension
+{
+    /// <summary>Counts per RPEI <see cref="JIM.Models.Enums.ObjectChangeType"/> (key: the enum's integer value).</summary>
+    ObjectChangeType = 0,
+
+    /// <summary>Counts per resolved object type name (key: the type name).</summary>
+    ObjectTypeName = 1,
+
+    /// <summary>Counts per RPEI <see cref="ActivityRunProfileExecutionItemErrorType"/>, excluding NotSet (key: the enum's integer value).</summary>
+    ErrorType = 2,
+
+    /// <summary>Counts per <see cref="JIM.Models.Enums.NoChangeReason"/> on NoChange RPEIs (key: the enum's integer value).</summary>
+    NoChangeReason = 3,
+
+    /// <summary>Counts per <see cref="ActivityRunProfileExecutionItemSyncOutcomeType"/> across the Activity's sync outcome rows (key: the enum's integer value).</summary>
+    OutcomeType = 4
+}

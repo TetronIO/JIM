@@ -35,7 +35,7 @@ public partial class SyncEngine
         bool onlyReferenceAttributes = false,
         bool isFinalReferencePass = false,
         int? contributingSystemId = null,
-        List<AttributeFlowWarning>? warnings = null,
+        List<AttributeFlowError>? errors = null,
         int mvoObjectTypeId = 0,
         AttributePriorityContext? priorityContext = null)
     {
@@ -89,54 +89,47 @@ public partial class SyncEngine
                         if (onlyReferenceAttributes && csotAttribute.Type != AttributeDataType.Reference)
                             continue;
 
-                        // MVA -> SVA truncation: when multiple source values target a single-valued
-                        // MV attribute, take only the first value and record a warning (#435)
-                        var isMvaToSva = csoAttributeValues.Count > 1 &&
-                            syncRuleMapping.TargetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued;
+                        // For text, apply the mapping's inbound value processing (#843) up front: the processed,
+                        // de-duplicated set is both what flows and what the MVA->SVA guard below counts, so two
+                        // whitespace/case variants that collapse to the same value count as one value.
+                        List<string>? effectiveTextValues = null;
+                        if (csotAttribute.Type == AttributeDataType.Text)
+                            effectiveTextValues = ProcessInboundTextValues(csoAttributeValues.Select(av => av.StringValue), syncRuleMapping);
 
-                        if (isMvaToSva)
+                        // MVA -> SVA guard (#435): flowing more than one value to a single-valued target attribute
+                        // is an error. A single-valued attribute can hold only one value, and JIM will not pick one
+                        // arbitrarily; the attribute is skipped and an error is recorded (surfaced as an RPEI by the
+                        // worker), while the object's other attributes still synchronise. Reference attributes are
+                        // inherently multi-valued and resolved in a later pass, so they are out of scope here.
+                        if (syncRuleMapping.TargetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued &&
+                            csotAttribute.Type != AttributeDataType.Reference)
                         {
-                            var firstValue = csoAttributeValues.First();
-                            var selectedValueDescription = csotAttribute.Type switch
+                            var effectiveValueCount = effectiveTextValues?.Count ?? csoAttributeValues.Count;
+                            if (effectiveValueCount > 1)
                             {
-                                AttributeDataType.Text => firstValue.StringValue ?? "(null)",
-                                AttributeDataType.Number => firstValue.IntValue?.ToString() ?? "(null)",
-                                AttributeDataType.LongNumber => firstValue.LongValue?.ToString() ?? "(null)",
-                                AttributeDataType.DateTime => firstValue.DateTimeValue?.ToString("O") ?? "(null)",
-                                AttributeDataType.Boolean => firstValue.BoolValue?.ToString() ?? "(null)",
-                                AttributeDataType.Guid => firstValue.GuidValue?.ToString() ?? "(null)",
-                                AttributeDataType.Binary => firstValue.ByteValue != null
-                                    ? $"[{firstValue.ByteValue.Length} bytes]" : "(null)",
-                                _ => "(unknown)"
-                            };
+                                Log.Error(
+                                    "ProcessMapping: Multi-valued source attribute '{SourceAttr}' has {ValueCount} values but target " +
+                                    "attribute '{TargetAttr}' is single-valued. No value flowed for this attribute. CSO {CsoId}",
+                                    csotAttribute.Name, effectiveValueCount, syncRuleMapping.TargetMetaverseAttribute.Name, cso.Id);
 
-                            Log.Warning(
-                                "ProcessMapping: Multi-valued source attribute '{SourceAttr}' has {ValueCount} values but target " +
-                                "attribute '{TargetAttr}' is single-valued. Using first value: '{SelectedValue}'. CSO {CsoId}",
-                                csotAttribute.Name, csoAttributeValues.Count,
-                                syncRuleMapping.TargetMetaverseAttribute.Name, LogSanitiser.Sanitise(selectedValueDescription), cso.Id);
+                                errors?.Add(new AttributeFlowError
+                                {
+                                    SourceAttributeName = csotAttribute.Name,
+                                    TargetAttributeName = syncRuleMapping.TargetMetaverseAttribute.Name,
+                                    ValueCount = effectiveValueCount
+                                });
 
-                            warnings?.Add(new AttributeFlowWarning
-                            {
-                                SourceAttributeName = csotAttribute.Name,
-                                TargetAttributeName = syncRuleMapping.TargetMetaverseAttribute.Name,
-                                ValueCount = csoAttributeValues.Count,
-                                SelectedValue = selectedValueDescription
-                            });
-
-                            // Truncate to the first value only
-                            csoAttributeValues = new List<ConnectedSystemObjectAttributeValue> { firstValue };
+                                continue;
+                            }
                         }
 
                         switch (csotAttribute.Type)
                         {
                             case AttributeDataType.Text:
                             {
-                                // Apply the mapping's inbound value processing (#843) to the source text values,
-                                // dropping any that collapse to no value, before diffing against the MVO. An empty
-                                // processed set is the ConnectedNoValue state, resolved by priority (#91).
-                                var effectiveTextValues = ProcessInboundTextValues(csoAttributeValues.Select(av => av.StringValue), syncRuleMapping);
-                                if (effectiveTextValues.Count == 0)
+                                // effectiveTextValues was computed above; an empty processed set is the
+                                // ConnectedNoValue state, resolved by priority (#91).
+                                if (effectiveTextValues!.Count == 0)
                                     ApplyNoValueOutcome(mvo, syncRuleMapping, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
                                 else
                                     ProcessTextAttribute(mvo, syncRuleMapping, effectiveTextValues, contributingSystemId, contributingSyncRuleId);
@@ -528,8 +521,8 @@ public partial class SyncEngine
             !csoAttributeValues.Any(csoav => csoav.IntValue != null && csoav.IntValue.Equals(mvoav.IntValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        // Use the (possibly truncated) csoAttributeValues list rather than cso.AttributeValues
-        // to respect MVA->SVA first-value selection (#435)
+        // csoAttributeValues holds all source values for this attribute; for a single-valued target the
+        // MVA->SVA guard in ProcessMapping has already errored and skipped when more than one is present.
         var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
             !currentValues.Any(mvoav => mvoav.IntValue != null && mvoav.IntValue.Equals(csoav.IntValue)));
 
@@ -603,8 +596,8 @@ public partial class SyncEngine
                 csoav.ByteValue != null && JIM.Utilities.Utilities.AreByteArraysTheSame(csoav.ByteValue, mvoav.ByteValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        // Use the (possibly truncated) csoAttributeValues list rather than cso.AttributeValues
-        // to respect MVA->SVA first-value selection (#435)
+        // csoAttributeValues holds all source values for this attribute; for a single-valued target the
+        // MVA->SVA guard in ProcessMapping has already errored and skipped when more than one is present.
         var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
             !currentValues.Any(mvoav => JIM.Utilities.Utilities.AreByteArraysTheSame(mvoav.ByteValue, csoav.ByteValue)));
 
@@ -754,8 +747,8 @@ public partial class SyncEngine
             !csoAttributeValues.Any(csoav => csoav.GuidValue.HasValue && csoav.GuidValue.Equals(mvoav.GuidValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        // Use the (possibly truncated) csoAttributeValues list rather than cso.AttributeValues
-        // to respect MVA->SVA first-value selection (#435)
+        // csoAttributeValues holds all source values for this attribute; for a single-valued target the
+        // MVA->SVA guard in ProcessMapping has already errored and skipped when more than one is present.
         var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
             !currentValues.Any(mvoav => mvoav.GuidValue.HasValue && mvoav.GuidValue.Equals(csoav.GuidValue)));
 

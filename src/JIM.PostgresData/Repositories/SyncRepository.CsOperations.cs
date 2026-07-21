@@ -409,7 +409,16 @@ public partial class SyncRepository
         }
     }
 
-    public async Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId)
+    /// <summary>
+    /// Rows updated per statement by <see cref="FixupCrossBatchChangeRecordReferenceIdsAsync"/> when
+    /// the caller does not specify a batch size. Sized so each UPDATE completes comfortably inside
+    /// <see cref="PostgresDataRepository.BulkOperationCommandTimeoutSeconds"/>: the Scale500k25kGroups
+    /// run (2026-07-18) showed a single-statement update of 6.5M rows exceeds 300s, while the
+    /// matching join scan alone takes ~17s, so the write side dominates and must be bounded.
+    /// </summary>
+    private const int DefaultChangeRecordReferenceFixupBatchSize = 250_000;
+
+    public async Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId, int? batchSize = null)
     {
         // Change record attribute values (ConnectedSystemObjectChangeAttributeValues) store reference
         // DN strings in StringValue but have ReferenceValueId nulled during COPY binary persistence
@@ -418,40 +427,111 @@ public partial class SyncRepository
         // secondary external ID attribute values of CSOs in the same Connected System.
         //
         // Unlike the CSO attribute value fixup, there is no dedicated "UnresolvedReferenceValue"
-        // column on change records — the DN is stored in StringValue alongside regular string values.
-        // The UPDATE is safe because it only matches when StringValue equals a secondary external ID
-        // value (case-insensitive), so non-reference string values are naturally excluded by the JOIN.
+        // column on change records; the DN is stored in StringValue alongside regular string values.
+        // The resolution is safe because it only matches when StringValue equals a secondary external
+        // ID value (case-insensitive per RFC 4514, hence the LOWER() comparison), so non-reference
+        // string values are naturally excluded by the JOIN.
         //
-        // Uses case-insensitive LOWER() comparison because LDAP Distinguished Names are
-        // case-insensitive per RFC 4514.
-        var previousTimeout = _context.Database.GetCommandTimeout();
-        _context.Database.SetCommandTimeout(PostgresDataRepository.BulkOperationCommandTimeoutSeconds);
-        try
+        // Executed in two phases because a single UPDATE does not survive customer scale: the
+        // Scale500k25kGroups run accumulated 6.5M unresolved rows across the sync and export stages
+        // and the previous single-statement UPDATE blew the bulk command timeout, hard-failing the
+        // confirming import. Phase 1 runs the expensive join once, materialising every resolution
+        // into a session-local temp table. Phase 2 applies them in bounded batches, each a separate
+        // auto-committed statement well inside the timeout. Partial progress is durable and the
+        // operation is idempotent (resolved rows drop out of the phase 1 join), so a failure part
+        // way through simply leaves less for the next invocation. The temp table only ever selects
+        // resolvable rows, so unresolvable DNs (deleted targets, placeholder members) cannot cause
+        // repeat work here; they are re-evaluated on the next invocation.
+        //
+        // The temp table is scoped to the underlying connection, so every command below must run on
+        // the same physical connection: the RawSqlConnectionLease holds it open for the duration and
+        // Npgsql's pool reset (DISCARD ALL) clears any leftovers if we fail before the drop.
+        var effectiveBatchSize = batchSize ?? DefaultChangeRecordReferenceFixupBatchSize;
+        if (effectiveBatchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "Batch size must be positive.");
+
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+
+        const string tempTableName = "_jim_change_record_reference_fixup";
+
+        await using (var dropCmd = new NpgsqlCommand($"""DROP TABLE IF EXISTS "{tempTableName}";""", npgsqlConn))
         {
-            return await _context.Database.ExecuteSqlRawAsync(
-                """
-                UPDATE "ConnectedSystemObjectChangeAttributeValues" cav
-                SET "ReferenceValueId" = target_cso."Id"
-                FROM "ConnectedSystemObjectChangeAttributes" ca
+            dropCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
+            await dropCmd.ExecuteNonQueryAsync();
+        }
+
+        await using (var createCmd = new NpgsqlCommand($"""
+            CREATE TEMP TABLE "{tempTableName}" AS
+            SELECT row_number() OVER () AS rn, s.cav_id, s.target_id
+            FROM (
+                SELECT cav."Id" AS cav_id, target_cso."Id" AS target_id
+                FROM "ConnectedSystemObjectChangeAttributeValues" cav
+                JOIN "ConnectedSystemObjectChangeAttributes" ca ON cav."ConnectedSystemObjectChangeAttributeId" = ca."Id"
                 JOIN "ConnectedSystemObjectChanges" cc ON cc."Id" = ca."ConnectedSystemChangeId"
-                JOIN "ConnectedSystemObjects" target_cso ON target_cso."ConnectedSystemId" = {0}
+                JOIN "ConnectedSystemObjects" target_cso ON target_cso."ConnectedSystemId" = @connectedSystemId
                 JOIN "ConnectedSystemObjectAttributeValues" target_av ON target_av."ConnectedSystemObjectId" = target_cso."Id"
                 JOIN "ConnectedSystemAttributes" target_attr ON target_attr."Id" = target_av."AttributeId"
                     AND target_attr."IsSecondaryExternalId" = true
-                WHERE cc."ConnectedSystemId" = {0}
-                  AND cav."ConnectedSystemObjectChangeAttributeId" = ca."Id"
-                  AND ca."AttributeType" = {1}
+                WHERE cc."ConnectedSystemId" = @connectedSystemId
+                  AND ca."AttributeType" = @referenceAttributeType
                   AND cav."StringValue" IS NOT NULL
                   AND cav."ReferenceValueId" IS NULL
                   AND target_av."StringValue" IS NOT NULL
                   AND LOWER(cav."StringValue") = LOWER(target_av."StringValue")
-                """,
-                connectedSystemId, (int)AttributeDataType.Reference);
-        }
-        finally
+            ) s;
+            """, npgsqlConn))
         {
-            _context.Database.SetCommandTimeout(previousTimeout);
+            createCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
+            createCmd.Parameters.AddWithValue("connectedSystemId", connectedSystemId);
+            createCmd.Parameters.AddWithValue("referenceAttributeType", (int)AttributeDataType.Reference);
+            await createCmd.ExecuteNonQueryAsync();
         }
+
+        await using (var indexCmd = new NpgsqlCommand($"""CREATE INDEX ON "{tempTableName}" (rn);""", npgsqlConn))
+        {
+            indexCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
+            await indexCmd.ExecuteNonQueryAsync();
+        }
+
+        long totalToResolve;
+        await using (var countCmd = new NpgsqlCommand($"""SELECT COUNT(*) FROM "{tempTableName}";""", npgsqlConn))
+        {
+            countCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
+            totalToResolve = (long)(await countCmd.ExecuteScalarAsync() ?? 0L);
+        }
+
+        var totalResolved = 0;
+        if (totalToResolve > 0)
+        {
+            await using var updateCmd = new NpgsqlCommand($"""
+                UPDATE "ConnectedSystemObjectChangeAttributeValues" cav
+                SET "ReferenceValueId" = f.target_id
+                FROM "{tempTableName}" f
+                WHERE f.rn > @rangeStart AND f.rn <= @rangeEnd
+                  AND cav."Id" = f.cav_id
+                """, npgsqlConn);
+            updateCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
+            var rangeStartParam = updateCmd.Parameters.Add("rangeStart", NpgsqlTypes.NpgsqlDbType.Bigint);
+            var rangeEndParam = updateCmd.Parameters.Add("rangeEnd", NpgsqlTypes.NpgsqlDbType.Bigint);
+
+            for (long rangeStart = 0; rangeStart < totalToResolve; rangeStart += effectiveBatchSize)
+            {
+                rangeStartParam.Value = rangeStart;
+                rangeEndParam.Value = rangeStart + effectiveBatchSize;
+                totalResolved += await updateCmd.ExecuteNonQueryAsync();
+                Log.Information("FixupCrossBatchChangeRecordReferenceIdsAsync: Resolved {Resolved:N0} of {Total:N0} change record references for Connected System {ConnectedSystemId}",
+                    totalResolved, totalToResolve, connectedSystemId);
+            }
+        }
+
+        await using (var finalDropCmd = new NpgsqlCommand($"""DROP TABLE IF EXISTS "{tempTableName}";""", npgsqlConn))
+        {
+            finalDropCmd.CommandTimeout = PostgresDataRepository.BulkOperationCommandTimeoutSeconds;
+            await finalDropCmd.ExecuteNonQueryAsync();
+        }
+
+        return totalResolved;
     }
 
     #endregion
@@ -1055,6 +1135,62 @@ public partial class SyncRepository
         }
 
         return targets;
+    }
+
+    public async Task<Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>> GetConnectedSystemObjectDisplaySnapshotsAsync(IReadOnlyCollection<Guid> csoIds)
+    {
+        if (csoIds.Count == 0)
+            return new Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>();
+
+        var idList = csoIds as IList<Guid> ?? csoIds.ToList();
+
+        // Correlated single-column scalar subqueries keyed on the CSO's external-ID attribute; a
+        // single-column projection emits a clean correlated subquery rather than the whole-table
+        // ROW_NUMBER() a multi-column projection would produce, and filtering by ExternalIdAttributeId
+        // rides the (ConnectedSystemObjectId, AttributeId) index instead of scanning member values.
+        var rows = await _context.ConnectedSystemObjects
+            .AsNoTracking()
+            .Where(cso => idList.Contains(cso.Id))
+            .Select(cso => new
+            {
+                cso.Id,
+                ExtIdString = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.StringValue).FirstOrDefault(),
+                ExtIdDateTime = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.DateTimeValue).FirstOrDefault(),
+                ExtIdInt = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.IntValue).FirstOrDefault(),
+                ExtIdLong = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.LongValue).FirstOrDefault(),
+                ExtIdGuid = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.GuidValue).FirstOrDefault(),
+                ExtIdBool = cso.AttributeValues.Where(av => av.AttributeId == cso.ExternalIdAttributeId).Select(av => av.BoolValue).FirstOrDefault(),
+                TypeName = cso.Type!.Name
+            })
+            .ToListAsync();
+
+        return rows.ToDictionary(r => r.Id, r => new ConnectedSystemObjectDisplaySnapshot
+        {
+            ConnectedSystemObjectId = r.Id,
+            ExternalId = FormatExternalIdSnapshotValue(r.ExtIdString, r.ExtIdDateTime, r.ExtIdInt, r.ExtIdLong, r.ExtIdGuid, r.ExtIdBool),
+            TypeName = r.TypeName
+        });
+    }
+
+    /// <summary>
+    /// Formats a Connected System Object external-ID attribute value from its typed columns, mirroring
+    /// the priority order in <see cref="ConnectedSystemObjectAttributeValue.ToStringNoName"/>.
+    /// </summary>
+    private static string? FormatExternalIdSnapshotValue(string? stringValue, DateTime? dateTimeValue, int? intValue, long? longValue, Guid? guidValue, bool? boolValue)
+    {
+        if (!string.IsNullOrEmpty(stringValue))
+            return stringValue;
+        if (dateTimeValue != null)
+            return dateTimeValue.ToString();
+        if (intValue != null)
+            return intValue.ToString();
+        if (longValue != null)
+            return longValue.ToString();
+        if (guidValue != null)
+            return guidValue.ToString();
+        if (boolValue != null)
+            return boolValue.ToString();
+        return null;
     }
 
     /// <summary>

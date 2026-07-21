@@ -188,8 +188,24 @@ public class SyncRepository : ISyncRepository
     }
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
-        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null)
+        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null)
     {
+        if (afterId.HasValue)
+        {
+            // Keyset path: order by Id (matching the production loader's keyset ordering) and
+            // return the first page of rows sorting after the cursor. .NET Guid comparison is
+            // used for both the ordering and the filter, so the cursor chain is self-consistent
+            // within this provider, mirroring the production contract.
+            var afterIdValue = afterId.Value;
+            var remaining = GetCsosForSystem(connectedSystemId)
+                .OrderBy(c => c.Id)
+                .Where(c => c.Id.CompareTo(afterIdValue) > 0)
+                .ToList();
+            var keysetResult = BuildPagedResult(remaining, 1, pageSize);
+            keysetResult.CurrentPage = page;
+            return Task.FromResult(keysetResult);
+        }
+
         var all = GetCsosForSystem(connectedSystemId)
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
@@ -318,6 +334,23 @@ public class SyncRepository : ISyncRepository
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
 
+    public Task<Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>> GetConnectedSystemObjectDisplaySnapshotsAsync(IReadOnlyCollection<Guid> csoIds)
+    {
+        var result = new Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>();
+        foreach (var id in csoIds.Where(_csos.ContainsKey))
+        {
+            var cso = _csos[id];
+            FixupCsoNavigationProperties(cso);
+            result[id] = new ConnectedSystemObjectDisplaySnapshot
+            {
+                ConnectedSystemObjectId = id,
+                ExternalId = cso.ExternalIdAttributeValue?.ToStringNoName(),
+                TypeName = cso.Type?.Name
+            };
+        }
+        return Task.FromResult(result);
+    }
+
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(
         int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
     {
@@ -425,6 +458,16 @@ public class SyncRepository : ISyncRepository
             }
         }
         return Task.FromResult(result);
+    }
+
+    public async Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds)
+    {
+        // Mirrors the production contract: every requested ID gets an entry, empty when the
+        // CSO has no reference lookups.
+        var result = new Dictionary<Guid, Dictionary<Guid, string>>();
+        foreach (var csoId in csoIds)
+            result[csoId] = await GetReferenceExternalIdsAsync(csoId);
+        return result;
     }
 
     public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
@@ -617,8 +660,10 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(resolved);
     }
 
-    public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId)
+    public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId, int? batchSize = null)
     {
+        // batchSize only affects the PostgreSQL implementation's statement chunking; the in-memory
+        // resolution below is a single pass either way.
         // Build a lookup of secondary external ID values → CSO for the Connected System
         var secondaryIdLookup = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
@@ -1188,8 +1233,10 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId)
+    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null)
     {
+        // chunkSize only affects the PostgreSQL implementation's statement chunking; the in-memory
+        // load below is a single pass either way.
         var result = new Dictionary<Guid, PendingExport>();
         foreach (var pe in GetPendingExportsForSystem(connectedSystemId))
         {

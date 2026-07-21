@@ -162,7 +162,23 @@ A multi-source mapping combines several source attributes into one target. This 
 
 ### Multi-valued attributes
 
-Mappings support both single-valued and multi-valued attributes. Multi-valued attributes hold a list of values (group memberships, email aliases, and so on). Mappings can flow multi-valued to multi-valued, or use functions like `Join()` and `Split()` to convert between multi-valued and single-valued representations.
+Mappings support both single-valued and multi-valued attributes. A **Multi-Valued** attribute holds a list of values (group memberships, email aliases, and so on); a **Single-Valued** attribute holds at most one. How a mapping behaves depends on the plurality of the source and the target:
+
+| Source | Target | Behaviour |
+|--------|--------|-----------|
+| Single-Valued | Single-Valued | ✅ The value flows normally. |
+| Multi-Valued | Multi-Valued | ✅ Every value flows. |
+| Single-Valued | Multi-Valued | ✅ The value flows as a single-item list. |
+| Multi-Valued | Single-Valued | ⚠️ See below. |
+
+**Multi-Valued to Single-Valued.** A Single-Valued target can hold only one value, so this mapping is only meaningful when the object actually has one value:
+
+- If the object has **one** value, it flows (import) or is exported normally.
+- If the object has **more than one** value, JIM does **not** pick one arbitrarily. An arbitrary choice would be non-deterministic (a Connected System does not guarantee value order) and, on export, could never be reconciled on the next import. Instead, JIM flows nothing for that attribute and records an error against the object; the object's other attributes still synchronise. The error appears as a `Multi-Valued to Single-Valued` item in the run's [Activity](activities.md).
+
+The Attribute Flow editor warns you at configuration time when a mapping is Multi-Valued to Single-Valued, and the mapping is flagged in the Attribute Flow list, so you can decide before running whether it is what you intend.
+
+To flow a chosen value deterministically instead of erroring, either target a Multi-Valued attribute, or use an [Expression mapping](#expression-mappings) to select one value (for example `Join()`/`Split()` or an index into the list). Reference attributes on import are exempt from this rule; they are resolved separately.
 
 ### Value processing (inbound)
 

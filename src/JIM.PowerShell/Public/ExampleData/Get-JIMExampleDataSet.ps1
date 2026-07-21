@@ -33,7 +33,7 @@ function Get-JIMExampleDataSet {
         Gets the Example Data Set with ID 5, including its values.
 
     .EXAMPLE
-        Get-JIMExampleDataSet | Select-Object Name, Description
+        Get-JIMExampleDataSet | Select-Object Name, Culture, ValueCount
 
         Gets all example data sets with specific properties.
 

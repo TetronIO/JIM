@@ -633,6 +633,57 @@ Describe 'Get-JIMScheduleExecution' {
         }
     }
 
+    Context 'Pipeline binding' {
+
+        It 'Filters active executions to the piped Schedule (as documented: Get-JIMSchedule | Get-JIMScheduleExecution -Active)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+
+                $targetScheduleId = [guid]::NewGuid()
+                $otherScheduleId = [guid]::NewGuid()
+                $matching = [PSCustomObject]@{ id = [guid]::NewGuid(); scheduleId = $targetScheduleId; scheduleName = 'Weekday Sync'; status = 'InProgress' }
+                $other = [PSCustomObject]@{ id = [guid]::NewGuid(); scheduleId = $otherScheduleId; scheduleName = 'Other Schedule'; status = 'Queued' }
+                Mock Invoke-JIMApi { @($matching, $other) }
+
+                # As returned by Get-JIMSchedule: a PSCustomObject exposing Id (not ScheduleId).
+                $schedule = [PSCustomObject]@{ Id = $targetScheduleId; Name = 'Weekday Sync' }
+                $result = @($schedule | Get-JIMScheduleExecution -Active)
+
+                $result.Count | Should -Be 1
+                $result[0].scheduleId | Should -Be $targetScheduleId
+            }
+        }
+
+        It 'Filters by ScheduleId in the query string when the piped Schedule is used with -Status' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false } }
+
+                $schedule = [PSCustomObject]@{ Id = [guid]::NewGuid(); Name = 'Delta Sync' }
+                $schedule | Get-JIMScheduleExecution -Status Failed | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -like "*scheduleId=$($schedule.Id)*" -and $Endpoint -like '*status=Failed*'
+                }
+            }
+        }
+
+        It 'Still supports direct -ScheduleId with no pipeline input' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $scheduleId = [guid]::NewGuid()
+                $matching = [PSCustomObject]@{ id = [guid]::NewGuid(); scheduleId = $scheduleId; status = 'InProgress' }
+                $other = [PSCustomObject]@{ id = [guid]::NewGuid(); scheduleId = [guid]::NewGuid(); status = 'Queued' }
+                Mock Invoke-JIMApi { @($matching, $other) }
+
+                $result = @(Get-JIMScheduleExecution -ScheduleId $scheduleId -Active)
+
+                $result.Count | Should -Be 1
+                $result[0].scheduleId | Should -Be $scheduleId
+            }
+        }
+    }
+
     Context 'Requires Connection' {
 
         BeforeEach {

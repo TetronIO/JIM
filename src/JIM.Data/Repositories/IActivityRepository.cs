@@ -84,6 +84,17 @@ public interface IActivityRepository
 
     public Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId);
 
+    /// <summary>
+    /// Finalises the Activity's Run Profile execution stat counters: recomputes the stats exactly
+    /// from the persisted Run Profile Execution Items and Sync Outcomes, replaces the incremental
+    /// counter rows with the exact values, and sets
+    /// <see cref="Activity.RunProfileExecutionStatsFinalised"/> on the passed entity (the caller's
+    /// subsequent <see cref="UpdateActivityAsync"/> persists the flag alongside the terminal
+    /// status). Called by the completion paths so completed Activities serve stats from stored
+    /// counters instead of re-aggregating; safe to call for Activities with no execution items.
+    /// </summary>
+    public Task FinaliseActivityRunProfileExecutionStatsAsync(Activity activity);
+
     public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id);
 
     /// <summary>

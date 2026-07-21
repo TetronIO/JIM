@@ -1687,4 +1687,220 @@ public class DriftDetectionTests
     }
 
     #endregion
+
+    #region Multi-Valued Set Comparison Performance Tests
+
+    /// <summary>
+    /// Regression test for the quadratic multi-valued set comparison in ValuesEqual.
+    /// The original implementation compared expected vs actual by scanning the whole actual
+    /// set linearly for every expected value (O(n^2)); at Scale500k25kGroups this cost ~36s
+    /// of CPU per large group during the confirming Full Synchronisation (57 groups, 2,073s
+    /// total). With the hash-based fast path an identical 30,000-member comparison completes
+    /// in milliseconds; the generous 2s ceiling keeps the assertion robust on slow CI hosts
+    /// while still failing decisively if the quadratic path returns.
+    /// </summary>
+    [Test]
+    public void EvaluateDrift_LargeMultiValuedReferenceSetWithNoDrift_CompletesQuickly()
+    {
+        // Arrange - multi-valued reference attributes (group membership shape)
+        var membersMvAttr = new MetaverseAttribute
+        {
+            Id = 9000,
+            Name = "Static Members",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued
+        };
+        MvoUserType.Attributes.RemoveAll(a => a.Name == "Static Members");
+        MvoUserType.Attributes.Add(membersMvAttr);
+
+        var memberCsoAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 9001,
+            Name = "member",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        TargetUserType.Attributes.RemoveAll(a => a.Name == "member");
+        TargetUserType.Attributes.Add(memberCsoAttr);
+
+        // 30,000 identical member references on both sides. Scalar FK properties are used
+        // directly (ReferenceValueId / ResolvedReferenceMetaverseObjectId) so the arrange
+        // phase does not need 30,000 materialised member objects.
+        const int memberCount = 30_000;
+        var memberIds = Enumerable.Range(0, memberCount).Select(_ => Guid.NewGuid()).ToList();
+
+        var groupMvo = CreateTestMvo();
+        foreach (var memberId in memberIds)
+        {
+            groupMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+            {
+                Id = Guid.NewGuid(),
+                MetaverseObject = groupMvo,
+                Attribute = membersMvAttr,
+                AttributeId = membersMvAttr.Id,
+                ReferenceValueId = memberId
+            });
+        }
+
+        var groupCso = CreateTestCso(groupMvo);
+        foreach (var memberId in memberIds)
+        {
+            groupCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            {
+                ConnectedSystemObject = groupCso,
+                Attribute = memberCsoAttr,
+                AttributeId = memberCsoAttr.Id,
+                ResolvedReferenceMetaverseObjectId = memberId
+            });
+        }
+        groupMvo.ConnectedSystemObjects.Add(groupCso);
+
+        var memberMapping = new SyncRuleMapping
+        {
+            Id = 9100,
+            TargetConnectedSystemAttribute = memberCsoAttr,
+            TargetConnectedSystemAttributeId = memberCsoAttr.Id
+        };
+        memberMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 91000,
+            MetaverseAttribute = membersMvAttr,
+            MetaverseAttributeId = membersMvAttr.Id
+        });
+        var exportRule = new SyncRule
+        {
+            Id = 910,
+            Name = "Export Group Members",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            EnforceState = true,
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            ConnectedSystemObjectTypeId = TargetUserType.Id,
+            ConnectedSystemObjectType = TargetUserType,
+            MetaverseObjectTypeId = MvoUserType.Id,
+            MetaverseObjectType = MvoUserType,
+            AttributeFlowRules = new List<SyncRuleMapping> { memberMapping }
+        };
+        SyncRulesData.Add(exportRule);
+
+        // Act
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var result = Jim.DriftDetection.EvaluateDrift(
+            groupCso,
+            groupMvo,
+            new List<SyncRule> { exportRule },
+            null);
+        stopwatch.Stop();
+
+        // Assert
+        Assert.That(result.HasDrift, Is.False, "Identical 30,000-member sets must not be reported as drift");
+        Assert.That(stopwatch.ElapsedMilliseconds, Is.LessThan(2000),
+            $"Comparing two identical 30,000-member sets took {stopwatch.ElapsedMilliseconds}ms; " +
+            "the hash-based fast path should complete in milliseconds. A time in the tens of " +
+            "seconds means the O(n^2) linear-scan comparison has regressed.");
+    }
+
+    /// <summary>
+    /// Guards the cross-type comparison semantics that the hash-based fast path must preserve:
+    /// a Guid-typed Metaverse Attribute flowing to a Text-typed Connected System attribute
+    /// produces sets of different runtime types (Guid vs string) that hash differently but are
+    /// equal under SingleValueEquals' Guid-parse comparison. The fallback pairwise scan must
+    /// still run when the hash comparison finds no match.
+    /// </summary>
+    [Test]
+    public void EvaluateDrift_MultiValuedGuidToTextMappingWithEquivalentValues_DetectsNoDrift()
+    {
+        // Arrange - Guid-typed MVO attribute exported to a Text-typed CSO attribute
+        var entitlementsMvAttr = new MetaverseAttribute
+        {
+            Id = 9200,
+            Name = "Entitlement Ids",
+            Type = AttributeDataType.Guid,
+            AttributePlurality = AttributePlurality.MultiValued
+        };
+        MvoUserType.Attributes.Add(entitlementsMvAttr);
+
+        var entitlementsCsoAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 9201,
+            Name = "entitlements",
+            Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued,
+            ConnectedSystemObjectType = TargetUserType
+        };
+        TargetUserType.Attributes.Add(entitlementsCsoAttr);
+
+        var entitlementIds = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
+
+        var userMvo = CreateTestMvo();
+        foreach (var entitlementId in entitlementIds)
+        {
+            userMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+            {
+                Id = Guid.NewGuid(),
+                MetaverseObject = userMvo,
+                Attribute = entitlementsMvAttr,
+                AttributeId = entitlementsMvAttr.Id,
+                GuidValue = entitlementId
+            });
+        }
+
+        var userCso = CreateTestCso(userMvo);
+        foreach (var entitlementId in entitlementIds)
+        {
+            userCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            {
+                ConnectedSystemObject = userCso,
+                Attribute = entitlementsCsoAttr,
+                AttributeId = entitlementsCsoAttr.Id,
+                StringValue = entitlementId.ToString()
+            });
+        }
+        userMvo.ConnectedSystemObjects.Add(userCso);
+
+        var entitlementsMapping = new SyncRuleMapping
+        {
+            Id = 9300,
+            TargetConnectedSystemAttribute = entitlementsCsoAttr,
+            TargetConnectedSystemAttributeId = entitlementsCsoAttr.Id
+        };
+        entitlementsMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 93000,
+            MetaverseAttribute = entitlementsMvAttr,
+            MetaverseAttributeId = entitlementsMvAttr.Id
+        });
+        var exportRule = new SyncRule
+        {
+            Id = 930,
+            Name = "Export Entitlements",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            EnforceState = true,
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            ConnectedSystemObjectTypeId = TargetUserType.Id,
+            ConnectedSystemObjectType = TargetUserType,
+            MetaverseObjectTypeId = MvoUserType.Id,
+            MetaverseObjectType = MvoUserType,
+            AttributeFlowRules = new List<SyncRuleMapping> { entitlementsMapping }
+        };
+        SyncRulesData.Add(exportRule);
+
+        // Act
+        var result = Jim.DriftDetection.EvaluateDrift(
+            userCso,
+            userMvo,
+            new List<SyncRule> { exportRule },
+            null);
+
+        // Assert
+        Assert.That(result.HasDrift, Is.False,
+            "Guid values and their string representations are equivalent under SingleValueEquals; " +
+            "the multi-valued comparison must fall back to the pairwise scan when hash equality fails.");
+    }
+
+    #endregion
 }

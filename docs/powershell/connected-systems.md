@@ -39,7 +39,8 @@ Get-JIMConnectedSystem -Id <int> -DeletionPreview
 
 ### Output
 
-- **List / ById**: Connected System Objects with properties such as `Id`, `Name`, `Description`, `ConnectorDefinitionId`, and configuration state.
+- **List**: Connected System headers with properties such as `Id`, `Name`, `Description`, `Status`, `ObjectCount`, `ConnectorName`, and `ConnectorId`.
+- **ById**: the full Connected System, including its nested `Connector` (use `$cs.Connector.Id` for the connector definition ID) and configuration state.
 - **ObjectTypes**: Object type definitions for the specified Connected System.
 - **DeletionPreview**: Deletion impact preview with counts and warnings.
 
@@ -210,7 +211,9 @@ Remove-JIMConnectedSystem -Id 3
 Remove-JIMConnectedSystem -Id 3 -Force
 ```
 
-```powershell title="Pipeline deletion"
+```powershell title="Delete every Connected System matching a name pattern"
+# -Name supports wildcards, so this deletes ALL matching Connected Systems and
+# their connector spaces. Run it without -Force first to confirm the matches.
 Get-JIMConnectedSystem -Name "Decommissioned*" | Remove-JIMConnectedSystem -Force
 ```
 
@@ -354,7 +357,11 @@ Get-JIMConnectorDefinition -Id 1
 ```
 
 ```powershell title="Find connectors that support delta import"
-Get-JIMConnectorDefinition | Where-Object { $_.Capabilities -contains "DeltaImport" }
+# The list form returns headers, which carry no capability flags; fetch each
+# definition by ID to see what it supports.
+Get-JIMConnectorDefinition |
+    ForEach-Object { Get-JIMConnectorDefinition -Id $_.Id } |
+    Where-Object { $_.SupportsDeltaImport }
 ```
 
 ---
@@ -989,7 +996,7 @@ Get-JIMConnectedSystem | ForEach-Object {
     $preview = $_ | Get-JIMConnectedSystemDeletionPreview
     [PSCustomObject]@{
         Name = $_.Name
-        CSOCount = $preview.ConnectorSpaceObjectCount
+        CSOCount = $preview.ConnectedSystemObjectCount
         SyncRules = $preview.SyncRuleCount
     }
 }
