@@ -520,6 +520,29 @@ public abstract class SyncTaskProcessorBase
                         AddNoContributorOutcomeForScopeExit(existingRpei,
                             existingRpei.SyncOutcomes.FirstOrDefault(o => o.ParentSyncOutcome == null), changeResult);
                     }
+
+                    // Defensive parity with the new-RPEI branch below (#1086): when the deletion rule was
+                    // triggered by an out-of-scope disconnect whose RPEI already exists, record the MVO
+                    // deletion fate outcome here too, so the deletion is never silently absent from the
+                    // causality tree. Attached to the existing root outcome when one exists.
+                    if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None
+                        && changeResult.ChangeType == ObjectChangeType.DisconnectedOutOfScope
+                        && changeResult.MvoDeletionFate != MvoDeletionFate.NotDeleted)
+                    {
+                        var deletionOutcomeType = changeResult.MvoDeletionFate == MvoDeletionFate.DeletedImmediately
+                            ? ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
+                            : ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled;
+                        var existingRoot = existingRpei.SyncOutcomes.FirstOrDefault(o => o.ParentSyncOutcome == null);
+                        if (existingRoot != null && existingRpei.SyncOutcomes.All(o => o.OutcomeType != deletionOutcomeType))
+                        {
+                            SyncOutcomeBuilder.AddChildOutcome(existingRpei, existingRoot,
+                                deletionOutcomeType,
+                                targetEntityId: changeResult.DisconnectedMvoId,
+                                targetEntityDescription: changeResult.DisconnectedMvoDisplayName,
+                                detailMessage: BuildMvoDeletionDetailMessage(changeResult.MvoDeletionFate,
+                                    changeResult.MvoDeletionReason, changeResult.MvoDeletionGracePeriod));
+                        }
+                    }
                 }
                 else
                 {
@@ -554,10 +577,14 @@ public abstract class SyncTaskProcessorBase
                             ObjectChangeType.DisconnectedOutOfScope => ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
                             _ => ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
                         };
-                        // Include MVO info for outcomes (only store ID if already persisted)
+                        // Include MVO info for outcomes (only store ID if already persisted). For
+                        // DisconnectedOutOfScope the join has already been broken (and the MVO may
+                        // already be queued for deletion), so the CSO's MetaverseObject navigation is
+                        // null; fall back to the snapshot captured on the change result before the
+                        // disconnection (#1086).
                         var mvoRef = connectedSystemObject.MetaverseObject;
-                        Guid? mvoId = mvoRef != null && mvoRef.Id != Guid.Empty ? mvoRef.Id : null;
-                        string? mvoDescription = mvoRef?.DisplayName;
+                        Guid? mvoId = mvoRef != null && mvoRef.Id != Guid.Empty ? mvoRef.Id : changeResult.DisconnectedMvoId;
+                        string? mvoDescription = mvoRef?.DisplayName ?? changeResult.DisconnectedMvoDisplayName;
 
                         // Only put detailCount on AttributeFlow/DisconnectedOutOfScope root outcomes, not on Joined/Projected
                         int? rootDetailCount = outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
@@ -588,7 +615,9 @@ public abstract class SyncTaskProcessorBase
                         if (changeResult.ChangeType == ObjectChangeType.DisconnectedOutOfScope)
                             AddNoContributorOutcomeForScopeExit(runProfileExecutionItem, rootOutcome, changeResult);
 
-                        // Add MVO deletion fate outcome for DisconnectedOutOfScope when the deletion rule was triggered
+                        // Add MVO deletion fate outcome for DisconnectedOutOfScope when the deletion rule
+                        // was triggered. The outcome carries the deleted Metaverse Object's id and display
+                        // name snapshot plus the Deletion Rule reason and any grace period (#1086).
                         if (changeResult.ChangeType == ObjectChangeType.DisconnectedOutOfScope
                             && changeResult.MvoDeletionFate != MvoDeletionFate.NotDeleted)
                         {
@@ -599,7 +628,9 @@ public abstract class SyncTaskProcessorBase
                             SyncOutcomeBuilder.AddChildOutcome(runProfileExecutionItem, rootOutcome,
                                 deletionOutcomeType,
                                 targetEntityId: mvoId,
-                                targetEntityDescription: mvoDescription);
+                                targetEntityDescription: mvoDescription,
+                                detailMessage: BuildMvoDeletionDetailMessage(changeResult.MvoDeletionFate,
+                                    changeResult.MvoDeletionReason, changeResult.MvoDeletionGracePeriod));
                         }
                     }
 
@@ -818,7 +849,8 @@ public abstract class SyncTaskProcessorBase
         // If the MVO will be deleted immediately, attribute recall is nugatory work —
         // the attributes, MVO update, and export evaluations would all be discarded
         // when the MVO is deleted moments later in FlushPendingMvoDeletionsAsync.
-        var mvoDeletionFate = await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingCsoCount);
+        var mvoDeletionDecision = await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingCsoCount);
+        var mvoDeletionFate = mvoDeletionDecision.Fate;
 
         // Recall the obsoleting system's contributed attributes (where the object type opts in), re-electing a
         // surviving contributor where one exists. A configured deletion grace period no longer skips recall wholesale:
@@ -960,26 +992,26 @@ public abstract class SyncTaskProcessorBase
             SyncOutcomeBuilder.AddChildOutcome(deletionExecutionItem, disconnectedRoot,
                 ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
 
-            // Add MVO deletion fate outcome when the deletion rule was triggered
+            // Add MVO deletion fate outcome when the deletion rule was triggered. The outcome carries
+            // the deleted Metaverse Object's id and display name snapshot (captured before deletion)
+            // plus the Deletion Rule reason and any grace period in the detail message (#1086).
             if (mvoDeletionFate == MvoDeletionFate.DeletedImmediately)
             {
                 SyncOutcomeBuilder.AddChildOutcome(deletionExecutionItem, disconnectedRoot,
                     ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
                     targetEntityId: mvoId,
-                    targetEntityDescription: mvoDisplayName);
+                    targetEntityDescription: mvoDisplayName,
+                    detailMessage: BuildMvoDeletionDetailMessage(mvoDeletionFate, mvoDeletionDecision.Reason, null));
             }
             else if (mvoDeletionFate == MvoDeletionFate.DeletionScheduled)
             {
-                var gracePeriod = mvo.Type?.DeletionGracePeriod;
-                var graceMessage = gracePeriod.HasValue
-                    ? $"Grace period: {FormatGracePeriod(gracePeriod.Value)}"
-                    : null;
+                var gracePeriod = mvoDeletionDecision.GracePeriod ?? mvo.Type?.DeletionGracePeriod;
 
                 SyncOutcomeBuilder.AddChildOutcome(deletionExecutionItem, disconnectedRoot,
                     ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled,
                     targetEntityId: mvoId,
                     targetEntityDescription: mvoDisplayName,
-                    detailMessage: graceMessage);
+                    detailMessage: BuildMvoDeletionDetailMessage(mvoDeletionFate, mvoDeletionDecision.Reason, gracePeriod));
             }
         }
 
@@ -1007,10 +1039,27 @@ public abstract class SyncTaskProcessorBase
     /// <param name="mvo">The Metaverse Object to evaluate for deletion.</param>
     /// <param name="disconnectingSystemId">The ID of the Connected System whose CSO was disconnected.</param>
     /// <param name="remainingCsoCount">The count of remaining CSOs still joined to the MVO.</param>
-    protected async Task<MvoDeletionFate> ProcessMvoDeletionRuleAsync(MetaverseObject mvo, int disconnectingSystemId, int remainingCsoCount)
+    /// <returns>
+    /// The applied deletion decision, including the fate, the human-readable reason and any grace
+    /// period, so callers can surface the reason on MvoDeleted/MvoDeletionScheduled outcomes (#1086).
+    /// </returns>
+    protected async Task<MvoDeletionDecision> ProcessMvoDeletionRuleAsync(MetaverseObject mvo, int disconnectingSystemId, int remainingCsoCount)
     {
         var decision = _syncEngine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId, remainingCsoCount);
-        return await ApplyMvoDeletionDecisionAsync(mvo, decision);
+        var appliedFate = await ApplyMvoDeletionDecisionAsync(mvo, decision);
+
+        // The applied fate should always match the engine's decision (both derive from the same grace
+        // period configuration); rebuild the decision defensively if they ever diverge so callers see
+        // what actually happened.
+        if (appliedFate == decision.Fate)
+            return decision;
+
+        return new MvoDeletionDecision
+        {
+            Fate = appliedFate,
+            GracePeriod = decision.GracePeriod,
+            Reason = decision.Reason
+        };
     }
 
     /// <summary>
@@ -1080,6 +1129,22 @@ public abstract class SyncTaskProcessorBase
             await _syncRepo.UpdateMetaverseObjectAsync(mvo);
             return MvoDeletionFate.DeletionScheduled;
         }
+    }
+
+    /// <summary>
+    /// Builds the detail message for an MvoDeleted or MvoDeletionScheduled outcome node: the
+    /// Metaverse Object Deletion Rule reason (when known) plus the grace period for scheduled
+    /// deletions, e.g. "Deletion Rule: last connector disconnected. Grace period: 7 days" (#1086).
+    /// Returns null when neither part is available.
+    /// </summary>
+    private static string? BuildMvoDeletionDetailMessage(MvoDeletionFate fate, string? reason, TimeSpan? gracePeriod)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(reason))
+            parts.Add($"Deletion Rule: {reason}");
+        if (fate == MvoDeletionFate.DeletionScheduled && gracePeriod.HasValue)
+            parts.Add($"Grace period: {FormatGracePeriod(gracePeriod.Value)}");
+        return parts.Count > 0 ? string.Join(". ", parts) : null;
     }
 
     /// <summary>
@@ -3870,6 +3935,11 @@ public abstract class SyncTaskProcessorBase
                 var mvo = connectedSystemObject.MetaverseObject;
                 var mvoId = mvo.Id;
 
+                // Snapshot the MVO's display name BEFORE attribute recall and deletion, so the sync
+                // outcome nodes built later (after the join is broken and possibly after the MVO is
+                // deleted) can still describe the affected Metaverse Object (#1086).
+                var mvoDisplayName = mvo.DisplayName;
+
                 // Query remaining CSO count BEFORE breaking the join so the count includes all current connectors.
                 // Then subtract 1 to exclude this CSO which is about to be disconnected.
                 var totalCsoCount = await _syncRepo.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
@@ -3879,7 +3949,8 @@ public abstract class SyncTaskProcessorBase
                 // If the MVO will be deleted immediately, attribute recall is nugatory work —
                 // the attributes, MVO update, and export evaluations would all be discarded
                 // when the MVO is deleted moments later in FlushPendingMvoDeletionsAsync.
-                var mvoDeletionFate = await ProcessMvoDeletionRuleAsync(mvo, _connectedSystem.Id, remainingCsoCount);
+                var mvoDeletionDecision = await ProcessMvoDeletionRuleAsync(mvo, _connectedSystem.Id, remainingCsoCount);
+                var mvoDeletionFate = mvoDeletionDecision.Fate;
 
                 // Check if we should remove contributed attributes based on the object type setting.
                 // A configured deletion grace period no longer skips recall wholesale: an attribute with another
@@ -3980,7 +4051,11 @@ public abstract class SyncTaskProcessorBase
                     recalledAttributeValues: recalledAttributeValues,
                     recalledAttributeAdditions: recalledAttributeAdditions,
                     disconnectedMvo: recalledAttributeValues != null ? mvo : null,
-                    scopingSyncRule: scopingSyncRule);
+                    scopingSyncRule: scopingSyncRule,
+                    disconnectedMvoId: mvoId,
+                    disconnectedMvoDisplayName: mvoDisplayName,
+                    mvoDeletionReason: mvoDeletionFate != MvoDeletionFate.NotDeleted ? mvoDeletionDecision.Reason : null,
+                    mvoDeletionGracePeriod: mvoDeletionDecision.GracePeriod);
         }
     }
 

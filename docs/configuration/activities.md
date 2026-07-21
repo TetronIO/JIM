@@ -40,6 +40,8 @@ The exact field set depends on the operation; the [interactive API reference](..
 
 For Run Profile activities, JIM stores a per-object record of what happened (with any error details) for the most recent run. These let you go from a high-level error counter to the specific Connected System Objects that failed and the reason for each failure. Execution items are the right place to look when diagnosing why a particular identity didn't sync as expected.
 
+An execution item's detail page presents the causal chain of outcomes as a tree: the primary event (for example a projection, join, or disconnection) at the root, with its consequences nested beneath. When a disconnection triggers a Metaverse Object Deletion Rule, the resulting **MVO Deleted** or **MVO Deletion Scheduled** outcome shows the deleted Identity's display name (captured before deletion), why the Deletion Rule fired (for example "last connector disconnected"), the grace period for scheduled deletions, and a link to the deletion record browser, so the full story of a deleted Identity survives the deletion itself.
+
 ## Metaverse Object Housekeeping
 
 When a Metaverse Object's [deletion grace period](metaverse.md) expires, a background housekeeping process on the worker deletes it and stages membership-removal Pending Exports for any objects (such as groups) that referenced it. Each housekeeping batch that actually does work is recorded as a **Metaverse Object Housekeeping** activity, with an execution item per deleted Metaverse Object, per staged Pending Export, and per per-object failure, so grace-period deletions are auditable from the Activities page rather than only visible in service logs. A quiet housekeeping pass with nothing to delete records no activity.
