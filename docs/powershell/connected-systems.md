@@ -211,7 +211,9 @@ Remove-JIMConnectedSystem -Id 3
 Remove-JIMConnectedSystem -Id 3 -Force
 ```
 
-```powershell title="Pipeline deletion"
+```powershell title="Delete every Connected System matching a name pattern"
+# -Name supports wildcards, so this deletes ALL matching Connected Systems and
+# their connector spaces. Run it without -Force first to confirm the matches.
 Get-JIMConnectedSystem -Name "Decommissioned*" | Remove-JIMConnectedSystem -Force
 ```
 
