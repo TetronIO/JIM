@@ -166,6 +166,14 @@ public class Worker : BackgroundService
                 {
                     Log.Error(ex, "ExecuteAsync: Error during heartbeat update or cancellation check. Will retry on next cycle.");
                 }
+
+                // Pace the busy loop. Without this delay the loop spins as fast as the two round
+                // trips above allow (~200 iterations/s measured at Scale500k25kGroups: 6.7M
+                // heartbeat UPDATEs, 6.7M cancellation SELECTs and 16.4M connection-pool resets
+                // over one run), hammering the database throughout every long-running task.
+                // 2s matches the idle branch; stale-task recovery tolerates far coarser
+                // heartbeats, and cancellation latency of up to 2s is acceptable.
+                await Task.Delay(2000, stoppingToken);
             }
             else
             {

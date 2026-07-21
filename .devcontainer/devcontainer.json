@@ -76,6 +76,8 @@
         // Code quality
         "editorconfig.editorconfig",
         "streetsidesoftware.code-spell-checker",
+        // YAML
+        "redhat.vscode-yaml",
         // GitHub Actions workflow support
         "github.vscode-github-actions",
         // GitHub Pull Requests & Issues

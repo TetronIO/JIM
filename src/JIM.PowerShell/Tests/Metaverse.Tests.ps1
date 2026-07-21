@@ -533,7 +533,7 @@ Describe 'Set-JIMMetaverseAttribute' {
 
                 Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
                     $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1/schema' -and
-                    $Body.type -eq 2 -and $Body.attributePlurality -eq 1
+                    $Body.type -eq 'Number' -and $Body.attributePlurality -eq 'MultiValued'
                 }
             }
         }

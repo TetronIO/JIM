@@ -61,7 +61,12 @@ public interface ISyncRepository
     /// <param name="knownTotalCount">When provided, skips the per-page COUNT query and uses this value
     /// for paging metadata. Callers that already know the total (e.g. full sync) should pass it to
     /// eliminate redundant COUNT(*) queries at scale.</param>
-    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null);
+    /// <param name="afterId">Keyset cursor: when provided, returns the page of CSOs whose ID sorts
+    /// after this value (in the database engine's ordering) instead of using OFFSET, keeping every
+    /// page O(pageSize) at scale. Sequential callers must pass the ID of the last row of the previous
+    /// page exactly as returned. Null behaves as the offset-based page requested via
+    /// <paramref name="page"/>.</param>
+    Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
 
     /// <summary>
     /// Loads a page of CSOs modified since the specified date, with full attribute values.
@@ -131,6 +136,14 @@ public interface ISyncRepository
     Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds);
 
     /// <summary>
+    /// Summary-tier lookup of the external ID and object type name for the given CSOs, keyed by CSO ID.
+    /// Projects only the external-ID attribute value (correlated scalar subqueries keyed on the CSO's
+    /// external-ID attribute) and the type name, never the full attribute-value collection, so it stays
+    /// cheap even for large-membership group CSOs. Used to snapshot reference-recall RPEIs at end of run.
+    /// </summary>
+    Task<Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>> GetConnectedSystemObjectDisplaySnapshotsAsync(IReadOnlyCollection<Guid> csoIds);
+
+    /// <summary>
     /// Gets multiple CSOs by their external ID attribute values (batch lookup).
     /// Returns a dictionary keyed by the string representation of the attribute value.
     /// Used during import to batch-match incoming objects.
@@ -175,6 +188,15 @@ public interface ISyncRepository
     /// Used during cross-page reference resolution to find unresolved references.
     /// </summary>
     Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId);
+
+    /// <summary>
+    /// Batched form of <see cref="GetReferenceExternalIdsAsync"/>: gets the reference external ID
+    /// lookups for a whole page of CSOs in one query, keyed by owning CSO ID. Every requested ID
+    /// is present in the result (empty dictionary when the CSO has no resolved references).
+    /// Import processing previously issued the single-CSO variant once per existing object
+    /// (535K round trips at Scale500k25kGroups); callers with a hydrated page should use this instead.
+    /// </summary>
+    Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds);
 
     /// <summary>
     /// Gets the count of CSOs joined to a specific MVO across all Connected Systems.
@@ -245,9 +267,13 @@ public interface ISyncRepository
     /// Resolves cross-batch reference values in CSO change records (ConnectedSystemObjectChangeAttributeValues)
     /// that were nulled during COPY binary persistence to avoid FK violations. The DN string is preserved
     /// in StringValue and is matched against the secondary external ID attribute values of CSOs in the
-    /// same Connected System using case-insensitive comparison.
+    /// same Connected System using case-insensitive comparison. Resolutions are applied in bounded
+    /// batches so each statement stays inside the bulk command timeout regardless of backlog size
+    /// (a Scale500k25kGroups run accumulates millions of unresolved rows).
     /// </summary>
-    Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId);
+    /// <param name="connectedSystemId">The Connected System whose change records to resolve.</param>
+    /// <param name="batchSize">Rows updated per statement; null uses the implementation default.</param>
+    Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId, int? batchSize = null);
 
     /// <summary>
     /// Tactical fixup: populates ReferenceValueId on MetaverseObjectAttributeValues where the FK is
@@ -459,10 +485,13 @@ public interface ISyncRepository
     Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId);
 
     /// <summary>
-    /// Loads all Pending Exports for a Connected System in a single bulk query, keyed by CSO ID.
-    /// More efficient than per-page loading for large-scale reconciliation.
+    /// Loads all Pending Exports for a Connected System, keyed by CSO ID. More efficient than
+    /// per-page loading for large-scale reconciliation. Loads in bounded keyset-paginated chunks
+    /// so each statement stays inside the database's statement timeout regardless of backlog size.
     /// </summary>
-    Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId);
+    /// <param name="connectedSystemId">The Connected System whose Pending Exports to load.</param>
+    /// <param name="chunkSize">Pending Exports loaded per statement; null uses the implementation default.</param>
+    Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null);
 
     /// <summary>
     /// Deletes Pending Exports that are not tracked by the EF change tracker.

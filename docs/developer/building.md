@@ -84,11 +84,14 @@ Locally:
 jim-migrate
 ```
 
-In Docker:
+In Docker, there is nothing to run: `jim.worker` applies any pending migrations automatically when it starts, and `jim.web` and `jim.scheduler` wait until that has finished. Rebuild and restart the worker to pick up a new migration:
 
 ```bash
-docker compose exec jim.web dotnet ef database update
+jim-build-worker
 ```
+
+!!! note "`dotnet ef` is not available inside the containers"
+    The service images are built on the ASP.NET runtime base image, which ships neither the .NET SDK nor the `dotnet-ef` tool, so `docker compose exec jim.web dotnet ef ...` fails. Run EF commands on the host against the project, as in [Adding a Migration](#adding-a-migration) above.
 
 !!! danger "Never squash or delete migrations"
     JIM is deployed in production environments. EF Core tracks applied migrations by name in the `__EFMigrationsHistory` table. Removing existing migrations and replacing them with a combined migration will cause failures on every deployed instance. Migrations are append-only; once committed to `main`, they are permanent.

@@ -532,11 +532,10 @@ The `main` branch is protected by the **"Protect Main"** repository ruleset, whi
 | `Analyze (actions)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of GitHub Actions workflows |
 | `Analyze (csharp)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of C# code |
 | `Analyze (javascript-typescript)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of JavaScript/TypeScript code |
-| `claude-review` | Claude Code Review workflow | Automated code review on every PR |
 
 **Why `scan-base-images-summary` exists:** the `scan-base-images` job uses a dynamic matrix whose leg names embed image digests (e.g. `scan-base-images (src/JIM.Web/Dockerfile, 10, mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:...)`). These names change with every base image update, making them unsuitable as required status checks. The summary job aggregates all matrix legs into a single stable check name.
 
-**Human review:** the required approving review count is currently set to zero; the automated `claude-review` check provides a consistent independent review baseline across all PRs. As the team grows, human reviewer requirements will be layered onto the ruleset without restructuring.
+**Human review:** the required approving review count is currently set to zero. The machine-enforced quality gates (CodeQL static analysis with review comments via the github-code-quality bot, build and test, base image scanning, changelog lint) provide the consistent baseline across all PRs; an AI-assisted review can be requested on demand by commenting `@claude review this PR` (the `.github/workflows/claude.yml` workflow). As the team grows, human reviewer requirements will be layered onto the ruleset without restructuring.
 
 **Signed commits (planned):** server-side enforcement of signed commits via `required_signatures` is deferred until all contributor environments are reliably producing signed commits. See section 6 above for the current local enforcement via pre-commit hook.
 
@@ -1141,9 +1140,11 @@ This protects against tag-rewrite attacks: the `v4` tag is mutable and can be si
 **Ongoing updates** are handled by Dependabot, which natively understands SHA-pinned actions. When a new version tag moves the underlying commit, Dependabot opens a PR that updates both the SHA and the version comment. Before merging, review the action's changelog for any changes to inputs, outputs, or behaviour.
 
 ### Migrations
-Apply migrations on first run:
+There is no manual step: `jim.worker` applies any pending migrations when it starts, and `jim.web` and `jim.scheduler` wait for it before serving. To pick up a new migration, rebuild and restart the worker (`jim-build-worker`).
+
+To add a migration, run EF on the host against the project, not inside a container; the service images are built on the ASP.NET runtime base and carry no .NET SDK or `dotnet-ef` tool:
 ```bash
-docker compose exec jim.web dotnet ef database update
+dotnet ef migrations add MigrationName --project src/JIM.PostgresData
 ```
 
 ## File Connector Setup

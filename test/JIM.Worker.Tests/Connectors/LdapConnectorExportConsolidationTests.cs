@@ -245,6 +245,39 @@ public class LdapConnectorExportConsolidationTests
     }
 
     [Test]
+    public void BuildModifyRequests_DefaultBatchSize_HoldsOneThousandValuesInSingleRequestAsync()
+    {
+        // The default batch size is 1000: large group memberships export in far fewer
+        // round trips, which matters on servers whose per-modify cost grows with the
+        // entry's current value count (e.g. OpenLDAP without sortvals).
+        Assert.That(LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE, Is.EqualTo(1000));
+
+        var export = CreateExport();
+        var pendingExport = CreateMemberAddPendingExport("CN=Group,DC=test,DC=local", 1000);
+
+        var requests = export.BuildModifyRequests(pendingExport, "CN=Group,DC=test,DC=local");
+
+        Assert.That(requests, Has.Count.EqualTo(1));
+        var mod = (DirectoryAttributeModification)requests[0].Modifications[0]!;
+        Assert.That(mod.Count, Is.EqualTo(1000));
+    }
+
+    [Test]
+    public void BuildModifyRequests_DefaultBatchSizePlusOne_ChunksIntoTwoRequestsAsync()
+    {
+        var export = CreateExport();
+        var pendingExport = CreateMemberAddPendingExport("CN=Group,DC=test,DC=local", 1001);
+
+        var requests = export.BuildModifyRequests(pendingExport, "CN=Group,DC=test,DC=local");
+
+        Assert.That(requests, Has.Count.EqualTo(2));
+        var mod1 = (DirectoryAttributeModification)requests[0].Modifications[0]!;
+        var mod2 = (DirectoryAttributeModification)requests[1].Modifications[0]!;
+        Assert.That(mod1.Count, Is.EqualTo(1000));
+        Assert.That(mod2.Count, Is.EqualTo(1));
+    }
+
+    [Test]
     public void BuildModifyRequests_NoChanges_ReturnsEmptyListAsync()
     {
         var export = CreateExport(batchSize: 100);
