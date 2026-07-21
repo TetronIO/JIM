@@ -628,24 +628,30 @@
     }
 
     /// <summary>
-    /// The direction-specific warning shown when the mapping being edited is Multi-Valued to Single-Valued (#435).
+    /// The direction-specific warning shown when the mapping being added or edited is Multi-Valued to
+    /// Single-Valued (#435). The attribute names are rendered as inline code, so the result is raw markup;
+    /// each name is HTML-encoded because it is Connected System / Metaverse schema data.
     /// </summary>
-    private string GetMvaToSvaWarningText()
+    private MarkupString GetMvaToSvaWarningText()
     {
+        static string Code(string? name) => $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(name)}</code>";
+
         if (SyncRule.Direction == SyncRuleDirection.Import)
         {
-            var sourceName = _attributeFlowMappingSource?.ConnectedSystemAttribute?.Name ?? "The source attribute";
-            var targetName = _attributeFlowMapping?.TargetMetaverseAttribute?.Name ?? "the target Metaverse Attribute";
-            return $"'{sourceName}' is Multi-Valued but '{targetName}' is Single-Valued. If a synchronised object has more than one value, " +
-                   "no value will flow for this attribute and an error will be recorded against that object (a single value flows normally). " +
-                   "To always flow a value, target a Multi-Valued attribute or use an Expression to select one.";
+            var source = Code(_attributeFlowMappingSource?.ConnectedSystemAttribute?.Name);
+            var target = Code(_attributeFlowMapping?.TargetMetaverseAttribute?.Name);
+            return (MarkupString)(
+                $"{source} is Multi-Valued but {target} is Single-Valued. If a synchronised object has more than one value, " +
+                "no value will flow for this attribute and an error will be recorded against that object (a single value flows normally). " +
+                "To always flow a value, target a Multi-Valued attribute or use an Expression to select one.");
         }
 
-        var mvSourceName = _attributeFlowMappingSource?.MetaverseAttribute?.Name ?? "The source attribute";
-        var csTargetName = _attributeFlowMapping?.TargetConnectedSystemAttribute?.Name ?? "the target Connected System Attribute";
-        return $"'{mvSourceName}' is Multi-Valued but '{csTargetName}' is Single-Valued. If an object has more than one value, " +
-               "no value will be exported for this attribute and an error will be recorded against that object (a single value exports normally). " +
-               "To always export a value, target a Multi-Valued attribute or use an Expression to select one.";
+        var mvSource = Code(_attributeFlowMappingSource?.MetaverseAttribute?.Name);
+        var csTarget = Code(_attributeFlowMapping?.TargetConnectedSystemAttribute?.Name);
+        return (MarkupString)(
+            $"{mvSource} is Multi-Valued but {csTarget} is Single-Valued. If an object has more than one value, " +
+            "no value will be exported for this attribute and an error will be recorded against that object (a single value exports normally). " +
+            "To always export a value, target a Multi-Valued attribute or use an Expression to select one.");
     }
 
     /// <summary>
