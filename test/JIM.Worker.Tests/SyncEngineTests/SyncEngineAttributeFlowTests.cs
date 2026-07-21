@@ -109,12 +109,12 @@ public class SyncEngineAttributeFlowTests
         mapping.Sources.Add(new SyncRuleMappingSource { ConnectedSystemAttributeId = 200, ConnectedSystemAttribute = csoAttr, Order = 1 });
         var syncRule = new SyncRule { AttributeFlowRules = [mapping] };
 
-        var warnings = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
+        var errors = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
 
         Assert.That(mvo.PendingAttributeValueAdditions.Count, Is.EqualTo(1));
         Assert.That(mvo.PendingAttributeValueAdditions.First().StringValue, Is.EqualTo("John Doe"));
         Assert.That(mvo.PendingAttributeValueAdditions.First().ContributedBySystemId, Is.EqualTo(5));
-        Assert.That(warnings, Is.Empty);
+        Assert.That(errors, Is.Empty);
     }
 
     [Test]
@@ -127,10 +127,10 @@ public class SyncEngineAttributeFlowTests
             _engine.FlowInboundAttributes(cso, syncRule, Array.Empty<ConnectedSystemObjectType>()));
     }
 
-    #region Multi-valued to single-valued truncation (#435)
+    #region Multi-valued to single-valued (#435): more than one value to a single-valued target errors
 
     [Test]
-    public void FlowInboundAttributes_TextMvaToSva_SelectsFirstValueAndGeneratesWarning()
+    public void FlowInboundAttributes_TextMvaToSva_DoesNotFlowAndGeneratesError()
     {
         // Arrange — multi-valued CS attribute with 3 values flowing to a single-valued MV attribute
         var mvoAttr = new MetaverseAttribute
@@ -162,22 +162,20 @@ public class SyncEngineAttributeFlowTests
         var syncRule = new SyncRule { AttributeFlowRules = [mapping] };
 
         // Act
-        var warnings = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
+        var errors = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
 
-        // Assert — only the first value flows
-        Assert.That(mvo.PendingAttributeValueAdditions.Count, Is.EqualTo(1));
-        Assert.That(mvo.PendingAttributeValueAdditions.First().StringValue, Is.EqualTo("alice@example.com"));
+        // Assert — no value flowed
+        Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty);
 
-        // Assert — a warning was generated
-        Assert.That(warnings, Has.Count.EqualTo(1));
-        Assert.That(warnings[0].SourceAttributeName, Is.EqualTo("mail"));
-        Assert.That(warnings[0].TargetAttributeName, Is.EqualTo("mail"));
-        Assert.That(warnings[0].ValueCount, Is.EqualTo(3));
-        Assert.That(warnings[0].SelectedValue, Is.EqualTo("alice@example.com"));
+        // Assert — an error was raised carrying the attribute names and the value count
+        Assert.That(errors, Has.Count.EqualTo(1));
+        Assert.That(errors[0].SourceAttributeName, Is.EqualTo("mail"));
+        Assert.That(errors[0].TargetAttributeName, Is.EqualTo("mail"));
+        Assert.That(errors[0].ValueCount, Is.EqualTo(3));
     }
 
     [Test]
-    public void FlowInboundAttributes_NumberMvaToSva_SelectsFirstValueAndGeneratesWarning()
+    public void FlowInboundAttributes_NumberMvaToSva_DoesNotFlowAndGeneratesError()
     {
         // Arrange
         var mvoAttr = new MetaverseAttribute
@@ -208,19 +206,16 @@ public class SyncEngineAttributeFlowTests
         var syncRule = new SyncRule { AttributeFlowRules = [mapping] };
 
         // Act
-        var warnings = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
+        var errors = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
 
-        // Assert — only the first value flows
-        Assert.That(mvo.PendingAttributeValueAdditions.Count, Is.EqualTo(1));
-        Assert.That(mvo.PendingAttributeValueAdditions.First().IntValue, Is.EqualTo(42));
-
-        // Assert — a warning was generated
-        Assert.That(warnings, Has.Count.EqualTo(1));
-        Assert.That(warnings[0].ValueCount, Is.EqualTo(2));
+        // Assert — no value flowed, error raised
+        Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty);
+        Assert.That(errors, Has.Count.EqualTo(1));
+        Assert.That(errors[0].ValueCount, Is.EqualTo(2));
     }
 
     [Test]
-    public void FlowInboundAttributes_GuidMvaToSva_SelectsFirstValueAndGeneratesWarning()
+    public void FlowInboundAttributes_GuidMvaToSva_DoesNotFlowAndGeneratesError()
     {
         // Arrange
         var guid1 = Guid.NewGuid();
@@ -253,16 +248,15 @@ public class SyncEngineAttributeFlowTests
         var syncRule = new SyncRule { AttributeFlowRules = [mapping] };
 
         // Act
-        var warnings = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
+        var errors = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
 
         // Assert
-        Assert.That(mvo.PendingAttributeValueAdditions.Count, Is.EqualTo(1));
-        Assert.That(mvo.PendingAttributeValueAdditions.First().GuidValue, Is.EqualTo(guid1));
-        Assert.That(warnings, Has.Count.EqualTo(1));
+        Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty);
+        Assert.That(errors, Has.Count.EqualTo(1));
     }
 
     [Test]
-    public void FlowInboundAttributes_BinaryMvaToSva_SelectsFirstValueAndGeneratesWarning()
+    public void FlowInboundAttributes_BinaryMvaToSva_DoesNotFlowAndGeneratesError()
     {
         // Arrange
         var bytes1 = new byte[] { 1, 2, 3 };
@@ -295,18 +289,17 @@ public class SyncEngineAttributeFlowTests
         var syncRule = new SyncRule { AttributeFlowRules = [mapping] };
 
         // Act
-        var warnings = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
+        var errors = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
 
         // Assert
-        Assert.That(mvo.PendingAttributeValueAdditions.Count, Is.EqualTo(1));
-        Assert.That(mvo.PendingAttributeValueAdditions.First().ByteValue, Is.EqualTo(bytes1));
-        Assert.That(warnings, Has.Count.EqualTo(1));
+        Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty);
+        Assert.That(errors, Has.Count.EqualTo(1));
     }
 
     [Test]
-    public void FlowInboundAttributes_SingleCsoValue_ToSva_NoWarning()
+    public void FlowInboundAttributes_SingleCsoValue_ToSva_Flows_NoError()
     {
-        // Arrange — only one value, so no truncation warning
+        // Arrange — only one value, so it flows to the single-valued target with no error
         var mvoAttr = new MetaverseAttribute
         {
             Id = 100, Name = "mail", Type = AttributeDataType.Text,
@@ -334,18 +327,104 @@ public class SyncEngineAttributeFlowTests
         var syncRule = new SyncRule { AttributeFlowRules = [mapping] };
 
         // Act
-        var warnings = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
+        var errors = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
 
-        // Assert — value flows normally, no warning
+        // Assert — value flows normally, no error
         Assert.That(mvo.PendingAttributeValueAdditions.Count, Is.EqualTo(1));
         Assert.That(mvo.PendingAttributeValueAdditions.First().StringValue, Is.EqualTo("only@example.com"));
-        Assert.That(warnings, Is.Empty);
+        Assert.That(errors, Is.Empty);
     }
 
     [Test]
-    public void FlowInboundAttributes_MvaToMva_NoWarning()
+    public void FlowInboundAttributes_TextMvaToSva_DuplicateValues_FlowsSingleValue_NoError()
     {
-        // Arrange — multi-valued to multi-valued should flow all values with no warning
+        // Arrange — two source values that are identical, so the de-duplicated effective count is one:
+        // this must flow the single value and NOT error (the trigger is de-duplicated count, not raw count).
+        var mvoAttr = new MetaverseAttribute
+        {
+            Id = 100, Name = "mail", Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued
+        };
+        var csoAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 200, Name = "mail", Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued
+        };
+        var csoType = new ConnectedSystemObjectType { Id = 1, Attributes = [csoAttr] };
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(), TypeId = 1, ConnectedSystemId = 5, MetaverseObject = mvo
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { AttributeId = 200, StringValue = "alice@example.com" });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { AttributeId = 200, StringValue = "alice@example.com" });
+
+        var mapping = new SyncRuleMapping { TargetMetaverseAttribute = mvoAttr };
+        mapping.Sources.Add(new SyncRuleMappingSource
+        {
+            ConnectedSystemAttributeId = 200, ConnectedSystemAttribute = csoAttr, Order = 1
+        });
+        var syncRule = new SyncRule { AttributeFlowRules = [mapping] };
+
+        // Act
+        var errors = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
+
+        // Assert — the single distinct value flows, no error
+        Assert.That(mvo.PendingAttributeValueAdditions.Count, Is.EqualTo(1));
+        Assert.That(mvo.PendingAttributeValueAdditions.First().StringValue, Is.EqualTo("alice@example.com"));
+        Assert.That(errors, Is.Empty);
+    }
+
+    [Test]
+    public void FlowInboundAttributes_TextMvaToSva_ValuesCollapseToOneUnderCaseNormalisation_FlowsSingleValue_NoError()
+    {
+        // Arrange — two values that differ only by case, with lower-case normalisation, collapse to one
+        // distinct effective value, so the flow succeeds and does not error.
+        var mvoAttr = new MetaverseAttribute
+        {
+            Id = 100, Name = "mail", Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.SingleValued
+        };
+        var csoAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 200, Name = "mail", Type = AttributeDataType.Text,
+            AttributePlurality = AttributePlurality.MultiValued
+        };
+        var csoType = new ConnectedSystemObjectType { Id = 1, Attributes = [csoAttr] };
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(), TypeId = 1, ConnectedSystemId = 5, MetaverseObject = mvo
+        };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { AttributeId = 200, StringValue = "ALICE@example.com" });
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { AttributeId = 200, StringValue = "alice@example.com" });
+
+        var mapping = new SyncRuleMapping
+        {
+            TargetMetaverseAttribute = mvoAttr,
+            CaseNormalisation = InboundCaseNormalisation.Lower
+        };
+        mapping.Sources.Add(new SyncRuleMappingSource
+        {
+            ConnectedSystemAttributeId = 200, ConnectedSystemAttribute = csoAttr, Order = 1
+        });
+        var syncRule = new SyncRule { AttributeFlowRules = [mapping] };
+
+        // Act
+        var errors = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
+
+        // Assert — collapses to one distinct value, flows, no error
+        Assert.That(mvo.PendingAttributeValueAdditions.Count, Is.EqualTo(1));
+        Assert.That(mvo.PendingAttributeValueAdditions.First().StringValue, Is.EqualTo("alice@example.com"));
+        Assert.That(errors, Is.Empty);
+    }
+
+    [Test]
+    public void FlowInboundAttributes_MvaToMva_FlowsAll_NoError()
+    {
+        // Arrange — multi-valued to multi-valued should flow all values with no error
         var mvoAttr = new MetaverseAttribute
         {
             Id = 100, Name = "emails", Type = AttributeDataType.Text,
@@ -374,11 +453,11 @@ public class SyncEngineAttributeFlowTests
         var syncRule = new SyncRule { AttributeFlowRules = [mapping] };
 
         // Act
-        var warnings = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
+        var errors = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
 
-        // Assert — both values flow, no warning
+        // Assert — both values flow, no error
         Assert.That(mvo.PendingAttributeValueAdditions.Count, Is.EqualTo(2));
-        Assert.That(warnings, Is.Empty);
+        Assert.That(errors, Is.Empty);
     }
 
     #endregion
