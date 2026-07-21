@@ -882,7 +882,7 @@ public class ActivityRepository : IActivityRepository
             // Pre-compute the "<OutcomeType>:" tokens client-side. Embedding ot.ToString() inside the
             // predicate makes EF Core try (and fail) to translate object.ToString() to SQL; hoisting it
             // out yields captured constant strings that translate to OutcomeSummary LIKE '%token%'.
-            var outcomeTokens = outcomeTypeFilter.Select(ot => ot.ToString() + ":").ToList();
+            var outcomeTokens = outcomeTypeFilter.Select(ot => ot + ":").ToList();
             if (outcomeTokens.Count > 0)
             {
                 query = query.Where(a =>

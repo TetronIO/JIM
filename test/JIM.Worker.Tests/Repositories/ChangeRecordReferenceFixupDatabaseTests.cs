@@ -156,19 +156,15 @@ public class ChangeRecordReferenceFixupDatabaseTests
         };
         change.AttributeChanges.Add(memberChangeAttr);
 
-        var resolvableValueIds = new List<Guid>();
-        foreach (var dn in csoIdsByDn.Keys)
+        var resolvableValues = csoIdsByDn.Keys.Select(dn => new ConnectedSystemObjectChangeAttributeValue
         {
-            var value = new ConnectedSystemObjectChangeAttributeValue
-            {
-                Id = Guid.NewGuid(),
-                ConnectedSystemObjectChangeAttribute = memberChangeAttr,
-                ValueChangeType = ValueChangeType.Add,
-                StringValue = dn.ToLowerInvariant()
-            };
-            memberChangeAttr.ValueChanges.Add(value);
-            resolvableValueIds.Add(value.Id);
-        }
+            Id = Guid.NewGuid(),
+            ConnectedSystemObjectChangeAttribute = memberChangeAttr,
+            ValueChangeType = ValueChangeType.Add,
+            StringValue = dn.ToLowerInvariant()
+        }).ToList();
+        memberChangeAttr.ValueChanges.AddRange(resolvableValues);
+        var resolvableValueIds = resolvableValues.Select(v => v.Id).ToList();
 
         // Reference values whose DN matches no CSO; they must survive the fixup unresolved and
         // must not prevent loop termination.

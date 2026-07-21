@@ -224,20 +224,22 @@ public class PendingExportPreloadDatabaseTests
 
         foreach (var (csoId, pendingExportId) in preloadSeed.PendingExportIdsByCsoId)
         {
-            Assert.That(result.ContainsKey(csoId), $"CSO {csoId} must be present in the dictionary.");
-            var pe = result[csoId];
-            Assert.That(pe.Id, Is.EqualTo(pendingExportId), "The dictionary must map each CSO to its own Pending Export.");
+            var found = result.TryGetValue(csoId, out var pe);
+            Assert.That(found, $"CSO {csoId} must be present in the dictionary.");
+            Assert.That(pe, Is.Not.Null);
+            var export = pe!;
+            Assert.That(export.Id, Is.EqualTo(pendingExportId), "The dictionary must map each CSO to its own Pending Export.");
 
             if (csoId == preloadSeed.CsoWithoutValueChangesId)
             {
-                Assert.That(pe.AttributeValueChanges, Is.Empty,
+                Assert.That(export.AttributeValueChanges, Is.Empty,
                     "A Pending Export without value changes must load with an empty collection.");
             }
             else
             {
-                Assert.That(pe.AttributeValueChanges, Has.Count.EqualTo(2),
+                Assert.That(export.AttributeValueChanges, Has.Count.EqualTo(2),
                     "Each Pending Export must carry its two value changes.");
-                foreach (var valueChange in pe.AttributeValueChanges)
+                foreach (var valueChange in export.AttributeValueChanges)
                 {
                     Assert.That(valueChange.Attribute, Is.Not.Null,
                         "Attribute navigations must be stitched onto every value change.");

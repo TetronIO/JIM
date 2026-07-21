@@ -337,10 +337,9 @@ public class SyncRepository : ISyncRepository
     public Task<Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>> GetConnectedSystemObjectDisplaySnapshotsAsync(IReadOnlyCollection<Guid> csoIds)
     {
         var result = new Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>();
-        foreach (var id in csoIds)
+        foreach (var id in csoIds.Where(_csos.ContainsKey))
         {
-            if (!_csos.TryGetValue(id, out var cso))
-                continue;
+            var cso = _csos[id];
             FixupCsoNavigationProperties(cso);
             result[id] = new ConnectedSystemObjectDisplaySnapshot
             {
