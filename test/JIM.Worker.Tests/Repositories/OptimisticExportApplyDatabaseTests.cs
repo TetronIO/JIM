@@ -288,18 +288,47 @@ public class OptimisticExportApplyDatabaseTests
             Status = ConnectedSystemObjectStatus.Normal, ExternalIdAttributeId = dnAttrA.Id,
             SecondaryExternalIdAttributeId = dnAttrA.Id
         };
+        var csoADuplicate1 = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(), Type = csTypeA, ConnectedSystem = systemA,
+            Status = ConnectedSystemObjectStatus.Normal, ExternalIdAttributeId = dnAttrA.Id,
+            SecondaryExternalIdAttributeId = dnAttrA.Id
+        };
+        var csoADuplicate2 = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(), Type = csTypeA, ConnectedSystem = systemA,
+            Status = ConnectedSystemObjectStatus.Normal, ExternalIdAttributeId = dnAttrA.Id,
+            SecondaryExternalIdAttributeId = dnAttrA.Id
+        };
+        var csoANullValue = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(), Type = csTypeA, ConnectedSystem = systemA,
+            Status = ConnectedSystemObjectStatus.Normal, ExternalIdAttributeId = dnAttrA.Id,
+            SecondaryExternalIdAttributeId = dnAttrA.Id
+        };
         var csoB1 = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(), Type = csTypeB, ConnectedSystem = systemB,
             Status = ConnectedSystemObjectStatus.Normal, ExternalIdAttributeId = dnAttrB.Id,
             SecondaryExternalIdAttributeId = dnAttrB.Id
         };
-        seed.AddRange(csoA1, csoA2, csoB1);
+        seed.AddRange(csoA1, csoA2, csoADuplicate1, csoADuplicate2, csoANullValue, csoB1);
         await seed.SaveChangesAsync();
+
+        // Ensure the "keep the first" assertion below is deterministic rather than relying on
+        // incidental row ordering: whichever of the pair has the lower Id is "first".
+        var firstOfDuplicatePair = new[] { csoADuplicate1, csoADuplicate2 }.OrderBy(c => c.Id).First();
 
         seed.ConnectedSystemObjectAttributeValues.AddRange(
             new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = csoA1, AttributeId = dnAttrA.Id, StringValue = "CN=Alice,DC=test" },
             new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = csoA2, AttributeId = dnAttrA.Id, StringValue = "CN=Bob,DC=test" },
+            // Duplicate secondary external Id value within the same Connected System: the lookup
+            // must keep exactly one entry (the CSO with the lowest Id) rather than throwing or
+            // producing an inconsistent dictionary.
+            new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = csoADuplicate1, AttributeId = dnAttrA.Id, StringValue = "CN=Duplicate,DC=test" },
+            new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = csoADuplicate2, AttributeId = dnAttrA.Id, StringValue = "CN=Duplicate,DC=test" },
+            // Null StringValue row: must never surface as a lookup entry (there is nothing to key on).
+            new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = csoANullValue, AttributeId = dnAttrA.Id, StringValue = null },
             new ConnectedSystemObjectAttributeValue { Id = Guid.NewGuid(), ConnectedSystemObject = csoB1, AttributeId = dnAttrB.Id, StringValue = "CN=Other,DC=test" });
         await seed.SaveChangesAsync();
 
@@ -308,9 +337,13 @@ public class OptimisticExportApplyDatabaseTests
 
         var lookup = await repository.Sync.GetSecondaryExternalIdLookupAsync(systemA.Id);
 
-        Assert.That(lookup, Has.Count.EqualTo(2), "must only include System A's rows");
+        Assert.That(lookup, Has.Count.EqualTo(3), "must only include System A's rows, one entry per distinct value");
         Assert.That(lookup["CN=Alice,DC=test"], Is.EqualTo(csoA1.Id));
         Assert.That(lookup["cn=bob,dc=test"], Is.EqualTo(csoA2.Id), "the dictionary must match case-insensitively");
         Assert.That(lookup.ContainsKey("CN=Other,DC=test"), Is.False, "rows from other Connected Systems must be excluded");
+        Assert.That(lookup["CN=Duplicate,DC=test"], Is.EqualTo(firstOfDuplicatePair.Id),
+            "on a duplicate value within the same Connected System, the first Connected System Object encountered must be kept");
+        Assert.That(lookup.Values, Does.Not.Contain(csoANullValue.Id),
+            "a null StringValue row must never surface as a lookup entry");
     }
 }

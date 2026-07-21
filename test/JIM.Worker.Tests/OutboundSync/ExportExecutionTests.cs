@@ -2908,6 +2908,80 @@ public class ExportExecutionTests
     }
 
     /// <summary>
+    /// Regression A, other half: a Connected System whose Pending Exports carry no Reference-type
+    /// changes at all must never build the whole-Connected-System secondary external Id lookup -
+    /// the cheap in-memory probe (CollectUnresolvedReferenceDns) must gate the build so systems
+    /// that never need D5 fallback resolution pay nothing for it.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_NoReferenceChanges_NeverBuildsSecondaryExternalIdLookupAsync()
+    {
+        // Arrange
+        var countingRepo = new CountingSecondaryExternalIdLookupSyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: countingRepo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        const int exportCount = 6;
+        for (var i = 0; i < exportCount; i++)
+        {
+            var cso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            };
+            syncRepo.SeedConnectedSystemObject(cso);
+
+            var pendingExport = new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                ConnectedSystem = targetSystem,
+                ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
+                Status = PendingExportStatus.Pending,
+                ChangeType = PendingExportChangeType.Update,
+                CreatedAt = DateTime.UtcNow.AddMinutes(i),
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(),
+                        ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = displayNameAttr.Id,
+                        Attribute = displayNameAttr,
+                        StringValue = $"Updated Name {i}",
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    }
+                }
+            };
+            syncRepo.SeedPendingExport(pendingExport);
+        }
+
+        var mockConnector = CreateSucceedingCallsConnector();
+        var options = new ExportExecutionOptions { BatchSize = 2 }; // forces 3 sequential batches
+
+        // Act
+        var result = await jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None);
+
+        // Assert
+        Assert.That(result.SuccessCount, Is.EqualTo(exportCount));
+        Assert.That(countingRepo.CallCount, Is.EqualTo(0),
+            "a Connected System with no Reference-type changes should never build the secondary external Id lookup");
+    }
+
+    /// <summary>
     /// Repository that counts calls to GetSecondaryExternalIdLookupAsync, to prove it is built once
     /// per export run (issue #1079 regression A) rather than once per batch.
     /// </summary>

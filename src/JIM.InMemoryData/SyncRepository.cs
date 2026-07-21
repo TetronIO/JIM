@@ -12,6 +12,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
+using Serilog;
 
 namespace JIM.InMemoryData;
 
@@ -436,14 +437,25 @@ public class SyncRepository : ISyncRepository
     public virtual Task<Dictionary<string, Guid>> GetSecondaryExternalIdLookupAsync(int connectedSystemId)
     {
         var lookup = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-        foreach (var cso in GetCsosForSystem(connectedSystemId))
+
+        // Ordered by Id so "keep the first on a duplicate value" is deterministic, matching the
+        // real Postgres implementation's ORDER BY cso."Id".
+        var duplicateCount = 0;
+        foreach (var cso in GetCsosForSystem(connectedSystemId).OrderBy(cso => cso.Id))
         {
             if (!cso.SecondaryExternalIdAttributeId.HasValue) continue;
             var secIdAv = cso.AttributeValues
                 .FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId.Value);
-            if (secIdAv?.StringValue != null)
-                lookup.TryAdd(secIdAv.StringValue, cso.Id);
+            if (secIdAv?.StringValue != null && !lookup.TryAdd(secIdAv.StringValue, cso.Id))
+                duplicateCount++;
         }
+
+        if (duplicateCount > 0)
+        {
+            Log.Warning("GetSecondaryExternalIdLookupAsync: Found {DuplicateCount} duplicate secondary external Id value(s) in Connected System {ConnectedSystemId}. Keeping the first Connected System Object encountered for each; the rest were ignored. This indicates duplicate CSOs that should be investigated.",
+                duplicateCount, connectedSystemId);
+        }
+
         return Task.FromResult(lookup);
     }
 

@@ -504,15 +504,33 @@ public partial class SyncRepository
                 AND av."AttributeId" = cso."SecondaryExternalIdAttributeId"
             WHERE cso."ConnectedSystemId" = @connectedSystemId
                 AND av."StringValue" IS NOT NULL
+            ORDER BY cso."Id"
             """;
         var connectedSystemIdParameter = command.CreateParameter();
         connectedSystemIdParameter.ParameterName = "connectedSystemId";
         connectedSystemIdParameter.Value = connectedSystemId;
         command.Parameters.Add(connectedSystemIdParameter);
 
+        // ORDER BY cso."Id" makes "first" well-defined below: on a duplicate secondary external Id
+        // value within the same Connected System, the Connected System Object with the lowest Id
+        // is kept and the rest are ignored (mirrors the tone of the per-value warning that
+        // GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync logs, but as a single
+        // aggregate line - this lookup can cover hundreds of thousands of rows in one pass, so
+        // logging per-duplicate would itself be the kind of per-row overhead this replacement
+        // exists to eliminate).
+        var duplicateCount = 0;
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())
-            lookup.TryAdd(reader.GetString(0), reader.GetGuid(1));
+        {
+            if (!lookup.TryAdd(reader.GetString(0), reader.GetGuid(1)))
+                duplicateCount++;
+        }
+
+        if (duplicateCount > 0)
+        {
+            Log.Warning("GetSecondaryExternalIdLookupAsync: Found {DuplicateCount} duplicate secondary external Id value(s) in Connected System {ConnectedSystemId}. Keeping the first Connected System Object encountered for each; the rest were ignored. This indicates duplicate CSOs that should be investigated.",
+                duplicateCount, connectedSystemId);
+        }
 
         return lookup;
     }
