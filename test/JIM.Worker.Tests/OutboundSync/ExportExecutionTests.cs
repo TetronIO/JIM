@@ -120,6 +120,10 @@ public class ExportExecutionTests
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
+        // Optimistic apply's D5 fallback (issue #1079) reads Application.ServiceSettings.GetSyncPageSizeAsync,
+        // which dereferences this DbSet; an empty mock lets it fall back to its default page size
+        // instead of throwing NullReferenceException.
+        MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(new List<ServiceSetting>().BuildMockDbSet().Object);
 
         // Instantiate Jim using the mocked db context
         SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
@@ -2592,6 +2596,199 @@ public class ExportExecutionTests
     }
 
     /// <summary>
+    /// Orchestrator review finding #1: ProcessBatchesInParallelAsync's result aggregation lock
+    /// only copied SuccessCount/FailedCount/DeferredCount/ProcessedExportItems/
+    /// CreatedContainerExternalIds from each batch's own ExportExecutionResult into the shared
+    /// result, silently dropping the four OptimisticApply* counters whenever exports ran via the
+    /// parallel path (deferred references resolved, MaxParallelism &gt; 1). The end-of-run summary
+    /// log line must be truthful (Synchronisation Integrity: log summary statistics at the end of
+    /// every batch operation), so a parallel run's counters must match what actually happened.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredBatches_AggregatesOptimisticApplyCountersAsync()
+    {
+        // Arrange: 4 deferred (reference-bearing) exports, batch size 2 -> 2 batches, so once
+        // references resolve, ProcessDeferredExportsAsync routes them through the parallel path.
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+
+        // The referenced CSO the Manager reference on each export resolves against.
+        var managerMvoId = Guid.NewGuid();
+        SyncRepo.SeedMetaverseObject(new MetaverseObject { Id = managerMvoId });
+        var managerCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObjectId = managerMvoId,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new() { Id = Guid.NewGuid(), Attribute = objectGuidAttr, AttributeId = objectGuidAttr.Id, GuidValue = Guid.NewGuid() }
+            }
+        };
+        SyncRepo.SeedConnectedSystemObject(managerCso);
+
+        const int exportCount = 4;
+        var csos = new List<ConnectedSystemObject>();
+        for (var i = 0; i < exportCount; i++)
+        {
+            var cso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            };
+            ConnectedSystemObjectsData.Add(cso);
+            SyncRepo.SeedConnectedSystemObject(cso);
+            csos.Add(cso);
+
+            var pe = new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                ConnectedSystem = targetSystem,
+                ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
+                Status = PendingExportStatus.Pending,
+                ChangeType = PendingExportChangeType.Update,
+                HasUnresolvedReferences = true,
+                CreatedAt = DateTime.UtcNow.AddMinutes(i),
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(), ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = displayNameAttr.Id, Attribute = displayNameAttr, StringValue = $"Parallel User {i}",
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    },
+                    new()
+                    {
+                        Id = Guid.NewGuid(), ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = managerAttr.Id, Attribute = managerAttr, UnresolvedReferenceValue = managerMvoId.ToString(),
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    }
+                }
+            };
+            PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
+        }
+
+        var primaryConnector = CreateSucceedingCallsConnector();
+        Func<IConnector> connectorFactory = () => CreateSucceedingCallsConnector().Object;
+        Func<JIM.Data.Repositories.ISyncRepositoryScope> repositoryFactory = () =>
+            new JIM.Data.Repositories.SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var options = new ExportExecutionOptions
+        {
+            BatchSize = 2,
+            MaxParallelism = 2
+        };
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            primaryConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None,
+            connectorFactory: connectorFactory,
+            repositoryFactory: repositoryFactory);
+
+        // Assert
+        Assert.That(result.SuccessCount, Is.EqualTo(exportCount));
+        Assert.That(result.OptimisticApplyAppliedCount, Is.EqualTo(exportCount),
+            "the parallel path must aggregate OptimisticApplyAppliedCount from each batch's own result, not drop it");
+        foreach (var cso in csos)
+        {
+            Assert.That(cso.AttributeValues.Any(av => av.AttributeId == displayNameAttr.Id), Is.True,
+                "optimistic apply must actually have run for each parallel batch (the counter is not just coincidentally right)");
+        }
+    }
+
+    /// <summary>
+    /// Orchestrator review finding #3: the D5 fallback dictionary that maps a Reference change's
+    /// Distinguished Name to a resolved CSO Id is built from
+    /// GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync's returned keys. Distinguished
+    /// Names are case-insensitive (the import's own DN resolution, SyncImportTaskProcessor Phase 2,
+    /// matches case-insensitively for exactly this reason), so a stored DN cased differently from
+    /// the Pending Export's own recorded DN must still resolve.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DnFallbackLookupReturnsDifferentCase_StillResolvesReferenceValueIdAsync()
+    {
+        // Arrange
+        var caseRepo = new DifferentCaseDnSyncRepository
+        {
+            ReturnedDn = "cn=manager,dc=test"
+        };
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: caseRepo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        syncRepo.SeedConnectedSystemObject(cso);
+
+        // An immediate (non-deferred) export: the reference was never routed through
+        // TryResolveReferencesFromLookup, so ResolvedReferenceCsoId is unset and this change falls
+        // into the D5 database fallback bucket. The DN is recorded here in a DIFFERENT case than
+        // what the (mocked) repository lookup will return.
+        var managerChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportAttributeChangeType.Update,
+            AttributeId = managerAttr.Id,
+            Attribute = managerAttr,
+            StringValue = "CN=Manager,DC=Test",
+            Status = PendingExportAttributeChangeStatus.Pending
+        };
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange> { managerChange }
+        };
+        syncRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = CreateSucceedingCallsConnector();
+
+        // Act
+        await jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert
+        var appliedValue = cso.AttributeValues.SingleOrDefault(av => av.AttributeId == managerAttr.Id);
+        Assert.That(appliedValue, Is.Not.Null, "the Reference change must still have been applied");
+        Assert.That(appliedValue!.UnresolvedReferenceValue, Is.EqualTo("CN=Manager,DC=Test"),
+            "the DN is kept exactly as recorded on the Pending Export");
+        Assert.That(appliedValue.ReferenceValueId, Is.EqualTo(caseRepo.ResolvedCsoId),
+            "a DN differing only in case from the fallback lookup's returned key must still resolve (Distinguished Names are case-insensitive)");
+    }
+
+    /// <summary>
     /// Repository that throws when optimistic apply tries to persist the delta, to prove D7's
     /// failure-containment guarantee (the batch, Pending Export updates, and Activity must not fail).
     /// </summary>
@@ -2601,6 +2798,28 @@ public class ExportExecutionTests
             List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds)
         {
             throw new InvalidOperationException("Simulated optimistic export apply failure");
+        }
+    }
+
+    /// <summary>
+    /// Repository whose D5 fallback DN lookup returns the resolved DN in different case than the
+    /// Pending Export's own recorded DN, to prove ApplyOptimisticExportUpdatesAsync's fallback
+    /// dictionary matches case-insensitively.
+    /// </summary>
+    private sealed class DifferentCaseDnSyncRepository : SyncRepository
+    {
+        public Guid ResolvedCsoId { get; } = Guid.NewGuid();
+
+        public string ReturnedDn { get; set; } = null!;
+
+        public override Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(
+            int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
+        {
+            var resolvedCso = new ConnectedSystemObject { Id = ResolvedCsoId };
+            return Task.FromResult(new Dictionary<string, ConnectedSystemObject>(StringComparer.Ordinal)
+            {
+                [ReturnedDn] = resolvedCso
+            });
         }
     }
 

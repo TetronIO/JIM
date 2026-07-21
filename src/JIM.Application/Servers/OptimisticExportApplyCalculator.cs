@@ -117,7 +117,15 @@ public static class OptimisticExportApplyCalculator
 
         foreach (var change in changes)
         {
-            if (change.Attribute == null)
+            // Orchestrator review finding #2: a change whose Attribute.Type is NotSet (or any
+            // future type this calculator does not yet know how to map) must be skipped entirely,
+            // for both additions and removals. Without this guard, IsPendingChangeEmpty only
+            // inspects the typed value fields (not the Attribute's Type), so a change carrying a
+            // payload but an unrecognised Type is not "empty"; CreateAttributeValue's switch then
+            // has no matching arm and silently inserts a row with an Id, CSO and AttributeId but no
+            // populated value - a junk row the next confirming import would just churn straight
+            // back out.
+            if (change.Attribute == null || !IsSupportedAttributeType(change.Attribute.Type))
             {
                 delta.SkippedChangeCount++;
                 continue;
@@ -153,6 +161,25 @@ public static class OptimisticExportApplyCalculator
             }
         }
     }
+
+    /// <summary>
+    /// The eight attribute data types this calculator (and <see cref="SyncEngine.ValueExistsOnCso"/>,
+    /// whose switch this mirrors) knows how to map onto a <see cref="ConnectedSystemObjectAttributeValue"/>
+    /// column. <see cref="AttributeDataType.NotSet"/> and any future type not yet added here are
+    /// deliberately excluded so callers skip rather than silently create an unpopulated row.
+    /// </summary>
+    private static bool IsSupportedAttributeType(AttributeDataType type) => type switch
+    {
+        AttributeDataType.Text => true,
+        AttributeDataType.Number => true,
+        AttributeDataType.LongNumber => true,
+        AttributeDataType.DateTime => true,
+        AttributeDataType.Binary => true,
+        AttributeDataType.Boolean => true,
+        AttributeDataType.Guid => true,
+        AttributeDataType.Reference => true,
+        _ => false
+    };
 
     /// <summary>
     /// Add-if-absent (D4). Mirrors <see cref="SyncEngine.ValueExistsOnCso"/>'s empty-payload

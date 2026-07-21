@@ -971,6 +971,10 @@ public class ExportExecutionServer
                         result.SuccessCount += batchResult.SuccessCount;
                         result.FailedCount += batchResult.FailedCount;
                         result.DeferredCount += batchResult.DeferredCount;
+                        result.OptimisticApplyAppliedCount += batchResult.OptimisticApplyAppliedCount;
+                        result.OptimisticApplySkippedCount += batchResult.OptimisticApplySkippedCount;
+                        result.OptimisticApplyFailedCount += batchResult.OptimisticApplyFailedCount;
+                        result.OptimisticApplyUnresolvedReferenceCount += batchResult.OptimisticApplyUnresolvedReferenceCount;
                         if (batchCompletedCallback == null)
                             result.ProcessedExportItems.AddRange(batchResult.ProcessedExportItems);
                         if (batchContainerIds != null)
@@ -1136,9 +1140,9 @@ public class ExportExecutionServer
             // Issue #1079: Delete exports are skipped entirely by optimistic apply (D6, the CSO
             // obsolete/delete lifecycle owns that path) and one without a CSO has nothing to apply
             // values to; both are tracked as skipped rather than silently dropped.
-            if (export.ChangeType == PendingExportChangeType.Delete)
+            if (export.ChangeType == PendingExportChangeType.Delete || export.ConnectedSystemObject == null)
                 result.OptimisticApplySkippedCount++;
-            else if (export.ConnectedSystemObject != null)
+            else
                 successfulNonDeleteExports.Add(export);
         }
 
@@ -1189,7 +1193,12 @@ public class ExportExecutionServer
             // change whose transient ResolvedReferenceCsoId hint is unset (already resolved in an
             // earlier export run, or never routed through TryResolveReferencesFromLookup at all).
             var dnsNeedingResolution = OptimisticExportApplyCalculator.CollectUnresolvedReferenceDns(successfulNonDeleteExports);
-            var resolvedReferenceCsoIdsByDn = new Dictionary<string, Guid>(StringComparer.Ordinal);
+            // OrdinalIgnoreCase: Distinguished Names are case-insensitive, and the repository lookup's
+            // returned key casing (the stored secondary external Id value) is not guaranteed to match
+            // the casing recorded on the Pending Export's own attribute change. The import's own DN
+            // resolution (SyncImportTaskProcessor Phase 2, dbSecondaryResults) uses the same comparer
+            // for the same reason.
+            var resolvedReferenceCsoIdsByDn = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
 
             if (dnsNeedingResolution.Count > 0)
             {

@@ -529,6 +529,49 @@ public class OptimisticExportApplyCalculatorTests
         Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
     }
 
+    /// <summary>
+    /// Orchestrator review finding #2: an Add/Update change whose Attribute.Type is NotSet (or any
+    /// other value outside the eight supported types) must not create a row with an Id, CSO and
+    /// AttributeId but no populated value field. IsPendingChangeEmpty only inspects the typed value
+    /// fields, so a change with a payload (e.g. StringValue set) but an unrecognised Type is not
+    /// "empty", and ValueExistsOnCso's default arm returns false regardless of CSO state - both
+    /// would otherwise let CreateAttributeValue's switch (which has no arm for NotSet) fall through
+    /// and insert a payload-less row.
+    /// </summary>
+    [Test]
+    public void CalculateDelta_AddChangeType_UnsupportedAttributeType_SkippedNoRowCreated()
+    {
+        var cso = CreateCso();
+        var change = CreateChange(1, AttributeDataType.NotSet, PendingExportAttributeChangeType.Add, stringValue: "junk");
+        var pe = CreatePendingExport(cso, change);
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+
+        Assert.That(delta.Additions, Is.Empty);
+        Assert.That(delta.RemovalValueIds, Is.Empty);
+        Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
+    }
+
+    /// <summary>
+    /// Orchestrator review finding #2 (removal side): RemoveAll operates on the CSO's existing rows
+    /// for the attribute regardless of the pending change's own value fields, so without a type
+    /// guard it would happily stage removal of rows for an attribute whose Type the calculator does
+    /// not understand. Skip entirely instead.
+    /// </summary>
+    [Test]
+    public void CalculateDelta_RemoveAllChangeType_UnsupportedAttributeType_SkippedNoRemoval()
+    {
+        var cso = CreateCso();
+        AddCsoValue(cso, 1, AttributeDataType.NotSet, stringValue: "existing-junk");
+        var change = CreateChange(1, AttributeDataType.NotSet, PendingExportAttributeChangeType.RemoveAll);
+        var pe = CreatePendingExport(cso, change);
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+
+        Assert.That(delta.RemovalValueIds, Is.Empty);
+        Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
+    }
+
     #endregion
 
     #region External-Id dedupe (D9)
