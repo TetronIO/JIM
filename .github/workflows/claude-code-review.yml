@@ -25,25 +25,42 @@ jobs:
       # job-level `if` skip causes the check to be absent/failed, which blocks
       # merge when claude-review is a required check.
       #
-      # Two actors are exempt:
+      # Two bots are exempt, matched on BOTH the actor (who triggered the run)
+      # and the PR author (who opened the PR):
       #   - dependabot[bot]: NuGet/Docker/Actions version bumps.
       #   - jim-automation[bot]: the App that opens the apt-pin-check and
       #     tooling-pin-check version-bump PRs. These are mechanical pin bumps
       #     that do not warrant an AI review, and the review action cannot
-      #     authenticate on a bot-authored PR anyway (it dies trying to mint an
+      #     authenticate on a bot-actored run anyway (it dies trying to mint an
       #     installation token), so it must be skipped, not merely allowed to run.
+      # The author check matters because maintenance pushes to a bot's PR branch
+      # (lock-file regeneration, update-with-main) make the human pusher the
+      # actor, which previously un-skipped the review on PRs it was designed to
+      # skip (July 2026 Dependabot batch).
       - name: Skip review for automation bots
-        if: github.actor == 'dependabot[bot]' || github.actor == 'jim-automation[bot]'
-        run: echo "Skipping automated review for ${{ github.actor }} PRs"
+        if: >-
+          github.actor == 'dependabot[bot]' ||
+          github.actor == 'jim-automation[bot]' ||
+          github.event.pull_request.user.login == 'dependabot[bot]' ||
+          github.event.pull_request.user.login == 'jim-automation[bot]'
+        run: echo "Skipping automated review for bot PR (actor ${{ github.actor }}, author ${{ github.event.pull_request.user.login }})"
 
       - name: Checkout repository
-        if: github.actor != 'dependabot[bot]' && github.actor != 'jim-automation[bot]'
+        if: >-
+          github.actor != 'dependabot[bot]' &&
+          github.actor != 'jim-automation[bot]' &&
+          github.event.pull_request.user.login != 'dependabot[bot]' &&
+          github.event.pull_request.user.login != 'jim-automation[bot]'
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
         with:
           fetch-depth: 1
 
       - name: Run Claude Code Review
-        if: github.actor != 'dependabot[bot]' && github.actor != 'jim-automation[bot]'
+        if: >-
+          github.actor != 'dependabot[bot]' &&
+          github.actor != 'jim-automation[bot]' &&
+          github.event.pull_request.user.login != 'dependabot[bot]' &&
+          github.event.pull_request.user.login != 'jim-automation[bot]'
         id: claude-review
         uses: anthropics/claude-code-action@af0559ee4f514d1ef21826982bed13f7edc3c35e  # v1.0.178
         with:
