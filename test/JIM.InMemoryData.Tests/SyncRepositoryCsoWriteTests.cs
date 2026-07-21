@@ -94,6 +94,54 @@ public class SyncRepositoryCsoWriteTests
     }
 
     [Test]
+    public async Task UpdateConnectedSystemObjectsAsync_GivenDifferentInstanceSameId_AppliesFieldsWithoutAliasingStoreAsync()
+    {
+        // Guards against #1079 Regression B: a caller (SyncImportTaskProcessor) that hydrates a
+        // working copy of a CSO via GetConnectedSystemObjectsByIdsAsync (now an independent clone,
+        // not the store's live instance), applies a diff, and calls UpdateConnectedSystemObjectsAsync
+        // with that clone. The store must apply the clone's field values onto its OWN canonical
+        // instance (by Id) rather than aliasing its dictionary slot to the clone - otherwise, when
+        // the caller later releases the clone's AttributeValues to bound memory, the store's copy
+        // would be emptied too.
+        var seeded = CreateCso();
+        seeded.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = AttrId,
+            StringValue = "original-value"
+        });
+        _repo.SeedConnectedSystemObject(seeded);
+
+        // A different instance, same Id - simulating a hydrated clone, not the store's own object.
+        var workingCopy = new ConnectedSystemObject
+        {
+            Id = seeded.Id,
+            ConnectedSystemId = CsId,
+            TypeId = ObjectTypeId,
+            ExternalIdAttributeId = AttrId,
+            Created = seeded.Created,
+            LastUpdated = DateTime.UtcNow,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>(seeded.AttributeValues)
+            {
+                new() { Id = Guid.NewGuid(), AttributeId = AttrId, StringValue = "added-value" }
+            }
+        };
+
+        await _repo.UpdateConnectedSystemObjectsAsync(new List<ConnectedSystemObject> { workingCopy });
+
+        var afterUpdate = await _repo.GetConnectedSystemObjectAsync(CsId, seeded.Id);
+        Assert.That(afterUpdate!.AttributeValues, Has.Count.EqualTo(2),
+            "The store must reflect the working copy's changes.");
+
+        // The caller now releases its own working copy - the store must not be aliased to it.
+        workingCopy.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+
+        var afterRelease = await _repo.GetConnectedSystemObjectAsync(CsId, seeded.Id);
+        Assert.That(afterRelease!.AttributeValues, Has.Count.EqualTo(2),
+            "The store's canonical instance must not alias the caller's working copy.");
+    }
+
+    [Test]
     public async Task UpdateConnectedSystemObjectJoinStatesAsync_UpdatesJoinFieldsAsync()
     {
         var mvoId = Guid.NewGuid();
