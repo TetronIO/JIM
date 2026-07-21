@@ -6,6 +6,7 @@ This file holds cross-cutting rules and pointers. Detailed conventions live in f
 - `src/CLAUDE.md` - code style, copyright headers, layer rules, common dev tasks
 - `src/JIM.Web/CLAUDE.md` - Blazor/MudBlazor UI conventions, shared UI components
 - `src/JIM.Application/CLAUDE.md` - synchronisation integrity (full requirements)
+- `src/JIM.PowerShell/CLAUDE.md` - cmdlet parameter aliases, documenting output shapes, destructive examples, Pester
 - `test/CLAUDE.md` - TDD patterns, test data, integration testing
 - `.devcontainer/CLAUDE.md` - commands, aliases, Docker, environment
 - `engineering/CLAUDE.md` - PRDs, plans, changelog, release process
