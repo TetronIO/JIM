@@ -1,0 +1,388 @@
+@using JIM.Utilities
+@using JIM.Web.Causality
+@implements IAsyncDisposable
+@inject IJSRuntime Js
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The causality Flow view: a three-column pipeline (Source, Identity, Downstream) mirroring JIM's
+   conceptual data flow. The source column carries a synthetic source record card (plus any
+   Source-lane events beneath it), the Identity column the Identity-lane events flattened in tree
+   order, and the Downstream column the Downstream-lane events grouped per owning Connected System.
+   An SVG overlay draws cubic bezier elbow connectors from measured card positions (source to the
+   first Identity event, deepest Identity event to each system group) via a small JS measurement
+   interop; measurement re-runs on window resize (debounced JS-side). The connectors are decorative:
+   if the interop is unavailable or fails, the view renders cleanly without them, and below the
+   responsive breakpoint the columns stack and the overlay is hidden in CSS. *@
+
+<div class="flow-scroller">
+    <div class="flow-canvas" id="@_canvasId">
+        @if (_connectors.Count > 0)
+        {
+            <svg class="flow-svg" viewBox="0 0 @_canvasWidth @_canvasHeight" aria-hidden="true">
+                @foreach (var connector in _connectors)
+                {
+                    <path d="@connector.PathData"></path>
+                    <circle cx="@connector.DotX" cy="@connector.DotY" r="3"></circle>
+                }
+            </svg>
+        }
+        <div class="flow-cols">
+            @* ─── Source: what came in ─── *@
+            <div class="flow-col">
+                <div class="flow-col-head">Source <span class="hint">what came in</span></div>
+                <div class="evt-card" data-flow-id="@CausalityFlowConnectorCalculator.SourceCardId"
+                     style="--tone: var(--cz-secondary)">
+                    <div class="evt-head">
+                        <span class="evt-icon" aria-hidden="true">
+                            <MudIcon Icon="@Icons.Material.Filled.Description" />
+                        </span>
+                        <span class="evt-title">Source record</span>
+                    </div>
+                    <div class="evt-sub">
+                        @if (SourceProfileName != null)
+                        {
+                            <text>Processed by </text><b>@SourceProfileName</b>@GetSourceSentenceSuffix()
+                        }
+                        else
+                        {
+                            @GetSourceSentencePrefix()
+                        }
+                    </div>
+                    @{
+                        var recordLabel = GetRecordLabel();
+                        var systemName = Model.Context.ConnectedSystemName;
+                    }
+                    @if (recordLabel != null || !string.IsNullOrWhiteSpace(systemName))
+                    {
+                        <div class="evt-entities">
+                            @if (recordLabel != null)
+                            {
+                                <CausalityEntityChip Label="@recordLabel" Href="@GetRecordHref()"
+                                                     Kind="CausalityEntityKind.Record"
+                                                     SubLabel="@Model.Context.CsoObjectTypeName" />
+                            }
+                            @if (!string.IsNullOrWhiteSpace(systemName))
+                            {
+                                <CausalityEntityChip Label="@systemName" Href="@GetSystemHref()"
+                                                     Kind="CausalityEntityKind.ConnectedSystem" />
+                            }
+                        </div>
+                    }
+                </div>
+                @foreach (var sourceEvent in _sourceEvents)
+                {
+                    <CausalityEventCard Event="sourceEvent" TechnicalNames="TechnicalNames"
+                                        FlowId="@_flowIdsByEvent[sourceEvent]"
+                                        Selected="ReferenceEquals(SelectedEvent, sourceEvent)"
+                                        OnSelect="ToggleSelectionAsync" />
+                }
+            </div>
+
+            @* ─── Identity: what JIM did ─── *@
+            <div class="flow-col">
+                <div class="flow-col-head">Identity <span class="hint">what JIM did</span></div>
+                @if (_identityEvents.Count == 0)
+                {
+                    <div class="flow-empty">No Identity changes.</div>
+                }
+                else
+                {
+                    @foreach (var identityEvent in _identityEvents)
+                    {
+                        <CausalityEventCard Event="identityEvent" TechnicalNames="TechnicalNames"
+                                            FlowId="@_flowIdsByEvent[identityEvent]"
+                                            Selected="ReferenceEquals(SelectedEvent, identityEvent)"
+                                            OnSelect="ToggleSelectionAsync" />
+                    }
+                }
+            </div>
+
+            @* ─── Downstream: what it caused ─── *@
+            <div class="flow-col">
+                <div class="flow-col-head">Downstream <span class="hint">what it caused</span></div>
+                @if (_systemGroups.Count == 0)
+                {
+                    <div class="flow-empty">No downstream consequences.</div>
+                }
+                else
+                {
+                    @foreach (var group in _systemGroups)
+                    {
+                        <div class="sys-group" data-flow-id="@group.FlowId">
+                            <div class="sys-group-head">
+                                <CausalityEntityChip Label="@group.Name" Href="@group.Href"
+                                                     Kind="CausalityEntityKind.ConnectedSystem" />
+                            </div>
+                            @foreach (var groupEvent in group.Events)
+                            {
+                                <CausalityEventCard Event="groupEvent" TechnicalNames="TechnicalNames"
+                                                    FlowId="@_flowIdsByEvent[groupEvent]"
+                                                    Selected="ReferenceEquals(SelectedEvent, groupEvent)"
+                                                    OnSelect="ToggleSelectionAsync" />
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>
+    /// The causality model to render.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalityModel Model { get; set; } = null!;
+
+    /// <summary>
+    /// When true, technical labels (MVO/CSO vocabulary) are emphasised and plain language demoted.
+    /// </summary>
+    [Parameter]
+    public bool TechnicalNames { get; set; }
+
+    /// <summary>
+    /// The currently selected event (whose attribute detail the panel shows in the drawer); null
+    /// when none. Two-way bindable so the panel owns the state.
+    /// </summary>
+    [Parameter]
+    public CausalityEvent? SelectedEvent { get; set; }
+
+    [Parameter]
+    public EventCallback<CausalityEvent?> SelectedEventChanged { get; set; }
+
+    private readonly string _canvasId = $"causality-flow-{Guid.NewGuid():N}";
+    private CausalityModel? _builtModel;
+    private List<CausalityEvent> _sourceEvents = [];
+    private List<CausalityEvent> _identityEvents = [];
+    private List<FlowSystemGroup> _systemGroups = [];
+    private Dictionary<CausalityEvent, string> _flowIdsByEvent = [];
+    private List<CausalityFlowConnectorPair> _connectorPairs = [];
+    private List<CausalityFlowConnector> _connectors = [];
+    private string _canvasWidth = "0";
+    private string _canvasHeight = "0";
+    private DotNetObjectReference<CausalityFlowView>? _selfReference;
+    private bool _disposed;
+
+    private string? SourceProfileName =>
+        string.IsNullOrWhiteSpace(Model.Context.RunProfileName) ? null : Model.Context.RunProfileName;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(Model, _builtModel))
+            return;
+
+        _builtModel = Model;
+        BuildLayout();
+    }
+
+    /// <summary>
+    /// Assigns lane lists, per-system downstream groups and stable flow ids ("evt-n" in tree order,
+    /// "sys-n" per group) from the model, then derives the logical connector pairs.
+    /// </summary>
+    private void BuildLayout()
+    {
+        _sourceEvents = [];
+        _identityEvents = [];
+        _systemGroups = [];
+        _flowIdsByEvent = [];
+        _connectors = [];
+
+        var eventIndex = 0;
+        foreach (var causalityEvent in Model.AllEvents())
+        {
+            _flowIdsByEvent[causalityEvent] = $"evt-{eventIndex++}";
+            switch (causalityEvent.Lane)
+            {
+                case CausalityLane.Source:
+                    _sourceEvents.Add(causalityEvent);
+                    break;
+                case CausalityLane.Identity:
+                    _identityEvents.Add(causalityEvent);
+                    break;
+                default:
+                    AddToSystemGroup(causalityEvent);
+                    break;
+            }
+        }
+
+        _connectorPairs = CausalityFlowConnectorCalculator.BuildConnectorPairs(
+            _identityEvents.Select(e => _flowIdsByEvent[e]).ToList(),
+            _systemGroups.Select(g => g.FlowId).ToList());
+    }
+
+    private void AddToSystemGroup(CausalityEvent causalityEvent)
+    {
+        var key = causalityEvent.SystemId?.ToString() ?? causalityEvent.SystemName ?? "unknown";
+        var group = _systemGroups.FirstOrDefault(g => g.Key == key);
+        if (group == null)
+        {
+            group = new FlowSystemGroup(
+                key,
+                $"sys-{_systemGroups.Count}",
+                causalityEvent.SystemName ?? "Connected System",
+                causalityEvent.SystemId.HasValue
+                    ? Utilities.GetConnectedSystemHref(causalityEvent.SystemId.Value)
+                    : null);
+            _systemGroups.Add(group);
+        }
+
+        group.Events.Add(causalityEvent);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _selfReference = DotNetObjectReference.Create(this);
+            try
+            {
+                await Js.InvokeVoidAsync("jimCausality.observeResize", _canvasId, _selfReference);
+            }
+            catch (Exception ex) when (IsInteropUnavailable(ex))
+            {
+                // Connectors are decorative; without interop the resize observer is moot too
+            }
+        }
+
+        await RefreshConnectorsAsync();
+    }
+
+    /// <summary>
+    /// Measures the rendered cards via JS interop and recomputes the connector overlay, re-rendering
+    /// only when the geometry actually changed (so the measure-render cycle converges). Any interop
+    /// failure degrades to a connector-free layout; it never surfaces to the user.
+    /// </summary>
+    private async Task RefreshConnectorsAsync()
+    {
+        if (_disposed)
+            return;
+
+        List<CausalityFlowConnector> connectors = [];
+        var canvasWidth = "0";
+        var canvasHeight = "0";
+
+        try
+        {
+            var measurements = await Js.InvokeAsync<CausalityFlowMeasurements?>("jimCausality.measure", _canvasId);
+            if (measurements != null)
+            {
+                connectors = CausalityFlowConnectorCalculator.Compute(measurements, _connectorPairs);
+                canvasWidth = CausalityFlowConnectorCalculator.FormatCoordinate(measurements.Width);
+                canvasHeight = CausalityFlowConnectorCalculator.FormatCoordinate(measurements.Height);
+            }
+        }
+        catch (Exception ex) when (IsInteropUnavailable(ex))
+        {
+            // Render without connectors: prerendering, circuit teardown or a missing script must
+            // never break the view
+        }
+
+        if (connectors.SequenceEqual(_connectors) && canvasWidth == _canvasWidth && canvasHeight == _canvasHeight)
+            return;
+
+        _connectors = connectors;
+        _canvasWidth = canvasWidth;
+        _canvasHeight = canvasHeight;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Invoked from JavaScript when the window resize settles (debounced), so the connector overlay
+    /// tracks the reflowed card positions.
+    /// </summary>
+    [JSInvokable]
+    public Task OnFlowResizeAsync()
+    {
+        return InvokeAsync(RefreshConnectorsAsync);
+    }
+
+    private Task ToggleSelectionAsync(CausalityEvent causalityEvent)
+    {
+        var newValue = ReferenceEquals(SelectedEvent, causalityEvent) ? null : causalityEvent;
+        return SelectedEventChanged.InvokeAsync(newValue);
+    }
+
+    /// <summary>
+    /// The full source sentence for the no-Run-Profile fallback (the with-profile shape renders the
+    /// profile name emphasised inline instead).
+    /// </summary>
+    private string GetSourceSentencePrefix()
+    {
+        var system = Model.Context.ConnectedSystemName;
+        return !string.IsNullOrWhiteSpace(system) ? $"Processed by a run on {system}." : "Processed by this run.";
+    }
+
+    private string GetSourceSentenceSuffix()
+    {
+        if (SourceProfileName == null)
+            return string.Empty;
+        var system = Model.Context.ConnectedSystemName;
+        return !string.IsNullOrWhiteSpace(system) ? $" on {system}." : ".";
+    }
+
+    private string? GetRecordLabel()
+    {
+        var context = Model.Context;
+        var hasDisplayName = !string.IsNullOrWhiteSpace(context.CsoDisplayName);
+        var hasExternalId = !string.IsNullOrWhiteSpace(context.CsoExternalId);
+
+        if (hasDisplayName && hasExternalId)
+            return $"{context.CsoDisplayName} ({context.CsoExternalId})";
+        if (hasDisplayName)
+            return context.CsoDisplayName;
+        if (hasExternalId)
+            return context.CsoExternalId;
+        return null;
+    }
+
+    private string? GetRecordHref()
+    {
+        var context = Model.Context;
+        return context.ConnectedSystemId.HasValue && context.CsoId.HasValue
+            ? Utilities.GetConnectedSystemObjectHref(context.ConnectedSystemId.Value, context.CsoId.Value)
+            : null;
+    }
+
+    private string? GetSystemHref()
+    {
+        return Model.Context.ConnectedSystemId.HasValue
+            ? Utilities.GetConnectedSystemHref(Model.Context.ConnectedSystemId.Value)
+            : null;
+    }
+
+    private static bool IsInteropUnavailable(Exception ex)
+    {
+        return ex is JSDisconnectedException or JSException or InvalidOperationException or TaskCanceledException;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        if (_selfReference == null)
+            return;
+
+        try
+        {
+            await Js.InvokeVoidAsync("jimCausality.unobserveResize", _canvasId);
+        }
+        catch (Exception ex) when (IsInteropUnavailable(ex))
+        {
+            // The circuit is gone; nothing left to clean up on the client
+        }
+
+        _selfReference.Dispose();
+        _selfReference = null;
+    }
+
+    /// <summary>
+    /// A downstream column group: the events owned by one Connected System, rendered as a group
+    /// card with the system chip as its header.
+    /// </summary>
+    private sealed record FlowSystemGroup(string Key, string FlowId, string Name, string? Href)
+    {
+        public List<CausalityEvent> Events { get; } = [];
+    }
+}

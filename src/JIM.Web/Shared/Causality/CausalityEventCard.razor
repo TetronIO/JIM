@@ -1,0 +1,146 @@
+@using JIM.Web.Causality
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The Flow view event card: a tone-accented card with an icon tile, the plain-language title with
+   the technical label demoted alongside (swapped when the technical-names toggle is on), the event
+   sentence with entity mentions, entity chips, an attention badge, and a footer carrying the
+   attribute count plus up to two action links. Cards with attribute detail are clickable and
+   keyboard operable (role button, tabbable, Enter/Space) to open the shared attribute drawer. *@
+
+<div class="evt-card @(IsClickable ? "clickable" : null) @(Selected ? "selected" : null)"
+     data-flow-id="@FlowId" style="--tone: @CausalityToneCss.CssVar(Event.Tone)"
+     role="@(IsClickable ? "button" : null)" tabindex="@(IsClickable ? "0" : null)"
+     aria-label="@(IsClickable ? $"{Title}: show attribute detail" : null)"
+     @onclick="HandleActivationAsync" @onkeydown="HandleKeyDownAsync">
+    <div class="evt-head">
+        <span class="evt-icon" aria-hidden="true">
+            <MudIcon Icon="@Event.Icon" />
+        </span>
+        <span class="evt-title">@Title <span class="tech">· @DemotedTitle</span></span>
+        @if (Event.Badge != null)
+        {
+            <span class="evt-badge">@Event.Badge</span>
+        }
+    </div>
+    <div class="evt-sub">
+        @foreach (var segment in Event.SentenceSegments)
+        {
+            @if (segment is SummarySegment.Text text)
+            {
+                @text.Value
+            }
+            else if (segment is SummarySegment.Entity entity)
+            {
+                @if (!string.IsNullOrEmpty(entity.Href))
+                {
+                    <a href="@entity.Href">@entity.Label</a>
+                }
+                else
+                {
+                    <b>@entity.Label</b>
+                }
+            }
+        }
+    </div>
+    @if (!string.IsNullOrWhiteSpace(Event.DetailMessage))
+    {
+        <div class="evt-sub">@Event.DetailMessage</div>
+    }
+    @{
+        var chipLinks = Event.Links.Where(l => ChipKinds.Contains(l.Kind)).ToList();
+        var actionLinks = Event.Links
+            .Where(l => !ChipKinds.Contains(l.Kind) && !string.IsNullOrEmpty(l.Href))
+            .Take(2)
+            .ToList();
+    }
+    @if (chipLinks.Count > 0)
+    {
+        <div class="evt-entities">
+            @foreach (var link in chipLinks)
+            {
+                <CausalityEntityChip Label="@link.Label" Href="@link.Href" Kind="link.Kind" />
+            }
+        </div>
+    }
+    @if (Event.AttributeRows.Count > 0 || actionLinks.Count > 0)
+    {
+        <div class="evt-foot">
+            @if (Event.AttributeRows.Count > 0)
+            {
+                <span class="attr-count">
+                    <MudIcon Icon="@Icons.Material.Filled.TableChart" aria-hidden="true" />
+                    @Event.AttributeRows.Count attribute@(Event.AttributeRows.Count == 1 ? "" : "s")
+                </span>
+            }
+            <span class="spacer"></span>
+            @foreach (var link in actionLinks)
+            {
+                <a href="@link.Href">@link.Label</a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The kinds rendered as entity chips; the remaining linked kinds render in the footer's action
+    /// links (mirroring the Timeline view's split).
+    /// </summary>
+    private static readonly CausalityEntityKind[] ChipKinds =
+    [
+        CausalityEntityKind.ConnectedSystem,
+        CausalityEntityKind.Record,
+        CausalityEntityKind.Identity,
+        CausalityEntityKind.SynchronisationRule
+    ];
+
+    /// <summary>
+    /// The causality event to render.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalityEvent Event { get; set; } = null!;
+
+    /// <summary>
+    /// When true, technical labels (MVO/CSO vocabulary) are emphasised and plain language demoted.
+    /// </summary>
+    [Parameter]
+    public bool TechnicalNames { get; set; }
+
+    /// <summary>
+    /// Whether this card is the currently selected one.
+    /// </summary>
+    [Parameter]
+    public bool Selected { get; set; }
+
+    /// <summary>
+    /// The card's data-flow-id for connector measurement; null renders no id.
+    /// </summary>
+    [Parameter]
+    public string? FlowId { get; set; }
+
+    /// <summary>
+    /// Raised when a clickable card is activated (click, Enter or Space).
+    /// </summary>
+    [Parameter]
+    public EventCallback<CausalityEvent> OnSelect { get; set; }
+
+    private string Title => TechnicalNames ? Event.TechnicalLabel : Event.PlainLabel;
+
+    private string DemotedTitle => TechnicalNames ? Event.PlainLabel : Event.TechnicalLabel;
+
+    private bool IsClickable => Event.AttributeRows.Count > 0 && OnSelect.HasDelegate;
+
+    private Task HandleActivationAsync()
+    {
+        return IsClickable ? OnSelect.InvokeAsync(Event) : Task.CompletedTask;
+    }
+
+    private Task HandleKeyDownAsync(KeyboardEventArgs args)
+    {
+        return args.Key is "Enter" or " " or "Spacebar"
+            ? HandleActivationAsync()
+            : Task.CompletedTask;
+    }
+}

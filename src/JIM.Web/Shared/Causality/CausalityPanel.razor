@@ -6,12 +6,13 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The causality visualisation panel for a Run Profile Execution Item. Owns the current view, the
-   technical-names toggle and the expanded-event state; builds the causality model and summary once
-   per (Item, Context) pair and renders the toolbar, summary band and the active view. The available
-   view list drives the segmented control so the Flow and Graph views can register in later phases
-   without rework; while only the Timeline exists the control stays hidden. Persisted view and
-   technical-names preferences load on first render per the TableDensityToggle idiom; a stored
-   preference for a not-yet-available view falls back to the Timeline without being overwritten. *@
+   technical-names toggle, the Timeline's expanded event and the Flow view's selected event (whose
+   attribute detail renders in the bottom drawer); builds the causality model and summary once per
+   (Item, Context) pair and renders the toolbar, summary band, the active view and the drawer. The
+   available view list drives the segmented control so the Graph view can register in Phase 4
+   without rework. Persisted view and technical-names preferences load on first render per the
+   TableDensityToggle idiom; the Flow view is the default, and a stored preference for a
+   not-yet-available view (e.g. "graph") falls back to it without being overwritten. *@
 
 <div class="causality-panel">
     @if (Item.SyncOutcomes.Count == 0)
@@ -49,6 +50,10 @@
         <div class="canvas-wrap">
             @switch (_view)
             {
+                case CausalityView.Flow:
+                    <CausalityFlowView Model="_model" TechnicalNames="_technicalNames"
+                                       @bind-SelectedEvent="_selectedEvent" />
+                    break;
                 case CausalityView.Timeline:
                 default:
                     <CausalityTimelineView Model="_model" TechnicalNames="_technicalNames"
@@ -56,15 +61,32 @@
                     break;
             }
         </div>
+
+        @* ─── Bottom drawer: attribute detail for the Flow view's selected card ─── *@
+        @if (_view == CausalityView.Flow && _selectedEvent is { } selectedEvent && selectedEvent.AttributeRows.Count > 0)
+        {
+            <div class="drawer">
+                <div class="drawer-inner">
+                    <div class="drawer-head">
+                        <span class="drawer-title">@(_technicalNames ? selectedEvent.TechnicalLabel : selectedEvent.PlainLabel)</span>
+                        <span class="drawer-sub">@GetDrawerSubtitle(selectedEvent)</span>
+                        <button type="button" class="drawer-close" aria-label="Close detail"
+                                @onclick="CloseDrawer">&#x2715;</button>
+                    </div>
+                    @* Keyed on the event so the detail's filter state resets when another card is selected *@
+                    <CausalityAttributeDetail @key="selectedEvent" Rows="selectedEvent.AttributeRows" />
+                </div>
+            </div>
+        }
     }
 </div>
 
 @code {
     /// <summary>
-    /// The views currently implemented. Phases 3 and 4 add Flow and Graph here, which reveals the
-    /// segmented control and lets stored preferences for those views take effect.
+    /// The views currently implemented. Phase 4 adds Graph here, which lets stored preferences for
+    /// it take effect.
     /// </summary>
-    private static readonly IReadOnlyList<CausalityView> AvailableViews = [CausalityView.Timeline];
+    private static readonly IReadOnlyList<CausalityView> AvailableViews = [CausalityView.Flow, CausalityView.Timeline];
 
     /// <summary>
     /// The Run Profile Execution Item whose causality is visualised.
@@ -87,16 +109,17 @@
 
     private CausalityModel? _model;
     private CausalitySummary? _summary;
-    private CausalityView _view = CausalityView.Timeline;
+    private CausalityView _view = CausalityView.Flow;
     private bool _technicalNames;
     private CausalityEvent? _expandedEvent;
+    private CausalityEvent? _selectedEvent;
     private ActivityRunProfileExecutionItem? _builtItem;
     private CausalityPageContext? _builtContext;
 
     protected override void OnParametersSet()
     {
         // Build once per (Item, Context) pair; parent re-renders with unchanged values must not
-        // discard the expanded-event state by rebuilding the model
+        // discard the expanded/selected-event state by rebuilding the model
         if (ReferenceEquals(Item, _builtItem) && Equals(Context, _builtContext))
             return;
 
@@ -105,6 +128,7 @@
         _model = CausalityModelBuilder.Build(Item, Context);
         _summary = CausalitySummaryBuilder.Build(_model);
         _expandedEvent = null;
+        _selectedEvent = null;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -116,7 +140,7 @@
         var storedView = CausalityViewPreference.FromKey(await PreferenceService.GetCausalityViewAsync());
         var storedTechNames = await PreferenceService.GetCausalityTechNamesAsync();
 
-        // A stored preference for a view that has not shipped yet (e.g. "flow" before Phase 3)
+        // A stored preference for a view that has not shipped yet (e.g. "graph" before Phase 4)
         // keeps the default without overwriting the stored value, so it takes effect when the
         // view becomes available
         if (storedView.HasValue && AvailableViews.Contains(storedView.Value))
@@ -129,6 +153,7 @@
     private async Task SelectViewAsync(CausalityView view)
     {
         _view = view;
+        _selectedEvent = null;
         await PreferenceService.SetCausalityViewAsync(CausalityViewPreference.ToKey(view));
     }
 
@@ -136,6 +161,20 @@
     {
         _technicalNames = !_technicalNames;
         await PreferenceService.SetCausalityTechNamesAsync(_technicalNames);
+    }
+
+    private void CloseDrawer()
+    {
+        _selectedEvent = null;
+    }
+
+    private static string GetDrawerSubtitle(CausalityEvent selectedEvent)
+    {
+        var count = selectedEvent.AttributeRows.Count;
+        var subtitle = $"{count} attribute change{(count == 1 ? "" : "s")}";
+        return string.IsNullOrWhiteSpace(selectedEvent.SystemName)
+            ? subtitle
+            : $"{subtitle} · {selectedEvent.SystemName}";
     }
 
     private CausalityTone GetStatusTone()

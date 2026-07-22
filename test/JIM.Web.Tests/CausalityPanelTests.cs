@@ -14,9 +14,11 @@ using NUnit.Framework;
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// bUnit tests for <see cref="CausalityPanel"/>: rendering across the PRD scenarios, persisted
-/// preference loading via a stubbed <see cref="JIM.Web.Services.IUserPreferenceService"/>, the
-/// technical-names toggle persisting, and the empty (not-tracked) state.
+/// bUnit tests for <see cref="CausalityPanel"/>: rendering across the PRD scenarios, the view
+/// switcher (Flow default, Timeline selectable, stored preferences honoured with graceful fallback
+/// for not-yet-available views), the technical-names toggle persisting via a stubbed
+/// <see cref="JIM.Web.Services.IUserPreferenceService"/>, the Flow drawer, and the empty
+/// (not-tracked) state.
 /// </summary>
 [TestFixture]
 public class CausalityPanelTests
@@ -48,12 +50,13 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void Render_NewJoinerScenario_RendersSummaryBandAndTimeline()
+    public void Render_NewJoinerScenario_RendersSummaryBandAndFlowViewByDefault()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         Assert.That(cut.FindAll(".summary-sentence"), Has.Count.EqualTo(1));
-        Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".flow-cols"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".tl"), Is.Empty);
         Assert.That(cut.FindAll(".oc-pill"), Is.Not.Empty);
     }
 
@@ -62,7 +65,7 @@ public class CausalityPanelTests
     {
         var cut = RenderPanel(CausalityTestData.LeaverItem(), CausalityTestData.NewJoinerContext());
 
-        Assert.That(cut.FindAll(".tl-row").Count, Is.GreaterThan(1));
+        Assert.That(cut.FindAll(".evt-card").Count, Is.GreaterThan(1));
         Assert.That(cut.FindAll("a[href='/admin/deleted-objects']"), Is.Not.Empty);
     }
 
@@ -71,7 +74,7 @@ public class CausalityPanelTests
     {
         var cut = RenderPanel(CausalityTestData.ExportFailureItem(), CausalityTestData.ExportContext());
 
-        Assert.That(cut.FindAll(".tl-row").Count, Is.GreaterThan(1));
+        Assert.That(cut.FindAll(".evt-card").Count, Is.GreaterThan(1));
         var badges = cut.FindAll(".evt-badge").Select(b => b.TextContent.Trim());
         Assert.That(badges, Does.Contain("Needs attention"));
     }
@@ -84,15 +87,67 @@ public class CausalityPanelTests
         var cut = RenderPanel(item, CausalityTestData.NewJoinerContext());
 
         Assert.That(cut.Markup, Does.Contain("Outcome tracking was not enabled"));
-        Assert.That(cut.FindAll(".tl"), Is.Empty);
+        Assert.That(cut.FindAll(".flow-cols"), Is.Empty);
     }
 
     [Test]
-    public void Render_WithOnlyTimelineAvailable_HidesTheViewSwitcher()
+    public void Render_ViewSwitcher_ShowsFlowAndTimelineWithFlowOn()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        Assert.That(cut.FindAll(".seg"), Is.Empty);
+        var buttons = cut.FindAll(".seg button");
+        Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Flow", "Timeline" }));
+        Assert.That(cut.FindAll(".seg button")[0].ClassList, Does.Contain("on"));
+        Assert.That(cut.FindAll(".seg button")[1].ClassList, Does.Not.Contain("on"));
+    }
+
+    [Test]
+    public void ViewSwitcher_SelectingTimeline_SwitchesTheViewAndPersistsThePreference()
+    {
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        cut.FindAll(".seg button")[1].Click();
+
+        Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".flow-cols"), Is.Empty);
+        Assert.That(_preferences.CausalityViewWrites, Is.EqualTo(new[] { "timeline" }));
+    }
+
+    [Test]
+    public void Render_PersistedTimelinePreference_StartsOnTheTimeline()
+    {
+        _preferences.StoredCausalityView = "timeline";
+
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".flow-cols"), Is.Empty);
+        Assert.That(cut.FindAll(".seg button")[1].ClassList, Does.Contain("on"));
+    }
+
+    [Test]
+    public void Render_PersistedFlowPreference_StartsOnTheFlowView()
+    {
+        _preferences.StoredCausalityView = "flow";
+
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        Assert.That(cut.FindAll(".flow-cols"), Has.Count.EqualTo(1));
+        Assert.That(_preferences.CausalityViewWrites, Is.Empty);
+    }
+
+    [Test]
+    public void Render_PersistedUnavailableViewPreference_FallsBackToFlowWithoutOverwritingIt()
+    {
+        _preferences.StoredCausalityView = "graph";
+
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        // The Graph view does not exist yet, so the panel renders the default Flow view...
+        Assert.That(cut.FindAll(".flow-cols"), Has.Count.EqualTo(1));
+        // ...without clobbering the stored preference, so Graph is restored once it ships
+        Assert.That(_preferences.CausalityViewWrites, Is.Empty);
+        Assert.That(_preferences.StoredCausalityView, Is.EqualTo("graph"));
     }
 
     [Test]
@@ -103,22 +158,8 @@ public class CausalityPanelTests
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         Assert.That(cut.Find(".toggle-line").ClassList, Does.Contain("on"));
-        var verbs = cut.FindAll(".tl-line .verb").Select(v => v.TextContent.Trim()).ToList();
-        Assert.That(verbs, Does.Contain("MVO Projected"));
-    }
-
-    [Test]
-    public void Render_PersistedUnavailableViewPreference_FallsBackToTimelineWithoutOverwritingIt()
-    {
-        _preferences.StoredCausalityView = "flow";
-
-        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-
-        // The Flow view does not exist yet, so the panel renders the Timeline...
-        Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));
-        // ...without clobbering the stored preference, so Flow is restored once it ships
-        Assert.That(_preferences.CausalityViewWrites, Is.Empty);
-        Assert.That(_preferences.StoredCausalityView, Is.EqualTo("flow"));
+        var titles = cut.FindAll(".evt-title").Select(t => t.TextContent.Trim()).ToList();
+        Assert.That(titles.Any(t => t.StartsWith("MVO Projected")), Is.True);
     }
 
     [Test]
@@ -131,12 +172,53 @@ public class CausalityPanelTests
         Assert.That(_preferences.CausalityTechNamesWrites, Is.EqualTo(new[] { true }));
         Assert.That(cut.Find(".toggle-line").ClassList, Does.Contain("on"));
         Assert.That(cut.Find(".toggle-line").GetAttribute("aria-pressed"), Is.EqualTo("true"));
-        var verbs = cut.FindAll(".tl-line .verb").Select(v => v.TextContent.Trim()).ToList();
-        Assert.That(verbs, Does.Contain("MVO Projected"));
+        var titles = cut.FindAll(".evt-title").Select(t => t.TextContent.Trim()).ToList();
+        Assert.That(titles.Any(t => t.StartsWith("MVO Projected")), Is.True);
 
         cut.Find(".toggle-line").Click();
 
         Assert.That(_preferences.CausalityTechNamesWrites, Is.EqualTo(new[] { true, false }));
         Assert.That(cut.Find(".toggle-line").ClassList, Does.Not.Contain("on"));
+    }
+
+    [Test]
+    public void FlowCardSelection_OpensTheDrawerWithTheEventAttributeRows()
+    {
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        Assert.That(cut.FindAll(".drawer"), Is.Empty);
+
+        // Only the Export queued event carries attribute rows (its persisted CSO change snapshot)
+        cut.Find(".evt-card.clickable").Click();
+
+        Assert.That(cut.FindAll(".drawer"), Has.Count.EqualTo(1));
+        Assert.That(cut.Find(".drawer-title").TextContent.Trim(), Is.EqualTo("Export queued"));
+        Assert.That(cut.FindAll(".drawer .attr-row"), Has.Count.EqualTo(3));
+    }
+
+    [Test]
+    public void DrawerCloseButton_ClearsTheDrawerAndTheCardSelection()
+    {
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+        cut.Find(".evt-card.clickable").Click();
+        Assert.That(cut.FindAll(".drawer"), Has.Count.EqualTo(1));
+
+        cut.Find(".drawer-close").Click();
+
+        Assert.That(cut.FindAll(".drawer"), Is.Empty);
+        Assert.That(cut.FindAll(".evt-card.selected"), Is.Empty);
+    }
+
+    [Test]
+    public void SwitchingToTimeline_ClosesTheFlowDrawer()
+    {
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+        cut.Find(".evt-card.clickable").Click();
+        Assert.That(cut.FindAll(".drawer"), Has.Count.EqualTo(1));
+
+        cut.FindAll(".seg button")[1].Click();
+
+        Assert.That(cut.FindAll(".drawer"), Is.Empty);
+        Assert.That(cut.FindAll(".tl"), Has.Count.EqualTo(1));
     }
 }

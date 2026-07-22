@@ -86,6 +86,8 @@
 .causality-panel .toggle-line:focus-visible,
 .causality-panel .tl-expander:focus-visible,
 .causality-panel .filter-chips button:focus-visible,
+.causality-panel .evt-card:focus-visible,
+.causality-panel .drawer-close:focus-visible,
 .causality-panel a:focus-visible {
     outline: 2px solid var(--cz-primary);
     outline-offset: 2px;
@@ -347,6 +349,237 @@
     flex-wrap: wrap;
     gap: 6px;
     margin-top: 9px;
+}
+
+/* ─── Flow view ─── */
+
+.causality-panel .flow-scroller {
+    overflow-x: auto;
+    padding-bottom: 6px;
+}
+
+.causality-panel .flow-canvas {
+    position: relative;
+    min-width: 900px;
+}
+
+.causality-panel .flow-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.causality-panel .flow-svg path {
+    fill: none;
+    stroke: var(--cz-line);
+    stroke-width: 1.6;
+}
+
+.causality-panel .flow-svg circle {
+    fill: var(--cz-line);
+    stroke: none;
+}
+
+.causality-panel .flow-cols {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0 72px;
+    align-items: start;
+}
+
+.causality-panel .flow-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+}
+
+.causality-panel .flow-col-head {
+    font-size: 11px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    font-weight: 650;
+    color: var(--cz-text-faint);
+    padding-bottom: 2px;
+    border-bottom: 1px solid var(--cz-line-soft);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.causality-panel .flow-col-head .hint {
+    letter-spacing: 0;
+    text-transform: none;
+    font-weight: 450;
+    font-size: 11.5px;
+    color: var(--cz-text-faint);
+}
+
+.causality-panel .flow-empty {
+    padding: 6px 2px;
+    font-size: 12.8px;
+    color: var(--cz-text-dim);
+}
+
+/* ─── Flow event cards ─── */
+
+.causality-panel .evt-card {
+    background: var(--cz-inner);
+    border: 1px solid var(--cz-line-soft);
+    border-radius: 12px;
+    padding: 12px 14px 12px 12px;
+    position: relative;
+    cursor: default;
+    transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+    border-left: 3px solid var(--tone, var(--cz-secondary));
+}
+
+.causality-panel .evt-card.clickable {
+    cursor: pointer;
+}
+
+.causality-panel .evt-card.clickable:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12), 0 10px 28px rgba(0, 0, 0, 0.12);
+    transform: translateY(-1px);
+}
+
+.causality-panel .evt-card.selected {
+    border-color: var(--cz-primary);
+    box-shadow: 0 0 0 1.5px var(--cz-primary), 0 2px 6px rgba(0, 0, 0, 0.12), 0 10px 28px rgba(0, 0, 0, 0.12);
+}
+
+.causality-panel .evt-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.causality-panel .evt-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--tone, var(--cz-secondary)) 14%, transparent);
+    color: var(--tone, var(--cz-secondary));
+}
+
+.causality-panel .evt-icon .mud-icon-root {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+}
+
+.causality-panel .evt-title {
+    font-weight: 650;
+    font-size: 13.5px;
+    letter-spacing: -0.005em;
+}
+
+.causality-panel .evt-title .tech {
+    color: var(--cz-text-faint);
+    font-weight: 500;
+    font-size: 12px;
+}
+
+.causality-panel .evt-sub {
+    margin-top: 6px;
+    font-size: 12.8px;
+    color: var(--cz-text-dim);
+}
+
+.causality-panel .evt-sub b {
+    color: var(--cz-text);
+    font-weight: 600;
+}
+
+.causality-panel .evt-sub a {
+    color: var(--cz-info);
+    font-weight: 550;
+    text-decoration: none;
+}
+
+.causality-panel .evt-sub a:hover {
+    text-decoration: underline;
+}
+
+.causality-panel .evt-foot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px dashed var(--cz-line-soft);
+    font-size: 12px;
+    color: var(--cz-text-faint);
+}
+
+.causality-panel .evt-foot .attr-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--cz-info);
+    font-weight: 600;
+}
+
+.causality-panel .evt-foot .attr-count .mud-icon-root {
+    width: 13px;
+    height: 13px;
+    font-size: 13px;
+}
+
+.causality-panel .evt-foot .spacer {
+    flex: 1;
+}
+
+.causality-panel .evt-foot a {
+    color: var(--cz-info);
+    font-weight: 550;
+    text-decoration: none;
+}
+
+.causality-panel .evt-foot a:hover {
+    text-decoration: underline;
+}
+
+/* ─── Downstream Connected System groups ─── */
+
+.causality-panel .sys-group {
+    background: var(--cz-inner);
+    border: 1px solid var(--cz-line-soft);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.causality-panel .sys-group-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 13px;
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 7%, var(--cz-inner));
+    font-weight: 650;
+    font-size: 13px;
+}
+
+.causality-panel .sys-group .evt-card {
+    border-radius: 0;
+    border: none;
+    border-left: 3px solid var(--tone, var(--cz-secondary));
+    border-top: 1px solid var(--cz-line-soft);
+    background: transparent;
+}
+
+.causality-panel .sys-group .evt-card:first-of-type {
+    border-top: none;
 }
 
 /* ─── Timeline view ─── */
@@ -670,9 +903,69 @@
     font-size: 13px;
 }
 
+/* ─── Attribute detail drawer (Flow view) ─── */
+
+.causality-panel .drawer {
+    border-top: 1px solid var(--cz-line-soft);
+    background: var(--cz-surface);
+}
+
+.causality-panel .drawer-inner {
+    padding: 18px 24px 22px;
+}
+
+.causality-panel .drawer-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.causality-panel .drawer-title {
+    font-weight: 650;
+    font-size: 14.5px;
+}
+
+.causality-panel .drawer-sub {
+    font-size: 12.5px;
+    color: var(--cz-text-faint);
+}
+
+.causality-panel .drawer-close {
+    margin-left: auto;
+    border: none;
+    background: var(--cz-inner);
+    color: var(--cz-text-dim);
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1;
+}
+
+.causality-panel .drawer-close:hover {
+    color: var(--cz-text);
+}
+
 /* ─── Responsive ─── */
 
 @media (max-width: 820px) {
+    .causality-panel .flow-cols {
+        grid-template-columns: 1fr;
+        gap: 18px;
+    }
+
+    .causality-panel .flow-canvas {
+        min-width: 0;
+    }
+
+    .causality-panel .flow-svg {
+        display: none;
+    }
+
     .causality-panel .attr-row {
         grid-template-columns: 56px 1fr;
     }
