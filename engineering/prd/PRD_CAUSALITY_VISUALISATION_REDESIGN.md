@@ -104,9 +104,9 @@ The interactive mock-up (internal) is the canonical example set: https://claude.
 
 | Area | Impact |
 |------|--------|
-| UI (JIM.Web) | Replace the causality tree component set on the Run Profile Execution Item detail page; new view components; new CSS |
-| Application | New/extended user preference for causality view choice; summary-derivation helper |
-| Models | Display-mapping helper for outcome types (plain labels, tones, icons); no schema changes |
+| UI (JIM.Web) | Replace the causality tree component set on the Run Profile Execution Item detail page; new view components; display-mapping and summary-derivation helpers; new user preference; new CSS |
+| Application | None (page continues to call `jim.Activities.GetActivityRunProfileExecutionItemAsync`) |
+| Models | None; no schema changes |
 | Database | None |
 | Worker | None |
 
