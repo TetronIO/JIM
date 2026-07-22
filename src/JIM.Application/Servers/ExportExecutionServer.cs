@@ -1230,6 +1230,11 @@ public class ExportExecutionServer
     {
         using var span = Diagnostics.Diagnostics.Database.StartSpan("OptimisticApply")
             .SetTag("count", successfulNonDeleteExports.Count);
+        // A plain Stopwatch alongside the span: OperationSpan.Duration is only valid after
+        // Dispose(), so it cannot drive the in-flight slow-instance Warning below. Added per #1079
+        // ("255 slow apply instances totalling 77.5 minutes" was diagnosed from the span alone;
+        // making a slow batch visible in the logs too, not just traces, costs one Stopwatch).
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             // D5 fallback: any Reference change whose transient ResolvedReferenceCsoId hint is
@@ -1268,10 +1273,23 @@ public class ExportExecutionServer
             result.OptimisticApplyAppliedCount += successfulNonDeleteExports.Count;
             result.OptimisticApplyUnresolvedReferenceCount += delta.UnresolvedReferenceCount;
 
-            Log.Debug("ApplyOptimisticExportUpdatesAsync: Applied optimistic export updates for {Count} Pending Exports " +
-                "({Additions} additions, {Removals} removals, {Unresolved} unresolved references, {Skipped} no-op changes)",
-                successfulNonDeleteExports.Count, delta.Additions.Count, delta.RemovalValueIds.Count,
+            stopwatch.Stop();
+            Log.Debug("ApplyOptimisticExportUpdatesAsync: Applied optimistic export updates for {Count} Pending Exports in " +
+                "{ElapsedMs}ms ({Additions} additions, {Removals} removals, {Unresolved} unresolved references, {Skipped} no-op changes)",
+                successfulNonDeleteExports.Count, stopwatch.ElapsedMilliseconds, delta.Additions.Count, delta.RemovalValueIds.Count,
                 delta.UnresolvedReferenceCount, delta.SkippedChangeCount);
+
+            // #1079: full-scale validation diagnosed 255 slow OptimisticApply instances totalling
+            // 77.5 minutes from the span alone; a Warning here makes a slow batch visible in the
+            // logs too (Debug is often filtered out in production), without waiting on trace
+            // tooling to notice. 1 second is generous for a healthy batch (typically low
+            // milliseconds); this fires only when something is genuinely off.
+            if (stopwatch.Elapsed > TimeSpan.FromSeconds(1))
+            {
+                Log.Warning("ApplyOptimisticExportUpdatesAsync: Slow optimistic apply for Connected System {ConnectedSystemId} - " +
+                    "{Count} Pending Exports took {ElapsedMs}ms",
+                    successfulNonDeleteExports[0].ConnectedSystemId, successfulNonDeleteExports.Count, stopwatch.ElapsedMilliseconds);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

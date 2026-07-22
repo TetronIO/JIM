@@ -282,6 +282,30 @@ public class OptimisticExportApplyCalculatorTests
         Assert.That(delta.Additions[0].DateTimeValue, Is.EqualTo(dt));
     }
 
+    /// <summary>
+    /// Pins the #1079 perf fix's key derivation: the per-attribute index must key DateTime values
+    /// by Ticks (Kind-insensitive), exactly like the equality comparison it replaces
+    /// (<c>v.DateTimeValue == change.DateTimeValue</c>, which itself ignores <see cref="DateTimeKind"/>
+    /// - mirroring the reconciliation's #988 DateTimeTicksValues rationale). A naive alternative key
+    /// derivation (e.g. one that folds Kind into the key, or normalises to UTC first) would wrongly
+    /// treat this as a non-match.
+    /// </summary>
+    [Test]
+    public void CalculateDelta_DateTimeRemove_SameTicksDifferentKind_RemovesMatchingRow()
+    {
+        var cso = CreateCso();
+        var existing = AddCsoValue(cso, 1, AttributeDataType.DateTime,
+            dateTimeValue: new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc));
+        var change = CreateChange(1, AttributeDataType.DateTime, PendingExportAttributeChangeType.Remove,
+            dateTimeValue: new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Unspecified));
+        var pe = CreatePendingExport(cso, change);
+
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+
+        Assert.That(delta.RemovalValueIds, Is.EquivalentTo(new[] { existing.Id }),
+            "a DateTime value with different Kind but equal Ticks must still match, exactly like the == comparison it replaces");
+    }
+
     [Test]
     public void CalculateDelta_BinaryAdd_ValuePresentWithDifferentArrayInstance_NoOpViaSequenceEqual()
     {
