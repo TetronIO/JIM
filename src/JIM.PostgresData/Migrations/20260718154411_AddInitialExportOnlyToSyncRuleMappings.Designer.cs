@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,13 +13,15 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260718154411_AddInitialExportOnlyToSyncRuleMappings")]
+    partial class AddInitialExportOnlyToSyncRuleMappings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.10")
+                .HasAnnotation("ProductVersion", "10.0.9")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -183,9 +186,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("RoleId")
                         .HasColumnType("integer");
-
-                    b.Property<bool>("RunProfileExecutionStatsFinalised")
-                        .HasColumnType("boolean");
 
                     b.Property<Guid?>("ScheduleExecutionId")
                         .HasColumnType("uuid");
@@ -386,12 +386,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ParentSyncOutcomeId")
                         .HasColumnType("uuid");
 
-                    b.Property<int?>("SyncRuleId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("SyncRuleName")
-                        .HasColumnType("text");
-
                     b.Property<string>("TargetEntityDescription")
                         .HasColumnType("text");
 
@@ -411,26 +405,6 @@ namespace JIM.PostgresData.Migrations
                         .HasDatabaseName("IX_ActivityRunProfileExecutionItemSyncOutcomes_RpeiId_OutcomeType");
 
                     b.ToTable("ActivityRunProfileExecutionItemSyncOutcomes");
-                });
-
-            modelBuilder.Entity("JIM.Models.Activities.ActivityStatCounter", b =>
-                {
-                    b.Property<Guid>("ActivityId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Dimension")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Key")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<long>("Count")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("ActivityId", "Dimension", "Key");
-
-                    b.ToTable("ActivityStatCounters");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseAttribute", b =>
@@ -3455,15 +3429,6 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystemObjectChange");
 
                     b.Navigation("ParentSyncOutcome");
-                });
-
-            modelBuilder.Entity("JIM.Models.Activities.ActivityStatCounter", b =>
-                {
-                    b.HasOne("JIM.Models.Activities.Activity", null)
-                        .WithMany()
-                        .HasForeignKey("ActivityId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>

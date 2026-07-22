@@ -500,4 +500,149 @@ public class SynchronisationControllerMappingTests
     }
 
     #endregion
+
+    #region Initial Export Only (#223)
+
+    [Test]
+    public void SyncRuleMappingDto_FromEntity_CarriesInitialExportOnly()
+    {
+        var entity = new SyncRuleMapping
+        {
+            Id = 12,
+            TargetConnectedSystemAttribute = new ConnectedSystemObjectTypeAttribute { Id = 21, Name = "unicodePwd" },
+            TargetConnectedSystemAttributeId = 21,
+            InitialExportOnly = true
+        };
+
+        var dto = SyncRuleMappingDto.FromEntity(entity);
+
+        Assert.That(dto.InitialExportOnly, Is.True);
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ExportMapping_SetsInitialExportOnlyFromRequest()
+    {
+        const int syncRuleId = 2;
+        const int objectTypeId = 7;
+        var syncRule = new SyncRule { Id = syncRuleId, Name = "Export Rule", Direction = SyncRuleDirection.Export, ConnectedSystemObjectTypeId = objectTypeId };
+        var mvAttr = new MetaverseAttribute { Id = 5, Name = "displayName", Type = AttributeDataType.Text };
+        var csAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 20,
+            Name = "cn",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = objectTypeId }
+        };
+
+        SyncRuleMapping? captured = null;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId)).ReturnsAsync(syncRule);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(5, It.IsAny<bool>())).ReturnsAsync(mvAttr);
+        _mockConnectedSystemRepo.Setup(r => r.GetAttributeAsync(20)).ReturnsAsync(csAttr);
+        _mockConnectedSystemRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()))
+            .Callback<SyncRuleMapping>(m => captured = m)
+            .Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(It.IsAny<int>()))
+            .ReturnsAsync(() => captured);
+
+        var request = new CreateSyncRuleMappingRequest
+        {
+            TargetConnectedSystemAttributeId = 20,
+            InitialExportOnly = true,
+            Sources = new List<CreateSyncRuleMappingSourceRequest>
+            {
+                new() { Order = 0, MetaverseAttributeId = 5 }
+            }
+        };
+
+        await _controller.CreateSyncRuleMappingAsync(syncRuleId, request);
+
+        Assert.That(captured, Is.Not.Null, "Mapping should have been created.");
+        Assert.That(captured!.InitialExportOnly, Is.True);
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ExportMapping_InitialExportOnlyDefaultsToFalse()
+    {
+        const int syncRuleId = 2;
+        const int objectTypeId = 7;
+        var syncRule = new SyncRule { Id = syncRuleId, Name = "Export Rule", Direction = SyncRuleDirection.Export, ConnectedSystemObjectTypeId = objectTypeId };
+        var mvAttr = new MetaverseAttribute { Id = 5, Name = "displayName", Type = AttributeDataType.Text };
+        var csAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 20,
+            Name = "cn",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = objectTypeId }
+        };
+
+        SyncRuleMapping? captured = null;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId)).ReturnsAsync(syncRule);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(5, It.IsAny<bool>())).ReturnsAsync(mvAttr);
+        _mockConnectedSystemRepo.Setup(r => r.GetAttributeAsync(20)).ReturnsAsync(csAttr);
+        _mockConnectedSystemRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()))
+            .Callback<SyncRuleMapping>(m => captured = m)
+            .Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(It.IsAny<int>()))
+            .ReturnsAsync(() => captured);
+
+        // No InitialExportOnly supplied: the entity default (false) must stand.
+        var request = new CreateSyncRuleMappingRequest
+        {
+            TargetConnectedSystemAttributeId = 20,
+            Sources = new List<CreateSyncRuleMappingSourceRequest>
+            {
+                new() { Order = 0, MetaverseAttributeId = 5 }
+            }
+        };
+
+        await _controller.CreateSyncRuleMappingAsync(syncRuleId, request);
+
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.InitialExportOnly, Is.False);
+    }
+
+    [Test]
+    public async Task CreateSyncRuleMappingAsync_ImportMapping_IgnoresInitialExportOnly()
+    {
+        const int syncRuleId = 1;
+        const int objectTypeId = 7;
+        var syncRule = new SyncRule { Id = syncRuleId, Name = "Import Rule", Direction = SyncRuleDirection.Import, ConnectedSystemObjectTypeId = objectTypeId };
+        var mvAttr = new MetaverseAttribute { Id = 5, Name = "displayName", Type = AttributeDataType.Text };
+        var csAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 20,
+            Name = "cn",
+            Type = AttributeDataType.Text,
+            ConnectedSystemObjectType = new ConnectedSystemObjectType { Id = objectTypeId }
+        };
+
+        SyncRuleMapping? captured = null;
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleAsync(syncRuleId)).ReturnsAsync(syncRule);
+        _mockMetaverseRepo.Setup(r => r.GetMetaverseAttributeAsync(5, It.IsAny<bool>())).ReturnsAsync(mvAttr);
+        _mockConnectedSystemRepo.Setup(r => r.GetAttributeAsync(20)).ReturnsAsync(csAttr);
+        _mockConnectedSystemRepo.Setup(r => r.CreateSyncRuleMappingAsync(It.IsAny<SyncRuleMapping>()))
+            .Callback<SyncRuleMapping>(m => captured = m)
+            .Returns(Task.CompletedTask);
+        _mockConnectedSystemRepo.Setup(r => r.GetSyncRuleMappingAsync(It.IsAny<int>()))
+            .ReturnsAsync(() => captured);
+
+        // Initial Export Only is an export-mapping option; an import mapping request supplying it must not set it.
+        var request = new CreateSyncRuleMappingRequest
+        {
+            TargetMetaverseAttributeId = 5,
+            InitialExportOnly = true,
+            Sources = new List<CreateSyncRuleMappingSourceRequest>
+            {
+                new() { Order = 0, ConnectedSystemAttributeId = 20 }
+            }
+        };
+
+        await _controller.CreateSyncRuleMappingAsync(syncRuleId, request);
+
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.InitialExportOnly, Is.False,
+            "Initial Export Only must be ignored for import mappings");
+    }
+
+    #endregion
 }

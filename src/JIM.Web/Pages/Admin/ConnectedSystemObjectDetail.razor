@@ -1,5 +1,6 @@
 ﻿@page "/admin/connected-systems/{CsId:int}/connector-space/{CsoId}"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Logic
 @using JIM.Models.Staging
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Transactional
@@ -213,6 +214,12 @@
                     <RowTemplate>
                         <MudTd DataLabel="Attribute" Class="@($"jim-attr-name {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
                             <MudText Typo="Typo.body1" Class="mud-text-secondary">@context.AttributeName</MudText>
+                            @if (IsUnmanagedAttribute(context))
+                            {
+                                <MudTooltip Text="Initial Export Only: JIM set this attribute at initial provisioning (if it provisioned the object) and no longer exports changes to it; the Connected System owns the value" Arrow="true" Placement="Placement.Top">
+                                    <MudChip T="string" Variant="Variant.Outlined" Color="Color.Info">Unmanaged</MudChip>
+                                </MudTooltip>
+                            }
                         </MudTd>
                         <MudTd DataLabel="Value" Class="@($"jim-attr-value {(context.Values.Count > 1 ? "jim-attr-cell-mva" : "")}")">
                             @if (context.Values.Count == 1)
@@ -418,6 +425,9 @@
             _pendingExportTotalCount = pendingExportResult.Value.ChangeCount;
         }
 
+        // Derive which attributes are unmanaged via Initial Export Only mappings (#223)
+        _unmanagedAttributeIds = await ComputeUnmanagedAttributeIdsAsync(jim);
+
         // Change history is loaded lazily when the user opens the Change History tab; the count
         // already came back on the detail result so the badge renders immediately.
     }
@@ -534,6 +544,46 @@
                 isReference);
         })
         .ToList();
+    }
+
+    private HashSet<int> _unmanagedAttributeIds = new();
+
+    /// <summary>
+    /// Computes the Connected System attribute IDs that are unmanaged on this Connected System Object via
+    /// Initial Export Only mappings (#223). An attribute is unmanaged when the object is past provisioning,
+    /// joined to a Metaverse Object, and every enabled export mapping targeting the attribute for this object
+    /// type is Initial Export Only (a single normally-managed mapping keeps the attribute managed).
+    /// </summary>
+    private async Task<HashSet<int>> ComputeUnmanagedAttributeIdsAsync(JimApplication jim)
+    {
+        var result = new HashSet<int>();
+        if (ConnectedSystemObject == null ||
+            ConnectedSystemObject.Status == ConnectedSystemObjectStatus.PendingProvisioning ||
+            !ConnectedSystemObject.MetaverseObjectId.HasValue)
+            return result;
+
+        var syncRules = await jim.ConnectedSystems.GetSyncRulesAsync(CsId, includeDisabledSyncRules: false);
+        var exportMappings = syncRules
+            .Where(sr => sr.Direction == SyncRuleDirection.Export && sr.ConnectedSystemObjectTypeId == ConnectedSystemObject.TypeId)
+            .SelectMany(sr => sr.AttributeFlowRules)
+            .Where(m => m.TargetConnectedSystemAttributeId.HasValue);
+
+        result.UnionWith(exportMappings
+            .GroupBy(m => m.TargetConnectedSystemAttributeId!.Value)
+            .Where(g => g.All(m => m.InitialExportOnly))
+            .Select(g => g.Key));
+
+        return result;
+    }
+
+    private bool IsUnmanagedAttribute(AttributeGroup group)
+    {
+        if (_unmanagedAttributeIds.Count == 0)
+            return false;
+
+        var value = group.Values[0];
+        var attributeId = value.AttributeId != 0 ? value.AttributeId : value.Attribute?.Id ?? 0;
+        return _unmanagedAttributeIds.Contains(attributeId);
     }
 
     private int GetExternalIdSortOrder(AttributeGroup group)

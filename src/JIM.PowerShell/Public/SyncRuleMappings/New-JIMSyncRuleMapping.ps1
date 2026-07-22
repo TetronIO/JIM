@@ -52,6 +52,11 @@ function New-JIMSyncRuleMapping {
         For import mappings only. Normalises the case of the imported text value: None (default), Upper, Lower
         or Title.
 
+    .PARAMETER InitialExportOnly
+        For export mappings only. When set, the mapping only flows during the initial provisioning (Create)
+        export; afterwards the target attribute is unmanaged by JIM on that Connected System Object and
+        Drift Correction does not re-assert it.
+
     .OUTPUTS
         PSCustomObject representing the created Synchronisation Rule Mapping.
 
@@ -80,6 +85,11 @@ function New-JIMSyncRuleMapping {
 
         Creates an import mapping that trims surrounding whitespace and lower-cases the value (and, by default,
         treats whitespace-only values as no value).
+
+    .EXAMPLE
+        New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 15 -SourceMetaverseAttributeId 8 -InitialExportOnly
+
+        Creates an export mapping that only flows during initial provisioning; the attribute is unmanaged afterwards.
 
     .LINK
         Get-JIMSyncRuleMapping
@@ -132,7 +142,13 @@ function New-JIMSyncRuleMapping {
         [Parameter(ParameterSetName = 'ImportAttribute')]
         [Parameter(ParameterSetName = 'ImportExpression')]
         [ValidateSet('None', 'Upper', 'Lower', 'Title')]
-        [string]$CaseNormalisation = 'None'
+        [string]$CaseNormalisation = 'None',
+
+        # Initial Export Only (#223), export mappings only: the mapping flows solely during the initial
+        # provisioning (Create) export; the attribute is unmanaged by JIM afterwards.
+        [Parameter(ParameterSetName = 'ExportAttribute')]
+        [Parameter(ParameterSetName = 'ExportExpression')]
+        [switch]$InitialExportOnly
     )
 
     process {
@@ -218,6 +234,11 @@ function New-JIMSyncRuleMapping {
             else {
                 Write-Error "-SourceMetaverseAttributeId or -Expression is required for export mappings."
                 return
+            }
+
+            # Initial Export Only (#223), export mappings only.
+            if ($InitialExportOnly) {
+                $body.initialExportOnly = $true
             }
 
             $targetDescription = "CS Attribute $TargetConnectedSystemAttributeId"
