@@ -32,7 +32,14 @@ function Get-JIMConnectedSystemObject {
         Number of items per page (attribute values only). Defaults to 50.
 
     .PARAMETER All
-        If specified, automatically retrieves all pages of attribute values.
+        If specified, automatically retrieves all pages (of attribute values, or of
+        Connected System Object headers). Fetches at most 1000 pages before stopping
+        with a warning; use -Force to fetch beyond the cap. When used on a large result
+        set, a warning is emitted so a long-running sequential fetch is not a surprise.
+
+    .PARAMETER Force
+        Override the -All page ceiling (1000 pages) and fetch every page regardless of
+        how large the result set is. Only valid with -All.
 
     .OUTPUTS
         PSCustomObject representing the Connected System Object or attribute values.
@@ -87,6 +94,12 @@ function Get-JIMConnectedSystemObject {
 
         Gets every Connected System Object header for Connected System 1 (auto-paginates).
 
+    .EXAMPLE
+        Get-JIMConnectedSystemObject -ConnectedSystemId 1 -All -Force
+
+        Gets every Connected System Object header for Connected System 1, overriding the
+        1000-page safety cap for very large connector spaces (over ~100,000 objects).
+
     .LINK
         Get-JIMConnectedSystem
         Get-JIMPendingExport
@@ -133,6 +146,10 @@ function Get-JIMConnectedSystemObject {
         [Parameter(Mandatory, ParameterSetName = 'AttributeValuesAll')]
         [Parameter(Mandatory, ParameterSetName = 'ListAll')]
         [switch]$All,
+
+        [Parameter(ParameterSetName = 'AttributeValuesAll')]
+        [Parameter(ParameterSetName = 'ListAll')]
+        [switch]$Force,
 
         [Parameter(Mandatory, ParameterSetName = 'Count')]
         [switch]$Count,
@@ -216,24 +233,18 @@ function Get-JIMConnectedSystemObject {
 
             'AttributeValuesAll' {
                 Write-Verbose "Getting all attribute values for '$AttributeName' on CSO $Id"
-                $currentPage = 1
-                $hasMore = $true
                 $encodedAttrName = [System.Uri]::EscapeDataString($AttributeName)
-
-                while ($hasMore) {
-                    $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/connector-space/$Id/attributes/$encodedAttrName/values?page=$currentPage&pageSize=$PageSize"
+                $pageRequest = {
+                    param($p)
+                    $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/connector-space/$Id/attributes/$encodedAttrName/values?page=$p&pageSize=$PageSize"
                     if ($Search) {
                         $endpoint += "&search=$([System.Uri]::EscapeDataString($Search))"
                     }
-
-                    $response = Invoke-JIMApi -Endpoint $endpoint
-                    foreach ($item in $response.items) {
-                        $item
-                    }
-
-                    $hasMore = $response.hasNextPage
-                    $currentPage++
+                    Invoke-JIMApi -Endpoint $endpoint
                 }
+
+                Invoke-JIMPagedFetch -PageRequest $pageRequest -CmdletName 'Get-JIMConnectedSystemObject' -PageSize $PageSize -Force:$Force `
+                    -ItemNoun 'attribute values' -NarrowHint 'filter with -Search'
             }
 
             'List' {
@@ -249,21 +260,15 @@ function Get-JIMConnectedSystemObject {
 
             'ListAll' {
                 Write-Verbose "Getting all Connected System Objects for Connected System $ConnectedSystemId"
-                $currentPage = 1
-                $hasMore = $true
-
-                while ($hasMore) {
-                    $endpoint = Get-JIMConnectedSystemObjectListEndpoint -ConnectedSystemId $ConnectedSystemId -Page $currentPage -PageSize $PageSize `
+                $pageRequest = {
+                    param($p)
+                    $endpoint = Get-JIMConnectedSystemObjectListEndpoint -ConnectedSystemId $ConnectedSystemId -Page $p -PageSize $PageSize `
                         -Search $Search -Status $Status -ObjectTypeId $ObjectTypeId -JoinType $JoinType -SortBy $SortBy -Ascending:$Ascending
-
-                    $response = Invoke-JIMApi -Endpoint $endpoint
-                    foreach ($item in $response.items) {
-                        $item
-                    }
-
-                    $hasMore = $response.hasNextPage
-                    $currentPage++
+                    Invoke-JIMApi -Endpoint $endpoint
                 }
+
+                Invoke-JIMPagedFetch -PageRequest $pageRequest -CmdletName 'Get-JIMConnectedSystemObject' -PageSize $PageSize -Force:$Force `
+                    -ItemNoun 'objects' -NarrowHint 'narrow the query with -Search, -Status or -ObjectTypeId'
             }
         }
     }
