@@ -241,7 +241,7 @@ public class SyncRuleOutcomeAttributionTests : WorkflowTestBase
             }}
         });
 
-        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", "EMP001");
+        await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith", "EMP001");
 
         // Act
         var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
