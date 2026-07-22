@@ -167,7 +167,7 @@ public static class CausalityModelBuilder
         {
             case ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned:
                 // TargetEntityId is the new CSO's id and DetailMessage carries "csId|csoTypeName";
-                // same semantics as OutcomeTreeNode's provisioned CSO link
+                // same semantics as the legacy outcome tree's provisioned CSO link
                 if (parsedDetail.ConnectedSystemId.HasValue)
                 {
                     var provisioningSystemId = parsedDetail.ConnectedSystemId.Value;
@@ -234,7 +234,7 @@ public static class CausalityModelBuilder
                 break;
 
             default:
-                // Parity with OutcomeTreeNode: no Identity link when the Identity no longer exists,
+                // Parity with the legacy outcome tree: no Identity link when the Identity no longer exists,
                 // which is the case for parents with an MvoDeleted child in their causality tree
                 if (outcome.TargetEntityId is { } mvoId && mvoId != Guid.Empty
                     && childOutcomes.All(c => c.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted))

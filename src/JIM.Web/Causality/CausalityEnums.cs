@@ -29,6 +29,17 @@ public enum CausalityLane
 }
 
 /// <summary>
+/// The toggleable causality visualisation views. Timeline ships first; Flow and Graph arrive in
+/// later phases by adding themselves to <c>CausalityPanel</c>'s available-view list.
+/// </summary>
+public enum CausalityView
+{
+    Flow,
+    Timeline,
+    Graph
+}
+
+/// <summary>
 /// The kind of entity a causality link or sentence segment refers to, so the renderer can choose
 /// the matching glyph chip (Connected System, Record, Identity, Synchronisation Rule, etc.).
 /// </summary>

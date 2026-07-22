@@ -1,0 +1,694 @@
+/* Copyright (c) Tetron Limited. All rights reserved. */
+/* Licensed under the Tetron Commercial License. See LICENSE file in the project root. */
+
+/* Causality visualisation styles for the Run Profile Execution Item detail page.
+   Ported from the approved causality redesign mock-up, with every mock-up colour replaced by a
+   derivation from the active theme's MudBlazor palette tokens so all themes (light and dark) work
+   without per-theme additions. Everything is scoped under .causality-panel to avoid collisions
+   with site.css. Fonts inherit JIM's typography (IBM Plex Sans; IBM Plex Mono for values). */
+
+.causality-panel {
+    /* Tone palette: theme-token derivations, one custom property per CausalityTone */
+    --cz-primary: var(--mud-palette-primary);
+    --cz-success: var(--mud-palette-success);
+    --cz-info: var(--mud-palette-info);
+    --cz-warning: var(--mud-palette-warning);
+    --cz-error: var(--mud-palette-error);
+    --cz-secondary: var(--mud-palette-secondary);
+    --cz-primary-soft: color-mix(in srgb, var(--mud-palette-primary) 12%, transparent);
+    --cz-success-soft: color-mix(in srgb, var(--mud-palette-success) 12%, transparent);
+    --cz-info-soft: color-mix(in srgb, var(--mud-palette-info) 12%, transparent);
+    --cz-warning-soft: color-mix(in srgb, var(--mud-palette-warning) 13%, transparent);
+    --cz-error-soft: color-mix(in srgb, var(--mud-palette-error) 12%, transparent);
+    --cz-secondary-soft: color-mix(in srgb, var(--mud-palette-secondary) 13%, transparent);
+
+    /* Text, lines and surfaces */
+    --cz-text: var(--mud-palette-text-primary);
+    --cz-text-dim: var(--mud-palette-text-secondary);
+    --cz-text-faint: color-mix(in srgb, var(--mud-palette-text-primary) 55%, transparent);
+    --cz-line: var(--mud-palette-lines-default);
+    --cz-line-soft: color-mix(in srgb, var(--mud-palette-lines-default) 55%, transparent);
+    --cz-surface: var(--mud-palette-surface);
+    --cz-inner: var(--jim-inner-surface, var(--mud-palette-background-grey));
+    --cz-chip-bg: color-mix(in srgb, var(--mud-palette-text-primary) 9%, transparent);
+    --cz-mono: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+
+    background: var(--cz-surface);
+    border: 1px solid var(--cz-line-soft);
+    border-radius: 14px;
+    overflow: hidden;
+    color: var(--cz-text);
+}
+
+/* ─── Panel toolbar: view switcher + technical-names toggle ─── */
+
+.causality-panel .causality-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px 18px;
+    padding: 14px 24px 0;
+}
+
+.causality-panel .seg {
+    display: inline-flex;
+    background: var(--cz-inner);
+    border-radius: 9px;
+    padding: 3px;
+    gap: 2px;
+}
+
+.causality-panel .seg button {
+    border: none;
+    background: transparent;
+    color: var(--cz-text-dim);
+    cursor: pointer;
+    padding: 6px 13px;
+    font-size: 13px;
+    font-weight: 550;
+    font-family: inherit;
+    border-radius: 7px;
+    transition: background 0.15s, color 0.15s;
+}
+
+.causality-panel .seg button:hover {
+    color: var(--cz-text);
+}
+
+.causality-panel .seg button.on {
+    background: var(--cz-surface);
+    color: var(--cz-text);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.causality-panel .seg button:focus-visible,
+.causality-panel .toggle-line:focus-visible,
+.causality-panel .tl-expander:focus-visible,
+.causality-panel .filter-chips button:focus-visible,
+.causality-panel a:focus-visible {
+    outline: 2px solid var(--cz-primary);
+    outline-offset: 2px;
+}
+
+.causality-panel .toggle-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--cz-text-dim);
+    font-size: 13px;
+    font-family: inherit;
+    padding: 4px 2px;
+    border-radius: 6px;
+}
+
+.causality-panel .toggle-line .track {
+    width: 32px;
+    height: 18px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 16%, transparent);
+    position: relative;
+    transition: background 0.18s;
+    flex: none;
+}
+
+.causality-panel .toggle-line .track::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--cz-surface);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    transition: left 0.18s;
+}
+
+.causality-panel .toggle-line.on .track {
+    background: var(--cz-primary);
+}
+
+.causality-panel .toggle-line.on .track::after {
+    left: 16px;
+}
+
+/* ─── Summary band ─── */
+
+.causality-panel .summary {
+    padding: 14px 24px 18px;
+    border-bottom: 1px solid var(--cz-line-soft);
+}
+
+.causality-panel .summary-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+.causality-panel .run-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 12px 4px 8px;
+    background: var(--cz-chip-bg);
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.causality-panel .run-chip .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--tone, var(--cz-success));
+    flex: none;
+}
+
+.causality-panel .summary-time {
+    font-size: 12.5px;
+    color: var(--cz-text-faint);
+}
+
+.causality-panel .summary-sentence {
+    font-size: 16.5px;
+    font-weight: 480;
+    max-width: 78ch;
+    text-wrap: balance;
+    line-height: 1.65;
+}
+
+.causality-panel .summary-sentence b {
+    font-weight: 650;
+}
+
+.causality-panel .summary-sentence .hl {
+    color: var(--cz-primary);
+    background: var(--cz-primary-soft);
+    font-weight: 650;
+    padding: 1px 6px;
+    border-radius: 6px;
+    white-space: nowrap;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    text-decoration: none;
+}
+
+.causality-panel a.hl:hover {
+    text-decoration: underline;
+}
+
+.causality-panel .outcome-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+/* Outcome pills are MudChips; restyle them to the mock-up's soft tone pills */
+.causality-panel .mud-chip.oc-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: auto;
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    background: var(--cz-secondary-soft);
+    color: var(--cz-secondary);
+}
+
+.causality-panel .mud-chip.oc-pill.primary {
+    color: var(--cz-primary);
+    background: var(--cz-primary-soft);
+}
+
+.causality-panel .mud-chip.oc-pill.success {
+    color: var(--cz-success);
+    background: var(--cz-success-soft);
+}
+
+.causality-panel .mud-chip.oc-pill.info {
+    color: var(--cz-info);
+    background: var(--cz-info-soft);
+}
+
+.causality-panel .mud-chip.oc-pill.warning {
+    color: var(--cz-warning);
+    background: var(--cz-warning-soft);
+}
+
+.causality-panel .mud-chip.oc-pill.error {
+    color: var(--cz-error);
+    background: var(--cz-error-soft);
+}
+
+.causality-panel .mud-chip.oc-pill.secondary {
+    color: var(--cz-secondary);
+    background: var(--cz-secondary-soft);
+}
+
+/* ─── View canvas ─── */
+
+.causality-panel .canvas-wrap {
+    padding: 24px;
+}
+
+/* ─── Entity chips ─── */
+
+.causality-panel .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    background: var(--cz-chip-bg);
+    border-radius: 999px;
+    padding: 2px 10px 2px 3px;
+    font-size: 12.5px;
+    font-weight: 550;
+    color: var(--cz-text);
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.causality-panel a.chip:hover {
+    text-decoration: none;
+    box-shadow: inset 0 0 0 1px var(--cz-line);
+}
+
+.causality-panel .chip .glyph {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    background: var(--cz-secondary);
+    color: var(--mud-palette-secondary-text, #fff);
+}
+
+.causality-panel .chip .glyph.sys {
+    background: var(--cz-info);
+    color: var(--mud-palette-info-text, #fff);
+}
+
+.causality-panel .chip .glyph.rec {
+    background: var(--cz-secondary);
+    color: var(--mud-palette-secondary-text, #fff);
+}
+
+.causality-panel .chip .glyph.idn {
+    background: var(--cz-primary);
+    color: var(--mud-palette-primary-text, #fff);
+}
+
+.causality-panel .chip .glyph.rule {
+    background: var(--cz-warning);
+    color: var(--mud-palette-warning-text, #fff);
+}
+
+.causality-panel .chip .sub {
+    color: var(--cz-text-faint);
+    font-weight: 450;
+}
+
+.causality-panel .chip .name-ellip {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ─── Event badges and entity rows (shared by views) ─── */
+
+.causality-panel .evt-badge {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 5px;
+    color: var(--tone, var(--cz-secondary));
+    background: color-mix(in srgb, var(--tone, var(--cz-secondary)) 13%, transparent);
+}
+
+.causality-panel .evt-entities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 9px;
+}
+
+/* ─── Timeline view ─── */
+
+.causality-panel .tl {
+    max-width: 860px;
+}
+
+.causality-panel .tl-row {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    column-gap: 16px;
+    position: relative;
+}
+
+.causality-panel .tl-rail {
+    position: relative;
+}
+
+.causality-panel .tl-rail::before {
+    content: "";
+    position: absolute;
+    left: 12px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--cz-line-soft);
+}
+
+.causality-panel .tl-row:first-child > .tl-rail::before {
+    top: 14px;
+}
+
+.causality-panel .tl-row:last-child > .tl-rail::before {
+    bottom: calc(100% - 14px);
+}
+
+.causality-panel .tl-row.only-child > .tl-rail::before {
+    display: none;
+}
+
+.causality-panel .tl-dot {
+    position: absolute;
+    top: 8px;
+    left: 4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--cz-surface);
+    border: 2px solid var(--tone, var(--cz-secondary));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--tone, var(--cz-secondary));
+    z-index: 2;
+}
+
+.causality-panel .tl-dot .mud-icon-root {
+    width: 11px;
+    height: 11px;
+    font-size: 11px;
+}
+
+.causality-panel .tl-body {
+    padding: 4px 0 22px;
+    min-width: 0;
+}
+
+.causality-panel .tl-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    font-size: 14.5px;
+}
+
+.causality-panel .tl-line .verb {
+    font-weight: 650;
+}
+
+.causality-panel .tl-line .tech {
+    color: var(--cz-text-faint);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.causality-panel .tl-detail-line {
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--cz-text-dim);
+    max-width: 72ch;
+}
+
+.causality-panel .tl-detail-line a {
+    color: var(--cz-info);
+    font-weight: 550;
+    text-decoration: none;
+}
+
+.causality-panel .tl-detail-line a:hover {
+    text-decoration: underline;
+}
+
+.causality-panel .tl-detail-line b {
+    color: var(--cz-text);
+    font-weight: 600;
+}
+
+.causality-panel .tl-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 6px;
+    font-size: 12.5px;
+}
+
+.causality-panel .tl-links a {
+    color: var(--cz-info);
+    font-weight: 550;
+    text-decoration: none;
+}
+
+.causality-panel .tl-links a:hover {
+    text-decoration: underline;
+}
+
+.causality-panel .tl-expander {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    border: 1px solid var(--cz-line);
+    background: transparent;
+    color: var(--cz-text-dim);
+    font-size: 12.5px;
+    font-weight: 550;
+    font-family: inherit;
+    padding: 4px 11px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.causality-panel .tl-expander:hover {
+    background: var(--cz-inner);
+    color: var(--cz-text);
+}
+
+.causality-panel .tl-expander .chev {
+    transition: transform 0.18s;
+    display: inline-flex;
+}
+
+.causality-panel .tl-expander .chev .mud-icon-root {
+    width: 12px;
+    height: 12px;
+    font-size: 12px;
+}
+
+.causality-panel .tl-expander.open .chev {
+    transform: rotate(90deg);
+}
+
+.causality-panel .tl-children {
+    margin-top: 4px;
+}
+
+.causality-panel .tl-inline-detail {
+    margin-top: 12px;
+}
+
+/* ─── Attribute change detail ─── */
+
+.causality-panel .attr-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 0 0 12px;
+}
+
+.causality-panel .attr-search {
+    flex: 0 1 240px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--cz-inner);
+    border: 1px solid var(--cz-line-soft);
+    border-radius: 8px;
+    padding: 5px 10px;
+}
+
+.causality-panel .attr-search input {
+    border: none;
+    background: transparent;
+    color: var(--cz-text);
+    font-size: 13px;
+    outline: none;
+    width: 100%;
+    font-family: inherit;
+}
+
+.causality-panel .attr-search .mud-icon-root {
+    width: 15px;
+    height: 15px;
+    font-size: 15px;
+    color: var(--cz-text-faint);
+    flex: none;
+}
+
+.causality-panel .filter-chips {
+    display: flex;
+    gap: 6px;
+}
+
+.causality-panel .filter-chips button {
+    border: 1px solid var(--cz-line-soft);
+    background: transparent;
+    color: var(--cz-text-dim);
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    padding: 3px 11px;
+    border-radius: 999px;
+    cursor: pointer;
+}
+
+.causality-panel .filter-chips button.on {
+    background: var(--cz-primary-soft);
+    color: var(--cz-primary);
+    border-color: transparent;
+}
+
+.causality-panel .attr-meta-count {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--cz-text-faint);
+}
+
+.causality-panel .attr-list {
+    border: 1px solid var(--cz-line-soft);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.causality-panel .attr-row {
+    display: grid;
+    grid-template-columns: 64px minmax(150px, 0.65fr) 1.35fr;
+    gap: 14px;
+    align-items: center;
+    padding: 8px 14px;
+    border-top: 1px solid var(--cz-line-soft);
+    font-size: 13px;
+}
+
+.causality-panel .attr-row:first-child {
+    border-top: none;
+}
+
+.causality-panel .attr-row:nth-child(odd) {
+    background: var(--cz-line-soft);
+}
+
+.causality-panel .op {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 2.5px 0;
+    border-radius: 5px;
+    width: 52px;
+}
+
+.causality-panel .op.set {
+    color: var(--cz-info);
+    background: var(--cz-info-soft);
+}
+
+.causality-panel .op.add {
+    color: var(--cz-success);
+    background: var(--cz-success-soft);
+}
+
+.causality-panel .op.remove {
+    color: var(--cz-error);
+    background: var(--cz-error-soft);
+}
+
+.causality-panel .attr-name {
+    font-weight: 600;
+    min-width: 0;
+}
+
+.causality-panel .attr-name .meta {
+    display: block;
+    font-size: 11px;
+    font-weight: 450;
+    color: var(--cz-text-faint);
+    margin-top: 1px;
+}
+
+.causality-panel .attr-value {
+    font-family: var(--cz-mono);
+    font-size: 12.3px;
+    color: var(--cz-text);
+    word-break: break-all;
+    min-width: 0;
+}
+
+.causality-panel .attr-value .was {
+    color: var(--cz-text-faint);
+    text-decoration: line-through;
+    margin-right: 8px;
+}
+
+.causality-panel .attr-empty {
+    padding: 18px;
+    text-align: center;
+    color: var(--cz-text-faint);
+    font-size: 13px;
+}
+
+/* ─── Responsive ─── */
+
+@media (max-width: 820px) {
+    .causality-panel .attr-row {
+        grid-template-columns: 56px 1fr;
+    }
+
+    .causality-panel .attr-row .attr-value {
+        grid-column: 1 / -1;
+        padding-left: 2px;
+    }
+}
+
+/* ─── Reduced motion ─── */
+
+@media (prefers-reduced-motion: reduce) {
+    .causality-panel *,
+    .causality-panel *::after,
+    .causality-panel *::before {
+        transition: none !important;
+    }
+}

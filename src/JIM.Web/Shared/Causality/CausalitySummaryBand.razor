@@ -1,0 +1,100 @@
+@using JIM.Web.Causality
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The causality summary band: a run context chip (Connected System · Run Profile with a status
+   dot), the execution timestamp, the plain-English summary sentence with entity mentions rendered
+   as highlighted token chips (linked where possible), and the colour-coded outcome pill strip.
+   Sentence segments are rendered as text through Blazor's encoder; MarkupString is never used, so
+   values sourced from connected systems cannot inject markup. *@
+
+<div class="summary">
+    <div class="summary-head">
+        @{
+            var runChipLabel = GetRunChipLabel();
+        }
+        @if (runChipLabel != null)
+        {
+            <span class="run-chip">
+                <span class="dot" style="--tone: @CausalityToneCss.CssVar(StatusTone)" aria-hidden="true"></span>
+                @runChipLabel
+            </span>
+        }
+        @if (Timestamp.HasValue)
+        {
+            var localTimestamp = Timestamp.Value.ToLocalTime();
+            <span class="summary-time" title="@localTimestamp.ToFriendlyDate()">@localTimestamp.ToRelativeTime()</span>
+        }
+    </div>
+    <div class="summary-sentence">
+        @foreach (var segment in Summary.Segments)
+        {
+            @if (segment is SummarySegment.Text text)
+            {
+                @text.Value
+            }
+            else if (segment is SummarySegment.Entity entity)
+            {
+                @if (!string.IsNullOrEmpty(entity.Href))
+                {
+                    <a class="hl" href="@entity.Href">@entity.Label</a>
+                }
+                else
+                {
+                    <span class="hl">@entity.Label</span>
+                }
+            }
+        }
+    </div>
+    @if (Summary.Pills.Count > 0)
+    {
+        <div class="outcome-strip">
+            @foreach (var pill in Summary.Pills)
+            {
+                <MudChip T="string" Variant="Variant.Text" Class="@($"oc-pill {CausalityToneCss.CssClass(pill.Tone)}")">@pill.Label</MudChip>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The summary content to render: sentence segments and outcome pills.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalitySummary Summary { get; set; } = null!;
+
+    /// <summary>
+    /// The page context supplying the run chip's Connected System and Run Profile names.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalityPageContext Context { get; set; } = null!;
+
+    /// <summary>
+    /// The execution timestamp (UTC), shown as a relative time with the full value in the tooltip.
+    /// </summary>
+    [Parameter]
+    public DateTime? Timestamp { get; set; }
+
+    /// <summary>
+    /// The tone of the run chip's status dot (Success when the item completed cleanly, Error when
+    /// it recorded an error).
+    /// </summary>
+    [Parameter]
+    public CausalityTone StatusTone { get; set; } = CausalityTone.Success;
+
+    private string? GetRunChipLabel()
+    {
+        var hasSystem = !string.IsNullOrWhiteSpace(Context.ConnectedSystemName);
+        var hasProfile = !string.IsNullOrWhiteSpace(Context.RunProfileName);
+
+        if (hasSystem && hasProfile)
+            return $"{Context.ConnectedSystemName} · {Context.RunProfileName}";
+        if (hasSystem)
+            return Context.ConnectedSystemName;
+        if (hasProfile)
+            return Context.RunProfileName;
+        return null;
+    }
+}

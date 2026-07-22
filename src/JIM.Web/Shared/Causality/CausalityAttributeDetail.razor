@@ -1,0 +1,113 @@
+@using JIM.Web.Causality
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The causality attribute change detail: a toolbar with a search box, count-annotated operation
+   filter chips (All/Set/Add/Remove) and an "n of m" indicator, above the attribute rows (operation
+   badge, name with demoted type and plurality, monospace value with the previous value struck
+   through where applicable). Filtering is pure C# over the supplied rows; the filter state lives in
+   this component and resets whenever it is recreated (e.g. a Timeline expander reopening). *@
+
+<div class="attr-toolbar">
+    <label class="attr-search">
+        <MudIcon Icon="@Icons.Material.Filled.Search" aria-hidden="true" />
+        <input type="text" placeholder="Filter attributes…" aria-label="Filter attributes"
+               @bind="_search" @bind:event="oninput" />
+    </label>
+    <div class="filter-chips" role="group" aria-label="Filter by operation">
+        <button type="button" class="@(_operationFilter == null ? "on" : null)"
+                aria-pressed="@(_operationFilter == null ? "true" : "false")"
+                @onclick="() => _operationFilter = null">All</button>
+        @foreach (var (operation, count) in GetOperationCounts())
+        {
+            <button type="button" class="@(_operationFilter == operation ? "on" : null)"
+                    aria-pressed="@(_operationFilter == operation ? "true" : "false")"
+                    @onclick="() => _operationFilter = operation">@operation · @count</button>
+        }
+    </div>
+    <span class="attr-meta-count">@GetFilteredRows().Count of @Rows.Count</span>
+</div>
+<div class="attr-list">
+    @{
+        var filteredRows = GetFilteredRows();
+    }
+    @if (filteredRows.Count == 0)
+    {
+        <div class="attr-empty">No attributes match the current filter.</div>
+    }
+    else
+    {
+        @foreach (var row in filteredRows)
+        {
+            <div class="attr-row">
+                <span class="op @GetOperationClass(row.Operation)">@row.Operation</span>
+                <span class="attr-name">
+                    @row.Name
+                    <span class="meta">@row.TypeAndPlurality</span>
+                </span>
+                <span class="attr-value">
+                    @if (!string.IsNullOrEmpty(row.PreviousValue))
+                    {
+                        <span class="was">@row.PreviousValue</span>
+                    }
+                    @if (string.IsNullOrEmpty(row.Value))
+                    {
+                        <EmptyValue />
+                    }
+                    else
+                    {
+                        @row.Value
+                    }
+                </span>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The normalised attribute change rows to display.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<CausalityAttributeRow> Rows { get; set; } = [];
+
+    private string _search = string.Empty;
+    private CausalityAttributeOperation? _operationFilter;
+
+    private List<(CausalityAttributeOperation Operation, int Count)> GetOperationCounts()
+    {
+        return new[] { CausalityAttributeOperation.Set, CausalityAttributeOperation.Add, CausalityAttributeOperation.Remove }
+            .Select(operation => (Operation: operation, Count: Rows.Count(r => r.Operation == operation)))
+            .Where(entry => entry.Count > 0)
+            .ToList();
+    }
+
+    private List<CausalityAttributeRow> GetFilteredRows()
+    {
+        IEnumerable<CausalityAttributeRow> rows = Rows;
+
+        if (_operationFilter is { } operation)
+            rows = rows.Where(r => r.Operation == operation);
+
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var search = _search.Trim();
+            rows = rows.Where(r =>
+                r.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || (r.Value?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        return rows.ToList();
+    }
+
+    private static string GetOperationClass(CausalityAttributeOperation operation)
+    {
+        return operation switch
+        {
+            CausalityAttributeOperation.Add => "add",
+            CausalityAttributeOperation.Remove => "remove",
+            _ => "set"
+        };
+    }
+}

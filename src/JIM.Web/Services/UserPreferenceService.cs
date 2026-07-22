@@ -113,6 +113,31 @@ public interface IUserPreferenceService
     /// <param name="categoryName">The category name (e.g., "Identity", "Contact").</param>
     /// <param name="expanded">Whether the category panel is expanded.</param>
     Task SetCategoryExpandedAsync(int objectTypeId, string categoryName, bool expanded);
+
+    /// <summary>
+    /// Gets the user's preferred causality visualisation view.
+    /// </summary>
+    /// <returns>"flow", "timeline" or "graph"; null if no preference (the causality panel decides).</returns>
+    Task<string?> GetCausalityViewAsync();
+
+    /// <summary>
+    /// Sets the user's preferred causality visualisation view.
+    /// </summary>
+    /// <param name="view">"flow", "timeline" or "graph".</param>
+    Task SetCausalityViewAsync(string view);
+
+    /// <summary>
+    /// Gets the user's causality technical-names preference (emphasise MVO/CSO vocabulary over
+    /// plain language).
+    /// </summary>
+    /// <returns>True if technical names are emphasised, false if plain language, null if no preference (default to off).</returns>
+    Task<bool?> GetCausalityTechNamesAsync();
+
+    /// <summary>
+    /// Sets the user's causality technical-names preference.
+    /// </summary>
+    /// <param name="enabled">Whether technical names are emphasised.</param>
+    Task SetCausalityTechNamesAsync(bool enabled);
 }
 
 /// <summary>
@@ -126,6 +151,8 @@ public class UserPreferenceService : IUserPreferenceService
     private const string DrawerPinnedKey = "drawerPinned";
     private const string MvoDetailViewModeKey = "mvoDetailViewMode";
     private const string TableDenseKey = "tableDense";
+    private const string CausalityViewKey = "causalityView";
+    private const string CausalityTechNamesKey = "causalityTechNames";
     private const int DefaultRowsPerPage = 10;
 
     /// <summary>
@@ -491,6 +518,94 @@ public class UserPreferenceService : IUserPreferenceService
         {
             var key = $"categoryExpanded_{objectTypeId}_{categoryName}";
             await _jsRuntime.InvokeVoidAsync("jimPreferences.set", key, expanded ? "true" : "false");
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, ignore
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), ignore
+        }
+    }
+
+    /// <summary>
+    /// Valid causality view values.
+    /// </summary>
+    private static readonly string[] ValidCausalityViews = ["flow", "timeline", "graph"];
+
+    /// <inheritdoc />
+    public async Task<string?> GetCausalityViewAsync()
+    {
+        try
+        {
+            var value = await _jsRuntime.InvokeAsync<string?>("jimPreferences.get", CausalityViewKey);
+            if (value != null && ValidCausalityViews.Contains(value))
+                return value;
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, return default
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), return default
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetCausalityViewAsync(string view)
+    {
+        if (!ValidCausalityViews.Contains(view))
+            return;
+
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("jimPreferences.set", CausalityViewKey, view);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, ignore
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), ignore
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool?> GetCausalityTechNamesAsync()
+    {
+        try
+        {
+            var value = await _jsRuntime.InvokeAsync<string?>("jimPreferences.get", CausalityTechNamesKey);
+            return value switch
+            {
+                "true" => true,
+                "false" => false,
+                _ => null // No preference saved - default to plain language
+            };
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuit disconnected, return default
+        }
+        catch (InvalidOperationException)
+        {
+            // JS interop not available (e.g., during prerendering), return default
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc />
+    public async Task SetCausalityTechNamesAsync(bool enabled)
+    {
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("jimPreferences.set", CausalityTechNamesKey, enabled ? "true" : "false");
         }
         catch (JSDisconnectedException)
         {

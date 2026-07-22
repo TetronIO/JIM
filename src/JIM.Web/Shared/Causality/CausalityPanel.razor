@@ -1,0 +1,157 @@
+@using JIM.Models.Activities
+@using JIM.Web.Causality
+@inject IUserPreferenceService PreferenceService
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The causality visualisation panel for a Run Profile Execution Item. Owns the current view, the
+   technical-names toggle and the expanded-event state; builds the causality model and summary once
+   per (Item, Context) pair and renders the toolbar, summary band and the active view. The available
+   view list drives the segmented control so the Flow and Graph views can register in later phases
+   without rework; while only the Timeline exists the control stays hidden. Persisted view and
+   technical-names preferences load on first render per the TableDensityToggle idiom; a stored
+   preference for a not-yet-available view falls back to the Timeline without being overwritten. *@
+
+<div class="causality-panel">
+    @if (Item.SyncOutcomes.Count == 0)
+    {
+        <div class="pa-4">
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                Outcome tracking was not enabled when this activity was recorded.
+                Only the operation type is available.
+            </MudAlert>
+        </div>
+    }
+    else if (_model != null && _summary != null)
+    {
+        <div class="causality-toolbar">
+            @if (AvailableViews.Count > 1)
+            {
+                <div class="seg" role="group" aria-label="Causality view">
+                    @foreach (var view in AvailableViews)
+                    {
+                        <button type="button" class="@(view == _view ? "on" : null)"
+                                aria-pressed="@(view == _view ? "true" : "false")"
+                                @onclick="() => SelectViewAsync(view)">@GetViewLabel(view)</button>
+                    }
+                </div>
+            }
+            <button type="button" class="toggle-line @(_technicalNames ? "on" : null)"
+                    aria-pressed="@(_technicalNames ? "true" : "false")"
+                    @onclick="ToggleTechnicalNamesAsync">
+                <span class="track" aria-hidden="true"></span> Technical names
+            </button>
+        </div>
+
+        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()" />
+
+        <div class="canvas-wrap">
+            @switch (_view)
+            {
+                case CausalityView.Timeline:
+                default:
+                    <CausalityTimelineView Model="_model" TechnicalNames="_technicalNames"
+                                           @bind-ExpandedEvent="_expandedEvent" />
+                    break;
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// The views currently implemented. Phases 3 and 4 add Flow and Graph here, which reveals the
+    /// segmented control and lets stored preferences for those views take effect.
+    /// </summary>
+    private static readonly IReadOnlyList<CausalityView> AvailableViews = [CausalityView.Timeline];
+
+    /// <summary>
+    /// The Run Profile Execution Item whose causality is visualised.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ActivityRunProfileExecutionItem Item { get; set; } = null!;
+
+    /// <summary>
+    /// The page-level context (run, Connected System, record and Metaverse Object Type names) used
+    /// for sentence composition and link building.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalityPageContext Context { get; set; } = null!;
+
+    /// <summary>
+    /// The execution timestamp (UTC) shown in the summary band.
+    /// </summary>
+    [Parameter]
+    public DateTime? Timestamp { get; set; }
+
+    private CausalityModel? _model;
+    private CausalitySummary? _summary;
+    private CausalityView _view = CausalityView.Timeline;
+    private bool _technicalNames;
+    private CausalityEvent? _expandedEvent;
+    private ActivityRunProfileExecutionItem? _builtItem;
+    private CausalityPageContext? _builtContext;
+
+    protected override void OnParametersSet()
+    {
+        // Build once per (Item, Context) pair; parent re-renders with unchanged values must not
+        // discard the expanded-event state by rebuilding the model
+        if (ReferenceEquals(Item, _builtItem) && Equals(Context, _builtContext))
+            return;
+
+        _builtItem = Item;
+        _builtContext = Context;
+        _model = CausalityModelBuilder.Build(Item, Context);
+        _summary = CausalitySummaryBuilder.Build(_model);
+        _expandedEvent = null;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        // No try/catch needed: the preference service swallows JS interop unavailability internally
+        var storedView = CausalityViewPreference.FromKey(await PreferenceService.GetCausalityViewAsync());
+        var storedTechNames = await PreferenceService.GetCausalityTechNamesAsync();
+
+        // A stored preference for a view that has not shipped yet (e.g. "flow" before Phase 3)
+        // keeps the default without overwriting the stored value, so it takes effect when the
+        // view becomes available
+        if (storedView.HasValue && AvailableViews.Contains(storedView.Value))
+            _view = storedView.Value;
+
+        _technicalNames = storedTechNames == true;
+        StateHasChanged();
+    }
+
+    private async Task SelectViewAsync(CausalityView view)
+    {
+        _view = view;
+        await PreferenceService.SetCausalityViewAsync(CausalityViewPreference.ToKey(view));
+    }
+
+    private async Task ToggleTechnicalNamesAsync()
+    {
+        _technicalNames = !_technicalNames;
+        await PreferenceService.SetCausalityTechNamesAsync(_technicalNames);
+    }
+
+    private CausalityTone GetStatusTone()
+    {
+        return Item.ErrorType is not null and not ActivityRunProfileExecutionItemErrorType.NotSet
+            ? CausalityTone.Error
+            : CausalityTone.Success;
+    }
+
+    private static string GetViewLabel(CausalityView view)
+    {
+        return view switch
+        {
+            CausalityView.Flow => "Flow",
+            CausalityView.Graph => "Graph",
+            _ => "Timeline"
+        };
+    }
+}

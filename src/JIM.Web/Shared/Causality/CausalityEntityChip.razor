@@ -1,0 +1,79 @@
+@using JIM.Web.Causality
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* A causality entity chip: a glyph circle identifying the entity kind (CS, R, ID, SR, ...), an
+   optional demoted sub-label and the entity name with ellipsis overflow. Renders as a link when
+   Href is provided, otherwise as a plain chip. *@
+
+@if (!string.IsNullOrEmpty(Href))
+{
+    <a class="chip" href="@Href" title="@Label">@ChipContent</a>
+}
+else
+{
+    <span class="chip" title="@Label">@ChipContent</span>
+}
+
+@code {
+    /// <summary>
+    /// The entity's display name.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Destination href; when null the chip renders unlinked.
+    /// </summary>
+    [Parameter]
+    public string? Href { get; set; }
+
+    /// <summary>
+    /// The kind of entity, selecting the glyph circle's text and colour.
+    /// </summary>
+    [Parameter]
+    public CausalityEntityKind Kind { get; set; }
+
+    /// <summary>
+    /// Optional demoted sub-label rendered before the name (e.g. the record's object type).
+    /// </summary>
+    [Parameter]
+    public string? SubLabel { get; set; }
+
+    private RenderFragment ChipContent => __builder =>
+    {
+        <span class="glyph @GetGlyphClass()" aria-hidden="true">@GetGlyphText()</span>
+        @if (!string.IsNullOrEmpty(SubLabel))
+        {
+            <span class="sub">@SubLabel:</span>
+        }
+        <span class="name-ellip">@Label</span>
+    };
+
+    private string GetGlyphText()
+    {
+        return Kind switch
+        {
+            CausalityEntityKind.ConnectedSystem => "CS",
+            CausalityEntityKind.Record => "R",
+            CausalityEntityKind.Identity => "ID",
+            CausalityEntityKind.SynchronisationRule => "SR",
+            CausalityEntityKind.PendingExport => "PE",
+            CausalityEntityKind.DeletionRecord => "DR",
+            _ => "RP"
+        };
+    }
+
+    private string GetGlyphClass()
+    {
+        return Kind switch
+        {
+            CausalityEntityKind.ConnectedSystem => "sys",
+            CausalityEntityKind.Record => "rec",
+            CausalityEntityKind.Identity => "idn",
+            CausalityEntityKind.SynchronisationRule => "rule",
+            _ => "other"
+        };
+    }
+}

@@ -8,6 +8,7 @@
 @using JIM.Models.Staging.DTOs
 @using JIM.Models.Transactional
 @using JIM.Utilities;
+@using JIM.Web.Causality
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 
@@ -233,31 +234,20 @@
             </MudGrid>
         </MudPaper>
 
-        @* Causality Tree - shows the outcome graph when outcomes are recorded *@
+        @* Causality - shows what the run did to this object and what it caused *@
         @if (_activityRunProfileExecutionItem.SyncOutcomes.Count > 0)
         {
             <MudText Typo="Typo.h6" Class="mb-2">
-                Causality Tree
+                Causality
             </MudText>
             <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
                 What happened during processing and the downstream consequences.
             </MudText>
-            <MudPaper Class="pa-5 mb-5" Outlined="true">
-                <OutcomeTree Outcomes="_activityRunProfileExecutionItem.SyncOutcomes.ToList()"
-                             AttributeChanges="_activityRunProfileExecutionItem.ConnectedSystemObjectChange?.AttributeChanges?.ToList()"
-                             MvoAttributeChanges="_activityRunProfileExecutionItem.MetaverseObjectChange?.AttributeChanges?.ToList()"
-                             ConnectedSystemName="@_connectedSystemHeader?.Name"
-                             ConnectedSystemId="@_connectedSystemHeader?.Id"
-                             RunProfileName="@_activity?.TargetName"
-                             CsoExternalId="@(_externalIdAttributeValue?.ToStringNoName() ?? _activityRunProfileExecutionItem.ExternalIdSnapshot)"
-                             CsoDisplayName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.DisplayNameOrId ?? _activityRunProfileExecutionItem.DisplayNameSnapshot)"
-                             CsoObjectTypeName="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.Type?.Name ?? _activityRunProfileExecutionItem.ObjectTypeSnapshot)"
-                             CsoId="@_activityRunProfileExecutionItem.ConnectedSystemObjectId"
-                             CsoConnectedSystemId="@(_activityRunProfileExecutionItem.ConnectedSystemObject?.ConnectedSystemId ?? _connectedSystemHeader?.Id)"
-                             MvoTypePluralName="@_metaverseObjectType?.PluralName"
-                             MvoTypeName="@_metaverseObjectType?.Name"
-                             InitiallyExpanded="true" />
-            </MudPaper>
+            <div class="mb-5">
+                <CausalityPanel Item="_activityRunProfileExecutionItem"
+                                Context="@BuildCausalityPageContext()"
+                                Timestamp="@_activity?.Executed" />
+            </div>
         }
 
         @* Projection Flow Visualisation - shown for Projected items *@
@@ -1012,6 +1002,24 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private MetaverseObjectHeader? _initiatorMetaverseObjectHeader;
     private List<ConnectedSystemHeader>? _deletionTriggerSystems;
 
+
+    /// <summary>
+    /// Builds the causality panel's page context from the values this page has already loaded,
+    /// falling back to the item's snapshot fields when the Connected System Object has been deleted.
+    /// </summary>
+    private CausalityPageContext BuildCausalityPageContext() => new(
+        ConnectedSystemId: _connectedSystemHeader?.Id,
+        ConnectedSystemName: _connectedSystemHeader?.Name,
+        RunProfileName: _activity?.TargetName,
+        CsoId: _activityRunProfileExecutionItem?.ConnectedSystemObjectId,
+        CsoDisplayName: _activityRunProfileExecutionItem?.ConnectedSystemObject?.DisplayNameOrId
+                        ?? _activityRunProfileExecutionItem?.DisplayNameSnapshot,
+        CsoExternalId: _externalIdAttributeValue?.ToStringNoName()
+                       ?? _activityRunProfileExecutionItem?.ExternalIdSnapshot,
+        CsoObjectTypeName: _activityRunProfileExecutionItem?.ConnectedSystemObject?.Type?.Name
+                           ?? _activityRunProfileExecutionItem?.ObjectTypeSnapshot,
+        MvoTypeName: _metaverseObjectType?.Name,
+        MvoTypePluralName: _metaverseObjectType?.PluralName);
 
     private string GetMvoHref(Guid mvoId) =>
         _metaverseObjectType != null
