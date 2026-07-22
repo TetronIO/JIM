@@ -114,8 +114,10 @@ public class DriftDetectionService
 
         foreach (var exportRule in applicableExportRules)
         {
-            // Check each Attribute Flow mapping in the export rule
-            foreach (var mapping in exportRule.AttributeFlowRules)
+            // Check each Attribute Flow mapping in the export rule. Initial Export Only mappings (#223)
+            // are excluded: their target attribute is unmanaged by JIM once the Connected System Object is
+            // past provisioning, so a diverged value is external ownership, not drift.
+            foreach (var mapping in exportRule.AttributeFlowRules.Where(m => !m.InitialExportOnly))
             {
                 if (mapping.TargetConnectedSystemAttribute == null)
                 {

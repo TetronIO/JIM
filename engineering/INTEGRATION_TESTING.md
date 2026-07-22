@@ -89,7 +89,7 @@ This single script handles everything:
 ./test/integration/Run-IntegrationTests.ps1 -Template Scale100k5kGroups       # long-tail, OpenLDAP + Scenario 8 only
 
 # Run only a specific test step (steps vary by scenario)
-./test/integration/Run-IntegrationTests.ps1 -Step Joiner                          # Scenario 1: Joiner, Mover, Mover-Rename, Mover-Move, Disable, Enable, Leaver, Reconnection
+./test/integration/Run-IntegrationTests.ps1 -Step Joiner                          # Scenario 1: Joiner, Mover, Mover-Rename, Mover-Move, Disable, Enable, Leaver, Reconnection, InitialExportOnly
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario2-CrossDomainSync" -Step Provision  # Scenario 2: Provision, ForwardSync, ReverseSync, Conflict
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario7-ClearConnectedSystemObjects" -Step DeleteHistory  # Scenario 7: DeleteHistory, KeepHistory, EdgeCases
 ./test/integration/Run-IntegrationTests.ps1 -Scenario "Scenario8-CrossDomainEntitlementSync" -Step InitialSync  # Scenario 8: InitialSync, ForwardSync, DetectDrift, ReassertState, NewGroup, DeleteGroup, LeaverCohort (OpenLDAP only)
@@ -132,7 +132,7 @@ In **Containers Used**, `samba-* / openldap-primary` means the scenario runs aga
 
 | Scenario | Description | Containers Used |
 |----------|-------------|-----------------|
-| `Scenario1-HRToIdentityDirectory` | HR + Training CSV -> AD provisioning (Joiner/Mover/Leaver) | samba-ad-primary / openldap-primary |
+| `Scenario1-HRToIdentityDirectory` | HR + Training CSV -> AD provisioning (Joiner/Mover/Leaver); Initial Export Only attribute flows (#223) | samba-ad-primary / openldap-primary |
 | `Scenario2-CrossDomainSync` | APAC -> EMEA directory sync | samba-ad-source, samba-ad-target / openldap-primary |
 | `Scenario3-GALSYNC` | AD -> CSV global address list export (stub, not implemented) | samba-ad-primary / openldap-primary |
 | `Scenario4-DeletionRules` | Deletion rules and grace period testing | samba-ad-primary / openldap-primary |
@@ -450,6 +450,7 @@ All templates generate realistic enterprise data following normal distribution p
 | 2e | **Enable** | User status set back to `Active` in CSV -> AD account re-enabled (Samba AD only) |
 | 3 | **Leaver** | User removed from CSV -> deprovisioned from AD (respecting deletion rules) |
 | 4 | **Reconnection** | User re-added to CSV within grace period -> scheduled deletion cancelled |
+| 5 | **InitialExportOnly** | Employee Type -> employeeType export mapping marked Initial Export Only (#223): a fresh joiner proves the one-time value flows on the provisioning export, a subsequent Metaverse change is not re-exported, and an external directory edit survives Drift Detection while the sibling managed (title) attribute is corrected in the same run |
 
 **Diagnostic steps** (run a partial pipeline; do not participate in `-Step All`):
 
@@ -483,6 +484,9 @@ Each test step is triggered via a `-Step` parameter. This allows JIM to complete
 # Step 4: Reconnection - Re-add user before grace period, verify preserved
 ./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step Reconnection -Template Small
 
+# Step 5: InitialExportOnly - Add Employee Type -> employeeType Initial Export Only mapping, verify provisioning/source-change/external-change behaviour (#223)
+./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step InitialExportOnly -Template Small
+
 # Run all steps sequentially (waits for JIM between each)
 ./Invoke-Scenario1-HRToIdentityDirectory.ps1 -Step All -Template Small
 ```
@@ -497,6 +501,7 @@ Each test step is triggered via a `-Step` parameter. This allows JIM to complete
 | `-Step Mover-Move` | Changes department (Admin->Finance) | User moved from OU=Admin to OU=Finance via LDAP move operation |
 | `-Step Leaver` | Removes user from HR CSV | User disabled/deleted in AD per deletion rules |
 | `-Step Reconnection` | Re-adds user to CSV | Scheduled deletion cancelled, user remains active |
+| `-Step InitialExportOnly` | Adds an Initial Export Only mapping, then a fresh joiner, a source change, and an external change | One-time value flows on Create, is not re-exported on a Metaverse change, and survives Drift Correction while the managed sibling attribute is corrected |
 | `-Step All` | Runs all steps sequentially | Full lifecycle validated |
 
 The `-Step All` option includes built-in waits and JIM Run Profile triggers between steps to automate the full test cycle.

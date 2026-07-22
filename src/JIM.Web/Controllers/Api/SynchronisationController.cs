@@ -2195,6 +2195,11 @@ public class SynchronisationController(
 
             mapping.TargetConnectedSystemAttributeId = csAttr.Id;
             mapping.TargetConnectedSystemAttribute = csAttr;
+
+            // Initial Export Only applies to export mappings only (#223). The entity default is false;
+            // only override when the request supplies a value.
+            if (request.InitialExportOnly.HasValue)
+                mapping.InitialExportOnly = request.InitialExportOnly.Value;
         }
 
         // Add sources

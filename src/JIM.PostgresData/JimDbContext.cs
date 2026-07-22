@@ -328,6 +328,12 @@ public class JimDbContext : DbContext
             .Property(srm => srm.NullIsValue)
             .HasDefaultValue(false);
 
+        // Initial Export Only (#223). Defaults to false (the attribute is fully managed); the store-level
+        // default backfills existing rows on migration.
+        modelBuilder.Entity<SyncRuleMapping>()
+            .Property(srm => srm.InitialExportOnly)
+            .HasDefaultValue(false);
+
         // ObjectMatchingRule can belong to either SyncRule or ConnectedSystemObjectType (mutually exclusive)
         modelBuilder.Entity<SyncRule>()
             .HasMany(sr => sr.ObjectMatchingRules)

@@ -45,6 +45,13 @@ public class SyncRuleMappingDto
     /// </summary>
     public bool NullIsValue { get; set; }
 
+    /// <summary>
+    /// When true, this mapping only flows during the initial provisioning (Create) export; afterwards the
+    /// target attribute is unmanaged by JIM on that Connected System Object (#223). Only meaningful for
+    /// export mappings.
+    /// </summary>
+    public bool InitialExportOnly { get; set; }
+
     public List<SyncRuleMappingSourceDto> Sources { get; set; } = new();
 
     public static SyncRuleMappingDto FromEntity(SyncRuleMapping entity)
@@ -62,6 +69,7 @@ public class SyncRuleMappingDto
             CaseNormalisation = entity.CaseNormalisation,
             Priority = entity.Priority,
             NullIsValue = entity.NullIsValue,
+            InitialExportOnly = entity.InitialExportOnly,
             Sources = entity.Sources.Select(SyncRuleMappingSourceDto.FromEntity).ToList()
         };
     }
@@ -136,6 +144,14 @@ public class CreateSyncRuleMappingRequest
     /// attribute-priority-order endpoint.
     /// </summary>
     public bool? NullIsValue { get; set; }
+
+    /// <summary>
+    /// For export rules only: when true, the mapping only flows during the initial provisioning (Create)
+    /// export; afterwards the target attribute is unmanaged by JIM on that Connected System Object and
+    /// Drift Correction does not re-assert it (#223). When omitted, defaults to false. Ignored for
+    /// import rules.
+    /// </summary>
+    public bool? InitialExportOnly { get; set; }
 
     /// <summary>
     /// The sources for this mapping (attribute mappings or expressions).
