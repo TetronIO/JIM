@@ -1,6 +1,6 @@
 # Causality Visualisation Redesign
 
-- **Status:** Planned
+- **Status:** Doing
 - **Created:** 2026-07-22
 - **Author:** JayVDZ (drafted with Claude Code)
 - **Issue:** [#1087](https://github.com/TetronIO/JIM/issues/1087)
@@ -29,7 +29,7 @@ The two data-fidelity gaps that previously blocked a redesign have now shipped: 
 
 - Renaming MVO/CSO terminology across the rest of JIM; that is the Record/Identity umbrella (#1088) and its waves (#1089 to #1092). This feature introduces the terminology only within the causality visualisation.
 - No changes to code identifiers, database schema, or the outcome capture pipeline; #1085/#1086 completed the data work.
-- No new third-party dependencies (no graph/visualisation libraries); CSS grid and hand-rolled SVG only.
+- No new product/runtime dependencies (no graph/visualisation libraries); CSS grid and hand-rolled SVG only. (bUnit was approved as a test-only dependency for component testing; it does not ship in the product.)
 - No changes to the Activities list pages or run summary pages beyond the Run Profile Execution Item detail view.
 - No animation/physics-based graph interactions; the Graph view is a static layered layout.
 
@@ -94,7 +94,7 @@ The interactive mock-up (internal) is the canonical example set: https://claude.
 
 ## Constraints
 
-- No new NuGet packages or JavaScript libraries; must work air-gapped.
+- No new product/runtime NuGet packages or JavaScript libraries; must work air-gapped. Test-only dependencies (bUnit) are permitted.
 - Both light and dark themes.
 - British English throughout; no em dashes in UI text; JIM domain nouns Title Cased ("Synchronisation Rule" in full).
 - Code identifiers (MVO/CSO class and property names) unchanged.

@@ -1,8 +1,8 @@
 # Causality Visualisation Redesign: Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 in progress)
 - **Issue:** [#1087](https://github.com/TetronIO/JIM/issues/1087)
-- **PRD:** [`engineering/prd/PRD_CAUSALITY_VISUALISATION_REDESIGN.md`](../prd/PRD_CAUSALITY_VISUALISATION_REDESIGN.md)
+- **PRD:** [`engineering/prd/doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md`](../../prd/doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md)
 - **Design reference:** approved interactive mock-up (internal): https://claude.ai/code/artifact/c928e648-1fb1-4f39-961d-9c73c497dacb
 
 ## Overview
@@ -89,23 +89,27 @@ Each phase is TDD (failing tests first), builds clean, and leaves the page worki
 - `OutcomeDisplayMap` with complete coverage of all 20 outcome types (plain label, technical label, tone, icon); `Helpers.GetOutcomeType*` delegate to it; add the missing `AssertedNull`/`NoContributor` icons.
 - `OutcomeDetailMessageParser` extraction.
 - `CausalityModelBuilder` + `CausalitySummaryBuilder` with a test matrix over the three mock-up scenarios (new joiner, leaver, export failure) plus: no-change items, pre-#1085 data (null `SyncRuleId`/`SyncRuleName`), pre-#1086 deletions (no detail message), Standard vs Detailed tracking levels, and the generic-sentence fallback.
-- Tests in `test/JIM.Web.Api.Tests/` (the project that references JIM.Web; no bUnit exists, which is why all logic lives in these plain classes and the Razor stays thin).
+- New test project `test/JIM.Web.Tests/` (NUnit + bUnit 2.7.2, referencing JIM.Web) hosts all causality tests: plain-class tests in this phase, component tests from Phase 2. The logic lives in plain classes because four renderers (summary band + three views) consume it, not as a testing workaround; bUnit covers what remains in the Razor layer.
+- Register the new project in `JIM.sln`, and update `test/CLAUDE.md` and the root `CLAUDE.md` (test project list, and retire the "no UI tests exist" carve-out for UI-only changes).
 
 ### Phase 2: Panel, summary band and Timeline view
 
 - `CausalityPanel`, `CausalitySummaryBand`, `CausalityEntityChip`, `CausalityEventCard`, `CausalityTimelineView`, `CausalityAttributeDetail`, `causality.css`.
 - User preference methods and the view/technical-names toggles.
 - Replace the `<OutcomeTree>` section in `ActivityRunProfileExecutionItemDetail.razor` with `<CausalityPanel>`; delete `OutcomeTree.razor` / `OutcomeTreeNode.razor` and the `.outcome-tree` CSS block.
+- bUnit component tests: summary band segment/pill rendering (entity chips link correctly, hostile values encoded), Timeline nesting and inline attribute expansion, MvoDeleted deletion-record link, view/technical-names toggles persisting via a stubbed preference service.
 - Timeline ships first because it is structurally closest to the current tree: full information parity from day one.
 
 ### Phase 3: Flow view
 
 - `CausalityFlowView` with the three-column grid, per-system downstream grouping, `causality.js` measurement interop, SVG connectors, responsive stacking, drawer wiring.
+- bUnit component tests: lane/column assignment, per-system group cards, drawer opening on card selection, graceful rendering when the measurement interop fails (bUnit's JSInterop stubs simulate the failure).
 - Flow becomes the default view (matching the mock-up's default).
 
 ### Phase 4: Graph view
 
 - `CausalityGraphView` with the C# layered layout, node selection into the drawer, legend.
+- bUnit component tests: node/edge counts for known tree shapes, selection behaviour, label truncation.
 - Deliberately last: the PRD's open question resolves as "ship it, but sequence it so it can be dropped from the PR without rework if review prefers".
 
 ### Phase 5: Runtime validation, docs and changelog
@@ -119,7 +123,7 @@ Each phase is TDD (failing tests first), builds clean, and leaves the page worki
 
 - Every acceptance criterion in the PRD ticks, including per-user view persistence and the #1085/#1086 fidelity rendering.
 - All 20 outcome types have complete display mappings, proven by tests; no outcome shape renders an exception or an empty summary.
-- `dotnet build JIM.sln` and `dotnet test JIM.sln` pass with zero errors and warnings; no new NuGet or JS dependencies.
+- `dotnet build JIM.sln` and `dotnet test JIM.sln` pass with zero errors and warnings; no new product/runtime dependencies (bUnit is test-only).
 - Old components and their CSS removed; no dead code left behind.
 
 ## Benefits
@@ -133,13 +137,13 @@ Each phase is TDD (failing tests first), builds clean, and leaves the page worki
 
 - #1085 and #1086: shipped (PR #1098).
 - Existing user preferences service and theme token system: no changes beyond additive preference methods.
-- None external; air-gap safe.
+- **bUnit 2.7.2** (MIT; actively maintained; supports net10.0 and NUnit; test-only, nothing ships in JIM containers) - approved 2026-07-22 under the third-party dependency governance process, for the new `test/JIM.Web.Tests/` project. No product/runtime dependencies added; air-gap safe.
 
 ## Risks & Mitigations
 
 | Risk | Mitigation |
 |------|------------|
-| No bUnit means Razor markup is untestable | All decision logic lives in `OutcomeDisplayMap`/builders (unit-tested); components are thin projections; Phase 5 runtime validation covers the rendering |
+| Razor-layer defects (parameter wiring, conditional rendering, callbacks) | Decision logic lives in `OutcomeDisplayMap`/builders (unit-tested); the thin components get bUnit tests per phase; Phase 5 runtime validation covers real-browser rendering |
 | Summary sentences read wrongly for unanticipated outcome shapes | Template-per-shape with a tested generic fallback; the matrix includes no-change, error and legacy-data cases |
 | Connected-system values contain hostile strings | Sentence and attribute values are rendered as text segments by Blazor's encoder; `MarkupString` is never used for data-derived content |
 | Flow connector measurement races Blazor rendering | Measure in `OnAfterRenderAsync` + `requestAnimationFrame`; re-measure on resize; connectors are decorative, so failure degrades to a clean three-column layout |
