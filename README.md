@@ -4,18 +4,12 @@
   <img src="https://junctional.io/assets/jim-logo.png" alt="JIM" width="400"/>
 </p>
 
-[![CI](https://github.com/TetronIO/JIM/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TetronIO/JIM/actions/workflows/ci.yml)
-&nbsp;
-[![.NET 10.0](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
-&nbsp;
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791)](https://www.postgresql.org/)
-&nbsp;
-[![PowerShell Gallery](https://img.shields.io/powershellgallery/v/JIM?label=PSGallery&color=blue)](https://www.powershellgallery.com/packages/JIM/)
-&nbsp;
-[![License](https://img.shields.io/badge/License-Source_Available-orange)](https://junctional.io/license)
-&nbsp;
-[![Documentation](https://img.shields.io/badge/Docs-docs.junctional.io-green)](https://docs.junctional.io/)
-&nbsp;
+[![CI](https://github.com/TetronIO/JIM/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TetronIO/JIM/actions/workflows/ci.yml)&nbsp;
+[![.NET 10.0](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)&nbsp;
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791)](https://www.postgresql.org/)&nbsp;
+[![PowerShell Gallery](https://img.shields.io/powershellgallery/v/JIM?label=PSGallery&color=blue)](https://www.powershellgallery.com/packages/JIM/)&nbsp;
+[![License](https://img.shields.io/badge/License-Source_Available-orange)](https://junctional.io/license)&nbsp;
+[![Documentation](https://img.shields.io/badge/Docs-docs.junctional.io-green)](https://docs.junctional.io/)&nbsp;
 [![Open in GitHub Codespaces](https://img.shields.io/badge/Open_in-Codespaces-black?logo=github)](https://codespaces.new/TetronIO/JIM?devcontainer_path=.devcontainer/devcontainer.json)
 
 JIM is a modern Identity Management system designed for organisations with complex identity synchronisation requirements. It is self-hosted, container-deployable, and works in both connected and air-gapped networks. Features include:
@@ -49,22 +43,14 @@ Enterprise identity synchronisation typically requires cloud connectivity, compl
 
 JIM is designed to solve both enterprise-scale identity management and micro-deployment challenges for edge-sync scenarios.
 
-![Air-gapped deployment](https://img.shields.io/badge/%E2%9C%93-Air--gapped_deployment-2ea44f?style=for-the-badge)
-&nbsp;
-![Container-native](https://img.shields.io/badge/%E2%9C%93-Container--native-2ea44f?style=for-the-badge)
-&nbsp;
-![Source available](https://img.shields.io/badge/%E2%9C%93-Source_available-2ea44f?style=for-the-badge)
-&nbsp;
-![SSO with any OIDC provider](https://img.shields.io/badge/%E2%9C%93-SSO_with_any_OIDC_provider-2ea44f?style=for-the-badge)
-&nbsp;
-![Full REST API](https://img.shields.io/badge/%E2%9C%93-Full_REST_API-2ea44f?style=for-the-badge)
-&nbsp;
-![PowerShell automation](https://img.shields.io/badge/%E2%9C%93-PowerShell_automation-2ea44f?style=for-the-badge)
-&nbsp;
-![Deploy in minutes](https://img.shields.io/badge/%E2%9C%93-Deploy_in_minutes-2ea44f?style=for-the-badge)
-&nbsp;
-![Enterprise scale](https://img.shields.io/badge/%E2%9C%93-Enterprise_scale-2ea44f?style=for-the-badge)
-&nbsp;
+![Air-gapped deployment](https://img.shields.io/badge/%E2%9C%93-Air--gapped_deployment-2ea44f?style=for-the-badge)&nbsp;
+![Container-native](https://img.shields.io/badge/%E2%9C%93-Container--native-2ea44f?style=for-the-badge)&nbsp;
+![Source available](https://img.shields.io/badge/%E2%9C%93-Source_available-2ea44f?style=for-the-badge)&nbsp;
+![SSO with any OIDC provider](https://img.shields.io/badge/%E2%9C%93-SSO_with_any_OIDC_provider-2ea44f?style=for-the-badge)&nbsp;
+![Full REST API](https://img.shields.io/badge/%E2%9C%93-Full_REST_API-2ea44f?style=for-the-badge)&nbsp;
+![PowerShell automation](https://img.shields.io/badge/%E2%9C%93-PowerShell_automation-2ea44f?style=for-the-badge)&nbsp;
+![Deploy in minutes](https://img.shields.io/badge/%E2%9C%93-Deploy_in_minutes-2ea44f?style=for-the-badge)&nbsp;
+![Enterprise scale](https://img.shields.io/badge/%E2%9C%93-Enterprise_scale-2ea44f?style=for-the-badge)&nbsp;
 ![Micro deployments for edge sync](https://img.shields.io/badge/%E2%9C%93-Micro_deployments_for_edge_sync-2ea44f?style=for-the-badge)
 
 ## Scenarios
