@@ -407,10 +407,13 @@ public class ExportEvaluationServer
                     result.PendingExports.Add(pendingExport);
                 }
 
-                // Collect provisioning CSOs for batch creation when deferSave is true
+                // Collect provisioning CSOs for batch creation when deferSave is true, recording
+                // which export Synchronisation Rule caused each provisioning so the worker can
+                // attribute the Provisioned sync outcome to it (#1085).
                 if (provisioningCso != null)
                 {
                     result.ProvisioningCsosToCreate.Add(provisioningCso);
+                    result.ProvisioningSyncRulesByCsoId[provisioningCso.Id] = exportRule;
                 }
             }
         }

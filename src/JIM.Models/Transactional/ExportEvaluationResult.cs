@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 
@@ -21,6 +22,13 @@ public class ExportEvaluationResult
     /// These need to be batch-persisted by the caller before the Pending Exports.
     /// </summary>
     public List<ConnectedSystemObject> ProvisioningCsosToCreate { get; set; } = [];
+
+    /// <summary>
+    /// The export Synchronisation Rule that caused each provisioning CSO in
+    /// <see cref="ProvisioningCsosToCreate"/> to be created, keyed by the provisioning CSO's id.
+    /// Enables the worker to attribute Provisioned sync outcome nodes to the causing rule (#1085).
+    /// </summary>
+    public Dictionary<Guid, SyncRule> ProvisioningSyncRulesByCsoId { get; set; } = [];
 
     /// <summary>
     /// Count of attributes skipped because the CSO already has the current value.
