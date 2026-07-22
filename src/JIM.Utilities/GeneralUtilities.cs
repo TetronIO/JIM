@@ -122,6 +122,11 @@ public static class Utilities
         return $"/admin/connected-systems/{connectedSystemHeader.Id}";
     }
 
+    public static string GetConnectedSystemHref(int connectedSystemId)
+    {
+        return $"/admin/connected-systems/{connectedSystemId}";
+    }
+
     public static string GetConnectedSystemObjectsHref(ConnectedSystemHeader connectedSystemHeader)
     {
         return GetConnectedSystemObjectsHref(connectedSystemHeader.Id);

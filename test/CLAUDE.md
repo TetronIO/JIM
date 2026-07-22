@@ -19,6 +19,14 @@ JIM requires TDD. The workflow is **Red → Green → Refactor**:
 
 **NEVER** write the implementation first and then write a test to match it. The test must fail before the fix to be meaningful.
 
+## Test Projects
+
+- `test/JIM.Models.Tests/` - domain model unit tests
+- `test/JIM.Worker.Tests/` - sync engine and worker unit tests
+- `test/JIM.Web.Api.Tests/` - REST API, application server and Helpers tests
+- `test/JIM.Web.Tests/` - JIM.Web UI tests: causality display logic (plain NUnit classes) and Blazor component tests (bUnit; test-only dependency, nothing ships in containers)
+- `test/JIM.Utilities.Tests/`, `test/JIM.InMemoryData.Tests/`, `test/JIM.Workflow.Tests/` - supporting suites
+
 ## Test Structure
 
 - Use NUnit with `[Test]` attribute
