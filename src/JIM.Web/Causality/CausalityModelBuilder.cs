@@ -325,8 +325,8 @@ public static class CausalityModelBuilder
 
     /// <summary>
     /// Normalises CSO and MVO attribute changes into display rows, collapsing single-valued
-    /// Add and Remove pairs into one Set row with the previous value; the same collapse logic as
-    /// the legacy AttributeChangeTable.
+    /// Add and Remove pairs into one Set row with the previous value, so a value replacement
+    /// reads as a single change rather than a separate removal and addition.
     /// </summary>
     private static IReadOnlyList<CausalityAttributeRow> NormaliseAttributeRows(
         IEnumerable<ConnectedSystemObjectChangeAttribute>? csoAttributeChanges,

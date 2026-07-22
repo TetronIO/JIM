@@ -40,7 +40,19 @@ The exact field set depends on the operation; the [interactive API reference](..
 
 For Run Profile activities, JIM stores a per-object record of what happened (with any error details) for the most recent run. These let you go from a high-level error counter to the specific Connected System Objects that failed and the reason for each failure. Execution items are the right place to look when diagnosing why a particular identity didn't sync as expected.
 
-An execution item's detail page presents the causal chain of outcomes as a tree: the primary event (for example a projection, join, or disconnection) at the root, with its consequences nested beneath. When a disconnection triggers a Metaverse Object Deletion Rule, the resulting **MVO Deleted** or **MVO Deletion Scheduled** outcome shows the deleted Identity's display name (captured before deletion), why the Deletion Rule fired (for example "last connector disconnected"), the grace period for scheduled deletions, and a link to the deletion record browser, so the full story of a deleted Identity survives the deletion itself.
+An execution item's detail page opens with a causality panel that answers "what happened to this object, and what did it cause?" without any digging. A summary band leads with a single plain-English sentence describing the run's effect on the object, with every entity mentioned (Connected Systems, Identities, Synchronisation Rules) highlighted as a clickable token, and a strip of colour-coded outcome pills beneath it summarising the outcomes at a glance (for example "Identity created", "11 attributes flowed", "Export queued").
+
+Below the summary, the same chain of outcomes can be explored in three switchable views; the view you choose is remembered for your next visit:
+
+- **Flow**<br /> A left-to-right pipeline showing what came in, what JIM did, and what it caused, with downstream effects grouped per Connected System. The best starting point for understanding a typical import or synchronisation.
+- **Timeline**<br /> A vertical narrative read from top to bottom, with attribute change detail expanding inline beneath each event. Useful when you want the whole story, every attribute included, in one scroll.
+- **Graph**<br /> A node-and-edge rendering of the underlying outcome tree. Useful for seeing the branching structure of a complex causal chain in one picture.
+
+Every event is named in plain language first (for example "Identity created") with the technical term alongside ("MVO Projected"); a technical-names toggle swaps the emphasis for practitioners who prefer the underlying vocabulary. Attribute change detail is built for scanning: each change carries a Set, Add or Remove operation badge and a monospace value (with the previous value struck through where one existed), and a search box plus count-annotated filter chips narrow large change sets quickly.
+
+Everything mentioned links to its detail page: Connected Systems, Connected System Objects, Identities, Synchronisation Rules and Pending Exports are all one click away. Destructive outcomes keep their story even after the object is gone: when a disconnection triggers a Metaverse Object Deletion Rule, the resulting **MVO Deleted** or **MVO Deletion Scheduled** event shows the deleted Identity's display name (captured before deletion), why the Deletion Rule fired (for example "last connector disconnected"), the grace period for scheduled deletions, and a link to the deletion record browser, so the full story of a deleted Identity survives the deletion itself.
+
+How much detail the panel can show depends on the `ChangeTracking.SyncOutcomes.Level` [Service Setting](../administration/configuration.md#service-settings) (None, Standard or Detailed): lower levels record fewer outcomes and less attribute detail for each execution item.
 
 ## Metaverse Object Housekeeping
 

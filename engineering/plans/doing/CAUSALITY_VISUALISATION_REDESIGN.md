@@ -1,6 +1,6 @@
 # Causality Visualisation Redesign: Implementation Plan
 
-- **Status:** Doing (Phases 1-4 complete; runtime validation, docs and changelog outstanding)
+- **Status:** Doing (Phases 1-5 complete; awaiting review and merge)
 - **Issue:** [#1087](https://github.com/TetronIO/JIM/issues/1087)
 - **PRD:** [`engineering/prd/doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md`](../../prd/doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md)
 - **Design reference:** approved interactive mock-up (internal): https://claude.ai/code/artifact/c928e648-1fb1-4f39-961d-9c73c497dacb
@@ -21,7 +21,7 @@ Administrators currently have to walk a tree of MVO/CSO-vocabulary events to wor
 
 - **Host section:** `src/JIM.Web/Pages/ActivityRunProfileExecutionItemDetail.razor` lines ~236-261 render `<OutcomeTree>` inside a `MudPaper` when `SyncOutcomes.Count > 0`. The page's separate "Projection Details", "Metaverse Impact" and legacy "Attribute Changes" sections (the last suppressed when SyncOutcomes exist) are untouched by this plan.
 - **Components being replaced:** `src/JIM.Web/Shared/OutcomeTree.razor` (synthetic Connected System + record root nodes), `src/JIM.Web/Shared/OutcomeTreeNode.razor` (recursive node; inline link logic; parses the overloaded `DetailMessage` `"csId|csoTypeName"` channel inline), and their global styles in `src/JIM.Web/wwwroot/css/site.css` (`.outcome-tree` block, lines ~1896-1957).
-- **Kept:** `src/JIM.Web/Shared/AttributeChangeTable.razor` remains for the page's legacy Attribute Changes section (used when no SyncOutcomes exist); the causality views get their own attribute detail component.
+- **Kept:** `src/JIM.Web/Shared/AttributeChangeTable.razor` remains for the page's legacy Attribute Changes section (used when no SyncOutcomes exist); the causality views get their own attribute detail component. (In practice it turned out to be orphaned once `OutcomeTreeNode` was deleted; no other consumer existed, so it was removed in Phase 5.)
 - **Display mapping today:** `src/JIM.Web/Helpers.cs` `GetOutcomeTypeDisplayName` / `GetOutcomeTypeMudBlazorColor` / `GetOutcomeTypeIcon`. Icon coverage for `AssertedNull` / `NoContributor` needs verifying and completing.
 - **Data:** the page already loads everything needed via `jim.Activities.GetActivityRunProfileExecutionItemAsync(Id)`: flat `SyncOutcomes` (EF relationship fixup populates `Children` / `ParentSyncOutcomeId`), `ConnectedSystemObjectChange` / `MetaverseObjectChange` attribute changes, and per-outcome `ConnectedSystemObjectChange` snapshots for `PendingExportCreated`. Ordering is client-side by `Ordinal`. `SyncRuleId` / `SyncRuleName` exist on `ActivityRunProfileExecutionItemSyncOutcome` but are rendered nowhere yet.
 
@@ -100,7 +100,7 @@ Each phase is TDD (failing tests first), builds clean, and leaves the page worki
 - bUnit component tests: summary band segment/pill rendering (entity chips link correctly, hostile values encoded), Timeline nesting and inline attribute expansion, MvoDeleted deletion-record link, view/technical-names toggles persisting via a stubbed preference service.
 - Timeline ships first because it is structurally closest to the current tree: full information parity from day one.
 
-### Phase 3: Flow view ✅ ✅
+### Phase 3: Flow view ✅
 
 - `CausalityFlowView` with the three-column grid, per-system downstream grouping, `causality.js` measurement interop, SVG connectors, responsive stacking, drawer wiring.
 - bUnit component tests: lane/column assignment, per-system group cards, drawer opening on card selection, graceful rendering when the measurement interop fails (bUnit's JSInterop stubs simulate the failure).
@@ -112,7 +112,7 @@ Each phase is TDD (failing tests first), builds clean, and leaves the page worki
 - bUnit component tests: node/edge counts for known tree shapes, selection behaviour, label truncation.
 - Deliberately last: the PRD's open question resolves as "ship it, but sequence it so it can be dropped from the PR without rework if review prefers".
 
-### Phase 5: Runtime validation, docs and changelog
+### Phase 5: Runtime validation, docs and changelog ✅
 
 - Runtime verification in the sandbox light stack (`pwsh ./scripts/Start-SandboxStack.ps1`, per `engineering/SANDBOX_RUNTIME_VERIFICATION.md`): drive the three scenario shapes end to end, verify light and dark for the default navy-o6 theme and spot-check the other theme families, keyboard navigation, and pre-#1085/#1086 rows rendering unenriched.
 - Rewrite the outcome tree section of `docs/configuration/activities.md` around the summary band and the three views.
