@@ -1,6 +1,6 @@
 # Causality Visualisation Redesign: Implementation Plan
 
-- **Status:** Doing (Phases 1-3 complete; Graph and runtime validation outstanding)
+- **Status:** Doing (Phases 1-4 complete; runtime validation, docs and changelog outstanding)
 - **Issue:** [#1087](https://github.com/TetronIO/JIM/issues/1087)
 - **PRD:** [`engineering/prd/doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md`](../../prd/doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md)
 - **Design reference:** approved interactive mock-up (internal): https://claude.ai/code/artifact/c928e648-1fb1-4f39-961d-9c73c497dacb
@@ -100,13 +100,13 @@ Each phase is TDD (failing tests first), builds clean, and leaves the page worki
 - bUnit component tests: summary band segment/pill rendering (entity chips link correctly, hostile values encoded), Timeline nesting and inline attribute expansion, MvoDeleted deletion-record link, view/technical-names toggles persisting via a stubbed preference service.
 - Timeline ships first because it is structurally closest to the current tree: full information parity from day one.
 
-### Phase 3: Flow view ✅
+### Phase 3: Flow view ✅ ✅
 
 - `CausalityFlowView` with the three-column grid, per-system downstream grouping, `causality.js` measurement interop, SVG connectors, responsive stacking, drawer wiring.
 - bUnit component tests: lane/column assignment, per-system group cards, drawer opening on card selection, graceful rendering when the measurement interop fails (bUnit's JSInterop stubs simulate the failure).
 - Flow becomes the default view (matching the mock-up's default).
 
-### Phase 4: Graph view
+### Phase 4: Graph view ✅
 
 - `CausalityGraphView` with the C# layered layout, node selection into the drawer, legend.
 - bUnit component tests: node/edge counts for known tree shapes, selection behaviour, label truncation.

@@ -15,10 +15,10 @@ namespace JIM.Web.Tests;
 
 /// <summary>
 /// bUnit tests for <see cref="CausalityPanel"/>: rendering across the PRD scenarios, the view
-/// switcher (Flow default, Timeline selectable, stored preferences honoured with graceful fallback
-/// for not-yet-available views), the technical-names toggle persisting via a stubbed
-/// <see cref="JIM.Web.Services.IUserPreferenceService"/>, the Flow drawer, and the empty
-/// (not-tracked) state.
+/// switcher (Flow default; Timeline and Graph selectable; stored preferences honoured with graceful
+/// fallback for unknown values), the technical-names toggle persisting via a stubbed
+/// <see cref="JIM.Web.Services.IUserPreferenceService"/>, the shared attribute drawer, and the
+/// empty (not-tracked) state.
 /// </summary>
 [TestFixture]
 public class CausalityPanelTests
@@ -91,14 +91,15 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void Render_ViewSwitcher_ShowsFlowAndTimelineWithFlowOn()
+    public void Render_ViewSwitcher_ShowsAllThreeViewsWithFlowOn()
     {
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
         var buttons = cut.FindAll(".seg button");
-        Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Flow", "Timeline" }));
+        Assert.That(buttons.Select(b => b.TextContent.Trim()), Is.EqualTo(new[] { "Flow", "Timeline", "Graph" }));
         Assert.That(cut.FindAll(".seg button")[0].ClassList, Does.Contain("on"));
         Assert.That(cut.FindAll(".seg button")[1].ClassList, Does.Not.Contain("on"));
+        Assert.That(cut.FindAll(".seg button")[2].ClassList, Does.Not.Contain("on"));
     }
 
     [Test]
@@ -137,17 +138,32 @@ public class CausalityPanelTests
     }
 
     [Test]
-    public void Render_PersistedUnavailableViewPreference_FallsBackToFlowWithoutOverwritingIt()
+    public void Render_PersistedGraphPreference_StartsOnTheGraphView()
     {
+        // Phase 2/3 stored "graph" preferences were held without taking effect; now the Graph view
+        // exists, the stored preference must resolve to it
         _preferences.StoredCausalityView = "graph";
 
         var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
 
-        // The Graph view does not exist yet, so the panel renders the default Flow view...
-        Assert.That(cut.FindAll(".flow-cols"), Has.Count.EqualTo(1));
-        // ...without clobbering the stored preference, so Graph is restored once it ships
+        Assert.That(cut.FindAll(".graph-svg"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".flow-cols"), Is.Empty);
+        Assert.That(cut.FindAll(".seg button")[2].ClassList, Does.Contain("on"));
         Assert.That(_preferences.CausalityViewWrites, Is.Empty);
-        Assert.That(_preferences.StoredCausalityView, Is.EqualTo("graph"));
+    }
+
+    [Test]
+    public void Render_PersistedUnknownViewPreference_FallsBackToFlowWithoutOverwritingIt()
+    {
+        _preferences.StoredCausalityView = "constellation";
+
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        // An unknown stored value renders the default Flow view without clobbering the stored
+        // preference, so it takes effect if that view ever ships
+        Assert.That(cut.FindAll(".flow-cols"), Has.Count.EqualTo(1));
+        Assert.That(_preferences.CausalityViewWrites, Is.Empty);
+        Assert.That(_preferences.StoredCausalityView, Is.EqualTo("constellation"));
     }
 
     [Test]
@@ -207,6 +223,45 @@ public class CausalityPanelTests
 
         Assert.That(cut.FindAll(".drawer"), Is.Empty);
         Assert.That(cut.FindAll(".evt-card.selected"), Is.Empty);
+    }
+
+    [Test]
+    public void ViewSwitcher_SelectingGraph_SwitchesTheViewAndPersistsThePreference()
+    {
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        cut.FindAll(".seg button")[2].Click();
+
+        Assert.That(cut.FindAll(".graph-svg"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".flow-cols"), Is.Empty);
+        Assert.That(_preferences.CausalityViewWrites, Is.EqualTo(new[] { "graph" }));
+    }
+
+    [Test]
+    public void GraphNodeSelection_AttributeBearingNode_OpensTheDrawerWithItsRows()
+    {
+        _preferences.StoredCausalityView = "graph";
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+        Assert.That(cut.FindAll(".drawer"), Is.Empty);
+
+        // Only the Export queued event carries attribute rows (its persisted CSO change snapshot)
+        cut.FindAll(".g-node").Single(g => g.TextContent.Contains("3 attributes")).Click();
+
+        Assert.That(cut.FindAll(".drawer"), Has.Count.EqualTo(1));
+        Assert.That(cut.Find(".drawer-title").TextContent.Trim(), Is.EqualTo("Export queued"));
+        Assert.That(cut.FindAll(".drawer .attr-row"), Has.Count.EqualTo(3));
+    }
+
+    [Test]
+    public void GraphNodeSelection_NonAttributeNode_SelectsWithoutOpeningTheDrawer()
+    {
+        _preferences.StoredCausalityView = "graph";
+        var cut = RenderPanel(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
+
+        cut.FindAll(".g-node").Single(g => g.TextContent.Contains("Identity created")).Click();
+
+        Assert.That(cut.FindAll(".g-node.selected"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".drawer"), Is.Empty);
     }
 
     [Test]

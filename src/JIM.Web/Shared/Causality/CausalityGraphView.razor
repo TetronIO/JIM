@@ -1,0 +1,121 @@
+@using JIM.Web.Causality
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* The causality Graph view: a layered node-link SVG showing the raw causality tree shape, computed
+   entirely in C# by CausalityGraphLayoutCalculator (depth = x column, leaves take successive rows,
+   parents centre over their children, a synthetic "Source record" root at depth 0). Each node is a
+   rounded rectangle with a tone accent bar, a truncated title (plain or technical per the toggle)
+   and a truncated sub line; edges are cubic beziers between node centres. Event nodes are clickable
+   and keyboard operable (role button, tabbable, Enter/Space) and select into the panel's shared
+   attribute drawer via the two-way SelectedEvent binding; the source root is informational only.
+   The layout is static, so no JS interop is needed; wide graphs scroll horizontally. *@
+
+<div class="graph-scroller">
+    <svg class="graph-svg" width="@Format(_layout.Width)" height="@Format(_layout.Height)"
+         viewBox="0 0 @Format(_layout.Width) @Format(_layout.Height)"
+         role="group" aria-label="Causality graph">
+        @foreach (var edge in _layout.Edges)
+        {
+            <path class="edge" d="@edge.PathData"></path>
+        }
+        @foreach (var node in _layout.Nodes)
+        {
+            var transform = $"translate({Format(node.X)}, {Format(node.Y)})";
+            @if (node.Event is { } nodeEvent)
+            {
+                <g class="g-node @(ReferenceEquals(SelectedEvent, nodeEvent) ? "selected" : null)"
+                   transform="@transform" role="button" tabindex="0" aria-label="@GetAriaLabel(node)"
+                   @onclick="() => ToggleSelectionAsync(nodeEvent)"
+                   @onkeydown="args => HandleKeyDownAsync(args, nodeEvent)">
+                    <rect class="body" width="210" height="58" rx="10"></rect>
+                    <rect class="accent" x="0" y="10" width="3" height="38" rx="1.5"
+                          fill="@CausalityToneCss.CssVar(node.Tone)"></rect>
+                    <text x="14" y="24">@node.Title</text>
+                    <text class="sub" x="14" y="42">@node.Sub</text>
+                </g>
+            }
+            else
+            {
+                <g class="g-node static" transform="@transform">
+                    <rect class="body" width="210" height="58" rx="10"></rect>
+                    <rect class="accent" x="0" y="10" width="3" height="38" rx="1.5"
+                          fill="@CausalityToneCss.CssVar(node.Tone)"></rect>
+                    <text x="14" y="24">@node.Title</text>
+                    <text class="sub" x="14" y="42">@node.Sub</text>
+                </g>
+            }
+        }
+    </svg>
+</div>
+<div class="g-legend" aria-hidden="true">
+    <span><i style="background: var(--cz-primary)"></i> Identity change</span>
+    <span><i style="background: var(--cz-info)"></i> Queued for export</span>
+    <span><i style="background: var(--cz-warning)"></i> Scope &amp; policy</span>
+    <span><i style="background: var(--cz-error)"></i> Destructive &amp; failed</span>
+    <span><i style="background: var(--cz-secondary)"></i> Data flow</span>
+</div>
+
+@code {
+    /// <summary>
+    /// The causality model to render.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public CausalityModel Model { get; set; } = null!;
+
+    /// <summary>
+    /// When true, node titles use the technical labels (MVO/CSO vocabulary).
+    /// </summary>
+    [Parameter]
+    public bool TechnicalNames { get; set; }
+
+    /// <summary>
+    /// The currently selected event (whose attribute detail the panel shows in the drawer when it
+    /// has any); null when none. Two-way bindable so the panel owns the state.
+    /// </summary>
+    [Parameter]
+    public CausalityEvent? SelectedEvent { get; set; }
+
+    [Parameter]
+    public EventCallback<CausalityEvent?> SelectedEventChanged { get; set; }
+
+    private CausalityGraphLayout _layout = new([], [], 0, 0);
+    private CausalityModel? _builtModel;
+    private bool _builtTechnicalNames;
+
+    protected override void OnParametersSet()
+    {
+        // Recompute only when the inputs that shape the layout change; selection changes must not
+        // pay for a relayout
+        if (ReferenceEquals(Model, _builtModel) && TechnicalNames == _builtTechnicalNames)
+            return;
+
+        _builtModel = Model;
+        _builtTechnicalNames = TechnicalNames;
+        _layout = CausalityGraphLayoutCalculator.Compute(Model, TechnicalNames);
+    }
+
+    private Task ToggleSelectionAsync(CausalityEvent causalityEvent)
+    {
+        var newValue = ReferenceEquals(SelectedEvent, causalityEvent) ? null : causalityEvent;
+        return SelectedEventChanged.InvokeAsync(newValue);
+    }
+
+    private Task HandleKeyDownAsync(KeyboardEventArgs args, CausalityEvent causalityEvent)
+    {
+        return args.Key is "Enter" or " " or "Spacebar"
+            ? ToggleSelectionAsync(causalityEvent)
+            : Task.CompletedTask;
+    }
+
+    private static string GetAriaLabel(CausalityGraphNode node)
+    {
+        return node.HasAttributeRows ? $"{node.Title}: show attribute detail" : node.Title;
+    }
+
+    private static string Format(double value)
+    {
+        return CausalityFlowConnectorCalculator.FormatCoordinate(value);
+    }
+}
