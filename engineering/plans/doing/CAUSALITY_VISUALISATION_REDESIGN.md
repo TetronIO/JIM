@@ -1,6 +1,6 @@
 # Causality Visualisation Redesign: Implementation Plan
 
-- **Status:** Doing (Phase 1 in progress)
+- **Status:** Doing (Phases 1-2 complete; Flow, Graph and runtime validation outstanding)
 - **Issue:** [#1087](https://github.com/TetronIO/JIM/issues/1087)
 - **PRD:** [`engineering/prd/doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md`](../../prd/doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md)
 - **Design reference:** approved interactive mock-up (internal): https://claude.ai/code/artifact/c928e648-1fb1-4f39-961d-9c73c497dacb
@@ -84,7 +84,7 @@ CausalityPanel ── view pref ──> Flow │ Timeline │ Graph
 
 Each phase is TDD (failing tests first), builds clean, and leaves the page working. Phases 2-4 are separable if review favours landing the views incrementally.
 
-### Phase 1: Testable core
+### Phase 1: Testable core ✅
 
 - `OutcomeDisplayMap` with complete coverage of all 20 outcome types (plain label, technical label, tone, icon); `Helpers.GetOutcomeType*` delegate to it; add the missing `AssertedNull`/`NoContributor` icons.
 - `OutcomeDetailMessageParser` extraction.
@@ -92,7 +92,7 @@ Each phase is TDD (failing tests first), builds clean, and leaves the page worki
 - New test project `test/JIM.Web.Tests/` (NUnit + bUnit 2.7.2, referencing JIM.Web) hosts all causality tests: plain-class tests in this phase, component tests from Phase 2. The logic lives in plain classes because four renderers (summary band + three views) consume it, not as a testing workaround; bUnit covers what remains in the Razor layer.
 - Register the new project in `JIM.sln`, and update `test/CLAUDE.md` and the root `CLAUDE.md` (test project list, and retire the "no UI tests exist" carve-out for UI-only changes).
 
-### Phase 2: Panel, summary band and Timeline view
+### Phase 2: Panel, summary band and Timeline view ✅
 
 - `CausalityPanel`, `CausalitySummaryBand`, `CausalityEntityChip`, `CausalityEventCard`, `CausalityTimelineView`, `CausalityAttributeDetail`, `causality.css`.
 - User preference methods and the view/technical-names toggles.
