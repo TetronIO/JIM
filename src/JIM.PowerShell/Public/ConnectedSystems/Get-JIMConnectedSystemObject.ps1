@@ -233,33 +233,18 @@ function Get-JIMConnectedSystemObject {
 
             'AttributeValuesAll' {
                 Write-Verbose "Getting all attribute values for '$AttributeName' on CSO $Id"
-                $currentPage = 1
-                $pagesFetched = 0
-                $hasMore = $true
                 $encodedAttrName = [System.Uri]::EscapeDataString($AttributeName)
-
-                while ($hasMore) {
-                    $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/connector-space/$Id/attributes/$encodedAttrName/values?page=$currentPage&pageSize=$PageSize"
+                $pageRequest = {
+                    param($p)
+                    $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/connector-space/$Id/attributes/$encodedAttrName/values?page=$p&pageSize=$PageSize"
                     if ($Search) {
                         $endpoint += "&search=$([System.Uri]::EscapeDataString($Search))"
                     }
-
-                    $response = Invoke-JIMApi -Endpoint $endpoint
-                    $pagesFetched++
-                    foreach ($item in $response.items) {
-                        $item
-                    }
-
-                    $hasMore = $response.hasNextPage
-
-                    # Enforce the -All page ceiling unless -Force is supplied; stop clearly rather than truncating silently.
-                    if ($hasMore -and -not $Force -and $pagesFetched -ge $script:JIMMaxAllPages) {
-                        Write-Warning "Get-JIMConnectedSystemObject -All stopped after $script:JIMMaxAllPages pages (~$($script:JIMMaxAllPages * $PageSize) attribute values); more values remain (total pages: $($response.totalPages)). Re-run with -Force to fetch everything, or filter with -Search."
-                        break
-                    }
-
-                    $currentPage++
+                    Invoke-JIMApi -Endpoint $endpoint
                 }
+
+                Invoke-JIMPagedFetch -PageRequest $pageRequest -CmdletName 'Get-JIMConnectedSystemObject' -PageSize $PageSize -Force:$Force `
+                    -ItemNoun 'attribute values' -NarrowHint 'filter with -Search'
             }
 
             'List' {
@@ -275,38 +260,15 @@ function Get-JIMConnectedSystemObject {
 
             'ListAll' {
                 Write-Verbose "Getting all Connected System Objects for Connected System $ConnectedSystemId"
-                $currentPage = 1
-                $pagesFetched = 0
-                $warnedLargeSet = $false
-                $hasMore = $true
-
-                while ($hasMore) {
-                    $endpoint = Get-JIMConnectedSystemObjectListEndpoint -ConnectedSystemId $ConnectedSystemId -Page $currentPage -PageSize $PageSize `
+                $pageRequest = {
+                    param($p)
+                    $endpoint = Get-JIMConnectedSystemObjectListEndpoint -ConnectedSystemId $ConnectedSystemId -Page $p -PageSize $PageSize `
                         -Search $Search -Status $Status -ObjectTypeId $ObjectTypeId -JoinType $JoinType -SortBy $SortBy -Ascending:$Ascending
-
-                    $response = Invoke-JIMApi -Endpoint $endpoint
-                    $pagesFetched++
-
-                    # Warn up front (once) when -All is auto-paginating a large result set.
-                    if (-not $warnedLargeSet -and $response.totalCount -ge $script:JIMAllWarningThreshold) {
-                        Write-Warning "Get-JIMConnectedSystemObject -All is fetching a large result set ($($response.totalCount) objects across $($response.totalPages) pages); this may take a while."
-                        $warnedLargeSet = $true
-                    }
-
-                    foreach ($item in $response.items) {
-                        $item
-                    }
-
-                    $hasMore = $response.hasNextPage
-
-                    # Enforce the -All page ceiling unless -Force is supplied; stop clearly rather than truncating silently.
-                    if ($hasMore -and -not $Force -and $pagesFetched -ge $script:JIMMaxAllPages) {
-                        Write-Warning "Get-JIMConnectedSystemObject -All stopped after $script:JIMMaxAllPages pages (~$($script:JIMMaxAllPages * $PageSize) objects); more results remain (total pages: $($response.totalPages)). Re-run with -Force to fetch everything, or narrow the query with -Search, -Status or -ObjectTypeId."
-                        break
-                    }
-
-                    $currentPage++
+                    Invoke-JIMApi -Endpoint $endpoint
                 }
+
+                Invoke-JIMPagedFetch -PageRequest $pageRequest -CmdletName 'Get-JIMConnectedSystemObject' -PageSize $PageSize -Force:$Force `
+                    -ItemNoun 'objects' -NarrowHint 'narrow the query with -Search, -Status or -ObjectTypeId'
             }
         }
     }

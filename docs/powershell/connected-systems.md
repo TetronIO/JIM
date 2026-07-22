@@ -720,7 +720,7 @@ Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid>
     [-Page <int>] [-PageSize <int>]
 
 # All
-Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid> -All [-PageSize <int>]
+Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid> -All [-Force] [-PageSize <int>]
 ```
 
 ### Parameters
@@ -729,7 +729,8 @@ Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid> -A
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts pipeline input by property name. |
 | `Id` | `guid` | Yes | | Connector space object identifier. Accepts pipeline input by property name. |
-| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. |
+| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. Fetches at most 1000 pages (~50,000 records at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 | `Page` | `int` | No | `1` | Page number for paginated results. Cannot be used with `-All`. |
 | `PageSize` | `int` | No | `50` | Number of items per page. Maximum: `100`. |
 
@@ -766,7 +767,7 @@ Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId <int> -CsoId <guid
 
 # All
 Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId <int> -CsoId <guid>
-    -AttributeName <string> [-Search <string>] -All
+    -AttributeName <string> [-Search <string>] -All [-Force]
 ```
 
 ### Parameters
@@ -779,7 +780,8 @@ Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId <int> -CsoId <guid
 | `Search` | `string` | No | | Filter values by search term |
 | `Page` | `int` | No | `1` | Page number |
 | `PageSize` | `int` | No | `50` | Number of values per page (maximum 100) |
-| `All` | `switch` | No | `$false` | Returns all values without paging |
+| `All` | `switch` | No | `$false` | Returns all values, auto-paginating. Fetches at most 1000 pages (~50,000 values at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 
 ### Output
 
@@ -908,7 +910,7 @@ Get-JIMPendingExport -ConnectedSystemId <int> [-Search <string>]
     [-Page <int>] [-PageSize <int>]
 
 # ListAll
-Get-JIMPendingExport -ConnectedSystemId <int> [-Search <string>] -All
+Get-JIMPendingExport -ConnectedSystemId <int> [-Search <string>] -All [-Force]
 
 # ById
 Get-JIMPendingExport -Id <guid>
@@ -918,7 +920,7 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string>
     [-Search <string>] [-Page <int>] [-PageSize <int>]
 
 # AttributeChangesAll
-Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All
+Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All [-Force]
 ```
 
 ### Parameters
@@ -931,7 +933,8 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All
 | `Search` | `string` | No | | Filter results by search term |
 | `Page` | `int` | No | `1` | Page number |
 | `PageSize` | `int` | No | `50` | Number of results per page (maximum 100) |
-| `All` | `switch` | No | `$false` | Returns all results without paging |
+| `All` | `switch` | No | `$false` | Returns all results, auto-paginating. Fetches at most 1000 pages and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 
 ### Output
 

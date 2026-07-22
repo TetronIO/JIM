@@ -36,7 +36,12 @@ function Get-JIMPendingExport {
         Number of items per page. Defaults to 50.
 
     .PARAMETER All
-        If specified, automatically retrieves all pages of results.
+        If specified, automatically retrieves all pages of results. Fetches at most 1000
+        pages before stopping with a warning; use -Force to fetch beyond the cap.
+
+    .PARAMETER Force
+        Override the -All page ceiling (1000 pages) and fetch every page regardless of how
+        large the result set is. Only valid with -All.
 
     .OUTPUTS
         PSCustomObject representing Pending Export(s) or attribute value changes.
@@ -50,6 +55,11 @@ function Get-JIMPendingExport {
         Get-JIMPendingExport -ConnectedSystemId 2 -All
 
         Gets all pending exports for Connected System 2 (auto-paginates).
+
+    .EXAMPLE
+        Get-JIMPendingExport -ConnectedSystemId 2 -All -Force
+
+        Gets all pending exports, overriding the 1000-page safety cap for a very large export backlog.
 
     .EXAMPLE
         Get-JIMPendingExport -Id "15aa3e6f-9f82-44a8-a04d-0245d3c76198"
@@ -124,6 +134,10 @@ function Get-JIMPendingExport {
         [Parameter(Mandatory, ParameterSetName = 'AttributeChangesAll')]
         [switch]$All,
 
+        [Parameter(ParameterSetName = 'ListAll')]
+        [Parameter(ParameterSetName = 'AttributeChangesAll')]
+        [switch]$Force,
+
         [Parameter(Mandatory, ParameterSetName = 'Count')]
         [switch]$Count,
 
@@ -187,23 +201,17 @@ function Get-JIMPendingExport {
 
             'ListAll' {
                 Write-Verbose "Getting all Pending Exports for Connected System $ConnectedSystemId"
-                $currentPage = 1
-                $hasMore = $true
-
-                while ($hasMore) {
-                    $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/pending-exports?page=$currentPage&pageSize=$PageSize"
+                $pageRequest = {
+                    param($p)
+                    $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/pending-exports?page=$p&pageSize=$PageSize"
                     if ($Search) {
                         $endpoint += "&search=$([System.Uri]::EscapeDataString($Search))"
                     }
-
-                    $response = Invoke-JIMApi -Endpoint $endpoint
-                    foreach ($item in $response.items) {
-                        $item
-                    }
-
-                    $hasMore = $response.hasNextPage
-                    $currentPage++
+                    Invoke-JIMApi -Endpoint $endpoint
                 }
+
+                Invoke-JIMPagedFetch -PageRequest $pageRequest -CmdletName 'Get-JIMPendingExport' -PageSize $PageSize -Force:$Force `
+                    -ItemNoun 'pending exports' -NarrowHint 'filter with -Search'
             }
 
             'AttributeChanges' {
@@ -222,24 +230,18 @@ function Get-JIMPendingExport {
 
             'AttributeChangesAll' {
                 Write-Verbose "Getting all attribute changes for '$AttributeName' on Pending Export $Id"
-                $currentPage = 1
-                $hasMore = $true
                 $encodedAttrName = [System.Uri]::EscapeDataString($AttributeName)
-
-                while ($hasMore) {
-                    $endpoint = "/api/v1/synchronisation/pending-exports/$Id/attribute-changes/$encodedAttrName/values?page=$currentPage&pageSize=$PageSize"
+                $pageRequest = {
+                    param($p)
+                    $endpoint = "/api/v1/synchronisation/pending-exports/$Id/attribute-changes/$encodedAttrName/values?page=$p&pageSize=$PageSize"
                     if ($Search) {
                         $endpoint += "&search=$([System.Uri]::EscapeDataString($Search))"
                     }
-
-                    $response = Invoke-JIMApi -Endpoint $endpoint
-                    foreach ($item in $response.items) {
-                        $item
-                    }
-
-                    $hasMore = $response.hasNextPage
-                    $currentPage++
+                    Invoke-JIMApi -Endpoint $endpoint
                 }
+
+                Invoke-JIMPagedFetch -PageRequest $pageRequest -CmdletName 'Get-JIMPendingExport' -PageSize $PageSize -Force:$Force `
+                    -ItemNoun 'attribute changes' -NarrowHint 'filter with -Search'
             }
         }
     }

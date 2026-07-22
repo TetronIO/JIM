@@ -298,45 +298,27 @@ function Get-JIMMetaverseObject {
                     }
                 }
 
-                $currentPage = $Page
-                $pagesFetched = 0
-                $warnedLargeSet = $false
-                do {
-                    $queryParams = @("page=$currentPage") + $baseQueryParams
-                    $queryString = $queryParams -join '&'
-                    $response = Invoke-JIMApi -Endpoint "/api/v1/metaverse/objects?$queryString"
-                    $pagesFetched++
+                # One page-request closure serves both the single-page (List) and auto-paginating (ListAll)
+                # paths; the shared helper owns the -All loop, the page cap and the warnings (issue #487).
+                $pageRequest = {
+                    param($p)
+                    $queryParams = @("page=$p") + $baseQueryParams
+                    Invoke-JIMApi -Endpoint "/api/v1/metaverse/objects?$($queryParams -join '&')"
+                }
 
+                if ($All) {
+                    Invoke-JIMPagedFetch -PageRequest $pageRequest -CmdletName 'Get-JIMMetaverseObject' -PageSize $PageSize -Force:$Force `
+                        -ItemNoun 'objects' -NarrowHint 'narrow the query with -Search, -ObjectTypeName or -AttributeName'
+                }
+                else {
+                    $response = & $pageRequest $Page
                     # Handle paginated response - check property exists, not truthy (empty array is valid)
                     $objects = if ($null -ne $response.items) { $response.items } else { $response }
-
-                    # Warn up front (once) when -All is auto-paginating a large result set, so a long-running
-                    # sequential fetch is not a surprise.
-                    if ($All -and -not $warnedLargeSet -and $response.totalCount -ge $script:JIMAllWarningThreshold) {
-                        Write-Warning "Get-JIMMetaverseObject -All is fetching a large result set ($($response.totalCount) objects across $($response.totalPages) pages); this may take a while."
-                        $warnedLargeSet = $true
-                    }
-
                     # Output each object individually for pipeline support
                     foreach ($obj in $objects) {
                         $obj
                     }
-
-                    # Check if we should fetch the next page
-                    $hasMore = $All -and $response.hasNextPage -eq $true
-
-                    # Enforce the -All page ceiling unless -Force is supplied, so a runaway fetch cannot
-                    # hammer the API sequentially without bound. Stop clearly rather than truncating silently.
-                    if ($hasMore -and -not $Force -and $pagesFetched -ge $script:JIMMaxAllPages) {
-                        Write-Warning "Get-JIMMetaverseObject -All stopped after $script:JIMMaxAllPages pages (~$($script:JIMMaxAllPages * $PageSize) objects); more results remain (total pages: $($response.totalPages)). Re-run with -Force to fetch everything, or narrow the query with -Search, -ObjectTypeName or -AttributeName."
-                        break
-                    }
-
-                    if ($hasMore) {
-                        $currentPage++
-                        Write-Verbose "Fetching page $currentPage of $($response.totalPages)..."
-                    }
-                } while ($hasMore)
+                }
             }
         }
     }

@@ -141,7 +141,7 @@ The underlying API returns a paginated response envelope, but this cmdlet unwrap
 Get-JIMActivityChildren -Id <guid> [-Page <int>] [-PageSize <int>]
 
 # Get every child activity, paginating automatically
-Get-JIMActivityChildren -Id <guid> -All [-PageSize <int>]
+Get-JIMActivityChildren -Id <guid> -All [-Force] [-PageSize <int>]
 ```
 
 ### Parameters
@@ -151,7 +151,8 @@ Get-JIMActivityChildren -Id <guid> -All [-PageSize <int>]
 | `Id` | `guid` | Yes | | ID of the parent activity whose children to retrieve. Accepts pipeline input by property name. |
 | `Page` | `int` | No (Page set) | `1` | Page number for the child activity list. Cannot be used with `-All`. |
 | `PageSize` | `int` | No | `50` | Number of child activities per page. Maximum is 100. |
-| `All` | `switch` | Yes (All set) | | Automatically paginates through all child activities and returns every one. Cannot be used with `-Page`. |
+| `All` | `switch` | Yes (All set) | | Automatically paginates through all child activities and returns every one. Cannot be used with `-Page`. Fetches at most 1000 pages and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `Force` | `switch` | No (All set) | | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 
 ### Output
 
