@@ -459,10 +459,10 @@
         "type": "Project",
         "dependencies": {
           "DynamicExpresso.Core": "[2.19.3, )",
-          "JIM.Connectors": "[0.13.0-dev.20260721.548, )",
-          "JIM.Data": "[0.13.0-dev.20260721.548, )",
-          "JIM.Models": "[0.13.0-dev.20260721.548, )",
-          "JIM.Utilities": "[0.13.0-dev.20260721.548, )",
+          "JIM.Connectors": "[0.13.0-dev.20260721.1297, )",
+          "JIM.Data": "[0.13.0-dev.20260721.1297, )",
+          "JIM.Models": "[0.13.0-dev.20260721.1297, )",
+          "JIM.Utilities": "[0.13.0-dev.20260721.1297, )",
           "NCrontab": "[3.4.0, )",
           "Serilog": "[4.4.0, )"
         }
@@ -471,15 +471,15 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.13.0-dev.20260721.548, )",
-          "JIM.Utilities": "[0.13.0-dev.20260721.548, )",
+          "JIM.Models": "[0.13.0-dev.20260721.1297, )",
+          "JIM.Utilities": "[0.13.0-dev.20260721.1297, )",
           "System.DirectoryServices.Protocols": "[10.0.10, )"
         }
       },
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0-dev.20260721.548, )"
+          "JIM.Models": "[0.13.0-dev.20260721.1297, )"
         }
       },
       "jim.models": {
@@ -492,9 +492,9 @@
       "jim.postgresdata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.13.0-dev.20260721.548, )",
-          "JIM.Models": "[0.13.0-dev.20260721.548, )",
-          "JIM.Utilities": "[0.13.0-dev.20260721.548, )",
+          "JIM.Data": "[0.13.0-dev.20260721.1297, )",
+          "JIM.Models": "[0.13.0-dev.20260721.1297, )",
+          "JIM.Utilities": "[0.13.0-dev.20260721.1297, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "Serilog": "[4.4.0, )"
@@ -503,7 +503,7 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0-dev.20260721.548, )",
+          "JIM.Models": "[0.13.0-dev.20260721.1297, )",
           "Serilog": "[4.4.0, )"
         }
       }

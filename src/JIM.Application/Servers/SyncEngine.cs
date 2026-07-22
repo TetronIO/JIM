@@ -32,7 +32,7 @@ public partial class SyncEngine : ISyncEngine
         if (projectionSyncRule == null)
             return ProjectionDecision.NoProjection();
 
-        return ProjectionDecision.Project(projectionSyncRule.MetaverseObjectType!);
+        return ProjectionDecision.Project(projectionSyncRule.MetaverseObjectType!, projectionSyncRule);
     }
 
     /// <inheritdoc />

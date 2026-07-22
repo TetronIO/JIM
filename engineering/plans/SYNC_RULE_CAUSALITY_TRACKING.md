@@ -28,6 +28,16 @@ Administrators managing complex environments with multiple Synchronisation Rules
 
 The Synchronisation Rule context is available in the worker and application code at the point each record is created; it is simply not being persisted.
 
+### Already Delivered by Issue #1085 (Outcome-Level Attribution)
+
+Issue [#1085](https://github.com/TetronIO/JIM/issues/1085) delivered outcome-level Synchronisation Rule attribution ahead of this plan: `ActivityRunProfileExecutionItemSyncOutcome` now carries nullable `SyncRuleId` and `SyncRuleName` (name snapshot) columns, populated by the worker for:
+
+- `DisconnectedOutOfScope` outcomes: the scoping rule the Connected System Object fell out of scope of (the deterministic first import rule with scoping criteria; the same rule whose `InboundOutOfScopeAction` governs the disconnect).
+- `Projected` outcomes: the projecting rule, threaded through `ProjectionDecision`.
+- `Provisioned` outcomes: the export rule that caused the provisioning, threaded through `ExportEvaluationResult.ProvisioningSyncRulesByCsoId`.
+
+Unlike the FK pattern above, the outcome columns are plain snapshot scalars (no FK), matching the table's existing `TargetEntityId`/`TargetEntityDescription` approach. This plan's remaining scope is the per-attribute attribution (`MetaverseObjectChangeAttribute`, `PendingExportAttributeValueChange`), the `MetaverseObjectChange`/`PendingExport` population, and the UI surfacing.
+
 ## Goals
 
 1. Know which Synchronisation Rule caused an MVO to be projected (one rule is responsible).

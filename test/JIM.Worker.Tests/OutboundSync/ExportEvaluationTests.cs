@@ -2402,6 +2402,87 @@ public class ExportEvaluationTests
     }
 
     /// <summary>
+    /// Issue #1085 (opportunistic Provisioned attribution): when export evaluation provisions a new
+    /// CSO with deferred saving, the result must record which export Synchronisation Rule caused the
+    /// provisioning, keyed by the provisioning CSO's id, so the worker can attribute the Provisioned
+    /// outcome node to that rule.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_ProvisioningCsoDeferred_RecordsProvisioningSyncRuleAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.ObjectMatchingRules.Clear();
+
+        exportRule.AttributeFlowRules.Clear();
+        var employeeIdMapping = new SyncRuleMapping
+        {
+            Id = 6002,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = csEmployeeIdAttr,
+            TargetConnectedSystemAttributeId = csEmployeeIdAttr.Id
+        };
+        employeeIdMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 6002,
+            Order = 1,
+            MetaverseAttribute = employeeIdAttr,
+            MetaverseAttributeId = employeeIdAttr.Id
+        });
+        exportRule.AttributeFlowRules.Add(employeeIdMapping);
+
+        // Empty CsoLookup: no existing join, so evaluation goes down the provisioning path.
+        var cache = new ExportEvaluationCache(
+            new Dictionary<int, List<SyncRule>> { { mvUserType.Id, new List<SyncRule> { exportRule } } },
+            new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>(),
+            Array.Empty<ConnectedSystemObjectAttributeValue>().ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId)),
+            new List<int> { targetSystem.Id });
+
+        var changedAttributes = mvo.AttributeValues.ToList();
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, changedAttributes, sourceSystem: null, cache, deferSave: true);
+
+        // Assert
+        Assert.That(result.ProvisioningCsosToCreate, Has.Count.EqualTo(1),
+            "A provisioning CSO should be deferred for batch creation");
+        var provisioningCso = result.ProvisioningCsosToCreate[0];
+        Assert.That(result.ProvisioningSyncRulesByCsoId.TryGetValue(provisioningCso.Id, out var attributedRule), Is.True,
+            "The result should record the export Synchronisation Rule that provisioned the CSO");
+        Assert.That(attributedRule, Is.SameAs(exportRule),
+            "The attributed Synchronisation Rule should be the export rule that caused provisioning");
+    }
+
+    /// <summary>
     /// Repository-level twin semantics: claiming an unclaimed CSO succeeds and sets all four join
     /// fields; a second claim attempt for a different Metaverse Object fails and leaves the first
     /// claim's values intact.

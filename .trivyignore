@@ -43,7 +43,8 @@ CVE-2026-26171
 CVE-2026-33116
 
 # ----------------------------------------------------------------------------
-# CVE-2026-47302 / CVE-2026-47304 / CVE-2026-50525 / CVE-2026-50648
+# CVE-2026-47302 / CVE-2026-47304 / CVE-2026-50525 / CVE-2026-50648 /
+# CVE-2026-50527
 # (.NET July 2026 servicing wave, flagged only in the SDK build-stage image)
 # ----------------------------------------------------------------------------
 # All four are part of the July 2026 .NET security release (Ubuntu advisory
@@ -67,7 +68,17 @@ CVE-2026-33116
 #
 # Review by: 2026-10-21 (re-check whether Microsoft has re-rolled the SDK
 # image; remove once a clean sdk:10.0-noble digest exists).
+# Re-evaluated 2026-07-22: CVE-2026-50527 (network-based buffer overflow DoS,
+# CVSS 7.5) added to Trivy's database after this entry was written; it is the
+# fifth member of the same July 2026 wave. A rescan shows all five CVEs are
+# flagged against System.Security.Cryptography.Xml 10.0.6 bundled inside the
+# SDK image's PowerShell 7.6.2 install (usr/share/powershell/.store/...),
+# which only exists in the build stage; nothing from it ships in the runtime
+# images. The sdk:10.0-noble tag still resolves to digest ed034a8 (verified
+# via docker buildx imagetools), so no newer image exists to pull. JIM's own
+# System.Security.Cryptography.Xml reference is overridden to 10.0.10.
 CVE-2026-47302
 CVE-2026-47304
 CVE-2026-50525
 CVE-2026-50648
+CVE-2026-50527
