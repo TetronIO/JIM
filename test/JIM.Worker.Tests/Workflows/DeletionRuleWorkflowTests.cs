@@ -344,7 +344,7 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
 
         // Create Synchronisation Rules
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
-        var targetExportRule = await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export");
+        await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export");
 
         // Create matching rules
         await CreateMatchingRuleAsync(sourceType, mvType, "EmployeeId");
@@ -415,9 +415,11 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
             gracePeriod: TimeSpan.Zero,  // Zero grace period - delete synchronously
             triggerConnectedSystemIds: new List<int> { sourceSystem.Id });
 
-        // Create Synchronisation Rules
+        // Create Synchronisation Rules; the export rule's Delete action drives the delete export
+        // when the MVO is deleted (issue #655)
         await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
-        var targetExportRule = await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export");
+        await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export",
+            deprovisionAction: OutboundDeprovisionAction.Delete);
 
         // Create matching rules
         await CreateMatchingRuleAsync(sourceType, mvType, "EmployeeId");
@@ -602,8 +604,10 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         await CreateImportSyncRuleAsync(hrSystem.Id, hrUserType, mvType, "HR Import");
         await CreateImportSyncRuleAsync(trainingSystem.Id, trainingUserType, mvType, "Training Import");
 
-        // Create export Synchronisation Rule for AD
-        await CreateExportSyncRuleAsync(adSystem.Id, adUserType, mvType, "AD Export");
+        // Create export Synchronisation Rule for AD; its Delete action drives the delete export
+        // when the MVO is deleted (issue #655)
+        await CreateExportSyncRuleAsync(adSystem.Id, adUserType, mvType, "AD Export",
+            deprovisionAction: OutboundDeprovisionAction.Delete);
 
         // Create HR CSO and run Full Sync to project to MVO
         var hrCso = await CreateCsoAsync(hrSystem.Id, hrUserType, "John Smith", "EMP001");
@@ -688,6 +692,175 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
             "Delete Pending Export should be created for the Provisioned AD CSO");
         Assert.That(deletePendingExports[0].ConnectedSystemObjectId, Is.EqualTo(adCsoId),
             "Delete Pending Export should reference the AD CSO");
+    }
+
+    /// <summary>
+    /// A 0-grace-period deletion of a Metaverse Object referenced by a group must surface the
+    /// recall-staged membership-removal Pending Export on the sync Activity (#1003): one RPEI with
+    /// a PendingExportCreated outcome per staged export, counted into TotalPendingExports. Before
+    /// this, deletion-staged exports were only logged, so the Activity reported 0 Pending Exports
+    /// while thousands were staged.
+    /// </summary>
+    [Test]
+    public async Task ZeroGracePeriod_DeletedMvoReferencedByGroup_RecallPendingExportCountedOnActivityAsync()
+    {
+        // Arrange: source system projects a person MVO with immediate deletion on disconnect.
+        var sourceSystem = await CreateConnectedSystemAsync("Source HR System");
+        var sourceType = await CreateCsoTypeAsync(sourceSystem.Id, "User");
+
+        // Target side is created before any sync runs (the harness DbContext rejects new
+        // connected-system saves afterwards); an export rule flows group members to it.
+        var targetSystem = await CreateConnectedSystemAsync("Target LDAP");
+
+        // The person deletes immediately when the authoritative source disconnects, even though
+        // its target CSO remains joined - the same shape as a leaver-cohort deprovisioning.
+        var mvType = await CreateMvObjectTypeWithDeletionRuleAsync(
+            "Person",
+            MetaverseObjectDeletionRule.WhenAuthoritativeSourceDisconnected,
+            gracePeriod: TimeSpan.Zero,
+            triggerConnectedSystemIds: [sourceSystem.Id]);
+        await CreateImportSyncRuleAsync(sourceSystem.Id, sourceType, mvType, "HR Import");
+        var cso = await CreateCsoAsync(sourceSystem.Id, sourceType, "John Smith");
+
+        var fullSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Full Sync", ConnectedSystemRunType.FullSynchronisation);
+        var fullSyncActivity = await CreateActivityAsync(sourceSystem.Id, fullSyncProfile, ConnectedSystemRunType.FullSynchronisation);
+        await new SyncFullSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, fullSyncProfile, fullSyncActivity, new CancellationTokenSource())
+            .PerformFullSyncAsync();
+        cso = await ReloadEntityAsync(cso);
+        var mvoId = cso.MetaverseObjectId!.Value;
+
+        // A group referencing the person, both with provisioned target CSOs (the person's
+        // carrying its DN). Seeded directly into the sync repository (no DbContext writes).
+        var mvMemberAttribute = new MetaverseAttribute
+        {
+            Id = 9060,
+            Name = "Static Members",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued
+        };
+        var mvGroupType = new MetaverseObjectType { Id = 9050, Name = "Group", Attributes = [mvMemberAttribute] };
+        var csMemberAttribute = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 9080,
+            Name = "member",
+            Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.MultiValued,
+            Selected = true
+        };
+        var csDnAttribute = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 9081,
+            Name = "distinguishedName",
+            Type = AttributeDataType.Text,
+            IsSecondaryExternalId = true,
+            Selected = true
+        };
+        SyncRepo.SeedSyncRule(new SyncRule
+        {
+            Id = 9900,
+            Name = "Target Export Groups",
+            Enabled = true,
+            Direction = SyncRuleDirection.Export,
+            ConnectedSystemId = targetSystem.Id,
+            MetaverseObjectTypeId = mvGroupType.Id,
+            AttributeFlowRules =
+            {
+                new SyncRuleMapping
+                {
+                    Id = 9901,
+                    TargetConnectedSystemAttribute = csMemberAttribute,
+                    TargetConnectedSystemAttributeId = csMemberAttribute.Id,
+                    Sources =
+                    {
+                        new SyncRuleMappingSource
+                        {
+                            Id = 9902,
+                            Order = 0,
+                            MetaverseAttribute = mvMemberAttribute,
+                            MetaverseAttributeId = mvMemberAttribute.Id
+                        }
+                    }
+                }
+            }
+        });
+
+        const string memberDn = "uid=john.smith,ou=People,dc=target,dc=local";
+        var personTargetCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            TypeId = 9070,
+            Status = ConnectedSystemObjectStatus.Normal,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            MetaverseObjectId = mvoId
+        };
+        personTargetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = personTargetCso,
+            Attribute = csDnAttribute,
+            AttributeId = csDnAttribute.Id,
+            StringValue = memberDn
+        });
+        SyncRepo.SeedConnectedSystemObject(personTargetCso);
+
+        var groupMvo = new MetaverseObject { Id = Guid.NewGuid(), Type = mvGroupType, CachedDisplayName = "Team Alpha" };
+        groupMvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = groupMvo,
+            Attribute = mvMemberAttribute,
+            AttributeId = mvMemberAttribute.Id,
+            ReferenceValueId = mvoId
+        });
+        SyncRepo.SeedMetaverseObject(groupMvo);
+
+        var groupTargetCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            TypeId = 9070,
+            Status = ConnectedSystemObjectStatus.Normal,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            MetaverseObjectId = groupMvo.Id
+        };
+        groupTargetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = groupTargetCso,
+            Attribute = csMemberAttribute,
+            AttributeId = csMemberAttribute.Id,
+            ReferenceValueId = personTargetCso.Id,
+            UnresolvedReferenceValue = memberDn
+        });
+        SyncRepo.SeedConnectedSystemObject(groupTargetCso);
+
+        // Act: obsolete the source CSO and run a Delta Sync, which deletes the MVO synchronously
+        // and stages the group's membership removal via reference recall.
+        await MarkCsoAsObsoleteAsync(cso);
+        var deltaSyncProfile = await CreateRunProfileAsync(sourceSystem.Id, "Delta Sync", ConnectedSystemRunType.DeltaSynchronisation);
+        sourceSystem = await ReloadEntityAsync(sourceSystem);
+        var deltaSyncActivity = await CreateActivityAsync(sourceSystem.Id, deltaSyncProfile, ConnectedSystemRunType.DeltaSynchronisation);
+        await new SyncDeltaSyncTaskProcessor(new SyncEngine(), new SyncServer(Jim), SyncRepo, sourceSystem, deltaSyncProfile, deltaSyncActivity, new CancellationTokenSource())
+            .PerformDeltaSyncAsync();
+
+        // Assert: the recall-staged Pending Export exists and is surfaced on the Activity.
+        var stagedPendingExport = SyncRepo.PendingExports.Values
+            .SingleOrDefault(pe => pe.ConnectedSystemObjectId == groupTargetCso.Id);
+        Assert.That(stagedPendingExport, Is.Not.Null, "Reference recall must stage a membership-removal Pending Export");
+
+        var recallRpei = deltaSyncActivity.RunProfileExecutionItems
+            .SingleOrDefault(rpei => rpei.ObjectChangeType == ObjectChangeType.PendingExport);
+        Assert.That(recallRpei, Is.Not.Null,
+            "A recall-staged Pending Export must be surfaced as an RPEI on the sync Activity");
+        Assert.That(recallRpei!.PendingExportId, Is.EqualTo(stagedPendingExport!.Id));
+        Assert.That(recallRpei.ConnectedSystemObjectId, Is.EqualTo(groupTargetCso.Id));
+        Assert.That(recallRpei.DisplayNameSnapshot, Is.EqualTo("Team Alpha"),
+            "The RPEI must carry the referencing group's display name for Activity drill-down");
+
+        Worker.CalculateActivitySummaryStats(deltaSyncActivity);
+        Assert.That(deltaSyncActivity.TotalPendingExports, Is.GreaterThanOrEqualTo(1),
+            "Recall-staged Pending Exports must be counted into the Activity's TotalPendingExports");
     }
 
     #endregion
@@ -822,7 +995,8 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
         ConnectedSystemObjectType csoType,
         MetaverseObjectType mvType,
         string name,
-        bool enableProvisioning = true)
+        bool enableProvisioning = true,
+        OutboundDeprovisionAction deprovisionAction = OutboundDeprovisionAction.Disconnect)
     {
         var syncRule = new SyncRule
         {
@@ -834,7 +1008,8 @@ public class DeletionRuleWorkflowTests : WorkflowTestBase
             ConnectedSystemObjectType = csoType,
             MetaverseObjectTypeId = mvType.Id,
             MetaverseObjectType = mvType,
-            ProvisionToConnectedSystem = enableProvisioning
+            ProvisionToConnectedSystem = enableProvisioning,
+            OutboundDeprovisionAction = deprovisionAction
         };
 
         DbContext.SyncRules.Add(syncRule);

@@ -15,7 +15,7 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Logs</PageTitle>
-<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Custom.FileFormats.FileDocument" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Logs</MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Custom.FileFormats.FileDocument" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />Logs</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">
     View and search logs from all JIM services. Logs are stored for 31 days.
@@ -293,8 +293,15 @@
     {
         if (firstRender)
         {
-            // Hide the page footer to maximise viewing area for logs
-            await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.add('jim-hide-footer')");
+            try
+            {
+                // Hide the page footer to maximise viewing area for logs
+                await JSRuntime.InvokeVoidAsync("jimInterop.setBodyClass", "jim-hide-footer", true);
+            }
+            catch (JSDisconnectedException)
+            {
+                // Ignore - circuit is disconnected and being disposed
+            }
         }
 
         if (!_preferencesLoaded)
@@ -632,7 +639,7 @@
         // Remove the footer-hiding class when leaving the page
         try
         {
-            await JSRuntime.InvokeVoidAsync("eval", "document.body.classList.remove('jim-hide-footer')");
+            await JSRuntime.InvokeVoidAsync("jimInterop.setBodyClass", "jim-hide-footer", false);
         }
         catch (JSDisconnectedException)
         {

@@ -7,6 +7,7 @@
 @using JIM.Models.Tasking
 @using JIM.Models.Utility
 @using JIM.Utilities
+@using JIM.Web.Models
 @using JIM.Web.Services
 @using JIM.Web.Shared
 @inject IJimApplicationFactory JimFactory
@@ -18,7 +19,7 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Connected System Objects: @_connectedSystemHeader?.Name</PageTitle>
-<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System Objects:</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Cable" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Connected System Objects:</span> <span class="mud-primary-text">@_connectedSystemHeader?.Name</span></MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 @if (_showIntro)
 {
@@ -197,7 +198,7 @@
             </MudTd>
             @if (_hasSecondaryExternalId)
             {
-                <MudTd DataLabel="Secondary External Id" Class="jim-text-break">
+                <MudTd DataLabel="Secondary External Id" Class="jim-text-code mud-text-secondary">
                     @if (!string.IsNullOrEmpty(context.SecondaryExternalIdValue))
                     {
                         @context.SecondaryExternalIdValue
@@ -221,17 +222,23 @@
                         <MudText Color="Color.Info">@context.PendingDisplayName</MudText>
                     </MudTooltip>
                 }
+                else
+                {
+                    <EmptyValue />
+                }
             </MudTd>
-            <MudTd DataLabel="Type">@context.TypeName</MudTd>
+            <MudTd DataLabel="Type">
+                <MudChip T="string" Text="@context.TypeName" Variant="Variant.Text" Color="@_typeChipColors.GetColor(context.TypeName)" />
+            </MudTd>
             <MudTd DataLabel="Created">
-                <MudTooltip Text="@context.Created.ToString("O")" Arrow="true" Placement="Placement.Top">
+                <MudTooltip Text="@context.Created.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                     <MudText>@context.Created.ToLocalTime().ToRelativeTime()</MudText>
                 </MudTooltip>
             </MudTd>
             <MudTd DataLabel="Date Joined">
                 @if (context.DateJoined != null)
                 {
-                    <MudTooltip Text="@context.DateJoined.Value.ToString("O")" Arrow="true" Placement="Placement.Top">
+                    <MudTooltip Text="@context.DateJoined.Value.ToLocalTime().ToFriendlyDate()" Arrow="true" Placement="Placement.Top">
                         <MudText>@context.DateJoined.Value.ToLocalTime().ToRelativeTime()</MudText>
                     </MudTooltip>
                 }
@@ -320,6 +327,9 @@ else
     private bool _clearDialogVisible;
     private bool _clearDeleteChangeHistory = true; // Default to true (recommended for re-import)
     private readonly DialogOptions _clearDialogOptions = new() { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    private readonly TypeChipColorAssigner _typeChipColors = new();
+
     private bool _hasSecondaryExternalId;
     private string _externalIdColumnHeader = "External Id";
     private string _secondaryExternalIdColumnHeader = "Secondary External Id";

@@ -9,8 +9,10 @@
 #
 #   1. If running inside a GitHub Codespace, the system gitconfig already
 #      contains gpg.program=/.codespaces/bin/gh-gpgsign which signs via the
-#      GitHub API. No further action is required beyond ensuring
-#      commit.gpgsign=true and gpg.format=ssh are set.
+#      GitHub API. We ensure commit.gpgsign=true, leave gpg.format unset (so
+#      the gh-gpgsign chain is used, not native SSH signing), and force the
+#      account's @users.noreply.github.com address as the author so no personal
+#      email is committed and the API accepts the signature.
 #
 #   2. If running in a local devcontainer with SSH agent forwarding active
 #      and a key loaded, configure git to use the forwarded key for signing.
@@ -106,7 +108,23 @@ verify_codespaces_signing_works() {
         return 0
     fi
 
-    if echo "$probe_out" | grep -qi "signing disabled"; then
+    if echo "$probe_out" | grep -qi "author is invalid"; then
+        print_banner "$RED" "Codespaces commit signing rejected the author identity" \
+            "" \
+            "gh-gpgsign refused to sign because the commit author email is" \
+            "not one GitHub will attribute to your account. JIM forces your" \
+            "@users.noreply.github.com address in Codespaces (for privacy and" \
+            "to satisfy account email privacy), so seeing this means that" \
+            "address could not be derived or applied. Check:" \
+            "" \
+            "  1. 'gh auth status' shows you are logged in" \
+            "  2. 'git config user.email' is an" \
+            "     @users.noreply.github.com address" \
+            "" \
+            "Then re-run 'jim-setup-signing'." \
+            "" \
+            "See engineering/DEVELOPER_GUIDE.md 'Commit Signing' for details."
+    elif echo "$probe_out" | grep -qi "signing disabled"; then
         print_banner "$RED" "Codespaces commit signing is disabled on your account" \
             "" \
             "git is configured to sign, but a test signature was refused" \
@@ -137,6 +155,54 @@ verify_codespaces_signing_works() {
     return 1
 }
 
+# Derive this account's GitHub noreply address in the ID-prefixed form
+# (<id>+<login>@users.noreply.github.com). This address is always accepted by
+# gh-gpgsign as a commit author and never exposes a personal email. Requires gh
+# to be authenticated, which is always the case inside a Codespace (the
+# GITHUB_TOKEN is provisioned automatically). Prints the address on success and
+# returns 1 if it cannot be derived.
+github_noreply_email() {
+    local id login
+    id=$(gh api user -q '.id' 2>/dev/null) || return 1
+    login=$(gh api user -q '.login' 2>/dev/null) || return 1
+    [ -n "$id" ] && [ -n "$login" ] || return 1
+    echo "${id}+${login}@users.noreply.github.com"
+}
+
+# Enforce a privacy-safe commit author email inside Codespaces. Codespaces seeds
+# the account's git email into the system /etc/gitconfig, which is frequently a
+# personal address (e.g. you@example.com). Two problems follow:
+#
+#   1. Privacy: we never want a personal email committed to GitHub history.
+#   2. Signing: gh-gpgsign signs via the GitHub API, which rejects a personal
+#      author with "403 | Author is invalid" whenever the account has
+#      "Keep my email address private" enabled. The signing chain then dead-ends
+#      because the author identity, not the signing capability, is at fault.
+#
+# Both are solved by forcing the account's @users.noreply.github.com address as
+# the author. We set it at --global scope so it overrides the system-scope
+# identity in /etc/gitconfig, while leaving local devcontainers (which take a
+# different code path and sign via a forwarded SSH agent) on the real host
+# email. If the current email is already a noreply address, we leave it be.
+enforce_privacy_safe_author_email() {
+    local current_email noreply_email
+    current_email=$(git config --get user.email 2>/dev/null || echo "")
+
+    case "$current_email" in
+        *@users.noreply.github.com)
+            # Already privacy-safe; nothing to change.
+            return 0
+            ;;
+    esac
+
+    if noreply_email=$(github_noreply_email); then
+        git config --global user.email "$noreply_email"
+        print_success "Author email set to ${noreply_email} (privacy-safe, overrides system config)"
+    else
+        print_warning "Could not derive your GitHub noreply address (is gh authenticated?); leaving author email as ${current_email:-<unset>}"
+    fi
+}
+
 # Configure signing for Codespaces. The heavy lifting is already done by the
 # Codespaces system gitconfig, which sets gpg.program to the gh-gpgsign helper.
 # We just need to ensure commit.gpgsign is true and that we do NOT set
@@ -151,6 +217,11 @@ configure_codespaces_signing() {
     # Ensure commit/tag signing is on.
     git config --global commit.gpgsign true
     git config --global tag.gpgsign true
+
+    # Force the account's noreply address as the author, both to keep personal
+    # emails out of history and because gh-gpgsign refuses to sign for a
+    # personal author when account email privacy is enabled.
+    enforce_privacy_safe_author_email
 
     # Explicitly unset gpg.format if a previous run (or a stale global config)
     # set it to ssh. In Codespaces the gh-gpgsign helper is a gpg wrapper, not

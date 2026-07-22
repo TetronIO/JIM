@@ -8,8 +8,9 @@ JIM implements an enterprise identity management system using the metaverse patt
 
 ## System Context
 
-<img class="diagram-light" alt="System Context" src="../../diagrams/images/light/jim-structurizr-1-SystemContext.svg">
-<img class="diagram-dark" alt="System Context" src="../../diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
+--8<-- "assets/diagrams/system-context.svg"
+
+<p class="jim-diagram-caption">Administrators and automation clients work through JIM's UI and API; JIM synchronises with the surrounding systems. Dashed elements indicate planned connectivity.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
 ## Layered Architecture
 
@@ -31,8 +32,9 @@ JIM follows a strict N-tier layered architecture. Upper layers depend on lower l
 
 ## Container Diagram
 
-<img class="diagram-light" alt="Containers" src="../../diagrams/images/light/jim-structurizr-1-Containers.svg">
-<img class="diagram-dark" alt="Containers" src="../../diagrams/images/dark/jim-structurizr-1-Containers.svg">
+--8<-- "assets/diagrams/containers.svg"
+
+<p class="jim-diagram-caption">JIM's deployable containers. PostgreSQL doubles as the task queue: the Scheduler queues work and the Worker polls it, so the services coordinate through the database rather than calling each other.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
 ## Metaverse Pattern
 
@@ -43,38 +45,45 @@ The metaverse is the authoritative identity repository at the centre of JIM's ar
 - **SyncRule**<br /> Bidirectional mappings between Connected Systems and the metaverse
 - **Staging Areas**<br /> Import/export staging for transactional integrity
 
-```mermaid
-flowchart LR
-    A["Connected System\n(e.g. HR)"] <-->|Import / Export| B["Metaverse"]
-    B <-->|Import / Export| C["Connected System\n(e.g. AD)"]
-```
+--8<-- "assets/diagrams/metaverse-pattern.svg"
+
+<p class="jim-diagram-caption">Sources project identities into the Metaverse; targets receive them from it. The same Connected System can be both source and target (writeback).<span class="jimdg-caption-motion"> Moving dots trace import and export flows.</span></p>
 
 ## Component Diagrams
 
+The component views use the docs site's hand-authored diagram system and are simplified for legibility (the Worker view also appears on the [customer architecture page](../concepts/architecture.md)); the [process diagrams](#process-diagrams) below carry the exact runtime flows.
+
 ### Application Layer
 
-<img class="diagram-light" alt="Application Layer" src="../../diagrams/images/light/jim-structurizr-1-AppLayerComponents.svg">
-<img class="diagram-dark" alt="Application Layer" src="../../diagrams/images/dark/jim-structurizr-1-AppLayerComponents.svg">
+`JIM.Application` exposes a single entry point, the `JimApplication` facade, which delegates to the domain servers. The Worker's processors bypass the facade and use `SyncServer` and `SyncEngine` directly for performance-critical synchronisation work.
 
-### Connectors
+--8<-- "assets/diagrams/app-layer-components.svg"
 
-<img class="diagram-light" alt="Connectors" src="../../diagrams/images/light/jim-structurizr-1-ConnectorComponents.svg">
-<img class="diagram-dark" alt="Connectors" src="../../diagrams/images/dark/jim-structurizr-1-ConnectorComponents.svg">
+<p class="jim-diagram-caption">The facade fronts the domain servers for the Web and Scheduler services; the Worker's task processors use SyncServer and the stateless SyncEngine directly. Domain servers reach PostgreSQL through IJimRepository, the sync servers through the dedicated ISyncRepository (SyncServer also uses it directly; omitted for legibility).<span class="jimdg-caption-motion"> Moving dots trace calls and data in flight.</span></p>
 
 ### Web Application
 
-<img class="diagram-light" alt="Web App" src="../../diagrams/images/light/jim-structurizr-1-WebAppComponents.svg">
-<img class="diagram-dark" alt="Web App" src="../../diagrams/images/dark/jim-structurizr-1-WebAppComponents.svg">
+--8<-- "assets/diagrams/webapp-components.svg"
+
+<p class="jim-diagram-caption">Every request enters through the authentication middleware, which validates OIDC sign-in against the Identity Provider and API keys, before reaching the Blazor pages or API controllers; both call the JimApplication facade.<span class="jimdg-caption-motion"> Moving dots trace requests in flight.</span></p>
 
 ### Worker Service
 
-<img class="diagram-light" alt="Worker" src="../../diagrams/images/light/jim-structurizr-1-WorkerComponents.svg">
-<img class="diagram-dark" alt="Worker" src="../../diagrams/images/dark/jim-structurizr-1-WorkerComponents.svg">
+--8<-- "assets/diagrams/worker-components.svg"
+
+<p class="jim-diagram-caption">Inside the Worker Service: the host dispatches import, synchronise and export processors, and the Sync Engine makes the synchronisation decisions. The host polls the task queue in PostgreSQL, where the whole service reads and writes staged and Metaverse data; the Connectors carry data to and from Connected Systems.<span class="jimdg-caption-motion"> Moving dots trace data arriving through, and leaving via, the Connectors.</span></p>
+
+### Connectors
+
+--8<-- "assets/diagrams/connector-components.svg"
+
+<p class="jim-diagram-caption">The Worker's import and export processors invoke the connectors, which carry data to and from the external systems. Dashed elements indicate planned connectors.<span class="jimdg-caption-motion"> Moving dots trace data in flight.</span></p>
 
 ### Scheduler Service
 
-<img class="diagram-light" alt="Scheduler" src="../../diagrams/images/light/jim-structurizr-1-SchedulerComponents.svg">
-<img class="diagram-dark" alt="Scheduler" src="../../diagrams/images/dark/jim-structurizr-1-SchedulerComponents.svg">
+--8<-- "assets/diagrams/scheduler-components.svg"
+
+<p class="jim-diagram-caption">The Scheduler Host's polling loop evaluates schedule due times and performs crash recovery, queueing tasks through the facade into PostgreSQL for the Worker to pick up.<span class="jimdg-caption-motion"> Moving dots trace tasks being queued.</span></p>
 
 ## Technology Stack
 
@@ -117,7 +126,7 @@ JIM runs as a set of Docker services:
 
 | Service | Description |
 |---------|-------------|
-| **jim.web** | Blazor Server UI with integrated REST API at `/api/`. Port 5200 (HTTP) / 5201 (HTTPS). Interactive [Scalar](https://scalar.com/) API reference available at `/api/reference` in every environment, backed by a build-time OpenAPI document for instant loading. |
+| **jim.web** | Blazor Server UI with integrated REST API at `/api/`. Listens on port 80 in-container; reached at `http://localhost:5200` in the development Docker stack (HTTPS is terminated by a reverse proxy in production). Interactive [Scalar](https://scalar.com/) API reference available at `/api/reference` in every environment, backed by a build-time OpenAPI document for instant loading. |
 | **jim.worker** | Background task processor. Polls the task queue, processes sync/import/export operations. Uses `ISyncEngine`/`ISyncRepository` separation for testability. |
 | **jim.scheduler** | Schedule management with a 30-second polling cycle. Detects parallel step groups and queues them for concurrent worker dispatch. |
 | **jim.database** | PostgreSQL 18 database. |
@@ -145,8 +154,18 @@ The Worker and Scheduler use `IJimApplicationFactory` and `IConnectorFactory` fo
 
 Export parallelism operates on two independent axes:
 
-1. **LDAP Connector Pipelining:** Multiple LDAP operations execute concurrently within a single export batch using `SemaphoreSlim`-based throttling
-2. **Parallel Batch Processing:** Multiple export batches process concurrently with separate `IRepository` and `IConnector` instances per batch, gated by the `SupportsParallelExport` connector capability
+1. **LDAP Connector Pipelining:** Multiple LDAP operations execute concurrently within a single export batch using `SemaphoreSlim`-based throttling, tuned per directory type by Export Concurrency auto-tune (see `LdapConnector.AutoTuneExportConcurrency`)
+2. **Parallel Batch Processing:** Multiple export batches process concurrently with separate `IRepository` and `IConnector` instances per batch, gated by the `SupportsParallelExport` connector capability, and controlled by a Connected System's Max Export Parallelism setting
+
+The two axes multiply: each parallel batch pipeline gets its own connector instance running its own Export Concurrency operations, so total in-flight operations = Max Export Parallelism x Export Concurrency.
+
+A Connected System's Max Export Parallelism resolves via `ExportParallelismResolver` (`JIM.Worker.Processors`) in this order:
+
+1. An explicit Max Export Parallelism value on the Connected System always wins, respecting the administrator's choice.
+2. Otherwise, if the connector implements `IConnectorRecommendedExportParallelism`, its recommendation is used, clamped to 1-16. The LDAP Connector recommends a deliberately conservative 2 when the system's Export Concurrency signals a capable directory (8 or above; the auto-tune only sets 16, for Active Directory and OpenLDAP), keeping the multiplied total mild (2 x 16 = 32 in-flight operations); otherwise it makes no recommendation.
+3. Otherwise, JIM falls back to 1 (sequential), the pre-existing default.
+
+Note that for directories with a single-writer storage backend (for example OpenLDAP's mdb), higher batch parallelism does not translate into proportionally higher write throughput; the recommendation is a starting point, not a guarantee.
 
 ## Process Diagrams
 

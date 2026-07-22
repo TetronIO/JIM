@@ -50,9 +50,6 @@
 - `jim-docs` - Preview docs site at http://localhost:8000 (live-reloading)
 - `jim-docs-build` - Build static docs site to site/
 
-**Diagrams:**
-- `jim-diagrams` - Export Structurizr C4 diagrams as SVG (requires Docker)
-
 **Planning:**
 - `jim-prd` - Create a new PRD from template (prompts for feature name)
 
@@ -169,6 +166,24 @@ mkdir -p ~/.ssh && chmod 700 ~/.ssh
 **Codespaces caveat:** Codespaces honours the named-volume mount, but each Codespace is its own VM and the volume is scoped to that one VM. State survives container rebuilds within the same Codespace (the common case) but does not survive Codespace deletion.
 
 **To start fresh:** `docker volume rm jim-claude-state` (Docker Desktop / Linux Docker) before the next rebuild. Codespaces users delete the Codespace. If you have a stale `claude-state` volume from an earlier version of this devcontainer, remove it with `docker volume rm claude-state` to free disk space.
+
+## Profiling a Running Service Container
+
+The JIM service containers run with read-only root filesystems, so profiling tools cannot be copied in with `docker cp`. To capture managed thread stacks from a live process (e.g. `jim.worker` pinned at high CPU), run the tool from the devcontainer instead; the container's `/tmp` (a tmpfs holding the .NET diagnostics socket) is reachable through `/proc`:
+
+```bash
+# One-off: install the tool in the devcontainer
+dotnet tool install --tool-path /tmp/dttools dotnet-stack
+
+WPID=$(docker inspect -f '{{.State.Pid}}' jim.worker)
+sudo env TMPDIR=/proc/$WPID/root/tmp PATH=$PATH DOTNET_ROOT=/usr/share/dotnet \
+  /tmp/dttools/dotnet-stack report -p 1
+```
+
+- `-p 1` is the container-internal PID (the app is PID 1 inside the container); the tool locates the diagnostics socket via `TMPDIR`.
+- Threads doing real work show a `CPU_TIME` marker with the hot managed frame at the top; idle threads show wait frames. This pinpoints app-side hot loops (e.g. EF Core `DetectChanges`) that logs and spans cannot see.
+- The same trick works for `dotnet-trace`, `dotnet-counters` and `dotnet-dump`.
+- Pair with a `pg_stat_activity` sampling loop against `jim.database` to split app-side CPU from database time. Note `pg_stat_statements` is not loaded in freshly built stacks, and enabling it requires a database restart; never restart the database mid-run to get it.
 
 ## Troubleshooting
 

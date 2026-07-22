@@ -37,7 +37,7 @@ Get-JIMCertificate -EnabledOnly [-Name <string>]
 
 ### Output
 
-Certificate objects with properties such as `Id`, `Name`, `Notes`, `Enabled`, `Thumbprint`, `Subject`, `Issuer`, `NotBefore`, `NotAfter`, and `CreatedAt`.
+Certificate objects with properties such as `Id`, `Name`, `Thumbprint`, `Subject`, `Issuer`, `ValidFrom`, `ValidTo`, `SourceType`, `IsEnabled`, `IsExpired`, `IsExpiringSoon`, and `DaysUntilExpiry`. Retrieving a single certificate with `-Id` returns the fuller detail object, which additionally carries `Notes` and `CreatedAt`.
 
 ### Examples
 
@@ -217,7 +217,7 @@ Get-JIMCertificate -Id "a1b2c3d4-..." | Remove-JIMCertificate -Force
 ```
 
 ```powershell title="Remove all disabled certificates"
-Get-JIMCertificate | Where-Object { -not $_.Enabled } | Remove-JIMCertificate -Force
+Get-JIMCertificate | Where-Object { -not $_.IsEnabled } | Remove-JIMCertificate -Force
 ```
 
 ### Notes

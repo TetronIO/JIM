@@ -46,23 +46,23 @@ The list view and wildcard `-Uri` lookups return one or more header `PSCustomObj
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `id` | `int` | Unique identifier for the search. Use this to update the search via `Set-JIMPredefinedSearch`. |
-| `name` | `string` | Human-readable display name |
-| `uri` | `string` | Stable slug used in URLs and as a search identifier |
-| `isEnabled` | `bool` | Whether the search is currently visible to end users |
-| `builtIn` | `bool` | Whether the search ships with JIM (as opposed to being administrator-defined) |
-| `isDefaultForMetaverseObjectType` | `bool` | Whether this is the default search for its object type |
-| `metaverseObjectTypeName` | `string` | Name of the Metaverse Object Type the search targets |
-| `metaverseAttributeCount` | `int` | Number of attributes surfaced in the search results |
-| `created` | `datetime` | When the search was created |
+| `Id` | `int` | Unique identifier for the search. Use this to update the search via `Set-JIMPredefinedSearch`. |
+| `Name` | `string` | Human-readable display name |
+| `Uri` | `string` | Stable slug used in URLs and as a search identifier |
+| `IsEnabled` | `bool` | Whether the search is currently visible to end users |
+| `BuiltIn` | `bool` | Whether the search ships with JIM (as opposed to being administrator-defined) |
+| `IsDefaultForMetaverseObjectType` | `bool` | Whether this is the default search for its object type |
+| `MetaverseObjectTypeName` | `string` | Name of the Metaverse Object Type the search targets |
+| `MetaverseAttributeCount` | `int` | Number of attributes surfaced in the search results |
+| `Created` | `datetime` | When the search was created |
 
-`-Id` and literal `-Uri` lookups return a single full search with all of the header fields plus:
+`-Id` and literal `-Uri` lookups return the full search rather than a header. It carries the header fields above except `MetaverseObjectTypeName` and `MetaverseAttributeCount`, which have no equivalent on the full object; use `$search.MetaverseObjectType.Name` and `$search.Attributes.Count` instead. It also adds:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `metaverseObjectType` | `object` | The Metaverse Object Type the search targets |
-| `attributes` | `array` | Attributes surfaced in the search results, ordered by `position` |
-| `criteriaGroups` | `array` | Criteria groups that filter which objects match the search |
+| `MetaverseObjectType` | `object` | The Metaverse Object Type the search targets |
+| `Attributes` | `array` | Attributes surfaced in the search results, ordered by `Position` |
+| `CriteriaGroups` | `array` | Criteria groups that filter which objects match the search |
 
 ### Examples
 
@@ -83,7 +83,7 @@ Get-JIMPredefinedSearch -Uri 'sec*'
 ```
 
 ```powershell title="List every disabled search"
-Get-JIMPredefinedSearch | Where-Object { -not $_.isEnabled }
+Get-JIMPredefinedSearch | Where-Object { -not $_.IsEnabled }
 ```
 
 ---
@@ -106,11 +106,11 @@ Set-JIMPredefinedSearch [-Id] <int> [-IsEnabled <bool>] [-ChangeReason <string>]
 | `Id` | `int` | Yes | | Unique identifier of the search to update. Accepts pipeline input by property name. |
 | `IsEnabled` | `bool` | No | | When specified, sets whether the search is visible to end users. Pass `$true` to enable, `$false` to disable. Omit to leave unchanged. |
 | `ChangeReason` | `string` | No | | Optional reason for the change, recorded on the audit Activity and shown in the search's [configuration change history](history.md). |
-| `PassThru` | `switch` | No | `$false` | If specified, emits the updated search header after the update. |
+| `PassThru` | `switch` | No | `$false` | If specified, emits the updated search after the update. |
 
 ### Output
 
-When `-PassThru` is specified, returns the updated search header. Otherwise, no output.
+When `-PassThru` is specified, returns the updated search in its full form (as `-Id` returns it), not a header. Otherwise, no output.
 
 ### Examples
 
@@ -175,7 +175,7 @@ For a Date/Time attribute you can compare against a date relative to now instead
 
 ```powershell title="Add a group, then filter on a text attribute"
 $group = New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -Type All -PassThru
-New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $group.id `
+New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $group.Id `
     -MetaverseAttributeName 'Department' -ComparisonType Equals -StringValue 'Finance'
 ```
 
@@ -198,11 +198,11 @@ New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId 10 `
 ```powershell title="Mixed logic: (Department = Finance OR Sales) AND IsActive"
 # Top-level All group with the IsActive criterion, plus a nested Any group for the departments.
 $all = New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -Type All -PassThru
-New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $all.id `
+New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $all.Id `
     -MetaverseAttributeName 'IsActive' -ComparisonType Equals -BoolValue $true
-$any = New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -ParentGroupId $all.id -Type Any -PassThru
-New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $any.id -MetaverseAttributeName 'Department' -ComparisonType Equals -StringValue 'Finance'
-New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $any.id -MetaverseAttributeName 'Department' -ComparisonType Equals -StringValue 'Sales'
+$any = New-JIMPredefinedSearchCriteriaGroup -PredefinedSearchId 3 -ParentGroupId $all.Id -Type Any -PassThru
+New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $any.Id -MetaverseAttributeName 'Department' -ComparisonType Equals -StringValue 'Finance'
+New-JIMPredefinedSearchCriterion -PredefinedSearchId 3 -GroupId $any.Id -MetaverseAttributeName 'Department' -ComparisonType Equals -StringValue 'Sales'
 ```
 
 ```powershell title="List the criteria groups for a search"

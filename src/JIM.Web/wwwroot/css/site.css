@@ -4,6 +4,18 @@
     --jim-instance-bar-height: 28px;
 }
 
+/* App.razor's <FocusOnNavigate Selector="h1" /> (standard Blazor Web App template
+   scaffolding) programmatically focuses the page's <h1> after every navigation, so
+   screen readers announce the new page. The stock template pairs that with this
+   exact rule in its default app.css to suppress the resulting browser focus ring,
+   since the focus is not a real keyboard interaction and doesn't need a visible
+   ring for sighted users; it was dropped when JIM's own site.css replaced that
+   file. Restored here so any page using a real <h1> for its title behaves
+   correctly. */
+h1:focus {
+    outline: none;
+}
+
 /* MUDBLAZOR CUSTOMISATIONS */
 /* Note: Colour palettes are defined in css/themes/ files, not here. */
 
@@ -124,6 +136,31 @@ html[lang] a.mud-link.mud-primary-text:visited:hover {
 
 .mud-main-content {
     padding-top: 0;
+}
+
+/* Heading leading-trim: make the space above an h5 heading's glyphs match normal
+   box padding. MudBlazor's h5 (20px / weight 500) inherits the default line-height
+   of 1.334, giving a ~26.7px line box whose half-leading places the caps ~4px lower
+   from the top than the glyphs sit from the left. Inside a padded panel the top gap
+   therefore reads as larger than the left gap, so headings look mis-centred.
+
+   text-box-trim: trim-start removes ONLY the block-start (top) leading, snapping the
+   box's top edge to the cap height (text-box-edge's first value). It is self-adjusting
+   (no magic pixel value to drift when the font or size changes), leaves the block-end
+   edge untouched (so descenders are never clipped and the gap BELOW the heading, hence
+   vertical rhythm, is preserved), and corrects the box geometry itself rather than
+   nudging its position, so it stays consistent whether or not the heading sits in a
+   flex row.
+
+   Applies to every MudText h5 (.mud-typography-h5), not only panel headings; trimming
+   the top leading is uniformly correct for headings, so section and standalone h5s
+   benefit identically. text-box-trim is a modern feature (Chromium 133+, Safari 18.4+);
+   older browsers simply ignore it and keep the current, slightly looser spacing, so
+   this degrades gracefully with no risk to air-gapped deployments running older
+   browsers. */
+.mud-typography-h5 {
+    text-box-trim: trim-start;
+    text-box-edge: cap alphabetic;
 }
 
 

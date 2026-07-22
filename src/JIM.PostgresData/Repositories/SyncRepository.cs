@@ -65,8 +65,8 @@ public partial class SyncRepository : ISyncRepository
     public Task<int> GetConnectedSystemObjectModifiedSinceCountAsync(int connectedSystemId, DateTime modifiedSince)
         => _repo.ConnectedSystems.GetConnectedSystemObjectModifiedSinceCountAsync(connectedSystemId, modifiedSince);
 
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null)
-        => _repo.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null)
+        => _repo.ConnectedSystems.GetConnectedSystemObjectsAsync(connectedSystemId, page, pageSize, knownTotalCount, lastSyncTimestamp, afterId);
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsModifiedSinceAsync(
         int connectedSystemId, DateTime modifiedSince, int page, int pageSize, int? knownTotalCount = null)
@@ -129,6 +129,9 @@ public partial class SyncRepository : ISyncRepository
 
     public Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId)
         => _repo.ConnectedSystems.GetReferenceExternalIdsAsync(csoId);
+
+    public Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds)
+        => _repo.ConnectedSystems.GetReferenceExternalIdsForCsosAsync(csoIds);
 
     public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
         => _repo.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(metaverseObjectId);
@@ -198,11 +201,16 @@ public partial class SyncRepository : ISyncRepository
         IReadOnlyCollection<Guid> referencedMetaverseObjectIds)
         => _repo.Metaverse.GetMetaverseObjectReferenceRecallCandidatesAsync(referencedMetaverseObjectIds);
 
+    public Task<List<MetaverseObjectRecallSummary>> GetMetaverseObjectRecallSummariesAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> scopingAttributeIds)
+        => _repo.Metaverse.GetMetaverseObjectRecallSummariesAsync(metaverseObjectIds, scopingAttributeIds);
+
     public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
         => CreateMetaverseObjectsBulkAsync(metaverseObjects as List<MetaverseObject> ?? metaverseObjects.ToList());
 
     public Task UpdateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
-        => _repo.Metaverse.UpdateMetaverseObjectsAsync(metaverseObjects);
+        => UpdateMetaverseObjectsBulkAsync(metaverseObjects as List<MetaverseObject> ?? metaverseObjects.ToList());
 
     public Task UpdateMetaverseObjectAsync(MetaverseObject metaverseObject)
         => _repo.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
@@ -239,8 +247,8 @@ public partial class SyncRepository : ISyncRepository
     public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
         => _repo.ConnectedSystems.GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
 
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
-        => _repo.ConnectedSystems.GetPendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+    public Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
+        => _repo.ConnectedSystems.GetPendingExportLightweightByConnectedSystemObjectIdAsync(connectedSystemObjectId);
 
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds)
         => _repo.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
@@ -248,8 +256,8 @@ public partial class SyncRepository : ISyncRepository
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetCsoIdsWithPendingExportsByConnectedSystemAsync(connectedSystemId);
 
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId)
-        => _repo.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId);
+    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null)
+        => _repo.ConnectedSystems.GetPendingExportsLightweightByConnectedSystemIdAsync(connectedSystemId, chunkSize);
 
     #endregion
 
@@ -397,6 +405,9 @@ public partial class SyncRepository : ISyncRepository
         List<ConnectedSystemObjectAttributeValue> newAttributeValues)
         => _repo.ConnectedSystems.UpdateConnectedSystemObjectWithNewAttributeValuesAsync(connectedSystemObject, newAttributeValues);
 
+    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined)
+        => _repo.ConnectedSystems.TryClaimConnectedSystemObjectForJoinAsync(connectedSystemObjectId, metaverseObjectId, dateJoined);
+
     #endregion
 
     #region Pending Export — Singular Convenience Methods
@@ -451,8 +462,14 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<PendingExport>> GetExecutableExportsAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetExecutableExportsAsync(connectedSystemId);
 
-    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
-        => _repo.ConnectedSystems.GetExecutableExportBatchAsync(connectedSystemId, skip, take);
+    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
+        => _repo.ConnectedSystems.GetExecutableExportBatchAsync(connectedSystemId, take, afterCreatedAt, afterId);
+
+    public Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+        => _repo.ConnectedSystems.GetRemainingDeferredExportsAsync(connectedSystemId, afterCreatedAt, afterId);
+
+    public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+        => _repo.ConnectedSystems.AnyExecutableNonDeferredExportsAfterAsync(connectedSystemId, afterCreatedAt, afterId);
 
     public Task<List<PendingExportSummary>> GetExecutableExportSummariesAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetExecutableExportSummariesAsync(connectedSystemId);

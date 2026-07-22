@@ -32,14 +32,9 @@ public class MetaverseObjectHeaderDto
     public MetaverseObjectStatus Status { get; set; }
 
     /// <summary>
-    /// The object type ID.
+    /// The object type (id and name). Nested to match the single-object response shape.
     /// </summary>
-    public int TypeId { get; set; }
-
-    /// <summary>
-    /// The object type name.
-    /// </summary>
-    public string TypeName { get; set; } = null!;
+    public MetaverseObjectTypeDto Type { get; set; } = null!;
 
     /// <summary>
     /// Additional attribute values requested via the 'attributes' query parameter.
@@ -59,8 +54,11 @@ public class MetaverseObjectHeaderDto
             Created = header.Created,
             DisplayName = header.DisplayName,
             Status = header.Status,
-            TypeId = header.TypeId,
-            TypeName = header.TypeName
+            Type = new MetaverseObjectTypeDto
+            {
+                Id = header.TypeId,
+                Name = header.TypeName
+            }
         };
 
         // Add any additional attributes (excluding DisplayName which has its own property)

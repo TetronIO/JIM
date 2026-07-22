@@ -5,7 +5,7 @@
 
 <#
 .SYNOPSIS
-    Pester tests for Sync Rule cmdlets.
+    Pester tests for Synchronisation Rule cmdlets.
 #>
 
 BeforeAll {
@@ -158,9 +158,44 @@ Describe 'New-JIMSyncRule' {
         It 'Should support ShouldProcess' {
             $command.Parameters['WhatIf'] | Should -Not -BeNullOrEmpty
         }
+
+        It 'Should have OutboundDeprovisionAction parameter with ValidateSet' {
+            $param = $command.Parameters['OutboundDeprovisionAction']
+            $param | Should -Not -BeNullOrEmpty
+            $validateSet = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $validateSet | Should -Not -BeNullOrEmpty
+            $validateSet.ValidValues | Should -Contain 'Disconnect'
+            $validateSet.ValidValues | Should -Contain 'Delete'
+        }
     }
 
     Context 'Request body composition' {
+
+        It 'Sends outboundDeprovisionAction in the POST body when -OutboundDeprovisionAction is specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMSyncRule -Name 'Test' -ConnectedSystemId 1 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Export -OutboundDeprovisionAction Delete -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.outboundDeprovisionAction -eq 'Delete'
+                }
+            }
+        }
+
+        It 'Omits outboundDeprovisionAction from the POST body when not specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMSyncRule -Name 'Test' -ConnectedSystemId 1 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Export -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('outboundDeprovisionAction')
+                }
+            }
+        }
 
         It 'Sends description in the POST body when -Description is specified' {
             InModuleScope JIM {

@@ -9,28 +9,42 @@
     <DockerfileContext>..\..\..</DockerfileContext>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591;1587</NoWarn>
+
+    <!-- Pin the ASP.NET Core shared framework version explicitly. Without this,
+         Microsoft.NET.Sdk.Web + RestorePackagesWithLockFile resolves the implicit
+         "Microsoft.AspNetCore.App.Internal.Assets" lock file entry to whichever
+         ASP.NET Core runtime patch happens to be installed on the machine that
+         performs the restore, which floats between the devcontainer's pinned SDK
+         (10.0.203 -> runtime 10.0.7) and the production Dockerfiles' pinned SDK
+         (10.0-noble digest -> runtime 10.0.9), breaking locked-mode restore
+         non-deterministically. Pinning to the exact version shipped by the
+         production base images (src/JIM.Web/Dockerfile) makes it deterministic.
+         Keep in sync with the ASP.NET Core runtime version bundled by the pinned
+         mcr.microsoft.com/dotnet/aspnet and dotnet/sdk digests whenever either is
+         bumped (see engineering/DEPENDENCY_PINNING.md). -->
+    <RuntimeFrameworkVersion>10.0.9</RuntimeFrameworkVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Asp.Versioning.Mvc" Version="10.0.0" />
     <PackageReference Include="Asp.Versioning.Mvc.ApiExplorer" Version="10.0.0" />
     <PackageReference Include="Humanizer.Core" Version="3.0.10" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.9" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9">
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
     <!-- Direct pin to override the vulnerable Microsoft.OpenApi 2.0.0 pulled in transitively by
          Microsoft.AspNetCore.OpenApi 10.0.9. 2.7.5 is the first patched release for GHSA-v5pm-xwqc-g5wc
          ("Circular schema references may terminate OpenAPI parsing", high). Remove once the parent
          package references a patched version. -->
-    <PackageReference Include="Microsoft.OpenApi" Version="2.9.0" />
-    <PackageReference Include="Scalar.AspNetCore" Version="2.16.10" />
-    <PackageReference Include="MudBlazor" Version="9.6.0" />
+    <PackageReference Include="Scalar.AspNetCore" Version="2.16.15" />
+    <PackageReference Include="Microsoft.OpenApi" Version="2.11.0" />
+    <PackageReference Include="MudBlazor" Version="9.7.0" />
   </ItemGroup>
 
   <ItemGroup>

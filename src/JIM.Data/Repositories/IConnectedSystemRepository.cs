@@ -160,12 +160,42 @@ public interface IConnectedSystemRepository
     /// <summary>
     /// Retrieves a single batch of Pending Exports that are ready for execution, using AsNoTracking
     /// for minimal memory overhead. Uses the same database-level filtering as <see cref="GetExecutableExportsAsync"/>.
+    /// Pages via keyset pagination ordered by (CreatedAt, Id) so batch collection stays a single
+    /// forward sweep at scale (issue #985).
     /// </summary>
     /// <param name="connectedSystemId">The Connected System to load exports for.</param>
-    /// <param name="skip">Number of rows to skip (for paging).</param>
     /// <param name="take">Maximum number of rows to return.</param>
+    /// <param name="afterCreatedAt">CreatedAt of the last row of the previous batch, or null to start from the beginning.</param>
+    /// <param name="afterId">Id of the last row of the previous batch, or null to start from the beginning.</param>
     /// <returns>Untracked Pending Exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
-    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take);
+    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId);
+
+    /// <summary>
+    /// Collects all remaining executable exports with unresolved references (deferred) strictly
+    /// after the given keyset cursor, in a single query. Used to fast-path the export batch-collection
+    /// loop once a batch is discovered to be made up entirely of deferred exports (issue #985). Same
+    /// Include chain and keyset predicate as <see cref="GetExecutableExportBatchAsync"/>, restricted
+    /// to HasUnresolvedReferences exports, with no page size limit.
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System to load exports for.</param>
+    /// <param name="afterCreatedAt">CreatedAt of the last row already collected, or null to start from the beginning.</param>
+    /// <param name="afterId">Id of the last row already collected, or null to start from the beginning.</param>
+    /// <returns>Untracked, deferred Pending Exports with ConnectedSystemObject, AttributeValues, and AttributeValueChanges loaded.</returns>
+    public Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
+
+    /// <summary>
+    /// Returns whether any executable exports WITHOUT unresolved references exist strictly after
+    /// the given keyset cursor. Guards the deferred-collection fast path (issue #985): deferred
+    /// and executable exports interleave in (CreatedAt, Id) order, so an all-deferred batch does
+    /// not prove the rest of the queue is deferred too. Same filtering semantics and keyset
+    /// predicate as <see cref="GetExecutableExportBatchAsync"/>, restricted to non-deferred
+    /// exports; implemented as an existence check (no Includes, no entity materialisation).
+    /// </summary>
+    /// <param name="connectedSystemId">The Connected System to probe.</param>
+    /// <param name="afterCreatedAt">CreatedAt of the last row already collected, or null to probe from the beginning.</param>
+    /// <param name="afterId">Id of the last row already collected, or null to probe from the beginning.</param>
+    /// <returns>True if at least one executable, non-deferred Pending Export exists beyond the cursor.</returns>
+    public Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId);
 
     /// <summary>
     /// Gets lightweight summaries of executable exports for pre-export reconciliation.
@@ -333,18 +363,24 @@ public interface IConnectedSystemRepository
     public Task<PendingExport?> GetPendingExportByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
 
     /// <summary>
-    /// Retrieves Pending Exports for multiple Connected System Objects in a single query.
-    /// More efficient than calling GetPendingExportByConnectedSystemObjectIdAsync multiple times.
+    /// Lightweight fetch for export evaluation hot paths: the merge-and-replace path
+    /// (<c>ExportEvaluationServer.CreateOrUpdatePendingExportWithNoNetChangeAsync</c>) and the
+    /// deprovisioning delete path (<c>ExportEvaluationServer.EnsureDeletePendingExportAsync</c>). Only
+    /// AttributeValueChanges (with Attribute) are loaded; ConnectedSystemObject, ConnectedSystem
+    /// and SourceMetaverseObject and their attribute value graphs are skipped because neither
+    /// caller reads them. <see cref="GetPendingExportByConnectedSystemObjectIdAsync"/>'s full
+    /// Include chain could load hundreds of thousands of rows per fetch for a large group's
+    /// Connected System Object and source Metaverse Object, re-fetched once per removed member
+    /// during cohort deprovisioning (issue #986). Use this method on that hot path instead;
+    /// <see cref="GetPendingExportByConnectedSystemObjectIdAsync"/> stays as-is for callers that
+    /// need the full graph (for example the Pending Export detail page).
     /// </summary>
-    /// <param name="connectedSystemObjectIds">The CSO IDs to retrieve Pending Exports for.</param>
-    /// <returns>A dictionary mapping CSO ID to its Pending Export (if any).</returns>
-    /// <exception cref="JIM.Models.Exceptions.DuplicatePendingExportException">
-    /// Thrown when duplicate Pending Exports are found for the same CSO, indicating a data integrity violation.
-    /// </exception>
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(IEnumerable<Guid> connectedSystemObjectIds);
+    /// <param name="connectedSystemObjectId">The unique identifier of the Connected System Object.</param>
+    /// <returns>The PendingExport for the CSO with AttributeValueChanges loaded, or null if none exists.</returns>
+    public Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId);
 
     /// <summary>
-    /// Lightweight version of GetPendingExportsByConnectedSystemObjectIdsAsync for reconciliation.
+    /// Retrieves Pending Exports for multiple Connected System Objects in a single lightweight query.
     /// Uses AsNoTracking and only loads AttributeValueChanges (with Attribute), avoiding the heavy
     /// Include chains for ConnectedSystemObject, ConnectedSystem, and SourceMetaverseObject.
     /// Uses the ConnectedSystemObjectId FK property for the dictionary key instead of loading the full CSO.
@@ -373,10 +409,14 @@ public interface IConnectedSystemRepository
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId);
 
     /// <summary>
-    /// Loads all Pending Exports for a Connected System in a single bulk query, keyed by CSO ID.
-    /// More efficient than per-page loading for large-scale reconciliation.
+    /// Loads all Pending Exports for a Connected System, keyed by CSO ID. More efficient than
+    /// per-page loading for large-scale reconciliation. Loads in bounded keyset-paginated chunks
+    /// so each statement stays inside the database's statement timeout regardless of backlog size
+    /// (a Scale500k25kGroups run holds 525K Pending Exports with 9.8M attribute value changes).
     /// </summary>
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId);
+    /// <param name="connectedSystemId">The Connected System whose Pending Exports to load.</param>
+    /// <param name="chunkSize">Pending Exports loaded per statement; null uses the implementation default.</param>
+    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null);
 
     /// <summary>
     /// Gets all Connected System Objects that are joined to a specific Metaverse Object.
@@ -511,7 +551,12 @@ public interface IConnectedSystemRepository
     /// <param name="includeDisabledSyncRules">Controls whether to return Synchronisation Rules that are disabled</param>
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules, bool withChangeTracking = false);
 
-    public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
+    /// <summary>
+    /// Retrieves lightweight Synchronisation Rule headers for list views, optionally filtered.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">When supplied, only rules targeting this Metaverse Object Type are returned.</param>
+    /// <param name="direction">When supplied, only rules with this direction are returned.</param>
+    public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync(int? metaverseObjectTypeId = null, SyncRuleDirection? direction = null);
 
     /// <summary>
     /// Gets the change history for a Connected System Object.
@@ -634,7 +679,7 @@ public interface IConnectedSystemRepository
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null);
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
 
     /// <summary>
     /// Batch loads Connected System Objects by their IDs with the full Include chain needed for
@@ -653,6 +698,16 @@ public interface IConnectedSystemRepository
     /// <param name="csoId">The CSO whose reference attribute values should be looked up.</param>
     /// <returns>Dictionary mapping referenced CSO GUIDs to their external ID strings.</returns>
     public Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId);
+
+    /// <summary>
+    /// Batched form of <see cref="GetReferenceExternalIdsAsync"/>: returns the reference external ID
+    /// lookups for a whole page of CSOs in one query, keyed by owning CSO ID. Every requested ID is
+    /// present in the result; owners with no resolved reference values map to an empty dictionary,
+    /// so callers can distinguish "no references" from "not fetched" without a fallback query.
+    /// </summary>
+    /// <param name="csoIds">The CSOs whose reference attribute values should be looked up.</param>
+    /// <returns>Dictionary keyed by owning CSO ID; each value maps referenced CSO GUIDs to their external ID strings.</returns>
+    public Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds);
 
     /// <summary>
     /// Returns all the CSOs for a Connected System that are marked as Obsolete.
@@ -770,6 +825,17 @@ public interface IConnectedSystemRepository
         List<ConnectedSystemObject> connectedSystemObjects,
         List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
         List<Guid>? pendingRemovalIds = null);
+
+    /// <summary>
+    /// Atomically claims an unjoined Connected System Object for a Metaverse Object during export
+    /// matching (join-before-provision); the claim succeeds only if the object is still unclaimed
+    /// at write time, guarding against two Metaverse Objects racing to join the same object;
+    /// returns true if the claim was written, false if another Metaverse Object claimed it first.
+    /// On success the row's MetaverseObjectId, JoinType (Joined), DateJoined and Status (Normal)
+    /// are set; the caller owns fixing up any tracked instance to match (raw SQL bypasses the
+    /// change tracker).
+    /// </summary>
+    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined);
 
     /// <summary>
     /// Batch updates only the join-related columns (JoinType, DateJoined, MetaverseObjectId) on

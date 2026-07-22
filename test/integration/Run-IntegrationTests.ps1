@@ -164,8 +164,8 @@
     ./Run-IntegrationTests.ps1 -PreRelease
 
     Runs the full pre-release regression: every implemented scenario against both
-    directory types, with Samba AD at the MediumLarge template and OpenLDAP at Scale100k50Groups.
-    Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD MediumLarge -TemplateOpenLDAP Scale100k50Groups.
+    directory types, with Samba AD at the Medium template and OpenLDAP at Large.
+    Equivalent to: -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Large.
 #>
 
 param(
@@ -213,6 +213,15 @@ param(
 
     [Parameter(Mandatory=$false)]
     [switch]$DisableChangeTracking,
+
+    # OpenLDAP integration containers default to relaxed MDB durability (nosync; no
+    # per-transaction fsync) so large-template test cycles run fast. That is a TEST-ONLY
+    # speed-up and NOT the customer experience: real directories fsync their writes and
+    # that bounds export throughput. Pass this switch to run with durable,
+    # customer-representative directory writes. Performance baselines are kept separate
+    # per mode. Has no effect on Samba AD runs (always durable).
+    [Parameter(Mandatory=$false)]
+    [switch]$DurableDirectoryWrites,
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("Nano", "Micro", "Small", "Medium", "MediumLarge", "Large", "Scale100k50Groups", "Scale200k55Groups", "Scale500k65Groups", "Scale750k70Groups", "Scale1m80Groups", "Scale100k5kGroups", "Scale200k10kGroups", "Scale500k25kGroups", "Scale750k40kGroups", "Scale1m60kGroups")]
@@ -314,14 +323,10 @@ function Test-LongTailTemplateCompatibility {
 Test-LongTailTemplateCompatibility -Template $Template -DirectoryType $DirectoryType `
     -TemplateSambaAD $TemplateSambaAD -TemplateOpenLDAP $TemplateOpenLDAP
 
-# Hard-fail: Scenario 14 (Attribute Priority) depends on two LDAP suffixes hosted on a single
-# OpenLDAP container (docker/openldap/scripts/01-add-second-suffix.sh); Samba AD has no
-# equivalent multi-suffix mechanism. Reject early rather than failing deep into setup.
-# -DirectoryType All is exempt: its handler below runs the OpenLDAP leg and skips the
-# Samba AD leg for this scenario, and the -Scenario All loop likewise skips it on Samba AD.
-if ($Scenario -like "*Scenario14*" -and $DirectoryType -eq "SambaAD") {
-    throw "Scenario 14 (Attribute Priority) requires two LDAP suffixes on a single OpenLDAP container and is OpenLDAP only. Rejected -DirectoryType $DirectoryType. Use -DirectoryType OpenLDAP."
-}
+# NOTE: Scenario 14 (Attribute Priority) is OpenLDAP only (two-suffix topology). Its
+# directory-type handling runs *after* scenario/directory resolution (see "Scenario 14
+# directory coercion" below), not here, because when the scenario is chosen from the
+# interactive menu $Scenario is still empty at this point.
 
 # Resolve directory configuration (used throughout for Docker profiles, population, setup)
 # Skip for "All" — the DirectoryType All handler orchestrates multiple runs with specific types.
@@ -343,7 +348,11 @@ function Invoke-ImagePrunePreservingSnapshots {
         $ids = docker images --filter "label=$label" -q 2>$null
         if ($ids) { $preserveIds += $ids }
     }
-    $preserveIds = $preserveIds | Sort-Object -Unique | Where-Object { $_ -ne "" }
+    # Wrap with @(...) so that when zero images carry a preserve label the pipeline yields an empty
+    # array rather than $null; under Set-StrictMode -Version Latest, $null.Count throws
+    # "The property 'Count' cannot be found on this object" and aborts Step 7 cleanup on an otherwise
+    # green run (same idiom used elsewhere in this file for StrictMode-safe .Count access).
+    $preserveIds = @($preserveIds | Sort-Object -Unique | Where-Object { $_ -ne "" })
 
     if ($preserveIds.Count -eq 0) {
         $result = docker image prune -af 2>&1
@@ -539,7 +548,7 @@ function Show-ScenarioMenu {
         }
         @{
             Name = "Pre-Release"
-            Description = "Runs every implemented scenario sequentially for both Samba AD and OpenLDAP at MediumLarge and Scale100k50Groups templates, respectively"
+            Description = "Runs every implemented scenario sequentially for both Samba AD and OpenLDAP at Medium and Large templates, respectively"
             Disabled = $false
             SeparatorAfter = $true
         }
@@ -1219,12 +1228,12 @@ function Test-TemplateRelevant {
     return $true
 }
 
-# -PreRelease is shorthand for: -Scenario All -DirectoryType All -TemplateSambaAD MediumLarge -TemplateOpenLDAP Scale100k50Groups
+# -PreRelease is shorthand for: -Scenario All -DirectoryType All -TemplateSambaAD Medium -TemplateOpenLDAP Large
 if ($PreRelease) {
     $Scenario               = "All"
     $DirectoryType          = "All"
-    $TemplateSambaAD        = "MediumLarge"
-    $TemplateOpenLDAP       = "Scale100k50Groups"
+    $TemplateSambaAD        = "Medium"
+    $TemplateOpenLDAP       = "Large"
     $DirectoryTypeWasExplicitlySet = $true
     $TemplateWasExplicitlySet      = $true
 }
@@ -1234,13 +1243,13 @@ if (-not $Scenario) {
     $Scenario = Show-ScenarioMenu
 
     # "Pre-Release" is a special menu entry that expands to all-scenarios, both directory
-    # types, with Samba AD at MediumLarge and OpenLDAP at Scale100k50Groups. It bypasses the Template
+    # types, with Samba AD at Medium and OpenLDAP at Large. It bypasses the Template
     # and DirectoryType sub-menus since those are fixed by the Pre-Release preset.
     if ($Scenario -eq "Pre-Release") {
         $Scenario                      = "All"
         $DirectoryType                 = "All"
-        $TemplateSambaAD               = "MediumLarge"
-        $TemplateOpenLDAP              = "Scale100k50Groups"
+        $TemplateSambaAD               = "Medium"
+        $TemplateOpenLDAP              = "Large"
         $DirectoryTypeWasExplicitlySet = $true
         $TemplateWasExplicitlySet      = $true
     }
@@ -1255,9 +1264,15 @@ if (-not $Scenario) {
         }
     }
 
-    # Show directory type menu only if not explicitly provided
+    # Show directory type menu only if not explicitly provided. Scenario 14 is OpenLDAP
+    # only (two-suffix topology), so don't offer a choice; go straight to OpenLDAP.
     if (-not $DirectoryTypeWasExplicitlySet) {
-        $DirectoryType = Show-DirectoryTypeMenu
+        if ($Scenario -like "*Scenario14*") {
+            $DirectoryType = "OpenLDAP"
+        }
+        else {
+            $DirectoryType = Show-DirectoryTypeMenu
+        }
         # Re-resolve directory config with the selected type (skip for "All" — handled below)
         if ($DirectoryType -ne "All") {
             $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType $DirectoryType
@@ -1284,6 +1299,25 @@ if (-not $Scenario) {
             'Default'    { } # neither switch set
         }
     }
+}
+
+# ---------------------------------------------------------------------------
+# Scenario 14 directory coercion (Attribute Priority is OpenLDAP only)
+# ---------------------------------------------------------------------------
+# Scenario 14 depends on two LDAP suffixes hosted on a single OpenLDAP container
+# (docker/openldap/scripts/01-add-second-suffix.sh); Samba AD has no equivalent
+# multi-suffix mechanism. This runs after scenario/directory resolution (whether the
+# values came from parameters or the interactive menu) and before the build, so the
+# constraint is enforced whichever way they were chosen. If -DirectoryType SambaAD was
+# explicitly passed, respect the explicit intent and reject; otherwise coerce to
+# OpenLDAP. -DirectoryType All is handled by its own block below.
+if ($Scenario -like "*Scenario14*" -and $DirectoryType -eq "SambaAD") {
+    if ($DirectoryTypeWasExplicitlySet) {
+        throw "Scenario 14 (Attribute Priority) requires two LDAP suffixes on a single OpenLDAP container and is OpenLDAP only. Rejected -DirectoryType SambaAD. Use -DirectoryType OpenLDAP."
+    }
+    Write-Host "${YELLOW}Scenario 14 (Attribute Priority) is OpenLDAP only; using -DirectoryType OpenLDAP.${NC}"
+    $DirectoryType = "OpenLDAP"
+    $script:DirectoryConfig = Get-DirectoryConfig -DirectoryType "OpenLDAP"
 }
 
 # ---------------------------------------------------------------------------
@@ -1496,6 +1530,42 @@ function Reset-JIMForNextScenario {
         foreach ($ou in @("OU=TestUsers,DC=gentian,DC=local", "OU=CorpManaged,DC=gentian,DC=local")) {
             docker exec samba-ad-target samba-tool ou delete $ou --force-subtree-delete 2>&1 | Out-Null
         }
+    }
+
+    # 3b. Clean OpenLDAP test data (yellowstone.local / glitterband.local), used by the OpenLDAP directory type.
+    # Unlike the JIM database (volume removed above) and Samba AD (OUs deleted above), the OpenLDAP directory has
+    # no other cross-scenario reset: it is a long-lived container whose data volume persists between scenarios.
+    # Without this, each OpenLDAP scenario imports the accumulated objects of every earlier OpenLDAP scenario;
+    # that is why the "six-user" Scenario14-AttributePriority actually synchronised ~50,000 stale objects and hit
+    # the Metaverse Object update concurrency failure. Delete the People/Groups subtrees (all users and groups) and
+    # recreate the empty base OUs the next scenario's populate expects, symmetric with the Samba AD OU cleanup above.
+    $openLdapRunning = docker ps --filter "name=openldap-primary" --format '{{.Names}}' 2>$null
+    if ($openLdapRunning) {
+        Write-Host "${GRAY}  Cleaning OpenLDAP test data...${NC}"
+        $openLdapPurge = @'
+uri="ldap://localhost:1389"
+pw="Test@123!"
+for suffix in dc=yellowstone,dc=local dc=glitterband,dc=local; do
+  admin="cn=admin,$suffix"
+  ldapdelete -r -x -H "$uri" -D "$admin" -w "$pw" "ou=People,$suffix" "ou=Groups,$suffix" >/dev/null 2>&1 || true
+  ldapadd -x -H "$uri" -D "$admin" -w "$pw" >/dev/null 2>&1 <<LDIF || true
+dn: ou=People,$suffix
+objectClass: organizationalUnit
+ou: People
+
+dn: ou=Groups,$suffix
+objectClass: organizationalUnit
+ou: Groups
+LDIF
+done
+'@
+        # This .ps1 uses CRLF line endings, so the here-string above carries a trailing CR on
+        # every line. Passed to bash, each CR becomes part of the command: the LDAP URI parses
+        # as "ldap://localhost:1389\r" (rejected), and the heredoc terminator "LDIF\r" never
+        # matches "LDIF". Every ldapdelete/ldapadd then fails, '|| true' and Out-Null swallow the
+        # errors, and the purge silently no-ops, letting OpenLDAP pollution accumulate across
+        # scenarios. Strip CR so bash receives clean LF-terminated lines.
+        docker exec openldap-primary bash -c ($openLdapPurge -replace "`r", "") 2>&1 | Out-Null
     }
 
     # 4. Generate new API key and update .env
@@ -1922,6 +1992,22 @@ if ($DisableChangeTracking) {
 } else {
     Write-Host "  Change Tracking:         ${CYAN}Enabled${NC}"
 }
+if ($DirectoryType -in @("OpenLDAP", "All")) {
+    if ($DurableDirectoryWrites) {
+        Write-Host "  Directory Writes:        ${CYAN}Durable (customer-representative)${NC}"
+    } else {
+        Write-Host "  Directory Writes:        ${YELLOW}Fast/nosync (TEST-ONLY speed-up; not customer-representative)${NC}"
+    }
+}
+
+# Wire the durability mode through to the OpenLDAP container (compose reads
+# OPENLDAP_FAST_WRITES; the container's boot reconcile applies or removes the
+# MDB nosync flags accordingly). Snapshot images are mode-agnostic.
+$env:OPENLDAP_FAST_WRITES = if ($DurableDirectoryWrites) { 'no' } else { 'yes' }
+
+# Performance baselines are per durability mode: fast-write and durable runs have very
+# different export wall-clocks, so comparing across modes would mislead.
+$script:PerfModeSuffix = if ($DurableDirectoryWrites) { "-durable" } else { "" }
 
 # Metrics streaming status.
 # Hydrate JIM_BENCH_* from .env into the process env when not already set,
@@ -2238,6 +2324,42 @@ Write-Section "Step 3: Starting Services"
 # it. See utils/Initialize-WorkerLogDirectories.ps1 for the full rationale.
 Initialize-WorkerLogDirectories -LogDirectory (Join-Path $scriptRoot "results" "logs")
 
+# Scale PostgreSQL with template size (mirrors the per-template OpenLDAP memory scaling
+# further below). docker-compose.override.yml parameterises the database's command with
+# JIM_DB_* variables, defaulting to the low-footprint dev profile (256MB shared_buffers,
+# 1GB max_wal_size) when unset, so small templates stay laptop-friendly. At scale that
+# profile is punishing: the Scale500k25kGroups run triggered WAL-pressure checkpoints
+# every ~12 seconds (PostgreSQL logged "checkpoints are occurring too frequently" 1,488
+# times) and each checkpoint's fsync storm stalled bulk COPY streams for up to 78s.
+# Frequent checkpoints also amplify WAL volume itself (every checkpoint resets full-page
+# writes), so spacing them out reduces total I/O, not just stalls. lz4 WAL compression
+# shrinks the full-page images that dominate bulk-load WAL. shm_size must exceed
+# shared_buffers with ~25% headroom (see docker-compose.yml).
+$jimDbProfile = switch -Wildcard ($Template) {
+    "Scale1m*"   { @{ SharedBuffers = "8GB"; EffectiveCache = "16GB"; ShmSize = "10gb"; MaxWal = "24GB"; MinWal = "2GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
+    "Scale750k*" { @{ SharedBuffers = "6GB"; EffectiveCache = "12GB"; ShmSize = "8gb";  MaxWal = "20GB"; MinWal = "2GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
+    "Scale500k*" { @{ SharedBuffers = "4GB"; EffectiveCache = "8GB";  ShmSize = "5gb";  MaxWal = "16GB"; MinWal = "1GB"; MaintenanceWorkMem = "1GB"; WorkMem = "64MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
+    "Scale200k*" { @{ SharedBuffers = "2GB"; EffectiveCache = "4GB";  ShmSize = "3gb";  MaxWal = "8GB";  MinWal = "1GB"; MaintenanceWorkMem = "512MB"; WorkMem = "32MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
+    "Scale100k*" { @{ SharedBuffers = "1GB"; EffectiveCache = "2GB";  ShmSize = "1536mb"; MaxWal = "6GB"; MinWal = "512MB"; MaintenanceWorkMem = "256MB"; WorkMem = "16MB"; WalBuffers = "16MB"; CheckpointTimeout = "15min"; WalCompression = "lz4" }; break }
+    default      { @{ SharedBuffers = $null; EffectiveCache = $null; ShmSize = $null; MaxWal = $null; MinWal = $null; MaintenanceWorkMem = $null; WorkMem = $null; WalBuffers = $null; CheckpointTimeout = $null; WalCompression = $null } }
+}
+# Always assign (clearing to $null removes the variable), so a Scale run in this shell
+# cannot leak its profile into a later small-template run; compose then falls back to
+# the dev defaults in docker-compose.override.yml. Mirrors OPENLDAP_PRIMARY_MEMORY below.
+$env:JIM_DB_SHARED_BUFFERS       = $jimDbProfile.SharedBuffers
+$env:JIM_DB_EFFECTIVE_CACHE_SIZE = $jimDbProfile.EffectiveCache
+$env:JIM_DB_SHM_SIZE             = $jimDbProfile.ShmSize
+$env:JIM_DB_MAX_WAL_SIZE         = $jimDbProfile.MaxWal
+$env:JIM_DB_MIN_WAL_SIZE         = $jimDbProfile.MinWal
+$env:JIM_DB_MAINTENANCE_WORK_MEM = $jimDbProfile.MaintenanceWorkMem
+$env:JIM_DB_WORK_MEM             = $jimDbProfile.WorkMem
+$env:JIM_DB_WAL_BUFFERS          = $jimDbProfile.WalBuffers
+$env:JIM_DB_CHECKPOINT_TIMEOUT   = $jimDbProfile.CheckpointTimeout
+$env:JIM_DB_WAL_COMPRESSION      = $jimDbProfile.WalCompression
+if ($jimDbProfile.SharedBuffers) {
+    Write-Host "  PostgreSQL scaled for $Template template: shared_buffers=$($jimDbProfile.SharedBuffers), max_wal_size=$($jimDbProfile.MaxWal), checkpoint_timeout=$($jimDbProfile.CheckpointTimeout), wal_compression=$($jimDbProfile.WalCompression)" -ForegroundColor Gray
+}
+
 Write-Step "Starting JIM stack..."
 $jimResult = docker compose -f docker-compose.yml -f docker-compose.override.yml --profile with-db up -d 2>&1
 if ($LASTEXITCODE -ne 0) {
@@ -2260,6 +2382,17 @@ if (Get-Command socat -ErrorAction SilentlyContinue) {
 }
 
 Start-Sleep -Seconds 2
+
+# Snapshot image selection communicates with docker compose via process-level environment
+# variables, and an all-scenarios sweep invokes each scenario in this same process. Clear them
+# all up front so a scenario that skips snapshot selection (Scenario 1's empty target,
+# Scenario 14's bespoke six-user dataset) or whose snapshot check fails gets the compose
+# defaults, not the previous scenario's snapshot. Leaked state here put Scenario 14 on the
+# previous scenario's general-small image (50 baked-in users), tripping its isolation check.
+$env:SAMBA_IMAGE_PRIMARY = $null
+$env:SAMBA_IMAGE_SOURCE = $null
+$env:SAMBA_IMAGE_TARGET = $null
+$env:OPENLDAP_IMAGE_PRIMARY = $null
 
 # Check for pre-populated snapshot images (Scenario 1 / primary)
 # Note: "*Scenario1*" also substring-matches "Scenario14-...", so it must be excluded explicitly;
@@ -2333,6 +2466,28 @@ if ($DirectoryType -eq "OpenLDAP") {
                 Write-Host "  ${GREEN}OpenLDAP snapshot built and ready: $olTag${NC}"
             }
         }
+    }
+
+    # Scale the OpenLDAP container's memory limit with template size. back-mdb has
+    # no internal entry cache; it relies entirely on the OS page cache over its
+    # memory-mapped databases, so the limit must accommodate the working set (both
+    # suffixes plus the hot accesslog tail) or large-template runs thrash: the
+    # Scale500k25kGroups big-group export measurably degraded at the old fixed 2G
+    # cap with slapd pinned at 1.94G. Unlike the Samba scaling above, this applies
+    # regardless of snapshots; the memory pressure comes at run time (import and
+    # export), not during population. Limits are caps, not reservations, so the
+    # low default keeps small templates safe on modest dev machines while costing
+    # scale runs nothing.
+    $env:OPENLDAP_PRIMARY_MEMORY = switch -Wildcard ($Template) {
+        "Scale1m*"   { "12G"; break }
+        "Scale750k*" { "10G"; break }
+        "Scale500k*" { "8G"; break }
+        "Scale200k*" { "4G"; break }
+        "Scale100k*" { "3G"; break }
+        default      { "2G" }
+    }
+    if ($env:OPENLDAP_PRIMARY_MEMORY -ne "2G") {
+        Write-Host "  OpenLDAP memory limit scaled to $($env:OPENLDAP_PRIMARY_MEMORY) for $Template template" -ForegroundColor Gray
     }
 
     Write-Step "Starting OpenLDAP (Primary)..."
@@ -3135,13 +3290,14 @@ if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
 
     # Save current wall-clock metrics
     $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
-    $currentFile = Join-Path $perfDir "$Scenario-$Template-$timestamp.json"
+    $currentFile = Join-Path $perfDir "$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json"
     $wallClockMetrics | ConvertTo-Json -Depth 10 | Set-Content $currentFile
-    Write-Success "Saved wall-clock metrics to: results/performance/$hostname/$Scenario-$Template-$timestamp.json"
+    Write-Success "Saved wall-clock metrics to: results/performance/$hostname/$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json"
 
     # Find most recent previous baseline (excluding current run)
-    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template-*.json" |
-        Where-Object { $_.Name -ne "$Scenario-$Template-$timestamp.json" } |
+    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template$($script:PerfModeSuffix)-*.json" |
+        Where-Object { $_.Name -ne "$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json" } |
+        Where-Object { $script:PerfModeSuffix -ne "" -or $_.Name -notlike "*-durable-*" } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
@@ -3203,7 +3359,7 @@ if ($Template -in $metricsSkippedTemplates -and -not $CaptureMetrics) {
     else {
         Write-Host ""
         Write-Host "${YELLOW}No previous baseline found for comparison.${NC}"
-        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template on $hostname${NC}"
+        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template$($script:PerfModeSuffix) on $hostname${NC}"
     }
 }
 else {
@@ -3414,13 +3570,14 @@ else {
 
     # Save current metrics
     $timestamp = (Get-Date).ToString("yyyy-MM-dd_HHmmss")
-    $currentFile = Join-Path $perfDir "$Scenario-$Template-$timestamp.json"
+    $currentFile = Join-Path $perfDir "$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json"
     $metrics | ConvertTo-Json -Depth 10 | Set-Content $currentFile
-    Write-Success "Saved metrics to: results/performance/$hostname/$Scenario-$Template-$timestamp.json"
+    Write-Success "Saved metrics to: results/performance/$hostname/$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json"
 
     # Find most recent previous baseline (excluding current run)
-    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template-*.json" |
-        Where-Object { $_.Name -ne "$Scenario-$Template-$timestamp.json" } |
+    $previousFiles = Get-ChildItem $perfDir -Filter "$Scenario-$Template$($script:PerfModeSuffix)-*.json" |
+        Where-Object { $_.Name -ne "$Scenario-$Template$($script:PerfModeSuffix)-$timestamp.json" } |
+        Where-Object { $script:PerfModeSuffix -ne "" -or $_.Name -notlike "*-durable-*" } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
@@ -3459,7 +3616,7 @@ else {
     else {
         Write-Host ""
         Write-Host "${YELLOW}No previous baseline found for comparison.${NC}"
-        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template on $hostname${NC}"
+        Write-Host "${GRAY}This is the first performance capture for $Scenario-$Template$($script:PerfModeSuffix) on $hostname${NC}"
     }
 }
 } # end else (metrics not skipped)

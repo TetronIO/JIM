@@ -1,0 +1,164 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@using JIM.Models.Core
+@using JIM.Models.Core.DTOs
+@using JIM.Utilities
+@using JIM.Web.Services
+@inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        @if (_impact == null)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        }
+        else
+        {
+            <MudStack Spacing="4">
+                @if (_impact.BlockedByValues)
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                        <MudText Typo="Typo.subtitle2">@_impact.ObjectsWithValues.ToString("N0") @_impact.MetaverseObjectTypeName object(s) have a value</MudText>
+                        @if (!string.IsNullOrEmpty(_impact.MetaverseObjectTypePluralName))
+                        {
+                            <MudLink Href="@Utilities.GetMetaverseObjectHasAttributeSearchHref(_impact.MetaverseObjectTypePluralName, _impact.AttributeName)" Class="mt-1 d-inline-flex align-center">
+                                <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="mr-1" />View the object(s) with a value
+                            </MudLink>
+                        }
+                    </MudAlert>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Clear these values first, then remove the binding.
+                    </MudText>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
+                        No @_impact.MetaverseObjectTypeName has a value for this attribute. Safe to remove; no object data will be lost.
+                    </MudAlert>
+
+                    @if (_cascadeReferences.Count > 0)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                            <MudText Typo="Typo.subtitle2">These @_cascadeReferences.Count reference(s) will also be removed</MudText>
+                            <MudList T="string" Dense="true" Class="mt-1">
+                                @foreach (var reference in _cascadeReferences)
+                                {
+                                    <MudListItem T="string" Icon="@Icons.Material.Filled.Link">
+                                        @reference.Description
+                                    </MudListItem>
+                                }
+                            </MudList>
+                        </MudAlert>
+
+                        <div>
+                            <MudText Typo="Typo.body2" Class="mb-1">Type <b>@_impact.AttributeName</b> to confirm</MudText>
+                            <MudTextField @bind-Value="_confirmText" Variant="Variant.Outlined" Immediate="true"
+                                          Placeholder="@_impact.AttributeName" AutoFocus="true"
+                                          Adornment="Adornment.End"
+                                          AdornmentIcon="@(ConfirmMatches() ? Icons.Material.Filled.CheckCircle : null)" />
+                        </div>
+                    }
+                }
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled"
+                   Disabled="@(!CanRemove())" OnClick="RemoveAsync">
+            @RemoveButtonText()
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    [Parameter]
+    public int AttributeId { get; set; }
+
+    [Parameter]
+    public int MetaverseObjectTypeId { get; set; }
+
+    private AttributeUnassignImpact? _impact;
+    private List<AttributeReference> _cascadeReferences = new();
+    private string _confirmText = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var jim = JimFactory.Create();
+        _impact = await jim.Metaverse.EvaluateAttributeUnassignAsync(AttributeId, MetaverseObjectTypeId);
+        // The impact's References include the binding row itself; the cascade list is everything beyond it.
+        _cascadeReferences = _impact.References.Where(r => r.Kind != AttributeReferenceKind.Binding).ToList();
+    }
+
+    private bool ConfirmMatches() =>
+        _impact != null && string.Equals(_confirmText, _impact.AttributeName, StringComparison.Ordinal);
+
+    private bool CanRemove()
+    {
+        if (_impact == null || _impact.BlockedByValues || _impact.BuiltIn || !_impact.WasBound)
+            return false;
+
+        return _cascadeReferences.Count == 0 || ConfirmMatches();
+    }
+
+    private string RemoveButtonText() =>
+        _cascadeReferences.Count > 0
+            ? $"Remove binding + {_cascadeReferences.Count} reference(s)"
+            : "Remove binding";
+
+    private async Task RemoveAsync()
+    {
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Remove");
+        if (cancelled)
+            return;
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var impact = await jim.Metaverse.UnassignAttributeFromObjectTypeAsync(AttributeId, MetaverseObjectTypeId, user, changeReason);
+            if (!impact.Unassigned)
+            {
+                Snackbar.Add("The binding could not be removed; it may now hold stored values. Refresh and try again.", Severity.Warning);
+                return;
+            }
+            Snackbar.Add($"Removed \"{impact.AttributeName}\" from {impact.MetaverseObjectTypeName}.", Severity.Success);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Failed to remove binding: {ex.Message}", Severity.Error);
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>
+    /// Opens the remove-binding (unassign) dialog. Returns true when the binding was removed.
+    /// </summary>
+    public static async Task<bool> ShowAsync(IDialogService dialogService, int attributeId, string attributeName,
+        int metaverseObjectTypeId, string metaverseObjectTypeName)
+    {
+        var parameters = new DialogParameters<RemoveAttributeBindingDialog>
+        {
+            { x => x.AttributeId, attributeId },
+            { x => x.MetaverseObjectTypeId, metaverseObjectTypeId }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await dialogService.ShowAsync<RemoveAttributeBindingDialog>(
+            $"Remove \"{attributeName}\" from {metaverseObjectTypeName}", parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}

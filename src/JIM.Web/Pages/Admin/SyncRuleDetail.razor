@@ -18,7 +18,7 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>Synchronisation Rule: @_syncRuleNameOrCreate</PageTitle>
-<MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Synchronisation Rule:</span> <span class="mud-primary-text">@_syncRuleNameOrCreate</span></MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" /><span>Synchronisation Rule:</span> <span class="mud-primary-text">@_syncRuleNameOrCreate</span></MudText>
 <div class="d-flex justify-space-between align-center">
     <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
     @if (_syncRule is { Id: > 0 })
@@ -61,7 +61,7 @@ else if (_syncRule != null)
         @if (_syncRule.Id > 0)
         {
             <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
-                <ConfigurationChangesTab TargetType="ActivityTargetType.SyncRule" ObjectId="_syncRule.Id" ObjectTypeLabel="Synchronisation Rule" />
+                <ConfigurationChangesTab TargetType="ActivityTargetType.SynchronisationRule" ObjectId="_syncRule.Id" ObjectTypeLabel="Synchronisation Rule" />
             </MudTabPanel>
         }
 
@@ -182,7 +182,7 @@ else if (_syncRule != null)
             _breadcrumbs.Add(new BreadcrumbItem(_syncRule.Name, href: null, disabled: true));
 
             // lightweight count for the Changes tab badge (one row fetched; TotalResults only)
-            _changeCount = (await _jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.SyncRule, _syncRule.Id, 1, 1)).TotalResults;
+            _changeCount = (await _jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.SynchronisationRule, _syncRule.Id, 1, 1)).TotalResults;
         }
         else
         {

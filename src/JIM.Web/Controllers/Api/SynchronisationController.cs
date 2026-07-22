@@ -973,6 +973,9 @@ public class SynchronisationController(
         if (request.MaxExportParallelism.HasValue)
             connectedSystem.MaxExportParallelism = request.MaxExportParallelism.Value;
 
+        if (request.UnresolvedReferenceHandling.HasValue)
+            connectedSystem.UnresolvedReferenceHandling = request.UnresolvedReferenceHandling.Value;
+
         // Update setting values if provided
         if (request.SettingValues != null)
         {
@@ -1732,7 +1735,8 @@ public class SynchronisationController(
             ProjectToMetaverse = request.ProjectToMetaverse,
             ProvisionToConnectedSystem = request.ProvisionToConnectedSystem,
             Enabled = request.Enabled,
-            EnforceState = request.EnforceState
+            EnforceState = request.EnforceState,
+            OutboundDeprovisionAction = request.OutboundDeprovisionAction ?? OutboundDeprovisionAction.Disconnect
         };
 
         var apiKey = await GetCurrentApiKeyAsync();
@@ -1891,7 +1895,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetSyncRuleChangeHistoryAsync(int id, [FromQuery] PaginationRequest pagination)
     {
-        var result = await _application.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.SyncRule, id, pagination.Page, pagination.PageSize);
+        var result = await _application.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.SynchronisationRule, id, pagination.Page, pagination.PageSize);
         return Ok(PaginatedResponse<ConfigurationChangeHistoryItem>.Create(result.Results, result.TotalResults, pagination.Page, pagination.PageSize));
     }
 
@@ -1910,7 +1914,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetSyncRuleChangeAsync(int id, int changeVersion)
     {
-        var detail = await _application.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.SyncRule, id, changeVersion);
+        var detail = await _application.ChangeHistory.GetConfigurationChangeAsync(ActivityTargetType.SynchronisationRule, id, changeVersion);
         if (detail == null)
             return NotFound(ApiErrorResponse.NotFound($"No change history found for Synchronisation Rule {id} version {changeVersion}."));
         return Ok(detail);
@@ -1932,7 +1936,7 @@ public class SynchronisationController(
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CompareSyncRuleChangesAsync(int id, [FromQuery] int fromVersion, [FromQuery] int toVersion)
     {
-        var diff = await _application.ChangeHistory.CompareConfigurationChangesAsync(ActivityTargetType.SyncRule, id, fromVersion, toVersion);
+        var diff = await _application.ChangeHistory.CompareConfigurationChangesAsync(ActivityTargetType.SynchronisationRule, id, fromVersion, toVersion);
         if (diff == null)
             return NotFound(ApiErrorResponse.NotFound($"Could not compare versions {fromVersion} and {toVersion} for Synchronisation Rule {id}."));
         return Ok(diff);
@@ -2994,17 +2998,9 @@ public class SynchronisationController(
                 source.ConnectedSystemAttributeId = csAttr.Id;
                 source.ConnectedSystemAttribute = csAttr;
             }
-            else if (sourceRequest.MetaverseAttributeId.HasValue)
-            {
-                var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
-                if (mvAttr == null)
-                    return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
-                source.MetaverseAttributeId = mvAttr.Id;
-                source.MetaverseAttribute = mvAttr;
-            }
             else
             {
-                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
             }
 
             rule.Sources.Add(source);
@@ -3101,7 +3097,6 @@ public class SynchronisationController(
         if (request.Sources != null)
         {
             var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == rule.ConnectedSystemObjectTypeId);
-            var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
 
             // Clear existing sources and add new ones
             rule.Sources.Clear();
@@ -3122,17 +3117,9 @@ public class SynchronisationController(
                     source.ConnectedSystemAttributeId = csAttr.Id;
                     source.ConnectedSystemAttribute = csAttr;
                 }
-                else if (sourceRequest.MetaverseAttributeId.HasValue)
-                {
-                    var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
-                    if (mvAttr == null)
-                        return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
-                    source.MetaverseAttributeId = mvAttr.Id;
-                    source.MetaverseAttribute = mvAttr;
-                }
                 else
                 {
-                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
                 }
 
                 rule.Sources.Add(source);
@@ -3334,17 +3321,9 @@ public class SynchronisationController(
                 source.ConnectedSystemAttributeId = csAttr.Id;
                 source.ConnectedSystemAttribute = csAttr;
             }
-            else if (sourceRequest.MetaverseAttributeId.HasValue)
-            {
-                var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
-                if (mvAttr == null)
-                    return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
-                source.MetaverseAttributeId = mvAttr.Id;
-                source.MetaverseAttribute = mvAttr;
-            }
             else
             {
-                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
             }
 
             rule.Sources.Add(source);
@@ -3430,7 +3409,6 @@ public class SynchronisationController(
         if (request.Sources != null)
         {
             var objectType = syncRule.ConnectedSystemObjectType;
-            var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
 
             rule.Sources.Clear();
 
@@ -3450,17 +3428,9 @@ public class SynchronisationController(
                     source.ConnectedSystemAttributeId = csAttr.Id;
                     source.ConnectedSystemAttribute = csAttr;
                 }
-                else if (sourceRequest.MetaverseAttributeId.HasValue)
-                {
-                    var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
-                    if (mvAttr == null)
-                        return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
-                    source.MetaverseAttributeId = mvAttr.Id;
-                    source.MetaverseAttribute = mvAttr;
-                }
                 else
                 {
-                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
                 }
 
                 rule.Sources.Add(source);

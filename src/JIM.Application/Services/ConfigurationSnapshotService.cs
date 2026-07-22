@@ -193,7 +193,6 @@ public class ConfigurationSnapshotService
             var children = new List<ConfigurationSnapshotNode>();
             Add(children, "order", Render(source.Order), "Order");
             AddReference(children, "connectedSystemAttributeId", source.ConnectedSystemAttributeId, source.ConnectedSystemAttribute?.Name, "Connected System Attribute");
-            AddReference(children, "metaverseAttributeId", source.MetaverseAttributeId, source.MetaverseAttribute?.Name, "Metaverse Attribute");
             Add(children, "expression", source.Expression, "Expression");
             items.Add(ConfigurationSnapshotNode.ObjectNode("source", children, "Source", source.Id));
         }
@@ -254,6 +253,7 @@ public class ConfigurationSnapshotService
         // belong in a configuration change history (it would record phantom changes around deletion attempts).
         AddReference(children, "connectorDefinitionId", connectedSystem.ConnectorDefinitionId, connectedSystem.ConnectorDefinition?.Name, "Connector");
         AddEnum(children, "objectMatchingRuleMode", connectedSystem.ObjectMatchingRuleMode, "Object matching rule mode");
+        AddEnum(children, "unresolvedReferenceHandling", connectedSystem.UnresolvedReferenceHandling, "Unresolved reference handling");
         // SettingValuesValid is deliberately excluded: it is internal UI-flow state (whether the connector has validated
         // the settings), not configuration, so it does not belong in a configuration change history.
         Add(children, "maxExportParallelism", Render(connectedSystem.MaxExportParallelism), "Max export parallelism");

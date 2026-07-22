@@ -480,11 +480,6 @@ test-data/
 .env.apikey
 *.apikey
 
-# Structurizr Lite working files
-engineering/diagrams/structurizr/.structurizr/
-engineering/diagrams/structurizr/workspace.json
-engineering/diagrams/structurizr/node_modules/
-
 # MkDocs build output
 site/
 

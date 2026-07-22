@@ -69,7 +69,27 @@ function Invoke-JIMApi {
     # Build and execute the request, with reactive 401 retry for OAuth
     $response = Invoke-JIMApiRequest -Endpoint $Endpoint -Method $Method -Body $Body -ContentType $ContentType
 
-    return $response
+    # An empty response (a 204 No Content, or an empty JSON array that Invoke-RestMethod
+    # enumerated into nothing) must stay empty. Passing it through the normaliser would
+    # bind as $null and come back as an explicit $null OUTPUT ITEM, which callers using
+    # @(Get-JIMXxx).Count would count as one object, breaking "is the list empty?" checks.
+    if ($null -eq $response) {
+        return
+    }
+
+    # Normalise the wire's camelCase property names to the PascalCase that PowerShell
+    # cmdlet output is expected to use, at the single choke point every cmdlet funnels
+    # through. Cmdlets read the result via case-insensitive member access, so their own
+    # internal property reads (e.g. $response.items) are unaffected. Dynamic-key
+    # dictionary values keep their keys verbatim (see ConvertTo-JIMOutputObject).
+    #
+    # Assign before returning: the normaliser wraps arrays with the comma operator to
+    # protect nested single-element and empty arrays from being unrolled away. The
+    # assignment collapses that protection at the top level, so a bare-array response
+    # emits its elements individually here, exactly as the previous `return $response`
+    # did. (A `return` of the call directly would keep the top-level array atomic.)
+    $normalised = ConvertTo-JIMOutputObject -InputObject $response
+    return $normalised
 }
 
 function Invoke-TokenRefresh {
@@ -134,8 +154,17 @@ function Invoke-JIMApiRequest {
 
         [string]$ContentType = 'application/json',
 
-        [switch]$IsRetry
+        [switch]$IsRetry,
+
+        # Number of rate-limit (429) retries already attempted for this logical request. Incremented on each
+        # recursive retry; capped by $MaxRateLimitRetries below. Not for callers to set.
+        [int]$RateLimitAttempt = 0
     )
+
+    # Bounded retry budget for 429 (rate limit) responses. Chosen so a burst of automation transparently rides
+    # out the JIM rate limiter's one-minute window (Retry-After is at most the window's segment length) rather
+    # than hard-failing the caller, while still giving up eventually rather than blocking forever.
+    $MaxRateLimitRetries = 5
 
     # Build the full URI
     $uri = "$($script:JIMConnection.Url.TrimEnd('/'))$Endpoint"
@@ -181,7 +210,10 @@ function Invoke-JIMApiRequest {
         return $response
     }
     catch {
-        $statusCode = $_.Exception.Response.StatusCode.value__
+        # Capture the exception before the switch below: inside a PowerShell switch statement, $_ rebinds to the
+        # switch input (the status code), so $_.Exception is no longer the caught error there.
+        $caughtException = $_.Exception
+        $statusCode = $caughtException.Response.StatusCode.value__
         $errorMessage = $_.ErrorDetails.Message
 
         if ($errorMessage) {
@@ -231,6 +263,18 @@ function Invoke-JIMApiRequest {
             403 {
                 throw "Access denied. You are authenticated but not authorised to perform this operation. This usually means your identity has not been provisioned in JIM. Identities are created when you are synchronised into JIM from a connected system, or provisioned by an administrator. Contact your JIM administrator if this is unexpected."
             }
+            429 {
+                # Rate limited. A well-behaved client honours the server's Retry-After and retries with bounded
+                # backoff rather than surfacing a hard failure, so a legitimate burst of automation (bulk config,
+                # integration tests) rides out the rate limiter's window transparently.
+                if ($RateLimitAttempt -lt $MaxRateLimitRetries) {
+                    $retryAfterSeconds = Get-JIMRetryAfterSeconds -Exception $caughtException -AttemptNumber $RateLimitAttempt
+                    Write-Verbose "JIM API rate limit reached (429) for $Method $Endpoint. Waiting ${retryAfterSeconds}s before retry $($RateLimitAttempt + 1) of $MaxRateLimitRetries."
+                    Start-Sleep -Seconds $retryAfterSeconds
+                    return Invoke-JIMApiRequest -Endpoint $Endpoint -Method $Method -Body $Body -ContentType $ContentType -IsRetry:$IsRetry -RateLimitAttempt ($RateLimitAttempt + 1)
+                }
+                throw "JIM API error (429): $errorMessage The rate limit retry budget ($MaxRateLimitRetries attempts) was exhausted; try again later or reduce the request rate."
+            }
             404 {
                 throw "Resource not found: $errorMessage"
             }
@@ -239,4 +283,60 @@ function Invoke-JIMApiRequest {
             }
         }
     }
+}
+
+function Get-JIMRetryAfterSeconds {
+    <#
+    .SYNOPSIS
+        Determines how long to wait before retrying a rate-limited (429) JIM API request.
+
+    .DESCRIPTION
+        Prefers the server's Retry-After header (JIM's rate limiter always sets it), which HttpClient parses into
+        a RetryConditionHeaderValue: a delta (seconds) for the integer form the limiter emits, or an absolute date.
+        When no usable Retry-After is present, falls back to exponential backoff keyed on the attempt number. The
+        result is clamped to [1, 60] seconds so a missing, hostile, or misconfigured header can neither retry
+        instantly in a tight loop nor stall automation indefinitely.
+
+    .PARAMETER Exception
+        The exception thrown by Invoke-RestMethod for the 429 response (a HttpResponseException whose .Response is
+        the HttpResponseMessage carrying the headers).
+
+    .PARAMETER AttemptNumber
+        The zero-based count of rate-limit retries already attempted, used to scale the backoff fallback.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [AllowNull()]
+        $Exception,
+
+        [int]$AttemptNumber = 0
+    )
+
+    $maxWaitSeconds = 60
+    $backoffBaseSeconds = 2
+    $seconds = $null
+
+    # Prefer the server's Retry-After. Guarded because not every exception carries a .Response with headers.
+    try {
+        $retryAfter = $Exception.Response.Headers.RetryAfter
+        if ($retryAfter) {
+            if ($null -ne $retryAfter.Delta) {
+                $seconds = [int][math]::Ceiling($retryAfter.Delta.TotalSeconds)
+            }
+            elseif ($null -ne $retryAfter.Date) {
+                $seconds = [int][math]::Ceiling(($retryAfter.Date.UtcDateTime - [DateTime]::UtcNow).TotalSeconds)
+            }
+        }
+    }
+    catch {
+        $seconds = $null
+    }
+
+    # Fall back to exponential backoff when the server gave no usable Retry-After.
+    if ($null -eq $seconds -or $seconds -lt 1) {
+        $seconds = [int]($backoffBaseSeconds * [math]::Pow(2, $AttemptNumber))
+    }
+
+    return [int][math]::Min($maxWaitSeconds, [math]::Max(1, $seconds))
 }

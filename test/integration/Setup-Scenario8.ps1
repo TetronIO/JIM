@@ -754,6 +754,8 @@ else {
 $targetUserExportRuleName = "$targetLabel Export Users"
 $targetUserExportRule = $existingRules | Where-Object { $_.name -eq $targetUserExportRuleName }
 if (-not $targetUserExportRule) {
+    # Delete deprovisioning action: provisioned target users are removed when their
+    # Metaverse Object is deleted (issue #655)
     $targetUserExportRule = New-JIMSyncRule `
         -Name $targetUserExportRuleName `
         -ConnectedSystemId $targetSystem.id `
@@ -761,6 +763,7 @@ if (-not $targetUserExportRule) {
         -MetaverseObjectTypeId $mvUserType.id `
         -Direction Export `
         -ProvisionToConnectedSystem `
+        -OutboundDeprovisionAction Delete `
         -PassThru
     Write-Host "  ✓ Created: $targetUserExportRuleName" -ForegroundColor Green
 }
@@ -795,6 +798,8 @@ else {
 $targetGroupExportRuleName = "$targetLabel Export Groups"
 $targetGroupExportRule = $existingRules | Where-Object { $_.name -eq $targetGroupExportRuleName }
 if (-not $targetGroupExportRule) {
+    # Delete deprovisioning action: deleted source groups must be deprovisioned from the
+    # target directory (issue #655; asserted by the group-deletion validation)
     $targetGroupExportRule = New-JIMSyncRule `
         -Name $targetGroupExportRuleName `
         -ConnectedSystemId $targetSystem.id `
@@ -802,6 +807,7 @@ if (-not $targetGroupExportRule) {
         -MetaverseObjectTypeId $mvGroupType.id `
         -Direction Export `
         -ProvisionToConnectedSystem `
+        -OutboundDeprovisionAction Delete `
         -PassThru
     Write-Host "  ✓ Created: $targetGroupExportRuleName" -ForegroundColor Green
 }

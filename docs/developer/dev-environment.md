@@ -121,7 +121,6 @@ Rebuild and restart services after code changes:
 | Alias | Description |
 |-------|-------------|
 | `jim-reset` | Reset JIM (delete database and log volumes) |
-| `jim-diagrams` | Export Structurizr C4 diagrams as SVG |
 | `jim-prd` | Create a new PRD from template |
 
 ## Development Workflows

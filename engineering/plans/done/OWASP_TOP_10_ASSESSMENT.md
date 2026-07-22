@@ -1,0 +1,360 @@
+# OWASP Top 10:2025 Assessment
+
+- **Status:** Done (all five gaps remediated: #1001, #1002, #983, #984, #1013; see [issue #500](https://github.com/TetronIO/JIM/issues/500))
+- **Note:** Tamper evidence for the audit trail deferred 2026-07-13 (no live compliance driver; revisit on customer demand). CSP remains stage one; the nonce-based stage is tracked as future work in the Security Headers documentation.
+- **Issue:** [#500](https://github.com/TetronIO/JIM/issues/500)
+- **Assessed:** 2026-04-09
+- **Standard:** [OWASP Top 10:2025](https://owasp.org/Top10/2025/)
+
+## Overview
+
+This document assesses JIM against each category in the OWASP Top 10:2025. JIM is deployed in high-trust/assurance environments (healthcare, financial services, government), so all gaps identified here should be treated seriously even if the practical risk is moderate.
+
+**Overall result:** JIM is in strong shape. The fundamentals (authentication, access control, cryptography, injection prevention, exception handling) are solid and well-implemented. Five gaps were identified; none represent critical vulnerabilities, but all should be remediated to maintain the security posture expected by JIM's target deployment environments.
+
+## Assessment Results
+
+### A01:2025; Broken Access Control
+
+**Rating: Strong**
+
+All API controllers enforce role-based authorisation via `[Authorize]` attributes. Blazor pages are secured with role requirements. Anonymous access is deliberate and limited to health checks and OAuth discovery.
+
+| Control | Evidence |
+|---------|----------|
+| API controllers require `[Authorize(Roles = "Administrator")]` | `SecurityController.cs:19`, `ApiKeysController.cs:25` |
+| Blazor admin pages require Administrator role | All `/admin/*` pages verified |
+| Index page requires `[Authorize(Roles = "User")]` | `Index.razor:2` |
+| `[AllowAnonymous]` used only where necessary | `HealthController.cs:19` (load balancers), `AuthController.cs:37` (OAuth discovery) |
+| API requests return HTTP 401 (not redirect) | `Program.cs:252-256` |
+
+**Gaps:** None.
+
+---
+
+### A02:2025; Security Misconfiguration
+
+**Rating: Strong**
+
+Core security configuration is sound: HSTS, HTTPS redirection, restricted development tooling. Two gaps were identified; both have been remediated.
+
+| Control | Evidence |
+|---------|----------|
+| HSTS enabled in production | `Program.cs:398` |
+| HTTPS redirection enabled | `Program.cs:414` |
+| OpenAPI spec pre-generated at build time and served as a static document (no runtime OpenAPI generator in production); Scalar API reference available in every environment for authenticated users | `src/JIM.Web/wwwroot/api/openapi/v1.json`, `Program.cs` |
+| Stack traces suppressed in production | `GlobalExceptionHandler.cs:32` |
+| DbContext pooling prevents connection exhaustion | `Program.cs:76-80` |
+
+**Gap 1: No rate limiting (High priority) - ✅ Remediated**
+
+No `UseRateLimiter()` middleware is configured. Authentication endpoints (`/api/auth`, `/api/apikeys`) are exposed to brute-force attacks with no throttle. This is the highest-priority gap in the assessment.
+
+Remediated: `Microsoft.AspNetCore.RateLimiting` (built-in; no new dependency) now protects the whole REST API with per-client partitioning (authenticated principal or client IP), HTTP 429 with `Retry-After`, and `ForwardedHeaders` handling (`JIM_TRUSTED_PROXIES`) so per-IP partitioning is correct behind a reverse proxy. Limits are runtime-tunable via Service Settings. See [Rate Limiting](../../../docs/api/rate-limiting.md).
+
+**Gap 2: No Content Security Policy header (Medium priority) - ✅ Remediated**
+
+No explicit CSP header is defined. Blazor Server uses inline scripts/styles which complicates CSP, but a policy should still be defined to mitigate XSS risks.
+
+Remediated: a new `SecurityHeadersMiddleware` (`JIM.Web/Middleware/`) now sets a stage-one Content Security Policy plus `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and `Permissions-Policy` on every response, site-wide (Blazor UI, static assets, REST API). The CSP follows recommendation Option C below (`'unsafe-inline'` for `script-src`/`style-src`, matching Blazor Server's and MudBlazor's current inline usage); the nonce-based Option A remains tracked as a future stage. See [Security Headers](../../../docs/administration/security-headers.md).
+
+---
+
+### A03:2025; Software Supply Chain Failures
+
+**Rating: Strong**
+
+Framework and packages are current. Two gaps were identified; both have been remediated.
+
+| Control | Evidence |
+|---------|----------|
+| .NET 10 (latest supported release) | All `.csproj` files target `net10.0` |
+| NuGet packages appear current | e.g. `Microsoft.AspNetCore.Authentication.*` v10.0.4 |
+| Third-party dependency governance documented | `CLAUDE.md` requires approval before adding any NuGet package |
+
+**Gap 1: No `packages.lock.json` (Medium priority) - ✅ Remediated**
+
+NuGet packages are not cryptographically pinned. `dotnet restore` can resolve different transitive dependency versions across environments, which undermines reproducible builds and supply chain integrity.
+
+Remediated: `packages.lock.json` is committed for every project, with locked-mode restore enforced in CI, the release workflow, and all three production container image builds, and automated lock file regeneration for Dependabot NuGet PRs. See [`DEPENDENCY_PINNING.md`](../../DEPENDENCY_PINNING.md) for the full policy and section 2 below for detail.
+
+**Gap 2: DynamicExpresso review needed (Low priority) - ✅ Remediated**
+
+`DynamicExpresso.Core` v2.19.3 is used for expression evaluation in `JIM.Application`. If user-controlled input can flow into the expression interpreter, this becomes a code injection vector. The input paths need to be reviewed and documented to confirm this is safe.
+
+Remediated: all input paths traced and documented (every one is Administrator-authored; no end-user data becomes an expression), and non-subtractive defence-in-depth guardrails added with no change to expression functionality. See [`EXPRESSION_SECURITY.md`](../../EXPRESSION_SECURITY.md) and section 5 below.
+
+---
+
+### A04:2025; Cryptographic Failures
+
+**Rating: Strong**
+
+Encryption at rest uses AES-256-GCM (FIPS-approved). Cryptographically secure RNG is used for API key generation. No weak algorithms found.
+
+| Control | Evidence |
+|---------|----------|
+| AES-256-GCM for credentials at rest | `CredentialProtectionService.cs` with versioned prefix `$JIM$v1$` |
+| `RandomNumberGenerator.Create()` for API keys | `ApiKeyAuthenticationHandler.cs:159-171` (256-bit entropy) |
+| Data Protection key files chmod 700 on Linux | `DataProtectionHelper.cs:95-96` |
+| Key management with env var, Docker volume, and OS fallback | `DataProtectionHelper.cs:20-76` |
+| No weak algorithms (MD5, SHA1, DES) | Full codebase search confirmed |
+
+**Note:** API keys are hashed with SHA256 (`ApiKeyAuthenticationHandler.cs:179`). This is acceptable because the input is a 256-bit random value (no rainbow table risk), but the rationale should be documented.
+
+**Gaps:** None.
+
+---
+
+### A05:2025; Injection
+
+**Rating: Strong**
+
+All database access uses parameterised queries (EF Core LINQ or typed `NpgsqlParameter` objects). LDAP uses the type-safe `DirectoryServices.Protocols` API. Log injection is mitigated via mandatory `LogSanitiser.Sanitise()`.
+
+| Control | Evidence |
+|---------|----------|
+| EF Core LINQ throughout | Standard pattern across all repositories |
+| Raw SQL uses typed `NpgsqlParameter` objects | `BulkSqlHelpers.cs:18-25`, `SyncRepository.CsOperations.cs:313` |
+| Type-safe LDAP API (no filter string concatenation) | `LdapConnectorImport.cs` uses `SearchRequest` |
+| Log injection (CWE-117) prevention | `LogSanitiser.cs`, enforced in `GlobalExceptionHandler.cs:42,46` |
+
+**Note:** See A03 Gap 2 regarding DynamicExpresso. If user input reaches the expression interpreter, this becomes an injection risk under A05 as well.
+
+**Gaps:** None (DynamicExpresso review complete; see [`EXPRESSION_SECURITY.md`](../../EXPRESSION_SECURITY.md)).
+
+---
+
+### A06:2025; Insecure Design
+
+**Rating: Good**
+
+JIM's architecture reflects security-conscious design: the metaverse pattern enforces all identity changes flow through a central model, N-tier boundaries are enforced, and the system is designed for air-gapped deployment.
+
+| Control | Evidence |
+|---------|----------|
+| Metaverse pattern prevents direct system-to-system writes | Core architecture principle |
+| N-tier layer boundaries enforced | UI/API calls `JimApplication` only, never repositories |
+| Air-gapped deployment (no cloud dependencies) | Design principle documented in `CLAUDE.md` |
+| Fail-fast on missing configuration | `Program.cs:536-557` validates all required config at startup |
+| Versioned credential encryption (supports algorithm migration) | `$JIM$v1$` prefix in `CredentialProtectionService.cs` |
+
+**Gaps:** None.
+
+---
+
+### A07:2025; Authentication Failures
+
+**Rating: Strong**
+
+OIDC with Authorization Code + PKCE is the primary authentication mechanism. Full token validation is implemented. API key authentication includes expiry, usage tracking, and secure storage.
+
+| Control | Evidence |
+|---------|----------|
+| OIDC with Authorization Code + PKCE | `Program.cs:168-278` |
+| Full token validation (issuer, audience, lifetime, signing key) | `Program.cs:268-274` |
+| Session lifetime bound to IdP token | `UseTokenLifetime = true` at `Program.cs:171` |
+| Triple auth scheme (Cookie + JWT Bearer + API Key) | `Program.cs:146-167` with header-based forwarding |
+| API keys: prefix validation, expiry, usage tracking, SHA256 hash | `ApiKeyAuthenticationHandler.cs` |
+
+**Gaps:** None.
+
+---
+
+### A08:2025; Software or Data Integrity Failures
+
+**Rating: Strong**
+
+Data Protection keys are version-prefixed and purpose-isolated. Its one gap was shared with A03 (no `packages.lock.json`) and has been remediated.
+
+| Control | Evidence |
+|---------|----------|
+| Versioned Data Protection with purpose isolation | `CredentialProtectionService.cs:18,24` |
+| Blazor serves static assets from the app (no external CDN) | Default Blazor Server hosting |
+
+**Gap:** No `packages.lock.json` (same as A03 Gap 1) - ✅ Remediated; see A03 Gap 1 and [`DEPENDENCY_PINNING.md`](../../DEPENDENCY_PINNING.md).
+
+---
+
+### A09:2025; Security Logging and Alerting Failures
+
+**Rating: Strong**
+
+Structured logging is comprehensive: Serilog with JSON output, rolling log files, log injection prevention, and sync error reporting via RPEIs. One gap was identified; it has been remediated.
+
+| Control | Evidence |
+|---------|----------|
+| Structured logging via Serilog with JSON output | `Program.cs:478-526` |
+| Rolling log files (100 max, 50MB each) | `Program.cs:519-520` |
+| Log injection prevention (CWE-117) | `LogSanitiser.cs` enforced across codebase |
+| Sync errors logged via RPEI/Activities | Core sync operation pattern |
+| Privileged configuration changes (API key CRUD, Role changes, Connected Systems, Synchronisation Rules, Schedules, Service Settings) versioned and audited | Configuration change capture, `ConfigurationChangeCaptureService.cs` |
+| Authentication events (sign-in success/failure, API key authentication failure) audited with aggregation | `SecurityAuditServer.cs`, see remediation below |
+
+**Gap: No security audit trail (Medium priority) - ✅ Remediated**
+
+There is no dedicated security audit log for privileged operations such as API key creation/deletion, role changes, configuration modifications, or authentication failures. For healthcare/government deployments, a tamper-evident audit trail is a compliance expectation. Current application logs mix operational and security events, making it difficult to isolate security-relevant actions for review or SIEM integration.
+
+Remediated: authentication events (interactive sign-in success/failure, API key authentication failure) are now recorded in the existing Activity system as a new `Authentication` target type, closing the remaining scope of this gap; privileged configuration operations (API key CRUD, Role definition and membership, Connected Systems, Synchronisation Rules, Schedules, Service Settings) were already covered by the pre-existing configuration change capture system. Failed authentication, written on behalf of an unauthenticated, attacker-controlled source, is aggregated (one Activity per API key prefix/client IP/failure reason per 15-minute UTC window, with an attempt counter) so a key-spraying or credential-stuffing client cannot force unbounded database writes; this is a deliberate design constraint, not an omission. Security events are queryable via the REST API (filterable by target type, for SIEM polling) and governed by their own retention period, separate from general history and configuration change retention. Tamper evidence (hash-chained audit records) is explicitly deferred pending a live compliance driver. See [Security Audit Events](../../../docs/administration/security-audit-events.md).
+
+---
+
+### A10:2025; Mishandling of Exceptional Conditions
+
+**Rating: Strong**
+
+A global exception handler catches all unhandled exceptions. Production responses are generic (no internal detail leaked). Sync operations fail fast on errors rather than continuing with corrupted state.
+
+| Control | Evidence |
+|---------|----------|
+| Global exception handler | `GlobalExceptionHandler.cs` |
+| Production: generic error messages only | `GlobalExceptionHandler.cs:97` |
+| Development: full detail (correct behaviour) | `GlobalExceptionHandler.cs:32` |
+| Transient DB errors return 503 + Retry-After | `GlobalExceptionHandler.cs:55-65` |
+| Sync errors fail entire activity (no silent corruption) | `UnhandledError` RPEI items fail activity |
+
+**Gaps:** None.
+
+---
+
+## Summary Matrix
+
+| # | Category | Rating | Gaps | Priority |
+|---|----------|--------|------|----------|
+| A01 | Broken Access Control | Strong | None | - |
+| A02 | Security Misconfiguration | Strong | ~~Rate limiting~~ (remediated), ~~CSP header~~ (remediated) | ~~High~~, ~~Medium~~ |
+| A03 | Software Supply Chain | Good | `packages.lock.json`, DynamicExpresso review | Medium, Low |
+| A04 | Cryptographic Failures | Strong | None | - |
+| A05 | Injection | Strong | None (pending DynamicExpresso) | - |
+| A06 | Insecure Design | Good | None | - |
+| A07 | Authentication Failures | Strong | None | - |
+| A08 | Software/Data Integrity | Good | `packages.lock.json` (shared with A03) | Medium |
+| A09 | Security Logging & Alerting | Strong | ~~Security audit trail~~ (remediated) | ~~Medium~~ |
+| A10 | Exceptional Conditions | Strong | None | - |
+
+## Remediation Recommendations
+
+### 1. Rate Limiting Middleware (High) - ✅ Remediated
+
+**OWASP:** A02
+**Risk:** Authentication endpoints exposed to brute-force attacks.
+
+**Option A: ASP.NET Core built-in rate limiter (Recommended)**
+- Use `Microsoft.AspNetCore.RateLimiting` (built-in, no new dependency)
+- Apply fixed-window or sliding-window policies to `/api/auth` and `/api/apikeys` endpoints
+- Configure per-IP limits with appropriate thresholds (e.g. 10 requests/minute for auth)
+- Return HTTP 429 with `Retry-After` header
+
+**Option B: Reverse proxy rate limiting**
+- Defer to deployment infrastructure (nginx, HAProxy, or cloud load balancer)
+- Less control, but zero application code changes
+- Not viable for air-gapped deployments without a reverse proxy
+
+**Recommendation:** Option A. It is built-in, requires no new dependency, and works in all deployment topologies including air-gapped.
+
+**Effort:** Low
+
+**Implemented:** Option A, extended to the whole REST API rather than just `/api/auth`/`/api/apikeys` (any endpoint, not just the two named here, is a viable target for API key spraying). Authenticated requests are partitioned per principal (sliding window); unauthenticated requests, including failed API key attempts, per client IP (fixed window). Limits are Service Settings, not hardcoded, per product decision. `/api/health` is excluded (orchestrator probes).
+
+---
+
+### 2. NuGet Package Lock File (Medium)
+
+**OWASP:** A03, A08
+**Risk:** Non-reproducible builds; transitive dependency substitution.
+
+**Remediation:**
+1. Run `dotnet restore --use-lock-file` to generate `packages.lock.json` for each project
+2. Commit all lock files
+3. Add `<RestoreLockedMode>true</RestoreLockedMode>` to `Directory.Build.props` or CI build scripts
+4. CI builds use `dotnet restore --locked-mode` to fail if lock files are out of date
+
+**Effort:** Low
+
+**Status: Implemented.** `packages.lock.json` is now committed for every project, and `Directory.Build.props` forces `RestoreLockedMode` whenever `CI=true`, with explicit `--locked-mode` / `/p:RestoreLockedMode=true` in CI, the release workflow, and all three production container image builds. Because Dependabot does not reliably regenerate lock files across project references when it bumps a NuGet version, a new `regenerate-nuget-lock-files` workflow watches Dependabot's NuGet branches and pushes a signed regeneration commit automatically. See `engineering/DEPENDENCY_PINNING.md` for the full policy.
+
+---
+
+### 3. Security Audit Trail (Medium) - ✅ Remediated
+
+**OWASP:** A09
+**Risk:** Cannot isolate security events for review or compliance evidence.
+
+**Option A: Dedicated audit log table (Recommended)**
+- Create an `AuditLog` table with: Timestamp, Actor (user/API key), Action, Resource, Outcome, IP Address
+- Log security-relevant actions: API key CRUD, authentication success/failure, configuration changes, role changes
+- Expose via API for SIEM integration (`GET /api/v1/audit-logs` with filtering)
+- Retention policy configurable via admin UI
+
+**Option B: Structured log enrichment**
+- Add a `SecurityEvent` property to Serilog log entries for security-relevant actions
+- Use Serilog filtering to route security events to a separate sink (file, database, or external)
+- Lower effort but less queryable and harder to make tamper-evident
+
+**Option C: Route through the existing Activity system (Implemented)**
+- Reuse the Activity system already used for every other tracked operation, rather than a parallel `AuditLog` table
+- Privileged configuration operations were already covered by configuration change capture; the remaining gap was authentication telemetry
+- New `Authentication` Activity target type and `Anonymous` initiator type; failed authentication aggregated per (API key prefix, client IP, reason) per 15-minute window to bound writes under attack
+- Exposed via the existing Activities REST API, filterable by target type, for SIEM polling
+- Own retention period (Service Setting), independent of general history and configuration change retention
+
+**Recommendation:** Option A. A dedicated table is queryable, exportable, and can be made tamper-evident. It also serves as the foundation for a future admin UI audit viewer.
+
+**Effort:** Medium
+
+**Implemented:** Option C, agreed with the product owner on 2026-07-13 in preference to Option A: a single audit log (the existing Activity system, which the admin portal, PowerShell module and REST API already surface) beats a parallel store for discoverability and maintenance cost, and the aggregation-on-write design in Option C is what makes the write-amplification risk of the "authentication failure" event class safe to record at all. Tamper evidence (hash-chaining), the one capability Option A's "can be made tamper-evident" nods to that Option C does not yet provide, is deferred pending a live compliance driver; if required later it can chain just the security and configuration Activity classes without reworking this design. See `engineering/plans/done/SECURITY_AUDIT_EVENTS.md` and [Security Audit Events](../../../docs/administration/security-audit-events.md).
+
+---
+
+### 4. Content Security Policy Header (Medium) - ✅ Remediated (stage one)
+
+**OWASP:** A02
+**Risk:** No defence-in-depth against XSS via injected scripts.
+
+**Option A: Nonce-based CSP (Recommended)**
+- Blazor Server requires inline scripts for SignalR bootstrap
+- Use a per-request nonce injected into both the CSP header and the `<script>` tags
+- ASP.NET Core middleware generates the nonce and sets the header
+- Policy: `default-src 'self'; script-src 'self' 'nonce-{value}'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss:`
+
+**Option B: Hash-based CSP**
+- Pre-compute SHA256 hashes of known inline scripts
+- Less flexible (hashes must be updated when Blazor framework updates change inline scripts)
+
+**Option C: `unsafe-inline` with restrictive defaults**
+- Set `script-src 'self' 'unsafe-inline'` as a starting point
+- Weaker than nonce-based, but still better than no CSP at all
+- Can be tightened later
+
+**Recommendation:** Start with Option C as a quick win, then migrate to Option A. Blazor Server's inline script requirements make nonce-based CSP non-trivial; a staged approach avoids breaking the UI.
+
+**Effort:** Low (Option C), Medium (Option A)
+
+**Implemented:** Option C, plus the surrounding response header set (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`) rather than CSP alone, applied via a single `SecurityHeadersMiddleware` to every response (Blazor UI, static assets, REST API). Option A (nonce-based `script-src`/`style-src`, dropping `'unsafe-inline'`) remains open as a future stage.
+
+---
+
+### 5. DynamicExpresso Input Path Review (Low)
+
+**Status: Implemented.** Findings, the input path inventory, and the guardrails added are documented in
+[`engineering/EXPRESSION_SECURITY.md`](../../EXPRESSION_SECURITY.md). Summary: every expression input path is
+Administrator-authored configuration behind `[Authorize(Roles = "Administrator")]`; no user-controlled input
+reaches the evaluator. Reflection and type-escape attempts were proven to fail against the real evaluator
+(unit tests, not assumed). Two non-subtractive guardrails were added (an expression length ceiling and a bounded
+compiled-expression cache); a function/operator allowlist, removing default reference types, and evaluation
+timeouts were all considered and explicitly rejected as they would impair legitimate expression functionality
+for no matching security benefit.
+
+**OWASP:** A03, A05
+**Risk:** If user-controlled input reaches the expression evaluator, it becomes a code injection vector.
+
+**Remediation:**
+1. Trace all call sites of `DynamicExpresso` in `JIM.Application`
+2. Document which inputs are user-controlled vs. admin-configured vs. system-generated
+3. If user input can reach the interpreter:
+   - Implement an allowlist of permitted functions/operators
+   - Sandbox the expression context (DynamicExpresso supports restricting available types)
+   - Add input length limits
+4. Document the findings regardless of outcome
+
+**Effort:** Low (review), Medium (if sandboxing is needed)

@@ -59,7 +59,7 @@ This is a known and intentional limitation of digest-pinned base images. It is n
 Tetron currently runs small, focused development teams on JIM. The security and compliance controls described in this document are designed to provide consistent baseline enforcement at any team size, with additional human-review layers that can be added as development capacity grows.
 
 - **Branch protection ruleset ("Protect Main")**: all changes to `main` must land via a pull request, all required status checks must pass before merge, branches must be up to date with `main`, and all review comment threads must be resolved. Direct pushes and force-pushes are blocked. See [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) section 7 for the full ruleset specification.
-- **Automated baseline review**: every pull request is reviewed by an automated code review job (`claude-review` in `.github/workflows/claude-code-review.yml`) before it can be merged, regardless of author. This is a required status check in the branch protection ruleset, providing a consistent independent review across all changes.
+- **Automated baseline review**: every pull request receives automated review before it can be merged, regardless of author: CodeQL static analysis (three required `Analyze` checks) posts review comments on the diff via the github-code-quality integration, and unresolved review threads block the merge. An additional AI-assisted review can be requested on demand by commenting `@claude review this PR` on any pull request.
 - **CI-enforced quality gates**: build and test success, CodeQL static analysis, container base image vulnerability scanning, and dependency scanning are all required status checks in the branch protection ruleset. These gates are machine-enforced (not advisory) and operate identically whether the team has one developer or many.
 - **Signed commits**: all contributors sign their commits via the devcontainer's automated signing setup. The pre-commit hook at `.githooks/pre-commit` enforces this locally. Server-side enforcement via `required_signatures` in the branch protection ruleset is planned once all contributor environments are reliably producing signed commits.
 - **Scalable human review**: additional reviewer requirements can be layered onto the branch protection ruleset as team composition supports them. The current configuration is designed to extend cleanly; no restructuring is needed to add reviewer requirements.
@@ -259,7 +259,7 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 | Application Control | Not directly applicable (infrastructure control) | N/A |
 | Patch Applications | Dependency management, vulnerability scanning | Aligned |
 | Configure Microsoft Office Macro Settings | Not applicable | N/A |
-| User Application Hardening | Blazor CSP headers, XSS protection | Supported |
+| User Application Hardening | Content Security Policy, MIME-sniffing protection (`X-Content-Type-Options`), clickjacking denial (`X-Frame-Options` + `frame-ancestors`), Referrer-Policy, Permissions-Policy | Aligned |
 | Restrict Administrative Privileges | RBAC, claims-based authorisation, least privilege | Aligned |
 | Patch Operating Systems | Docker base image updates, .NET runtime updates | Aligned |
 | Multi-Factor Authentication | SSO/OIDC with PKCE (MFA via identity provider) | Aligned |
@@ -319,21 +319,21 @@ This maps JIM's features to the NIST SP 800-53 control families most relevant to
 
 ## OWASP Top 10:2025 Assessment
 
-A full assessment against the OWASP Top 10:2025 is documented in [`engineering/plans/OWASP_TOP_10_ASSESSMENT.md`](plans/OWASP_TOP_10_ASSESSMENT.md) (first published 2026-04-09).
+A full assessment against the OWASP Top 10:2025 is documented in [`engineering/plans/done/OWASP_TOP_10_ASSESSMENT.md`](plans/done/OWASP_TOP_10_ASSESSMENT.md) (first published 2026-04-09). The DynamicExpresso expression evaluation review (A03/A05 gap 5) is documented separately in [`engineering/EXPRESSION_SECURITY.md`](EXPRESSION_SECURITY.md).
 
 **Overall result:** Strong. The fundamentals (authentication, access control, cryptography, injection prevention, exception handling) are solid and well-implemented. Five gaps were identified; none represent critical vulnerabilities, but all are tracked for remediation to maintain the security posture expected by JIM's target deployment environments.
 
 | Category | Rating | Gaps |
 |----------|--------|------|
 | A01:2025 - Broken Access Control | Strong | None |
-| A02:2025 - Security Misconfiguration | Good, with gaps | No rate limiting (High); no Content Security Policy (Medium) |
-| A03:2025 - Software Supply Chain Failures | Good, with gap | See assessment document |
+| A02:2025 - Security Misconfiguration | Strong | None (rate limiting and defence-in-depth response headers, including CSP, both remediated) |
+| A03:2025 - Software Supply Chain Failures | Strong | None (transitive NuGet pinning implemented, see [`DEPENDENCY_PINNING.md`](DEPENDENCY_PINNING.md); DynamicExpresso review complete, see [`EXPRESSION_SECURITY.md`](EXPRESSION_SECURITY.md)) |
 | A04:2025 - Cryptographic Failures | Strong | None |
 | A05:2025 - Injection | Strong | None |
 | A06:2025 - Insecure Design | Strong | None |
 | A07:2025 - Identification and Authentication Failures | Strong | None |
 | A08:2025 - Software and Data Integrity Failures | Strong | Covered by supply chain hardening (see below) |
-| A09:2025 - Security Logging and Monitoring Failures | Good, with gap | See assessment document |
+| A09:2025 - Security Logging and Monitoring Failures | Strong | None (authentication events audited via the Activity system with aggregation and dedicated retention; see assessment document) |
 | A10:2025 - Server-Side Request Forgery | Strong | None |
 
 See the assessment document for the full evidence table and remediation plan.
@@ -343,7 +343,8 @@ See the assessment document for the full evidence table and remediation plan.
 As of JIM v0.10.0 the following supply chain controls are in place:
 
 - **Docker base images digest-pinned**: all `FROM` lines in `src/JIM.Web/Dockerfile`, `src/JIM.Worker/Dockerfile`, and `src/JIM.Scheduler/Dockerfile` pin `image:tag@sha256:<digest>`. Enforced by the CI `scan-base-images` job. Updates are driven by Dependabot.
-- **GitHub Actions pinned by SHA**: every reusable action referenced from `.github/workflows/` is pinned to a commit SHA rather than a mutable tag. Dependabot raises digest/SHA bumps on a daily cadence.
+- **NuGet transitive dependencies locked**: every project carries a `packages.lock.json`; `RestoreLockedMode` is enforced whenever `CI=true`, so CI, the release workflow, and production container image builds can never silently resolve a different transitive dependency graph. Dependabot NuGet PRs get their lock files regenerated automatically by the `regenerate-nuget-lock-files` workflow, since Dependabot itself does not reliably update them. See [`DEPENDENCY_PINNING.md`](DEPENDENCY_PINNING.md) for the full policy across every pinned layer.
+- **GitHub Actions pinned by SHA**: every reusable action referenced from `.github/workflows/` is pinned to a commit SHA rather than a mutable tag. Dependabot raises digest/SHA bumps on a weekly cadence.
 - **Main branch protection**: all changes to `main` must land via pull request with required status checks (build, test, CodeQL, container scan, dependency scan, automated baseline review). Direct pushes and force-pushes are blocked.
 - **Signed commits**: contributors cannot commit without signing; the pre-commit hook enforces this locally and server-side enforcement is planned.
 

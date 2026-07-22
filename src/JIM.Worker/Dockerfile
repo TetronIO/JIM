@@ -7,7 +7,7 @@
 
 ARG VERSION=dev
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0-noble@sha256:58318ab0733b63d3ac0d7609c46f2718244e623a176f45991ee01fad46fbf880 AS base
+FROM mcr.microsoft.com/dotnet/runtime:10.0-noble@sha256:ed5d539b27842d656a06a5984dbcb5114d3e885fbada612a49a5a7c3c3a44e1c AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Worker"
@@ -25,7 +25,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libldap-common=2.6.10+dfsg-0ubuntu0.24.04.1 \
         libldap2=2.6.10+dfsg-0ubuntu0.24.04.1 \
-        cifs-utils=2:7.0-2ubuntu0.4 \
+        cifs-utils=2:7.0-2ubuntu0.5 \
         libgssapi-krb5-2=1.20.1-6ubuntu2.6 \
     && rm -rf /var/lib/apt/lists/* \
     # Symlink for System.DirectoryServices.Protocols compatibility
@@ -43,19 +43,26 @@ RUN mkdir -p /data/keys /var/log/jim /connector-files \
 # Run as non-root for security (built-in 'app' user, UID 1654)
 USER app
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:548d93f8a18a1acbe6cc127bc4f47281430d34a9e35c18afa80a8d6741c2adc3 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:ed034a8bf0b24ded0cbbac07e17825d8e9ebfe21e308191d0f7421eaf5ad4664 AS build
 WORKDIR /src
 COPY ["Directory.Build.props", "./"]
 COPY ["VERSION", "./"]
 COPY ["src/JIM.Worker/JIM.Worker.csproj", "JIM.Worker/"]
+COPY ["src/JIM.Worker/packages.lock.json", "JIM.Worker/"]
 COPY ["src/JIM.Models/JIM.Models.csproj", "JIM.Models/"]
+COPY ["src/JIM.Models/packages.lock.json", "JIM.Models/"]
 COPY ["src/JIM.Application/JIM.Application.csproj", "JIM.Application/"]
+COPY ["src/JIM.Application/packages.lock.json", "JIM.Application/"]
 COPY ["src/JIM.PostgresData/JIM.PostgresData.csproj", "JIM.PostgresData/"]
+COPY ["src/JIM.PostgresData/packages.lock.json", "JIM.PostgresData/"]
 COPY ["src/JIM.Utilities/JIM.Utilities.csproj", "JIM.Utilities/"]
+COPY ["src/JIM.Utilities/packages.lock.json", "JIM.Utilities/"]
 COPY ["src/JIM.Connectors/JIM.Connectors.csproj", "JIM.Connectors/"]
+COPY ["src/JIM.Connectors/packages.lock.json", "JIM.Connectors/"]
 COPY ["src/JIM.Data/JIM.Data.csproj", "JIM.Data/"]
+COPY ["src/JIM.Data/packages.lock.json", "JIM.Data/"]
 
-RUN dotnet restore "./JIM.Worker/JIM.Worker.csproj"
+RUN dotnet restore "./JIM.Worker/JIM.Worker.csproj" /p:RestoreLockedMode=true
 
 COPY src/ .
 WORKDIR "/src/JIM.Worker"
@@ -63,7 +70,7 @@ WORKDIR "/src/JIM.Worker"
 # Publish stage - optimised for production
 FROM build AS publish
 ARG VERSION_SUFFIX=
-RUN dotnet publish "JIM.Worker.csproj" -c Release -o /app/publish /p:VersionSuffix="${VERSION_SUFFIX}"
+RUN dotnet publish "JIM.Worker.csproj" -c Release -o /app/publish /p:VersionSuffix="${VERSION_SUFFIX}" /p:RestoreLockedMode=true
 
 # Final stage - use published output
 FROM base AS final

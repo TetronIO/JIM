@@ -1023,6 +1023,17 @@ internal class SeedingServer
             IsReadOnly = false
         });
 
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.SecurityEventRetentionPeriod,
+            DisplayName = "Security event retention period",
+            Description = "The duration for which security audit event Activities (interactive sign-in success/failure, API key authentication failure) are retained. Kept separately from the history and configuration change retention periods. Format: d.hh:mm:ss (e.g., '365.00:00:00' for ~1 year).",
+            Category = ServiceSettingCategory.History,
+            ValueType = ServiceSettingValueType.TimeSpan,
+            DefaultValue = "365.00:00:00", // ~1 year
+            IsReadOnly = false
+        });
+
         // Change Tracking Settings
         await SeedSettingAsync(new ServiceSetting
         {
@@ -1130,6 +1141,45 @@ internal class SeedingServer
             DefaultValue = null,
             Value = Environment.GetEnvironmentVariable(Constants.Config.EncryptionKeyPath),
             IsReadOnly = true
+        });
+
+        // API rate limiting settings (issue #500, OWASP Top 10:2025 A02). Runtime-tunable so administrators can
+        // adjust limits without a restart; JIM.Web's rate limiter reads these through a short-TTL cache rather
+        // than on every request (see RateLimitSettingsCache), so a change here takes effect within that
+        // propagation delay, not instantly.
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.RateLimitingEnabled,
+            DisplayName = "API rate limiting enabled",
+            Description = "When enabled, REST API requests are throttled per client (see the authenticated and unauthenticated request limits below). When disabled, no limiter is applied to any API request.",
+            Category = ServiceSettingCategory.Security,
+            ValueType = ServiceSettingValueType.Boolean,
+            // Lowercase to match every other boolean setting's stored convention ("true"/"false"); bool.ToString()
+            // would produce "True" instead. bool.Parse accepts either case, but the stored value should be consistent.
+            DefaultValue = Constants.RateLimitDefaults.Enabled ? "true" : "false",
+            IsReadOnly = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.RateLimitingAuthenticatedRequestsPerMinute,
+            DisplayName = "Authenticated API requests per minute",
+            Description = "The maximum number of REST API requests an authenticated client (a signed-in user or an API key) may make per rolling minute. Each authenticated principal is limited independently.",
+            Category = ServiceSettingCategory.Security,
+            ValueType = ServiceSettingValueType.Integer,
+            DefaultValue = Constants.RateLimitDefaults.AuthenticatedRequestsPerMinute.ToString(),
+            IsReadOnly = false
+        });
+
+        await SeedSettingAsync(new ServiceSetting
+        {
+            Key = Constants.SettingKeys.RateLimitingUnauthenticatedRequestsPerMinute,
+            DisplayName = "Unauthenticated API requests per minute",
+            Description = "The maximum number of REST API requests an unauthenticated client may make per one-minute window, identified by client IP address. Applies to anonymous endpoints and requests that failed API key authentication.",
+            Category = ServiceSettingCategory.Security,
+            ValueType = ServiceSettingValueType.Integer,
+            DefaultValue = Constants.RateLimitDefaults.UnauthenticatedRequestsPerMinute.ToString(),
+            IsReadOnly = false
         });
 
         // UI Settings

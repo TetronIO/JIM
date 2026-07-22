@@ -11,7 +11,7 @@
     Features:
     - Connection management with API key authentication
     - Connected Systems management
-    - Sync Rules configuration
+    - Synchronisation Rules configuration
     - Run Profile execution
     - Metaverse object queries
     - Activity monitoring

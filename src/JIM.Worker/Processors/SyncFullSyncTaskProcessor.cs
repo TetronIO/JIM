@@ -8,6 +8,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -107,6 +108,12 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         using (Diagnostics.Sync.StartSpan("LoadExportEvaluationCache"))
         {
             _exportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(_connectedSystem.Id);
+
+            // Separate run-scoped cache for reference recall staging (#1003): recall must not
+            // exclude the source system (Q3 does not apply to deletions), so the stable tier is
+            // built with sourceConnectedSystemId 0, reusing the already-loaded rules (no new query).
+            _recallExportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(
+                sourceConnectedSystemId: 0, preloadedSyncRules: allSyncRules);
         }
 
         // Load settings once at start of sync
@@ -157,6 +164,14 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
         var csoPhaseStopwatch = System.Diagnostics.Stopwatch.StartNew();
         await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing Connected System Objects");
 
+        // Keyset cursor for CSO page loads. Starting at Guid.Empty (below every generated uuid in
+        // both PostgreSQL's bytewise and .NET's component-wise ordering) keeps every page on the
+        // keyset path, so per-page cost stays O(pageSize) instead of degrading with OFFSET depth
+        // (measured at Scale500k25kGroups: 977s across 1,050 page loads). The cursor must advance
+        // to the last row of each page exactly as the repository returned it; a client-side max
+        // would diverge from PostgreSQL's uuid ordering and skip rows.
+        var csoPageCursor = Guid.Empty;
+
         for (var i = 1; i <= totalCsoPages; i++)
         {
 
@@ -165,8 +180,11 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
             {
                 csoPagedResult = await _syncRepo.GetConnectedSystemObjectsAsync(
                     _connectedSystem.Id, i, pageSize, totalCsosToProcess,
-                    csoLoadWatermark);
+                    csoLoadWatermark, csoPageCursor);
             }
+
+            if (csoPagedResult.Results.Count > 0)
+                csoPageCursor = csoPagedResult.Results[^1].Id;
 
             // Note: Target CSO attribute values for no-net-change detection are pre-loaded in ExportEvaluationCache
             // (built at sync start) rather than per-page, since we need target system CSO attributes not source CSO attributes.
@@ -316,6 +334,14 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
                 LogPageMemoryDiagnostics(i, totalCsoPages);
             }
+            catch (Exception ex) when (ex is not OperationCanceledException and not SyncPersistenceException)
+            {
+                // Attribute the persistence failure (page, Connected System, affected object ids) before it
+                // propagates to the worker's activity-failure handler, which otherwise records only a generic
+                // "unhandled exception". This is a hard failure: we rethrow so the run stops rather than
+                // continuing with a page that did not fully persist (Synchronisation Integrity).
+                throw CreatePagePersistenceException(i, totalCsoPages, ex);
+            }
             finally
             {
                 _syncRepo.SetAutoDetectChangesEnabled(true);
@@ -342,6 +368,10 @@ public class SyncFullSyncTaskProcessor : SyncTaskProcessorBase
 
             // Flush any RPEIs from cross-page resolution
             await FlushRpeisAsync();
+
+            // Emit the deduplicated reference-recall Pending Export RPEIs accumulated across all page
+            // deletions (one per referencing group CSO, not one per page-flush that touched it).
+            await FlushDeferredRecallRpeisAsync();
 
             // Outbound Temporal Scope Reconciler apply step (#892): re-evaluate export scope for Metaverse
             // Objects the reconciler flagged, whose export-rule scope drifted with the clock without a data

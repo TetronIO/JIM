@@ -1465,4 +1465,101 @@ public class DynamicExpressoEvaluatorTests
     }
 
     #endregion
+
+    #region Expression Length Ceiling Tests (OWASP #500 guardrail)
+
+    [Test]
+    public void Evaluate_ExpressionExceedsMaxLength_ThrowsArgumentException()
+    {
+        var context = new ExpressionContext();
+        var expression = BuildStringLiteralExpressionOfLength(DynamicExpressoEvaluator.MaxExpressionLength + 1);
+
+        var ex = Assert.Throws<ArgumentException>(() => _evaluator.Evaluate(expression, context));
+
+        Assert.That(ex?.Message, Does.Contain(DynamicExpressoEvaluator.MaxExpressionLength.ToString("N0")));
+    }
+
+    [Test]
+    public void Evaluate_ExpressionAtMaxLength_EvaluatesSuccessfully()
+    {
+        var context = new ExpressionContext();
+        var expression = BuildStringLiteralExpressionOfLength(DynamicExpressoEvaluator.MaxExpressionLength);
+
+        Assert.That(expression.Length, Is.EqualTo(DynamicExpressoEvaluator.MaxExpressionLength));
+        Assert.DoesNotThrow(() => _evaluator.Evaluate(expression, context));
+    }
+
+    [Test]
+    public void Validate_ExpressionExceedsMaxLength_ReturnsFailure()
+    {
+        var expression = BuildStringLiteralExpressionOfLength(DynamicExpressoEvaluator.MaxExpressionLength + 1);
+
+        var result = _evaluator.Validate(expression);
+
+        Assert.That(result.IsValid, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain(DynamicExpressoEvaluator.MaxExpressionLength.ToString("N0")));
+    }
+
+    [Test]
+    public void Validate_ExpressionAtMaxLength_ReturnsSuccess()
+    {
+        var expression = BuildStringLiteralExpressionOfLength(DynamicExpressoEvaluator.MaxExpressionLength);
+
+        var result = _evaluator.Validate(expression);
+
+        Assert.That(result.IsValid, Is.True);
+    }
+
+    [Test]
+    public void Test_ExpressionExceedsMaxLength_ReturnsFailureWithoutEvaluating()
+    {
+        var context = new ExpressionContext();
+        var expression = BuildStringLiteralExpressionOfLength(DynamicExpressoEvaluator.MaxExpressionLength + 1);
+
+        var result = _evaluator.Test(expression, context);
+
+        Assert.That(result.IsValid, Is.False);
+        Assert.That(result.ErrorMessage, Does.Contain(DynamicExpressoEvaluator.MaxExpressionLength.ToString("N0")));
+    }
+
+    /// <summary>
+    /// Builds a syntactically valid, trivially-evaluable string literal expression (a quoted run of 'a'
+    /// characters) whose total source length, including the surrounding quotes, is exactly <paramref name="length"/>.
+    /// Used to test the exact boundary of the expression length ceiling without depending on a specific
+    /// legitimate expression's shape.
+    /// </summary>
+    private static string BuildStringLiteralExpressionOfLength(int length)
+    {
+        // Length includes the two surrounding quote characters.
+        return "\"" + new string('a', length - 2) + "\"";
+    }
+
+    #endregion
+
+    #region Compiled Expression Cache Bound Tests (OWASP #500 guardrail)
+
+    [Test]
+    public void GetOrCompileExpression_CacheExceedsBound_CacheSizeNeverExceedsMaximum()
+    {
+        // Evaluate more distinct expressions than the cache bound to prove the cache never grows past
+        // DynamicExpressoEvaluator.MaxCompiledExpressionCacheSize, however many entries other tests have
+        // already left in the shared static cache. Each expression is unique (GUID-qualified) so it always
+        // triggers a compile (cache miss), which is what exercises the bound-checking path.
+        var context = new ExpressionContext();
+        var uniquePrefix = Guid.NewGuid().ToString("N");
+        var expressionCount = DynamicExpressoEvaluator.MaxCompiledExpressionCacheSize + 200;
+
+        for (var i = 0; i < expressionCount; i++)
+        {
+            var expression = $"\"{uniquePrefix}-{i}\"";
+            _evaluator.Evaluate(expression, context);
+
+            Assert.That(
+                DynamicExpressoEvaluator.CompiledExpressionCacheSize,
+                Is.LessThanOrEqualTo(DynamicExpressoEvaluator.MaxCompiledExpressionCacheSize),
+                $"Cache size exceeded the maximum bound after compiling expression {i}.");
+        }
+    }
+
+    #endregion
 }

@@ -4,32 +4,28 @@
   <img src="https://junctional.io/assets/jim-logo.png" alt="JIM" width="400"/>
 </p>
 
-[![CI](https://github.com/TetronIO/JIM/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TetronIO/JIM/actions/workflows/ci.yml)
-&nbsp;
-[![.NET 10.0](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
-&nbsp;
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791)](https://www.postgresql.org/)
-&nbsp;
-[![PowerShell Gallery](https://img.shields.io/powershellgallery/v/JIM?label=PSGallery&color=blue)](https://www.powershellgallery.com/packages/JIM/)
-&nbsp;
-[![License](https://img.shields.io/badge/License-Source_Available-orange)](https://junctional.io/license)
-&nbsp;
-[![Documentation](https://img.shields.io/badge/Docs-docs.junctional.io-green)](https://docs.junctional.io/)
-&nbsp;
+[![CI](https://github.com/TetronIO/JIM/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TetronIO/JIM/actions/workflows/ci.yml)&nbsp;
+[![.NET 10.0](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)&nbsp;
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791)](https://www.postgresql.org/)&nbsp;
+[![PowerShell Gallery](https://img.shields.io/powershellgallery/v/JIM?label=PSGallery&color=blue)](https://www.powershellgallery.com/packages/JIM/)&nbsp;
+[![License](https://img.shields.io/badge/License-Source_Available-orange)](https://junctional.io/license)&nbsp;
+[![Documentation](https://img.shields.io/badge/Docs-docs.junctional.io-green)](https://docs.junctional.io/)&nbsp;
 [![Open in GitHub Codespaces](https://img.shields.io/badge/Open_in-Codespaces-black?logo=github)](https://codespaces.new/TetronIO/JIM?devcontainer_path=.devcontainer/devcontainer.json)
 
 JIM is a modern Identity Management system designed for organisations with complex identity synchronisation requirements. It is self-hosted, container-deployable, and works in both connected and air-gapped networks. Features include:
 
 - Hub-and-spoke architecture using a central metaverse for identity correlation
-- Bidirectional synchronisation of Users, Groups, and custom object types (e.g., Departments, Roles, Computers)
+- Bidirectional synchronisation of Users, Groups, and custom object types
+- [Attribute Priority](https://docs.junctional.io/concepts/attribute-priority/): deterministic precedence when multiple aystems contribute the same attribute
 - Multi-directory LDAP support: AD DS, OpenLDAP, 389 Directory Server, and RFC 4512-compliant ones
 - Built-in scheduler that supports parallel operations
-- Tested at 100K+ object scale with bounded memory pipelines
+- Validated at 500,000-user scale (with tens of thousands of groups of up to 495,000 members)
 - Transform data using expressions with extensive built-in functions for common identity operations
 - Built-in LDAP and File connectors, more in development, including a custom connector framework
 - Modern Web Portal and REST API with interactive Scalar [API reference](https://docs.junctional.io/api/reference/)
 - PowerShell automation for Identity as Code (IDaC) - deploy JIM instances in minutes, not months
 - Realtime activity monitoring
+- [Configuration Change History](https://docs.junctional.io/configuration/activities/#configuration-change-history): versioned who/what/when audit across all configuration types
 - Single Sign-On (SSO) using OpenID Connect
 - Dark/Light mode
 
@@ -47,29 +43,21 @@ Enterprise identity synchronisation typically requires cloud connectivity, compl
 
 JIM is designed to solve both enterprise-scale identity management and micro-deployment challenges for edge-sync scenarios.
 
-![Air-gapped deployment](https://img.shields.io/badge/%E2%9C%93-Air--gapped_deployment-2ea44f?style=for-the-badge)
-&nbsp;
-![Container-native](https://img.shields.io/badge/%E2%9C%93-Container--native-2ea44f?style=for-the-badge)
-&nbsp;
-![Source available](https://img.shields.io/badge/%E2%9C%93-Source_available-2ea44f?style=for-the-badge)
-&nbsp;
-![SSO with any OIDC provider](https://img.shields.io/badge/%E2%9C%93-SSO_with_any_OIDC_provider-2ea44f?style=for-the-badge)
-&nbsp;
-![Full REST API](https://img.shields.io/badge/%E2%9C%93-Full_REST_API-2ea44f?style=for-the-badge)
-&nbsp;
-![PowerShell automation](https://img.shields.io/badge/%E2%9C%93-PowerShell_automation-2ea44f?style=for-the-badge)
-&nbsp;
-![Deploy in minutes](https://img.shields.io/badge/%E2%9C%93-Deploy_in_minutes-2ea44f?style=for-the-badge)
-&nbsp;
-![Enterprise scale](https://img.shields.io/badge/%E2%9C%93-Enterprise_scale-2ea44f?style=for-the-badge)
-&nbsp;
+![Air-gapped deployment](https://img.shields.io/badge/%E2%9C%93-Air--gapped_deployment-2ea44f?style=for-the-badge)&nbsp;
+![Container-native](https://img.shields.io/badge/%E2%9C%93-Container--native-2ea44f?style=for-the-badge)&nbsp;
+![Source available](https://img.shields.io/badge/%E2%9C%93-Source_available-2ea44f?style=for-the-badge)&nbsp;
+![SSO with any OIDC provider](https://img.shields.io/badge/%E2%9C%93-SSO_with_any_OIDC_provider-2ea44f?style=for-the-badge)&nbsp;
+![Full REST API](https://img.shields.io/badge/%E2%9C%93-Full_REST_API-2ea44f?style=for-the-badge)&nbsp;
+![PowerShell automation](https://img.shields.io/badge/%E2%9C%93-PowerShell_automation-2ea44f?style=for-the-badge)&nbsp;
+![Deploy in minutes](https://img.shields.io/badge/%E2%9C%93-Deploy_in_minutes-2ea44f?style=for-the-badge)&nbsp;
+![Enterprise scale](https://img.shields.io/badge/%E2%9C%93-Enterprise_scale-2ea44f?style=for-the-badge)&nbsp;
 ![Micro deployments for edge sync](https://img.shields.io/badge/%E2%9C%93-Micro_deployments_for_edge_sync-2ea44f?style=for-the-badge)
 
 ## Scenarios
 JIM supports common Identity Governance & Administration (IGA) scenarios:
 
-- **Joiner/Mover/Leaver (JML) Automation** - Synchronise users from HR systems to directories, applications, and downstream systems
-- **Attribute Writeback** - Keep HR systems current by writing IT-managed attributes back (e.g., email addresses, phone numbers)
+- **Joiner/Mover/Leaver (JML) Automation** - Synchronise users from HR systems to directories, dbs, etc.
+- **Attribute Writeback** - Keep HR systems current by writing back IT attributes (e.g., emails, phone numbers)
 - **Domain Consolidation** - Prepare for cloud migration, simplification, or organisational mergers
 - **Domain Migration** - Support divestitures and system decommissioning
 - **Identity Correlation** - Bring together user and entitlement data from disparate business applications
@@ -86,10 +74,10 @@ Why choose JIM?
 ## Architecture
 JIM is a container-based distributed application implementing the metaverse pattern for centralised identity governance.
 
-<a href="docs/diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
+<a href=".github/diagrams/system-context-dark.svg">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
-    <img alt="JIM System Context" src="docs/diagrams/images/light/jim-structurizr-1-SystemContext.svg">
+    <source media="(prefers-color-scheme: dark)" srcset=".github/diagrams/system-context-dark.svg">
+    <img alt="JIM System Context" src=".github/diagrams/system-context-light.svg">
   </picture>
 </a>
 
@@ -100,10 +88,10 @@ JIM is a container-based distributed application implementing the metaverse patt
 - **JIM.PowerShell** - A cross-platform PowerShell module (Windows, macOS, Linux) for full configuration and automation of JIM, enabling Identity as Code (IDaC)
 - A database - PostgreSQL
 
-<a href="docs/diagrams/images/dark/jim-structurizr-1-Containers.svg">
+<a href=".github/diagrams/containers-dark.svg">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/images/dark/jim-structurizr-1-Containers.svg">
-    <img alt="JIM Containers" src="docs/diagrams/images/light/jim-structurizr-1-Containers.svg">
+    <source media="(prefers-color-scheme: dark)" srcset=".github/diagrams/containers-dark.svg">
+    <img alt="JIM Containers" src=".github/diagrams/containers-light.svg">
   </picture>
 </a>
 

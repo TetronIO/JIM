@@ -6,8 +6,6 @@ using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
 using JIM.Application.Utilities;
 using JIM.Connectors;
-using JIM.Connectors.File;
-using JIM.Connectors.LDAP;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -29,8 +27,9 @@ public class SyncExportTaskProcessor
 {
     private readonly ISyncServer _syncServer;
     private readonly ISyncRepository _syncRepo;
-    private readonly Func<ISyncRepository>? _syncRepoFactory;
+    private readonly Func<ISyncRepositoryScope>? _syncRepoFactory;
     private readonly IConnector _connector;
+    private readonly IConnectorFactory _connectorFactory;
     private readonly ConnectedSystem _connectedSystem;
     private readonly ConnectedSystemRunProfile _runProfile;
     private readonly Activity _activity;
@@ -62,12 +61,14 @@ public class SyncExportTaskProcessor
         WorkerTask workerTask,
         CancellationTokenSource cancellationTokenSource,
         SyncRunMode runMode = SyncRunMode.PreviewAndSync,
-        Func<ISyncRepository>? syncRepoFactory = null)
+        Func<ISyncRepositoryScope>? syncRepoFactory = null,
+        IConnectorFactory? connectorFactory = null)
     {
         _syncServer = syncServer;
         _syncRepo = syncRepository;
         _syncRepoFactory = syncRepoFactory;
         _connector = connector;
+        _connectorFactory = connectorFactory ?? new ConnectorFactory();
         _connectedSystem = connectedSystem;
         _runProfile = runProfile;
         _activity = workerTask.Activity;
@@ -136,11 +137,21 @@ public class SyncExportTaskProcessor
 
         try
         {
+            // Resolve the degree of export batch parallelism (issue #985d): an explicit
+            // Max Export Parallelism setting always wins; otherwise the connector may recommend
+            // a directory-aware degree of parallelism (e.g. LdapConnector, mirroring its own
+            // Export Concurrency auto-tune); otherwise fall back to sequential.
+            var resolvedParallelism = ExportParallelismResolver.Resolve(
+                _connectedSystem.MaxExportParallelism,
+                _connector,
+                _connectedSystem.SettingValues,
+                _connectedSystem.Name);
+
             // Execute exports using the ExportExecutionServer with progress reporting
             var options = new ExportExecutionOptions
             {
                 BatchSize = 100,
-                MaxParallelism = _connectedSystem.MaxExportParallelism ?? 1
+                MaxParallelism = resolvedParallelism
             };
 
             var throughput = new ThroughputTracker();
@@ -338,6 +349,20 @@ public class SyncExportTaskProcessor
     /// </summary>
     private async Task ProcessExportResultAsync(ExportExecutionResult result, ThroughputTracker throughput)
     {
+        // Resolve reference FKs on the change records this export wrote, plus any left over from the
+        // preceding sync stage for this system (both persist reference DNs with ReferenceValueId
+        // nulled for cross-batch FK safety). Paying the debt here keeps it from accumulating for the
+        // next import's fixup, which previously inherited millions of unresolved rows at scale and
+        // blew the bulk command timeout (Scale500k25kGroups, 2026-07-18). The fixup applies bounded
+        // batches, so its statements stay inside the timeout regardless of volume.
+        if (_csoChangeTrackingEnabled && _runMode != SyncRunMode.PreviewOnly)
+        {
+            await _syncRepo.UpdateActivityMessageAsync(_activity, "Resolving change history references");
+            var changeRecordsResolved = await _syncRepo.FixupCrossBatchChangeRecordReferenceIdsAsync(_connectedSystem.Id);
+            if (changeRecordsResolved > 0)
+                Log.Information("ProcessExportResultAsync: Resolved {Count} cross-batch change record reference FKs after export completion.", changeRecordsResolved);
+        }
+
         // Update activity progress
         _activity.ObjectsProcessed = result.TotalPendingExports;
 
@@ -377,13 +402,7 @@ public class SyncExportTaskProcessor
     /// </summary>
     private IConnector CreateConnectorForParallelBatch()
     {
-        if (_connectedSystem.ConnectorDefinition.Name == ConnectorConstants.LdapConnectorName)
-            return new LdapConnector();
-        if (_connectedSystem.ConnectorDefinition.Name == ConnectorConstants.FileConnectorName)
-            return new FileConnector();
-
-        throw new NotSupportedException(
-            $"{_connectedSystem.ConnectorDefinition.Name} connector does not support parallel batch export.");
+        return _connectorFactory.Create(_connectedSystem.ConnectorDefinition.Name);
     }
 
     /// <summary>

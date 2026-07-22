@@ -22,6 +22,12 @@ This section covers everything you need to deploy, configure, and maintain JIM i
 
     Step-by-step instructions for configuring OIDC authentication with Microsoft Entra ID, AD FS, or Keycloak, including testing procedures and security considerations.
 
+-   **[Security Headers](security-headers.md)**
+
+    ---
+
+    The defence-in-depth response headers JIM sends on every request, including the Content Security Policy, and what to know if you sit JIM behind a reverse proxy or corporate web proxy.
+
 -   **[Configuration Reference](configuration.md)**
 
     ---
@@ -32,7 +38,13 @@ This section covers everything you need to deploy, configure, and maintain JIM i
 
     ---
 
-    Procedures for upgrading JIM in connected and air-gapped environments, including backup recommendations and migration notes.
+    Procedures for upgrading JIM in connected and air-gapped environments, including pre-upgrade backups, pausing Schedules, verification, and rolling back.
+
+-   **[Backup & Disaster Recovery](backup-recovery.md)**
+
+    ---
+
+    What to back up (database plus encryption keys, as a matched pair), how to take and restore a backup, securing key backups, and recovery expectations if keys are lost.
 
 -   **[Troubleshooting](troubleshooting.md)**
 

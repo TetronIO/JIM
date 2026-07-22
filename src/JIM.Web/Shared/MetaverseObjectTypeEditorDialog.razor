@@ -1,0 +1,286 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@using JIM.Models.Core
+@using JIM.Utilities
+@using JIM.Web.Services
+@inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @bind-IsValid="_formValid">
+            @if (_isEdit)
+            {
+                <PrefilledFormValidator />
+            }
+            <MudStack Spacing="4">
+                @* ─── Name (live uniqueness) ─── *@
+                <MudTextField @bind-Value="_name"
+                              Label="Name"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="A name is required."
+                              Immediate="true"
+                              DebounceInterval="300"
+                              OnDebounceIntervalElapsed="OnNameChangedAsync"
+                              Error="_nameError != null"
+                              ErrorText="@_nameError"
+                              HelperText="The singular name of the Object Type (e.g. Device)."
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@(_checkingName ? Icons.Material.Filled.HourglassEmpty : (_nameError == null && !string.IsNullOrWhiteSpace(_name) ? Icons.Material.Filled.CheckCircle : null))"
+                              AutoFocus="true" />
+
+                @* ─── Plural Name (live uniqueness) ─── *@
+                <MudTextField @bind-Value="_pluralName"
+                              Label="Plural Name"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="A plural name is required."
+                              Immediate="true"
+                              DebounceInterval="300"
+                              OnDebounceIntervalElapsed="OnPluralNameChangedAsync"
+                              Error="_pluralNameError != null"
+                              ErrorText="@_pluralNameError"
+                              HelperText="The plural name of the Object Type (e.g. Devices)."
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@(_checkingPluralName ? Icons.Material.Filled.HourglassEmpty : (_pluralNameError == null && !string.IsNullOrWhiteSpace(_pluralName) ? Icons.Material.Filled.CheckCircle : null))" />
+
+                @* ─── Icon ─── *@
+                <MudTextField @bind-Value="_icon"
+                              Label="Icon (optional)"
+                              Variant="Variant.Outlined"
+                              Immediate="true"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Helpers.ResolveObjectTypeIcon(_icon)"
+                              HelperText="A MudBlazor Filled icon name, e.g. Person, Groups, Devices. Leave empty for the default." />
+
+                @if (!_isEdit && _attributes.Count > 0)
+                {
+                    @* ─── Create-time attribute bindings (create only) ─── *@
+                    <MudSelect T="int" Label="Add attributes (optional)" Variant="Variant.Outlined"
+                               MultiSelection="true" @bind-SelectedValues="_selectedAttributeIds"
+                               MultiSelectionTextFunc="@(selected => string.Join(", ", selected.Select(s => int.TryParse(s, out var id) ? NameForAttributeId(id) : s)))"
+                               HelperText="Bind existing Metaverse Attributes to the new Object Type. You can also manage these later on the Object Type's Attributes tab.">
+                        @foreach (var attr in _attributes)
+                        {
+                            <MudSelectItem T="int" Value="attr.Id">@attr.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   Disabled="@(!CanSubmit())" OnClick="SubmitAsync">
+            @(_isEdit ? "Save Changes" : "Create Object Type")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    /// <summary>
+    /// The Object Type being edited. Null opens the dialog in create mode.
+    /// </summary>
+    [Parameter]
+    public MetaverseObjectType? ObjectType { get; set; }
+
+    private bool _isEdit;
+    private bool _formValid;
+
+    private string _name = string.Empty;
+    private string _pluralName = string.Empty;
+    private string _icon = string.Empty;
+    private IReadOnlyCollection<int> _selectedAttributeIds = new HashSet<int>();
+
+    private string? _nameError;
+    private string? _pluralNameError;
+    private bool _checkingName;
+    private bool _checkingPluralName;
+
+    // Original values (edit) to detect what actually changed.
+    private string _originalName = string.Empty;
+    private string _originalPluralName = string.Empty;
+    private string _originalIcon = string.Empty;
+
+    private IList<MetaverseAttribute> _attributes = new List<MetaverseAttribute>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (ObjectType != null)
+        {
+            _isEdit = true;
+            _name = ObjectType.Name;
+            _pluralName = ObjectType.PluralName;
+            _icon = ObjectType.Icon ?? string.Empty;
+            _originalName = ObjectType.Name;
+            _originalPluralName = ObjectType.PluralName;
+            _originalIcon = ObjectType.Icon ?? string.Empty;
+        }
+        else
+        {
+            using var jim = JimFactory.Create();
+            var attributes = await jim.Metaverse.GetMetaverseAttributesAsync();
+            _attributes = attributes?.OrderBy(a => a.Name).ToList() ?? new List<MetaverseAttribute>();
+        }
+    }
+
+    private string NameForAttributeId(int id) =>
+        _attributes.FirstOrDefault(a => a.Id == id)?.Name ?? id.ToString();
+
+    private async Task OnNameChangedAsync()
+    {
+        var trimmed = _name?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            _nameError = null;
+            return;
+        }
+
+        if (_isEdit && string.Equals(trimmed, _originalName, StringComparison.OrdinalIgnoreCase))
+        {
+            _nameError = null;
+            return;
+        }
+
+        _checkingName = true;
+        StateHasChanged();
+        try
+        {
+            using var jim = JimFactory.Create();
+            var available = await jim.Metaverse.IsMetaverseObjectTypeNameAvailableAsync(trimmed, ObjectType?.Id);
+            _nameError = available ? null : $"An Object Type named \"{trimmed}\" already exists. Names are case-insensitive.";
+        }
+        finally
+        {
+            _checkingName = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnPluralNameChangedAsync()
+    {
+        var trimmed = _pluralName?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            _pluralNameError = null;
+            return;
+        }
+
+        if (_isEdit && string.Equals(trimmed, _originalPluralName, StringComparison.OrdinalIgnoreCase))
+        {
+            _pluralNameError = null;
+            return;
+        }
+
+        _checkingPluralName = true;
+        StateHasChanged();
+        try
+        {
+            using var jim = JimFactory.Create();
+            var available = await jim.Metaverse.IsMetaverseObjectTypePluralNameAvailableAsync(trimmed, ObjectType?.Id);
+            _pluralNameError = available ? null : $"An Object Type with plural name \"{trimmed}\" already exists. Names are case-insensitive.";
+        }
+        finally
+        {
+            _checkingPluralName = false;
+            StateHasChanged();
+        }
+    }
+
+    private bool CanSubmit()
+    {
+        if (!_formValid || _checkingName || _checkingPluralName || _nameError != null || _pluralNameError != null)
+            return false;
+        if (string.IsNullOrWhiteSpace(_name) || string.IsNullOrWhiteSpace(_pluralName))
+            return false;
+
+        // On edit, require at least one actual change.
+        if (_isEdit && !HasChanges())
+            return false;
+
+        return true;
+    }
+
+    private bool HasChanges() =>
+        !string.Equals(_name.Trim(), _originalName, StringComparison.Ordinal) ||
+        !string.Equals(_pluralName.Trim(), _originalPluralName, StringComparison.Ordinal) ||
+        !string.Equals(_icon.Trim(), _originalIcon, StringComparison.Ordinal);
+
+    private async Task SubmitAsync()
+    {
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, _isEdit ? "Save" : "Create");
+        if (cancelled)
+            return;
+
+        using var jim = JimFactory.Create();
+        var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+        var trimmedName = _name.Trim();
+        var trimmedPluralName = _pluralName.Trim();
+        var normalisedIcon = string.IsNullOrWhiteSpace(_icon) ? null : _icon.Trim();
+
+        try
+        {
+            if (_isEdit)
+            {
+                await jim.Metaverse.RenameMetaverseObjectTypeAsync(ObjectType!.Id, trimmedName, trimmedPluralName, normalisedIcon, user, changeReason);
+                Snackbar.Add($"Saved changes to \"{trimmedName}\".", Severity.Success);
+            }
+            else
+            {
+                var objectType = new MetaverseObjectType
+                {
+                    Name = trimmedName,
+                    PluralName = trimmedPluralName,
+                    Icon = normalisedIcon,
+                    BuiltIn = false,
+                    Created = DateTime.UtcNow,
+                    Attributes = new List<MetaverseAttribute>()
+                };
+
+                objectType.Attributes.AddRange(_selectedAttributeIds
+                    .Select(id => _attributes.FirstOrDefault(a => a.Id == id))
+                    .Where(a => a != null)
+                    .Select(a => a!));
+
+                await jim.Metaverse.CreateMetaverseObjectTypeAsync(objectType, user, changeReason);
+                Snackbar.Add($"Created Object Type \"{trimmedName}\".", Severity.Success);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Failed to save Object Type: {ex.Message}", Severity.Error);
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>
+    /// Opens the create/edit dialog. Pass an Object Type to edit, or null to create. Returns true when a change was
+    /// saved.
+    /// </summary>
+    public static async Task<bool> ShowAsync(IDialogService dialogService, MetaverseObjectType? objectType = null)
+    {
+        var parameters = new DialogParameters<MetaverseObjectTypeEditorDialog>
+        {
+            { x => x.ObjectType, objectType }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var title = objectType == null ? "New Object Type" : $"Edit \"{objectType.Name}\"";
+        var dialog = await dialogService.ShowAsync<MetaverseObjectTypeEditorDialog>(title, parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}

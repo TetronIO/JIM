@@ -10,10 +10,10 @@ function Remove-JIMSyncRule {
         Permanently deletes a Synchronisation Rule.
 
     .PARAMETER Id
-        The unique identifier of the Sync Rule to delete.
+        The unique identifier of the Synchronisation Rule to delete.
 
     .PARAMETER InputObject
-        Sync Rule object to delete (from pipeline).
+        Synchronisation Rule object to delete (from pipeline).
 
     .PARAMETER ChangeReason
         An optional reason for the deletion, recorded against the change history.
@@ -22,25 +22,25 @@ function Remove-JIMSyncRule {
         Suppresses confirmation prompts.
 
     .PARAMETER PassThru
-        If specified, returns the deleted Sync Rule object.
+        If specified, returns the deleted Synchronisation Rule object.
 
     .OUTPUTS
-        If -PassThru is specified, returns the deleted Sync Rule object.
+        If -PassThru is specified, returns the deleted Synchronisation Rule object.
 
     .EXAMPLE
         Remove-JIMSyncRule -Id 1
 
-        Removes the Sync Rule with ID 1 (prompts for confirmation).
+        Removes the Synchronisation Rule with ID 1 (prompts for confirmation).
 
     .EXAMPLE
         Remove-JIMSyncRule -Id 1 -Force -ChangeReason "Decommissioned (CHG0123)"
 
-        Removes the Sync Rule without confirmation and records a reason against the change history.
+        Removes the Synchronisation Rule without confirmation and records a reason against the change history.
 
     .EXAMPLE
         Get-JIMSyncRule | Where-Object { $_.name -like "Test*" } | Remove-JIMSyncRule -Force
 
-        Removes all Sync Rules with names starting with "Test".
+        Removes all Synchronisation Rules with names starting with "Test".
 
     .LINK
         Get-JIMSyncRule
@@ -80,12 +80,12 @@ function Remove-JIMSyncRule {
             $existing = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$ruleId"
         }
         catch {
-            Write-Error "Sync Rule not found: $ruleId"
+            Write-Error "Synchronisation Rule not found: $ruleId"
             return
         }
 
-        if ($Force -or $PSCmdlet.ShouldProcess($existing.name, "Delete Sync Rule")) {
-            Write-Verbose "Deleting Sync Rule: $ruleId"
+        if ($Force -or $PSCmdlet.ShouldProcess($existing.name, "Delete Synchronisation Rule")) {
+            Write-Verbose "Deleting Synchronisation Rule: $ruleId"
 
             # The reason is supplied as a query parameter because HTTP DELETE bodies are awkward for clients.
             $deleteEndpoint = "/api/v1/synchronisation/sync-rules/$ruleId"
@@ -96,14 +96,14 @@ function Remove-JIMSyncRule {
             try {
                 Invoke-JIMApi -Endpoint $deleteEndpoint -Method 'DELETE'
 
-                Write-Verbose "Deleted Sync Rule: $ruleId"
+                Write-Verbose "Deleted Synchronisation Rule: $ruleId"
 
                 if ($PassThru) {
                     $existing
                 }
             }
             catch {
-                Write-Error "Failed to delete Sync Rule: $_"
+                Write-Error "Failed to delete Synchronisation Rule: $_"
             }
         }
     }

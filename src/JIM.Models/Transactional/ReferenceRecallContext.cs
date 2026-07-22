@@ -28,4 +28,13 @@ public class ReferenceRecallContext
     /// export-time resolution path cannot resolve a Metaverse Object that no longer exists.
     /// </summary>
     public Dictionary<Guid, Dictionary<int, string>> ResolvedReferenceValuesBySystem { get; init; } = [];
+
+    /// <summary>
+    /// Per deleted Metaverse Object: the Connected System Object it was joined to in each
+    /// Connected System, keyed deletedMvoId -> (connectedSystemId -> csoId). Captured before
+    /// deletion disconnects them; the set-based recall fast path (#1003) matches target-side
+    /// reference rows by these CSO ids. A CSO id is recorded even when no reference value could
+    /// be resolved for it, so unresolvable matches can be counted rather than silently missed.
+    /// </summary>
+    public Dictionary<Guid, Dictionary<int, Guid>> DeletedCsoIdsBySystem { get; init; } = [];
 }

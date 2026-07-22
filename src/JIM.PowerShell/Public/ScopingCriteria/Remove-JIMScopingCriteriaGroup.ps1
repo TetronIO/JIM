@@ -4,13 +4,13 @@
 function Remove-JIMScopingCriteriaGroup {
     <#
     .SYNOPSIS
-        Removes a scoping criteria group from a sync rule.
+        Removes a scoping criteria group from a Synchronisation Rule.
 
     .DESCRIPTION
         Deletes a scoping criteria group and all its contents (criteria and child groups).
 
     .PARAMETER SyncRuleId
-        The unique identifier of the sync rule.
+        The unique identifier of the Synchronisation Rule.
 
     .PARAMETER GroupId
         The unique identifier of the criteria group to remove.
@@ -26,7 +26,7 @@ function Remove-JIMScopingCriteriaGroup {
     .EXAMPLE
         Get-JIMScopingCriteria -SyncRuleId 5 | Remove-JIMScopingCriteriaGroup
 
-        Removes all scoping criteria groups from sync rule 5.
+        Removes all scoping criteria groups from Synchronisation Rule 5.
 
     .LINK
         Get-JIMScopingCriteria
@@ -49,7 +49,7 @@ function Remove-JIMScopingCriteriaGroup {
         }
 
         if ($PSCmdlet.ShouldProcess("Scoping Criteria Group $GroupId", "Remove")) {
-            Write-Verbose "Removing scoping criteria group $GroupId from sync rule $SyncRuleId"
+            Write-Verbose "Removing scoping criteria group $GroupId from Synchronisation Rule $SyncRuleId"
 
             try {
                 Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria/$GroupId" -Method 'DELETE'

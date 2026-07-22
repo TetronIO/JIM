@@ -10,7 +10,7 @@ function Remove-JIMScopingCriterion {
         Deletes a specific criterion from within a scoping criteria group.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the sync rule.
+        The unique identifier of the Synchronisation Rule.
 
     .PARAMETER GroupId
         The unique identifier of the criteria group containing the criterion.
@@ -50,7 +50,7 @@ function Remove-JIMScopingCriterion {
         }
 
         if ($PSCmdlet.ShouldProcess("Criterion $CriterionId in Group $GroupId", "Remove")) {
-            Write-Verbose "Removing criterion $CriterionId from group $GroupId in sync rule $SyncRuleId"
+            Write-Verbose "Removing criterion $CriterionId from group $GroupId in Synchronisation Rule $SyncRuleId"
 
             try {
                 Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/scoping-criteria/$GroupId/criteria/$CriterionId" -Method 'DELETE'

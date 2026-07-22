@@ -241,6 +241,128 @@ public class SyncRepositoryMvoTests
 
     #endregion
 
+    #region MVO deletion ghost reference rows (#1019)
+
+    private const int MemberAttributeId = 86;
+
+    private (MetaverseObject member, MetaverseObject survivor, MetaverseObject group) SeedGroupReferencingMemberAndSurvivor()
+    {
+        var member = new MetaverseObject { Id = Guid.NewGuid(), Type = new MetaverseObjectType { Id = 5 } };
+        var survivor = new MetaverseObject { Id = Guid.NewGuid(), Type = new MetaverseObjectType { Id = 5 } };
+        var group = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new MetaverseObjectType { Id = 6 },
+            AttributeValues = new List<MetaverseObjectAttributeValue>
+            {
+                new() { Id = Guid.NewGuid(), AttributeId = MemberAttributeId, ReferenceValueId = member.Id },
+                new() { Id = Guid.NewGuid(), AttributeId = MemberAttributeId, ReferenceValueId = survivor.Id }
+            }
+        };
+        _repo.SeedMetaverseObject(member);
+        _repo.SeedMetaverseObject(survivor);
+        _repo.SeedMetaverseObject(group);
+        return (member, survivor, group);
+    }
+
+    [Test]
+    public async Task DeleteMetaverseObjectsAsync_SurvivingGroupReferencesDeletedMember_RemovesValuelessReferenceRowAsync()
+    {
+        var (member, survivor, group) = SeedGroupReferencingMemberAndSurvivor();
+
+        await _repo.DeleteMetaverseObjectsAsync(new[] { member });
+
+        Assert.That(group.AttributeValues, Has.Count.EqualTo(1),
+            "The valueless row referencing the deleted member must be removed, not left as an all-null ghost");
+        Assert.That(group.AttributeValues[0].ReferenceValueId, Is.EqualTo(survivor.Id),
+            "The row referencing the surviving object must be untouched");
+    }
+
+    [Test]
+    public async Task DeleteMetaverseObjectsAsync_NavigationOnlyReferenceToDeletedMember_RemovesRowAsync()
+    {
+        var member = new MetaverseObject { Id = Guid.NewGuid(), Type = new MetaverseObjectType { Id = 5 } };
+        var group = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new MetaverseObjectType { Id = 6 },
+            AttributeValues = new List<MetaverseObjectAttributeValue>
+            {
+                new() { Id = Guid.NewGuid(), AttributeId = MemberAttributeId, ReferenceValue = member }
+            }
+        };
+        _repo.SeedMetaverseObject(member);
+        _repo.SeedMetaverseObject(group);
+
+        await _repo.DeleteMetaverseObjectsAsync(new[] { member });
+
+        Assert.That(group.AttributeValues, Is.Empty,
+            "A row referencing the deleted member via navigation only must also be removed");
+    }
+
+    [Test]
+    public async Task DeleteMetaverseObjectsAsync_ReferenceRowWithPayload_IsNulledNotRemovedAsync()
+    {
+        var member = new MetaverseObject { Id = Guid.NewGuid(), Type = new MetaverseObjectType { Id = 5 } };
+        var group = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new MetaverseObjectType { Id = 6 },
+            AttributeValues = new List<MetaverseObjectAttributeValue>
+            {
+                new() { Id = Guid.NewGuid(), AttributeId = MemberAttributeId, ReferenceValueId = member.Id, StringValue = "payload" }
+            }
+        };
+        _repo.SeedMetaverseObject(member);
+        _repo.SeedMetaverseObject(group);
+
+        await _repo.DeleteMetaverseObjectsAsync(new[] { member });
+
+        Assert.That(group.AttributeValues, Has.Count.EqualTo(1),
+            "A row carrying payload must survive with its reference nulled, preserving today's behaviour");
+        Assert.That(group.AttributeValues[0].ReferenceValueId, Is.Null);
+        Assert.That(group.AttributeValues[0].StringValue, Is.EqualTo("payload"));
+    }
+
+    [Test]
+    public async Task DeleteMetaverseObjectsAsync_AssertedNullMarkerRow_SurvivesAsync()
+    {
+        var member = new MetaverseObject { Id = Guid.NewGuid(), Type = new MetaverseObjectType { Id = 5 } };
+        var group = new MetaverseObject
+        {
+            Id = Guid.NewGuid(),
+            Type = new MetaverseObjectType { Id = 6 },
+            AttributeValues = new List<MetaverseObjectAttributeValue>
+            {
+                new() { Id = Guid.NewGuid(), AttributeId = MemberAttributeId, ReferenceValueId = member.Id },
+                new() { Id = Guid.NewGuid(), AttributeId = MemberAttributeId, NullValue = true }
+            }
+        };
+        _repo.SeedMetaverseObject(member);
+        _repo.SeedMetaverseObject(group);
+
+        await _repo.DeleteMetaverseObjectsAsync(new[] { member });
+
+        Assert.That(group.AttributeValues, Has.Count.EqualTo(1),
+            "Only the row referencing the deleted member may be removed");
+        Assert.That(group.AttributeValues[0].NullValue, Is.True,
+            "The asserted-null marker row must survive deletion clean-up");
+    }
+
+    [Test]
+    public async Task DeleteMetaverseObjectAsync_SingularForm_RemovesValuelessReferenceRowAsync()
+    {
+        var (member, survivor, group) = SeedGroupReferencingMemberAndSurvivor();
+
+        await _repo.DeleteMetaverseObjectAsync(member);
+
+        Assert.That(group.AttributeValues, Has.Count.EqualTo(1),
+            "The singular deletion form must remove ghost rows identically to the plural form");
+        Assert.That(group.AttributeValues[0].ReferenceValueId, Is.EqualTo(survivor.Id));
+    }
+
+    #endregion
+
     #region PersistPendingMvoChangesAsync (combined new + append)
 
     [Test]

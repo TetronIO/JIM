@@ -87,6 +87,31 @@ public static class Utilities
         return metaverseObjectHeader.GetAttributeValue(Constants.BuiltInAttributes.DisplayName)?.StringValue;
     }
 
+    /// <summary>
+    /// The search query-string token that filters a Metaverse Object list to those objects holding a value for a
+    /// named Metaverse Attribute: <c>/t/{pluralName}?search=hasAttribute:{attributeName}</c>. Shared by the deep-link
+    /// builders below and the Metaverse Object list page's search parser so the two cannot drift.
+    /// </summary>
+    public const string HasAttributeSearchToken = "hasAttribute:";
+
+    /// <summary>
+    /// The Metaverse Object list URL for a type (the unfiltered list).
+    /// </summary>
+    public static string GetMetaverseObjectListHref(string typePluralName)
+    {
+        return $"/t/{typePluralName.ToLower()}";
+    }
+
+    /// <summary>
+    /// The Metaverse Object list URL for a type, pre-filtered to objects that hold a value for the named attribute
+    /// (the hasAttribute: presence search). The attribute name is URL-encoded; the token colon is left literal (it is
+    /// query-safe) so the URL reads as documented.
+    /// </summary>
+    public static string GetMetaverseObjectHasAttributeSearchHref(string typePluralName, string attributeName)
+    {
+        return $"/t/{typePluralName.ToLower()}?search={HasAttributeSearchToken}{Uri.EscapeDataString(attributeName)}";
+    }
+
     public static string GetConnectedSystemHref(ConnectedSystem connectedSystem)
     {
         return $"/admin/connected-systems/{connectedSystem.Id}";

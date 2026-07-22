@@ -1,12 +1,14 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using JIM.Application;
 using JIM.Models.Core;
+using JIM.Models.Security;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using Serilog;
@@ -34,16 +36,21 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
     /// </summary>
     public const string ApiKeyPrefix = "jim_ak_";
 
-    private readonly IServiceProvider _serviceProvider;
+    // IServiceScopeFactory, not IServiceProvider: authentication handlers are resolved from the request scope, so
+    // an injected IServiceProvider is the request's own provider and is disposed the moment the response completes.
+    // The fire-and-forget usage/audit recording below outlives the request (failed authentications respond almost
+    // instantly), and CreateScope() on the disposed request provider throws ObjectDisposedException, silently
+    // dropping the write. IServiceScopeFactory is a root singleton; scopes created from it survive the request.
+    private readonly IServiceScopeFactory _serviceScopeFactory;
 
     public ApiKeyAuthenticationHandler(
         IOptionsMonitor<ApiKeyAuthenticationOptions> options,
         ILoggerFactory logger,
         UrlEncoder encoder,
-        IServiceProvider serviceProvider)
+        IServiceScopeFactory serviceScopeFactory)
         : base(options, logger, encoder)
     {
-        _serviceProvider = serviceProvider;
+        _serviceScopeFactory = serviceScopeFactory;
     }
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -60,10 +67,15 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
 
         var providedKey = apiKeyHeader.ToString();
 
+        // ForwardedHeaders middleware (when configured) rewrites RemoteIpAddress to the real client address even
+        // behind a reverse proxy, so this is proxy-truthful for free; see docs/administration/security-headers.md.
+        var clientIp = Context.Connection.RemoteIpAddress?.ToString();
+
         // Validate the key format
         if (string.IsNullOrWhiteSpace(providedKey) || !providedKey.StartsWith(ApiKeyPrefix))
         {
             Log.Warning("ApiKeyAuthenticationHandler: Invalid API key format provided");
+            RecordFailedAuthenticationEvent("Invalid API key format", apiKeyPrefix: null, clientIp);
             return AuthenticateResult.Fail("Invalid API key format");
         }
 
@@ -71,7 +83,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
         {
             // Create a scope to get a fresh DbContext for this authentication operation
             // This prevents DbContext threading issues when the controller also uses the same context
-            using var scope = _serviceProvider.CreateScope();
+            using var scope = _serviceScopeFactory.CreateScope();
             var jim = scope.ServiceProvider.GetRequiredService<JimApplication>();
 
             // Hash the provided key to look it up
@@ -80,8 +92,9 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
 
             if (apiKey == null)
             {
-                Log.Warning("ApiKeyAuthenticationHandler: API key not found (prefix: {KeyPrefix})",
-                    providedKey.Length >= 12 ? providedKey[..12] : providedKey);
+                var unknownKeyPrefix = providedKey.Length >= 12 ? providedKey[..12] : providedKey;
+                Log.Warning("ApiKeyAuthenticationHandler: API key not found (prefix: {KeyPrefix})", unknownKeyPrefix);
+                RecordFailedAuthenticationEvent("API key not found", unknownKeyPrefix, clientIp);
                 return AuthenticateResult.Fail("Invalid API key");
             }
 
@@ -92,6 +105,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             if (!apiKey.IsEnabled)
             {
                 Log.Warning("ApiKeyAuthenticationHandler: API key is disabled (prefix: {KeyPrefix})", apiKey.KeyPrefix);
+                RecordFailedAuthenticationEvent("API key is disabled", apiKey.KeyPrefix, clientIp);
                 return AuthenticateResult.Fail("API key is disabled");
             }
 
@@ -99,18 +113,19 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             if (apiKey.ExpiresAt.HasValue && apiKey.ExpiresAt.Value < DateTime.UtcNow)
             {
                 Log.Warning("ApiKeyAuthenticationHandler: API key has expired (prefix: {KeyPrefix})", apiKey.KeyPrefix);
+                RecordFailedAuthenticationEvent("API key has expired", apiKey.KeyPrefix, clientIp);
                 return AuthenticateResult.Fail("API key has expired");
             }
 
             // Record usage (fire and forget - don't block authentication)
-            var ipAddress = Context.Connection.RemoteIpAddress?.ToString();
+            var ipAddress = clientIp;
             var apiKeyId = apiKey.Id;
             _ = Task.Run(async () =>
             {
                 try
                 {
                     // Create a new scope for the background task since the original scope will be disposed
-                    using var usageScope = _serviceProvider.CreateScope();
+                    using var usageScope = _serviceScopeFactory.CreateScope();
                     var usageJim = usageScope.ServiceProvider.GetRequiredService<JimApplication>();
                     await usageJim.Security.RecordApiKeyUsageAsync(apiKeyId, ipAddress);
                 }
@@ -121,22 +136,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
             });
 
             // Build claims for the authenticated API key
-            var claims = new List<Claim>
-            {
-                new(ClaimTypes.NameIdentifier, apiKey.Id.ToString()),
-                new(ClaimTypes.Name, apiKey.Name),
-                new("auth_method", "api_key"),
-                new("key_prefix", apiKey.KeyPrefix)
-            };
-
-            // Add role claims from the API key's assigned roles
-            foreach (var role in apiKey.Roles)
-            {
-                claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, role.Name));
-            }
-
-            // Add the virtual "User" role for basic access (consistent with SSO auth)
-            claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.User));
+            var claims = BuildApiKeyClaims(apiKey);
 
             var identity = new ClaimsIdentity(claims, SchemeName, nameType: ClaimTypes.Name, roleType: Constants.BuiltInRoles.RoleClaimType);
             var principal = new ClaimsPrincipal(identity);
@@ -151,8 +151,63 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
         catch (Exception ex)
         {
             Log.Error(ex, "ApiKeyAuthenticationHandler: Error during authentication");
+            RecordFailedAuthenticationEvent("Authentication error", apiKeyPrefix: null, clientIp);
             return AuthenticateResult.Fail("Authentication error");
         }
+    }
+
+    /// <summary>
+    /// Records an aggregated failed-authentication security audit event on a background task with a fresh DI scope,
+    /// mirroring the non-blocking usage-recording pattern above: authentication must never be slowed or destabilised
+    /// by audit capture. <see cref="JIM.Application.Servers.SecurityAuditServer"/>'s
+    /// <c>RecordFailedAuthenticationAsync</c> itself never throws (audit-write failures are logged and swallowed
+    /// there), so the try/catch here is defence-in-depth against failures resolving the scope/service itself.
+    /// </summary>
+    private void RecordFailedAuthenticationEvent(string reason, string? apiKeyPrefix, string? clientIp)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var auditScope = _serviceScopeFactory.CreateScope();
+                var auditJim = auditScope.ServiceProvider.GetRequiredService<JimApplication>();
+                await auditJim.SecurityAudit.RecordFailedAuthenticationAsync("API key authentication failed", reason, apiKeyPrefix, clientIp);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Log.Warning(ex, "ApiKeyAuthenticationHandler: Failed to record failed authentication event");
+            }
+        });
+    }
+
+    /// <summary>
+    /// Builds the claim set for an authenticated API key principal. Extracted as an internal static so the claim
+    /// composition (identity claims, role claims, the virtual "User" role, and the infrastructure-key marker) can
+    /// be unit tested without spinning up the ASP.NET Core authentication pipeline.
+    /// </summary>
+    /// <param name="apiKey">The validated API key entity, with its <see cref="ApiKey.Roles"/> loaded.</param>
+    public static List<Claim> BuildApiKeyClaims(ApiKey apiKey)
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, apiKey.Id.ToString()),
+            new(ClaimTypes.Name, apiKey.Name),
+            new("auth_method", "api_key"),
+            new("key_prefix", apiKey.KeyPrefix)
+        };
+
+        // Role claims from the API key's assigned roles.
+        claims.AddRange(apiKey.Roles.Select(role => new Claim(Constants.BuiltInRoles.RoleClaimType, role.Name)));
+
+        // The virtual "User" role for basic access (consistent with SSO auth).
+        claims.Add(new Claim(Constants.BuiltInRoles.RoleClaimType, Constants.BuiltInRoles.User));
+
+        // Infrastructure keys are trusted backend automation; mark them so the rate limiter can exempt them
+        // (see RateLimitPartitionResolver). Only attached for infrastructure keys, so an ordinary key is never exempt.
+        if (apiKey.IsInfrastructureKey)
+            claims.Add(new Claim(Constants.BuiltInClaims.IsInfrastructureKey, "true"));
+
+        return claims;
     }
 
     /// <summary>

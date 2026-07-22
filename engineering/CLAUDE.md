@@ -15,11 +15,13 @@ PRD (what & why)  -->  Implementation Plan (how)  -->  Code
 
 A **Product Requirements Document** defines what to build and why. It is the input a developer writes to communicate requirements to Claude.
 
-1. Run `jim-prd`; it prompts for a feature name and creates `docs/prd/PRD_YOUR_FEATURE_NAME.md` from the template
+1. Run `jim-prd`; it prompts for a feature name and creates `engineering/prd/PRD_YOUR_FEATURE_NAME.md` from the template
 2. Fill in all **required** sections (Problem Statement, Goals, Non-Goals, User Stories, Functional Requirements, Examples, Acceptance Criteria)
 3. Fill in optional sections where relevant
 4. Delete the comment block and any unused optional sections
 5. Create a GitHub issue linking to the PRD
+
+New PRDs start at the top level of `engineering/prd/` as `Status: Planned`, and move through `doing/` and `done/` as work progresses. See [PRD Filing](#prd-filing) below.
 
 ### Step 2: Generate an Implementation Plan
 
@@ -37,7 +39,7 @@ Once the plan is approved, Claude implements phase by phase, building and testin
 
 ### PRD Template
 
-See [`docs/prd/PRD_TEMPLATE.md`](prd/PRD_TEMPLATE.md) for the full template with guidance comments.
+See [`engineering/prd/PRD_TEMPLATE.md`](prd/PRD_TEMPLATE.md) for the full template with guidance comments.
 
 **Required PRD sections:** Problem Statement, Goals, Non-Goals, User Stories, Functional Requirements, Examples and Scenarios, Acceptance Criteria.
 
@@ -47,7 +49,7 @@ See [`docs/prd/PRD_TEMPLATE.md`](prd/PRD_TEMPLATE.md) for the full template with
 
 When creating the implementation plan (either appended to the PRD or as a separate document):
 
-1. **Create a plan document in `docs/plans/`:**
+1. **Create a plan document in `engineering/plans/`:**
    - Use uppercase filename with underscores: e.g., `PROGRESS_REPORTING.md`, `SCIM_SERVER_DESIGN.md`
    - Include comprehensive details: Overview, Architecture, Implementation Phases, Success Criteria, Benefits
    - Keep plan focused but detailed enough for implementation
@@ -57,7 +59,7 @@ When creating the implementation plan (either appended to the PRD or as a separa
    - Link to the plan document for full details
    - Assign to appropriate milestone
    - Add relevant labels (enhancement, bug, documentation, etc.)
-   - Example: "See full implementation plan: [`docs/plans/PROGRESS_REPORTING.md`](plans/PROGRESS_REPORTING.md)"
+   - Example: "See full implementation plan: [`engineering/plans/PROGRESS_REPORTING.md`](plans/PROGRESS_REPORTING.md)"
 
 3. **Add the issue number back to the plan document header:**
    - After creating the issue, add an `Issue` line to the plan document header referencing the GitHub issue
@@ -76,20 +78,59 @@ When creating the implementation plan (either appended to the PRD or as a separa
 
 ---
 
+## PRD Filing
+
+PRDs follow the same three-state lifecycle as plan documents, filed by their current state:
+
+| Location | Status | Description |
+|----------|--------|-------------|
+| `engineering/prd/` | `Planned` | Written and reviewed, but implementation has not started |
+| `engineering/prd/doing/` | `Doing` | Implementation is underway |
+| `engineering/prd/done/` | `Done` | Implemented and the GitHub issue is closed (or remaining items explicitly deferred) |
+
+The lifecycle:
+
+1. **Created** by `jim-prd` at the top level of `engineering/prd/` with `- **Status:** Planned`.
+2. **When work starts:** change the status to `- **Status:** Doing` and `git mv` the PRD into `engineering/prd/doing/`.
+3. **When implemented and the issue is closed:** change the status to `- **Status:** Done` and `git mv` the PRD into `engineering/prd/done/`.
+
+**The Status field and the folder must always agree.** The folder gives the at-a-glance view; the Status field is what a reader sees when they open the document. Update both in the same commit.
+
+`PRD_TEMPLATE.md` stays at the top level permanently; it is the template, not a PRD, and carries no lifecycle status.
+
+Where a PRD's implementation deferred or dropped scope, add a **Note** line below the status, as plans do:
+
+```markdown
+- **Status:** Done
+- **Note:** Rollback / restore deferred until there is demand; tracked under [#942](https://github.com/TetronIO/JIM/issues/942).
+```
+
+For a `Doing` PRD, a parenthetical qualifier is encouraged so the state is legible without reading the plan:
+
+```markdown
+- **Status:** Doing (Phases 1-2 complete; connector schema discovery outstanding)
+```
+
+**Moving a PRD is subject to the same cross-reference rule as plans** (see below): PRDs are linked to from plan documents (`- **PRD:** [...]`) and from each other, and moving one changes both the inbound paths and the relative depth of its own outbound links. Search for the filename before completing the move.
+
+> **Note on retro-editing:** the "point-in-time records are exempt" rule under [Keeping Documentation Current](#keeping-documentation-current) means do not rewrite a completed PRD's *content* to reflect later product changes. It does **not** exempt the Status field or link hygiene: status transitions and cross-reference fixes are lifecycle mechanics and must be kept accurate.
+
+---
+
 ## Plan Document Filing
 
 Plan documents are filed in one of three locations based on their current state:
 
 | Location | Status | Description |
 |----------|--------|-------------|
-| `docs/plans/` | `Planned` | Not yet started: design and future work |
-| `docs/plans/doing/` | `Doing` | Partially implemented or actively being worked on |
-| `docs/plans/done/` | `Done` | Fully implemented (or remaining items explicitly deferred/dropped) |
+| `engineering/plans/` | `Planned` | Not yet started: design and future work |
+| `engineering/plans/doing/` | `Doing` | Partially implemented or actively being worked on |
+| `engineering/plans/done/` | `Done` | Fully implemented (or remaining items explicitly deferred/dropped) |
 
 **Move plans between folders** as their status changes. Use `git mv` to preserve history.
 
 **IMPORTANT: Update all cross-references when moving documents:**
-When moving a document between `docs/plans/`, `docs/plans/doing/`, and `docs/plans/done/` (or anywhere in the `docs/` tree), you **MUST** search for and update all relative links that reference the moved file. This includes:
+When moving a document between `engineering/plans/`, `engineering/plans/doing/`, and `engineering/plans/done/` (or between the equivalent `engineering/prd/` folders), you **MUST** search for and update all relative links that reference the moved file. This includes:
 - Links **to** the moved file from other documents (the path has changed)
 - Links **from** the moved file to other documents (the relative path depth has changed)
 
@@ -152,18 +193,22 @@ This makes it easy to see at a glance what has been done within a partially-impl
 
 ## Documentation Organisation
 
-- `docs/prd/` - Product Requirements Documents (PRD template + feature PRDs)
-- `docs/plans/` - New/planned feature plans and design documents
-- `docs/plans/doing/` - Partially implemented or in-progress plans
-- `docs/plans/done/` - Completed plans
-- `docs/` - Active guides and references (current/completed work)
+Internal engineering artefacts live under `engineering/`; the customer-facing MkDocs site lives under `docs/` (see [Plans and specs never belong under `docs/`](#plans-and-specs-never-belong-under-docs)).
+
+- `engineering/prd/` - Planned PRDs, plus `PRD_TEMPLATE.md`
+- `engineering/prd/doing/` - PRDs whose implementation is underway
+- `engineering/prd/done/` - Implemented PRDs
+- `engineering/plans/` - New/planned feature plans and design documents
+- `engineering/plans/doing/` - Partially implemented or in-progress plans
+- `engineering/plans/done/` - Completed plans
+- `engineering/notes/` - Investigation notes and point-in-time analysis
+- `engineering/` - Active guides and references (current/completed work)
   - `COMPLIANCE_MAPPING.md` - Security framework and standards compliance mapping
   - `DATABASE_GUIDE.md` - PostgreSQL configuration, connection pooling, and backup/restore
   - `DEVELOPER_GUIDE.md` - Comprehensive development guide
   - `INTEGRATION_TESTING.md` - Integration testing guide
   - `plans/done/MVP_DEFINITION.md` - MVP completion record and future roadmap
   - `RELEASE_PROCESS.md` - Release and deployment procedures
-  - `SSO_SETUP_GUIDE.md` - SSO configuration instructions
 
 ---
 
@@ -217,11 +262,11 @@ The changelog is a **customer-facing product document**. The audience is adminis
 - Do NOT include: internal refactoring, test changes, developer tooling, CI/CD tweaks, or anything that has no user-facing impact
 - Trivial changes (renamed a CSS class, moved a file, updated a comment) do NOT belong in the changelog
 
-**Length and style — keep entries succinct:**
+**Length and style, keep entries succinct:**
 - **Target one sentence per entry; two at most.** If you cannot say it in two sentences, the entry is doing too much; trim or split it.
 - A reader should be able to scan the entry in a few seconds and know whether it affects them.
 - Lead with the customer-visible outcome ("Safari sign-in no longer fails with...", "The bundled X template now persists at production speed without..."), then optionally one short clause naming the underlying mechanism at a high level (e.g. "rewritten to use PostgreSQL `COPY` binary import"). Stop there.
-- **Do NOT include in changelog entries** (these belong in commit messages, PR descriptions, or code comments — not the changelog):
+- **Do NOT include in changelog entries** (these belong in commit messages, PR descriptions, or code comments, not the changelog):
   - Internal class, method, file, or property names (e.g. `SaveChanges`, EF change tracker, `SecurePolicy=SameAsRequest`)
   - Step-by-step explanations of what was wrong and how it was fixed
   - Browser/framework default behaviour explanations
@@ -270,7 +315,6 @@ The `VERSION` file is the single source of truth for JIM's version number. It fe
 - All .NET assembly versions (via `Directory.Build.props`)
 - Docker image tags (via release workflow)
 - PowerShell module version (updated at release time)
-- Diagram metadata (via `export-diagrams.js`)
 
 **Versioning scheme:** [Semantic Versioning](https://semver.org/), `X.Y.Z` with optional prerelease suffix (e.g., `0.3.0-alpha`).
 

@@ -93,7 +93,7 @@ npm install -g @playwright/mcp@0.0.75
 node "$(find "$(npm root -g)/@playwright/mcp" -path '*/playwright-core/cli.js' | head -1)" install chromium
 ```
 
-The Chromium shared libraries it depends on are already present in the image (installed for Puppeteer / `jim-diagrams`), so no `--with-deps` / `sudo` step is needed.
+The Chromium shared libraries it depends on are already present in the image, so no `--with-deps` / `sudo` step is needed.
 
 ### Port Forwarding
 
@@ -217,11 +217,6 @@ jim-build-scheduler # Rebuild jim.scheduler + start
 ```bash
 jim-reset          # Full reset (containers, images, volumes)
 jim-wipe           # Wipe JIM data (reset CSOs/MVOs/config, keep schema)
-```
-
-### Diagrams
-```bash
-jim-diagrams       # Export Structurizr C4 diagrams as SVG
 ```
 
 ### Help

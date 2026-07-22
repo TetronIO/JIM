@@ -26,7 +26,7 @@ Get-JIMRole [-Name <string>]
 
 ### Output
 
-Role objects with `id`, `name`, `builtIn`, `created`, and `staticMemberCount` properties.
+Role objects with `Id`, `Name`, `BuiltIn`, `Created`, and `StaticMemberCount` properties.
 
 ### Examples
 
@@ -44,7 +44,7 @@ Get-JIMRole -Name "Administrator"
 
 ```powershell title="Find the Administrator role ID for use with New-JIMApiKey"
 $adminRole = Get-JIMRole -Name "Administrator"
-New-JIMApiKey -Name "Admin Key" -RoleIds @($adminRole.id) -PassThru
+New-JIMApiKey -Name "Admin Key" -RoleIds @($adminRole.Id) -PassThru
 ```
 
 ---
@@ -71,7 +71,7 @@ Get-JIMRoleMember -InputObject <PSCustomObject>
 
 ### Output
 
-Metaverse Object members with `id`, `displayName`, `typeId`, and `typeName` properties.
+Metaverse Object members with `Id`, `DisplayName`, and a nested `Type` object (`Type.Id` and `Type.Name`) properties. (Prior to this release the object type was exposed as flat `TypeId`/`TypeName` properties; this is a breaking change to the output shape.)
 
 ### Examples
 
@@ -88,8 +88,8 @@ Get-JIMRole | ForEach-Object {
     $role = $_
     $members = $_ | Get-JIMRoleMember
     [PSCustomObject]@{
-        Role    = $role.name
-        Members = ($members | ForEach-Object { $_.displayName }) -join ", "
+        Role    = $role.Name
+        Members = ($members | ForEach-Object { $_.DisplayName }) -join ", "
     }
 }
 ```
@@ -114,7 +114,7 @@ Get-JIMMetaverseObjectRole -Id <guid>
 
 ### Output
 
-Role objects with `id`, `name`, `builtIn`, `created`, and `staticMemberCount` properties. Returns nothing if the object is not a member of any role.
+Role objects with `Id`, `Name`, `BuiltIn`, `Created`, and `StaticMemberCount` properties. Returns nothing if the object is not a member of any role.
 
 ### Examples
 
@@ -134,8 +134,8 @@ Get-JIMRole -Name "Administrator" |
         $member = $_
         $roles = $_ | Get-JIMMetaverseObjectRole
         [PSCustomObject]@{
-            Member = $member.displayName
-            Roles  = ($roles | ForEach-Object { $_.name }) -join ", "
+            Member = $member.DisplayName
+            Roles  = ($roles | ForEach-Object { $_.Name }) -join ", "
         }
     }
 ```
@@ -176,7 +176,7 @@ Get-JIMMetaverseObject -Id "a1b2c3d4-..." | Add-JIMRoleMember -RoleId 1
 
 ```powershell title="Look up role by name and add a member"
 $adminRole = Get-JIMRole -Name "Administrator"
-Add-JIMRoleMember -RoleId $adminRole.id -MetaverseObjectId "a1b2c3d4-..."
+Add-JIMRoleMember -RoleId $adminRole.Id -MetaverseObjectId "a1b2c3d4-..."
 ```
 
 ```powershell title="Add a member and record a reason"
@@ -226,7 +226,7 @@ Remove-JIMRoleMember -RoleId 1 -MetaverseObjectId "a1b2c3d4-..." -Force
 
 ```powershell title="Remove a specific member by display name"
 Get-JIMRoleMember -RoleId 2 |
-    Where-Object { $_.displayName -eq "Bob" } |
+    Where-Object { $_.DisplayName -eq "Bob" } |
     Remove-JIMRoleMember -RoleId 2 -Force
 ```
 

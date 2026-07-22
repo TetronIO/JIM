@@ -2,13 +2,9 @@
 
 JIM processes identity data in a three-phase pipeline: **Import**, **Sync**, and **Export**. Each phase has a distinct responsibility, and data must pass through them in order. This separation ensures that data is validated, transformed, and reconciled at each stage before reaching its destination.
 
-```mermaid
-graph LR
-    A[External System] -->|Import| B[Connector Space<br/>CSOs]
-    B -->|Sync| C[Metaverse<br/>MVOs]
-    C -->|Sync| D[Connector Space<br/>CSOs]
-    D -->|Export| E[Target System]
-```
+--8<-- "assets/diagrams/sync-pipeline.svg"
+
+<p class="jim-diagram-caption">Data is staged either side of the Metaverse: imports land in the connector space as Connected System Objects, synchronisation reconciles them into Metaverse Objects, and outbound changes are staged again before export.<span class="jimdg-caption-motion"> Moving dots trace data through the pipeline.</span></p>
 
 ## 📥 Phase 1: Import
 
@@ -58,6 +54,8 @@ Inbound sync processes CSOs from source systems and updates the metaverse. For e
 
 4. **Attribute Flow**<br /> Once a CSO is joined or projected to an MVO, JIM applies the Attribute Flow Rules. Inbound Attribute Flows copy values from the CSO to the MVO, optionally transforming them using [expressions](expressions.md). For text attributes, per-mapping [value processing](../configuration/synchronisation-rules.md#value-processing-inbound) (trim, collapse, case normalisation, and the default treat-whitespace-as-no-value) runs at this step, normalising the value before priority resolves which rule's value wins.
 
+5. **Attribute resolution**<br /> When more than one Connected System contributes the same Metaverse attribute, the winning value is chosen deterministically by [Attribute Priority](attribute-priority.md), not by the order synchronisations happen to run in. This is also where a "Null is a value" contributor can assert a clear and where a departing source hands an attribute down to the next-priority contributor.
+
 ### Outbound Sync (Metaverse to Target)
 
 Outbound sync evaluates MVOs against outbound Synchronisation Rules and determines what changes need to be exported to target systems. For each MVO in scope:
@@ -99,19 +97,9 @@ JIM performs intelligent reconciliation before export. For example, if an object
 
 A typical synchronisation cycle follows this pattern:
 
-```mermaid
-sequenceDiagram
-    participant HR as HR System
-    participant CS1 as HR Connector Space
-    participant MV as Metaverse
-    participant CS2 as AD Connector Space
-    participant AD as Active Directory
+--8<-- "assets/diagrams/sync-cycle.svg"
 
-    HR->>CS1: 1. Import (read employees)
-    CS1->>MV: 2. Inbound Sync (join/project, Attribute Flow)
-    MV->>CS2: 3. Outbound Sync (provision, Attribute Flow)
-    CS2->>AD: 4. Export (create/update accounts)
-```
+<p class="jim-diagram-caption">One identity's journey from HR to Active Directory; the numbered steps match the list below.<span class="jimdg-caption-motion"> A moving dot traces the identity making the journey.</span></p>
 
 1. **Import** from the HR system brings employee records into the HR connector space
 2. **Inbound sync** joins or projects those records to Metaverse Objects and flows attributes inward

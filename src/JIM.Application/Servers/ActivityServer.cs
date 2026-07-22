@@ -8,6 +8,7 @@ using JIM.Models.Enums;
 using JIM.Models.Exceptions;
 using JIM.Models.Security;
 using JIM.Models.Utility;
+using Serilog;
 namespace JIM.Application.Servers;
 
 public class ActivityServer
@@ -144,7 +145,41 @@ public class ActivityServer
         activity.Executed = DateTime.UtcNow;
         activity.InitiatedByType = initiatorType;
         activity.InitiatedById = initiatorId;
-        activity.InitiatedByName = initiatorName ?? (initiatorType == ActivityInitiatorType.System ? "System" : "Unknown");
+        activity.InitiatedByName = initiatorName ?? initiatorType switch
+        {
+            ActivityInitiatorType.System => "System",
+            ActivityInitiatorType.Anonymous => "Anonymous",
+            _ => "Unknown"
+        };
+
+        ValidateActivity(activity);
+        await Application.Repository.Activity.CreateActivityAsync(activity);
+    }
+
+    /// <summary>
+    /// Creates and persists an Activity already in its terminal Complete state, as a single insert, attributed via
+    /// an explicit initiator triad. For point-in-time audit records (for example security audit events) that
+    /// represent an instantaneous fact rather than a long-running operation. Such records MUST NOT use the usual
+    /// create-then-complete lifecycle: completing performs a second, full-row update from the caller's in-memory
+    /// Activity, which silently overwrites any concurrent in-place changes made to the row between the two writes
+    /// (a lost update; SecurityAuditServer's aggregated AttemptCount increments were erased this way under a
+    /// concurrent authentication spray).
+    /// </summary>
+    public async Task CreateCompletedActivityWithTriadAsync(Activity activity, ActivityInitiatorType initiatorType, Guid? initiatorId, string? initiatorName)
+    {
+        var now = DateTime.UtcNow;
+        activity.Status = ActivityStatus.Complete;
+        activity.Executed = now;
+        activity.ExecutionTime = TimeSpan.Zero;
+        activity.TotalActivityTime = now - activity.Created;
+        activity.InitiatedByType = initiatorType;
+        activity.InitiatedById = initiatorId;
+        activity.InitiatedByName = initiatorName ?? initiatorType switch
+        {
+            ActivityInitiatorType.System => "System",
+            ActivityInitiatorType.Anonymous => "Anonymous",
+            _ => "Unknown"
+        };
 
         ValidateActivity(activity);
         await Application.Repository.Activity.CreateActivityAsync(activity);
@@ -157,10 +192,16 @@ public class ActivityServer
         if (activity.InitiatedByType == ActivityInitiatorType.NotSet)
             throw new InvalidOperationException("Activity must be attributed to a security principal. InitiatedByType has not been set.");
 
-        // System activities have no principal entity, so InitiatedById is allowed to be null.
-        // User and ApiKey activities must have an InitiatedById.
-        if (activity.InitiatedByType != ActivityInitiatorType.System && activity.InitiatedById == null)
+        // System activities have no principal entity, so InitiatedById is allowed to be null. Anonymous activities
+        // (an unidentified, unauthenticated caller) likewise have no principal entity: InitiatedById MUST be null,
+        // enforced below. User and ApiKey activities must have an InitiatedById.
+        if (activity.InitiatedByType != ActivityInitiatorType.System
+            && activity.InitiatedByType != ActivityInitiatorType.Anonymous
+            && activity.InitiatedById == null)
             throw new InvalidOperationException("Activity must be attributed to a security principal. InitiatedById has not been set.");
+
+        if (activity.InitiatedByType == ActivityInitiatorType.Anonymous && activity.InitiatedById != null)
+            throw new InvalidOperationException("Activity attributed to Anonymous must not carry an InitiatedById.");
 
         if (string.IsNullOrWhiteSpace(activity.InitiatedByName))
             throw new InvalidOperationException("Activity must be attributed to a security principal. InitiatedByName has not been set.");
@@ -176,12 +217,60 @@ public class ActivityServer
         }
     }
 
+    /// <summary>
+    /// Attaches Run Profile Execution Items to an Activity that has already been persisted (via one of the
+    /// CreateActivity methods on this server) and persists them, including their sync outcome trees and any
+    /// Connected System Object change snapshots carried on the outcomes. Items must reference related entities
+    /// (Connected System Objects, Pending Exports) by scalar foreign key only. Intended for small batches
+    /// recorded outside sync task processing (for example Metaverse Object Housekeeping); sync processors use
+    /// the bulk insert path on ISyncRepository instead.
+    /// </summary>
+    public async Task AddRunProfileExecutionItemsAsync(Activity activity, IReadOnlyCollection<ActivityRunProfileExecutionItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(activity);
+        ArgumentNullException.ThrowIfNull(items);
+
+        if (items.Count == 0)
+            return;
+
+        foreach (var item in items)
+        {
+            if (item.Id == Guid.Empty)
+                item.Id = Guid.NewGuid();
+            item.Activity = activity;
+            item.ActivityId = activity.Id;
+            activity.RunProfileExecutionItems.Add(item);
+        }
+
+        await Application.Repository.Activity.CreateActivityRunProfileExecutionItemsAsync(items);
+    }
+
+    /// <summary>
+    /// Finalises the Activity's Run Profile execution stat counters (#1078) ahead of persisting a
+    /// terminal status, so completed Activities serve their stats from exact stored counters. A
+    /// finalisation failure must not leave the Activity stuck InProgress: the counters stay
+    /// advisory and the lazy finalise-on-first-read path repairs them, so the error is logged and
+    /// completion proceeds.
+    /// </summary>
+    private async Task TryFinaliseRunProfileExecutionStatsAsync(Activity activity)
+    {
+        try
+        {
+            await Application.Repository.Activity.FinaliseActivityRunProfileExecutionStatsAsync(activity);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Error(ex, "TryFinaliseRunProfileExecutionStatsAsync: Failed to finalise stat counters for Activity {ActivityId}; stats will be finalised lazily on first read", activity.Id);
+        }
+    }
+
     public async Task CompleteActivityAsync(Activity activity)
     {
         var now = DateTime.UtcNow;
         activity.Status = ActivityStatus.Complete;
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 
@@ -192,6 +281,7 @@ public class ActivityServer
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
         activity.Status = ActivityStatus.CompleteWithWarning;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 
@@ -209,6 +299,7 @@ public class ActivityServer
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
         activity.Status = ActivityStatus.CompleteWithError;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 
@@ -219,6 +310,7 @@ public class ActivityServer
         activity.TotalActivityTime = now - activity.Created;
         activity.ErrorMessage = errorMessage;
         activity.Status = ActivityStatus.CompleteWithError;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 
@@ -230,6 +322,7 @@ public class ActivityServer
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
         activity.Status = ActivityStatus.FailedWithError;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 
@@ -246,6 +339,7 @@ public class ActivityServer
         activity.Status = ActivityStatus.FailedWithError;
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 
@@ -270,6 +364,7 @@ public class ActivityServer
         activity.ExecutionTime = now - activity.Executed;
         activity.TotalActivityTime = now - activity.Created;
         activity.Status = ActivityStatus.Cancelled;
+        await TryFinaliseRunProfileExecutionStatsAsync(activity);
         await Application.Repository.Activity.UpdateActivityAsync(activity);
     }
 

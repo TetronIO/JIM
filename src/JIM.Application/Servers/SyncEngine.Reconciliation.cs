@@ -4,6 +4,7 @@
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 
 namespace JIM.Application.Servers;
@@ -58,6 +59,18 @@ public partial class SyncEngine
             .GroupBy(av => av.AttributeId)
             .ToDictionary(g => g.Key, g => g.ToList());
 
+        // Build a per-attribute value index once per CSO (#988): a HashSet (or, for typed numeric/
+        // temporal/identifier data, a typed set) of comparison-ready values per attribute, built once
+        // from attrValuesByAttrId above. This turns the per-change membership test that ValueExistsOnCso
+        // used to do with List.Any() (O(n) per change - O(n²) for a large multi-valued attribute with
+        // many pending changes, e.g. a 200,000-member group) into an O(1) average-case set lookup.
+        var attrIndexByAttrId = new Dictionary<int, AttributeValueIndex>(attrValuesByAttrId.Count);
+        foreach (var (attributeId, values) in attrValuesByAttrId)
+        {
+            var attrType = values.Count > 0 ? values[0].Attribute?.Type ?? AttributeDataType.NotSet : AttributeDataType.NotSet;
+            attrIndexByAttrId[attributeId] = BuildAttributeValueIndex(attrType, values);
+        }
+
         // Process each attribute change that is awaiting confirmation
         var changesAwaitingConfirmation = pendingExport.AttributeValueChanges
             .Where(ac => ac.Status == PendingExportAttributeChangeStatus.ExportedPendingConfirmation ||
@@ -66,7 +79,7 @@ public partial class SyncEngine
 
         foreach (var attrChange in changesAwaitingConfirmation)
         {
-            var confirmed = IsAttributeChangeConfirmed(attrValuesByAttrId, attrChange);
+            var confirmed = IsAttributeChangeConfirmedFast(attrIndexByAttrId, attrChange);
 
             if (Log.IsEnabled(Serilog.Events.LogEventLevel.Verbose))
             {
@@ -75,8 +88,8 @@ public partial class SyncEngine
                     attrChange.Attribute?.Name ?? "unknown",
                     attrChange.ChangeType,
                     connectedSystemObject.Id,
-                    GetExpectedValueAsString(attrChange),
-                    GetImportedValueAsString(attrValuesByAttrId, attrChange),
+                    LogSanitiser.Sanitise(GetExpectedValueAsString(attrChange)),
+                    LogSanitiser.Sanitise(GetImportedValueAsString(attrValuesByAttrId, attrChange)),
                     confirmed);
             }
 
@@ -101,7 +114,7 @@ public partial class SyncEngine
                     Log.Warning("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) failed after {Attempts} attempts. " +
                         "Expected: '{ExpectedValue}', Actual: '{ImportedValue}'",
                         attrChange.Id, attrChange.Attribute?.Name ?? "unknown", attrChange.ExportAttemptCount,
-                        expectedValue, attrChange.LastImportedValue);
+                        LogSanitiser.Sanitise(expectedValue), LogSanitiser.Sanitise(attrChange.LastImportedValue));
                 }
                 else
                 {
@@ -109,14 +122,20 @@ public partial class SyncEngine
                     Log.Debug("ReconcileCsoAgainstPendingExport: Attribute change {AttrChangeId} (Attr: {AttrName}) not confirmed, will retry (attempt {Attempt}). " +
                         "Expected: '{ExpectedValue}', Actual: '{ImportedValue}'",
                         attrChange.Id, attrChange.Attribute?.Name ?? "unknown", attrChange.ExportAttemptCount,
-                        expectedValue, attrChange.LastImportedValue);
+                        LogSanitiser.Sanitise(expectedValue), LogSanitiser.Sanitise(attrChange.LastImportedValue));
                 }
             }
         }
 
-        // Remove confirmed changes from the Pending Export
-        foreach (var confirmed in result.ConfirmedChanges)
-            pendingExport.AttributeValueChanges.Remove(confirmed);
+        // Remove confirmed changes from the Pending Export. A single RemoveAll against a HashSet of
+        // the confirmed changes (#988) replaces the previous per-change List.Remove loop, which was
+        // O(n) per removal (List.Remove does a linear search-and-shift) - O(n²) for a Pending Export
+        // with many confirmed changes, e.g. a large group's confirming import.
+        if (result.ConfirmedChanges.Count > 0)
+        {
+            var confirmedChangeIds = new HashSet<PendingExportAttributeValueChange>(result.ConfirmedChanges);
+            pendingExport.AttributeValueChanges.RemoveAll(ac => confirmedChangeIds.Contains(ac));
+        }
 
         // If this was a Create and the Secondary External ID was confirmed, transition to Update
         TransitionCreateToUpdateIfSecondaryExternalIdConfirmed(pendingExport, result);
@@ -245,6 +264,236 @@ public partial class SyncEngine
 
             _ => false
         };
+    }
+
+    /// <summary>
+    /// Per-attribute value index (#988): a comparison-ready structure built once per CSO attribute
+    /// so <see cref="IsAttributeChangeConfirmedFast"/> does O(1) average-case set lookups instead of
+    /// the O(n) linear scans (<c>List.Any(...)</c>) that <see cref="ValueExistsOnCso"/> does. Exactly
+    /// one of the typed sets is populated, matching the attribute's data type.
+    /// </summary>
+    /// <remarks>
+    /// Number/LongNumber/Guid/Boolean/DateTime use typed sets (not stringified keys) so that set
+    /// membership is exactly the same comparison the original code performed (e.g. DateTime equality
+    /// via <c>Ticks</c>, which - like the <c>==</c> operator this replaces - ignores <see cref="DateTimeKind"/>;
+    /// stringifying with a round-trip format would incorrectly make Kind significant). Binary values are
+    /// not indexed: byte arrays do not hash usefully, and Binary attributes are never large multi-valued
+    /// sets in practice (they are typically a single profile picture, certificate, etc.), so the original
+    /// linear <c>SequenceEqual</c> scan is kept for them.
+    /// </remarks>
+    private sealed class AttributeValueIndex
+    {
+        public required int Count { get; init; }
+
+        /// <summary>
+        /// The raw CSO values this index was built from (a reference copy of the caller's list,
+        /// no allocation cost). Kept on EVERY index so <see cref="ValueExistsInIndex"/> can fall
+        /// back to the original <see cref="ValueExistsOnCso"/> linear comparison whenever the
+        /// typed set a probe needs is missing; see the mismatch guard there for the scenario.
+        /// </summary>
+        public required List<ConnectedSystemObjectAttributeValue> RawValues { get; init; }
+
+        public HashSet<string>? TextValues { get; init; }
+        public HashSet<string>? ReferenceValues { get; init; }
+        public HashSet<int>? NumberValues { get; init; }
+        public HashSet<long>? LongNumberValues { get; init; }
+        public HashSet<Guid>? GuidValues { get; init; }
+        public HashSet<bool>? BooleanValues { get; init; }
+        public HashSet<long>? DateTimeTicksValues { get; init; }
+        public List<ConnectedSystemObjectAttributeValue>? BinaryValues { get; init; }
+    }
+
+    /// <summary>
+    /// Builds a <see cref="AttributeValueIndex"/> for one attribute's worth of CSO values (#988).
+    /// Key derivation mirrors <see cref="ValueExistsOnCso"/>'s switch exactly, per data type.
+    /// </summary>
+    private static AttributeValueIndex BuildAttributeValueIndex(AttributeDataType attrType, List<ConnectedSystemObjectAttributeValue> values)
+    {
+        return attrType switch
+        {
+            AttributeDataType.Text => new AttributeValueIndex
+            {
+                Count = values.Count,
+                RawValues = values,
+                TextValues = values.Where(v => v.StringValue != null).Select(v => v.StringValue!).ToHashSet(StringComparer.Ordinal)
+            },
+
+            AttributeDataType.Reference => new AttributeValueIndex
+            {
+                Count = values.Count,
+                RawValues = values,
+                // Both attrChange.UnresolvedReferenceValue and attrChange.StringValue are matched
+                // against the CSO's UnresolvedReferenceValue (see ValueExistsOnCso's Reference case),
+                // so a single index built from that one CSO-side field covers both probes.
+                ReferenceValues = values.Where(v => v.UnresolvedReferenceValue != null).Select(v => v.UnresolvedReferenceValue!).ToHashSet(StringComparer.Ordinal)
+            },
+
+            AttributeDataType.Number => new AttributeValueIndex
+            {
+                Count = values.Count,
+                RawValues = values,
+                NumberValues = values.Where(v => v.IntValue.HasValue).Select(v => v.IntValue!.Value).ToHashSet()
+            },
+
+            AttributeDataType.LongNumber => new AttributeValueIndex
+            {
+                Count = values.Count,
+                RawValues = values,
+                LongNumberValues = values.Where(v => v.LongValue.HasValue).Select(v => v.LongValue!.Value).ToHashSet()
+            },
+
+            AttributeDataType.Guid => new AttributeValueIndex
+            {
+                Count = values.Count,
+                RawValues = values,
+                GuidValues = values.Where(v => v.GuidValue.HasValue).Select(v => v.GuidValue!.Value).ToHashSet()
+            },
+
+            AttributeDataType.Boolean => new AttributeValueIndex
+            {
+                Count = values.Count,
+                RawValues = values,
+                BooleanValues = values.Where(v => v.BoolValue.HasValue).Select(v => v.BoolValue!.Value).ToHashSet()
+            },
+
+            AttributeDataType.DateTime => new AttributeValueIndex
+            {
+                Count = values.Count,
+                RawValues = values,
+                DateTimeTicksValues = values.Where(v => v.DateTimeValue.HasValue).Select(v => v.DateTimeValue!.Value.Ticks).ToHashSet()
+            },
+
+            // Binary: keep the existing linear SequenceEqual scan - byte arrays do not hash usefully,
+            // and Binary attributes are never large multi-valued sets in practice, so this is fine.
+            AttributeDataType.Binary => new AttributeValueIndex
+            {
+                Count = values.Count,
+                RawValues = values,
+                BinaryValues = values
+            },
+
+            _ => new AttributeValueIndex { Count = values.Count, RawValues = values }
+        };
+    }
+
+    /// <summary>
+    /// Set-based equivalent of <see cref="ValueExistsOnCso"/> (#988): checks whether the Pending Export
+    /// attribute change's value exists in a pre-built <see cref="AttributeValueIndex"/>, mirroring
+    /// <see cref="ValueExistsOnCso"/>'s switch exactly per data type but via O(1) set lookups.
+    /// </summary>
+    private static bool ValueExistsInIndex(AttributeValueIndex index, PendingExportAttributeValueChange attrChange)
+    {
+        if (index.Count == 0)
+            return false;
+
+        var attrType = attrChange.Attribute?.Type ?? AttributeDataType.NotSet;
+
+        // Mismatch guard (belt and braces): the index's typed set is derived from the CSO values'
+        // OWN Attribute navigation type, while this probe uses the CHANGE's attribute type. If the
+        // value-side navigation was not loaded (Attribute null, so the index was built as NotSet
+        // with no typed sets despite Count > 0), or the two types genuinely disagree, the set this
+        // probe needs is null even though values exist. Silently probing a null set would report an
+        // actually-confirmed change as unconfirmed (false retries, then false export confirmation
+        // errors), so fall back to the original linear comparison, which switches on the change's
+        // type and compares raw value fields regardless of the value-side navigation - guaranteeing
+        // byte-identical behaviour with ValueExistsOnCso for every mismatch. The fast path below
+        // stays hot for the normal case where the index and probe types agree.
+        var typedSetAvailableForProbe = attrType switch
+        {
+            AttributeDataType.Text => index.TextValues != null,
+            AttributeDataType.Number => index.NumberValues != null,
+            AttributeDataType.LongNumber => index.LongNumberValues != null,
+            AttributeDataType.DateTime => index.DateTimeTicksValues != null,
+            AttributeDataType.Binary => index.BinaryValues != null,
+            AttributeDataType.Boolean => index.BooleanValues != null,
+            AttributeDataType.Guid => index.GuidValues != null,
+            AttributeDataType.Reference => index.ReferenceValues != null,
+            // NotSet and any future types: ValueExistsOnCso's default arm returns false, matching
+            // the fast switch's own default arm, so either route is equivalent; take the fallback
+            // for uniformity.
+            _ => false
+        };
+        if (!typedSetAvailableForProbe)
+            return ValueExistsOnCso(index.RawValues, attrChange);
+
+        return attrType switch
+        {
+            AttributeDataType.Text =>
+                !string.IsNullOrEmpty(attrChange.StringValue) &&
+                (index.TextValues?.Contains(attrChange.StringValue) ?? false),
+
+            AttributeDataType.Number =>
+                attrChange.IntValue.HasValue &&
+                (index.NumberValues?.Contains(attrChange.IntValue.Value) ?? false),
+
+            AttributeDataType.LongNumber =>
+                attrChange.LongValue.HasValue &&
+                (index.LongNumberValues?.Contains(attrChange.LongValue.Value) ?? false),
+
+            AttributeDataType.DateTime =>
+                attrChange.DateTimeValue.HasValue &&
+                (index.DateTimeTicksValues?.Contains(attrChange.DateTimeValue.Value.Ticks) ?? false),
+
+            AttributeDataType.Binary =>
+                attrChange.ByteValue != null &&
+                (index.BinaryValues?.Any(v => v.ByteValue != null && v.ByteValue.SequenceEqual(attrChange.ByteValue)) ?? false),
+
+            AttributeDataType.Boolean =>
+                attrChange.BoolValue.HasValue &&
+                (index.BooleanValues?.Contains(attrChange.BoolValue.Value) ?? false),
+
+            AttributeDataType.Guid =>
+                attrChange.GuidValue.HasValue &&
+                (index.GuidValues?.Contains(attrChange.GuidValue.Value) ?? false),
+
+            AttributeDataType.Reference =>
+                (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue) &&
+                 (index.ReferenceValues?.Contains(attrChange.UnresolvedReferenceValue) ?? false)) ||
+                (!string.IsNullOrEmpty(attrChange.StringValue) &&
+                 (index.ReferenceValues?.Contains(attrChange.StringValue) ?? false)),
+
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Set-based equivalent of <see cref="IsAttributeChangeConfirmed(Dictionary{int, List{ConnectedSystemObjectAttributeValue}}, PendingExportAttributeValueChange)"/>
+    /// (#988): determines if an attribute change has been confirmed using a pre-built per-attribute
+    /// value index instead of per-attribute value lists, so that <see cref="ReconcileCsoAgainstPendingExport"/>
+    /// does O(1) average-case lookups per change instead of O(n) scans. Semantics are identical to the
+    /// List-based overload; only the underlying comparison mechanism differs.
+    /// </summary>
+    private static bool IsAttributeChangeConfirmedFast(Dictionary<int, AttributeValueIndex> attrIndexByAttrId, PendingExportAttributeValueChange attrChange)
+    {
+        if (attrChange.Attribute == null)
+            return false;
+
+        attrIndexByAttrId.TryGetValue(attrChange.AttributeId, out var index);
+        var count = index?.Count ?? 0;
+
+        switch (attrChange.ChangeType)
+        {
+            case PendingExportAttributeChangeType.Add:
+            case PendingExportAttributeChangeType.Update:
+                // For Add/Update with a null/empty value (clearing a single-valued attribute),
+                // confirmation means the CSO should have no values for this attribute.
+                if (IsPendingChangeEmpty(attrChange))
+                    return count == 0;
+
+                // For Add/Update with a real value, the value should exist on the CSO
+                return index != null && ValueExistsInIndex(index, attrChange);
+
+            case PendingExportAttributeChangeType.Remove:
+                // For Remove, the value should NOT exist on the CSO
+                return !(index != null && ValueExistsInIndex(index, attrChange));
+
+            case PendingExportAttributeChangeType.RemoveAll:
+                // For RemoveAll, there should be no values for this attribute
+                return count == 0;
+
+            default:
+                return false;
+        }
     }
 
     /// <summary>

@@ -13,7 +13,7 @@ public static class ActivityTargetTypeCategories
     private static readonly Dictionary<ActivityTargetType, ActivityTargetCategory> Map = new()
     {
         { ActivityTargetType.ConnectedSystem, ActivityTargetCategory.Configuration },
-        { ActivityTargetType.SyncRule, ActivityTargetCategory.Configuration },
+        { ActivityTargetType.SynchronisationRule, ActivityTargetCategory.Configuration },
         { ActivityTargetType.ObjectMatchingRule, ActivityTargetCategory.Configuration },
         { ActivityTargetType.MetaverseAttribute, ActivityTargetCategory.Configuration },
         { ActivityTargetType.MetaverseObjectType, ActivityTargetCategory.Configuration },
@@ -33,11 +33,13 @@ public static class ActivityTargetTypeCategories
         { ActivityTargetType.MetaverseObject, ActivityTargetCategory.IdentityData },
         { ActivityTargetType.ConnectedSystemRunProfile, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.TemporalScopeReconciliation, ActivityTargetCategory.SyncRuns },
+        { ActivityTargetType.MetaverseObjectHousekeeping, ActivityTargetCategory.SyncRuns },
         { ActivityTargetType.HistoryRetentionCleanup, ActivityTargetCategory.System },
         { ActivityTargetType.System, ActivityTargetCategory.System },
         { ActivityTargetType.SystemInitialisation, ActivityTargetCategory.System },
         { ActivityTargetType.DataGeneration, ActivityTargetCategory.System },
-        { ActivityTargetType.NotSet, ActivityTargetCategory.System }
+        { ActivityTargetType.NotSet, ActivityTargetCategory.System },
+        { ActivityTargetType.Authentication, ActivityTargetCategory.Security }
     };
 
     /// <summary>

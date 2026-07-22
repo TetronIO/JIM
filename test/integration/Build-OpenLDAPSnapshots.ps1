@@ -223,7 +223,25 @@ function Build-OpenLDAPSnapshot {
     Write-Host "  Populating test data..." -ForegroundColor Gray
     & $PopulateAction
 
-    # Copy volume data to backup location (volumes aren't captured by docker commit)
+    # Strip the accesslog BEFORE backing up and committing. A snapshot never reuses
+    # its accesslog: start-openldap.sh recreates a fresh one on every boot (the
+    # slapo-accesslog overlay cannot resume a log written in a prior slapd lifetime),
+    # so a baked accesslog is pure image bloat. At scale it is enormous: the
+    # Scale500k25kGroups build filled the entire 128GB accesslog cap, producing a
+    # ~138GB image. /bitnami/openldap is NOT a Docker volume (the base image declares
+    # none), so docker commit bakes whatever lives under it; the previous code
+    # dropped the accesslog only from the .provisioned copy, leaving the full live
+    # accesslog in the committed layer. slapd is idle post-populate and holds the MDB
+    # open, so the unlink is safe and docker commit (which walks the filesystem tree)
+    # excludes the now-unlinked file. Only the *.mdb files are removed; the directory
+    # stays so slapd can create a fresh accesslog on boot.
+    Write-Host "  Removing accesslog to keep the snapshot image lean..." -ForegroundColor Gray
+    docker exec $ContainerName bash -c "rm -f /bitnami/openldap/data/accesslog/*.mdb" 2>&1 | Out-Null
+
+    # Back up the (now accesslog-free) data to a plain directory in the container
+    # filesystem. docker commit does not capture Docker volumes, so a snapshot started
+    # against a fresh /bitnami/openldap volume restores from this copy (see
+    # start-openldap.sh); the copy is accesslog-free by construction.
     Write-Host "  Backing up volume data for commit..." -ForegroundColor Gray
     docker exec $ContainerName bash -c "cp -a /bitnami/openldap /bitnami/openldap.provisioned" 2>&1 | Out-Null
 
@@ -328,6 +346,11 @@ $openLDAPEnv = @{
     LDAP_ENABLE_TLS             = "no"
     LDAP_SKIP_DEFAULT_TREE      = "no"
     LDAP_ENABLE_ACCESSLOG       = "yes"
+    # Snapshot population is bulk test-data loading, never customer-representative, so
+    # always build with relaxed (nosync) MDB durability for speed. The snapshot itself is
+    # mode-agnostic: start-openldap.sh reconciles the nosync flags on every container
+    # start from LDAP_TEST_FAST_WRITES (see the runner's -DurableDirectoryWrites switch).
+    LDAP_TEST_FAST_WRITES       = "yes"
 }
 
 foreach ($scen in $scenariosToProcess) {

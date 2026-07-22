@@ -47,20 +47,29 @@ services:
       # Override JIM_DB_HOSTNAME from .env to use bundled database container
       - JIM_DB_HOSTNAME=jim.database
 
-  # Development PostgreSQL settings - sized for dev environments (~8-16GB RAM)
-  # shm_size must be >= shared_buffers (256MB + headroom) - see docker-compose.yml for production guidance
+  # Development PostgreSQL settings - sized for dev environments (~8-16GB RAM) by default.
+  # Performance-relevant values are parameterised via JIM_DB_* environment variables so the
+  # integration test runner can scale the database with template size (mirroring the per-template
+  # OpenLDAP memory scaling); see Run-IntegrationTests.ps1. With no JIM_DB_* variables set, the
+  # low-footprint dev defaults below apply, so plain `docker compose up` behaviour is unchanged.
+  # Sizing note: an undersized max_wal_size is punishing at scale; the Scale500k25kGroups run on
+  # the 1GB default checkpointed every ~12 seconds ("checkpoints are occurring too frequently"
+  # logged 1,488 times) and each checkpoint's fsync storm stalled bulk COPY streams for up to 78s.
+  # shm_size must be >= shared_buffers (with ~25% headroom) - see docker-compose.yml for guidance
+  # effective_io_concurrency=1000 matches the NVMe assumption in docker-compose.yml (the
+  # PostgreSQL default of 16 dates from spinning disks)
   # statement_timeout=300000 (5 minutes) prevents runaway queries
   # log_min_duration_statement (JIM_DB_LOG_MIN_DURATION, default 500ms) logs slow queries for dev analysis
   # logging_collector + jsonlog writes structured JSON logs to the shared log volume for the Logs UI
   jim.database:
-    shm_size: '512mb'
+    shm_size: ${JIM_DB_SHM_SIZE:-512mb}
     environment:
       # Override LANG from .env - PostgreSQL doesn't have en_GB.UTF-8 locale installed
       - LANG=C
     volumes:
       - jim-logs-volume:/var/log/jim
     entrypoint: ["/bin/bash", "-c", "mkdir -p /var/log/jim/database && chown postgres:postgres /var/log/jim/database && exec docker-entrypoint.sh \"$$@\"", "--"]
-    command: postgres -c shared_preload_libraries=pg_stat_statements -c pg_stat_statements.track=all -c max_connections=100 -c shared_buffers=256MB -c effective_cache_size=1GB -c maintenance_work_mem=64MB -c checkpoint_completion_target=0.9 -c wal_buffers=8MB -c default_statistics_target=100 -c random_page_cost=1.1 -c work_mem=4MB -c min_wal_size=80MB -c max_wal_size=1GB -c statement_timeout=300000 -c log_min_duration_statement=${JIM_DB_LOG_MIN_DURATION:-500} -c logging_collector=on -c log_destination=jsonlog -c log_directory=/var/log/jim/database -c log_filename=jim.database.%Y%m%d.log -c log_rotation_age=1440 -c log_rotation_size=0 -c log_file_mode=0644
+    command: postgres -c shared_preload_libraries=pg_stat_statements -c pg_stat_statements.track=all -c max_connections=100 -c shared_buffers=${JIM_DB_SHARED_BUFFERS:-256MB} -c effective_cache_size=${JIM_DB_EFFECTIVE_CACHE_SIZE:-1GB} -c maintenance_work_mem=${JIM_DB_MAINTENANCE_WORK_MEM:-64MB} -c checkpoint_completion_target=0.9 -c checkpoint_timeout=${JIM_DB_CHECKPOINT_TIMEOUT:-5min} -c wal_buffers=${JIM_DB_WAL_BUFFERS:-8MB} -c wal_compression=${JIM_DB_WAL_COMPRESSION:-off} -c default_statistics_target=100 -c random_page_cost=1.1 -c effective_io_concurrency=1000 -c work_mem=${JIM_DB_WORK_MEM:-4MB} -c min_wal_size=${JIM_DB_MIN_WAL_SIZE:-80MB} -c max_wal_size=${JIM_DB_MAX_WAL_SIZE:-1GB} -c statement_timeout=300000 -c log_min_duration_statement=${JIM_DB_LOG_MIN_DURATION:-500} -c logging_collector=on -c log_destination=jsonlog -c log_directory=/var/log/jim/database -c log_filename=jim.database.%Y%m%d.log -c log_rotation_age=1440 -c log_rotation_size=0 -c log_file_mode=0644
     # Expose PostgreSQL port for local database tools (VS Code extensions, etc.)
     ports:
       - "5432:5432"
@@ -70,7 +79,7 @@ services:
   # and clients for the web UI (jim-web) and PowerShell module (jim-powershell).
   # Admin console: http://localhost:8181 (admin/admin)
   jim.keycloak:
-    image: quay.io/keycloak/keycloak:26.6
+    image: quay.io/keycloak/keycloak:26.7
     container_name: jim.keycloak
     restart: unless-stopped
     command: start-dev --import-realm --health-enabled=true

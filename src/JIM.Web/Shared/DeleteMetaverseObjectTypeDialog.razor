@@ -1,0 +1,192 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@using JIM.Models.Core
+@using JIM.Models.Core.DTOs
+@using JIM.Utilities
+@using JIM.Web.Services
+@inject IJimApplicationFactory JimFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        @if (_impact == null)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        }
+        else
+        {
+            <MudStack Spacing="4">
+                @if (_impact.BlockedByObjects)
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                        <MudText Typo="Typo.subtitle2">@_impact.MetaverseObjectCount.ToString("N0") Metaverse Object(s) of this type exist</MudText>
+                        <MudText Typo="Typo.body2" Class="mt-1">
+                            A type cannot be deleted while Metaverse Objects of it exist. Delete those objects first (stop the source flows and let them deprovision, or delete them manually), then delete the type.
+                        </MudText>
+                        <MudLink Href="@Utilities.GetMetaverseObjectListHref(ObjectType.PluralName)" Class="mt-1 d-inline-flex align-center">
+                            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="mr-1" />View these Metaverse Objects
+                        </MudLink>
+                    </MudAlert>
+                }
+                else if (_impact.BlockedBySynchronisationRules)
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                        <MudText Typo="Typo.subtitle2">@_impact.SynchronisationRules.Count Synchronisation Rule(s) target this type</MudText>
+                        <MudList T="string" Dense="true" Class="mt-1">
+                            @foreach (var rule in _impact.SynchronisationRules)
+                            {
+                                <MudListItem T="string" Icon="@Icons.Material.Filled.SyncAlt">@rule.Description</MudListItem>
+                            }
+                        </MudList>
+                        <MudText Typo="Typo.body2" Class="mt-1">
+                            Remove these Synchronisation Rules first; deleting the type would otherwise remove the whole rule.
+                        </MudText>
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
+                        No Metaverse Objects of this type exist and no Synchronisation Rule targets it. Safe to delete.
+                    </MudAlert>
+
+                    @if (_impact.CascadeReferences.Count > 0)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                            <MudText Typo="Typo.subtitle2">These @_impact.CascadeReferences.Count reference(s) will also be removed</MudText>
+                            <MudText Typo="Typo.body2" Class="mt-1 mb-1">Bound attributes themselves are kept; only their bindings to this type are removed.</MudText>
+                            <MudList T="string" Dense="true">
+                                @foreach (var reference in _impact.CascadeReferences)
+                                {
+                                    <MudListItem T="string" Icon="@ReferenceIcon(reference.Kind)">
+                                        @DescribeReference(reference)
+                                    </MudListItem>
+                                }
+                            </MudList>
+                        </MudAlert>
+
+                        <div>
+                            <MudText Typo="Typo.body2" Class="mb-1">Type <b>@_impact.ObjectTypeName</b> to confirm</MudText>
+                            <MudTextField @bind-Value="_confirmText" Variant="Variant.Outlined" Immediate="true"
+                                          Placeholder="@_impact.ObjectTypeName" AutoFocus="true"
+                                          Adornment="Adornment.End"
+                                          AdornmentIcon="@(ConfirmMatches() ? Icons.Material.Filled.CheckCircle : null)" />
+                        </div>
+                    }
+                }
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">@(_impact?.Blocked == true ? "Close" : "Cancel")</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled"
+                   Disabled="@(!CanDelete())" OnClick="DeleteAsync">
+            @DeleteButtonText()
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    /// <summary>
+    /// The Object Type to delete.
+    /// </summary>
+    [Parameter]
+    public MetaverseObjectType ObjectType { get; set; } = null!;
+
+    private ObjectTypeDeletionImpact? _impact;
+    private string _confirmText = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var jim = JimFactory.Create();
+        _impact = await jim.Metaverse.EvaluateObjectTypeDeletionAsync(ObjectType);
+    }
+
+    private bool ConfirmMatches() =>
+        _impact != null && string.Equals(_confirmText, _impact.ObjectTypeName, StringComparison.Ordinal);
+
+    private bool CanDelete()
+    {
+        if (_impact == null || _impact.Blocked)
+            return false;
+
+        // Cascade references require the typed confirmation; a clean delete does not.
+        return _impact.CascadeReferences.Count == 0 || ConfirmMatches();
+    }
+
+    private string DeleteButtonText()
+    {
+        if (_impact == null)
+            return "Delete";
+        return _impact.CascadeReferences.Count > 0
+            ? $"Delete + {_impact.CascadeReferences.Count} reference(s)"
+            : "Delete";
+    }
+
+    private static string ReferenceIcon(ObjectTypeReferenceKind kind) => kind switch
+    {
+        ObjectTypeReferenceKind.PredefinedSearch => Icons.Material.Filled.Search,
+        ObjectTypeReferenceKind.ExampleDataTemplate => Icons.Material.Filled.Dataset,
+        ObjectTypeReferenceKind.AttributeBinding => Icons.Material.Filled.Link,
+        _ => Icons.Material.Filled.SyncAlt
+    };
+
+    private static string DescribeReference(ObjectTypeReference reference) => reference.Kind switch
+    {
+        ObjectTypeReferenceKind.PredefinedSearch => $"Predefined Search: {reference.Description}",
+        ObjectTypeReferenceKind.ExampleDataTemplate => $"Example Data Template: {reference.Description}",
+        ObjectTypeReferenceKind.AttributeBinding => $"Attribute binding: {reference.Description}",
+        _ => reference.Description
+    };
+
+    private async Task DeleteAsync()
+    {
+        var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
+        if (cancelled)
+            return;
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var impact = await jim.Metaverse.DeleteMetaverseObjectTypeAsync(ObjectType, user, changeReason);
+            if (!impact.Deleted)
+            {
+                Snackbar.Add("The Object Type could not be deleted; its state may have changed. Refresh and try again.", Severity.Warning);
+                return;
+            }
+            Snackbar.Add($"Deleted Object Type \"{impact.ObjectTypeName}\".", Severity.Success);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Snackbar.Add($"Failed to delete Object Type: {ex.Message}", Severity.Error);
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    /// <summary>
+    /// Opens the delete dialog for a Metaverse Object Type. Returns true when the type was deleted.
+    /// </summary>
+    public static async Task<bool> ShowAsync(IDialogService dialogService, MetaverseObjectType objectType)
+    {
+        var parameters = new DialogParameters<DeleteMetaverseObjectTypeDialog>
+        {
+            { x => x.ObjectType, objectType }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await dialogService.ShowAsync<DeleteMetaverseObjectTypeDialog>($"Delete \"{objectType.Name}\" Object Type", parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}

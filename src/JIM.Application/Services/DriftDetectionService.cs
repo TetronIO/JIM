@@ -8,6 +8,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 
 namespace JIM.Application.Services;
@@ -627,8 +628,20 @@ public class DriftDetectionService
                 return false;
             }
 
-            // Check if all expected values are in the actual set
-            foreach (var expectedValue in expectedSet)
+            // Fast path: hash-based set equality. Covers the overwhelmingly common case where both
+            // sets hold same-typed values (reference attributes always yield Guids on both sides) and
+            // the target has not drifted. The pairwise scan below is O(n^2); on a 20,000-member group
+            // that is 400M comparisons (~36s of CPU per group measured at Scale500k25kGroups), where
+            // this is O(n). Hash equality implies SingleValueEquals equality for every type produced
+            // by the value extractors (ordinal for strings, value equality for Guids and numerics,
+            // reference equality for byte arrays), so a true result here is always safe.
+            if (expectedSet.SetEquals(actualSet))
+                return true;
+
+            // Fallback: pairwise scan preserving the cross-type semantics hash equality cannot see
+            // (Guid vs its string representation, byte array content). The O(1) hash lookup filters
+            // first, so only genuinely hash-missing values pay for a linear scan.
+            foreach (var expectedValue in expectedSet.Where(v => !actualSet.Contains(v)))
             {
                 var found = actualSet.Any(actualValue => SingleValueEquals(expectedValue, actualValue));
                 if (!found)
@@ -868,13 +881,13 @@ public class DriftDetectionService
             if (hashSet.Count == 0)
                 return "(empty set)";
 
-            var formattedValues = hashSet.Select(v => v?.ToString() ?? "(null)").Take(5);
+            var formattedValues = hashSet.Select(v => LogSanitiser.Sanitise(v?.ToString()) ?? "(null)").Take(5);
             var result = string.Join(", ", formattedValues);
             if (hashSet.Count > 5)
                 result += $"... (+{hashSet.Count - 5} more)";
             return $"[{result}] ({hashSet.Count} values)";
         }
 
-        return value.ToString() ?? "(null)";
+        return LogSanitiser.Sanitise(value.ToString()) ?? "(null)";
     }
 }

@@ -188,18 +188,38 @@ public class ExportEvaluationTests
     }
 
     /// <summary>
-    /// Tests the Q4 decision: only Provisioned CSOs should be deleted when MVO is deleted.
+    /// Repoints the seeded user export Synchronisation Rule at the Dummy Target System and its
+    /// TARGET_USER object type, with the given deprovisioning action. The seeded export rules all
+    /// point at the source system, so without this the MVO-deletion cascade finds no rule matching
+    /// a target-system CSO. Returns the rule so callers can tweak it further.
     /// </summary>
-    [Test]
-    public async Task EvaluateMvoDeletionAsync_WhenCsoIsProvisioned_CreatesDeleteExportAsync()
+    private SyncRule ArrangeDeletionExportRule(OutboundDeprovisionAction action)
     {
-        // Arrange
-        var mvo = MetaverseObjectsData[0];
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.MetaverseObjectType = mvUserType;
+        exportRule.OutboundDeprovisionAction = action;
+        return exportRule;
+    }
+
+    /// <summary>
+    /// Creates a CSO of the given join type in the Dummy Target System, joined to the MVO,
+    /// and seeds it into both data stores.
+    /// </summary>
+    private ConnectedSystemObject ArrangeJoinedTargetCso(MetaverseObject mvo, ConnectedSystemObjectJoinType joinType)
+    {
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
 
-        // Create a provisioned CSO joined to the MVO
-        var provisionedCso = new ConnectedSystemObject
+        var cso = new ConnectedSystemObject
         {
             Id = Guid.NewGuid(),
             ConnectedSystemId = targetSystem.Id,
@@ -207,54 +227,197 @@ public class ExportEvaluationTests
             TypeId = targetUserType.Id,
             MetaverseObject = mvo,
             MetaverseObjectId = mvo.Id,
-            JoinType = ConnectedSystemObjectJoinType.Provisioned
+            JoinType = joinType
         };
 
-        ConnectedSystemObjectsData.Add(provisionedCso);
-        SyncRepo.SeedConnectedSystemObject(provisionedCso);
+        ConnectedSystemObjectsData.Add(cso);
+        SyncRepo.SeedConnectedSystemObject(cso);
+        return cso;
+    }
+
+    /// <summary>
+    /// Tests that the MVO-deletion cascade honours the export Synchronisation Rule's
+    /// OutboundDeprovisionAction (issue #655): a Provisioned CSO under a Delete-action rule
+    /// gets a delete Pending Export.
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionAsync_ProvisionedCsoWithDeleteActionRule_CreatesDeleteExportAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        ArrangeDeletionExportRule(OutboundDeprovisionAction.Delete);
+        var provisionedCso = ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Provisioned);
 
         // Act
         var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.Count, Is.GreaterThan(0), "Expected delete PendingExport for Provisioned CSO");
+        Assert.That(result.Count, Is.GreaterThan(0), "Expected delete PendingExport for CSO under a Delete-action rule");
         Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
         Assert.That(result[0].ConnectedSystemObjectId, Is.EqualTo(provisionedCso.Id));
     }
 
     /// <summary>
-    /// Tests the Q4 decision: Joined (not Provisioned) CSOs should NOT be deleted when MVO is deleted.
+    /// Tests the headline issue #655 behaviour: a Joined (not Provisioned) CSO under a Delete-action
+    /// export Synchronisation Rule now gets a delete Pending Export when its MVO is deleted. The
+    /// CSO's join type no longer gates deprovisioning; the rule's action does.
     /// </summary>
     [Test]
-    public async Task EvaluateMvoDeletionAsync_WhenCsoIsJoined_DoesNotCreateDeleteExportAsync()
+    public async Task EvaluateMvoDeletionAsync_JoinedCsoWithDeleteActionRule_CreatesDeleteExportAsync()
     {
         // Arrange
         var mvo = MetaverseObjectsData[0];
-        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
-        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
-
-        // Create a joined (not provisioned) CSO
-        var joinedCso = new ConnectedSystemObject
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystemId = targetSystem.Id,
-            Type = targetUserType,
-            TypeId = targetUserType.Id,
-            MetaverseObject = mvo,
-            MetaverseObjectId = mvo.Id,
-            JoinType = ConnectedSystemObjectJoinType.Joined
-        };
-
-        ConnectedSystemObjectsData.Add(joinedCso);
-        SyncRepo.SeedConnectedSystemObject(joinedCso);
+        ArrangeDeletionExportRule(OutboundDeprovisionAction.Delete);
+        var joinedCso = ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Joined);
 
         // Act
         var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
 
         // Assert
         Assert.That(result, Is.Not.Null);
-        Assert.That(result.Count, Is.EqualTo(0), "Expected no delete PendingExport for Joined CSO (Q4 decision)");
+        Assert.That(result.Count, Is.EqualTo(1), "Expected a delete PendingExport for a Joined CSO under a Delete-action rule (issue #655)");
+        Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
+        Assert.That(result[0].ConnectedSystemObjectId, Is.EqualTo(joinedCso.Id));
+    }
+
+    /// <summary>
+    /// Tests the deliberate issue #655 behaviour change: a Provisioned CSO under a Disconnect-action
+    /// (default) export Synchronisation Rule is disconnected only; no delete Pending Export is
+    /// created, even though JIM originally provisioned the CSO.
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionAsync_ProvisionedCsoWithDisconnectActionRule_DisconnectsWithoutDeleteExportAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        ArrangeDeletionExportRule(OutboundDeprovisionAction.Disconnect);
+        var provisionedCso = ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Provisioned);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Count, Is.EqualTo(0), "Expected no delete PendingExport when the rule's action is Disconnect");
+        Assert.That(provisionedCso.MetaverseObjectId, Is.Null, "The CSO must still be disconnected from its MVO");
+        Assert.That(provisionedCso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined));
+    }
+
+    /// <summary>
+    /// Tests the safe default: when no export Synchronisation Rule matches the CSO's system and
+    /// object type, the CSO is disconnected only; no delete Pending Export is created.
+    /// The seeded export rules point at the source system, so nothing matches the target CSO.
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionAsync_NoMatchingExportRule_DisconnectsWithoutDeleteExportAsync()
+    {
+        // Arrange: deliberately no ArrangeDeletionExportRule call
+        var mvo = MetaverseObjectsData[0];
+        var provisionedCso = ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Provisioned);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Count, Is.EqualTo(0), "Expected no delete PendingExport when no export rule matches the CSO");
+        Assert.That(provisionedCso.MetaverseObjectId, Is.Null, "The CSO must still be disconnected from its MVO");
+    }
+
+    /// <summary>
+    /// Tests conflict resolution: when two enabled export Synchronisation Rules match the same CSO
+    /// with different deprovisioning actions, Delete wins (the most explicit admin intent).
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionAsync_ConflictingDeprovisionActions_DeleteWinsAsync()
+    {
+        // Arrange: rule 1 says Disconnect, a second rule with the same triple says Delete
+        var mvo = MetaverseObjectsData[0];
+        var disconnectRule = ArrangeDeletionExportRule(OutboundDeprovisionAction.Disconnect);
+        var deleteRule = new SyncRule
+        {
+            Id = 99,
+            ConnectedSystemId = disconnectRule.ConnectedSystemId,
+            ConnectedSystem = disconnectRule.ConnectedSystem,
+            Name = "Dummy User Export Synchronisation Rule 2",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            ConnectedSystemObjectTypeId = disconnectRule.ConnectedSystemObjectTypeId,
+            ConnectedSystemObjectType = disconnectRule.ConnectedSystemObjectType,
+            MetaverseObjectTypeId = disconnectRule.MetaverseObjectTypeId,
+            MetaverseObjectType = disconnectRule.MetaverseObjectType,
+            OutboundDeprovisionAction = OutboundDeprovisionAction.Delete
+        };
+        SyncRulesData.Add(deleteRule);
+        SyncRepo.SeedSyncRule(deleteRule);
+
+        var joinedCso = ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Joined);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Count, Is.EqualTo(1), "Expected Delete to win when matching rules conflict");
+        Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete));
+        Assert.That(result[0].ConnectedSystemObjectId, Is.EqualTo(joinedCso.Id));
+    }
+
+    /// <summary>
+    /// Tests the defensive path: an MVO with no Type cannot be matched to any export
+    /// Synchronisation Rule, so its CSOs are disconnected without delete Pending Exports.
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionAsync_MvoWithNoType_DisconnectsWithoutDeleteExportAsync()
+    {
+        // Arrange: a Delete-action rule exists, but the MVO has no Type to match it by
+        ArrangeDeletionExportRule(OutboundDeprovisionAction.Delete);
+        var typelessMvo = new MetaverseObject { Id = Guid.NewGuid() };
+        MetaverseObjectsData.Add(typelessMvo);
+        SyncRepo.SeedMetaverseObject(typelessMvo);
+        var provisionedCso = ArrangeJoinedTargetCso(typelessMvo, ConnectedSystemObjectJoinType.Provisioned);
+        typelessMvo.ConnectedSystemObjects.Add(provisionedCso);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(typelessMvo);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.Count, Is.EqualTo(0), "Expected no delete PendingExport for an MVO with no Type");
+        Assert.That(provisionedCso.MetaverseObjectId, Is.Null, "The CSO must still be disconnected from its MVO");
+    }
+
+    /// <summary>
+    /// Tests that all join types are treated equally under a Delete-action rule (issue #655):
+    /// Provisioned, Joined and Projected CSOs joined to the same MVO all get delete Pending
+    /// Exports, and all are disconnected.
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionsAsync_MixedJoinTypesWithDeleteActionRule_CreatesDeleteExportsForAllJoinedCsosAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        ArrangeDeletionExportRule(OutboundDeprovisionAction.Delete);
+        var csos = new List<ConnectedSystemObject>
+        {
+            ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Provisioned),
+            ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Joined),
+            ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Projected)
+        };
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateMvoDeletionsAsync(new[] { mvo });
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(3), "Expected one delete PendingExport per CSO regardless of join type");
+        Assert.That(result.All(pe => pe.ChangeType == PendingExportChangeType.Delete), Is.True);
+        foreach (var cso in csos)
+        {
+            Assert.That(result.Any(pe => pe.ConnectedSystemObjectId == cso.Id), Is.True,
+                $"Expected a delete PendingExport for CSO with join type {cso.JoinType}");
+            Assert.That(cso.MetaverseObjectId, Is.Null, $"CSO {cso.Id} must be disconnected from its MVO");
+        }
     }
 
     /// <summary>
@@ -268,6 +431,7 @@ public class ExportEvaluationTests
     {
         // Arrange
         var mvo = MetaverseObjectsData[0];
+        ArrangeDeletionExportRule(OutboundDeprovisionAction.Delete);
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
         var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
         var dnAttribute = targetUserType.Attributes.Single(a => a.Name == "distinguishedName");
@@ -319,22 +483,9 @@ public class ExportEvaluationTests
     {
         // Arrange
         var mvo = MetaverseObjectsData[0];
+        ArrangeDeletionExportRule(OutboundDeprovisionAction.Delete);
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
-        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
-
-        var provisionedCso = new ConnectedSystemObject
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystemId = targetSystem.Id,
-            Type = targetUserType,
-            TypeId = targetUserType.Id,
-            MetaverseObject = mvo,
-            MetaverseObjectId = mvo.Id,
-            JoinType = ConnectedSystemObjectJoinType.Provisioned
-        };
-
-        ConnectedSystemObjectsData.Add(provisionedCso);
-        SyncRepo.SeedConnectedSystemObject(provisionedCso);
+        var provisionedCso = ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Provisioned);
 
         // Pre-populate with an existing Delete PE for this CSO
         // Must set ConnectedSystemObject navigation property because mock DbSet doesn't auto-load it
@@ -371,22 +522,9 @@ public class ExportEvaluationTests
     {
         // Arrange
         var mvo = MetaverseObjectsData[0];
+        ArrangeDeletionExportRule(OutboundDeprovisionAction.Delete);
         var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
-        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
-
-        var provisionedCso = new ConnectedSystemObject
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystemId = targetSystem.Id,
-            Type = targetUserType,
-            TypeId = targetUserType.Id,
-            MetaverseObject = mvo,
-            MetaverseObjectId = mvo.Id,
-            JoinType = ConnectedSystemObjectJoinType.Provisioned
-        };
-
-        ConnectedSystemObjectsData.Add(provisionedCso);
-        SyncRepo.SeedConnectedSystemObject(provisionedCso);
+        var provisionedCso = ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Provisioned);
 
         // Pre-populate with an existing Create PE for this CSO (not yet exported)
         // Must set ConnectedSystemObject navigation property because mock DbSet doesn't auto-load it
@@ -414,6 +552,213 @@ public class ExportEvaluationTests
         Assert.That(result[0].Id, Is.Not.EqualTo(existingCreatePe.Id), "Should be a new PE, not the old Create PE");
         Assert.That(SyncRepo.PendingExports.Values.Count(pe => pe.ChangeType == PendingExportChangeType.Delete), Is.EqualTo(1),
             "Should create exactly one new Delete PE");
+    }
+
+    /// <summary>
+    /// Tests that when EvaluateMvoDeletionAsync replaces an existing non-Delete Pending Export, the
+    /// replaced Pending Export is removed from the store together with its attribute value changes;
+    /// none of them may leak onto the replacement Delete Pending Export. Pins the delete-path fetch
+    /// behaviour across the lean-fetch call-site change (issue #986): child-row disposal on delete
+    /// relies on the fetched entity having its AttributeValueChanges loaded.
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionAsync_WhenCreatePeWithAttributeChangesExists_ReplacementDisposesOldPeAndChangesAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        ArrangeDeletionExportRule(OutboundDeprovisionAction.Delete);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var targetAttribute = targetUserType.Attributes.First(a => a.Type == AttributeDataType.Text);
+        var provisionedCso = ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Provisioned);
+
+        // Pre-populate with an existing Create PE carrying attribute value changes
+        // Must set ConnectedSystemObject navigation property because mock DbSet doesn't auto-load it
+        var existingCreatePe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystemObjectId = provisionedCso.Id,
+            ConnectedSystemObject = provisionedCso,
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Pending,
+            SourceMetaverseObjectId = mvo.Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        existingCreatePe.AttributeValueChanges.Add(new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            PendingExportId = existingCreatePe.Id,
+            Attribute = targetAttribute,
+            AttributeId = targetAttribute.Id,
+            ChangeType = PendingExportAttributeChangeType.Add,
+            StringValue = "stale value from the replaced Create PE"
+        });
+        PendingExportsData.Add(existingCreatePe);
+        SyncRepo.SeedPendingExport(existingCreatePe);
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+
+        // Assert: the old Create PE and its changes are gone; the replacement carries none of them
+        Assert.That(result.Count, Is.EqualTo(1), "Should return exactly one PE");
+        Assert.That(result[0].ChangeType, Is.EqualTo(PendingExportChangeType.Delete), "Should be a Delete PE");
+        Assert.That(SyncRepo.PendingExports.ContainsKey(existingCreatePe.Id), Is.False,
+            "The replaced Create PE should be removed from the store");
+        Assert.That(SyncRepo.PendingExports.Count, Is.EqualTo(1), "Only the replacement Delete PE should remain");
+        Assert.That(result[0].AttributeValueChanges.Any(avc => avc.StringValue == "stale value from the replaced Create PE"),
+            Is.False, "No attribute value change from the replaced PE may leak onto the replacement");
+    }
+
+    /// <summary>
+    /// Tests that a supplied export evaluation cache is honoured (issue #655): the cache's rules
+    /// drive the deprovisioning decisions and no Synchronisation Rule reload hits the repository.
+    /// The repository's rules deliberately match nothing; only the cache carries a matching
+    /// Delete-action rule.
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionsAsync_WithProvidedCache_UsesCacheRulesAsync()
+    {
+        // Arrange: repository rules untouched (they point at the source system, matching nothing)
+        var mvo = MetaverseObjectsData[0];
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var joinedCso = ArrangeJoinedTargetCso(mvo, ConnectedSystemObjectJoinType.Joined);
+
+        var cacheOnlyRule = new SyncRule
+        {
+            Id = 98,
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            Name = "Cache-Only User Export Synchronisation Rule",
+            Direction = SyncRuleDirection.Export,
+            Enabled = true,
+            ConnectedSystemObjectTypeId = targetUserType.Id,
+            ConnectedSystemObjectType = targetUserType,
+            MetaverseObjectTypeId = mvUserType.Id,
+            MetaverseObjectType = mvUserType,
+            OutboundDeprovisionAction = OutboundDeprovisionAction.Delete
+        };
+        var cache = new ExportEvaluationCache(
+            new Dictionary<int, List<SyncRule>> { [mvUserType.Id] = [cacheOnlyRule] },
+            new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>(),
+            Array.Empty<ConnectedSystemObjectAttributeValue>().ToLookup(x => (x.ConnectedSystemObject.Id, x.AttributeId)),
+            new List<int> { targetSystem.Id });
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateMvoDeletionsAsync([mvo], cache);
+
+        // Assert
+        Assert.That(result, Has.Count.EqualTo(1), "Expected the cache's Delete-action rule to drive the deprovisioning decision");
+        Assert.That(result[0].ConnectedSystemObjectId, Is.EqualTo(joinedCso.Id));
+        Assert.That(SyncRepo.GetAllSyncRulesCallCount, Is.EqualTo(0),
+            "No Synchronisation Rule reload may hit the repository when a cache is supplied");
+    }
+
+    /// <summary>
+    /// Tests the set-based deletion evaluation (issue #993) with a genuinely mixed batch: three
+    /// MVOs whose CSOs fall under a Delete-action export Synchronisation Rule and are respectively
+    /// fresh (no Pending Export), carrying an existing Delete Pending Export (must be reused), and
+    /// carrying an existing Create Pending Export (must be replaced), plus a fourth MVO whose CSO
+    /// has a different object type that no export rule matches (disconnect only, no delete PE).
+    /// The per-CSO collision policy must be applied independently within the one call, and every
+    /// CSO must end up disconnected from its MVO.
+    /// </summary>
+    [Test]
+    public async Task EvaluateMvoDeletionsAsync_MixedCollisionStates_AppliesPolicyPerCsoAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var sourceGroupType = ConnectedSystemObjectTypesData.Single(t => t.Name == "SOURCE_GROUP");
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        ArrangeDeletionExportRule(OutboundDeprovisionAction.Delete);
+
+        var mvos = new List<MetaverseObject>();
+        var csos = new List<ConnectedSystemObject>();
+        for (var i = 0; i < 4; i++)
+        {
+            var mvo = new MetaverseObject { Id = Guid.NewGuid(), Type = mvUserType };
+            // the fourth CSO's object type is not matched by any export rule: disconnect only, no delete PE
+            var csoType = i < 3 ? targetUserType : sourceGroupType;
+            var cso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = csoType,
+                TypeId = csoType.Id,
+                MetaverseObject = mvo,
+                MetaverseObjectId = mvo.Id,
+                JoinType = i < 3 ? ConnectedSystemObjectJoinType.Provisioned : ConnectedSystemObjectJoinType.Joined,
+                DateJoined = DateTime.UtcNow
+            };
+            mvo.ConnectedSystemObjects.Add(cso);
+            MetaverseObjectsData.Add(mvo);
+            ConnectedSystemObjectsData.Add(cso);
+            SyncRepo.SeedMetaverseObject(mvo);
+            SyncRepo.SeedConnectedSystemObject(cso);
+            mvos.Add(mvo);
+            csos.Add(cso);
+        }
+
+        // CSO 1 carries an existing Delete PE (must be reused)
+        var existingDeletePe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystemObjectId = csos[1].Id,
+            ConnectedSystemObject = csos[1],
+            ChangeType = PendingExportChangeType.Delete,
+            Status = PendingExportStatus.Exported,
+            SourceMetaverseObjectId = mvos[1].Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        SyncRepo.SeedPendingExport(existingDeletePe);
+
+        // CSO 2 carries an existing Create PE (must be replaced with a Delete PE)
+        var existingCreatePe = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystemObjectId = csos[2].Id,
+            ConnectedSystemObject = csos[2],
+            ChangeType = PendingExportChangeType.Create,
+            Status = PendingExportStatus.Pending,
+            SourceMetaverseObjectId = mvos[2].Id,
+            CreatedAt = DateTime.UtcNow.AddMinutes(-5)
+        };
+        SyncRepo.SeedPendingExport(existingCreatePe);
+
+        // Act: one set-based call for the whole batch
+        var result = await Jim.ExportEvaluation.EvaluateMvoDeletionsAsync(mvos);
+
+        // Assert: three Delete PEs (fresh create, reuse, replacement); the unmatched CSO gets none
+        Assert.That(result, Has.Count.EqualTo(3), "Expected one Delete PE per CSO matched by the Delete-action rule");
+        Assert.That(result.All(pe => pe.ChangeType == PendingExportChangeType.Delete), Is.True);
+
+        var freshPe = result.SingleOrDefault(pe => pe.ConnectedSystemObjectId == csos[0].Id);
+        Assert.That(freshPe, Is.Not.Null, "Expected a new Delete PE for the fresh CSO");
+
+        var reusedPe = result.SingleOrDefault(pe => pe.ConnectedSystemObjectId == csos[1].Id);
+        Assert.That(reusedPe, Is.Not.Null);
+        Assert.That(reusedPe!.Id, Is.EqualTo(existingDeletePe.Id), "The existing Delete PE must be reused, not duplicated");
+
+        var replacementPe = result.SingleOrDefault(pe => pe.ConnectedSystemObjectId == csos[2].Id);
+        Assert.That(replacementPe, Is.Not.Null);
+        Assert.That(replacementPe!.Id, Is.Not.EqualTo(existingCreatePe.Id), "The Create PE must be replaced by a new Delete PE");
+        Assert.That(SyncRepo.PendingExports.ContainsKey(existingCreatePe.Id), Is.False, "The replaced Create PE must be removed");
+
+        Assert.That(result.Any(pe => pe.ConnectedSystemObjectId == csos[3].Id), Is.False,
+            "The CSO with no matching export rule must not get a delete PE");
+
+        // Assert: every CSO is disconnected from its MVO
+        foreach (var cso in csos)
+        {
+            Assert.That(cso.MetaverseObjectId, Is.Null, $"CSO {cso.Id} must be disconnected from its MVO");
+            Assert.That(cso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined));
+            Assert.That(cso.DateJoined, Is.Null);
+        }
     }
 
     #region EvaluateOutOfScopeExportsAsync (cascade) — Delete-PE collision handling
@@ -1794,6 +2139,385 @@ public class ExportEvaluationTests
         // Assert - No Pending Export should be created for Update with no mapped attribute changes
         Assert.That(result, Has.Count.EqualTo(0),
             "No Pending Export should be created when changed attributes don't have export mappings");
+    }
+
+    #endregion
+
+    #region Export Matching Concurrency Tests (#1051)
+
+    /// <summary>
+    /// In-memory <see cref="SyncRepository"/> whose <see cref="TryClaimConnectedSystemObjectForJoinAsync"/>
+    /// always reports the claim as lost, simulating another Metaverse Object's overlapping export
+    /// evaluation winning the race for the same Connected System Object (#1051).
+    /// </summary>
+    private sealed class ClaimLostSyncRepository : SyncRepository
+    {
+        public override Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined)
+            => Task.FromResult(false);
+    }
+
+    /// <summary>
+    /// Builds a standard inbound-shaped Object Matching Rule for the Dummy Target System's
+    /// TARGET_USER type (source sets only ConnectedSystemAttribute, target sets
+    /// TargetMetaverseAttribute); mirrors <c>ObjectMatchingServerTests.BuildInboundShapedMatchingRule</c>.
+    /// The Dummy Target System runs in Advanced (SyncRule) matching mode, so the caller attaches
+    /// the returned rule to <c>exportRule.ObjectMatchingRules</c>.
+    /// </summary>
+    private static ObjectMatchingRule BuildExportMatchingRule(
+        ConnectedSystemObjectType targetUserType,
+        ConnectedSystemObjectTypeAttribute csEmployeeIdAttr,
+        MetaverseAttribute targetMetaverseAttribute)
+    {
+        return new ObjectMatchingRule
+        {
+            Id = 5001,
+            Order = 1,
+            ConnectedSystemObjectTypeId = targetUserType.Id,
+            ConnectedSystemObjectType = targetUserType,
+            TargetMetaverseAttribute = targetMetaverseAttribute,
+            TargetMetaverseAttributeId = targetMetaverseAttribute.Id,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Id = 5001,
+                    Order = 1,
+                    ConnectedSystemAttribute = csEmployeeIdAttr,
+                    ConnectedSystemAttributeId = csEmployeeIdAttr.Id
+                }
+            }
+        };
+    }
+
+    /// <summary>
+    /// Seeds an unclaimed, Normal-status CSO with a single matching attribute value into the given
+    /// SyncRepo; mirrors <c>ObjectMatchingServerTests.SeedTargetCso</c>.
+    /// </summary>
+    private static ConnectedSystemObject SeedUnclaimedTargetCso(
+        SyncRepository syncRepo,
+        ConnectedSystem targetSystem,
+        ConnectedSystemObjectType targetUserType,
+        ConnectedSystemObjectTypeAttribute csEmployeeIdAttr,
+        string attributeValue)
+    {
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Attribute = csEmployeeIdAttr,
+                    AttributeId = csEmployeeIdAttr.Id,
+                    StringValue = attributeValue
+                }
+            }
+        };
+
+        syncRepo.SeedConnectedSystemObject(cso);
+        return cso;
+    }
+
+    /// <summary>
+    /// Happy-path pin: when export matching finds an unclaimed CSO, the MVO should join it rather
+    /// than a duplicate being provisioned. This test passes both before and after the #1051 fix
+    /// (the pre-fix code also performed the join, just without the concurrency guard); it exists to
+    /// pin the happy path so the guard's addition cannot regress it.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_ExportMatchingFindsUnclaimedCso_JoinsInsteadOfProvisioningAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var cso = SeedUnclaimedTargetCso(SyncRepo, targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.ObjectMatchingRules = new List<ObjectMatchingRule>
+        {
+            BuildExportMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr)
+        };
+
+        // An Update-typed Pending Export is only emitted when at least one attribute mapping
+        // produces a change, so add a mapping for the EmployeeId flow (existingCso is deliberately
+        // null here, since it is the join-before-provision path, so no-net-change detection has
+        // nothing to compare against and the mapped value always flows).
+        exportRule.AttributeFlowRules.Clear();
+        var employeeIdMapping = new SyncRuleMapping
+        {
+            Id = 6001,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = csEmployeeIdAttr,
+            TargetConnectedSystemAttributeId = csEmployeeIdAttr.Id
+        };
+        employeeIdMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 6001,
+            Order = 1,
+            MetaverseAttribute = employeeIdAttr,
+            MetaverseAttributeId = employeeIdAttr.Id
+        });
+        exportRule.AttributeFlowRules.Add(employeeIdMapping);
+
+        // The join-before-provision path (AttemptExportMatchingAsync) is only reached via
+        // CreateOrUpdatePendingExportWithNoNetChangeAsync, i.e. the cached evaluation entry point;
+        // the uncached EvaluateExportRulesAsync overload provisions directly without matching.
+        // CsoLookup is empty (no existing join) so the export evaluation goes down the
+        // needsProvisioning path and attempts export matching, finding the seeded CSO.
+        var cache = new ExportEvaluationCache(
+            new Dictionary<int, List<SyncRule>> { { mvUserType.Id, new List<SyncRule> { exportRule } } },
+            new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>(),
+            Array.Empty<ConnectedSystemObjectAttributeValue>().ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId)),
+            new List<int> { targetSystem.Id });
+
+        var changedAttributes = mvo.AttributeValues.ToList();
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, changedAttributes, sourceSystem: null, cache);
+
+        // Assert - export matching joined the seeded CSO instead of creating a new one
+        Assert.That(SyncRepo.ConnectedSystemObjects.Count, Is.EqualTo(1),
+            "No new CSO should be created; the unclaimed CSO should be joined instead");
+        Assert.That(cso.MetaverseObjectId, Is.EqualTo(mvo.Id), "The unclaimed CSO should be joined to the MVO");
+        Assert.That(cso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined));
+        Assert.That(cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal));
+
+        Assert.That(result.PendingExports, Has.Count.EqualTo(1), "Expected exactly one PendingExport");
+        Assert.That(result.PendingExports[0].ChangeType, Is.EqualTo(PendingExportChangeType.Update),
+            "PendingExport should be an Update operation since the CSO was joined, not provisioned");
+        Assert.That(result.PendingExports[0].ConnectedSystemObjectId, Is.EqualTo(cso.Id));
+    }
+
+    /// <summary>
+    /// Red-first regression for #1051: when the atomic claim reports the CSO was claimed by another
+    /// Metaverse Object first, export evaluation must fall back to provisioning a new CSO rather than
+    /// leaving the seeded CSO in a stolen or inconsistent state. Uses a repository whose claim always
+    /// fails to deterministically simulate the lost race.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_ExportMatchingClaimLost_FallsBackToProvisioningAsync()
+    {
+        // Arrange - a dedicated fixture wired to a repository that always loses the claim race.
+        var claimLostRepo = new ClaimLostSyncRepository();
+        var localSyncRepo = TestUtilities.CreateSyncRepository(
+            activity: ActivitiesData.First(),
+            syncRules: SyncRulesData,
+            repository: claimLostRepo);
+        using var localJim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: localSyncRepo);
+
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var cso = SeedUnclaimedTargetCso(localSyncRepo, targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.ObjectMatchingRules = new List<ObjectMatchingRule>
+        {
+            BuildExportMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr)
+        };
+
+        var cache = new ExportEvaluationCache(
+            new Dictionary<int, List<SyncRule>> { { mvUserType.Id, new List<SyncRule> { exportRule } } },
+            new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>(),
+            Array.Empty<ConnectedSystemObjectAttributeValue>().ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId)),
+            new List<int> { targetSystem.Id });
+
+        var changedAttributes = mvo.AttributeValues.ToList();
+
+        // Act
+        var result = await localJim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, changedAttributes, sourceSystem: null, cache);
+
+        // Assert - the claim was lost, so the seeded CSO must remain unclaimed...
+        Assert.That(cso.MetaverseObjectId, Is.Null, "The CSO must remain unclaimed when the claim is lost to another Metaverse Object");
+        Assert.That(cso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.NotJoined), "The CSO's join state must not change when the claim is lost");
+
+        // ...and export evaluation must fall back to provisioning a brand new CSO.
+        var createdCsos = localSyncRepo.ConnectedSystemObjects.Values.Where(c => c.Id != cso.Id).ToList();
+        Assert.That(createdCsos, Has.Count.EqualTo(1), "A new CSO should be provisioned as a fallback when the claim is lost");
+        Assert.That(createdCsos[0].Status, Is.EqualTo(ConnectedSystemObjectStatus.PendingProvisioning));
+        Assert.That(createdCsos[0].JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Provisioned));
+
+        Assert.That(result.PendingExports, Has.Count.EqualTo(1), "Expected exactly one PendingExport");
+        Assert.That(result.PendingExports[0].ChangeType, Is.EqualTo(PendingExportChangeType.Create),
+            "PendingExport should be a Create operation for the newly provisioned CSO");
+        Assert.That(result.PendingExports[0].ConnectedSystemObjectId, Is.EqualTo(createdCsos[0].Id));
+    }
+
+    /// <summary>
+    /// Issue #1085 (opportunistic Provisioned attribution): when export evaluation provisions a new
+    /// CSO with deferred saving, the result must record which export Synchronisation Rule caused the
+    /// provisioning, keyed by the provisioning CSO's id, so the worker can attribute the Provisioned
+    /// outcome node to that rule.
+    /// </summary>
+    [Test]
+    public async Task EvaluateExportRulesWithNoNetChangeDetectionAsync_ProvisioningCsoDeferred_RecordsProvisioningSyncRuleAsync()
+    {
+        // Arrange
+        var mvo = MetaverseObjectsData[0];
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        mvo.Type = mvUserType;
+
+        var employeeIdAttr = mvUserType.Attributes.Single(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            MetaverseObject = mvo,
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var exportRule = SyncRulesData.Single(sr => sr.Name == "Dummy User Export Synchronisation Rule 1");
+        exportRule.Enabled = true;
+        exportRule.Direction = SyncRuleDirection.Export;
+        exportRule.MetaverseObjectTypeId = mvUserType.Id;
+        exportRule.ConnectedSystemId = targetSystem.Id;
+        exportRule.ConnectedSystem = targetSystem;
+        exportRule.ConnectedSystemObjectTypeId = targetUserType.Id;
+        exportRule.ConnectedSystemObjectType = targetUserType;
+        exportRule.ProvisionToConnectedSystem = true;
+        exportRule.ObjectScopingCriteriaGroups.Clear();
+        exportRule.ObjectMatchingRules.Clear();
+
+        exportRule.AttributeFlowRules.Clear();
+        var employeeIdMapping = new SyncRuleMapping
+        {
+            Id = 6002,
+            SyncRule = exportRule,
+            TargetConnectedSystemAttribute = csEmployeeIdAttr,
+            TargetConnectedSystemAttributeId = csEmployeeIdAttr.Id
+        };
+        employeeIdMapping.Sources.Add(new SyncRuleMappingSource
+        {
+            Id = 6002,
+            Order = 1,
+            MetaverseAttribute = employeeIdAttr,
+            MetaverseAttributeId = employeeIdAttr.Id
+        });
+        exportRule.AttributeFlowRules.Add(employeeIdMapping);
+
+        // Empty CsoLookup: no existing join, so evaluation goes down the provisioning path.
+        var cache = new ExportEvaluationCache(
+            new Dictionary<int, List<SyncRule>> { { mvUserType.Id, new List<SyncRule> { exportRule } } },
+            new Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>(),
+            Array.Empty<ConnectedSystemObjectAttributeValue>().ToLookup(av => (av.ConnectedSystemObject.Id, av.AttributeId)),
+            new List<int> { targetSystem.Id });
+
+        var changedAttributes = mvo.AttributeValues.ToList();
+
+        // Act
+        var result = await Jim.ExportEvaluation.EvaluateExportRulesWithNoNetChangeDetectionAsync(
+            mvo, changedAttributes, sourceSystem: null, cache, deferSave: true);
+
+        // Assert
+        Assert.That(result.ProvisioningCsosToCreate, Has.Count.EqualTo(1),
+            "A provisioning CSO should be deferred for batch creation");
+        var provisioningCso = result.ProvisioningCsosToCreate[0];
+        Assert.That(result.ProvisioningSyncRulesByCsoId.TryGetValue(provisioningCso.Id, out var attributedRule), Is.True,
+            "The result should record the export Synchronisation Rule that provisioned the CSO");
+        Assert.That(attributedRule, Is.SameAs(exportRule),
+            "The attributed Synchronisation Rule should be the export rule that caused provisioning");
+    }
+
+    /// <summary>
+    /// Repository-level twin semantics: claiming an unclaimed CSO succeeds and sets all four join
+    /// fields; a second claim attempt for a different Metaverse Object fails and leaves the first
+    /// claim's values intact.
+    /// </summary>
+    [Test]
+    public async Task TryClaimConnectedSystemObjectForJoinAsync_UnclaimedThenContested_FirstClaimWinsSecondLosesAsync()
+    {
+        // Arrange
+        var repo = new SyncRepository();
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+        var cso = SeedUnclaimedTargetCso(repo, targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+
+        var firstMvoId = Guid.NewGuid();
+        var secondMvoId = Guid.NewGuid();
+        var firstDateJoined = DateTime.UtcNow;
+
+        // Act - first claim succeeds
+        var firstResult = await repo.TryClaimConnectedSystemObjectForJoinAsync(cso.Id, firstMvoId, firstDateJoined);
+
+        // Assert
+        Assert.That(firstResult, Is.True, "The first claim on an unclaimed CSO must succeed");
+        Assert.That(cso.MetaverseObjectId, Is.EqualTo(firstMvoId));
+        Assert.That(cso.JoinType, Is.EqualTo(ConnectedSystemObjectJoinType.Joined));
+        Assert.That(cso.DateJoined, Is.EqualTo(firstDateJoined));
+        Assert.That(cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal));
+
+        // Act - second claim for a different MVO must lose
+        var secondResult = await repo.TryClaimConnectedSystemObjectForJoinAsync(cso.Id, secondMvoId, DateTime.UtcNow.AddSeconds(1));
+
+        // Assert - the first claim's values are untouched
+        Assert.That(secondResult, Is.False, "A second claim on an already-claimed CSO must fail");
+        Assert.That(cso.MetaverseObjectId, Is.EqualTo(firstMvoId), "The CSO must remain claimed by the first Metaverse Object");
+        Assert.That(cso.DateJoined, Is.EqualTo(firstDateJoined), "The first claim's DateJoined must be untouched by the failed second claim");
     }
 
     #endregion

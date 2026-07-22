@@ -275,7 +275,7 @@ public class ConfigurationChangeCaptureCoverageTests
         Assert.That(storedSnapshot, Is.Not.Null);
 
         // Second identical save records no new version.
-        _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SyncRule, 55))
+        _activityRepo.Setup(r => r.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SynchronisationRule, 55))
             .ReturnsAsync(storedSnapshot);
         _completedActivity = null;
 

@@ -11,7 +11,7 @@ ARG VERSION=dev
 # to skip the expensive generation step in local dev builds.
 ARG OPENAPI_STAGE=openapi-gen
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:ddcf70ad1ab963a4fcd41fbd722a6b660e404e87567cfbd46fd2809c21b02088 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:1fa23fc4872d95fd71c2833ebe65d7e84a43b2d51a31d119516852f13d9505a7 AS base
 ARG VERSION
 
 LABEL org.opencontainers.image.title="JIM Web"
@@ -52,18 +52,36 @@ RUN mkdir -p /data/keys /var/log/jim /connector-files \
 # Run as non-root for security (built-in 'app' user, UID 1654)
 USER app
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:ea8bde36c11b6e7eec2656d0e59101d4462f6bd630730f2c8201ed0572b295d5 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble@sha256:ed034a8bf0b24ded0cbbac07e17825d8e9ebfe21e308191d0f7421eaf5ad4664 AS build
 WORKDIR /src
 COPY ["Directory.Build.props", "./"]
 COPY ["VERSION", "./"]
 COPY ["src/JIM.Web/JIM.Web.csproj", "JIM.Web/"]
+COPY ["src/JIM.Web/packages.lock.json", "JIM.Web/"]
 COPY ["src/JIM.Models/JIM.Models.csproj", "JIM.Models/"]
+COPY ["src/JIM.Models/packages.lock.json", "JIM.Models/"]
 COPY ["src/JIM.Application/JIM.Application.csproj", "JIM.Application/"]
+COPY ["src/JIM.Application/packages.lock.json", "JIM.Application/"]
 COPY ["src/JIM.PostgresData/JIM.PostgresData.csproj", "JIM.PostgresData/"]
+COPY ["src/JIM.PostgresData/packages.lock.json", "JIM.PostgresData/"]
 COPY ["src/JIM.Utilities/JIM.Utilities.csproj", "JIM.Utilities/"]
+COPY ["src/JIM.Utilities/packages.lock.json", "JIM.Utilities/"]
 COPY ["src/JIM.Connectors/JIM.Connectors.csproj", "JIM.Connectors/"]
+COPY ["src/JIM.Connectors/packages.lock.json", "JIM.Connectors/"]
 COPY ["src/JIM.Data/JIM.Data.csproj", "JIM.Data/"]
+COPY ["src/JIM.Data/packages.lock.json", "JIM.Data/"]
 
+# This restore step is a Docker layer-caching optimisation only (warms the
+# NuGet package cache before the source COPY below invalidates later layers);
+# it deliberately does NOT pass RestoreLockedMode. Locked-mode enforcement for
+# JIM.Web happens at the publish step instead, because `dotnet restore` run in
+# isolation as a Microsoft.NET.Sdk.Web single-project restore inside this exact
+# SDK image hits a known upstream bug where the implicit
+# Microsoft.AspNetCore.App.Internal.Assets framework-reference package is
+# dropped from the locked-mode comparison and the restore fails NU1004 no
+# matter what the lock file contains (dotnet/aspnetcore#64897). `dotnet
+# publish` performs its own implicit restore and is unaffected, so it is the
+# step that actually validates and enforces the lock file for this project.
 RUN dotnet restore "./JIM.Web/JIM.Web.csproj"
 
 COPY src/ .
@@ -72,7 +90,7 @@ WORKDIR "/src/JIM.Web"
 # Publish stage - optimised for production
 FROM build AS publish
 ARG VERSION_SUFFIX=
-RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=false /p:VersionSuffix="${VERSION_SUFFIX}"
+RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=false /p:VersionSuffix="${VERSION_SUFFIX}" /p:RestoreLockedMode=true
 
 # Generate OpenAPI document in lightweight mode (no DB or IdP required).
 # The app starts, generates the schema from controller metadata, writes the
@@ -87,7 +105,7 @@ RUN dotnet publish "JIM.Web.csproj" -c Release -o /app/publish /p:UseAppHost=fal
 #
 # The output is written under /app/publish so that the final stage can pull
 # from either openapi-gen or publish using the same path.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:ddcf70ad1ab963a4fcd41fbd722a6b660e404e87567cfbd46fd2809c21b02088 AS openapi-gen
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:1fa23fc4872d95fd71c2833ebe65d7e84a43b2d51a31d119516852f13d9505a7 AS openapi-gen
 WORKDIR /app/publish
 COPY --from=publish /app/publish .
 ENV JIM_OPENAPI_GENERATE=true \

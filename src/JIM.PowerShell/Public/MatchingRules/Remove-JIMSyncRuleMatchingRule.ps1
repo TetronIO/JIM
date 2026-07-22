@@ -4,14 +4,14 @@
 function Remove-JIMSyncRuleMatchingRule {
     <#
     .SYNOPSIS
-        Removes an Object Matching Rule from a Sync Rule (advanced mode).
+        Removes an Object Matching Rule from a Synchronisation Rule (advanced mode).
 
     .DESCRIPTION
-        Deletes an Object Matching Rule from a Sync Rule.
+        Deletes an Object Matching Rule from a Synchronisation Rule.
         This operation cannot be undone.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Sync Rule.
+        The unique identifier of the Synchronisation Rule.
 
     .PARAMETER Id
         The unique identifier of the Matching Rule to delete.
@@ -25,7 +25,7 @@ function Remove-JIMSyncRuleMatchingRule {
     .EXAMPLE
         Remove-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 12
 
-        Removes Matching Rule 12 from Sync Rule 5 (with confirmation).
+        Removes Matching Rule 12 from Synchronisation Rule 5 (with confirmation).
 
     .EXAMPLE
         Remove-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 12 -Force
@@ -35,7 +35,7 @@ function Remove-JIMSyncRuleMatchingRule {
     .EXAMPLE
         Get-JIMSyncRuleMatchingRule -SyncRuleId 5 | Remove-JIMSyncRuleMatchingRule -Force
 
-        Removes all Matching Rules from Sync Rule 5 without confirmation.
+        Removes all Matching Rules from Synchronisation Rule 5 without confirmation.
 
     .LINK
         Get-JIMSyncRuleMatchingRule
@@ -60,10 +60,10 @@ function Remove-JIMSyncRuleMatchingRule {
             return
         }
 
-        $shouldProcess = $Force -or $PSCmdlet.ShouldProcess("Matching Rule $Id on Sync Rule $SyncRuleId", "Remove")
+        $shouldProcess = $Force -or $PSCmdlet.ShouldProcess("Matching Rule $Id on Synchronisation Rule $SyncRuleId", "Remove")
 
         if ($shouldProcess) {
-            Write-Verbose "Removing Matching Rule ID: $Id from Sync Rule ID: $SyncRuleId"
+            Write-Verbose "Removing Matching Rule ID: $Id from Synchronisation Rule ID: $SyncRuleId"
 
             try {
                 Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/matching-rules/$Id" -Method 'DELETE'

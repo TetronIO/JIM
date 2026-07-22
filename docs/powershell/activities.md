@@ -4,7 +4,7 @@ title: Activities
 
 # Activities
 
-Activity cmdlets retrieve and inspect the execution history of operations within JIM. Activities track all operations: synchronisation runs, data generation, certificate management, and other administrative actions. Use these cmdlets to review activity logs, retrieve execution statistics, and inspect child activities spawned by parent operations.
+Activity cmdlets retrieve and inspect the execution history of operations within JIM. Activities track all operations: synchronisation runs, data generation, certificate management, and other administrative actions. Example data generation is now its own distinct **Data Generation** activity type, separate from configuration changes to an Example Data Template. Use these cmdlets to review activity logs, retrieve execution statistics, and inspect child activities spawned by parent operations.
 
 ---
 
@@ -37,9 +37,9 @@ Get-JIMActivity -Id <guid> -ExecutionItems
 
 ### Output
 
-When using the **List** or **ById** parameter sets, returns one or more `PSCustomObject` instances representing activities, each containing properties such as `Id`, `Name`, `Type`, `Status`, `StartTime`, `EndTime`, and `TargetName`.
+When using the **List** or **ById** parameter sets, returns one or more `PSCustomObject` instances representing activities, each containing properties such as `Id`, `Created`, `Executed`, `Status`, `TargetType`, `TargetOperationType`, `TargetName`, `InitiatedByName`, and per-run totals such as `TotalErrors`.
 
-When using the **ExecutionItems** parameter set, returns `PSCustomObject` instances representing individual execution items, each containing properties such as `ObjectType`, `ObjectName`, `Operation`, `Status`, and `ErrorDetails`.
+When using the **ExecutionItems** parameter set, returns `PSCustomObject` instances representing individual execution items, each containing properties such as `ExternalIdValue`, `DisplayName`, `ConnectedSystemObjectType`, `ObjectChangeType`, `ErrorType`, and `OutcomeSummary`.
 
 ### Examples
 
@@ -75,7 +75,7 @@ Get-JIMActivity -Id $result.ActivityId
 ```powershell title="Review errors in execution items"
 $result = Start-JIMRunProfile -RunProfileId 42 -Wait -PassThru
 Get-JIMActivity -Id $result.ActivityId -ExecutionItems |
-    Where-Object { $_.Status -eq "Error" }
+    Where-Object { $null -ne $_.ErrorType }
 ```
 
 ---
@@ -98,7 +98,7 @@ Get-JIMActivityStats -Id <guid>
 
 ### Output
 
-Returns a `PSCustomObject` containing execution statistics with properties such as `TotalObjects`, `SuccessCount`, `ErrorCount`, `WarningCount`, `Duration`, and timing breakdowns.
+Returns a `PSCustomObject` containing execution statistics with properties such as `TotalObjectsProcessed`, `TotalObjectChangeCount`, `TotalUnchanged`, `TotalObjectErrors`, and `TotalObjectTypes`, plus per-operation breakdowns (`TotalCsoAdds`, `TotalJoins`, `TotalAttributeFlows`, `TotalExported`, and similar).
 
 ### Examples
 
@@ -119,10 +119,10 @@ Get-JIMActivityStats -Id $result.ActivityId
 ```powershell title="Check for errors after execution"
 $result = Start-JIMRunProfile -RunProfileId 42 -Wait -PassThru
 $stats = Get-JIMActivityStats -Id $result.ActivityId
-if ($stats.ErrorCount -gt 0) {
-    Write-Warning "Sync completed with $($stats.ErrorCount) errors"
+if ($stats.TotalObjectErrors -gt 0) {
+    Write-Warning "Sync completed with $($stats.TotalObjectErrors) errors"
     Get-JIMActivity -Id $result.ActivityId -ExecutionItems |
-        Where-Object { $_.Status -eq "Error" }
+        Where-Object { $null -ne $_.ErrorType }
 }
 ```
 
@@ -155,7 +155,7 @@ Get-JIMActivityChildren -Id <guid> -All [-PageSize <int>]
 
 ### Output
 
-Returns one or more `PSCustomObject` instances representing child activities, each containing the same properties as a standard activity object: `Id`, `Name`, `Type`, `Status`, `StartTime`, `EndTime`, and `TargetName`.
+Returns one or more `PSCustomObject` instances representing child activities, each containing the same properties as a standard activity object: `Id`, `Created`, `Executed`, `Status`, `TargetType`, `TargetOperationType`, and `TargetName`.
 
 ### Examples
 
@@ -176,12 +176,12 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" |
 Get-JIMActivity -Search "Nightly Sync Schedule" |
     Select-Object -First 1 |
     Get-JIMActivityChildren -All |
-    Format-Table Name, Status, StartTime, EndTime
+    Format-Table TargetName, Status, Created, Executed
 ```
 
 ```powershell title="Find failed child activities"
 Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -All |
-    Where-Object { $_.Status -eq "Failed" }
+    Where-Object { $_.Status -eq "FailedWithError" }
 ```
 
 ```powershell title="Get statistics for each child activity"

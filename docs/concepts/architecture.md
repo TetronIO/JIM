@@ -11,11 +11,9 @@ At the heart of JIM is the **metaverse**: a centralised repository of identity o
 - **Decoupled systems**<br /> Connected Systems do not need to know about each other; they only interact with the metaverse.
 - **Auditability**<br /> Every change is tracked as it passes through the hub.
 
-```mermaid
-flowchart LR
-    A["Source Systems\n\nHR Database\nBadge System"] -->|Import| B["Metaverse\n\nIdentity\nObjects"]
-    B -->|Export| C["Target Systems\n\nActive Directory\nEmail System"]
-```
+--8<-- "assets/diagrams/metaverse-pattern.svg"
+
+<p class="jim-diagram-caption">Sources project identities into the Metaverse; targets receive them from it. The same Connected System can be both source and target (writeback).<span class="jimdg-caption-motion"> Moving dots trace import and export flows.</span></p>
 
 **Key principle**: All identity data flows through the metaverse. JIM never synchronises directly between Connected Systems.
 
@@ -23,15 +21,17 @@ flowchart LR
 
 The following diagram shows JIM in the context of the systems and users it interacts with:
 
-<img class="diagram-light" alt="JIM System Context" src="../../diagrams/images/light/jim-structurizr-1-SystemContext.svg">
-<img class="diagram-dark" alt="JIM System Context" src="../../diagrams/images/dark/jim-structurizr-1-SystemContext.svg">
+--8<-- "assets/diagrams/system-context.svg"
+
+<p class="jim-diagram-caption">Administrators and automation clients work through JIM's UI and API; JIM synchronises with the surrounding systems. Dashed elements indicate planned connectivity.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
 ## Containers
 
 JIM is deployed as a set of Docker containers, each with a distinct responsibility:
 
-<img class="diagram-light" alt="JIM Containers" src="../../diagrams/images/light/jim-structurizr-1-Containers.svg">
-<img class="diagram-dark" alt="JIM Containers" src="../../diagrams/images/dark/jim-structurizr-1-Containers.svg">
+--8<-- "assets/diagrams/containers.svg"
+
+<p class="jim-diagram-caption">JIM's deployable containers. PostgreSQL doubles as the task queue: the Scheduler queues work and the Worker polls it, so the services coordinate through the database rather than calling each other.<span class="jimdg-caption-motion"> Moving dots trace identity data in flight.</span></p>
 
 ### JIM.Web
 
@@ -40,6 +40,10 @@ The web application provides both the **administrative user interface** (built w
 ### JIM.Worker
 
 The background processor that executes all identity operations -- imports, synchronisation, and exports. When an operation is triggered (manually, via the API, or by the scheduler), the Worker picks it up and processes it asynchronously. It handles batch processing, error reporting, and activity logging.
+
+--8<-- "assets/diagrams/worker-components.svg"
+
+<p class="jim-diagram-caption">Inside the Worker Service: the host dispatches import, synchronise and export processors, and the Sync Engine makes the synchronisation decisions. The host polls the task queue in PostgreSQL, where the whole service reads and writes staged and Metaverse data; the Connectors carry data to and from Connected Systems.<span class="jimdg-caption-motion"> Moving dots trace data arriving through, and leaving via, the Connectors.</span></p>
 
 ### JIM.Scheduler
 
@@ -57,16 +61,9 @@ JIM uses PostgreSQL as its sole data store. The database holds all configuration
 
 JIM follows a strict layered architecture. Each layer depends only on the layer directly below it -- higher layers never bypass intermediate layers.
 
-```mermaid
-flowchart TD
-    A["<b>Presentation</b><br>JIM.Web (Blazor + API)"]
-    B["<b>Application</b><br>JIM.Application (Servers)"]
-    C["<b>Domain</b><br>JIM.Models (Entities, DTOs)"]
-    D["<b>Data</b><br>JIM.PostgresData (EF Core)"]
-    E["<b>Integration</b><br>JIM.Connectors"]
+--8<-- "assets/diagrams/layered-architecture.svg"
 
-    A --> B --> C --> D --- E
-```
+<p class="jim-diagram-caption">Arrows show dependencies: each layer depends only on the layer directly beneath it. The Integration layer's Connectors sit at the base of the stack alongside data access.</p>
 
 ### Presentation Layer
 
@@ -76,8 +73,7 @@ flowchart TD
 
 **JIM.Application** -- contains the core business logic ("Servers") that orchestrate operations. This includes the sync engine, import/export processing, Run Profile execution, and all domain workflows. The UI and API never access the database directly; they always go through the Application layer.
 
-<img class="diagram-light" alt="Application Layer" src="../../diagrams/images/light/jim-structurizr-1-AppLayerComponents.svg">
-<img class="diagram-dark" alt="Application Layer" src="../../diagrams/images/dark/jim-structurizr-1-AppLayerComponents.svg">
+For a component-level breakdown of the Application Layer's domain servers and repositories, see the [Developer Guide's architecture page](../developer/architecture.md).
 
 ### Domain Layer
 

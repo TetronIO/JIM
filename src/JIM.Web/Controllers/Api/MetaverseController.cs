@@ -190,6 +190,39 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
         if (objectType == null)
             return NotFound(ApiErrorResponse.NotFound($"Object type with ID {id} not found."));
 
+        // Identity fields (Name, PluralName, Icon). Built-in types reject changes to these; only their deletion rules
+        // may be changed. Custom types apply the change with a case-insensitive uniqueness re-check. Icon follows the
+        // clearable-field convention: null leaves it unchanged, empty/whitespace clears it.
+        var trimmedName = request.Name?.Trim();
+        var trimmedPluralName = request.PluralName?.Trim();
+        var normalisedIcon = string.IsNullOrWhiteSpace(request.Icon) ? null : request.Icon.Trim();
+
+        var wantsNameChange = !string.IsNullOrEmpty(trimmedName) && trimmedName != objectType.Name;
+        var wantsPluralNameChange = !string.IsNullOrEmpty(trimmedPluralName) && trimmedPluralName != objectType.PluralName;
+        var wantsIconChange = request.Icon != null && normalisedIcon != objectType.Icon;
+
+        if (objectType.BuiltIn && (wantsNameChange || wantsPluralNameChange || wantsIconChange))
+            return BadRequest(ApiErrorResponse.BadRequest("Built-in Metaverse Object Types cannot be renamed or re-iconed; only their deletion rules can be changed."));
+
+        if (wantsNameChange)
+        {
+            var clashByName = await _application.Metaverse.GetMetaverseObjectTypeAsync(trimmedName!, includeChildObjects: false);
+            if (clashByName != null && clashByName.Id != objectType.Id)
+                return BadRequest(ApiErrorResponse.BadRequest($"Object type with name '{trimmedName}' already exists."));
+            objectType.Name = trimmedName!;
+        }
+
+        if (wantsPluralNameChange)
+        {
+            var clashByPluralName = await _application.Metaverse.GetMetaverseObjectTypeByPluralNameAsync(trimmedPluralName!, includeChildObjects: false);
+            if (clashByPluralName != null && clashByPluralName.Id != objectType.Id)
+                return BadRequest(ApiErrorResponse.BadRequest($"Object type with plural name '{trimmedPluralName}' already exists."));
+            objectType.PluralName = trimmedPluralName!;
+        }
+
+        if (wantsIconChange)
+            objectType.Icon = normalisedIcon;
+
         // Apply updates
         if (request.DeletionRule.HasValue)
             objectType.DeletionRule = request.DeletionRule.Value;
@@ -233,6 +266,119 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         var result = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectType.Id, false);
         return Ok(MetaverseObjectTypeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
+    /// Check whether a Metaverse Object Type name and/or plural name are available
+    /// </summary>
+    /// <remarks>
+    /// Backs the real-time create/edit dialog validator. Comparisons are case-insensitive. Supply
+    /// <paramref name="excludeId"/> when validating an edit so the type does not clash with its own current names.
+    /// At least one of <paramref name="name"/> or <paramref name="pluralName"/> must be supplied.
+    /// </remarks>
+    /// <param name="name">The candidate singular name.</param>
+    /// <param name="pluralName">The candidate plural name.</param>
+    /// <param name="excludeId">Optional Object Type ID to exclude (the type being edited).</param>
+    [HttpGet("object-types/name-availability", Name = "GetObjectTypeNameAvailability")]
+    [ProducesResponseType(typeof(MetaverseObjectTypeNameAvailabilityDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetObjectTypeNameAvailabilityAsync([FromQuery] string? name = null, [FromQuery] string? pluralName = null, [FromQuery] int? excludeId = null)
+    {
+        if (string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(pluralName))
+            return BadRequest(ApiErrorResponse.BadRequest("Supply a name and/or pluralName to check."));
+
+        var response = new MetaverseObjectTypeNameAvailabilityDto();
+
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            response.Name = name;
+            response.NameAvailable = await _application.Metaverse.IsMetaverseObjectTypeNameAvailableAsync(name, excludeId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(pluralName))
+        {
+            response.PluralName = pluralName;
+            response.PluralNameAvailable = await _application.Metaverse.IsMetaverseObjectTypePluralNameAvailableAsync(pluralName, excludeId);
+        }
+
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// Preview the impact of deleting a Metaverse Object Type
+    /// </summary>
+    /// <remarks>
+    /// Returns the two hard blocks (Metaverse Objects of the type, and Synchronisation Rules targeting it) and the
+    /// softer references (Predefined Searches, Example Data Templates, attribute bindings) that would be cascade-removed,
+    /// with <c>Blocked</c> and <c>RequiresConfirmation</c> flags. No change is made.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Object Type.</param>
+    [HttpGet("object-types/{id:int}/delete-preview", Name = "GetObjectTypeDeletePreview")]
+    [ProducesResponseType(typeof(ObjectTypeDeletionImpact), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetObjectTypeDeletePreviewAsync(int id)
+    {
+        var objectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(id, false);
+        if (objectType == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {id} not found."));
+
+        var impact = await _application.Metaverse.EvaluateObjectTypeDeletionAsync(objectType);
+        return Ok(impact);
+    }
+
+    /// <summary>
+    /// Delete a Metaverse Object Type
+    /// </summary>
+    /// <remarks>
+    /// Built-in types cannot be deleted (400). Metaverse Objects of the type, or Synchronisation Rules targeting it,
+    /// are hard blocks (409 with the impact) and must be removed first. When the deletion would cascade softer
+    /// references (Predefined Searches, Example Data Templates, attribute bindings) it requires
+    /// <paramref name="confirmationName"/> to exactly match the Object Type's name (400 otherwise). The bound attributes
+    /// themselves are not deleted; only their bindings to this type are removed.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Object Type.</param>
+    /// <param name="confirmationName">Required only when the deletion will cascade references: the Object Type's exact name.</param>
+    /// <param name="changeReason">Optional reason for the change, recorded on the audit Activity.</param>
+    /// <response code="200">Deleted; returns the impact listing what was removed.</response>
+    /// <response code="400">The Object Type is built-in, or a required confirmation name is missing or mismatched.</response>
+    /// <response code="404">Object Type not found.</response>
+    /// <response code="409">Refused because Metaverse Objects of the type or Synchronisation Rules targeting it exist; returns the blocking impact.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpDelete("object-types/{id:int}", Name = "DeleteObjectType")]
+    [ProducesResponseType(typeof(ObjectTypeDeletionImpact), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ObjectTypeDeletionImpact), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeleteObjectTypeAsync(int id, [FromQuery] string? confirmationName = null, [FromQuery] string? changeReason = null)
+    {
+        _logger.LogInformation("Deleting Metaverse Object Type: {Id}", id);
+
+        var objectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(id, false);
+        if (objectType == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {id} not found."));
+
+        if (objectType.BuiltIn)
+            return BadRequest(ApiErrorResponse.BadRequest("Built-in Metaverse Object Types cannot be deleted."));
+
+        var impact = await _application.Metaverse.EvaluateObjectTypeDeletionAsync(objectType);
+
+        if (impact.Blocked)
+            return Conflict(impact);
+
+        if (impact.RequiresConfirmation && !string.Equals(confirmationName, objectType.Name, StringComparison.Ordinal))
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"This deletion will cascade-remove references. To confirm, supply confirmationName exactly matching the Object Type name '{objectType.Name}'."));
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var result = apiKey != null
+            ? await _application.Metaverse.DeleteMetaverseObjectTypeAsync(objectType, apiKey, changeReason)
+            : await _application.Metaverse.DeleteMetaverseObjectTypeAsync(objectType, await GetCurrentUserAsync(), changeReason);
+
+        _logger.LogInformation("Deleted Metaverse Object Type: {Id} ({Name})", id, LogSanitiser.Sanitise(objectType.Name));
+        return Ok(result);
     }
 
     /// <summary>
@@ -283,18 +429,19 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <response code="201">Attribute created successfully.</response>
     /// <response code="400">Invalid request or validation failed.</response>
     /// <response code="401">User not authenticated.</response>
+    /// <response code="409">An attribute with the same name (compared case-insensitively) already exists.</response>
     [HttpPost("attributes", Name = "CreateAttribute")]
     [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateAttributeAsync([FromBody] CreateMetaverseAttributeRequest request)
     {
         _logger.LogInformation("Creating metaverse attribute: {Name}", LogSanitiser.Sanitise(request.Name));
 
-        // Check if attribute with same name already exists
-        var existing = await _application.Metaverse.GetMetaverseAttributeAsync(request.Name);
-        if (existing != null)
-            return BadRequest(ApiErrorResponse.BadRequest($"Attribute with name '{request.Name}' already exists."));
+        // Enforce case-insensitive uniqueness (e.g. 'CostCentre' clashes with 'costCentre'). Names are stored as-is.
+        if (!await _application.Metaverse.IsMetaverseAttributeNameUniqueAsync(request.Name))
+            return Conflict(ApiErrorResponse.Conflict($"A Metaverse Attribute named '{request.Name}' already exists (names are compared case-insensitively)."));
 
         var attribute = new MetaverseAttribute
         {
@@ -333,107 +480,193 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     }
 
     /// <summary>
-    /// Update a Metaverse Attribute
+    /// Check whether a Metaverse Attribute name is available
     /// </summary>
+    /// <remarks>
+    /// Backs the real-time create/rename validator. The comparison is case-insensitive, so <c>CostCentre</c> is taken
+    /// if <c>costCentre</c> exists. Supply <paramref name="excludeId"/> when validating a rename so the attribute does
+    /// not clash with its own current name.
+    /// </remarks>
+    /// <param name="name">The candidate name.</param>
+    /// <param name="excludeId">Optional attribute ID to exclude (the attribute being renamed).</param>
+    [HttpGet("attributes/name-availability", Name = "GetAttributeNameAvailability")]
+    [ProducesResponseType(typeof(MetaverseAttributeNameAvailabilityDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetAttributeNameAvailabilityAsync([FromQuery] string name, [FromQuery] int? excludeId = null)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return BadRequest(ApiErrorResponse.BadRequest("A name to check is required."));
+
+        var available = await _application.Metaverse.IsMetaverseAttributeNameUniqueAsync(name, excludeId);
+        return Ok(new MetaverseAttributeNameAvailabilityDto { Name = name, Available = available });
+    }
+
+    /// <summary>
+    /// Update a Metaverse Attribute's name and rendering configuration
+    /// </summary>
+    /// <remarks>
+    /// Renames the attribute (subject to the same case-insensitive uniqueness check as creation) and/or updates its
+    /// rendering hint. Type and plurality are changed via the schema endpoint; Object Type bindings via the bind /
+    /// unassign endpoints. Built-in attributes cannot be modified.
+    /// </remarks>
     /// <param name="id">The unique identifier of the Attribute.</param>
-    /// <param name="request">The Attribute update request.</param>
-    /// <returns>The updated Attribute details.</returns>
+    /// <param name="request">The update request.</param>
     /// <response code="200">Attribute updated successfully.</response>
-    /// <response code="400">Invalid request or validation failed.</response>
+    /// <response code="400">Invalid request, or the attribute is built-in.</response>
     /// <response code="404">Attribute not found.</response>
+    /// <response code="409">The requested name is already used by another attribute (compared case-insensitively).</response>
     /// <response code="401">User not authenticated.</response>
-    [HttpPut("attributes/{id:int}", Name = "UpdateAttribute")]
+    [HttpPatch("attributes/{id:int}", Name = "UpdateAttribute")]
     [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateAttributeAsync(int id, [FromBody] UpdateMetaverseAttributeRequest request)
     {
         _logger.LogInformation("Updating metaverse attribute: {Id}", id);
 
-        // If we're updating object type associations, include them in the query to properly manage the many-to-many relationship.
-        // Use withChangeTracking: true because we modify and save the returned entity.
-        var attribute = request.ObjectTypeIds != null
-            ? await _application.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id, withChangeTracking: true)
-            : await _application.Metaverse.GetMetaverseAttributeAsync(id, withChangeTracking: true);
+        if (string.IsNullOrWhiteSpace(request.Name) && !request.RenderingHint.HasValue)
+            return BadRequest(ApiErrorResponse.BadRequest("Supply a new Name and/or RenderingHint to update."));
 
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
         if (attribute == null)
             return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
 
         if (attribute.BuiltIn)
-            return BadRequest(ApiErrorResponse.BadRequest("Cannot modify built-in attributes."));
+            return BadRequest(ApiErrorResponse.BadRequest("Built-in attributes cannot be modified."));
 
-        // Apply updates
-        if (!string.IsNullOrEmpty(request.Name))
+        var apiKey = await GetCurrentApiKeyAsync();
+        var user = apiKey == null ? await GetCurrentUserAsync() : null;
+
+        // Rename via the audited rename path when a different name is supplied (re-checks case-insensitive uniqueness).
+        if (!string.IsNullOrWhiteSpace(request.Name) && !string.Equals(request.Name, attribute.Name, StringComparison.Ordinal))
         {
-            // Check if new name conflicts with existing
-            var existing = await _application.Metaverse.GetMetaverseAttributeAsync(request.Name);
-            if (existing != null && existing.Id != id)
-                return BadRequest(ApiErrorResponse.BadRequest($"Attribute with name '{request.Name}' already exists."));
-            attribute.Name = request.Name;
-        }
-
-        if (request.Type.HasValue)
-            attribute.Type = request.Type.Value;
-
-        if (request.AttributePlurality.HasValue)
-            attribute.AttributePlurality = request.AttributePlurality.Value;
-
-        // Update object type associations if specified
-        if (request.ObjectTypeIds != null)
-        {
-            // Validate that removing object types won't orphan stored attribute values
             try
             {
-                await _application.Metaverse.ValidateObjectTypeRemovalAsync(attribute, request.ObjectTypeIds);
+                if (apiKey != null)
+                    await _application.Metaverse.RenameMetaverseAttributeAsync(id, request.Name, apiKey, request.ChangeReason);
+                else
+                    await _application.Metaverse.RenameMetaverseAttributeAsync(id, request.Name, user, request.ChangeReason);
             }
-            catch (MetaverseAttributeInUseException ex)
+            catch (MetaverseAttributeNameConflictException ex)
             {
-                _logger.LogWarning("Cannot update attribute {Id} object types: {Message}", id, ex.Message);
-                return BadRequest(ApiErrorResponse.ValidationError(ex.Message));
-            }
-
-            // Collection is loaded from the query when ObjectTypeIds is specified
-            attribute.MetaverseObjectTypes.Clear();
-            foreach (var objectTypeId in request.ObjectTypeIds)
-            {
-                var objectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectTypeId, false);
-                if (objectType == null)
-                    return BadRequest(ApiErrorResponse.BadRequest($"Object type with ID {objectTypeId} not found."));
-
-                attribute.MetaverseObjectTypes.Add(objectType);
+                return Conflict(ApiErrorResponse.Conflict(ex.Message));
             }
         }
 
-        // Get the current API key for Activity attribution
-        var apiKey = await GetCurrentApiKeyAsync();
-        if (apiKey != null)
-            await _application.Metaverse.UpdateMetaverseAttributeAsync(attribute, apiKey, request.ChangeReason);
-        else
-            await _application.Metaverse.UpdateMetaverseAttributeAsync(attribute, await GetCurrentUserAsync(), request.ChangeReason);
+        // Rendering hint via the generic audited update path.
+        if (request.RenderingHint.HasValue)
+        {
+            var tracked = await _application.Metaverse.GetMetaverseAttributeAsync(id, withChangeTracking: true);
+            if (tracked != null)
+            {
+                tracked.RenderingHint = request.RenderingHint.Value;
+                if (apiKey != null)
+                    await _application.Metaverse.UpdateMetaverseAttributeAsync(tracked, apiKey, request.ChangeReason);
+                else
+                    await _application.Metaverse.UpdateMetaverseAttributeAsync(tracked, user, request.ChangeReason);
+            }
+        }
 
-        _logger.LogInformation("Updated metaverse attribute: {Id} ({Name})", attribute.Id, LogSanitiser.Sanitise(attribute.Name));
+        _logger.LogInformation("Updated metaverse attribute: {Id}", id);
 
-        var result = await _application.Metaverse.GetMetaverseAttributeAsync(attribute.Id);
+        var result = await _application.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id);
         return Ok(MetaverseAttributeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
+    /// Change a Metaverse Attribute's data type and/or plurality
+    /// </summary>
+    /// <remarks>
+    /// Refused while any Metaverse Object holds a stored value for the attribute; in that case a 409 is returned with
+    /// the blocking impact (the stored-value count). Built-in attributes cannot be changed.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Attribute.</param>
+    /// <param name="request">The new type and plurality.</param>
+    /// <response code="200">Schema changed successfully; returns the updated attribute.</response>
+    /// <response code="400">Invalid request, or the attribute is built-in.</response>
+    /// <response code="404">Attribute not found.</response>
+    /// <response code="409">Refused because Metaverse Objects hold stored values; returns the blocking impact.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPatch("attributes/{id:int}/schema", Name = "ChangeAttributeSchema")]
+    [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(AttributeSchemaChangeImpact), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ChangeAttributeSchemaAsync(int id, [FromBody] ChangeMetaverseAttributeSchemaRequest request)
+    {
+        _logger.LogInformation("Changing schema of metaverse attribute: {Id}", id);
+
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
+
+        if (attribute.BuiltIn)
+            return BadRequest(ApiErrorResponse.BadRequest("Built-in attributes cannot be changed."));
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var impact = apiKey != null
+            ? await _application.Metaverse.ChangeMetaverseAttributeSchemaAsync(id, request.Type, request.AttributePlurality, apiKey, request.ChangeReason)
+            : await _application.Metaverse.ChangeMetaverseAttributeSchemaAsync(id, request.Type, request.AttributePlurality, await GetCurrentUserAsync(), request.ChangeReason);
+
+        if (impact.BlockedByValues)
+            return Conflict(impact);
+
+        var result = await _application.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id);
+        return Ok(MetaverseAttributeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
+    /// Preview the impact of deleting a Metaverse Attribute
+    /// </summary>
+    /// <remarks>
+    /// Returns whether stored values block the deletion (with per-Object-Type counts) or, when only configuration
+    /// references exist, the list of references that would be cascade-removed. No change is made. Use this to render
+    /// the confirmation dialog; the delete itself enforces the same rules server-side.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Attribute.</param>
+    [HttpGet("attributes/{id:int}/deletion-preview", Name = "GetAttributeDeletionPreview")]
+    [ProducesResponseType(typeof(AttributeDeletionImpact), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetAttributeDeletionPreviewAsync(int id)
+    {
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
+
+        var impact = await _application.Metaverse.EvaluateAttributeDeletionAsync(attribute);
+        return Ok(impact);
     }
 
     /// <summary>
     /// Delete a Metaverse Attribute
     /// </summary>
+    /// <remarks>
+    /// Stored values are the only hard block: if any Metaverse Object holds a value a 409 is returned with the
+    /// per-Object-Type counts. When only configuration references exist they are cascade-removed, but only when
+    /// <paramref name="confirmationName"/> exactly matches the attribute's name (the server-enforced type-the-name
+    /// gate); a missing or mismatched confirmation returns 400. On success the response lists what was removed.
+    /// Built-in attributes cannot be deleted.
+    /// </remarks>
     /// <param name="id">The unique identifier of the Attribute to delete.</param>
+    /// <param name="confirmationName">Required only when the deletion will cascade references: the attribute's exact name.</param>
     /// <param name="changeReason">Optional reason for the deletion, recorded on the audit Activity.</param>
-    /// <returns>No content on success.</returns>
-    /// <response code="204">Attribute deleted successfully.</response>
-    /// <response code="400">Cannot delete built-in or in-use Attribute.</response>
+    /// <response code="200">Attribute deleted; returns the impact listing any references removed.</response>
+    /// <response code="400">The attribute is built-in, or a required confirmation name is missing or mismatched.</response>
     /// <response code="404">Attribute not found.</response>
+    /// <response code="409">Refused because Metaverse Objects hold stored values; returns the blocking impact.</response>
     /// <response code="401">User not authenticated.</response>
     [HttpDelete("attributes/{id:int}", Name = "DeleteAttribute")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(AttributeDeletionImpact), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(AttributeDeletionImpact), StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> DeleteAttributeAsync(int id, [FromQuery] string? changeReason = null)
+    public async Task<IActionResult> DeleteAttributeAsync(int id, [FromQuery] string? confirmationName = null, [FromQuery] string? changeReason = null)
     {
         _logger.LogInformation("Deleting metaverse attribute: {Id}", id);
 
@@ -442,29 +675,149 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
 
         if (attribute.BuiltIn)
-            return BadRequest(ApiErrorResponse.BadRequest("Cannot delete built-in attributes."));
+            return BadRequest(ApiErrorResponse.BadRequest("Built-in attributes cannot be deleted."));
 
-        try
-        {
-            // Get the current API key for Activity attribution
-            var apiKey = await GetCurrentApiKeyAsync();
-            if (apiKey != null)
-                await _application.Metaverse.DeleteMetaverseAttributeAsync(attribute, apiKey, changeReason);
-            else
-                await _application.Metaverse.DeleteMetaverseAttributeAsync(attribute, await GetCurrentUserAsync(), changeReason);
-        }
-        catch (MetaverseAttributeInUseException ex)
-        {
-            _logger.LogWarning("Cannot delete attribute {Id}: {Message}", id, ex.Message);
-            var error = ApiErrorResponse.ValidationError(ex.Message);
-            if (ex.ReferencingSyncRules.Count > 0)
-                error.Details = System.Text.Json.JsonSerializer.Serialize(ex.ReferencingSyncRules);
-            return BadRequest(error);
-        }
+        var impact = await _application.Metaverse.EvaluateAttributeDeletionAsync(attribute);
 
-        _logger.LogInformation("Deleted metaverse attribute: {Id}", id);
+        // Stored values are the only hard block.
+        if (impact.BlockedByValues)
+            return Conflict(impact);
 
-        return NoContent();
+        // Cascade deletes require the type-the-name confirmation, enforced here so REST/PowerShell callers cannot
+        // accidentally mass-delete referenced attributes.
+        if (impact.RequiresConfirmation && !string.Equals(confirmationName, attribute.Name, StringComparison.Ordinal))
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"This deletion will remove {impact.References.Count} configuration reference(s). To confirm, supply confirmationName exactly matching the attribute name '{attribute.Name}'."));
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var result = apiKey != null
+            ? await _application.Metaverse.DeleteMetaverseAttributeWithCascadeAsync(attribute, apiKey, changeReason)
+            : await _application.Metaverse.DeleteMetaverseAttributeWithCascadeAsync(attribute, await GetCurrentUserAsync(), changeReason);
+
+        _logger.LogInformation("Deleted metaverse attribute: {Id} (removed {ReferenceCount} reference(s))", id, result.References.Count);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Bind a Metaverse Attribute to a Metaverse Object Type
+    /// </summary>
+    /// <remarks>
+    /// Idempotent. Built-in attributes cannot have their bindings modified.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Attribute.</param>
+    /// <param name="objectTypeId">The Metaverse Object Type to bind the attribute to.</param>
+    /// <param name="changeReason">Optional reason for the change, recorded on the audit Activity.</param>
+    /// <response code="200">Bound successfully; returns the updated attribute.</response>
+    /// <response code="400">The attribute is built-in.</response>
+    /// <response code="404">Attribute or Object Type not found.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpPost("attributes/{id:int}/object-types/{objectTypeId:int}", Name = "BindAttributeToObjectType")]
+    [ProducesResponseType(typeof(MetaverseAttributeDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> BindAttributeToObjectTypeAsync(int id, int objectTypeId, [FromQuery] string? changeReason = null)
+    {
+        _logger.LogInformation("Binding metaverse attribute {Id} to object type {ObjectTypeId}", id, objectTypeId);
+
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
+
+        if (attribute.BuiltIn)
+            return BadRequest(ApiErrorResponse.BadRequest("Built-in attributes cannot have their bindings modified."));
+
+        var objectType = await _application.Metaverse.GetMetaverseObjectTypeAsync(objectTypeId, false);
+        if (objectType == null)
+            return NotFound(ApiErrorResponse.NotFound($"Object type with ID {objectTypeId} not found."));
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        if (apiKey != null)
+            await _application.Metaverse.BindAttributeToObjectTypeAsync(id, objectTypeId, apiKey, changeReason);
+        else
+            await _application.Metaverse.BindAttributeToObjectTypeAsync(id, objectTypeId, await GetCurrentUserAsync(), changeReason);
+
+        var result = await _application.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id);
+        return Ok(MetaverseAttributeDetailDto.FromEntity(result!));
+    }
+
+    /// <summary>
+    /// Preview the impact of unassigning a Metaverse Attribute from a Metaverse Object Type
+    /// </summary>
+    /// <remarks>
+    /// Returns whether stored values of that type block the unassignment, and the type-scoped references (plus the
+    /// binding) that would be removed, with a <c>RequiresConfirmation</c> flag. No change is made.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Attribute.</param>
+    /// <param name="objectTypeId">The Metaverse Object Type to unassign from.</param>
+    [HttpGet("attributes/{id:int}/object-types/{objectTypeId:int}/unassign-preview", Name = "GetAttributeUnassignPreview")]
+    [ProducesResponseType(typeof(AttributeUnassignImpact), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetAttributeUnassignPreviewAsync(int id, int objectTypeId)
+    {
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
+
+        var impact = await _application.Metaverse.EvaluateAttributeUnassignAsync(id, objectTypeId);
+        return Ok(impact);
+    }
+
+    /// <summary>
+    /// Unassign a Metaverse Attribute from a Metaverse Object Type
+    /// </summary>
+    /// <remarks>
+    /// Stored values held by Metaverse Objects of that type are the only hard block (409 with the count). When the
+    /// unassignment would cascade type-scoped references it requires <paramref name="confirmationName"/> to exactly
+    /// match the attribute's name (400 otherwise). Attribute-global references and the attribute itself are untouched.
+    /// Built-in attributes cannot be unassigned.
+    /// </remarks>
+    /// <param name="id">The unique identifier of the Attribute.</param>
+    /// <param name="objectTypeId">The Metaverse Object Type to unassign from.</param>
+    /// <param name="confirmationName">Required only when the unassignment will cascade references: the attribute's exact name.</param>
+    /// <param name="changeReason">Optional reason for the change, recorded on the audit Activity.</param>
+    /// <response code="200">Unassigned; returns the impact listing what was removed.</response>
+    /// <response code="400">The attribute is built-in, or a required confirmation name is missing or mismatched.</response>
+    /// <response code="404">Attribute not found, or it is not bound to the Object Type.</response>
+    /// <response code="409">Refused because Metaverse Objects of the type hold stored values; returns the blocking impact.</response>
+    /// <response code="401">User not authenticated.</response>
+    [HttpDelete("attributes/{id:int}/object-types/{objectTypeId:int}", Name = "UnassignAttributeFromObjectType")]
+    [ProducesResponseType(typeof(AttributeUnassignImpact), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(AttributeUnassignImpact), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> UnassignAttributeFromObjectTypeAsync(int id, int objectTypeId, [FromQuery] string? confirmationName = null, [FromQuery] string? changeReason = null)
+    {
+        _logger.LogInformation("Unassigning metaverse attribute {Id} from object type {ObjectTypeId}", id, objectTypeId);
+
+        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
+        if (attribute == null)
+            return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
+
+        if (attribute.BuiltIn)
+            return BadRequest(ApiErrorResponse.BadRequest("Built-in attributes cannot be unassigned."));
+
+        var impact = await _application.Metaverse.EvaluateAttributeUnassignAsync(id, objectTypeId);
+
+        if (!impact.WasBound)
+            return NotFound(ApiErrorResponse.NotFound($"Attribute {id} is not bound to Object Type {objectTypeId}."));
+
+        if (impact.BlockedByValues)
+            return Conflict(impact);
+
+        if (impact.RequiresConfirmation && !string.Equals(confirmationName, attribute.Name, StringComparison.Ordinal))
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"This unassignment will remove type-scoped references. To confirm, supply confirmationName exactly matching the attribute name '{attribute.Name}'."));
+
+        var apiKey = await GetCurrentApiKeyAsync();
+        var result = apiKey != null
+            ? await _application.Metaverse.UnassignAttributeFromObjectTypeAsync(id, objectTypeId, apiKey, changeReason)
+            : await _application.Metaverse.UnassignAttributeFromObjectTypeAsync(id, objectTypeId, await GetCurrentUserAsync(), changeReason);
+
+        _logger.LogInformation("Unassigned metaverse attribute {Id} from object type {ObjectTypeId}", id, objectTypeId);
+        return Ok(result);
     }
 
     #region Configuration Change History
@@ -832,6 +1185,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     /// <param name="predefinedSearchUri">The URI identifier of the predefined search (e.g. "users", "groups").</param>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection).</param>
     /// <param name="search">Optional search query to filter across all string Attribute Values (case-insensitive).</param>
+    /// <param name="hasAttribute">Optional attribute-presence filter: restricts results to Metaverse Objects that hold
+    /// a value for the named Metaverse Attribute. The name is matched case-insensitively; an unrecognised name yields
+    /// no results.</param>
     /// <returns>A paginated list of Metaverse Object headers with the predefined search Attributes.</returns>
     [HttpGet("objects/search/{predefinedSearchUri}", Name = "SearchObjects")]
     [ProducesResponseType(typeof(PaginatedResponse<MetaverseObjectHeaderDto>), StatusCodes.Status200OK)]
@@ -840,14 +1196,33 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     public async Task<IActionResult> SearchObjectsAsync(
         [FromRoute] string predefinedSearchUri,
         [FromQuery] PaginationRequest pagination,
-        [FromQuery] string? search = null)
+        [FromQuery] string? search = null,
+        [FromQuery] string? hasAttribute = null)
     {
-        _logger.LogDebug("Searching Metaverse Objects via predefined search (Uri: {Uri}, Page: {Page}, PageSize: {PageSize}, Search: {Search})",
-            LogSanitiser.Sanitise(predefinedSearchUri), pagination.Page, pagination.PageSize, LogSanitiser.Sanitise(search));
+        _logger.LogDebug("Searching Metaverse Objects via predefined search (Uri: {Uri}, Page: {Page}, PageSize: {PageSize}, Search: {Search}, HasAttribute: {HasAttribute})",
+            LogSanitiser.Sanitise(predefinedSearchUri), pagination.Page, pagination.PageSize, LogSanitiser.Sanitise(search), LogSanitiser.Sanitise(hasAttribute));
 
         var predefinedSearch = await _application.Search.GetPredefinedSearchAsync(predefinedSearchUri);
         if (predefinedSearch == null || !predefinedSearch.IsEnabled)
             return NotFound(ApiErrorResponse.NotFound($"Predefined search '{predefinedSearchUri}' not found."));
+
+        // Resolve the optional attribute-presence filter. An unrecognised name cannot match any object, so return an
+        // empty page rather than silently dropping the filter (which would return every object of the type).
+        int? hasAttributeId = null;
+        if (!string.IsNullOrWhiteSpace(hasAttribute))
+        {
+            var presenceAttribute = await _application.Metaverse.GetMetaverseAttributeAsync(hasAttribute);
+            if (presenceAttribute == null)
+                return Ok(new PaginatedResponse<MetaverseObjectHeaderDto>
+                {
+                    Items = [],
+                    TotalCount = 0,
+                    Page = pagination.Page,
+                    PageSize = pagination.PageSize
+                });
+
+            hasAttributeId = presenceAttribute.Id;
+        }
 
         var result = await _application.Metaverse.GetMetaverseObjectHeadersPagedAsync(
             predefinedSearch,
@@ -855,7 +1230,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
             pageSize: pagination.PageSize,
             searchQuery: search,
             sortBy: pagination.SortBy,
-            sortDescending: pagination.IsDescending);
+            sortDescending: pagination.IsDescending,
+            hasAttributeId: hasAttributeId);
 
         var headers = result.Results.Select(MetaverseObjectHeaderDto.FromHeader);
 

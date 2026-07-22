@@ -8,7 +8,7 @@ function Get-JIMConnectedSystemDeletionPreview {
 
     .DESCRIPTION
         Retrieves a detailed impact analysis of what would be affected if the connected system were deleted.
-        This includes counts of objects, sync rules, run profiles, partitions, and metaverse objects that
+        This includes counts of objects, Synchronisation Rules, run profiles, partitions, and metaverse objects that
         would be impacted. Use this before Remove-JIMConnectedSystem to understand the scope of the operation.
 
     .PARAMETER ConnectedSystemId

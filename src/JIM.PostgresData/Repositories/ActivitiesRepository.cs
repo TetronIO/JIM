@@ -6,6 +6,7 @@ using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Models.Enums;
+using JIM.Models.Staging;
 using JIM.Models.Utility;
 using Microsoft.EntityFrameworkCore;
 namespace JIM.PostgresData.Repositories;
@@ -25,6 +26,71 @@ public class ActivityRepository : IActivityRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <inheritdoc />
+    public async Task CreateActivityRunProfileExecutionItemsAsync(IReadOnlyCollection<ActivityRunProfileExecutionItem> items)
+    {
+        if (items.Count == 0)
+            return;
+
+        foreach (var item in items.Where(i => i.Id == Guid.Empty))
+            item.Id = Guid.NewGuid();
+
+        // AddRange traverses each item's navigation graph and marks every untracked entity it reaches as Added.
+        // Connected System Object change snapshots carried on the sync outcomes reference pre-existing entities
+        // (the CSO the change belongs to, attribute definitions), which must not be re-inserted. Sever those
+        // navigations first, preserving their scalar/shadow foreign keys so the persisted rows keep the links.
+        var severedAttributeIds = new List<(ConnectedSystemObjectChangeAttribute AttributeChange, int AttributeId)>();
+        var severedReferenceValueIds = new List<(ConnectedSystemObjectChangeAttributeValue ValueChange, Guid ReferenceCsoId)>();
+        var changeSnapshots = items
+            .SelectMany(i => i.SyncOutcomes.Select(o => o.ConnectedSystemObjectChange))
+            .Concat(items.Select(i => i.ConnectedSystemObjectChange))
+            .Where(c => c != null)
+            .Select(c => c!)
+            .Distinct()
+            .ToList();
+
+        foreach (var change in changeSnapshots)
+        {
+            if (change.ConnectedSystemObject != null)
+            {
+                change.ConnectedSystemObjectId ??= change.ConnectedSystemObject.Id;
+                change.ConnectedSystemObject = null;
+            }
+
+            foreach (var attributeChange in change.AttributeChanges)
+            {
+                if (attributeChange.Attribute != null)
+                {
+                    severedAttributeIds.Add((attributeChange, attributeChange.Attribute.Id));
+                    attributeChange.Attribute = null;
+                }
+
+                foreach (var valueChange in attributeChange.ValueChanges.Where(vc => vc.ReferenceValue != null))
+                {
+                    severedReferenceValueIds.Add((valueChange, valueChange.ReferenceValue!.Id));
+                    valueChange.ReferenceValue = null;
+                }
+            }
+        }
+
+        Repository.Database.ActivityRunProfileExecutionItems.AddRange(items);
+
+        // Re-apply the severed foreign keys via their shadow properties now the entities are tracked.
+        foreach (var (attributeChange, attributeId) in severedAttributeIds)
+            Repository.Database.Entry(attributeChange).Property("AttributeId").CurrentValue = attributeId;
+        foreach (var (valueChange, referenceCsoId) in severedReferenceValueIds)
+            Repository.Database.Entry(valueChange).Property("ReferenceValueId").CurrentValue = referenceCsoId;
+
+        await Repository.Database.SaveChangesAsync();
+
+        // Maintain the Activity stat counters (#1078) for this EF-persisted batch too, so
+        // housekeeping Activities read their stats from counters like the bulk sync paths.
+        // Runs after SaveChangesAsync so EF's fixup has stamped each outcome's RPEI foreign key.
+        var syncOutcomes = items.SelectMany(i => i.SyncOutcomes).ToList();
+        await ActivityStatCounterWriter.UpsertDeltasAsync(
+            Repository.Database, ActivityStatCounterCalculator.CalculateRpeiInsertDeltas(items, syncOutcomes));
+    }
+
     public async Task UpdateActivityAsync(Activity activity)
     {
         // Use detach-safe update to avoid graph traversal on detached Activity entities.
@@ -32,6 +98,41 @@ public class ActivityRepository : IActivityRepository
         // causing identity conflicts with shared MetaverseAttribute/MetaverseObjectType instances.
         Repository.UpdateDetachedSafe(activity);
         await Repository.Database.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Atomically increments AttemptCount and advances LastSeen on the aggregated failed-authentication Activity row
+    /// matching the given window bucket. On relational providers this issues a single atomic SQL UPDATE
+    /// (<c>ExecuteUpdateAsync</c>), making concurrent increments for the same window race-safe. The in-memory test
+    /// provider does not support <c>ExecuteUpdateAsync</c> (see the identical pattern in
+    /// <c>SyncRepository.CsOperations.cs</c>), so it falls back to a tracked load/update/save.
+    /// </summary>
+    public async Task<bool> IncrementAggregatedFailedAuthenticationAsync(string apiKeyPrefix, string clientIp, string reason, DateTime windowStart, DateTime lastSeen)
+    {
+        var query = Repository.Database.Activities
+            .Where(a => a.TargetType == ActivityTargetType.Authentication
+                && a.ApiKeyPrefix == apiKeyPrefix
+                && a.ClientIpAddress == clientIp
+                && a.SecurityEventReason == reason
+                && a.AggregationWindowStart == windowStart);
+
+        if (Repository.Database.Database.IsRelational())
+        {
+            var rowsAffected = await query.ExecuteUpdateAsync(setters => setters
+                .SetProperty(a => a.AttemptCount, a => (a.AttemptCount ?? 0) + 1)
+                .SetProperty(a => a.LastSeen, lastSeen));
+            return rowsAffected > 0;
+        }
+
+        // InMemory provider (tests): ExecuteUpdateAsync not supported.
+        var existing = await query.AsTracking().SingleOrDefaultAsync();
+        if (existing == null)
+            return false;
+
+        existing.AttemptCount = (existing.AttemptCount ?? 0) + 1;
+        existing.LastSeen = lastSeen;
+        await Repository.Database.SaveChangesAsync();
+        return true;
     }
 
     public async Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId)
@@ -518,7 +619,7 @@ public class ActivityRepository : IActivityRepository
         return targetType switch
         {
             ActivityTargetType.ConnectedSystem => query.Where(a => a.ConnectedSystemId == targetObjectId),
-            ActivityTargetType.SyncRule => query.Where(a => a.SyncRuleId == targetObjectId),
+            ActivityTargetType.SynchronisationRule => query.Where(a => a.SyncRuleId == targetObjectId),
             ActivityTargetType.MetaverseAttribute => query.Where(a => a.MetaverseAttributeId == targetObjectId),
             ActivityTargetType.MetaverseObjectType => query.Where(a => a.MetaverseObjectTypeId == targetObjectId),
             ActivityTargetType.PredefinedSearch => query.Where(a => a.PredefinedSearchId == targetObjectId),
@@ -736,14 +837,17 @@ public class ActivityRepository : IActivityRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        // Header-tier read: do NOT eager-load the ConnectedSystemObject graph. The previous
+        // implementation Include()d each RPEI's CSO plus its entire (multi-valued) AttributeValues
+        // collection and then projected in memory, so a page that landed on a few large group CSOs
+        // pulled tens of thousands of attribute-value rows into memory just to render 100 grid rows
+        // (the 100% CPU seen on large activities). Instead, resolve the live display name / external
+        // id / type via correlated subqueries in the SQL projection below. Filters and sorts still
+        // reference the CSO navigations; EF Core translates those to SQL without an Include.
+        // AsNoTracking because this is a read-only projection.
         var query = Repository.Database.ActivityRunProfileExecutionItems
-            .AsSplitQuery() // Use split query to avoid cartesian explosion from multiple collection includes
-            .Include(a => a.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.Type)
-            .Include(a => a.ConnectedSystemObject)
-                .ThenInclude(cso => cso!.AttributeValues)
-                    .ThenInclude(av => av.Attribute)
-            .Where(a => a.Activity.Id == activityId);
+            .AsNoTracking()
+            .Where(a => a.ActivityId == activityId);
 
         // Apply object type filter if specified (falls back to ObjectTypeSnapshot when CSO/Type is null)
         if (objectTypeFilter != null)
@@ -775,14 +879,15 @@ public class ActivityRepository : IActivityRepository
         // Apply outcome type filter if specified — matches against the denormalised OutcomeSummary string
         if (outcomeTypeFilter != null)
         {
-            var outcomeTypes = outcomeTypeFilter.ToList();
-            if (outcomeTypes.Count > 0)
+            // Pre-compute the "<OutcomeType>:" tokens client-side. Embedding ot.ToString() inside the
+            // predicate makes EF Core try (and fail) to translate object.ToString() to SQL; hoisting it
+            // out yields captured constant strings that translate to OutcomeSummary LIKE '%token%'.
+            var outcomeTokens = outcomeTypeFilter.Select(ot => ot + ":").ToList();
+            if (outcomeTokens.Count > 0)
             {
-                // Build a predicate that requires at least one of the selected outcome types
-                // to appear in the OutcomeSummary string (e.g., "Projected:" prefix match)
                 query = query.Where(a =>
                     a.OutcomeSummary != null &&
-                    outcomeTypes.Any(ot => a.OutcomeSummary.Contains(ot.ToString() + ":")));
+                    outcomeTokens.Any(token => a.OutcomeSummary.Contains(token)));
             }
         }
 
@@ -860,23 +965,68 @@ public class ActivityRepository : IActivityRepository
         // Get total count before pagination
         var totalCount = await query.CountAsync();
 
-        // Apply pagination and materialise
+        // Apply pagination, then project in SQL to only the columns the header needs. The live
+        // display name and external-id value are pulled with correlated subqueries against the CSO's
+        // AttributeValues (no full-collection materialisation), falling back to the RPEI snapshot
+        // columns when the CSO is gone or the value is absent. External-id formatting mirrors
+        // ConnectedSystemObjectAttributeValue.ToStringNoName and runs in memory over the <= pageSize
+        // projected rows.
         var offset = (page - 1) * pageSize;
-        var entities = await query.Skip(offset).Take(pageSize).ToListAsync();
+        var projected = await query
+            .Skip(offset).Take(pageSize)
+            .Select(i => new
+            {
+                i.Id,
+                i.ErrorType,
+                i.ObjectChangeType,
+                i.OutcomeSummary,
+                i.DisplayNameSnapshot,
+                i.ExternalIdSnapshot,
+                i.ObjectTypeSnapshot,
+                DisplayNameLive = i.ConnectedSystemObject!.AttributeValues
+                    .Where(av => av.Attribute.Name.ToLower() == "displayname")
+                    .Select(av => av.StringValue)
+                    .FirstOrDefault(),
+                TypeLive = i.ConnectedSystemObject!.Type!.Name,
+                // External id resolved as per-column scalar subqueries. A single multi-column
+                // projection here (`.Select(av => new {...}).FirstOrDefault()`) makes EF Core emit a
+                // ROW_NUMBER() window over the WHOLE AttributeValues table instead of a correlated
+                // subquery, which is catastrophic at scale; separate single-column subqueries each
+                // translate to a cheap correlated scalar subquery run only for the page's rows.
+                ExtIdString = i.ConnectedSystemObject!.AttributeValues
+                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
+                    .Select(av => av.StringValue).FirstOrDefault(),
+                ExtIdDateTime = i.ConnectedSystemObject!.AttributeValues
+                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
+                    .Select(av => av.DateTimeValue).FirstOrDefault(),
+                ExtIdInt = i.ConnectedSystemObject!.AttributeValues
+                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
+                    .Select(av => av.IntValue).FirstOrDefault(),
+                ExtIdLong = i.ConnectedSystemObject!.AttributeValues
+                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
+                    .Select(av => av.LongValue).FirstOrDefault(),
+                ExtIdGuid = i.ConnectedSystemObject!.AttributeValues
+                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
+                    .Select(av => av.GuidValue).FirstOrDefault(),
+                ExtIdBool = i.ConnectedSystemObject!.AttributeValues
+                    .Where(av => av.AttributeId == i.ConnectedSystemObject!.ExternalIdAttributeId)
+                    .Select(av => av.BoolValue).FirstOrDefault()
+            })
+            .ToListAsync();
 
-        // Project to DTO in memory
-        // Use snapshot fields as fallback if CSO was deleted (preserves historical display data)
-        var results = entities.Select(i => new ActivityRunProfileExecutionItemHeader
+        // Project to the header DTO in memory (fallback to snapshot fields when the live CSO value
+        // is absent, preserving historical display data for deleted objects).
+        var results = projected.Select(p => new ActivityRunProfileExecutionItemHeader
         {
-            Id = i.Id,
-            ExternalIdValue = i.ConnectedSystemObject?.ExternalIdAttributeValue?.ToStringNoName() ?? i.ExternalIdSnapshot,
-            DisplayName = i.ConnectedSystemObject?.AttributeValues.FirstOrDefault(av => av.Attribute.Name.Equals("displayname", StringComparison.OrdinalIgnoreCase))?.StringValue
-                ?? i.DisplayNameSnapshot,
-            ConnectedSystemObjectType = i.ConnectedSystemObject?.Type?.Name
-                ?? i.ObjectTypeSnapshot,
-            ErrorType = i.ErrorType,
-            ObjectChangeType = i.ObjectChangeType,
-            OutcomeSummary = i.OutcomeSummary
+            Id = p.Id,
+            ExternalIdValue = FormatExternalIdValue(
+                p.ExtIdString, p.ExtIdDateTime, p.ExtIdInt,
+                p.ExtIdLong, p.ExtIdGuid, p.ExtIdBool) ?? p.ExternalIdSnapshot,
+            DisplayName = p.DisplayNameLive ?? p.DisplayNameSnapshot,
+            ConnectedSystemObjectType = p.TypeLive ?? p.ObjectTypeSnapshot,
+            ErrorType = p.ErrorType,
+            ObjectChangeType = p.ObjectChangeType,
+            OutcomeSummary = p.OutcomeSummary
         }).ToList();
 
         // Build paged result set
@@ -899,43 +1049,171 @@ public class ActivityRepository : IActivityRepository
         pagedResultSet.Results.Clear();
         return pagedResultSet;
     }
-        
+
+    /// <summary>
+    /// Formats an external-id attribute value from its raw value columns, mirroring
+    /// <see cref="JIM.Models.Staging.ConnectedSystemObjectAttributeValue.ToStringNoName"/> for the
+    /// scalar column set an external id can use (string, date, int, long, guid, bool; reference and
+    /// binary do not apply to an external id). Returns null when no value column is populated, so the
+    /// caller can fall back to the RPEI external-id snapshot column.
+    /// </summary>
+    private static string? FormatExternalIdValue(string? stringValue, DateTime? dateTimeValue, int? intValue, long? longValue, Guid? guidValue, bool? boolValue)
+    {
+        if (!string.IsNullOrEmpty(stringValue))
+            return stringValue;
+        if (dateTimeValue != null)
+            return dateTimeValue.ToString();
+        if (intValue != null)
+            return intValue.ToString();
+        if (longValue != null)
+            return longValue.ToString();
+        if (guidValue != null)
+            return guidValue.ToString();
+        if (boolValue != null)
+            return boolValue.ToString();
+        return null;
+    }
+
+    /// <summary>
+    /// Normalised per-dimension stat counts for one Activity, buildable either from the persisted
+    /// stat counter rows (#1078, the cheap path) or by aggregating the RPEI/outcome tables (the
+    /// legacy and finalisation path). <see cref="BuildActivityRunProfileExecutionStats"/> maps
+    /// either source onto the stats model identically.
+    /// </summary>
+    private sealed class ActivityStatAggregation
+    {
+        public Dictionary<ObjectChangeType, int> ChangeTypeCounts { get; } = new();
+        public Dictionary<string, int> ObjectTypeCounts { get; } = new();
+        public Dictionary<ActivityRunProfileExecutionItemErrorType, int> ErrorTypeCounts { get; } = new();
+        public Dictionary<NoChangeReason, int> NoChangeReasonCounts { get; } = new();
+        public Dictionary<ActivityRunProfileExecutionItemSyncOutcomeType, int> OutcomeTypeCounts { get; } = new();
+    }
+
     public async Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId)
     {
         // Get total objects processed from the activity itself (tracks all objects in scope)
         var activity = await Repository.Database.Activities.OrderBy(a => a.Id).FirstOrDefaultAsync(a => a.Id == activityId);
-        var totalObjectsProcessed = activity?.ObjectsProcessed ?? 0;
 
+        // Counter maintenance is raw SQL; on non-relational providers (the EF in-memory test
+        // provider) stats always derive from aggregation, exactly as before #1078.
+        var isRelational = Repository.Database.Database.IsRelational();
+
+        // Cheap path (#1078): in-progress Activities read the advisory incremental counters the
+        // persistence paths maintain; finalised Activities read the exact stored counters. Either
+        // way the read is O(counter rows), never an aggregation over the RPEI/outcome tables.
+        if (activity != null && isRelational && (activity.Status == ActivityStatus.InProgress || activity.RunProfileExecutionStatsFinalised))
+        {
+            var counterAggregation = await BuildStatAggregationFromCountersAsync(activityId);
+            return BuildActivityRunProfileExecutionStats(activityId, activity, counterAggregation);
+        }
+
+        // Legacy path: the Activity completed before the counter table existed (or the Activity
+        // row is missing). Aggregate from the RPEI/outcome tables as before.
+        var aggregation = await BuildStatAggregationFromRpeiTablesAsync(activityId);
+
+        // Lazily finalise completed legacy Activities so every subsequent read is cheap; their
+        // stats are immutable, so aggregating more than once is pure waste.
+        if (activity != null && isRelational && IsTerminalActivityStatus(activity.Status))
+        {
+            await ReplaceCountersWithAggregationAsync(activity.Id, aggregation, alsoPersistFinalisedFlag: true);
+            activity.RunProfileExecutionStatsFinalised = true;
+        }
+
+        return BuildActivityRunProfileExecutionStats(activityId, activity, aggregation);
+    }
+
+    /// <inheritdoc />
+    public async Task FinaliseActivityRunProfileExecutionStatsAsync(Activity activity)
+    {
+        // Non-relational providers have no counter table; leaving the flag false keeps their
+        // stats on the aggregation path, matching pre-#1078 behaviour.
+        if (!Repository.Database.Database.IsRelational())
+            return;
+
+        var aggregation = await BuildStatAggregationFromRpeiTablesAsync(activity.Id);
+        await ReplaceCountersWithAggregationAsync(activity.Id, aggregation, alsoPersistFinalisedFlag: false);
+
+        // The caller's subsequent UpdateActivityAsync persists the flag together with the
+        // terminal status; if that update never happens, the flag stays false and the lazy
+        // finalisation above repairs it on first read.
+        activity.RunProfileExecutionStatsFinalised = true;
+    }
+
+    private static bool IsTerminalActivityStatus(ActivityStatus status) => status is
+        ActivityStatus.Complete
+        or ActivityStatus.CompleteWithWarning
+        or ActivityStatus.CompleteWithError
+        or ActivityStatus.FailedWithError
+        or ActivityStatus.Cancelled;
+
+    /// <summary>
+    /// Builds the stat aggregation from the persisted <see cref="ActivityStatCounter"/> rows.
+    /// Rows whose enum keys cannot be parsed (which should not occur) are skipped defensively.
+    /// </summary>
+    private async Task<ActivityStatAggregation> BuildStatAggregationFromCountersAsync(Guid activityId)
+    {
+        var aggregation = new ActivityStatAggregation();
+        var counters = await Repository.Database.ActivityStatCounters
+            .AsNoTracking()
+            .Where(c => c.ActivityId == activityId)
+            .ToListAsync();
+
+        foreach (var counter in counters)
+        {
+            var count = (int)Math.Min(counter.Count, int.MaxValue);
+            switch (counter.Dimension)
+            {
+                case ActivityStatDimension.ObjectTypeName:
+                    aggregation.ObjectTypeCounts[counter.Key] = count;
+                    break;
+                case ActivityStatDimension.ObjectChangeType when int.TryParse(counter.Key, out var changeType):
+                    aggregation.ChangeTypeCounts[(ObjectChangeType)changeType] = count;
+                    break;
+                case ActivityStatDimension.ErrorType when int.TryParse(counter.Key, out var errorType):
+                    aggregation.ErrorTypeCounts[(ActivityRunProfileExecutionItemErrorType)errorType] = count;
+                    break;
+                case ActivityStatDimension.NoChangeReason when int.TryParse(counter.Key, out var reason):
+                    aggregation.NoChangeReasonCounts[(NoChangeReason)reason] = count;
+                    break;
+                case ActivityStatDimension.OutcomeType when int.TryParse(counter.Key, out var outcomeType):
+                    aggregation.OutcomeTypeCounts[(ActivityRunProfileExecutionItemSyncOutcomeType)outcomeType] = count;
+                    break;
+            }
+        }
+
+        return aggregation;
+    }
+
+    /// <summary>
+    /// Builds the stat aggregation by aggregating the RPEI and Sync Outcome tables: the exact
+    /// (and at scale, expensive) source used for legacy reads and completion-time finalisation.
+    /// </summary>
+    private async Task<ActivityStatAggregation> BuildStatAggregationFromRpeiTablesAsync(Guid activityId)
+    {
+        var aggregation = new ActivityStatAggregation();
         var rpeiQuery = Repository.Database.ActivityRunProfileExecutionItems
             .Where(q => q.Activity.Id == activityId);
 
-        // Check if this activity has sync outcome data (phases 1-3 of outcome graph).
-        // If outcomes exist, derive stats from outcome nodes for richer counting
-        // (e.g., multi-system exports count each target system separately).
-        // If no outcomes exist (legacy data or tracking level = None), fall back to RPEI ObjectChangeType counting.
-        var hasOutcomes = await Repository.Database.ActivityRunProfileExecutionItemSyncOutcomes
-            .AnyAsync(o => o.ActivityRunProfileExecutionItem.Activity.Id == activityId);
-
-        // --- RPEI-based aggregate data (always needed for shared stats, NoChange, errors, and RPEI-only types) ---
-        var aggregateData = await rpeiQuery
-            .GroupBy(q => new
-            {
-                q.ObjectChangeType,
-                HasError = q.ErrorType != null && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet,
-                q.NoChangeReason
-            })
-            .Select(g => new
-            {
-                g.Key.ObjectChangeType,
-                g.Key.HasError,
-                g.Key.NoChangeReason,
-                Count = g.Count()
-            })
+        var changeTypeData = await rpeiQuery
+            .GroupBy(q => new { q.ObjectChangeType, q.NoChangeReason })
+            .Select(g => new { g.Key.ObjectChangeType, g.Key.NoChangeReason, Count = g.Count() })
             .ToListAsync();
+        foreach (var row in changeTypeData)
+        {
+            aggregation.ChangeTypeCounts[row.ObjectChangeType] =
+                aggregation.ChangeTypeCounts.GetValueOrDefault(row.ObjectChangeType) + row.Count;
 
-        // Get object type counts with names (separate query as it needs GROUP BY on type name).
-        // Falls back to ObjectTypeSnapshot when the CSO/Type navigation is null (e.g. export RPEIs
-        // where the CSO was deleted, or the snapshot was populated but FK not retained).
+            // Reasons are only meaningful (and only consumed) for NoChange items.
+            if (row.ObjectChangeType == ObjectChangeType.NoChange && row.NoChangeReason.HasValue)
+            {
+                aggregation.NoChangeReasonCounts[row.NoChangeReason.Value] =
+                    aggregation.NoChangeReasonCounts.GetValueOrDefault(row.NoChangeReason.Value) + row.Count;
+            }
+        }
+
+        // Object type counts with names. Falls back to ObjectTypeSnapshot when the CSO/Type
+        // navigation is null (e.g. export RPEIs where the CSO was deleted, or the snapshot was
+        // populated but FK not retained).
         var objectTypeCounts = await rpeiQuery
             .Select(q => q.ConnectedSystemObject != null && q.ConnectedSystemObject.Type != null
                 ? q.ConnectedSystemObject.Type.Name
@@ -943,20 +1221,88 @@ public class ActivityRepository : IActivityRepository
             .Where(name => name != null)
             .GroupBy(name => name!)
             .Select(g => new { TypeName = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.TypeName, x => x.Count);
+            .ToListAsync();
+        foreach (var row in objectTypeCounts)
+            aggregation.ObjectTypeCounts[row.TypeName] = row.Count;
 
-        var totalObjectTypes = objectTypeCounts.Count;
-
-        // Get error type counts (separate query as it needs GROUP BY on error type)
         var errorTypeCounts = await rpeiQuery
             .Where(q => q.ErrorType != null && q.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
             .GroupBy(q => q.ErrorType!.Value)
             .Select(g => new { ErrorType = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.ErrorType, x => x.Count);
+            .ToListAsync();
+        foreach (var row in errorTypeCounts)
+            aggregation.ErrorTypeCounts[row.ErrorType] = row.Count;
 
-        // Shared stats always come from RPEIs
-        var totalObjectChangeCount = aggregateData.Sum(x => x.Count);
-        var totalObjectErrors = aggregateData.Where(x => x.HasError).Sum(x => x.Count);
+        var outcomeTypeCounts = await Repository.Database.ActivityRunProfileExecutionItemSyncOutcomes
+            .Where(o => o.ActivityRunProfileExecutionItem.Activity.Id == activityId)
+            .GroupBy(o => o.OutcomeType)
+            .Select(g => new { OutcomeType = g.Key, Count = g.Count() })
+            .ToListAsync();
+        foreach (var row in outcomeTypeCounts)
+            aggregation.OutcomeTypeCounts[row.OutcomeType] = row.Count;
+
+        return aggregation;
+    }
+
+    /// <summary>
+    /// Replaces the Activity's counter rows with the exact values from the given aggregation,
+    /// atomically, optionally also persisting the finalised flag directly (used by the lazy
+    /// legacy path, which has no subsequent Activity update to carry the flag).
+    /// </summary>
+    private async Task ReplaceCountersWithAggregationAsync(Guid activityId, ActivityStatAggregation aggregation, bool alsoPersistFinalisedFlag)
+    {
+        var deltas = new Dictionary<ActivityStatCounterKey, long>();
+        foreach (var (changeType, count) in aggregation.ChangeTypeCounts)
+            deltas[new ActivityStatCounterKey(activityId, ActivityStatDimension.ObjectChangeType, ActivityStatCounterCalculator.EnumKey(changeType))] = count;
+        foreach (var (typeName, count) in aggregation.ObjectTypeCounts)
+            deltas[new ActivityStatCounterKey(activityId, ActivityStatDimension.ObjectTypeName, typeName)] = count;
+        foreach (var (errorType, count) in aggregation.ErrorTypeCounts)
+            deltas[new ActivityStatCounterKey(activityId, ActivityStatDimension.ErrorType, ActivityStatCounterCalculator.EnumKey(errorType))] = count;
+        foreach (var (reason, count) in aggregation.NoChangeReasonCounts)
+            deltas[new ActivityStatCounterKey(activityId, ActivityStatDimension.NoChangeReason, ActivityStatCounterCalculator.EnumKey(reason))] = count;
+        foreach (var (outcomeType, count) in aggregation.OutcomeTypeCounts)
+            deltas[new ActivityStatCounterKey(activityId, ActivityStatDimension.OutcomeType, ActivityStatCounterCalculator.EnumKey(outcomeType))] = count;
+
+        var database = Repository.Database.Database;
+        var ownTransaction = database.CurrentTransaction == null ? await database.BeginTransactionAsync() : null;
+        try
+        {
+            await database.ExecuteSqlRawAsync(@"DELETE FROM ""ActivityStatCounters"" WHERE ""ActivityId"" = {0}", activityId);
+            await ActivityStatCounterWriter.UpsertDeltasAsync(Repository.Database, deltas);
+            if (alsoPersistFinalisedFlag)
+                await database.ExecuteSqlRawAsync(@"UPDATE ""Activities"" SET ""RunProfileExecutionStatsFinalised"" = TRUE WHERE ""Id"" = {0}", activityId);
+            if (ownTransaction != null)
+                await ownTransaction.CommitAsync();
+        }
+        finally
+        {
+            if (ownTransaction != null)
+                await ownTransaction.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// Maps a stat aggregation onto the stats model. Preserves the pre-counter semantics exactly:
+    /// when outcome counts exist they drive the richer per-outcome stats (e.g. one object exported
+    /// to two systems counts twice), otherwise the RPEI ObjectChangeType counts drive the legacy
+    /// mapping, with the Activity's target type disambiguating housekeeping deletions.
+    /// </summary>
+    private static ActivityRunProfileExecutionStats BuildActivityRunProfileExecutionStats(Guid activityId, Activity? activity, ActivityStatAggregation aggregation)
+    {
+        var totalObjectsProcessed = activity?.ObjectsProcessed ?? 0;
+        var hasOutcomes = aggregation.OutcomeTypeCounts.Count > 0;
+
+        var objectTypeCounts = aggregation.ObjectTypeCounts;
+        var errorTypeCounts = aggregation.ErrorTypeCounts;
+        var totalObjectTypes = objectTypeCounts.Count;
+
+        // Shared stats always come from RPEIs. Total errors equals the sum of the per-error-type
+        // counts because both use the same predicate (ErrorType set and not NotSet).
+        var totalObjectChangeCount = aggregation.ChangeTypeCounts.Values.Sum();
+        var totalObjectErrors = errorTypeCounts.Values.Sum();
+
+        int ChangeTypeCount(ObjectChangeType changeType) => aggregation.ChangeTypeCounts.GetValueOrDefault(changeType);
+        int OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType outcomeType) => aggregation.OutcomeTypeCounts.GetValueOrDefault(outcomeType);
 
         // --- Outcome-based or RPEI-based stats depending on whether outcomes exist ---
         int totalCsoAdds, totalCsoUpdates, totalCsoDeletes;
@@ -966,89 +1312,83 @@ public class ActivityRepository : IActivityRepository
         int totalPendingExportsFromOutcomes;
         int totalDriftCorrections;
         int totalProvisioned;
+        int totalMvoDeleted;
 
         if (hasOutcomes)
         {
-            // Derive stats from outcome nodes — counts outcome actions across all RPEIs.
-            // This gives richer semantics: e.g., one object exported to 2 systems = 2 Exported outcomes.
-            var outcomeCounts = await Repository.Database.ActivityRunProfileExecutionItemSyncOutcomes
-                .Where(o => o.ActivityRunProfileExecutionItem.Activity.Id == activityId)
-                .GroupBy(o => o.OutcomeType)
-                .Select(g => new { OutcomeType = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.OutcomeType, x => x.Count);
-
-            // Import stats from outcomes
-            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded, out totalCsoAdds);
-            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated, out totalCsoUpdates);
-            // Deletions: CsoDeleted (sync-phase actual deletions) + DeletionDetected (import-phase detection)
-            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted, out totalCsoDeletes);
-            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected, out var totalDeletionDetected);
-            totalCsoDeletes += totalDeletionDetected;
+            // Import stats from outcomes. Deletions: CsoDeleted (sync-phase actual deletions)
+            // + DeletionDetected (import-phase detection).
+            totalCsoAdds = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded);
+            totalCsoUpdates = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated);
+            totalCsoDeletes = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted)
+                + OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected);
 
             // Sync stats from outcomes
-            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Projected, out totalProjections);
-            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Joined, out totalJoins);
-            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow, out totalAttributeFlows);
-            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected, out totalDisconnections);
-            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope, out totalDisconnectedOutOfScope);
+            totalProjections = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+            totalJoins = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
+            totalAttributeFlows = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
+            totalDisconnections = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected);
+            totalDisconnectedOutOfScope = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope);
 
             // Export stats from outcomes
-            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Exported, out totalExported);
-            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned, out totalDeprovisioned);
+            totalExported = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.Exported);
+            totalDeprovisioned = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned);
 
-            // Pending Export stats from outcomes
-            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated, out totalPendingExportsFromOutcomes);
-
-            // Drift correction from outcomes
-            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection, out totalDriftCorrections);
-
-            // Provisioned from outcomes (outcome-only concept, no legacy fallback)
-            outcomeCounts.TryGetValue(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned, out totalProvisioned);
+            // Pending Export, drift correction, provisioning and Metaverse Object deletion
+            // stats from outcomes (housekeeping batches, #1020)
+            totalPendingExportsFromOutcomes = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated);
+            totalDriftCorrections = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.DriftCorrection);
+            totalProvisioned = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned);
+            totalMvoDeleted = OutcomeCount(ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
         }
         else
         {
-            // Legacy fallback: derive stats from RPEI ObjectChangeType (pre-outcome graph behaviour)
-            totalCsoAdds = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Added).Sum(x => x.Count);
-            totalCsoUpdates = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Updated).Sum(x => x.Count);
-            totalCsoDeletes = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deleted).Sum(x => x.Count);
+            // Legacy fallback: derive stats from RPEI ObjectChangeType (pre-outcome graph behaviour).
+            // ObjectChangeType.Deleted is ambiguous between CSO and Metaverse Object deletions; the
+            // Activity's target type disambiguates: a housekeeping batch only ever deletes MVOs.
+            var isHousekeeping = activity?.TargetType == ActivityTargetType.MetaverseObjectHousekeeping;
+            var totalDeleted = ChangeTypeCount(ObjectChangeType.Deleted);
 
-            totalProjections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Projected).Sum(x => x.Count);
-            totalJoins = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Joined).Sum(x => x.Count);
-            totalAttributeFlows = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.AttributeFlow).Sum(x => x.Count);
+            totalCsoAdds = ChangeTypeCount(ObjectChangeType.Added);
+            totalCsoUpdates = ChangeTypeCount(ObjectChangeType.Updated);
+            totalCsoDeletes = isHousekeeping ? 0 : totalDeleted;
+            totalMvoDeleted = isHousekeeping ? totalDeleted : 0;
 
-            totalDisconnections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Disconnected).Sum(x => x.Count);
-            totalDisconnectedOutOfScope = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DisconnectedOutOfScope).Sum(x => x.Count);
+            totalProjections = ChangeTypeCount(ObjectChangeType.Projected);
+            totalJoins = ChangeTypeCount(ObjectChangeType.Joined);
+            totalAttributeFlows = ChangeTypeCount(ObjectChangeType.AttributeFlow);
 
-            totalExported = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Exported).Sum(x => x.Count);
-            totalDeprovisioned = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Deprovisioned).Sum(x => x.Count);
+            totalDisconnections = ChangeTypeCount(ObjectChangeType.Disconnected);
+            totalDisconnectedOutOfScope = ChangeTypeCount(ObjectChangeType.DisconnectedOutOfScope);
+
+            totalExported = ChangeTypeCount(ObjectChangeType.Exported);
+            totalDeprovisioned = ChangeTypeCount(ObjectChangeType.Deprovisioned);
 
             totalPendingExportsFromOutcomes = 0;
 
-            totalDriftCorrections = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.DriftCorrection).Sum(x => x.Count);
+            totalDriftCorrections = ChangeTypeCount(ObjectChangeType.DriftCorrection);
 
             totalProvisioned = 0; // Provisioned is an outcome-only concept; no ObjectChangeType equivalent
         }
 
         // --- Stats that always come from RPEIs (no outcome type equivalent) ---
-        var totalOutOfScopeRetainJoin = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.OutOfScopeRetainJoin).Sum(x => x.Count);
-        var totalCreated = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.Created).Sum(x => x.Count);
+        var totalOutOfScopeRetainJoin = ChangeTypeCount(ObjectChangeType.OutOfScopeRetainJoin);
+        var totalCreated = ChangeTypeCount(ObjectChangeType.Created);
 
         // Pending Export stats: use outcome-based count when available, otherwise fall back to RPEI count
-        var totalPendingExportsFromRpeis = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.PendingExport).Sum(x => x.Count);
-        var totalPendingExports = hasOutcomes ? totalPendingExportsFromOutcomes : totalPendingExportsFromRpeis;
+        var totalPendingExports = hasOutcomes ? totalPendingExportsFromOutcomes : ChangeTypeCount(ObjectChangeType.PendingExport);
 
         // Pending Export reconciliation stats (populated during confirming import)
         // TotalPendingExportsConfirmed is stored directly on the Activity (not derived from RPEIs)
         var totalPendingExportsConfirmed = activity?.PendingExportsConfirmed ?? 0;
-        // Retrying and Failed are derived from error type counts (already calculated above)
+        // Retrying and Failed are derived from error type counts
         errorTypeCounts.TryGetValue(ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed, out var totalPendingExportsRetrying);
         errorTypeCounts.TryGetValue(ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed, out var totalPendingExportsFailed);
 
         // NoChange stats (always from RPEIs — no outcome equivalent)
-        var noChangeItems = aggregateData.Where(x => x.ObjectChangeType == ObjectChangeType.NoChange).ToList();
-        var totalNoChanges = noChangeItems.Sum(x => x.Count);
-        var totalMvoNoAttributeChanges = noChangeItems.Where(x => x.NoChangeReason == NoChangeReason.MvoNoAttributeChanges).Sum(x => x.Count);
-        var totalCsoAlreadyCurrent = noChangeItems.Where(x => x.NoChangeReason == NoChangeReason.CsoAlreadyCurrent).Sum(x => x.Count);
+        var totalNoChanges = ChangeTypeCount(ObjectChangeType.NoChange);
+        var totalMvoNoAttributeChanges = aggregation.NoChangeReasonCounts.GetValueOrDefault(NoChangeReason.MvoNoAttributeChanges);
+        var totalCsoAlreadyCurrent = aggregation.NoChangeReasonCounts.GetValueOrDefault(NoChangeReason.CsoAlreadyCurrent);
 
         return new ActivityRunProfileExecutionStats
         {
@@ -1074,6 +1414,7 @@ public class ActivityRepository : IActivityRepository
             TotalOutOfScopeRetainJoin = totalOutOfScopeRetainJoin,
             TotalDriftCorrections = totalDriftCorrections,
             TotalProvisioned = totalProvisioned,
+            TotalMvoDeleted = totalMvoDeleted,
 
             // Direct creation stats
             TotalCreated = totalCreated,

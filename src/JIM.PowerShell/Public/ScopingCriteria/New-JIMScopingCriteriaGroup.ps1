@@ -4,17 +4,17 @@
 function New-JIMScopingCriteriaGroup {
     <#
     .SYNOPSIS
-        Creates a new scoping criteria group for a sync rule.
+        Creates a new scoping criteria group for a Synchronisation Rule.
 
     .DESCRIPTION
-        Creates a new scoping criteria group on an export sync rule.
+        Creates a new scoping criteria group on an export Synchronisation Rule.
         Groups can be created at the root level or nested within an existing group.
         The group type determines how criteria within it are evaluated:
         - All: All criteria must match (AND logic)
         - Any: At least one criterion must match (OR logic)
 
     .PARAMETER SyncRuleId
-        The unique identifier of the sync rule.
+        The unique identifier of the Synchronisation Rule.
 
     .PARAMETER ParentGroupId
         Optional. The ID of an existing group to nest this group within.
@@ -86,14 +86,14 @@ function New-JIMScopingCriteriaGroup {
         }
 
         $target = if ($PSBoundParameters.ContainsKey('ParentGroupId')) {
-            "Sync Rule $SyncRuleId (under group $ParentGroupId)"
+            "Synchronisation Rule $SyncRuleId (under group $ParentGroupId)"
         }
         else {
-            "Sync Rule $SyncRuleId (root level)"
+            "Synchronisation Rule $SyncRuleId (root level)"
         }
 
         if ($PSCmdlet.ShouldProcess($target, "Create Scoping Criteria Group ($Type)")) {
-            Write-Verbose "Creating scoping criteria group for sync rule $SyncRuleId"
+            Write-Verbose "Creating scoping criteria group for Synchronisation Rule $SyncRuleId"
 
             try {
                 $result = Invoke-JIMApi -Endpoint $endpoint -Method 'POST' -Body $body

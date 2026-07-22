@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Logic;
 using JIM.Models.Sync;
 
 namespace JIM.Worker.Models;
@@ -78,6 +79,50 @@ public readonly struct MetaverseObjectChangeResult
     public MetaverseObject? DisconnectedMvo { get; init; }
 
     /// <summary>
+    /// The id of the MVO that was disconnected, captured before the CSO→MVO join was broken.
+    /// Unlike <see cref="DisconnectedMvo"/>, this is populated for EVERY DisconnectedOutOfScope
+    /// result (including immediate deletion, where attribute recall is skipped), so the caller
+    /// can build sync outcome nodes that identify the affected Metaverse Object (#1086).
+    /// </summary>
+    public Guid? DisconnectedMvoId { get; init; }
+
+    /// <summary>
+    /// A display name snapshot of the disconnected MVO, captured before the join was broken and
+    /// before any deletion, paired with <see cref="DisconnectedMvoId"/> so sync outcome nodes can
+    /// describe the affected Metaverse Object even after it has been deleted (#1086).
+    /// </summary>
+    public string? DisconnectedMvoDisplayName { get; init; }
+
+    /// <summary>
+    /// A human-readable reason for the Metaverse Object Deletion Rule decision (e.g. "last
+    /// connector disconnected"), when the deletion rule was triggered. Threaded through to the
+    /// MvoDeleted/MvoDeletionScheduled outcome's detail message (#1086). Null when the MVO was
+    /// not deleted or no reason was determinable.
+    /// </summary>
+    public string? MvoDeletionReason { get; init; }
+
+    /// <summary>
+    /// The deletion grace period applied when <see cref="MvoDeletionFate"/> is DeletionScheduled,
+    /// for inclusion in the MvoDeletionScheduled outcome's detail message. Null otherwise.
+    /// </summary>
+    public TimeSpan? MvoDeletionGracePeriod { get; init; }
+
+    /// <summary>
+    /// The id of the Synchronisation Rule attributed to this change, when one was determinable at
+    /// decision time (#1085): the scoping rule the Connected System Object fell out of scope of for
+    /// DisconnectedOutOfScope, or the projecting rule for Projected. Threaded through to the sync
+    /// outcome node so the causality tree records which rule drove the change. Null when no single
+    /// rule is attributable (e.g. Joined, AttributeFlow).
+    /// </summary>
+    public int? SyncRuleId { get; init; }
+
+    /// <summary>
+    /// Snapshot of the attributed Synchronisation Rule's name at decision time, paired with
+    /// <see cref="SyncRuleId"/> so the outcome's attribution survives later rule renames or deletions.
+    /// </summary>
+    public string? SyncRuleName { get; init; }
+
+    /// <summary>
     /// Creates a result indicating no changes occurred.
     /// </summary>
     public static MetaverseObjectChangeResult NoChanges() => new() { HasChanges = false };
@@ -85,11 +130,15 @@ public readonly struct MetaverseObjectChangeResult
     /// <summary>
     /// Creates a result indicating a projection (new MVO created).
     /// </summary>
-    public static MetaverseObjectChangeResult Projected(int attributesAdded) => new()
+    /// <param name="attributesAdded">The number of MVO attributes that were added by the projection.</param>
+    /// <param name="projectionSyncRule">The Synchronisation Rule that caused the projection, when known, for outcome attribution (#1085).</param>
+    public static MetaverseObjectChangeResult Projected(int attributesAdded, SyncRule? projectionSyncRule = null) => new()
     {
         HasChanges = true,
         ChangeType = ObjectChangeType.Projected,
-        AttributesAdded = attributesAdded
+        AttributesAdded = attributesAdded,
+        SyncRuleId = projectionSyncRule?.Id,
+        SyncRuleName = projectionSyncRule?.Name
     };
 
     /// <summary>
@@ -131,12 +180,23 @@ public readonly struct MetaverseObjectChangeResult
     /// <param name="mvoDeletionFate">The fate of the MVO after the disconnection.</param>
     /// <param name="recalledAttributeValues">MVO attribute values that were recalled, for change tracking.</param>
     /// <param name="recalledAttributeAdditions">MVO attribute values re-elected from a surviving contributor, for change tracking.</param>
+    /// <param name="disconnectedMvo">The MVO that was disconnected, for change tracking.</param>
+    /// <param name="scopingSyncRule">The Synchronisation Rule whose scope the CSO fell out of, when determinable, for outcome attribution (#1085).</param>
+    /// <param name="disconnectedMvoId">The disconnected MVO's id, captured before the join was broken, for outcome nodes (#1086).</param>
+    /// <param name="disconnectedMvoDisplayName">A display name snapshot of the disconnected MVO, captured before deletion, for outcome nodes (#1086).</param>
+    /// <param name="mvoDeletionReason">A human-readable Deletion Rule reason when the deletion rule was triggered (#1086).</param>
+    /// <param name="mvoDeletionGracePeriod">The grace period applied when the deletion was scheduled (#1086).</param>
     public static MetaverseObjectChangeResult DisconnectedOutOfScope(
         int? attributeFlowCount = null,
         MvoDeletionFate mvoDeletionFate = MvoDeletionFate.NotDeleted,
         List<MetaverseObjectAttributeValue>? recalledAttributeValues = null,
         List<MetaverseObjectAttributeValue>? recalledAttributeAdditions = null,
-        MetaverseObject? disconnectedMvo = null) => new()
+        MetaverseObject? disconnectedMvo = null,
+        SyncRule? scopingSyncRule = null,
+        Guid? disconnectedMvoId = null,
+        string? disconnectedMvoDisplayName = null,
+        string? mvoDeletionReason = null,
+        TimeSpan? mvoDeletionGracePeriod = null) => new()
     {
         HasChanges = true,
         ChangeType = ObjectChangeType.DisconnectedOutOfScope,
@@ -144,7 +204,13 @@ public readonly struct MetaverseObjectChangeResult
         MvoDeletionFate = mvoDeletionFate,
         RecalledAttributeValues = recalledAttributeValues,
         RecalledAttributeAdditions = recalledAttributeAdditions,
-        DisconnectedMvo = disconnectedMvo
+        DisconnectedMvo = disconnectedMvo,
+        SyncRuleId = scopingSyncRule?.Id,
+        SyncRuleName = scopingSyncRule?.Name,
+        DisconnectedMvoId = disconnectedMvoId,
+        DisconnectedMvoDisplayName = disconnectedMvoDisplayName,
+        MvoDeletionReason = mvoDeletionReason,
+        MvoDeletionGracePeriod = mvoDeletionGracePeriod
     };
 
     /// <summary>

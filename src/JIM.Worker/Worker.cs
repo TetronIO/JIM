@@ -3,6 +3,8 @@
 
 using JIM.Application;
 using JIM.Application.Diagnostics;
+using JIM.Application.Utilities;
+using JIM.Data.Repositories;
 using JIM.Application.Interfaces;
 using JIM.Connectors;
 using JIM.Models.Activities;
@@ -164,6 +166,14 @@ public class Worker : BackgroundService
                 {
                     Log.Error(ex, "ExecuteAsync: Error during heartbeat update or cancellation check. Will retry on next cycle.");
                 }
+
+                // Pace the busy loop. Without this delay the loop spins as fast as the two round
+                // trips above allow (~200 iterations/s measured at Scale500k25kGroups: 6.7M
+                // heartbeat UPDATEs, 6.7M cancellation SELECTs and 16.4M connection-pool resets
+                // over one run), hammering the database throughout every long-running task.
+                // 2s matches the idle branch; stale-task recovery tolerates far coarser
+                // heartbeats, and cancellation latency of up to 2s is acceptable.
+                await Task.Delay(2000, stoppingToken);
             }
             else
             {
@@ -333,9 +343,13 @@ public class Worker : BackgroundService
                                                         {
                                                             var syncExportTaskProcessor = new SyncExportTaskProcessor(syncServer, syncRepo, connector, connectedSystem, runProfile, newWorkerTask, cancellationTokenSource,
                                                                                         syncRepoFactory: () => {
+                                                                                            // The scope owns the per-batch JimApplication; the batch disposes it,
+                                                                                            // releasing the context's pooled connection (issue: Scale200k10kGroups
+                                                                                            // export exhausted the pool with one pinned connection per batch).
                                                                                             var parallelJim = _jimFactory.Create();
-                                                                                            return parallelJim.SyncRepository;
-                                                                                        });
+                                                                                            return new SyncRepositoryScope(parallelJim.SyncRepository, parallelJim);
+                                                                                        },
+                                                                                        connectorFactory: _connectorFactory);
                                                             await syncExportTaskProcessor.PerformExportAsync();
                                                             break;
                                                         }
@@ -620,8 +634,9 @@ public class Worker : BackgroundService
     /// <summary>
     /// Performs housekeeping tasks during worker idle time.
     /// Currently includes: orphaned MVO cleanup based on deletion rules.
+    /// Internal for testability (JIM.Worker.Tests exercises the housekeeping path directly).
     /// </summary>
-    private async Task PerformHousekeepingAsync(JimApplication jim)
+    internal async Task PerformHousekeepingAsync(JimApplication jim)
     {
         // Only run housekeeping every 60 seconds to avoid unnecessary database queries
         if ((DateTime.UtcNow - _lastHousekeepingRun).TotalSeconds < 60)
@@ -634,57 +649,9 @@ public class Worker : BackgroundService
             // Get MVOs that are eligible for deletion (grace period has passed)
             var mvosToDelete = await jim.Metaverse.GetMetaverseObjectsEligibleForDeletionAsync(maxResults: 50);
 
+            // Only a batch with work to do is recorded as an Activity (#1020); a quiet idle tick stays silent.
             if (mvosToDelete.Count > 0)
-            {
-                Log.Information("PerformHousekeepingAsync: Found {Count} MVOs eligible for deletion", mvosToDelete.Count);
-
-                // Reference recall (#908): capture referencing objects and resolved reference values
-                // BEFORE deletion nulls the reference FKs and disconnects the candidates' CSOs.
-                var recallContext = await jim.ExportEvaluation.CaptureReferenceRecallContextAsync(
-                    mvosToDelete.Select(m => m.Id).ToList());
-                var deletedMvoIds = new List<Guid>();
-
-                foreach (var mvo in mvosToDelete)
-                {
-                    try
-                    {
-                        Log.Information("PerformHousekeepingAsync: Deleting MVO {MvoId} ({DisplayName}) - disconnected at {DisconnectedDate}, rule: {DeletionRule}",
-                            mvo.Id, mvo.DisplayName ?? "No display name", mvo.LastConnectorDisconnectedDate, mvo.Type?.DeletionRule);
-
-                        // Evaluate export rules for the MVO deletion (create delete Pending Exports for provisioned CSOs)
-                        // WhenAuthoritativeSourceDisconnected MVOs may still have target CSOs that need delete exports
-                        await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
-
-                        // Delete the MVO using the initiator info captured when it was marked for deletion
-                        // This preserves the audit trail - the original initiator is recorded, not housekeeping
-                        await jim.Metaverse.DeleteMetaverseObjectAsync(
-                            mvo,
-                            mvo.DeletionInitiatedByType,
-                            mvo.DeletionInitiatedById,
-                            mvo.DeletionInitiatedByName);
-                        deletedMvoIds.Add(mvo.Id);
-
-                        Log.Information("PerformHousekeepingAsync: Successfully deleted MVO {MvoId}", mvo.Id);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Error(ex, "PerformHousekeepingAsync: Failed to delete MVO {MvoId}", mvo.Id);
-                    }
-                }
-
-                // Reference recall (#908): stage membership-removal Pending Exports for objects that
-                // referenced the deleted MVOs, so targets without referential integrity converge too.
-                if (deletedMvoIds.Count > 0)
-                {
-                    var recallResult = await jim.ExportEvaluation.StageReferenceRecallExportsAsync(recallContext, deletedMvoIds);
-                    Log.Information(
-                        "PerformHousekeepingAsync: Reference recall for {DeletedCount} deleted MVO(s): " +
-                        "{ReferencingCount} referencing MVO(s) evaluated, {PeCount} Pending Export(s) staged with " +
-                        "{ChangeCount} removal change(s), {DroppedCount} unresolvable change(s) dropped",
-                        deletedMvoIds.Count, recallResult.ReferencingObjectsEvaluated, recallResult.PendingExportsStaged,
-                        recallResult.RemovalChangesStaged, recallResult.UnresolvableChangesDropped);
-                }
-            }
+                await PerformMetaverseObjectHousekeepingAsync(jim, mvosToDelete);
         }
         catch (Exception ex)
         {
@@ -716,6 +683,172 @@ public class Worker : BackgroundService
     }
 
     /// <summary>
+    /// Deletes a batch of grace-period-expired Metaverse Objects and stages the resulting reference-recall
+    /// Pending Exports, recording the batch as a Metaverse Object Housekeeping Activity (#1020) with one
+    /// Run Profile Execution Item per deleted Metaverse Object, per failed deletion, and per staged recall
+    /// Pending Export, so the work is auditable in the UI. Housekeeping runs in the worker idle loop with no
+    /// WorkerTask, so this method owns the Activity lifecycle itself.
+    /// </summary>
+    private async Task PerformMetaverseObjectHousekeepingAsync(JimApplication jim, List<MetaverseObject> mvosToDelete)
+    {
+        Log.Information("PerformMetaverseObjectHousekeepingAsync: Found {Count} MVOs eligible for deletion", mvosToDelete.Count);
+
+        var activity = new Activity
+        {
+            TargetName = "Metaverse Object Housekeeping",
+            TargetType = ActivityTargetType.MetaverseObjectHousekeeping,
+            TargetOperationType = ActivityTargetOperationType.Execute,
+            ObjectsToProcess = mvosToDelete.Count
+        };
+        await jim.Activities.CreateActivityWithTriadAsync(activity, ActivityInitiatorType.System, null, null);
+
+        try
+        {
+            var outcomeTrackingLevel = await jim.ServiceSettings.GetSyncOutcomeTrackingLevelAsync();
+            var csoChangeTrackingEnabled = await jim.ServiceSettings.GetCsoChangeTrackingEnabledAsync();
+            var executionItems = new List<ActivityRunProfileExecutionItem>();
+
+            // Reference recall (#908): capture referencing objects and resolved reference values
+            // BEFORE deletion nulls the reference FKs and disconnects the candidates' CSOs.
+            var recallContext = await jim.ExportEvaluation.CaptureReferenceRecallContextAsync(
+                mvosToDelete.Select(m => m.Id).ToList());
+            var deletedMvoIds = new List<Guid>();
+
+            // One export evaluation cache for the batch, so per-MVO deletion evaluation (issue #655)
+            // and reference recall staging do not re-load Synchronisation Rules for every object.
+            // Source system 0: deletions must consider export rules to every system.
+            var exportEvaluationCache = await jim.ExportEvaluation.BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0);
+
+            foreach (var mvo in mvosToDelete)
+            {
+                try
+                {
+                    Log.Information("PerformMetaverseObjectHousekeepingAsync: Deleting MVO {MvoId} - disconnected at {DisconnectedDate}, rule: {DeletionRule}",
+                        mvo.Id, mvo.LastConnectorDisconnectedDate, mvo.Type?.DeletionRule);
+
+                    // Evaluate export rules for the MVO deletion: delete Pending Exports are created for
+                    // CSOs whose export Synchronisation Rule's OutboundDeprovisionAction is Delete (issue #655).
+                    // WhenAuthoritativeSourceDisconnected MVOs may still have target CSOs that need delete exports.
+                    await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache);
+
+                    // Delete the MVO using the initiator info captured when it was marked for deletion
+                    // This preserves the audit trail - the original initiator is recorded, not housekeeping
+                    await jim.Metaverse.DeleteMetaverseObjectAsync(
+                        mvo,
+                        mvo.DeletionInitiatedByType,
+                        mvo.DeletionInitiatedById,
+                        mvo.DeletionInitiatedByName);
+                    deletedMvoIds.Add(mvo.Id);
+
+                    var deletionItem = new ActivityRunProfileExecutionItem
+                    {
+                        Id = Guid.NewGuid(),
+                        ObjectChangeType = ObjectChangeType.Deleted,
+                        DisplayNameSnapshot = mvo.DisplayName,
+                        ObjectTypeSnapshot = mvo.Type?.Name
+                    };
+                    if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                    {
+                        SyncOutcomeBuilder.AddRootOutcome(deletionItem,
+                            ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
+                            targetEntityId: mvo.Id,
+                            targetEntityDescription: mvo.DisplayName);
+                    }
+                    executionItems.Add(deletionItem);
+
+                    Log.Information("PerformMetaverseObjectHousekeepingAsync: Successfully deleted MVO {MvoId}", mvo.Id);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Per-object error isolation: one bad object must not sink the batch. The failure is
+                    // recorded as an error execution item so it is visible on the Activity, not just in logs.
+                    Log.Error(ex, "PerformMetaverseObjectHousekeepingAsync: Failed to delete MVO {MvoId}", mvo.Id);
+                    executionItems.Add(new ActivityRunProfileExecutionItem
+                    {
+                        Id = Guid.NewGuid(),
+                        ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError,
+                        ErrorMessage = ex.Message,
+                        ErrorStackTrace = ex.StackTrace,
+                        DisplayNameSnapshot = mvo.DisplayName,
+                        ObjectTypeSnapshot = mvo.Type?.Name
+                    });
+                }
+            }
+
+            // Reference recall (#908): stage membership-removal Pending Exports for objects that
+            // referenced the deleted MVOs, so targets without referential integrity converge too.
+            if (deletedMvoIds.Count > 0)
+            {
+                var recallResult = await jim.ExportEvaluation.StageReferenceRecallExportsAsync(recallContext, deletedMvoIds, exportEvaluationCache);
+                Log.Information(
+                    "PerformMetaverseObjectHousekeepingAsync: Reference recall for {DeletedCount} deleted MVO(s): " +
+                    "{ReferencingCount} referencing MVO(s) evaluated, {PeCount} Pending Export(s) staged with " +
+                    "{ChangeCount} removal change(s), {DroppedCount} unresolvable change(s) dropped",
+                    deletedMvoIds.Count, recallResult.ReferencingObjectsEvaluated, recallResult.PendingExportsStaged,
+                    recallResult.RemovalChangesStaged, recallResult.UnresolvableChangesDropped);
+
+                // Fold the staged recall exports into Activity reporting: one execution item per staged
+                // Pending Export with a PendingExportCreated outcome, mirroring the sync-run recall reporting.
+                foreach (var stagedPendingExport in recallResult.StagedPendingExports)
+                {
+                    var recallItem = new ActivityRunProfileExecutionItem
+                    {
+                        Id = Guid.NewGuid(),
+                        ObjectChangeType = ObjectChangeType.PendingExport,
+                        ConnectedSystemObjectId = stagedPendingExport.ConnectedSystemObjectId,
+                        PendingExportId = stagedPendingExport.Id,
+                        DisplayNameSnapshot = stagedPendingExport.SourceMetaverseObjectId.HasValue
+                            ? recallResult.ReferencingObjectDisplayNames
+                                .GetValueOrDefault(stagedPendingExport.SourceMetaverseObjectId.Value)
+                            : null
+                    };
+
+                    if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+                    {
+                        var recallOutcome = SyncOutcomeBuilder.AddRootOutcome(recallItem,
+                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                            targetEntityId: stagedPendingExport.Id,
+                            targetEntityDescription: recallItem.DisplayNameSnapshot,
+                            detailCount: stagedPendingExport.AttributeValueChanges.Count,
+                            detailMessage: stagedPendingExport.ConnectedSystemId.ToString());
+
+                        // Snapshot the Pending Export's attribute changes so the Causality Tree can render
+                        // attribute detail even after the Pending Export is deleted during export confirmation.
+                        if (csoChangeTrackingEnabled && stagedPendingExport.AttributeValueChanges.Count > 0)
+                        {
+                            var change = ExportChangeHistoryBuilder.BuildFromPendingExport(
+                                stagedPendingExport, activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName);
+                            change.ConnectedSystemObjectId ??= stagedPendingExport.ConnectedSystemObjectId;
+                            recallOutcome.ConnectedSystemObjectChange = change;
+                        }
+                    }
+
+                    executionItems.Add(recallItem);
+                }
+            }
+
+            if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            {
+                foreach (var item in executionItems)
+                    SyncOutcomeBuilder.BuildOutcomeSummary(item);
+            }
+
+            activity.ObjectsProcessed = mvosToDelete.Count;
+            await jim.Activities.AddRunProfileExecutionItemsAsync(activity, executionItems);
+
+            // Recomputes summary stats from the execution items and completes with the status their errors warrant.
+            await CompleteActivityBasedOnExecutionResultsAsync(jim, activity);
+        }
+        catch (Exception ex)
+        {
+            // Activity execution boundary: an unexpected failure must be recorded on the Activity, never left
+            // InProgress. The caller's catch keeps the worker's idle loop alive if this recording fails too.
+            Log.Error(ex, "PerformMetaverseObjectHousekeepingAsync: Error during Metaverse Object housekeeping batch");
+            await jim.Activities.FailActivityWithErrorAsync(activity, ex);
+        }
+    }
+
+    /// <summary>
     /// Performs change history and activity cleanup based on retention policy.
     /// Runs as part of housekeeping during worker idle time.
     /// </summary>
@@ -724,22 +857,26 @@ public class Worker : BackgroundService
         try
         {
             // Get retention settings. Configuration-change Activities carry the versioned configuration snapshots,
-            // so they get their own (typically much longer) retention period than the general history.
+            // and security event Activities (Authentication) are the security audit trail, so each gets its own
+            // (typically much longer) retention period than the general history.
             var retentionPeriod = await jim.ServiceSettings.GetHistoryRetentionPeriodAsync();
             var configurationRetentionPeriod = await jim.ServiceSettings.GetConfigurationChangeRetentionPeriodAsync();
+            var securityRetentionPeriod = await jim.ServiceSettings.GetSecurityEventRetentionPeriodAsync();
             var batchSize = await jim.ServiceSettings.GetHistoryCleanupBatchSizeAsync();
 
             var cutoffDate = DateTime.UtcNow - retentionPeriod;
             var configurationCutoffDate = DateTime.UtcNow - configurationRetentionPeriod;
+            var securityCutoffDate = DateTime.UtcNow - securityRetentionPeriod;
 
             // Perform cleanup (creates its own Activity for audit)
-            var result = await jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, batchSize);
+            var result = await jim.ChangeHistory.DeleteExpiredChangeHistoryAsync(cutoffDate, configurationCutoffDate, securityCutoffDate, batchSize);
 
             // Log results if anything was deleted
-            if (result.CsoChangesDeleted > 0 || result.MvoChangesDeleted > 0 || result.ActivitiesDeleted > 0 || result.ConfigurationChangeActivitiesDeleted > 0)
+            if (result.CsoChangesDeleted > 0 || result.MvoChangesDeleted > 0 || result.ActivitiesDeleted > 0
+                || result.ConfigurationChangeActivitiesDeleted > 0 || result.SecurityEventActivitiesDeleted > 0)
             {
-                Log.Information("PerformChangeHistoryCleanupAsync: Deleted {CsoCount} CSO changes, {MvoCount} MVO changes, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities",
-                    result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted);
+                Log.Information("PerformChangeHistoryCleanupAsync: Deleted {CsoCount} CSO changes, {MvoCount} MVO changes, {ActivityCount} activities, {ConfigurationActivityCount} configuration-change activities, {SecurityActivityCount} security event activities",
+                    result.CsoChangesDeleted, result.MvoChangesDeleted, result.ActivitiesDeleted, result.ConfigurationChangeActivitiesDeleted, result.SecurityEventActivitiesDeleted);
             }
         }
         catch (Exception ex)
@@ -861,7 +998,8 @@ public class Worker : BackgroundService
             activity.TotalUpdated += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated);
             activity.TotalDeleted += allOutcomes.Count(o => o.OutcomeType is
                 ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted
-                or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected);
+                or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected
+                or ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
 
             activity.TotalProjected += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
             activity.TotalJoined += allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Joined);
@@ -917,10 +1055,12 @@ public class Worker : BackgroundService
             // Import stats from outcomes
             activity.TotalAdded = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded);
             activity.TotalUpdated = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated);
-            // Deletions: CsoDeleted (sync-phase actual deletions) + DeletionDetected (import-phase detection)
+            // Deletions: CsoDeleted (sync-phase actual deletions) + DeletionDetected (import-phase
+            // detection) + MvoDeleted (Metaverse Object Housekeeping batches)
             activity.TotalDeleted = allOutcomes.Count(o => o.OutcomeType is
                 ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted
-                or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected);
+                or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected
+                or ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
 
             // Sync stats from outcomes
             activity.TotalProjected = allOutcomes.Count(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.Projected);

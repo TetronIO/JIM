@@ -4,7 +4,7 @@ title: Activities
 
 # Activities
 
-An **activity** is a tracked operation in JIM. Every significant action creates an activity record with status, timing, and summary statistics: Run Profile executions, schema imports, data generation, certificate management, and configuration changes all produce activities.
+An **activity** is a tracked operation in JIM. Every significant action creates an activity record with status, timing, and summary statistics: Run Profile executions, schema imports, data generation, certificate management, and configuration changes all produce activities. Example data generation is now its own distinct **Data Generation** activity type, separate from configuration changes to an Example Data Template.
 
 Activities are the primary mechanism for monitoring synchronisation progress and troubleshooting issues. Run Profile activities additionally include detailed per-object execution items, so you can drill from a high-level "5 errors" counter down to the specific objects that failed.
 
@@ -23,7 +23,7 @@ Most monitoring code only cares about whether the activity has reached a termina
 
 ## Initiated by
 
-Every activity records who or what triggered it: a user (with their Metaverse Object reference), an API key, or the system itself (for example, a schedule). This is the audit trail.
+Every activity records who or what triggered it: a user (with their Metaverse Object reference), an API key, the system itself (for example, a schedule), or an unidentified, unauthenticated caller (**Anonymous**) for a failed sign-in or API key attempt. This is the audit trail.
 
 ## Summary statistics
 
@@ -40,6 +40,14 @@ The exact field set depends on the operation; the [interactive API reference](..
 
 For Run Profile activities, JIM stores a per-object record of what happened (with any error details) for the most recent run. These let you go from a high-level error counter to the specific Connected System Objects that failed and the reason for each failure. Execution items are the right place to look when diagnosing why a particular identity didn't sync as expected.
 
+An execution item's detail page presents the causal chain of outcomes as a tree: the primary event (for example a projection, join, or disconnection) at the root, with its consequences nested beneath. When a disconnection triggers a Metaverse Object Deletion Rule, the resulting **MVO Deleted** or **MVO Deletion Scheduled** outcome shows the deleted Identity's display name (captured before deletion), why the Deletion Rule fired (for example "last connector disconnected"), the grace period for scheduled deletions, and a link to the deletion record browser, so the full story of a deleted Identity survives the deletion itself.
+
+## Metaverse Object Housekeeping
+
+When a Metaverse Object's [deletion grace period](metaverse.md) expires, a background housekeeping process on the worker deletes it and stages membership-removal Pending Exports for any objects (such as groups) that referenced it. Each housekeeping batch that actually does work is recorded as a **Metaverse Object Housekeeping** activity, with an execution item per deleted Metaverse Object, per staged Pending Export, and per per-object failure, so grace-period deletions are auditable from the Activities page rather than only visible in service logs. A quiet housekeeping pass with nothing to delete records no activity.
+
+The activity's detail page shows the batch like a Run Profile execution: summary cards (Metaverse Objects Deleted, Recall Pending Exports, Object Types, Errors) above a searchable, filterable table listing each deleted object by name and type, with any per-object errors alongside.
+
 ## Parent and child activities
 
 A schedule execution typically appears as a parent activity with one child activity per step. Use the children listing to walk down a schedule's execution tree from the top-level run into the individual operations it triggered.
@@ -52,7 +60,7 @@ On an activity's detail page, the Target links to where that object is managed: 
 
 The Activity page in the admin portal filters a busy list down to what you are reviewing:
 
-- **Category quick-filter**<br /> One click isolates a whole class of activity: **Configuration** (Connected Systems, Synchronisation Rules, Schedules, schema, settings), **Identity** (Metaverse Objects), **Synchronisation** (Run Profile executions), or **System** (housekeeping, resets, data generation). Selecting a category sets the Type filter to the matching target types; you can then fine-tune individual types.
+- **Category quick-filter**<br /> One click isolates a whole class of activity: **Configuration** (Connected Systems, Synchronisation Rules, Schedules, schema, settings), **Identity** (Metaverse Objects), **Synchronisation** (Run Profile executions), **System** (housekeeping, resets, data generation), or **Security** ([interactive sign-in and API key authentication events](../administration/security-audit-events.md)). Selecting a category sets the Type filter to the matching target types; you can then fine-tune individual types.
 - **Detail filters**<br /> Operation, outcome, type, status, initiator (user, API key, or system), a created date range, and a target/initiator search.
 - **Shareable URLs**<br /> The filter state is reflected in the page URL, so a filtered view can be bookmarked or shared; opening the link reproduces the same view. For example, reviewing user-made configuration changes over the last week is one URL an auditor can return to each review cycle.
 
@@ -100,3 +108,4 @@ When an object is **deleted**, its final captured state is shown on the delete A
 
 - [Run Profiles](run-profiles.md) -- the operations that produce most activities
 - [Schedules](schedules.md) -- the parent-and-child activity model originates here
+- [Security Audit Events](../administration/security-audit-events.md) -- interactive sign-in and API key authentication events, aggregation, and their own retention period

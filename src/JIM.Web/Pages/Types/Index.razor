@@ -15,12 +15,25 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 <PageTitle>@PageTitle</PageTitle>
-<MudText Typo="Typo.h4"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@PageTitle</MudText>
+<MudText Typo="Typo.h3"><MudIcon Icon="@Helpers.ResolveObjectTypeIcon(MetaverseObjectType?.Icon)" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@PageTitle</MudText>
 <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0"></MudBreadcrumbs>
 <MudText Typo="Typo.subtitle1" Class="mud-text-secondary">Search, or browse for @ObjectTypeName</MudText>
 
 @if (_isInitialised && _preferencesLoaded && PredefinedSearch != null)
 {
+    @if (_hasAttributeName != null)
+    {
+        <MudChip T="string" Color="Color.Primary" Variant="Variant.Text" Icon="@Icons.Material.Filled.FilterAlt"
+                 OnClose="ClearHasAttributeFilter" Class="mt-3">Has a value for: @_hasAttributeName</MudChip>
+
+        @if (_hasAttributeUnknown)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
+                No Metaverse Attribute named "@_hasAttributeName" is defined, so no objects match. Clear the filter to browse all @MetaverseObjectType?.PluralName.
+            </MudAlert>
+        }
+    }
+
     <MudTable @ref="_table" T="MetaverseObjectHeader" ServerData="ServerReload" @bind-CurrentPage="_currentPage" RowsPerPage="@_rowsPerPage" RowsPerPageChanged="OnRowsPerPageChanged" Hover="true"
         Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="@(_dense ? "mt-5 dense-body-only" : "mt-5")" Outlined="true" Elevation="0" OnRowClick="HandleRowClick"
         RowClass="cursor-pointer" Loading="@_loading" LoadingProgressColor="Color.Primary">
@@ -97,6 +110,13 @@ else if (_isInitialised)
     private bool _dense;
     private int _currentPage;
 
+    // Attribute-presence filter (the ?search=hasAttribute:{name} deep link). _hasAttributeName is the parsed token
+    // (null when no presence filter is active); _hasAttributeId is its resolved attribute id; _hasAttributeUnknown is
+    // true when a name was supplied but no such attribute exists, in which case no object can match.
+    private string? _hasAttributeName;
+    private int? _hasAttributeId;
+    private bool _hasAttributeUnknown;
+
     private MetaverseObjectType? MetaverseObjectType { get; set; }
     private PredefinedSearch? PredefinedSearch { get; set; }
     private string? PageTitle { get; set; }
@@ -107,6 +127,9 @@ else if (_isInitialised)
     {
         // Reset state when parameters change (e.g., navigating between types)
         _isInitialised = false;
+        _hasAttributeName = null;
+        _hasAttributeId = null;
+        _hasAttributeUnknown = false;
 
         // Read page from URL query string (MudTable uses 0-indexed pages)
         _currentPage = GetPageFromUrl() - 1;
@@ -118,6 +141,24 @@ else if (_isInitialised)
         {
             NavManager.NavigateTo("/");
             return;
+        }
+
+        // Attribute-presence filter from the URL (?search=hasAttribute:{name}). Resolve the name to an attribute id so
+        // the table can filter by it; an unrecognised name yields no results (surfaced as a clear empty state).
+        var searchToken = GetSearchFromUrl();
+        if (!string.IsNullOrWhiteSpace(searchToken) &&
+            searchToken.StartsWith(Utilities.HasAttributeSearchToken, StringComparison.OrdinalIgnoreCase))
+        {
+            var attributeName = searchToken[Utilities.HasAttributeSearchToken.Length..].Trim();
+            if (attributeName.Length > 0)
+            {
+                var presenceAttribute = await jim.Metaverse.GetMetaverseAttributeAsync(attributeName);
+                // Show the attribute's stored casing in the chip and URL once resolved (the deep link may use any
+                // case); fall back to the typed name for the unknown-attribute empty state.
+                _hasAttributeName = presenceAttribute?.Name ?? attributeName;
+                _hasAttributeId = presenceAttribute?.Id;
+                _hasAttributeUnknown = presenceAttribute == null;
+            }
         }
 
         // set a default name for the objects on this page (use PluralName for list views)
@@ -200,6 +241,13 @@ else if (_isInitialised)
             return new TableData<MetaverseObjectHeader> { TotalItems = 0, Items = [] };
         }
 
+        // A presence filter naming an attribute that does not exist cannot match any object; return an empty page
+        // rather than falling through to an unfiltered query.
+        if (_hasAttributeUnknown)
+        {
+            return new TableData<MetaverseObjectHeader> { TotalItems = 0, Items = [] };
+        }
+
         _loading = true;
         StateHasChanged();
 
@@ -219,7 +267,8 @@ else if (_isInitialised)
                 state.PageSize,
                 string.IsNullOrWhiteSpace(_searchString) ? null : _searchString,
                 state.SortLabel,
-                sortDescending);
+                sortDescending,
+                _hasAttributeId);
 
             return new TableData<MetaverseObjectHeader>
             {
@@ -239,8 +288,15 @@ else if (_isInitialised)
         var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
         var baseUrl = uri.GetLeftPart(UriPartial.Path);
 
-        // Only add ?p= if not on page 1
-        var newUrl = page > 1 ? $"{baseUrl}?p={page}" : baseUrl;
+        // Preserve the attribute-presence filter and add ?p= only past page 1, so paging (and sharing a page-2 URL)
+        // keeps the filter rather than silently dropping it.
+        var queryParts = new List<string>();
+        if (_hasAttributeName != null)
+            queryParts.Add($"search={Utilities.HasAttributeSearchToken}{Uri.EscapeDataString(_hasAttributeName)}");
+        if (page > 1)
+            queryParts.Add($"p={page}");
+
+        var newUrl = queryParts.Count > 0 ? $"{baseUrl}?{string.Join("&", queryParts)}" : baseUrl;
 
         // Update URL without navigation (replace current history entry)
         NavManager.NavigateTo(newUrl, replace: true);
@@ -252,6 +308,18 @@ else if (_isInitialised)
         _table?.ReloadServerData();
     }
 
+    private void ClearHasAttributeFilter()
+    {
+        _hasAttributeName = null;
+        _hasAttributeId = null;
+        _hasAttributeUnknown = false;
+
+        // Drop the presence filter from the URL (keep the base path) without a full reload, then refresh the table.
+        var baseUrl = NavManager.ToAbsoluteUri(NavManager.Uri).GetLeftPart(UriPartial.Path);
+        NavManager.NavigateTo(baseUrl, replace: true);
+        _table?.ReloadServerData();
+    }
+
     private int GetPageFromUrl()
     {
         var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
@@ -260,6 +328,13 @@ else if (_isInitialised)
         if (int.TryParse(pageStr, out var page) && page > 0)
             return page;
         return 1; // Default to page 1
+    }
+
+    private string? GetSearchFromUrl()
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        return query["search"];
     }
 
     private void HandleRowClick(TableRowClickEventArgs<MetaverseObjectHeader> args)

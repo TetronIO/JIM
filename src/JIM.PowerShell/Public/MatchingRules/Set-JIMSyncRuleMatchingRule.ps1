@@ -4,14 +4,14 @@
 function Set-JIMSyncRuleMatchingRule {
     <#
     .SYNOPSIS
-        Updates an existing Object Matching Rule on a Sync Rule (advanced mode).
+        Updates an existing Object Matching Rule on a Synchronisation Rule (advanced mode).
 
     .DESCRIPTION
-        Updates an Object Matching Rule on a specific Sync Rule.
+        Updates an Object Matching Rule on a specific Synchronisation Rule.
         You can update the order, target Metaverse attribute, or source attributes.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Sync Rule.
+        The unique identifier of the Synchronisation Rule.
 
     .PARAMETER Id
         The unique identifier of the Matching Rule to update.
@@ -24,10 +24,6 @@ function Set-JIMSyncRuleMatchingRule {
 
     .PARAMETER SourceAttributeId
         The new Connected System attribute ID to use as the source.
-        Note: This replaces all existing sources with a single new source.
-
-    .PARAMETER SourceMetaverseAttributeId
-        The new Metaverse attribute ID to use as the source (for export matching).
         Note: This replaces all existing sources with a single new source.
 
     .PARAMETER CaseSensitive
@@ -44,7 +40,7 @@ function Set-JIMSyncRuleMatchingRule {
     .EXAMPLE
         Set-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 12 -Order 0
 
-        Updates the order of Matching Rule 12 on Sync Rule 5 to be first (order 0).
+        Updates the order of Matching Rule 12 on Synchronisation Rule 5 to be first (order 0).
 
     .EXAMPLE
         Get-JIMSyncRuleMatchingRule -SyncRuleId 5 -Id 12 | Set-JIMSyncRuleMatchingRule -CaseSensitive $false
@@ -73,9 +69,6 @@ function Set-JIMSyncRuleMatchingRule {
 
         [Parameter()]
         [int]$SourceAttributeId,
-
-        [Parameter()]
-        [int]$SourceMetaverseAttributeId,
 
         [Parameter()]
         [bool]$CaseSensitive,
@@ -108,14 +101,6 @@ function Set-JIMSyncRuleMatchingRule {
                 }
             )
         }
-        elseif ($PSBoundParameters.ContainsKey('SourceMetaverseAttributeId')) {
-            $body.sources = @(
-                @{
-                    order = 0
-                    metaverseAttributeId = $SourceMetaverseAttributeId
-                }
-            )
-        }
 
         if ($PSBoundParameters.ContainsKey('CaseSensitive')) {
             $body.caseSensitive = $CaseSensitive
@@ -126,8 +111,8 @@ function Set-JIMSyncRuleMatchingRule {
             return
         }
 
-        if ($PSCmdlet.ShouldProcess("Matching Rule $Id on Sync Rule $SyncRuleId", "Update")) {
-            Write-Verbose "Updating Matching Rule ID: $Id for Sync Rule ID: $SyncRuleId"
+        if ($PSCmdlet.ShouldProcess("Matching Rule $Id on Synchronisation Rule $SyncRuleId", "Update")) {
+            Write-Verbose "Updating Matching Rule ID: $Id for Synchronisation Rule ID: $SyncRuleId"
 
             try {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/matching-rules/$Id" -Method 'PUT' -Body $body

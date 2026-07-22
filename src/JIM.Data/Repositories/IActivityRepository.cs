@@ -13,6 +13,17 @@ public interface IActivityRepository
 
     public Task CreateActivityAsync(Activity activity);
 
+    /// <summary>
+    /// Persists Run Profile Execution Items (including their sync outcome trees and any Connected System Object
+    /// change snapshots carried on the outcomes) for an Activity that has already been persisted via
+    /// <see cref="CreateActivityAsync"/> in the same unit of work. Items must reference related entities
+    /// (Connected System Objects, Pending Exports) by scalar foreign key only; the implementation severs any
+    /// navigation references to pre-existing entities so they cannot be re-inserted.
+    /// Intended for small batches recorded outside sync task processing (for example Metaverse Object
+    /// Housekeeping); sync processors use the bulk insert path on ISyncRepository instead.
+    /// </summary>
+    public Task CreateActivityRunProfileExecutionItemsAsync(IReadOnlyCollection<ActivityRunProfileExecutionItem> items);
+
     public Task UpdateActivityAsync(Activity activity);
 
     public Task DeleteActivityAsync(Activity activity);
@@ -73,6 +84,17 @@ public interface IActivityRepository
 
     public Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId);
 
+    /// <summary>
+    /// Finalises the Activity's Run Profile execution stat counters: recomputes the stats exactly
+    /// from the persisted Run Profile Execution Items and Sync Outcomes, replaces the incremental
+    /// counter rows with the exact values, and sets
+    /// <see cref="Activity.RunProfileExecutionStatsFinalised"/> on the passed entity (the caller's
+    /// subsequent <see cref="UpdateActivityAsync"/> persists the flag alongside the terminal
+    /// status). Called by the completion paths so completed Activities serve stats from stored
+    /// counters instead of re-aggregating; safe to call for Activities with no execution items.
+    /// </summary>
+    public Task FinaliseActivityRunProfileExecutionStatsAsync(Activity activity);
+
     public Task<ActivityRunProfileExecutionItem?> GetActivityRunProfileExecutionItemAsync(Guid id);
 
     /// <summary>
@@ -96,7 +118,7 @@ public interface IActivityRepository
 
     /// <summary>
     /// Gets the highest configuration-change version recorded for a configuration object, identified by its activity
-    /// target type (<see cref="ActivityTargetType.ConnectedSystem"/> or <see cref="ActivityTargetType.SyncRule"/>) and
+    /// target type (<see cref="ActivityTargetType.ConnectedSystem"/> or <see cref="ActivityTargetType.SynchronisationRule"/>) and
     /// database id, or 0 if none exist yet. Used to assign the next per-object version when capturing a configuration
     /// snapshot; version numbers never renumber, so retention removing older entries does not affect this.
     /// </summary>
@@ -216,4 +238,15 @@ public interface IActivityRepository
     /// RPEIs into memory.
     /// </summary>
     public Task<(int TotalWithErrors, int TotalRpeis, int TotalUnhandledErrors)> GetActivityRpeiErrorCountsAsync(Guid activityId);
+
+    /// <summary>
+    /// Atomically increments <c>AttemptCount</c> and advances <c>LastSeen</c> on the aggregated failed-authentication
+    /// Activity row matching (TargetType Authentication, <paramref name="apiKeyPrefix"/>, <paramref name="clientIp"/>,
+    /// <paramref name="reason"/>, <paramref name="windowStart"/>). Callers must normalise a null API key prefix or
+    /// client IP to <see cref="string.Empty"/> before calling, matching the partial unique index's dedup contract
+    /// (Postgres unique indexes treat NULLs as distinct from one another).
+    /// </summary>
+    /// <returns>True if a matching row was found and incremented; false if no row exists yet for this window bucket
+    /// (the caller must then create one).</returns>
+    public Task<bool> IncrementAggregatedFailedAuthenticationAsync(string apiKeyPrefix, string clientIp, string reason, DateTime windowStart, DateTime lastSeen);
 }

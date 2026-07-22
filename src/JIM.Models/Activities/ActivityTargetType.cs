@@ -15,7 +15,7 @@ public enum ActivityTargetType
     ExampleDataTemplate = 1,
     ConnectedSystem = 2,
     ConnectedSystemRunProfile = 3,
-    SyncRule = 4,
+    SynchronisationRule = 4,
     MetaverseObject = 5,
     TrustedCertificate = 6,
     ObjectMatchingRule = 7,
@@ -83,5 +83,24 @@ public enum ActivityTargetType
     /// template's own configuration-change history (<see cref="ExampleDataTemplate"/>). The run still links to its
     /// template via <see cref="Activity.ExampleDataTemplateId"/> for context and deep-linking.
     /// </summary>
-    DataGeneration = 21
+    DataGeneration = 21,
+
+    /// <summary>
+    /// A security audit event: interactive sign-in success/failure or API key authentication failure. Sign-in
+    /// successes are recorded one per session establishment; failures are aggregated (see
+    /// <see cref="Activity.AggregationWindowStart"/>, <see cref="Activity.AttemptCount"/>) into one Activity per
+    /// (API key prefix, client IP, failure reason) per 15-minute UTC window, so a failed-authentication spray of
+    /// any volume produces a bounded number of rows. Governed by its own retention class
+    /// (see <see cref="JIM.Models.Core.Constants.SettingKeys.SecurityEventRetentionPeriod"/>), separate from general
+    /// history and configuration-change retention.
+    /// </summary>
+    Authentication = 22,
+
+    /// <summary>
+    /// A Metaverse Object Housekeeping batch (issue #1020): the worker's idle-time deletion of Metaverse Objects
+    /// whose deletion grace period has expired, including the reference-recall Pending Exports staged for objects
+    /// (for example groups) that referenced them. Created only when a batch actually has work to do; a quiet idle
+    /// tick records no Activity at all.
+    /// </summary>
+    MetaverseObjectHousekeeping = 23
 }

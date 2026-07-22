@@ -7,10 +7,15 @@ name: changelog-lint
 #      🔄 changed behaviour) must also update public docs under docs/, unless it
 #      opts out explicitly (a "Docs: n/a - <reason>" line in the PR body, or the
 #      'docs-not-needed' label).
+#   3. Doc example safety: no PowerShell example (under docs/, or in the
+#      module's own comment-based help) may invoke a JIM cmdlet using a
+#      parameter ALIAS instead of its real name - see Lint-DocExamples.ps1 for
+#      the defect this prevents (an -Id alias silently meaning "every Run
+#      Profile on this Connected System", not "Run Profile 42").
 #
-# Both run in this single job so docs coupling is enforced via the existing
-# required "changelog-lint" status, without registering a second required check
-# in the branch ruleset. A docs-coupling failure therefore surfaces as the
+# All three run in this single job so they are enforced via the existing
+# required "changelog-lint" status, without registering further required checks
+# in the branch ruleset. A failure in any of them therefore surfaces as the
 # "changelog-lint" check failing.
 #
 # Runs on every PR (no path filter) so it always reports a status and can safely
@@ -48,3 +53,5 @@ jobs:
           CHANGED_FILES="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
           export CHANGED_FILES
           pwsh -File ./scripts/Lint-DocsCoupling.ps1
+      - name: Lint PowerShell doc examples for parameter alias misuse
+        run: pwsh -File ./scripts/Lint-DocExamples.ps1

@@ -7,6 +7,7 @@ using JIM.Application.Interfaces;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
 using JIM.Models.Core;
+using JIM.Models.Exceptions;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Utility;
@@ -118,6 +119,12 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         using (Diagnostics.Sync.StartSpan("LoadExportEvaluationCache"))
         {
             _exportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(_connectedSystem.Id);
+
+            // Separate run-scoped cache for reference recall staging (#1003): recall must not
+            // exclude the source system (Q3 does not apply to deletions), so the stable tier is
+            // built with sourceConnectedSystemId 0, reusing the already-loaded rules (no new query).
+            _recallExportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(
+                sourceConnectedSystemId: 0, preloadedSyncRules: allSyncRules);
         }
 
         // Load settings once at start of sync
@@ -256,6 +263,13 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
                 LogPageMemoryDiagnostics(page, totalCsoPages);
             }
+            catch (Exception ex) when (ex is not OperationCanceledException and not SyncPersistenceException)
+            {
+                // Attribute the persistence failure before it reaches the worker's activity-failure handler.
+                // Hard failure: rethrow so the run stops rather than continuing with a partially persisted page
+                // (Synchronisation Integrity).
+                throw CreatePagePersistenceException(page, totalCsoPages, ex);
+            }
             finally
             {
                 _syncRepo.SetAutoDetectChangesEnabled(true);
@@ -279,6 +293,10 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
             // Flush any RPEIs from cross-page resolution
             await FlushRpeisAsync();
+
+            // Emit the deduplicated reference-recall Pending Export RPEIs accumulated across all page
+            // deletions (one per referencing group CSO, not one per page-flush that touched it).
+            await FlushDeferredRecallRpeisAsync();
 
             // Outbound Temporal Scope Reconciler apply step (#892): re-evaluate export scope for Metaverse
             // Objects the reconciler flagged, whose export-rule scope drifted with the clock without a data

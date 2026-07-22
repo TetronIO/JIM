@@ -47,7 +47,7 @@ Get-JIMConfigurationChangeHistory -Type <string> -Id <int|guid|string>
 
 ### Output
 
-In the summary modes, returns one `PSCustomObject` per change with `version`, `operation`, `initiatedBy`, `when`, `reason`, and a one-line `summary`. With `-Version`, returns the change detail (metadata, the redacted snapshot, and the diff against the previous version). With `-CompareFrom` / `-CompareTo`, returns the structured diff. With `-AsDiff`, returns the rendered diff as coloured strings.
+In the summary modes, returns one `PSCustomObject` per change with `Version`, `Operation`, `InitiatedByName`, `When`, `Reason`, and a one-line `Summary`. With `-Version`, returns the change detail (metadata, the redacted snapshot, and the diff against the previous version). With `-CompareFrom` / `-CompareTo`, returns the structured diff. With `-AsDiff`, returns the rendered diff as coloured strings.
 
 ### Examples
 
@@ -146,7 +146,7 @@ Get-JIMDeletedObject -ObjectType CSO -ConnectedSystemId <int>
 
 ### Output
 
-Returns a `PSCustomObject` with paginated results containing `items`, `totalCount`, `page`, and `pageSize` properties. Each item represents a deleted object with its attributes at the time of deletion.
+Returns a `PSCustomObject` with paginated results containing `Items`, `TotalCount`, `Page`, and `PageSize` properties. Each item represents a deleted object with its attributes at the time of deletion.
 
 ### Examples
 
@@ -203,7 +203,7 @@ Get-JIMHistoryCount -ConnectedSystemName <string>
 
 ### Output
 
-Returns a `PSCustomObject` with `connectedSystemId`, `connectedSystemName`, and `changeRecordCount` properties.
+Returns a `PSCustomObject` with `ConnectedSystemId`, `ConnectedSystemName`, and `ChangeRecordCount` properties.
 
 ### Examples
 
@@ -222,8 +222,8 @@ Get-JIMConnectedSystem | Get-JIMHistoryCount
 ```powershell title="Find systems with the most history records"
 Get-JIMConnectedSystem |
     Get-JIMHistoryCount |
-    Sort-Object changeRecordCount -Descending |
-    Format-Table connectedSystemName, changeRecordCount
+    Sort-Object ChangeRecordCount -Descending |
+    Format-Table ConnectedSystemName, ChangeRecordCount
 ```
 
 ---
@@ -250,14 +250,14 @@ When `PassThru` is specified, returns a `PSCustomObject` with the following prop
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `csoChangesDeleted` | `int` | Number of Connected System Object change records deleted. |
-| `mvoChangesDeleted` | `int` | Number of Metaverse Object change records deleted. |
-| `activitiesDeleted` | `int` | Number of activity records deleted. |
-| `oldestRecordDeleted` | `DateTime` | Timestamp of the oldest record removed. |
-| `newestRecordDeleted` | `DateTime` | Timestamp of the newest record removed. |
-| `cutoffDate` | `DateTime` | The calculated cutoff date based on retention policy. |
-| `retentionPeriodDays` | `int` | The configured retention period in days. |
-| `batchSize` | `int` | Maximum number of records processed per invocation. |
+| `CsoChangesDeleted` | `int` | Number of Connected System Object change records deleted. |
+| `MvoChangesDeleted` | `int` | Number of Metaverse Object change records deleted. |
+| `ActivitiesDeleted` | `int` | Number of activity records deleted. |
+| `OldestRecordDeleted` | `DateTime` | Timestamp of the oldest record removed. |
+| `NewestRecordDeleted` | `DateTime` | Timestamp of the newest record removed. |
+| `CutoffDate` | `DateTime` | The calculated cutoff date based on retention policy. |
+| `RetentionPeriodDays` | `int` | The configured retention period in days. |
+| `BatchSize` | `int` | Maximum number of records processed per invocation. |
 
 Without `PassThru`, produces no output.
 
@@ -277,8 +277,8 @@ Invoke-JIMHistoryCleanup -PassThru
 ```powershell title="Batch cleanup loop for large backlogs"
 do {
     $result = Invoke-JIMHistoryCleanup -PassThru
-    $total = $result.csoChangesDeleted + $result.mvoChangesDeleted + $result.activitiesDeleted
-    Write-Host "Deleted $total records (cutoff: $($result.cutoffDate))"
+    $total = $result.CsoChangesDeleted + $result.MvoChangesDeleted + $result.ActivitiesDeleted
+    Write-Host "Deleted $total records (cutoff: $($result.CutoffDate))"
 } while ($total -gt 0)
 ```
 

@@ -32,13 +32,17 @@ These figures are for the **host machine** (or VM) running the Docker stack -- t
 | Up to 10,000 objects        | 4 GB             | 8 GB                 |
 | 10,000 -- 50,000 objects    | 8 GB             | 16 GB                |
 | 50,000 -- 100,000 objects   | 20 GB            | 24 GB                |
-| 100,000+ objects            | 24 GB            | 32 GB                |
+| 100,000 -- 250,000 objects  | 24 GB            | 32 GB                |
+| 250,000 -- 500,000 objects  | 48 GB            | 64 GB                |
 
 !!! info "Why large imports need significant memory"
     During a full import, the worker loads all imported objects with their attributes into memory before the save phase begins (for duplicate detection, deletion detection, and reference resolution). A full import of 100,000 objects with 20 attributes each produces a worker peak working set of approximately 2.3 GB. The database requires an additional 1--2 GB during bulk inserts. Combined with the web, scheduler, and operating system overhead, total system memory consumption reaches 8--10 GB for 100K objects.
 
 !!! note
     These requirements apply to the largest single full import. If you have multiple Connected Systems of 50K objects each but import them sequentially (not concurrently), size for 50K, not the sum. Delta imports process only changed objects and require significantly less memory.
+
+!!! info "Large group memberships drive memory more than object count"
+    A group is loaded with its full member list during processing, so a single large group can dominate the working set: a group with 495,000 members loads 495,000 reference values. JIM's largest validated scenario (a cross-domain synchronisation between two directories of roughly 500,000 objects each, with groups of up to 495,000 members) peaked at approximately **55 GB total host RAM** with the full stack, database, and both directories resident. Size toward the upper figure in the table when provisioning or synchronising very large groups; a deployment of the same object count with only small groups needs considerably less.
 
 ### Software Requirements
 
@@ -62,12 +66,9 @@ In air-gapped environments, no outbound connectivity is required after initial d
 
 JIM runs as a Docker Compose stack with four services:
 
-```mermaid
-flowchart TD
-    W["jim.web\n(UI + REST API)"] --> DB["jim.database\n(PostgreSQL)"]
-    WK["jim.worker\n(sync processor)"] --> DB
-    S["jim.scheduler\n(cron triggers)"] --> DB
-```
+--8<-- "assets/diagrams/deployment-stack.svg"
+
+<p class="jim-diagram-caption">All three JIM services coordinate through PostgreSQL; the Scheduler queues tasks and the Worker polls them, so no service calls another directly. The bundled database container is optional; JIM can use an external PostgreSQL server instead.<span class="jimdg-caption-motion"> Moving dots trace database traffic.</span></p>
 
 | Service            | Description                                                                           |
 |--------------------|---------------------------------------------------------------------------------------|
@@ -83,6 +84,9 @@ flowchart TD
 | `jim-db-volume`    | PostgreSQL data (bundled DB only) |
 | `jim-logs-volume`  | Application and database logs     |
 | `jim-keys-volume`  | Encryption keys                   |
+
+!!! danger "Back up the key volume with the database"
+    `jim-keys-volume` holds the encryption keys that protect every stored secret (Connected System credentials, the SSO secret, Schedule SQL-step connection strings). The database ciphertext cannot be decrypted without these keys, so a database backup restored without its matching keys leaves every secret unrecoverable. Back up the key volume and the database together, as a matched pair. See [Backup & Disaster Recovery](backup-recovery.md).
 
 ### Bundled vs External PostgreSQL
 
@@ -191,7 +195,7 @@ Before deploying JIM in an air-gapped environment, ensure you have:
 ### Step 1: Transfer and Verify the Bundle
 
 ```bash
-# Transfer jim-release-X.Y.Z.tar.gz via approved media (USB, DVD, etc.)
+# Transfer jim-release-X.Y.Z.tar.gz via approved process
 
 # Extract the bundle
 tar -xzf jim-release-X.Y.Z.tar.gz
@@ -264,7 +268,7 @@ The OIDC redirect URIs configured in your identity provider must match the JIM s
 
 ### Step 6: File Connector storage (optional)
 
-The File Connector ships pre-configured to read and write at `/connector-files` inside the container, backed by a Docker-managed volume named `jim-connector-files-volume`. **No setup is required for the default case** — start the stack and the volume is created automatically with correct ownership.
+The File Connector ships pre-configured to read and write at `/connector-files` inside the container, backed by a Docker-managed volume named `jim-connector-files-volume`. **No setup is required for the default case**: start the stack and the volume is created automatically with correct ownership.
 
 To put files in or pull them out:
 
@@ -298,16 +302,20 @@ docker compose logs -f
 
 ### Step 8: Verify Startup
 
-JIM automatically applies any pending database migrations on first startup; no manual migration step is required. Watch the logs to confirm:
+JIM sets the database up automatically on first startup; there is no manual database step. Watch the logs to confirm:
 
 ```bash
 docker compose logs jim.worker --tail=50
 ```
 
-Look for "Database migrations applied" or "Database is up to date" in the worker logs. The web interface will show a loading screen until migrations complete and the worker signals readiness.
+The worker prepares the database before it starts accepting work, and `jim.web` will not serve requests until that has finished; while it waits, `jim.web` logs `JIM.Application is not ready yet. Sleeping...` once per second. The definitive signal is the readiness endpoint, which returns `503 Service Unavailable` until JIM is ready and `200 OK` afterwards:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/ready
+```
 
 !!! warning "Troubleshooting"
-    If migrations fail (e.g. due to a permissions issue), the worker logs will contain the full error. Fix the underlying issue and restart the services.
+    If the database setup fails (e.g. due to a permissions issue), the worker logs will contain the full error. Fix the underlying issue and restart the services.
 
 ### Step 9: Access JIM
 
@@ -493,11 +501,13 @@ Use this checklist before going live:
 - [ ] SSO configured and tested with your identity provider
 - [ ] Initial admin user can log in and access the administration UI
 - [ ] Database backup strategy in place and tested
+- [ ] Encryption keys (`jim-keys-volume` / `JIM_ENCRYPTION_KEY_PATH`) backed up alongside the database, as a matched pair (see [Backup & Disaster Recovery](backup-recovery.md))
+- [ ] Full restore (database plus keys) rehearsed, with a Connected System confirmed to reconnect
 - [ ] Log level set appropriately (`Information` for production)
 - [ ] Health endpoint monitored by your alerting system
 - [ ] Firewall rules restrict access to JIM's port to authorised networks
 - [ ] Docker restart policy is `unless-stopped` (set by production override)
-- [ ] Upgrade procedure documented and tested in staging
+- [ ] Upgrade procedure documented and tested in staging (see [Upgrading](upgrading.md))
 - [ ] PowerShell module installed and connected (if using automation/IDaC)
 
 ### Air-Gapped Network Checklist
@@ -505,11 +515,14 @@ Use this checklist before going live:
 For air-gapped deployments, also verify:
 
 - [ ] All Docker images loaded successfully (`docker images | grep jim`)
-- [ ] PostgreSQL is accessible and migrations applied
+- [ ] PostgreSQL is accessible and the database has been set up
 - [ ] SSO/OIDC identity provider is accessible from JIM server
 - [ ] DNS resolves JIM server name correctly
 - [ ] TLS certificates are valid and trusted (if using HTTPS)
-- [ ] Firewall allows traffic on required ports (5200/HTTP, 443/HTTPS, 5432/PostgreSQL)
+- [ ] Firewall allows inbound traffic to JIM's web port only (your chosen host port, e.g. 443 via reverse proxy, or the mapped HTTP port). The bundled PostgreSQL container publishes no host port; the database is reached only over the internal `jim-network` bridge
+- [ ] *If using an external PostgreSQL server:* the JIM host can reach it on 5432 (outbound, allowed on the database server's firewall)
 - [ ] File connector volumes mounted (if using File Connector)
+- [ ] Encryption key set backed up and included in the offline backup routine (see [Backup & Disaster Recovery](backup-recovery.md))
 - [ ] Initial admin user can log in
+- [ ] Logs are being written to the configured path
 - [ ] Logs are being written to configured path

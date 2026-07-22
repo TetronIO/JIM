@@ -200,6 +200,11 @@ public class SecurityControllerTests
         var dtos = okResult.Value as IEnumerable<RoleMemberDto>;
         Assert.That(dtos, Is.Not.Null);
         Assert.That(dtos!.Count(), Is.EqualTo(2));
+        // Object type is nested to match the single-object response shape (issue #813).
+        var firstDto = dtos!.First();
+        Assert.That(firstDto.Type, Is.Not.Null);
+        Assert.That(firstDto.Type!.Id, Is.EqualTo(1));
+        Assert.That(firstDto.Type.Name, Is.EqualTo("Person"));
     }
 
     [Test]

@@ -34,6 +34,16 @@ public static class Constants
         // API
         public static string InfrastructureApiKey => "JIM_INFRASTRUCTURE_API_KEY";
 
+        // Reverse proxy
+        /// <summary>
+        /// Optional, comma-separated list of trusted proxy IP addresses and/or CIDR networks (e.g.
+        /// "10.0.0.1,172.16.0.0/12"). When set, JIM trusts X-Forwarded-For/X-Forwarded-Proto headers from these
+        /// sources so client IPs (used for unauthenticated API rate limiting, logging, etc.) reflect the real
+        /// client rather than the reverse proxy. When unset (the default), forwarded headers are not trusted and
+        /// RemoteIpAddress is used as-is.
+        /// </summary>
+        public static string TrustedProxies => "JIM_TRUSTED_PROXIES";
+
         // Encryption
         public static string EncryptionKeyPath => "JIM_ENCRYPTION_KEY_PATH";
 
@@ -192,6 +202,14 @@ public static class Constants
     public static class BuiltInClaims
     {
         public static string MetaverseObjectId => "jim_mvo_id";
+
+        /// <summary>
+        /// Marks a principal authenticated by an infrastructure API key (see <c>ApiKey.IsInfrastructureKey</c>).
+        /// Attached by <c>ApiKeyAuthenticationHandler</c> only for infrastructure keys, and read by
+        /// <c>RateLimitPartitionResolver</c> to exempt trusted backend automation from REST API rate limiting.
+        /// Present with the value "true" when the claim applies; absent otherwise.
+        /// </summary>
+        public static string IsInfrastructureKey => "jim_infra_key";
     }
 
     /// <summary>
@@ -241,6 +259,14 @@ public static class Constants
         /// </summary>
         public const string HistoryCleanupBatchSize = "History.CleanupBatchSize";
 
+        /// <summary>
+        /// How long security audit event Activities (interactive sign-in success/failure, API key authentication
+        /// failure; <see cref="JIM.Models.Activities.ActivityTargetType.Authentication"/>) are retained. Kept
+        /// separately from the general history retention period and the configuration change retention period, as
+        /// its own retention class. Default: 365 days (~1 year).
+        /// </summary>
+        public const string SecurityEventRetentionPeriod = "History.SecurityEventRetentionPeriod";
+
         // Change Tracking Settings
         /// <summary>
         /// Enables or disables change tracking for Connected System Objects.
@@ -288,6 +314,29 @@ public static class Constants
         /// </summary>
         public const string ConfigurationChangeHashKey = "Security.ConfigurationChangeHashKey";
 
+        /// <summary>
+        /// Enables or disables API rate limiting. When enabled, REST API requests are throttled per-client
+        /// (see <see cref="RateLimitingAuthenticatedRequestsPerMinute"/> and
+        /// <see cref="RateLimitingUnauthenticatedRequestsPerMinute"/>). When disabled, no limiter is applied.
+        /// Default: true. Changes take effect within the settings cache propagation delay (see
+        /// <c>RateLimitSettingsCache</c> in JIM.Web), not immediately.
+        /// </summary>
+        public const string RateLimitingEnabled = "Security.RateLimiting.Enabled";
+
+        /// <summary>
+        /// The maximum number of REST API requests an authenticated client (identified by a stable principal ID:
+        /// Metaverse Object ID for SSO/JWT users, API key ID for API key callers) may make per rolling minute.
+        /// Default: 300.
+        /// </summary>
+        public const string RateLimitingAuthenticatedRequestsPerMinute = "Security.RateLimiting.AuthenticatedRequestsPerMinute";
+
+        /// <summary>
+        /// The maximum number of REST API requests an unauthenticated client (identified by client IP address,
+        /// including requests that failed API key authentication) may make per fixed one-minute window.
+        /// Default: 30.
+        /// </summary>
+        public const string RateLimitingUnauthenticatedRequestsPerMinute = "Security.RateLimiting.UnauthenticatedRequestsPerMinute";
+
         // Worker Settings
         /// <summary>
         /// The duration after which a processing task with no heartbeat update is considered stale/abandoned.
@@ -317,5 +366,17 @@ public static class Constants
         /// Generated exactly once on first startup; never changes thereafter.
         /// </summary>
         public const string ServiceId = "Instance.Id";
+    }
+
+    /// <summary>
+    /// The default values for the API rate limiting Service Settings. Shared between the seeded
+    /// <see cref="ServiceSetting"/> defaults (<c>SeedingServer.SyncServiceSettingsAsync</c>) and the settings-cache
+    /// fallback used by JIM.Web's rate limiter (see <c>RateLimitSettingsCache</c>) so the two never drift apart.
+    /// </summary>
+    public static class RateLimitDefaults
+    {
+        public const bool Enabled = true;
+        public const int AuthenticatedRequestsPerMinute = 300;
+        public const int UnauthenticatedRequestsPerMinute = 30;
     }
 }

@@ -4,24 +4,20 @@
 function New-JIMSyncRuleMatchingRule {
     <#
     .SYNOPSIS
-        Creates a new Object Matching Rule on a Sync Rule (advanced mode).
+        Creates a new Object Matching Rule on a Synchronisation Rule (advanced mode).
 
     .DESCRIPTION
-        Creates a new Object Matching Rule on a specific Sync Rule.
-        This is used in advanced mode where matching rules are per-sync rule
+        Creates a new Object Matching Rule on a specific Synchronisation Rule.
+        This is used in advanced mode where matching rules are per-Synchronisation Rule
         rather than per-object type. The Metaverse Object Type is derived from
-        the sync rule automatically.
+        the Synchronisation Rule automatically.
 
     .PARAMETER SyncRuleId
-        The unique identifier of the Sync Rule.
+        The unique identifier of the Synchronisation Rule.
 
     .PARAMETER SourceAttributeId
-        The Connected System attribute ID to use as the source for matching (import matching).
-        Either this or SourceMetaverseAttributeId must be specified.
-
-    .PARAMETER SourceMetaverseAttributeId
-        The Metaverse attribute ID to use as the source for matching (export matching).
-        Either this or SourceAttributeId must be specified.
+        The Connected System attribute ID to use as the source for matching. Matched against
+        -TargetMetaverseAttributeId, for both import and export matching.
 
     .PARAMETER TargetMetaverseAttributeId
         The Metaverse attribute ID to match against.
@@ -44,12 +40,7 @@ function New-JIMSyncRuleMatchingRule {
     .EXAMPLE
         New-JIMSyncRuleMatchingRule -SyncRuleId 5 -SourceAttributeId 25 -TargetMetaverseAttributeId 5
 
-        Creates a matching rule on sync rule 5 that maps CS attribute 25 to MV attribute 5.
-
-    .EXAMPLE
-        New-JIMSyncRuleMatchingRule -SyncRuleId 5 -SourceMetaverseAttributeId 3 -TargetMetaverseAttributeId 5 -PassThru
-
-        Creates an export matching rule on sync rule 5 and returns the created rule.
+        Creates a matching rule on Synchronisation Rule 5 that maps CS attribute 25 to MV attribute 5.
 
     .LINK
         Get-JIMSyncRuleMatchingRule
@@ -62,11 +53,8 @@ function New-JIMSyncRuleMatchingRule {
         [Parameter(Mandatory, ValueFromPipelineByPropertyName)]
         [int]$SyncRuleId,
 
-        [Parameter(ParameterSetName = 'CSAttribute')]
+        [Parameter(Mandatory)]
         [int]$SourceAttributeId,
-
-        [Parameter(ParameterSetName = 'MVAttribute')]
-        [int]$SourceMetaverseAttributeId,
 
         [Parameter(Mandatory)]
         [int]$TargetMetaverseAttributeId,
@@ -87,17 +75,9 @@ function New-JIMSyncRuleMatchingRule {
             return
         }
 
-        # Build source based on which attribute was specified
-        $source = @{ order = 0 }
-        if ($PSBoundParameters.ContainsKey('SourceAttributeId')) {
-            $source.connectedSystemAttributeId = $SourceAttributeId
-        }
-        elseif ($PSBoundParameters.ContainsKey('SourceMetaverseAttributeId')) {
-            $source.metaverseAttributeId = $SourceMetaverseAttributeId
-        }
-        else {
-            Write-Error "Either -SourceAttributeId or -SourceMetaverseAttributeId must be specified."
-            return
+        $source = @{
+            order = 0
+            connectedSystemAttributeId = $SourceAttributeId
         }
 
         $body = @{
@@ -113,8 +93,8 @@ function New-JIMSyncRuleMatchingRule {
             $body.caseSensitive = $CaseSensitive
         }
 
-        if ($PSCmdlet.ShouldProcess("Sync Rule $SyncRuleId", "Create Matching Rule")) {
-            Write-Verbose "Creating Matching Rule for Sync Rule ID: $SyncRuleId"
+        if ($PSCmdlet.ShouldProcess("Synchronisation Rule $SyncRuleId", "Create Matching Rule")) {
+            Write-Verbose "Creating Matching Rule for Synchronisation Rule ID: $SyncRuleId"
 
             try {
                 $result = Invoke-JIMApi -Endpoint "/api/v1/synchronisation/sync-rules/$SyncRuleId/matching-rules" -Method 'POST' -Body $body

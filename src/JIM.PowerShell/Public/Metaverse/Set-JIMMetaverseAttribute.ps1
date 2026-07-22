@@ -4,12 +4,19 @@
 function Set-JIMMetaverseAttribute {
     <#
     .SYNOPSIS
-        Updates an existing Metaverse Attribute in JIM.
+        Updates an existing custom Metaverse Attribute in JIM.
 
     .DESCRIPTION
-        Updates the properties of an existing Metaverse attribute.
-        Only the parameters provided will be updated.
-        Note: Built-in attributes cannot be modified.
+        Updates a custom Metaverse Attribute. Changes are routed to the correct endpoint:
+
+        - Name and RenderingHint are updated together via the attribute endpoint.
+        - Type and AttributePlurality are updated via the dedicated schema endpoint. Because the
+          schema change is refused while any Metaverse Object holds a stored value for the
+          attribute, supplying either -Type or -AttributePlurality sends both (the unspecified one
+          is read from the attribute's current schema).
+
+        Object Type bindings are not changed here; use Add-JIMMetaverseObjectTypeAttribute and
+        Remove-JIMMetaverseObjectTypeAttribute. Built-in attributes cannot be modified.
 
     .PARAMETER Id
         The unique identifier of the Attribute to update.
@@ -18,19 +25,19 @@ function Set-JIMMetaverseAttribute {
         Attribute object to update (from pipeline).
 
     .PARAMETER Name
-        The new name for the Attribute.
+        The new name for the Attribute. Subject to a case-insensitive uniqueness check.
+
+    .PARAMETER RenderingHint
+        The rendering hint for multi-valued attributes.
+        Valid values: Default, Table, ChipSet, List
 
     .PARAMETER Type
         The new data type for the attribute.
-        Valid values: Text, Integer, DateTime, Boolean, Reference, Guid, Binary
+        Valid values: Text, Integer, LongNumber, DateTime, Boolean, Reference, Guid, Binary
 
     .PARAMETER AttributePlurality
         The new plurality setting.
         Valid values: SingleValued, MultiValued
-
-    .PARAMETER ObjectTypeIds
-        Array of Object Type IDs to associate with this attribute.
-        This replaces any existing associations.
 
     .PARAMETER ChangeReason
         Optional reason for the change, recorded on the audit Activity and shown in the object's
@@ -45,22 +52,24 @@ function Set-JIMMetaverseAttribute {
     .EXAMPLE
         Set-JIMMetaverseAttribute -Id 1 -Name "UpdatedName"
 
-        Updates the name of the Attribute with ID 1.
+        Renames the Attribute with ID 1.
 
     .EXAMPLE
-        Set-JIMMetaverseAttribute -Id 1 -ObjectTypeIds 1,2,3 -PassThru
+        Set-JIMMetaverseAttribute -Id 1 -RenderingHint List -PassThru
 
-        Associates the attribute with object types 1, 2, and 3 and returns the updated object.
+        Changes the rendering hint and returns the updated object.
 
     .EXAMPLE
         Get-JIMMetaverseAttribute -Name "CustomAttr" | Set-JIMMetaverseAttribute -Type Integer
 
-        Updates an attribute from the pipeline to change its type.
+        Changes an attribute's data type (refused if any object holds a stored value).
 
     .LINK
         Get-JIMMetaverseAttribute
         New-JIMMetaverseAttribute
         Remove-JIMMetaverseAttribute
+        Add-JIMMetaverseObjectTypeAttribute
+        Remove-JIMMetaverseObjectTypeAttribute
     #>
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium', DefaultParameterSetName = 'ById')]
     [OutputType([PSCustomObject])]
@@ -76,15 +85,16 @@ function Set-JIMMetaverseAttribute {
         [string]$Name,
 
         [Parameter()]
-        [ValidateSet('Text', 'Integer', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')]
+        [ValidateSet('Default', 'Table', 'ChipSet', 'List')]
+        [string]$RenderingHint,
+
+        [Parameter()]
+        [ValidateSet('Text', 'Integer', 'LongNumber', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')]
         [string]$Type,
 
         [Parameter()]
         [ValidateSet('SingleValued', 'MultiValued')]
         [string]$AttributePlurality,
-
-        [Parameter()]
-        [int[]]$ObjectTypeIds,
 
         [Parameter()]
         [ValidateNotNullOrEmpty()]
@@ -102,74 +112,66 @@ function Set-JIMMetaverseAttribute {
 
         $attrId = if ($InputObject) { $InputObject.id } else { $Id }
 
-        # Map type string to enum integer value (AttributeDataType enum)
-        $typeMap = @{
-            'Text'      = 1
-            'Number'    = 2
-            'Integer'   = 2  # Alias for Number
-            'DateTime'  = 3
-            'Binary'    = 4
-            'Reference' = 5
-            'Guid'      = 6
-            'Boolean'   = 7
-        }
+        # Enum request fields are sent as their string names; the API rejects numeric ordinals
+        # (JsonStringEnumConverter allowIntegerValues:false, PR #1060). Responses already return
+        # enum names, so a value read back from the current schema is used as-is. -Type's
+        # ValidateSet exposes 'Integer' as an alias for the AttributeDataType member 'Number';
+        # that is normalised where -Type is applied below. Other values are exact member names.
 
-        # Map plurality string to enum integer value (AttributePlurality enum)
-        $pluralityMap = @{
-            'SingleValued' = 0
-            'MultiValued'  = 1
-        }
+        $metadataChanged = $PSBoundParameters.ContainsKey('Name') -or $PSBoundParameters.ContainsKey('RenderingHint')
+        $schemaChanged = $PSBoundParameters.ContainsKey('Type') -or $PSBoundParameters.ContainsKey('AttributePlurality')
 
-        # Build update body
-        $body = @{}
-
-        if ($Name) {
-            $body.name = $Name
-        }
-
-        if ($Type) {
-            $typeValue = $typeMap[$Type]
-            if ($null -eq $typeValue) {
-                Write-Error "Invalid type '$Type'. Valid values: Text, Number, Integer, DateTime, Binary, Reference, Guid, Boolean"
-                return
-            }
-            $body.type = $typeValue
-        }
-
-        if ($AttributePlurality) {
-            $body.attributePlurality = $pluralityMap[$AttributePlurality]
-        }
-
-        if ($PSBoundParameters.ContainsKey('ObjectTypeIds')) {
-            $body.objectTypeIds = $ObjectTypeIds
-        }
-
-        if ($body.Count -eq 0) {
-            Write-Warning "No updates specified."
+        if (-not $metadataChanged -and -not $schemaChanged) {
+            Write-Warning "No updates specified. Provide -Name, -RenderingHint, -Type and/or -AttributePlurality."
             return
         }
 
-        if ($ChangeReason) {
-            $body.changeReason = $ChangeReason
+        $displayName = if ($Name) { $Name } elseif ($InputObject -and $InputObject.name) { $InputObject.name } else { $attrId }
+
+        if (-not $PSCmdlet.ShouldProcess($displayName, "Update Metaverse Attribute")) {
+            return
         }
 
-        $displayName = $Name ?? $attrId
+        try {
+            # Schema change (type / plurality). The endpoint requires both values, so read the
+            # current schema to fill whichever was not supplied.
+            if ($schemaChanged) {
+                $current = Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes/$attrId"
 
-        if ($PSCmdlet.ShouldProcess($displayName, "Update Metaverse Attribute")) {
-            Write-Verbose "Updating Metaverse Attribute: $attrId"
-
-            try {
-                $result = Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes/$attrId" -Method 'PUT' -Body $body
-
-                Write-Verbose "Updated Metaverse Attribute: $attrId"
-
-                if ($PassThru) {
-                    $result
+                $typeValue = if ($PSBoundParameters.ContainsKey('Type')) {
+                    if ($Type -eq 'Integer') { 'Number' } else { $Type }
+                } else {
+                    $current.type
                 }
+                $pluralityValue = if ($PSBoundParameters.ContainsKey('AttributePlurality')) { $AttributePlurality } else { $current.attributePlurality }
+
+                $schemaBody = @{
+                    type               = $typeValue
+                    attributePlurality = $pluralityValue
+                }
+                if ($ChangeReason) { $schemaBody.changeReason = $ChangeReason }
+
+                Write-Verbose "Changing schema for Metaverse Attribute $attrId (type=$typeValue, plurality=$pluralityValue)"
+                $null = Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes/$attrId/schema" -Method 'PATCH' -Body $schemaBody
             }
-            catch {
-                Write-Error "Failed to update Metaverse Attribute: $_"
+
+            # Name / rendering-hint change.
+            if ($metadataChanged) {
+                $body = @{}
+                if ($PSBoundParameters.ContainsKey('Name')) { $body.name = $Name }
+                if ($PSBoundParameters.ContainsKey('RenderingHint')) { $body.renderingHint = $RenderingHint }
+                if ($ChangeReason) { $body.changeReason = $ChangeReason }
+
+                Write-Verbose "Updating name/rendering for Metaverse Attribute $attrId"
+                $null = Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes/$attrId" -Method 'PATCH' -Body $body
             }
+
+            if ($PassThru) {
+                Invoke-JIMApi -Endpoint "/api/v1/metaverse/attributes/$attrId"
+            }
+        }
+        catch {
+            Write-Error "Failed to update Metaverse Attribute: $_"
         }
     }
 }

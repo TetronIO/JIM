@@ -4,8 +4,9 @@ JIM (Junctional Identity Manager) is a self-hosted identity lifecycle management
 
 For per-object documentation (Connected Systems, Synchronisation Rules, Schedules, etc.) see the [Configuration](../configuration/index.md) section.
 
-<img class="diagram-light" alt="JIM Containers" src="../diagrams/images/light/jim-structurizr-1-Containers.svg">
-<img class="diagram-dark" alt="JIM Containers" src="../diagrams/images/dark/jim-structurizr-1-Containers.svg">
+--8<-- "assets/diagrams/hub-and-spoke.svg"
+
+<p class="jim-diagram-caption">The Connected Systems shown are illustrative examples. Dashed elements indicate planned connectivity.<span class="jimdg-caption-motion"> Moving dots trace identity data flowing through JIM.</span></p>
 
 ## 🏗️ Architecture
 

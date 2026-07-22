@@ -100,6 +100,11 @@ The settings listed below are the ones most commonly adjusted; the full list is 
 | `Sync.PartitionValidationMode` | Run Profile partition validation | Synchronisation | Controls how JIM behaves when a Run Profile is executed for a Connected System that supports partitions but has none selected. `Error` blocks execution; `Warning` allows execution but logs a warning.                                                         | `Error`       |
 | `History.RetentionPeriod`    | History retention period  | History         | The duration for which activity and audit history is retained. Format: `d.hh:mm:ss`. Longer periods increase database size and may affect performance. Configuration change history is excluded; it has its own retention period below.                          | `90.00:00:00` (90 days) |
 | `History.ConfigurationChangeRetentionPeriod` | Configuration change retention period | History | The duration for which configuration change history (versioned Connected System, Synchronisation Rule, and Schedule snapshots) is retained. Kept separately from, and typically much longer than, the general history retention period. Format: `d.hh:mm:ss`.     | `3650.00:00:00` (~10 years) |
+| `History.SecurityEventRetentionPeriod` | Security event retention period | History | The duration for which [security audit events](../administration/security-audit-events.md) (interactive sign-in success/failure, API key authentication failure) are retained. Kept separately from the general history and configuration change retention periods. Format: `d.hh:mm:ss`. | `365.00:00:00` (~1 year) |
+| `ChangeTracking.ConfigurationChanges.Enabled` | Track configuration changes | History | Enables or disables capture of Configuration Change History. When `true`, a redacted, versioned snapshot is recorded on the Activity for every configuration create, update, and delete. Set to `false` to stop capturing new history; existing history is not deleted. | `true`        |
+| `Security.RateLimiting.Enabled` | API rate limiting enabled | Security | When `true`, REST API requests are throttled per client. See [Rate Limiting](../api/rate-limiting.md). | `true` |
+| `Security.RateLimiting.AuthenticatedRequestsPerMinute` | Authenticated API requests per minute | Security | The maximum REST API requests per minute for an authenticated client (per signed-in user or API key). | `300` |
+| `Security.RateLimiting.UnauthenticatedRequestsPerMinute` | Unauthenticated API requests per minute | Security | The maximum REST API requests per minute for an unauthenticated client (per IP address). | `30` |
 
 !!! tip "Editing service settings"
     Navigate to **Admin > Service Settings**, use the filter and search box to locate the setting by key or display name, and click the edit icon. Changes are audited: the settings page shows who last modified each value and when.
@@ -116,11 +121,35 @@ The settings listed below are the ones most commonly adjusted; the full list is 
 
 ---
 
+## Encryption Keys
+
+JIM encrypts secrets at rest (Connected System credentials, the SSO secret, Schedule SQL-step connection strings) with keys stored on the filesystem. All three services (`jim.web`, `jim.worker`, `jim.scheduler`) must resolve to the same key location so they can decrypt each other's data.
+
+| Variable                  | Description                                                                                                                                                                                 | Default                          | Example        |
+|---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------|----------------|
+| `JIM_ENCRYPTION_KEY_PATH` | Filesystem path where encryption keys are stored. When unset, JIM uses `/data/keys` (the `jim-keys-volume` Docker volume) if `/data` exists, otherwise the platform application-data directory. | *(unset)* -- resolves to `/data/keys` in Docker | `/data/keys`   |
+
+!!! danger "These keys must be backed up with the database"
+    The database ciphertext cannot be decrypted without these keys. A database backup restored without its matching keys leaves every stored secret unrecoverable. See [Backup & Disaster Recovery](backup-recovery.md).
+
+---
+
 ## UI Theme
 
 | Variable    | Description                                                                                                    | Default    |
 |-------------|----------------------------------------------------------------------------------------------------------------|------------|
 | `JIM_THEME` | Built-in colour theme for the JIM web interface. Valid values: `purple`, `black`, `blended-nav`, `future-minimal`, `navy-o5`, `navy-o6`. | `navy-o6`  |
+
+---
+
+## Reverse Proxy
+
+| Variable              | Description                                                                                                                                                                                                                     | Default              |
+|------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------|
+| `JIM_TRUSTED_PROXIES` | Comma-separated list of trusted proxy IP addresses and/or CIDR networks (e.g. `10.0.0.1,172.16.0.0/12`). When set, JIM trusts `X-Forwarded-For`/`X-Forwarded-Proto` headers from these sources, so the real client IP and scheme are recovered rather than the proxy's own. Used for unauthenticated API [rate limiting](../api/rate-limiting.md), logging, and HTTPS redirection. | *(unset)* -- forwarded headers are not trusted; the connecting socket's address is used as-is |
+
+!!! warning "Only set this behind a trusted reverse proxy"
+    Trusting forwarded headers from an address you do not control lets a client spoof its own IP, defeating IP-based rate limiting and polluting logs. Only list proxies (or the proxy network) that terminate connections in front of JIM.
 
 ---
 

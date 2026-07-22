@@ -21,7 +21,7 @@
     {
         @* Page Title - must come before breadcrumbs for consistency *@
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
-            <MudText Typo="Typo.h4"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@GetStatusTitle()</MudText>
+            <MudText Typo="Typo.h3"><MudIcon Icon="@Icons.Material.Filled.ReceiptLong" Size="Size.Large" Class="mr-2 mb-1" Style="vertical-align: middle;" />@GetStatusTitle()</MudText>
             <MudIcon Icon="@GetStatusIcon()" Size="Size.Large" Color="@GetStatusColor()" />
         </MudStack>
         <MudBreadcrumbs Items="_breadcrumbs" Class="ps-0 mb-4"></MudBreadcrumbs>
@@ -53,7 +53,7 @@
                 @if (_activity != null)
                 {
                     <MudItem xs="12" sm="6" md="4">
-                        <MudText Typo="Typo.button" Class="mud-text-secondary">Run Profile</MudText>
+                        <MudText Typo="Typo.button" Class="mud-text-secondary">@(IsHousekeepingContext() ? "Activity" : "Run Profile")</MudText>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Class="mud-text-secondary" />
                             <MudText>@_activity.TargetName</MudText>
@@ -218,6 +218,11 @@
                                 </MudChip>
                             </MudTooltip>
                         }
+                    }
+                    else if (IsHousekeepingContext() && !string.IsNullOrEmpty(_activityRunProfileExecutionItem.DisplayNameSnapshot))
+                    {
+                        @* Housekeeping deletion: no CSO involved; show the deleted Metaverse Object's name *@
+                        <MudText Class="mud-text-secondary">@_activityRunProfileExecutionItem.DisplayNameSnapshot (deleted)</MudText>
                     }
                     else
                     {
@@ -600,7 +605,18 @@
 
             @if (_metaverseObjectType != null)
             {
-                @if (!IsSyncContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
+                @if (IsHousekeepingContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
+                {
+                    @* Housekeeping context: the Metaverse Object itself was deleted *@
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-3">
+                        <MudText Typo="Typo.body1">
+                            The Metaverse Object's deletion grace period expired and the housekeeping process deleted it
+                            from the metaverse. Delete Pending Exports were staged for any remaining target Connected
+                            System Objects, and membership-removal Pending Exports for objects that referenced it.
+                        </MudText>
+                    </MudAlert>
+                }
+                else if (!IsSyncContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
                 {
                     @* Import context: deletion detected but not yet processed by sync *@
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-3">
@@ -708,7 +724,17 @@
 else
                         {
                             @* Fallback generic message when object type info not available *@
-                            @if (!IsSyncContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
+                            @if (IsHousekeepingContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
+                            {
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+                                    <MudText Typo="Typo.body1">
+                                        The Metaverse Object's deletion grace period expired and the housekeeping process deleted it
+                                        from the metaverse. Delete Pending Exports were staged for any remaining target Connected
+                                        System Objects, and membership-removal Pending Exports for objects that referenced it.
+                                    </MudText>
+                                </MudAlert>
+                            }
+                            else if (!IsSyncContext() && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Deleted)
                             {
                                 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
                                     <MudText Typo="Typo.body1">
@@ -1315,6 +1341,16 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         or ConnectedSystemRunType.DeltaSynchronisation;
     }
 
+    /// <summary>
+    /// Whether this item belongs to a Metaverse Object Housekeeping Activity (#1020). Housekeeping
+    /// Deleted items are Metaverse Object deletions, not import-detected CSO deletions, so the
+    /// narrative copy differs from the Run Profile import/sync phrasing.
+    /// </summary>
+    private bool IsHousekeepingContext()
+    {
+        return _activity?.TargetType == ActivityTargetType.MetaverseObjectHousekeeping;
+    }
+
     private Color GetStatusColor()
     {
         if (_activityRunProfileExecutionItem?.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
@@ -1347,7 +1383,9 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             // Import operations
             ObjectChangeType.Added => $"{typeName} Added to Connector Space",
             ObjectChangeType.Updated => $"{typeName} Updated",
-            ObjectChangeType.Deleted => IsSyncContext() ? "Source Deletion Processed" : $"{typeName} Deletion Detected",
+            ObjectChangeType.Deleted => IsHousekeepingContext()
+                ? $"Metaverse {typeName} Deleted"
+                : IsSyncContext() ? "Source Deletion Processed" : $"{typeName} Deletion Detected",
             // Sync operations
             ObjectChangeType.Projected => $"Projected {typeName} to the Metaverse",
             ObjectChangeType.Joined => $"Joined {typeName} to Metaverse {mvoTypeName}",
@@ -1404,6 +1442,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin => "Synchronisation Failed",
             ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute => "Synchronisation Failed",
             ActivityRunProfileExecutionItemErrorType.UnresolvedReference => "Synchronisation Failed",
+            ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued => "Synchronisation Failed",
 
             // Export-phase errors
             ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed => "Export Pending",
@@ -1423,6 +1462,12 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         // If CSO exists, show "Connected System Object"
         if (_activityRunProfileExecutionItem?.ConnectedSystemObject != null)
             return "Connected System Object";
+
+        // Housekeeping deletion items describe the deleted Metaverse Object, not a CSO
+        if (IsHousekeepingContext()
+            && _activityRunProfileExecutionItem?.ObjectChangeType == ObjectChangeType.Deleted
+            && string.IsNullOrEmpty(_activityRunProfileExecutionItem.ExternalIdSnapshot))
+            return "Metaverse Object";
 
         // If no CSO but has external ID snapshot
         if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem?.ExternalIdSnapshot))
@@ -1450,9 +1495,11 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             // Import operations
             ObjectChangeType.Added => "A new Connected System Object was imported and added to the connector space.",
             ObjectChangeType.Updated => "The Connected System Object was updated with new attribute values.",
-            ObjectChangeType.Deleted => IsSyncContext()
-                ? "The Connected System Object was removed from the connector space after the source system deletion was confirmed."
-                : "The Connected System Object was detected as deleted from the source system and marked for removal.",
+            ObjectChangeType.Deleted => IsHousekeepingContext()
+                ? "The Metaverse Object's deletion grace period expired and the housekeeping process deleted it from the metaverse."
+                : IsSyncContext()
+                    ? "The Connected System Object was removed from the connector space after the source system deletion was confirmed."
+                    : "The Connected System Object was detected as deleted from the source system and marked for removal.",
             // Sync operations
             ObjectChangeType.Projected => "A new Metaverse Object was created via projection from the Connected System Object.",
             ObjectChangeType.Joined => "The Connected System Object was joined to an existing Metaverse Object.",
@@ -1477,7 +1524,9 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
             // Import operations - affect Connected System Objects
             ObjectChangeType.Added => "CSO Added",
             ObjectChangeType.Updated => "CSO Updated",
-            ObjectChangeType.Deleted => IsSyncContext() ? "Deletion Processed" : "Deletion Detected",
+            ObjectChangeType.Deleted => IsHousekeepingContext()
+                ? "Metaverse Object Deleted"
+                : IsSyncContext() ? "Deletion Processed" : "Deletion Detected",
             // Sync operations
             ObjectChangeType.Projected => "Projected",
             ObjectChangeType.Joined => "Joined",

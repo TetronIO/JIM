@@ -188,8 +188,24 @@ public class SyncRepository : ISyncRepository
     }
 
     public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(
-        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null)
+        int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null)
     {
+        if (afterId.HasValue)
+        {
+            // Keyset path: order by Id (matching the production loader's keyset ordering) and
+            // return the first page of rows sorting after the cursor. .NET Guid comparison is
+            // used for both the ordering and the filter, so the cursor chain is self-consistent
+            // within this provider, mirroring the production contract.
+            var afterIdValue = afterId.Value;
+            var remaining = GetCsosForSystem(connectedSystemId)
+                .OrderBy(c => c.Id)
+                .Where(c => c.Id.CompareTo(afterIdValue) > 0)
+                .ToList();
+            var keysetResult = BuildPagedResult(remaining, 1, pageSize);
+            keysetResult.CurrentPage = page;
+            return Task.FromResult(keysetResult);
+        }
+
         var all = GetCsosForSystem(connectedSystemId)
             .OrderBy(c => c.Created).ThenBy(c => c.Id)
             .ToList();
@@ -306,7 +322,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
+    public virtual Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
     {
         var idSet = new HashSet<Guid>(csoIds);
         var result = GetCsosForSystem(connectedSystemId)
@@ -317,6 +333,23 @@ public class SyncRepository : ISyncRepository
 
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
+
+    public Task<Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>> GetConnectedSystemObjectDisplaySnapshotsAsync(IReadOnlyCollection<Guid> csoIds)
+    {
+        var result = new Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>();
+        foreach (var id in csoIds.Where(_csos.ContainsKey))
+        {
+            var cso = _csos[id];
+            FixupCsoNavigationProperties(cso);
+            result[id] = new ConnectedSystemObjectDisplaySnapshot
+            {
+                ConnectedSystemObjectId = id,
+                ExternalId = cso.ExternalIdAttributeValue?.ToStringNoName(),
+                TypeName = cso.Type?.Name
+            };
+        }
+        return Task.FromResult(result);
+    }
 
     public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsByAttributeValuesAsync(
         int connectedSystemId, int attributeId, IEnumerable<string> attributeValues)
@@ -427,6 +460,16 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    public async Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds)
+    {
+        // Mirrors the production contract: every requested ID gets an entry, empty when the
+        // CSO has no reference lookups.
+        var result = new Dictionary<Guid, Dictionary<Guid, string>>();
+        foreach (var csoId in csoIds)
+            result[csoId] = await GetReferenceExternalIdsAsync(csoId);
+        return result;
+    }
+
     public Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
     {
         var count = _csosByMvo.TryGetValue(metaverseObjectId, out var ids) ? ids.Count : 0;
@@ -508,14 +551,16 @@ public class SyncRepository : ISyncRepository
                 cso.AttributeValues.Add(addition);
             }
 
-            foreach (var removal in cso.PendingAttributeValueRemovals)
+            // Single pass over cso.AttributeValues (#988) instead of one RemoveAll/Remove scan per
+            // pending removal - the latter is O(removals x AttributeValues), quadratic for a large
+            // multi-valued attribute (e.g. a big group's next Full Import replacing membership).
+            if (cso.PendingAttributeValueRemovals.Count > 0)
             {
                 // Use reference equality when Id is Guid.Empty (newly created, not yet persisted).
                 // With EF Core, these objects have DB-generated IDs. In-memory, they remain empty.
-                if (removal.Id == Guid.Empty)
-                    cso.AttributeValues.Remove(removal);
-                else
-                    cso.AttributeValues.RemoveAll(av => av.Id == removal.Id);
+                var removalIds = new HashSet<Guid>(cso.PendingAttributeValueRemovals.Where(r => r.Id != Guid.Empty).Select(r => r.Id));
+                var removalRefs = new HashSet<ConnectedSystemObjectAttributeValue>(cso.PendingAttributeValueRemovals.Where(r => r.Id == Guid.Empty));
+                cso.AttributeValues.RemoveAll(av => (av.Id != Guid.Empty && removalIds.Contains(av.Id)) || removalRefs.Contains(av));
             }
 
             cso.PendingAttributeValueAdditions = new List<ConnectedSystemObjectAttributeValue>();
@@ -615,8 +660,10 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(resolved);
     }
 
-    public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId)
+    public Task<int> FixupCrossBatchChangeRecordReferenceIdsAsync(int connectedSystemId, int? batchSize = null)
     {
+        // batchSize only affects the PostgreSQL implementation's statement chunking; the in-memory
+        // resolution below is a single pass either way.
         // Build a lookup of secondary external ID values → CSO for the Connected System
         var secondaryIdLookup = new Dictionary<string, ConnectedSystemObject>(StringComparer.OrdinalIgnoreCase);
         foreach (var cso in GetCsosForSystem(connectedSystemId))
@@ -786,39 +833,70 @@ public class SyncRepository : ISyncRepository
             return Task.FromResult<ConnectedSystemObject?>(null);
 
         var source = rule.Sources[0];
-        if (source.MetaverseAttribute == null && source.MetaverseAttributeId == null)
-            return Task.FromResult<ConnectedSystemObject?>(null);
-        if (source.ConnectedSystemAttribute == null && source.ConnectedSystemAttributeId == null)
+
+        // The connector-space side of the comparison always comes from the source's Connected System attribute.
+        var csAttrId = source.ConnectedSystemAttribute?.Id ?? source.ConnectedSystemAttributeId;
+        if (csAttrId == null)
             return Task.FromResult<ConnectedSystemObject?>(null);
 
-        var mvoAttrId = source.MetaverseAttribute?.Id ?? source.MetaverseAttributeId;
+        // The MVO side: the standard rule shape (source = Connected System attribute, target = Metaverse
+        // attribute) serves both import and export matching, so read the rule's Target Metaverse Attribute
+        // directly (mirrors the Postgres implementation).
+        var mvoAttrId = rule.TargetMetaverseAttribute?.Id ?? rule.TargetMetaverseAttributeId;
+        if (mvoAttrId == null)
+            return Task.FromResult<ConnectedSystemObject?>(null);
+
         var mvoAttr = metaverseObject.AttributeValues?
             .FirstOrDefault(av => av.AttributeId == mvoAttrId);
         if (mvoAttr == null)
             return Task.FromResult<ConnectedSystemObject?>(null);
 
-        var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString();
-        if (mvoVal == null)
+        // Empty string is treated as no value, matching the Postgres implementation's IsNullOrEmpty guard.
+        var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString() ?? mvoAttr.LongValue?.ToString();
+        if (string.IsNullOrEmpty(mvoVal))
             return Task.FromResult<ConnectedSystemObject?>(null);
 
-        var csAttrId = source.ConnectedSystemAttribute?.Id ?? source.ConnectedSystemAttributeId;
         var comparison = rule.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 
-        foreach (var cso in _csos.Values)
+        bool ValueMatches(ConnectedSystemObject cso)
         {
-            if (cso.ConnectedSystemId != connectedSystem.Id) continue;
-            if (cso.TypeId != connectedSystemObjectType.Id) continue;
-
-            var csoAttr = cso.AttributeValues?
-                .FirstOrDefault(av => av.AttributeId == csAttrId);
-            if (csoAttr == null) continue;
-
-            var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString();
-            if (string.Equals(mvoVal, csoVal, comparison))
-                return Task.FromResult<ConnectedSystemObject?>(cso);
+            var csoAttr = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == csAttrId);
+            if (csoAttr == null)
+                return false;
+            var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString() ?? csoAttr.LongValue?.ToString();
+            return string.Equals(mvoVal, csoVal, comparison);
         }
 
-        return Task.FromResult<ConnectedSystemObject?>(null);
+        // Only unjoined, Normal-status CSOs are eligible: matching must never steal a CSO already joined
+        // to another Metaverse Object, and an Obsolete or PendingProvisioning CSO does not represent a
+        // live, unclaimed object in the target system.
+        var match = _csos.Values
+            .Where(cso => cso.ConnectedSystemId == connectedSystem.Id &&
+                          cso.TypeId == connectedSystemObjectType.Id &&
+                          cso.MetaverseObjectId == null &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal)
+            .OrderBy(cso => cso.Id)
+            .FirstOrDefault(ValueMatches);
+
+        return Task.FromResult(match);
+    }
+
+    /// <summary>
+    /// In-memory twin of the PostgreSQL conditional UPDATE (#1051): claims the CSO only if it is
+    /// still unclaimed, mirroring the "WHERE MetaverseObjectId IS NULL" guard. Test usage is
+    /// single-threaded, so no locking is required here; this method exists purely to give tests a
+    /// seam to simulate a lost race (see <c>virtual</c>), not to reproduce real concurrency.
+    /// </summary>
+    public virtual Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined)
+    {
+        if (!_csos.TryGetValue(connectedSystemObjectId, out var cso) || cso.MetaverseObjectId != null)
+            return Task.FromResult(false);
+
+        cso.MetaverseObjectId = metaverseObjectId;
+        cso.JoinType = ConnectedSystemObjectJoinType.Joined;
+        cso.DateJoined = dateJoined;
+        cso.Status = ConnectedSystemObjectStatus.Normal;
+        return Task.FromResult(true);
     }
 
     #endregion
@@ -876,6 +954,83 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(candidates);
     }
 
+    public Task<List<MetaverseObjectRecallSummary>> GetMetaverseObjectRecallSummariesAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> scopingAttributeIds)
+    {
+        var scopingIds = scopingAttributeIds as HashSet<int> ?? [.. scopingAttributeIds];
+        var summaries = metaverseObjectIds
+            .Select(id => _mvos.TryGetValue(id, out var mvo) ? mvo : null)
+            .Where(mvo => mvo != null)
+            .Select(mvo =>
+            {
+                var summary = new MetaverseObjectRecallSummary
+                {
+                    Id = mvo!.Id,
+                    TypeId = mvo.Type.Id,
+                    DisplayName = mvo.CachedDisplayName
+                };
+                summary.ScopingAttributeValues.AddRange(
+                    mvo.AttributeValues.Where(av => scopingIds.Contains(av.AttributeId)));
+                return summary;
+            })
+            .ToList();
+        return Task.FromResult(summaries);
+    }
+
+    public Task<List<ConnectedSystemObjectRecallTarget>> GetConnectedSystemObjectRecallTargetsAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds,
+        IReadOnlyCollection<int> targetConnectedSystemIds)
+    {
+        var mvoIds = metaverseObjectIds as HashSet<Guid> ?? [.. metaverseObjectIds];
+        var systemIds = targetConnectedSystemIds as HashSet<int> ?? [.. targetConnectedSystemIds];
+        var targets = _csos.Values
+            .Where(cso => cso.MetaverseObjectId.HasValue && mvoIds.Contains(cso.MetaverseObjectId.Value) &&
+                          systemIds.Contains(cso.ConnectedSystemId))
+            .Select(cso => new ConnectedSystemObjectRecallTarget
+            {
+                ConnectedSystemObjectId = cso.Id,
+                MetaverseObjectId = cso.MetaverseObjectId!.Value,
+                ConnectedSystemId = cso.ConnectedSystemId,
+                Status = cso.Status
+            })
+            .ToList();
+        return Task.FromResult(targets);
+    }
+
+    public Task<List<CsoReferenceValueMatch>> GetCsoReferenceValueMatchesAsync(
+        IReadOnlyCollection<Guid> connectedSystemObjectIds,
+        IReadOnlyCollection<int> connectedSystemAttributeIds,
+        IReadOnlyCollection<Guid> deletedReferenceCsoIds,
+        IReadOnlyCollection<string> loweredReferenceValues)
+    {
+        var csoIds = connectedSystemObjectIds as HashSet<Guid> ?? [.. connectedSystemObjectIds];
+        var attributeIds = connectedSystemAttributeIds as HashSet<int> ?? [.. connectedSystemAttributeIds];
+        var deletedCsoIds = deletedReferenceCsoIds as HashSet<Guid> ?? [.. deletedReferenceCsoIds];
+        var loweredValues = loweredReferenceValues.ToHashSet(StringComparer.Ordinal);
+
+        // Same comparison semantics as the SQL implementation: exact match on the resolved
+        // reference id, or the pre-lowered raw reference string against LOWER(value).
+        var matches = csoIds
+            .Select(id => _csos.TryGetValue(id, out var cso) ? cso : null)
+            .Where(cso => cso != null)
+            .SelectMany(cso => cso!.AttributeValues
+                .Where(av => attributeIds.Contains(av.AttributeId) &&
+                             ((av.ReferenceValueId.HasValue && deletedCsoIds.Contains(av.ReferenceValueId.Value)) ||
+                              (av.UnresolvedReferenceValue != null &&
+                               loweredValues.Contains(av.UnresolvedReferenceValue.ToLowerInvariant()))))
+                .Select(av => new CsoReferenceValueMatch
+                {
+                    AttributeValueId = av.Id,
+                    ConnectedSystemObjectId = cso.Id,
+                    AttributeId = av.AttributeId,
+                    ReferenceValueId = av.ReferenceValueId,
+                    UnresolvedReferenceValue = av.UnresolvedReferenceValue
+                }))
+            .ToList();
+        return Task.FromResult(matches);
+    }
+
     public Task CreateMetaverseObjectsAsync(IEnumerable<MetaverseObject> metaverseObjects)
     {
         foreach (var mvo in metaverseObjects)
@@ -905,11 +1060,57 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
+    // Virtual so tests can spy on per-object deletes; the MVO deletion flush must use the
+    // set-based DeleteMetaverseObjectsAsync instead (issue #993).
+    public virtual Task DeleteMetaverseObjectAsync(MetaverseObject metaverseObject)
     {
         _mvos.Remove(metaverseObject.Id);
         _csosByMvo.Remove(metaverseObject.Id);
+        NullReferencesToDeletedMvos(new HashSet<Guid> { metaverseObject.Id });
         return Task.CompletedTask;
+    }
+
+    public virtual Task DeleteMetaverseObjectsAsync(IReadOnlyCollection<MetaverseObject> metaverseObjects)
+    {
+        foreach (var metaverseObject in metaverseObjects)
+        {
+            _mvos.Remove(metaverseObject.Id);
+            _csosByMvo.Remove(metaverseObject.Id);
+        }
+        NullReferencesToDeletedMvos(metaverseObjects.Select(mvo => mvo.Id).ToHashSet());
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Mirrors the PostgreSQL deletion path's reference row clean-up (#1003, #1019): valueless rows on
+    /// surviving objects that reference deleted MVOs are removed entirely (leaving them behind as
+    /// all-null "ghost" rows corrupted member lists and later exports), while rows carrying payload
+    /// keep the legacy behaviour of having only their reference nulled. Without this mirror, code that
+    /// wrongly reads live reference rows instead of the pre-deletion recall capture passes in-memory
+    /// tests and fails only on PostgreSQL. Predicate parity with the raw SQL lives in
+    /// <see cref="MetaverseObjectAttributeValue.IsValuelessReferenceRow"/>.
+    /// </summary>
+    private void NullReferencesToDeletedMvos(IReadOnlySet<Guid> deletedMvoIds)
+    {
+        foreach (var mvo in _mvos.Values)
+        {
+            if (deletedMvoIds.Contains(mvo.Id))
+                continue;
+
+            mvo.AttributeValues.RemoveAll(av => ReferencesDeletedMvo(av, deletedMvoIds) && av.IsValuelessReferenceRow());
+
+            foreach (var attributeValue in mvo.AttributeValues.Where(av => ReferencesDeletedMvo(av, deletedMvoIds)))
+            {
+                attributeValue.ReferenceValueId = null;
+                attributeValue.ReferenceValue = null;
+            }
+        }
+    }
+
+    private static bool ReferencesDeletedMvo(MetaverseObjectAttributeValue attributeValue, IReadOnlySet<Guid> deletedMvoIds)
+    {
+        return (attributeValue.ReferenceValueId.HasValue && deletedMvoIds.Contains(attributeValue.ReferenceValueId.Value)) ||
+               (attributeValue.ReferenceValue != null && deletedMvoIds.Contains(attributeValue.ReferenceValue.Id));
     }
 
     public Task DeleteMetaverseObjectAttributeValuesByIdsAsync(IReadOnlyList<Guid> attributeValueIds)
@@ -969,7 +1170,9 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+    // Virtual for test-support subclasses (see GetPendingExportsByIdsAsync): persisting is the
+    // event that makes state visible to fresh per-batch contexts in the parallel export path.
+    public virtual Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
     {
         foreach (var pe in pendingExports)
             _pendingExports[pe.Id] = pe;
@@ -998,21 +1201,26 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsByConnectedSystemObjectIdsAsync(
-        IEnumerable<Guid> connectedSystemObjectIds)
-    {
-        var result = new Dictionary<Guid, PendingExport>();
-        foreach (var csoId in connectedSystemObjectIds)
-        {
-            if (_pendingExportsByCsoId.TryGetValue(csoId, out var peId) && _pendingExports.TryGetValue(peId, out var pe))
-                result[csoId] = pe;
-        }
-        return Task.FromResult(result);
-    }
+    // This fake store has no Include-shape concept (there is no lazy loading and every seeded object
+    // is already a fully wired-up graph in memory), so the lean merge-fetch variant is behaviourally
+    // identical to the heavy one here. The distinction only exists - and is only provable - at the
+    // Postgres repository layer, where Include chains genuinely control what gets loaded.
+    public Task<PendingExport?> GetPendingExportLightweightByConnectedSystemObjectIdAsync(Guid connectedSystemObjectId)
+        => GetPendingExportByConnectedSystemObjectIdAsync(connectedSystemObjectId);
 
     public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(
         IEnumerable<Guid> connectedSystemObjectIds)
-        => GetPendingExportsByConnectedSystemObjectIdsAsync(connectedSystemObjectIds);
+    {
+        var result = connectedSystemObjectIds
+            .Distinct()
+            .Select(csoId => (csoId,
+                pe: _pendingExportsByCsoId.TryGetValue(csoId, out var peId) && _pendingExports.TryGetValue(peId, out var found)
+                    ? found
+                    : null))
+            .Where(pair => pair.pe != null)
+            .ToDictionary(pair => pair.csoId, pair => pair.pe!);
+        return Task.FromResult(result);
+    }
 
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId)
     {
@@ -1025,8 +1233,10 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId)
+    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null)
     {
+        // chunkSize only affects the PostgreSQL implementation's statement chunking; the in-memory
+        // load below is a single pass either way.
         var result = new Dictionary<Guid, PendingExport>();
         foreach (var pe in GetPendingExportsForSystem(connectedSystemId))
         {
@@ -1230,8 +1440,15 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(rules);
     }
 
+    /// <summary>
+    /// Number of times <see cref="GetAllSyncRulesAsync"/> has been called. Lets tests prove that a
+    /// pre-built export evaluation cache is honoured (no per-flush rule reloads, #1003).
+    /// </summary>
+    public int GetAllSyncRulesCallCount { get; private set; }
+
     public Task<List<SyncRule>> GetAllSyncRulesAsync(bool withChangeTracking = false)
     {
+        GetAllSyncRulesCallCount++;
         return Task.FromResult(_syncRules.Values.ToList());
     }
 
@@ -1330,7 +1547,9 @@ public class SyncRepository : ISyncRepository
 
     #region MVO Change History
 
-    public Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change)
+    // Virtual so tests can spy on per-object change record creation; the MVO deletion flush
+    // persists its Deleted change records via PersistPendingMvoChangesAsync instead (issue #993).
+    public virtual Task CreateMetaverseObjectChangeDirectAsync(MetaverseObjectChange change)
     {
         if (change.Id == Guid.Empty)
             change.Id = Guid.NewGuid();
@@ -1409,7 +1628,9 @@ public class SyncRepository : ISyncRepository
 
     #region Export Evaluation Support
 
-    public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
+    // Virtual so tests can spy on per-object fetches; the MVO deletion flush must use the
+    // set-based GetConnectedSystemObjectsForMvoDeletionAsync instead (issue #993).
+    public virtual Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByMetaverseObjectIdAsync(Guid metaverseObjectId)
     {
         var result = new List<ConnectedSystemObject>();
         if (_csosByMvo.TryGetValue(metaverseObjectId, out var csoIds))
@@ -1421,6 +1642,41 @@ public class SyncRepository : ISyncRepository
             }
         }
         return Task.FromResult(result);
+    }
+
+    // In-memory objects carry their full attribute value lists; the Postgres implementation's
+    // lean include shape (external ID attribute values only) cannot be modelled here (see the
+    // EF in-memory caveat in test/CLAUDE.md).
+    public virtual Task<Dictionary<Guid, List<ConnectedSystemObject>>> GetConnectedSystemObjectsForMvoDeletionAsync(
+        IReadOnlyCollection<Guid> metaverseObjectIds)
+    {
+        var result = new Dictionary<Guid, List<ConnectedSystemObject>>();
+        foreach (var mvoId in metaverseObjectIds.Where(_csosByMvo.ContainsKey))
+        {
+            var joinedCsos = _csosByMvo[mvoId]
+                .Where(_csos.ContainsKey)
+                .Select(csoId => _csos[csoId])
+                .ToList();
+
+            if (joinedCsos.Count > 0)
+                result[mvoId] = joinedCsos;
+        }
+        return Task.FromResult(result);
+    }
+
+    public virtual Task DisconnectConnectedSystemObjectsAsync(IReadOnlyCollection<Guid> connectedSystemObjectIds)
+    {
+        foreach (var cso in connectedSystemObjectIds
+            .Where(_csos.ContainsKey)
+            .Select(csoId => _csos[csoId]))
+        {
+            cso.MetaverseObjectId = null;
+            cso.MetaverseObject = null;
+            cso.JoinType = ConnectedSystemObjectJoinType.NotJoined;
+            cso.DateJoined = null;
+            UpdateMvoIndex(cso);
+        }
+        return Task.CompletedTask;
     }
 
     public Task<Dictionary<(Guid MvoId, int ConnectedSystemId), ConnectedSystemObject>> GetConnectedSystemObjectsByTargetSystemsAsync(
@@ -1559,52 +1815,6 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public Task<ConnectedSystemObject?> FindMatchingConnectedSystemObjectAsync(
-        MetaverseObject metaverseObject,
-        ConnectedSystem connectedSystem,
-        ConnectedSystemObjectType connectedSystemObjectType,
-        List<ObjectMatchingRule> matchingRules)
-    {
-        // Simplified export matching: iterate rules, find CSO with matching attribute value
-        foreach (var rule in matchingRules.OrderBy(r => r.Order))
-        {
-            if (rule.Sources.Count == 0) continue;
-            var source = rule.Sources[0];
-
-            if (source.MetaverseAttribute == null && source.MetaverseAttributeId == null) continue;
-            if (source.ConnectedSystemAttribute == null && source.ConnectedSystemAttributeId == null) continue;
-
-            // Get the MVO attribute value to match against
-            var mvoAttrId = source.MetaverseAttribute?.Id ?? source.MetaverseAttributeId;
-            var mvoAttr = metaverseObject.AttributeValues?
-                .FirstOrDefault(av => av.AttributeId == mvoAttrId);
-            if (mvoAttr == null) continue;
-
-            var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString();
-            if (mvoVal == null) continue;
-
-            // Find a CSO in the target system with a matching CS attribute value
-            var csAttrId = source.ConnectedSystemAttribute?.Id ?? source.ConnectedSystemAttributeId;
-            var comparison = rule.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-
-            foreach (var cso in _csos.Values)
-            {
-                if (cso.ConnectedSystemId != connectedSystem.Id) continue;
-                if (cso.TypeId != connectedSystemObjectType.Id) continue;
-
-                var csoAttr = cso.AttributeValues?
-                    .FirstOrDefault(av => av.AttributeId == csAttrId);
-                if (csoAttr == null) continue;
-
-                var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString();
-                if (string.Equals(mvoVal, csoVal, comparison))
-                    return Task.FromResult<ConnectedSystemObject?>(cso);
-            }
-        }
-
-        return Task.FromResult<ConnectedSystemObject?>(null);
-    }
-
     #endregion
 
     #region Export Execution Support
@@ -1621,13 +1831,76 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int skip, int take)
+    public virtual Task<List<PendingExport>> GetExecutableExportBatchAsync(int connectedSystemId, int take, DateTime? afterCreatedAt, Guid? afterId)
     {
-        var result = GetExecutableExportsForSystem(connectedSystemId)
-            .Skip(skip)
+        // Keyset pagination on (CreatedAt, Id), mirroring the Postgres implementation.
+        // Guid ordering only needs to be self-consistent within this store; .NET's
+        // Guid comparison is used for both the predicate and the ordering.
+        var query = GetExecutableExportsForSystem(connectedSystemId);
+
+        if (afterCreatedAt.HasValue && afterId.HasValue)
+        {
+            var cursorCreatedAt = afterCreatedAt.Value;
+            var cursorId = afterId.Value;
+            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
+                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
+        }
+
+        var result = query
+            .OrderBy(pe => pe.CreatedAt)
+            .ThenBy(pe => pe.Id)
             .Take(take)
             .ToList();
         return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Collects all remaining executable exports with unresolved references (deferred) strictly
+    /// after the given keyset cursor, in a single call, mirroring the Postgres implementation.
+    /// Used to fast-path the export batch-collection loop once a batch is discovered to be made
+    /// up entirely of deferred exports (issue #985).
+    /// </summary>
+    public virtual Task<List<PendingExport>> GetRemainingDeferredExportsAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+    {
+        var query = GetExecutableExportsForSystem(connectedSystemId)
+            .Where(pe => pe.HasUnresolvedReferences);
+
+        if (afterCreatedAt.HasValue && afterId.HasValue)
+        {
+            var cursorCreatedAt = afterCreatedAt.Value;
+            var cursorId = afterId.Value;
+            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
+                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
+        }
+
+        var result = query
+            .OrderBy(pe => pe.CreatedAt)
+            .ThenBy(pe => pe.Id)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Returns whether any executable exports WITHOUT unresolved references exist strictly after
+    /// the given keyset cursor, mirroring the Postgres implementation. Guards the
+    /// deferred-collection fast path (issue #985): deferred and executable exports interleave in
+    /// (CreatedAt, Id) order, so an all-deferred batch does not prove the rest of the queue is
+    /// deferred too.
+    /// </summary>
+    public virtual Task<bool> AnyExecutableNonDeferredExportsAfterAsync(int connectedSystemId, DateTime? afterCreatedAt, Guid? afterId)
+    {
+        var query = GetExecutableExportsForSystem(connectedSystemId)
+            .Where(pe => !pe.HasUnresolvedReferences);
+
+        if (afterCreatedAt.HasValue && afterId.HasValue)
+        {
+            var cursorCreatedAt = afterCreatedAt.Value;
+            var cursorId = afterId.Value;
+            query = query.Where(pe => pe.CreatedAt > cursorCreatedAt
+                || (pe.CreatedAt == cursorCreatedAt && pe.Id.CompareTo(cursorId) > 0));
+        }
+
+        return Task.FromResult(query.Any());
     }
 
     /// <summary>
@@ -1696,7 +1969,10 @@ public class SyncRepository : ISyncRepository
         return Task.CompletedTask;
     }
 
-    public Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
+    // Virtual for test-support subclasses: the parallel export batch path re-loads Pending
+    // Exports by ID on a fresh per-batch context, and tests need to simulate that database
+    // isolation (returning last-persisted state rather than live in-memory references).
+    public virtual Task<List<PendingExport>> GetPendingExportsByIdsAsync(IList<Guid> pendingExportIds)
     {
         var result = pendingExportIds
             .Where(id => _pendingExports.ContainsKey(id))

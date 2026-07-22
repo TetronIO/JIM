@@ -2,9 +2,9 @@
 
 > Copy the content below into the "Instructions" or "System Prompt" field when creating an AI assistant project for JIM.
 >
-> **Document Version**: 1.7
+> **Document Version**: 1.8
 >
-> **Last Updated**: 2026-04-22
+> **Last Updated**: 2026-07-10
 
 ---
 
@@ -77,7 +77,7 @@ JIM's core platform is complete with v0.10.0 released. Core sync (import, sync, 
 2. **Paste the Instructions** from above into the "Instructions" or "System Prompt" field
 3. **Upload the context file**: Add `docs/JIM_AI_ASSISTANT_CONTEXT.md` as a project file
 4. **Optionally add**:
-   - Architecture diagrams from `docs/diagrams/images/`
+   - Architecture diagrams from `.github/diagrams/` (self-contained light/dark exports)
    - Specific feature plans from `docs/plans/` as needed
 
 ---
@@ -100,5 +100,5 @@ You can either:
 ## Related Files
 
 - **Context Document**: `docs/JIM_AI_ASSISTANT_CONTEXT.md` - Upload this to the project
-- **Architecture Diagrams**: `docs/diagrams/images/` - Optional visual aids
+- **Architecture Diagrams**: `.github/diagrams/` - Optional visual aids
 - **Feature Plans**: `docs/plans/` - Upload specific plans when discussing those features

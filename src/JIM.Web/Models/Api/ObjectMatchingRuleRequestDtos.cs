@@ -17,16 +17,10 @@ public class CreateObjectMatchingRuleSourceRequest
     public int Order { get; set; } = 0;
 
     /// <summary>
-    /// The Connected System attribute ID (for import matching).
-    /// Either this or MetaverseAttributeId must be specified.
+    /// The Connected System attribute ID. Required: sources are matched against the rule's
+    /// Target Metaverse Attribute, for both import and export matching.
     /// </summary>
     public int? ConnectedSystemAttributeId { get; set; }
-
-    /// <summary>
-    /// The Metaverse attribute ID (for export matching).
-    /// Either this or ConnectedSystemAttributeId must be specified.
-    /// </summary>
-    public int? MetaverseAttributeId { get; set; }
 }
 
 /// <summary>

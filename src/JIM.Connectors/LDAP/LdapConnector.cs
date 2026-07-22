@@ -11,7 +11,7 @@ using System.Net;
 using System.Security.Cryptography.X509Certificates;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -88,8 +88,6 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = _settingCertificateValidation, Required = false, RequiredWhenSetting = _settingUseSecureConnection, RequiredWhenValue = "true", DefaultStringValue = LdapConnectorConstants.CERT_VALIDATION_FULL, Description = "How to validate the server's SSL certificate. Full validation uses system CA store plus any certificates added in Admin > Certificates.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.CERT_VALIDATION_FULL, LdapConnectorConstants.CERT_VALIDATION_SKIP }, Category = ConnectedSystemSettingCategory.Connectivity },
             new() { Name = _settingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect", DefaultIntValue = 10, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
 
-            new() { Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Divider },
-
             new() { Name = "Credentials", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingUsername, Required = true, Description = "What's the username for the service account you want to use to connect to the directory service using? i.e. corp\\svc-jim-adc", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String  },
             new() { Name = _settingPassword, Required = true, Description = "What's the password for the service account you want to use to connect to the directory service with?", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.StringEncrypted },
@@ -117,7 +115,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = _settingDeleteBehaviour, Required = false, Description = "How to handle object deletions.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.DELETE_BEHAVIOUR_DELETE, LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE }, Category = ConnectedSystemSettingCategory.Export },
             new() { Name = _settingDisableAttribute, Required = false, RequiredWhenSetting = _settingDeleteBehaviour, RequiredWhenValue = LdapConnectorConstants.DELETE_BEHAVIOUR_DISABLE, Description = "Attribute to set when disabling objects (e.g., userAccountControl for AD). Only used when Delete Behaviour is 'Disable'.", DefaultStringValue = "userAccountControl", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String },
             new() { Name = _settingExportConcurrency, Required = false, Description = "Maximum number of concurrent LDAP operations during export. Higher values improve throughput but increase load on the target directory. Default is 4. Recommended range: 2-8. Values above 8 show diminishing returns and may overwhelm the directory server.", DefaultIntValue = LdapConnectorConstants.DEFAULT_EXPORT_CONCURRENCY, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
-            new() { Name = _settingModifyBatchSize, Required = false, Description = "Maximum number of values per multi-valued attribute modification in a single LDAP request. When adding or removing many values from a multi-valued attribute (e.g., group members), changes are split into batches of this size. Lower values improve compatibility with constrained LDAP servers; higher values improve throughput. Default is 100. Recommended range: 50-500.", DefaultIntValue = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
+            new() { Name = _settingModifyBatchSize, Required = false, Description = "Maximum number of values per multi-valued attribute modification in a single LDAP request. When adding or removing many values from a multi-valued attribute (e.g., group members), changes are split into batches of this size. Lower values improve compatibility with constrained LDAP servers; higher values improve throughput, especially for very large groups. Default is 1000. Recommended range: 100-2000.", DefaultIntValue = LdapConnectorConstants.DEFAULT_MODIFY_BATCH_SIZE, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Integer },
 
             new() { Name = "Group Membership", Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.Heading },
             new() { Name = _settingGroupPlaceholderMemberDn, Required = false, Description = "Placeholder member DN used for group object classes that require at least one member (e.g. groupOfNames). When a group has no real members, this value is added to satisfy the schema constraint. It is automatically filtered out during import. Only applies to non-AD directories. Default: cn=placeholder. If your directory has referential integrity enabled, set this to an existing entry's DN.", DefaultStringValue = LdapConnectorConstants.DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN, Category = ConnectedSystemSettingCategory.Export, Type = ConnectedSystemSettingType.String }
@@ -478,6 +476,52 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     }
     #endregion
 
+    #region IConnectorRecommendedExportParallelism members
+    /// <summary>
+    /// The Export Concurrency value at or above which the target is treated as a capable
+    /// directory for batch-parallelism purposes. The auto-tune only sets 16 (well above this)
+    /// for Active Directory and OpenLDAP; Samba AD and Generic directories stay at the
+    /// default of 4.
+    /// </summary>
+    internal const int CAPABLE_DIRECTORY_CONCURRENCY_THRESHOLD = 8;
+
+    /// <summary>
+    /// The deliberately conservative batch-parallelism recommendation for capable directories.
+    /// </summary>
+    internal const int RECOMMENDED_EXPORT_PARALLELISM = 2;
+
+    /// <summary>
+    /// Recommends export batch parallelism for this Connected System (issue #985d).
+    ///
+    /// The two knobs MULTIPLY: each parallel batch pipeline gets its own connector instance,
+    /// and each instance runs its own Export Concurrency concurrent LDAP operations (see
+    /// <see cref="ExportAsync"/>), so total in-flight operations = parallelism x per-instance
+    /// concurrency. Recommending anything near Export Concurrency itself would square the load
+    /// (16 x 16 = 256 in-flight operations, against a setting whose own description warns that
+    /// values above 8 may overwhelm the directory), so the recommendation is a flat, mild 2:
+    /// with an auto-tuned concurrency of 16 that is 2 x 16 = 32 in-flight operations, a safe
+    /// default.
+    ///
+    /// The directory type is not persisted anywhere readable without opening a connection
+    /// (which this method must not do), so Active Directory cannot be distinguished from
+    /// OpenLDAP here; OpenLDAP's mdb backend is single-writer and gains little from batch
+    /// parallelism, a further reason the value is deliberately conservative. An Export
+    /// Concurrency of 8 or above is used as the capable-directory signal (the auto-tune only
+    /// sets 16, for Active Directory and OpenLDAP); below that, no recommendation is made and
+    /// the resolver falls back to sequential. Issue #845 (connector-agnostic classification
+    /// storage) is the future enabler of a genuinely per-directory-type recommendation.
+    /// </summary>
+    public int? GetRecommendedExportParallelism(List<ConnectedSystemSettingValue> settingValues)
+    {
+        var exportConcurrency = settingValues
+            .FirstOrDefault(s => s.Setting.Name == _settingExportConcurrency)?.IntValue;
+
+        return exportConcurrency >= CAPABLE_DIRECTORY_CONCURRENCY_THRESHOLD
+            ? RECOMMENDED_EXPORT_PARALLELISM
+            : null;
+    }
+    #endregion
+
     #region IConnectorContainerCreation members
     /// <summary>
     /// Gets the list of container external IDs (DNs) that were created during the current export session.
@@ -531,12 +575,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (string.IsNullOrEmpty(containerExternalId))
             return null;
 
-        // Find the first comma (which separates the RDN from the parent DN)
-        var commaIndex = containerExternalId.IndexOf(',');
-        if (commaIndex == -1 || commaIndex == containerExternalId.Length - 1)
-            return null;
-
-        return containerExternalId.Substring(commaIndex + 1);
+        // Split off the leaf RDN (honouring escaped/quoted separators) to get the parent DN; null at the root.
+        return LdapConnectorUtilities.ParseDistinguishedName(containerExternalId).ParentDn;
     }
 
     /// <summary>
@@ -549,15 +589,11 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         if (string.IsNullOrEmpty(containerExternalId))
             return string.Empty;
 
-        // The name is the value of the first RDN component
-        var commaIndex = containerExternalId.IndexOf(',');
-        var rdn = commaIndex > 0 ? containerExternalId.Substring(0, commaIndex) : containerExternalId;
+        // The display name is the (unescaped) value of the leaf RDN's first component, e.g. "Sales" from "OU=Sales".
+        if (LdapDistinguishedName.TryParse(containerExternalId, out var parsedDn) && parsedDn.LeafRdn.Components.Count > 0)
+            return parsedDn.LeafRdn.Components[0].Value;
 
-        // Extract value after = sign (e.g., "OU=Sales" -> "Sales")
-        var equalsIndex = rdn.IndexOf('=');
-        return equalsIndex > 0 && equalsIndex < rdn.Length - 1
-            ? rdn.Substring(equalsIndex + 1)
-            : rdn;
+        return containerExternalId;
     }
     #endregion
 

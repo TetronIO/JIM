@@ -1,7 +1,6 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using CPI.DirectoryServices;
 using JIM.Models.Staging;
 using Serilog;
 using System.DirectoryServices.Protocols;
@@ -197,7 +196,9 @@ internal class LdapConnectorPartitions
         var dnToParent = new Dictionary<string, string>(entries.Count, StringComparer.OrdinalIgnoreCase);
         foreach (var entry in entries)
         {
-            var parentDn = new DN(entry.DistinguishedName).Parent.ToString();
+            // Preserve the directory's own DN formatting (verbatim tail) so parent strings match child DNs
+            // for the case-insensitive dictionary lookups below; a single-RDN entry has no parent (empty string).
+            var parentDn = LdapDistinguishedName.Parse(entry.DistinguishedName).Parent?.ToString() ?? string.Empty;
             dnToParent[entry.DistinguishedName] = parentDn;
         }
 

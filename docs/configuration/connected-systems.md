@@ -10,7 +10,7 @@ Every Connected System is associated with a [connector](../connectors/index.md) 
 
 ## What a Connected System contains
 
-- **Connection details**<br /> How to reach the external system: server address, credentials, file path, and other connector-specific settings.
+- **Connection details**<br /> How to reach the external system: server address, credentials, file path, and other connector-specific settings. The Settings tab groups these into a collapsible accordion by category (Connectivity, General, Export, and so on) so dense connector configuration stays easy to scan.
 - **Discovered schema**<br /> The object types and attributes available in the external system, populated on first contact.
 - **Connector space**<br /> A staging area that holds JIM's local copy of the external system's data.
 - **Run Profiles**<br /> Configured operations (import, sync, export) that can be executed against the system.
@@ -20,11 +20,9 @@ Every Connected System is associated with a [connector](../connectors/index.md) 
 
 The connector space is a critical concept. It is a staging area between the external system and the metaverse: when JIM imports data from a Connected System, it does not write directly to the metaverse. Instead, it creates or updates **Connected System Objects (CSOs)** in the connector space; the metaverse is only updated during the explicit synchronisation phase.
 
-```mermaid
-flowchart LR
-    A["External System"] -->|Import| B["Connector Space (CSOs)"]
-    B -->|Sync| C["Metaverse (MVOs)"]
-```
+--8<-- "assets/diagrams/sync-pipeline.svg"
+
+<p class="jim-diagram-caption">Imported data is staged in the connector space as Connected System Objects; the Metaverse is only touched during the synchronisation phase, and exports stage the same way in reverse.<span class="jimdg-caption-motion"> Moving dots trace data through the pipeline.</span></p>
 
 This two-stage approach gives you:
 
@@ -66,6 +64,26 @@ Inside a partition, or directly inside the connector space of a connector that d
 | **Container** | Sub-tree within a partition, or within the connector space of a non-partitioned system | An OU (`OU=Users,DC=company,DC=local`) | Most connectors that expose hierarchy |
 
 In practice, selecting a partition brings an entire naming context into scope, while selecting containers narrows what is imported within that partition (or within the connector space for connectors that have no partitions).
+
+## Unresolved reference handling
+
+When an import stages a reference attribute value (for example a group member's Distinguished Name) that does not correspond to any object in the connector space, JIM cannot resolve the reference. The most common cause is the referenced object sitting outside the configured [Container Scope](#partitions-and-containers), which can be entirely deliberate: excluding foreign or out-of-remit objects from import is a normal scoping decision.
+
+Each Connected System has an **Unresolved Reference Handling** setting that controls what happens when this occurs during import:
+
+| Mode | Behaviour |
+|------|-----------|
+| **Error** (default) | Each affected object's Run Profile execution item is marked with an Unresolved Reference error, and the Activity completes with a warning status showing the errored items. Choose this when every reference is expected to resolve. |
+| **Warn** | No per-object errors are raised. The Activity completes with a warning carrying a summary of how many references could not be resolved. Choose this when unresolved references are worth a glance but should not read as failures. |
+| **Ignore** | No per-object errors and no Activity warning; the import completes successfully. Choose this when unresolved references are expected and benign. |
+
+Whichever mode is selected, genuine data-quality issues remain discoverable:
+
+- **Connected System Objects**<br /> Unresolved reference values stay stored on the affected objects, so they can be inspected on the object's detail page at any time.
+- **PowerShell**<br /> `Get-JIMConnectedSystemUnresolvedReferenceCount` reports how many unresolved references a Connected System currently holds.
+- **Service log**<br /> Every unresolved reference is logged (at Warning level in Warn mode, Debug level in Ignore mode), along with a summary count at the end of reference resolution.
+
+Set the mode from the **Import Behaviour** panel on the Connected System's Settings tab, with `Set-JIMConnectedSystem -UnresolvedReferenceHandling`, or via the REST API.
 
 ## Pending Exports
 

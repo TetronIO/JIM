@@ -5,7 +5,7 @@
 
 <#
 .SYNOPSIS
-    Pester tests for Sync Rule Mapping cmdlets, including inbound value processing (#843).
+    Pester tests for Synchronisation Rule Mapping cmdlets, including inbound value processing (#843).
 #>
 
 BeforeAll {

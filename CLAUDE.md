@@ -6,6 +6,7 @@ This file holds cross-cutting rules and pointers. Detailed conventions live in f
 - `src/CLAUDE.md` - code style, copyright headers, layer rules, common dev tasks
 - `src/JIM.Web/CLAUDE.md` - Blazor/MudBlazor UI conventions, shared UI components
 - `src/JIM.Application/CLAUDE.md` - synchronisation integrity (full requirements)
+- `src/JIM.PowerShell/CLAUDE.md` - cmdlet parameter aliases, documenting output shapes, destructive examples, Pester
 - `test/CLAUDE.md` - TDD patterns, test data, integration testing
 - `.devcontainer/CLAUDE.md` - commands, aliases, Docker, environment
 - `engineering/CLAUDE.md` - PRDs, plans, changelog, release process
@@ -23,9 +24,10 @@ Always use Context7 MCP when you need library/API documentation, code generation
 - Never commit code that has not built and tested locally; never create a PR with failing build/tests
 - If environmental constraints prevent local build/test, mark the PR as draft and state the limitation
 
-**Build/test exceptions** (no `dotnet build`/`test` required):
-- Scripts (`.ps1`, `.sh`), static assets (CSS/JS/images), `.md` docs, config (`.env.example`, compose files, Dockerfiles, `.gitignore`, `.editorconfig`), CI/CD workflows, diagrams, plan documents
-- **Partial:** UI-only Blazor/Razor changes need `dotnet build` but not `dotnet test` (no UI tests exist)
+**Build/test exceptions** (non-code changes: no local build, test, or validation tooling of any kind; just commit):
+- Applies to: `.md` docs and `mkdocs.yml`, scripts (`.ps1`, `.sh`), static assets (CSS/JS/images), config (`.env.example`, compose files, Dockerfiles, `.gitignore`, `.editorconfig`), CI/CD workflows, diagrams, plan documents.
+- Do NOT run `dotnet build`/`test` for these, and do NOT run a docs-site build (`mkdocs build`) for `.md`/`mkdocs.yml` changes. These steps slow the loop down for no benefit. Verify docs link/nav correctness by eye instead of tooling (there is no PR-time docs CI; the site deploys on merge to `main`).
+- **Partial:** UI-only Blazor/Razor changes need `dotnet build` but not `dotnet test` (no UI tests exist).
 
 **Validate behavioural changes at runtime, not just via tests:** `dotnet build`/`test` is necessary but is not the ceiling of validation. This local devcontainer runs the **full stack** (`jim.web`, `jim.worker`, `jim.scheduler`, `jim.database`, `jim.keycloak`) on an ample host; you can and should boot it and confirm a change actually behaves as intended - drive the flow, query the database, hit the API - especially for anything unit tests mock away: startup/seeding/bootstrap ordering, migrations, change capture, encryption, and integration behaviour. Do not claim you "cannot" run it here.
 - Running containers hold **stale images**: after changing `.cs`, rebuild the affected service(s) before verifying (a browser refresh shows nothing new). The full-stack and integration-test how-to (rebuild commands, `psql` access, `Run-IntegrationTests.ps1`) lives in `.devcontainer/CLAUDE.md` and `test/CLAUDE.md`; those files auto-load only under their own subtrees, so read them when validating from `src/`.
@@ -145,6 +147,8 @@ Before adding ANY new NuGet package or third-party dependency:
 
 Preference order: Microsoft-maintained > established corporate-backed > .NET Foundation > well-maintained OSS with identifiable maintainers.
 
+For how every dependency layer (NuGet direct and transitive, container base images, apt packages, GitHub Actions, and more) is pinned and updated once approved, see `engineering/DEPENDENCY_PINNING.md`.
+
 ## Architecture Quick Reference
 
 **Layer dependencies:** JIM.Web -> JIM.Application -> JIM.Models -> JIM.Data/JIM.PostgresData. **Never bypass layers** - UI/API must only call `JimApplication`, never `Jim.Repository.*` directly.
@@ -166,7 +170,9 @@ For new features or significant changes:
 2. Fill in required sections; create a GitHub issue linking to the PRD
 3. Ask Claude to generate the implementation plan from the PRD
 
-> **PRD template, plan structure, plan filing (planned/doing/done):** `engineering/CLAUDE.md`
+PRDs and plans share the same three-state lifecycle: created at the top level of `engineering/prd/` (or `engineering/plans/`) as `Status: Planned`, then `Status: Doing` + `git mv` into `doing/` when work starts, then `Status: Done` + `git mv` into `done/` when implemented. Keep the Status field and the folder in agreement, and update cross-references when moving.
+
+> **PRD template, plan structure, PRD/plan filing (planned/doing/done):** `engineering/CLAUDE.md`
 
 ## Workflow & Git
 
@@ -176,6 +182,10 @@ For new features or significant changes:
 - Never automatically create a PR or merge to `main` - the user must explicitly instruct
 - Build and test pass before commit (per Critical Rules); push and PR only when the user asks
 - Before filing a new GitHub issue, ALWAYS search existing open and closed issues for duplicates: `gh issue list --state all --search "<keywords>"`. Surface any close matches to the user before creating a new one.
+- **Record issue relationships with GitHub's native features, never as comments or body-text markers.** The plain `gh issue` commands have no flags for these; use the API directly:
+  - Sequencing ("must land first"): the blocked-by relationship, via REST: `gh api -X POST repos/TetronIO/JIM/issues/<blocked>/dependencies/blocked_by -F issue_id=<id>` where `<id>` is the blocking issue's database id (`gh api repos/TetronIO/JIM/issues/<n> --jq .id`). Inspect with `GET .../dependencies/blocked_by`; remove with `DELETE .../dependencies/blocked_by/<id>`.
+  - Containment (epic → part): parent/sub-issue, via GraphQL `addSubIssue` / `removeSubIssue` mutations with the two issues' node ids (`--jq .node_id`).
+  - Pick blocked-by for ordering and parent/sub-issue for hierarchy; they are not interchangeable. Issue bodies may state the *rationale* for a relationship, but the relationship itself must exist as the native link (it shows in the sidebar, rolls up, and is queryable; prose goes stale).
 - Dependabot does not auto-rebase PRs when they fall behind `main`. After merging any PR in a batch, comment `@dependabot rebase` on each remaining open Dependabot PR via `gh pr comment <num> --body '@dependabot rebase'`.
 
 ### Bringing a feature branch up to date with `main`
@@ -192,7 +202,7 @@ git merge origin/main      # then git push (no force needed)
 
 ### Merging via gh CLI
 
-`main` is protected by a ruleset that requires eight status checks to pass before a merge is allowed: `build-and-test`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), `claude-review`, and `changelog-lint`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.
+`main` is protected by a ruleset that requires seven status checks to pass before a merge is allowed: `build-and-test`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), and `changelog-lint`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.
 
 - Default merge command: `gh pr merge <n> --squash --delete-branch --auto`. The `--auto` flag queues the merge so it lands the moment all required checks go green.
 - An immediate `gh pr merge` failure right after `gh pr create` is **expected**, not a blocker. The checks haven't started yet. Don't escalate it; just use `--auto`.

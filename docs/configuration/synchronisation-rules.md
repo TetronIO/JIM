@@ -122,6 +122,17 @@ These determine what happens when no match is found.
 
 **Provisioning** applies to export rules. If provisioning is enabled, JIM creates a new CSO in the target system's connector space (and ultimately the target system itself, when the export Run Profile flushes Pending Exports). If provisioning is not enabled, the rule only updates objects that already exist in the target.
 
+## Deprovisioning Action
+
+Provisioning's counterpart: each export rule's **Deprovisioning Action** determines what happens to the object in the Connected System when its Metaverse Object leaves the rule's scope or is deleted (for example, when a leaver's identity is removed by a [deletion rule](../concepts/jml-lifecycle.md#deletion-rules)):
+
+- **Disconnect** (default): JIM breaks the join and leaves the object in place in the Connected System. Nothing is exported.
+- **Delete**: JIM queues a delete so the object is removed from the Connected System on the next export run.
+
+The action applies regardless of how the object came to be joined: it makes no difference whether JIM provisioned it or matched (joined) a pre-existing object. If several export rules cover the same object with different actions, Delete wins.
+
+Configure the action in the export section of the Synchronisation Rule editor. To review the deprovisioning behaviour of every export rule for an object type in one place, use the **Downstream Deprovisioning** panel on the Metaverse Object Type page (Admin, Schema, then the object type), where the action can also be changed inline.
+
 ## Attribute mappings
 
 Attribute mappings define which attributes to synchronise and how to transform them. Each mapping maps a source attribute (or expression) to a target attribute.
@@ -151,7 +162,23 @@ A multi-source mapping combines several source attributes into one target. This 
 
 ### Multi-valued attributes
 
-Mappings support both single-valued and multi-valued attributes. Multi-valued attributes hold a list of values (group memberships, email aliases, and so on). Mappings can flow multi-valued to multi-valued, or use functions like `Join()` and `Split()` to convert between multi-valued and single-valued representations.
+Mappings support both single-valued and multi-valued attributes. A **Multi-Valued** attribute holds a list of values (group memberships, email aliases, and so on); a **Single-Valued** attribute holds at most one. How a mapping behaves depends on the plurality of the source and the target:
+
+| Source | Target | Behaviour |
+|--------|--------|-----------|
+| Single-Valued | Single-Valued | ✅ The value flows normally. |
+| Multi-Valued | Multi-Valued | ✅ Every value flows. |
+| Single-Valued | Multi-Valued | ✅ The value flows as a single-item list. |
+| Multi-Valued | Single-Valued | ⚠️ See below. |
+
+**Multi-Valued to Single-Valued.** A Single-Valued target can hold only one value, so this mapping is only meaningful when the object actually has one value:
+
+- If the object has **one** value, it flows (import) or is exported normally.
+- If the object has **more than one** value, JIM does **not** pick one arbitrarily. An arbitrary choice would be non-deterministic (a Connected System does not guarantee value order) and, on export, could never be reconciled on the next import. Instead, JIM flows nothing for that attribute and records an error against the object; the object's other attributes still synchronise. The error appears as a `Multi-Valued to Single-Valued` item in the run's [Activity](activities.md).
+
+The Attribute Flow editor warns you at configuration time when a mapping is Multi-Valued to Single-Valued, and the mapping is flagged in the Attribute Flow list, so you can decide before running whether it is what you intend.
+
+To flow a chosen value deterministically instead of erroring, either target a Multi-Valued attribute, or use an [Expression mapping](#expression-mappings) to select one value (for example `Join()`/`Split()` or an index into the list). Reference attributes on import are exempt from this rule; they are resolved separately.
 
 ### Value processing (inbound)
 
@@ -164,20 +191,44 @@ Four controls are available:
 - **Collapse internal whitespace**<br /> Reduces runs of consecutive whitespace inside the value to a single space, so multiple spaces or tabs between words collapse to one. For example, `John···Smith` becomes `John Smith` (each `·` represents a space).
 - **Case normalisation**<br /> Converts the value to `Upper`, `Lower`, or `Title` case, or leaves it unchanged (`None`). Useful for folding usernames or email addresses to a consistent case.
 
-The transforms run in a fixed order: **trim, then collapse, then case normalisation, then the whitespace-as-no-value decision**. Because the whitespace decision runs last, a value that trims down to nothing is correctly treated as no value. Value processing is *normalisation*; it runs before [priority](#priority) resolves which rule's value wins.
+The transforms run in a fixed order: **trim, then collapse, then case normalisation, then the whitespace-as-no-value decision**. Because the whitespace decision runs last, a value that trims down to nothing is correctly treated as no value. Value processing is *normalisation*; it runs before [Attribute Priority](#attribute-priority) resolves which rule's value wins.
 
 When **Treat whitespace as no value** is switched off and a whitespace-only value is therefore stored, the portal flags it with a `(whitespace)` indicator rather than rendering a misleading blank cell, so administrators can tell a real-but-invisible value apart from an absent one.
 
-## Priority
+## Attribute Priority
 
-When multiple import rules write to the same MVO attribute, **priority** determines which rule's value wins. Each Synchronisation Rule has a priority level, and the rule with the highest priority wins.
+When more than one import rule maps to the same Metaverse Object attribute, **Attribute Priority** decides which contributor wins, so the result never depends on the order your synchronisations happen to run in. It is an inbound concern: it governs how values flow from Connected Systems into the metaverse, and does not change how the metaverse is exported back out.
 
-This matters when an identity has data flowing from multiple source systems. For example:
+Priority is held **per attribute, per contributing rule**, not as a single level on the whole Synchronisation Rule. The same Connected System can therefore rank first for one attribute and second for another, and a single system can even contribute through several differently-scoped rules at different priorities.
 
-- HR system provides `First Name` and `Last Name` (high priority: authoritative)
-- Badge system also provides `First Name` (lower priority: secondary)
+### How a winner is chosen
 
-The HR system's values win because its Synchronisation Rule has a higher priority.
+For a given Metaverse attribute, JIM evaluates every contributing import rule in priority order (1 is highest):
+
+- **The first contributor with a value wins.**<br /> Lower-priority contributors are not consulted.
+- **A rule with no opinion is skipped.**<br /> If a rule does not apply to the object (it is disabled, no object from its Connected System is joined, or the joined object is out of the rule's scope), it is passed over and the next priority is considered.
+- **If nobody contributes, the attribute is left unset.**
+
+For example, an identity drawing data from two source systems:
+
+- HR system provides `First Name` and `Last Name` (priority 1: authoritative)
+- Badge system also provides `First Name` (priority 2: secondary)
+
+The HR system's `First Name` wins because its contribution ranks higher; the badge system only fills in where HR has no opinion.
+
+### Null is a value
+
+By default, if the highest-priority source has **no** value for an attribute, JIM falls through to the next source. That is usually right, but not always: when the authoritative source deliberately *clears* a value, you want the clear to propagate, not to be back-filled from a stale secondary copy that still holds the old value.
+
+Enabling **Null is a value** on a contributor changes that. If the contributor is connected and in scope but supplies no value, JIM stops there and asserts "no value": the attribute is cleared downstream, and lower-priority sources are not consulted. This is distinct from a rule simply having no opinion; a rule that does not apply to the object is still skipped regardless of this setting.
+
+Typical uses are a manager or department cleared at the authoritative source that must propagate as a clear, and a primary-system migration where the new system is authoritative for the people it knows about (including their blanks). It is deliberately powerful: a misbehaving priority-1 import (an empty file, a truncated delta) becomes a mass-clearing event rather than a harmless no-op, so treat Null is a value as an authoritative, considered choice.
+
+### Configuring priority
+
+Attribute Priority is configured per (Metaverse Object Type, attribute), not on the Synchronisation Rule editor. Open the Metaverse Object Type (**Administration → Schema → Object Types**), select the **Attributes** tab, and expand the **contributors** list for any attribute that has more than one contributor. From there you drag contributors to reorder them and toggle **Null is a value** per contributor. A newly added import mapping joins at the **lowest** priority, so a new source never silently takes over an attribute until you promote it explicitly. The same configuration is available via the [PowerShell cmdlets](../powershell/metaverse.md) and the REST API.
+
+> **Full detail:** [Attribute Priority](../concepts/attribute-priority.md) covers re-election when a winning source disconnects or withdraws, multi-valued attribute semantics, per-value provenance, and how to see resolution decisions in [Synchronisation Activities](activities.md).
 
 ## Common workflows
 
@@ -226,6 +277,7 @@ This rule imports full-time employees from the HR system, joins them to existing
 
 - [Connected Systems](connected-systems.md) -- the systems a Synchronisation Rule connects to
 - [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md) -- where Synchronisation Rules fit in the import/sync/export flow
+- [Concepts: Attribute Priority](../concepts/attribute-priority.md) -- how JIM resolves which source wins when several rules feed the same attribute, and the "Null is a value" setting
 - [Concepts: JML Lifecycle](../concepts/jml-lifecycle.md) -- how scoping and provisioning drive joiner/mover/leaver behaviour
 - [Concepts: Expressions](../concepts/expressions.md) -- the expression language used in scoping criteria and attribute mappings
 - [Concepts: Case Sensitivity](../concepts/case-sensitivity.md) -- where matching and scoping are exact, and how to make them case-insensitive

@@ -68,13 +68,13 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 
 | Category | Cmdlets | Description |
 |----------|---------|-------------|
-| [System](system.md) | 4 | Health checks, version, auth config, and user info |
+| [System](system.md) | 5 | Health checks, version, auth config, user info, and system reset |
 | [Connection](connection.md) | 3 | Connect, disconnect, and test JIM sessions |
-| [Connected Systems](connected-systems.md) | 19 | Manage Connected Systems, schemas, partitions, and connector space objects |
+| [Connected Systems](connected-systems.md) | 20 | Manage Connected Systems, schemas, partitions, connector space objects, and connector definitions |
 | [Run Profiles](run-profiles.md) | 5 | Create and execute import, sync, and export operations |
-| [Synchronisation Rules](synchronisation-rules.md) | 17 | Define attribute mappings, scoping criteria, and Object Matching Rules |
-| [Metaverse](metaverse.md) | 8 | Query objects, manage schema types and attributes, review pending deletions |
-| [Predefined Searches](predefined-searches.md) | 2 | List and toggle the searches that drive portal list views and the fast search API |
+| [Synchronisation Rules](synchronisation-rules.md) | 23 | Define attribute mappings, scoping criteria, and Object Matching Rules |
+| [Metaverse](metaverse.md) | 14 | Query objects, manage schema types and attributes, set Attribute Priority, and review pending deletions |
+| [Predefined Searches](predefined-searches.md) | 9 | List and toggle the searches that drive portal list views and the fast search API, and manage their filter criteria (groups and criteria) |
 | [Schedules](schedules.md) | 11 | Automate synchronisation workflows with scheduled execution |
 | [Activities](activities.md) | 3 | Monitor operation history, statistics, and execution items |
 | [API Keys](api-keys.md) | 4 | Create, manage, and revoke API keys |
@@ -82,8 +82,11 @@ See [Connection](connection.md) for full details on all connection cmdlets.
 | [Service Settings](service-settings.md) | 3 | View and modify runtime configuration |
 | [Security](security.md) | 5 | Manage security roles and their memberships, including listing the roles a Metaverse Object is in |
 | [History](history.md) | 4 | Query configuration change history, query deleted objects, and manage change history retention |
-| [Example Data](example-data.md) | 3 | Generate sample data for testing and evaluation |
+| [Example Data](example-data.md) | 6 | Generate sample data for testing and evaluation, and create, update, and remove reusable Example Data Sets |
 | [Expressions](expressions.md) | 1 | Test Synchronisation Rule expressions before deployment |
+| [Worker Tasks](worker-tasks.md) | 2 | Monitor and cancel in-flight background worker tasks |
+| [File System](file-system.md) | 2 | Browse and validate server-side paths when configuring file-based connectors |
+| [Logs](logs.md) | 3 | Query, retrieve, and tail JIM service log files for remote troubleshooting |
 
 ## Quick Start
 
@@ -112,19 +115,44 @@ Most cmdlets accept pipeline input and produce pipeline-friendly output, enablin
 ```powershell
 # Execute all "Full Import" Run Profiles across all Connected Systems
 Get-JIMConnectedSystem | ForEach-Object {
-    Start-JIMRunProfile -ConnectedSystemId $_.id -RunProfileName "Full Import" -Wait
+    Start-JIMRunProfile -ConnectedSystemId $_.Id -RunProfileName "Full Import" -Wait
 }
 
 # Find all Synchronisation Rules for a specific Connected System
 Get-JIMSyncRule -ConnectedSystemName "HR System"
 
 # Bulk-disable expired API keys
-Get-JIMApiKey | Where-Object { $_.expiresAt -and $_.expiresAt -lt (Get-Date) } |
-    ForEach-Object { Set-JIMApiKey -Id $_.id -Disable }
+Get-JIMApiKey | Where-Object { $_.ExpiresAt -and $_.ExpiresAt -lt (Get-Date) } |
+    ForEach-Object { Set-JIMApiKey -Id $_.Id -Disable }
 
 # Validate all certificates
-Get-JIMCertificate | ForEach-Object { Test-JIMCertificate -Id $_.id }
+Get-JIMCertificate | ForEach-Object { Test-JIMCertificate -Id $_.Id }
 ```
+
+## Output Object Conventions
+
+Cmdlet output objects use **PascalCase** property names, following PowerShell convention, even though JIM's REST API serialises its JSON in camelCase:
+
+```powershell
+$mvo = Get-JIMMetaverseObject -Id $id
+$mvo.DisplayName        # not $mvo.displayName
+$mvo.Type.Name          # nested objects are PascalCase too
+```
+
+PowerShell member access is case-insensitive, so a script that reads the wire casing (`$mvo.displayName`) still resolves; but `Get-Member`, `Format-Table`, `ConvertTo-Json` and tab-completion all present the PascalCase names.
+
+**Exception: dictionaries keyed by your data keep their keys exactly as supplied.** A Metaverse Object's `Attributes` map is keyed by attribute name, so those keys follow your schema's casing rather than PascalCase:
+
+The `Attributes` map is only present on the list form, and only carries the attributes you asked for with `-Attributes`; retrieving a single object by `-Id` returns an `AttributeValues` list instead.
+
+```powershell
+$person = Get-JIMMetaverseObject -Search "j.smith" -Attributes mail, employeeID |
+    Select-Object -First 1
+$person.Attributes.mail          # attribute-name keys are verbatim...
+$person.Attributes.employeeID    # ...not 'Mail' / 'EmployeeID'
+```
+
+The same applies to any other data-keyed map, such as a log entry's `Properties`.
 
 ## Confirmation Prompts
 
