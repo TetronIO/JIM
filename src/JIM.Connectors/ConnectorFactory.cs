@@ -3,6 +3,7 @@
 
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
+using JIM.Connectors.SCIM;
 using JIM.Models.Interfaces;
 
 namespace JIM.Connectors;
@@ -37,6 +38,8 @@ public class ConnectorFactory : IConnectorFactory
             return new LdapConnector();
         if (connectorName == ConnectorConstants.FileConnectorName)
             return new FileConnector();
+        if (connectorName == ConnectorConstants.Scim2ConnectorName)
+            return new ScimConnector();
 
         throw new NotSupportedException(
             $"Connector definition '{connectorName}' is not supported. No built-in connector with that name is registered.");

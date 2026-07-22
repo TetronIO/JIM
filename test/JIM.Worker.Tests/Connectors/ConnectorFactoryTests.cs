@@ -4,6 +4,7 @@
 using JIM.Connectors;
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
+using JIM.Connectors.SCIM;
 using JIM.Models.Interfaces;
 using Moq;
 using NUnit.Framework;
@@ -53,10 +54,13 @@ public class ConnectorFactoryTests
     }
 
     [Test]
-    public void Create_Scim2ConnectorName_ThrowsNotSupportedException()
+    public void Create_Scim2ConnectorName_ReturnsScimConnector()
     {
-        // Act & Assert: the constant exists in ConnectorConstants but no built-in implementation exists yet.
-        Assert.Throws<NotSupportedException>(() => _connectorFactory.Create(ConnectorConstants.Scim2ConnectorName));
+        // Act
+        var connector = _connectorFactory.Create(ConnectorConstants.Scim2ConnectorName);
+
+        // Assert
+        Assert.That(connector, Is.InstanceOf<ScimConnector>());
     }
 
     [Test]
