@@ -55,17 +55,17 @@ Attributes are scoped to the object types that use them: an attribute is **bound
 
 ### Built-in attributes
 
-JIM's built-in Metaverse Attributes are **JIM's own canonical vocabulary**: no wire standard (LDAP/AD or SCIM 2.0) is its foundation. The built-in set covers the common identity domain, including neutral attributes that let SCIM 2.0 core and enterprise resources map cleanly, for example the multi-valued `Emails`, the boolean `Account Enabled` (the natural target for SCIM `active`), `Nickname`, `Preferred Language`, `Locale`, `Time Zone`, `Middle Name`, `Honorific Prefix`, and `Honorific Suffix`.
+JIM's built-in attributes use **friendly, standard-neutral names** (`First Name`, `Job Title`, `Email`) rather than adopting the naming conventions of any one directory or provisioning standard, so the same schema reads naturally whether your identities come from Active Directory, an HR system, or a SCIM client. The built-in set covers the common identity domain, and includes attributes that make SCIM 2.0 resources easy to map, for example the multi-valued `Emails`, the boolean `Account Enabled` (the natural home for SCIM's `active` flag), `Nickname`, `Preferred Language`, `Locale`, `Time Zone`, `Middle Name`, `Honorific Prefix`, and `Honorific Suffix`.
 
-Built-in attributes are read-only and cannot be deleted, and JIM maintains them automatically: newly-introduced built-in attributes are added to existing deployments at service startup, so upgrades pick them up without any administrator action.
+Built-in attributes are read-only and cannot be deleted, and JIM looks after them for you: when an upgrade introduces new built-in attributes, they are added to your deployment automatically at service startup, with no administrator action needed.
 
 ### Standard Mappings
 
-Built-in attributes carry **Standard Mappings**: advisory metadata recording how each attribute corresponds to counterpart attributes in wire standard vocabularies (SCIM 2.0 and LDAP/AD), with notes where the correspondence has nuance (for example, SCIM `active` maps to `Account Enabled`, while Active Directory's `userAccountControl` needs a transform rather than a direct flow).
+Every built-in attribute documents how it corresponds to its counterparts in the SCIM 2.0 and LDAP/Active Directory standards, so when you connect a system that speaks either standard you can see at a glance which Metaverse Attribute to target. Where the correspondence needs care, a note explains it: for example, SCIM's `active` maps to `Account Enabled`, while Active Directory's `userAccountControl` needs a transform rather than a direct flow.
 
-Standard Mappings are **advisory only**. They exist to power Attribute Flow editor hints, connector wizard default-flow suggestions, and schema documentation; they are never consulted by the synchronisation engine. Your Attribute Flow configuration remains the single source of mapping truth. JIM seeds and maintains the mappings for built-in attributes automatically at service startup.
+Standard Mappings are **for guidance only**; they never affect synchronisation. What flows between your systems is always exactly what your [Attribute Flows](synchronisation-rules.md) say, nothing more. Over time the mappings will also power hints in the Attribute Flow editor, suggested default flows in connector wizards, and schema documentation.
 
-View a built-in attribute's Standard Mappings from the view action on its row in the Schema area's **Attributes** tab. Custom attributes can carry your own Standard Mappings: add, edit or remove them from the attribute's edit dialog, documenting how organisation-specific attributes correspond to the standards. Changes are audited in the attribute's [configuration change history](activities.md#configuration-change-history), and the mappings are also returned by the REST API's attribute detail endpoint.
+View a built-in attribute's Standard Mappings from the view action on its row in the Schema area's **Attributes** tab; JIM keeps them up to date automatically. Custom attributes can carry your own Standard Mappings too: add, edit or remove them from the attribute's edit dialog to record how your organisation-specific attributes line up with the standards. Changes are audited in the attribute's [configuration change history](activities.md#configuration-change-history), and the mappings are also returned by the REST API's attribute detail endpoint.
 
 ### Custom attributes
 

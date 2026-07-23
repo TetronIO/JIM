@@ -86,11 +86,12 @@
                 <div>
                     <MudText Typo="Typo.subtitle2">Standard Mappings</MudText>
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        Advisory metadata recording how this attribute corresponds to attributes in the SCIM 2.0 and LDAP/AD vocabularies.
-                        Never used by the synchronisation engine; Attribute Flows remain the single source of mapping truth.
+                        How this attribute corresponds to its counterparts in the SCIM 2.0 and LDAP/Active Directory standards,
+                        to guide you when designing Attribute Flows. For reference only: what synchronises is always determined
+                        by your Attribute Flows, never by these mappings.
                         @if (ReadOnly)
                         {
-                            <text> Maintained automatically by JIM for built-in attributes.</text>
+                            <text> JIM maintains these automatically for built-in attributes.</text>
                         }
                     </MudText>
                 </div>
@@ -171,7 +172,7 @@
                         </MudSelect>
                         <MudTextField @bind-Value="editingMapping.CounterpartName" Label="Counterpart Attribute" Variant="Variant.Outlined"
                                       Immediate="true" Class="flex-grow-1"
-                                      HelperText="The attribute name in the standard's vocabulary, e.g. name.givenName or givenName." />
+                                      HelperText="The equivalent attribute name in the chosen standard, e.g. name.givenName (SCIM) or givenName (LDAP)." />
                     </div>
                     <MudTextField @bind-Value="editingMapping.Notes" Label="Notes (optional)" Variant="Variant.Outlined" Immediate="true" />
                     @if (MappingEditorError() is { } mappingError)
