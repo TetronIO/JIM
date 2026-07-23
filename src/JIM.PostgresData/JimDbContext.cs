@@ -132,6 +132,32 @@ public class JimDbContext : DbContext
         return connectionString;
     }
 
+    /// <summary>
+    /// Builds a connection string for a dedicated notification-listener connection (PostgreSQL LISTEN;
+    /// issue #307). LISTEN requires a long-lived connection outside the pool, so pooling is disabled and
+    /// TCP keepalives are enabled to detect dead connections promptly. At most one such connection exists
+    /// per service, so this does not pressure the PostgreSQL connection limit.
+    /// </summary>
+    public static string BuildListenerConnectionString()
+    {
+        var dbHostName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseHostname);
+        var dbName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseName);
+        var dbUsername = Environment.GetEnvironmentVariable(Constants.Config.DatabaseUsername);
+        var dbPassword = Environment.GetEnvironmentVariable(Constants.Config.DatabasePassword);
+
+        if (string.IsNullOrEmpty(dbHostName))
+            throw new Exception($"{Constants.Config.DatabaseHostname} environment variable missing");
+        if (string.IsNullOrEmpty(dbName))
+            throw new Exception($"{Constants.Config.DatabaseName} environment variable missing");
+        if (string.IsNullOrEmpty(dbUsername))
+            throw new Exception($"{Constants.Config.DatabaseUsername} environment variable missing");
+        if (string.IsNullOrEmpty(dbPassword))
+            throw new Exception($"{Constants.Config.DatabasePassword} environment variable missing");
+
+        return $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword}" +
+               ";Pooling=false;Keepalive=30";
+    }
+
     // Parameterless constructor for migrations and manual instantiation
     public JimDbContext()
     {
