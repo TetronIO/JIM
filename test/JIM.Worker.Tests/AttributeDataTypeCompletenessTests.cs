@@ -235,8 +235,6 @@ public class AttributeDataTypeCompletenessTests
         // Arrange
         var attribute = new MetaverseAttribute { Id = 1, Name = "attr", Type = type };
         var attributeValue = CreateMvoValue(attribute);
-        if (type == AttributeDataType.LongNumber)
-            attributeValue.LongValue = 42L; // stay within int range until #871 gives change history long storage
         if (type == AttributeDataType.Reference)
         {
             // the change recorder tracks resolved references; the FK-only shape is covered too, but the

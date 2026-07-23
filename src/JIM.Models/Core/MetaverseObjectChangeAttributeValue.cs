@@ -26,6 +26,8 @@ public class MetaverseObjectChangeAttributeValue
 
     public int? IntValue { get; set; }
 
+    public long? LongValue { get; set; }
+
     public decimal? DecimalValue { get; set; }
 
     /// <summary>
@@ -57,6 +59,9 @@ public class MetaverseObjectChangeAttributeValue
 
         if (IntValue.HasValue)
             return IntValue.Value.ToString();
+
+        if (LongValue.HasValue)
+            return LongValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         if (DecimalValue.HasValue)
             return DecimalValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -92,6 +97,13 @@ public class MetaverseObjectChangeAttributeValue
     public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, ValueChangeType valueChangeType, int intValue)
     {
         IntValue = intValue;
+        MetaverseObjectChangeAttribute = metaverseObjectChangeAttribute;
+        ValueChangeType = valueChangeType;
+    }
+
+    public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, ValueChangeType valueChangeType, long longValue)
+    {
+        LongValue = longValue;
         MetaverseObjectChangeAttribute = metaverseObjectChangeAttribute;
         ValueChangeType = valueChangeType;
     }

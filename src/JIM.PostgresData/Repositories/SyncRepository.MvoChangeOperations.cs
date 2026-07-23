@@ -213,7 +213,7 @@ public partial class SyncRepository
             """
             COPY "MetaverseObjectChangeAttributeValues" (
                 "Id", "MetaverseObjectChangeAttributeId", "ValueChangeType",
-                "StringValue", "DateTimeValue", "IntValue",
+                "StringValue", "DateTimeValue", "IntValue", "LongValue", "DecimalValue",
                 "ByteValueLength", "GuidValue", "BoolValue", "ReferenceValueId"
             ) FROM STDIN (FORMAT binary)
             """);
@@ -234,6 +234,14 @@ public partial class SyncRepository
                 await writer.WriteNullAsync();
             if (v.IntValue.HasValue)
                 await writer.WriteAsync(v.IntValue.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (v.LongValue.HasValue)
+                await writer.WriteAsync(v.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
+            else
+                await writer.WriteNullAsync();
+            if (v.DecimalValue.HasValue)
+                await writer.WriteAsync(v.DecimalValue.Value, NpgsqlTypes.NpgsqlDbType.Numeric);
             else
                 await writer.WriteNullAsync();
             if (v.ByteValueLength.HasValue)

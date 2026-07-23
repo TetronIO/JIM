@@ -1363,6 +1363,7 @@ public class MetaverseRepository : IMetaverseRepository
                                 StringValue = vc.StringValue,
                                 DateTimeValue = vc.DateTimeValue,
                                 IntValue = vc.IntValue,
+                                LongValue = vc.LongValue,
                                 DecimalValue = vc.DecimalValue,
                                 ByteValueLength = vc.ByteValueLength,
                                 GuidValue = vc.GuidValue,

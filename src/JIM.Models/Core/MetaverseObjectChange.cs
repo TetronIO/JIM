@@ -154,10 +154,8 @@ public class MetaverseObjectChange
                     attributeChange, valueChangeType, (int)value.IntValue));
                 break;
             case AttributeDataType.LongNumber when value.LongValue != null:
-                // #871: MetaverseObjectChangeAttributeValue has no long storage; this narrows to int and can
-                // truncate values outside Int32 range. Tracked for an end-to-end Int64 audit.
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
-                    attributeChange, valueChangeType, (int)value.LongValue.Value));
+                    attributeChange, valueChangeType, value.LongValue.Value));
                 break;
             case AttributeDataType.Decimal when value.DecimalValue != null:
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(

@@ -97,6 +97,8 @@ public class MvoValueChangeDto
 
     public int? IntValue { get; set; }
 
+    public long? LongValue { get; set; }
+
     public decimal? DecimalValue { get; set; }
 
     public int? ByteValueLength { get; set; }
@@ -122,6 +124,9 @@ public class MvoValueChangeDto
 
         if (IntValue.HasValue)
             return IntValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        if (LongValue.HasValue)
+            return LongValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         if (DecimalValue.HasValue)
             return DecimalValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
