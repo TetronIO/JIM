@@ -65,7 +65,7 @@ SCIM attribute type to `AttributeDataType` (`src/JIM.Models/Core/CoreEnums.cs`):
 | `string` | `Text` | Case sensitivity from `caseExact` is not modelled; document. |
 | `boolean` | `Boolean` | |
 | `integer` | `LongNumber` | RFC 7643 integers are 64-bit safe this way. |
-| `decimal` | `Text` | JIM has no decimal type; preserve lossless as text. Documented limitation. |
+| `decimal` | `Text` | JIM has no decimal type yet; preserve lossless as text. Interim mapping: revisit when #1046 (Decimal attribute data type) lands. |
 | `dateTime` | `DateTime` | ISO 8601 per RFC 7643. |
 | `reference` | `Reference` | `$ref`/`value` resolution against imported resources (e.g. group members). |
 | `binary` | `Binary` | Base64 per RFC 7643. |
