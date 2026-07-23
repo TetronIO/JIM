@@ -9,7 +9,7 @@ function Set-JIMMetaverseAttribute {
     .DESCRIPTION
         Updates a custom Metaverse Attribute. Changes are routed to the correct endpoint:
 
-        - Name and RenderingHint are updated together via the attribute endpoint.
+        - Name, RenderingHint and StandardMappings are updated together via the attribute endpoint.
         - Type and AttributePlurality are updated via the dedicated schema endpoint. Because the
           schema change is refused while any Metaverse Object holds a stored value for the
           attribute, supplying either -Type or -AttributePlurality sends both (the unspecified one
@@ -39,6 +39,12 @@ function Set-JIMMetaverseAttribute {
         The new plurality setting.
         Valid values: SingleValued, MultiValued
 
+    .PARAMETER StandardMappings
+        The attribute's full set of Standard Mappings, replacing any existing ones; pass an empty
+        array (@()) to clear them. Each element is a hashtable with a Standard ('Scim', 'Ldap' or
+        'Jim'), a CounterpartName (the equivalent attribute name in that standard), and optional
+        Notes. Standard Mappings are guidance only and never affect synchronisation.
+
     .PARAMETER ChangeReason
         Optional reason for the change, recorded on the audit Activity and shown in the object's
         configuration change history.
@@ -58,6 +64,11 @@ function Set-JIMMetaverseAttribute {
         Set-JIMMetaverseAttribute -Id 1 -RenderingHint List -PassThru
 
         Changes the rendering hint and returns the updated object.
+
+    .EXAMPLE
+        Set-JIMMetaverseAttribute -Id 42 -StandardMappings @(@{ Standard = 'Scim'; CounterpartName = 'costCenter'; Notes = 'SCIM Enterprise User extension.' })
+
+        Records how the custom attribute corresponds to its SCIM 2.0 counterpart.
 
     .EXAMPLE
         Get-JIMMetaverseAttribute -Name "CustomAttr" | Set-JIMMetaverseAttribute -Type Integer
@@ -97,6 +108,10 @@ function Set-JIMMetaverseAttribute {
         [string]$AttributePlurality,
 
         [Parameter()]
+        [AllowEmptyCollection()]
+        [array]$StandardMappings,
+
+        [Parameter()]
         [ValidateNotNullOrEmpty()]
         [string]$ChangeReason,
 
@@ -118,12 +133,36 @@ function Set-JIMMetaverseAttribute {
         # ValidateSet exposes 'Integer' as an alias for the AttributeDataType member 'Number';
         # that is normalised where -Type is applied below. Other values are exact member names.
 
-        $metadataChanged = $PSBoundParameters.ContainsKey('Name') -or $PSBoundParameters.ContainsKey('RenderingHint')
+        $metadataChanged = $PSBoundParameters.ContainsKey('Name') -or $PSBoundParameters.ContainsKey('RenderingHint') -or $PSBoundParameters.ContainsKey('StandardMappings')
         $schemaChanged = $PSBoundParameters.ContainsKey('Type') -or $PSBoundParameters.ContainsKey('AttributePlurality')
 
         if (-not $metadataChanged -and -not $schemaChanged) {
-            Write-Warning "No updates specified. Provide -Name, -RenderingHint, -Type and/or -AttributePlurality."
+            Write-Warning "No updates specified. Provide -Name, -RenderingHint, -StandardMappings, -Type and/or -AttributePlurality."
             return
+        }
+
+        # Validate and normalise Standard Mappings up front, before anything is sent to the API. A supplied
+        # list replaces the attribute's full set, so an empty array clears them.
+        $mappingsBody = $null
+        if ($PSBoundParameters.ContainsKey('StandardMappings')) {
+            $validStandards = @('Scim', 'Ldap', 'Jim')
+            $mappingsBody = @()
+            foreach ($mapping in $StandardMappings) {
+                if (-not $mapping.Standard -or [string]$mapping.Standard -notin $validStandards) {
+                    Write-Error "Each Standard Mapping requires a Standard of 'Scim', 'Ldap' or 'Jim'."
+                    return
+                }
+                if ([string]::IsNullOrWhiteSpace([string]$mapping.CounterpartName)) {
+                    Write-Error "Each Standard Mapping requires a CounterpartName (the equivalent attribute name in the standard)."
+                    return
+                }
+                $entry = @{
+                    standard        = [string]$mapping.Standard
+                    counterpartName = ([string]$mapping.CounterpartName).Trim()
+                }
+                if (-not [string]::IsNullOrWhiteSpace([string]$mapping.Notes)) { $entry.notes = ([string]$mapping.Notes).Trim() }
+                $mappingsBody += $entry
+            }
         }
 
         $displayName = if ($Name) { $Name } elseif ($InputObject -and $InputObject.name) { $InputObject.name } else { $attrId }
@@ -160,6 +199,7 @@ function Set-JIMMetaverseAttribute {
                 $body = @{}
                 if ($PSBoundParameters.ContainsKey('Name')) { $body.name = $Name }
                 if ($PSBoundParameters.ContainsKey('RenderingHint')) { $body.renderingHint = $RenderingHint }
+                if ($null -ne $mappingsBody) { $body.standardMappings = $mappingsBody }
                 if ($ChangeReason) { $body.changeReason = $ChangeReason }
 
                 Write-Verbose "Updating name/rendering for Metaverse Attribute $attrId"
