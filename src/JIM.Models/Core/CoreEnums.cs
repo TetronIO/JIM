@@ -23,6 +23,31 @@ public enum AttributePlurality
 }
 
 /// <summary>
+/// Identifies the vocabulary a Standard Mapping's counterpart attribute name belongs to.
+/// Used by the advisory Standard Mapping metadata on Metaverse Attributes; never consulted
+/// by the synchronisation engine.
+/// </summary>
+public enum AttributeStandard
+{
+    NotSet = 0,
+
+    /// <summary>
+    /// SCIM 2.0 (RFC 7643) core and enterprise extension attribute names, e.g. "name.givenName".
+    /// </summary>
+    Scim = 1,
+
+    /// <summary>
+    /// LDAP and Active Directory attribute names, e.g. "givenName".
+    /// </summary>
+    Ldap = 2,
+
+    /// <summary>
+    /// JIM's own canonical vocabulary, i.e. built-in Metaverse Attribute names.
+    /// </summary>
+    Jim = 3
+}
+
+/// <summary>
 /// Indicates whether an attribute can be written to in the Connected System.
 /// Attributes may be read-only due to being system-managed, constructed (computed),
 /// or back-link attributes that can only be modified from the forward-link side.

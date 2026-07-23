@@ -50,6 +50,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; } = null!;
     public virtual DbSet<ExampleDataSetValue> ExampleDataSetValues { get; set; } = null!;
     public virtual DbSet<MetaverseAttribute> MetaverseAttributes { get; set; } = null!;
+    public virtual DbSet<MetaverseAttributeStandardMapping> MetaverseAttributeStandardMappings { get; set; } = null!;
     public virtual DbSet<MetaverseObject> MetaverseObjects { get; set; } = null!;
     public virtual DbSet<MetaverseObjectAttributeValue> MetaverseObjectAttributeValues { get; set; } = null!;
     public virtual DbSet<MetaverseObjectChange> MetaverseObjectChanges { get; set; } = null!;
@@ -330,6 +331,20 @@ public class JimDbContext : DbContext
 
         modelBuilder.Entity<MetaverseObjectType>()
             .HasMany(mot => mot.Attributes);
+
+        // advisory Standard Mapping metadata (#1104). Mappings are owned by their attribute (cascade delete),
+        // and each (attribute, standard, counterpart name) combination exists at most once so the built-in
+        // schema synchronisation pass converges rather than duplicates.
+        modelBuilder.Entity<MetaverseAttribute>()
+            .HasMany(a => a.StandardMappings)
+            .WithOne(m => m.MetaverseAttribute)
+            .HasForeignKey(m => m.MetaverseAttributeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<MetaverseAttributeStandardMapping>()
+            .HasIndex(m => new { m.MetaverseAttributeId, m.Standard, m.CounterpartName })
+            .IsUnique()
+            .HasDatabaseName("IX_MetaverseAttributeStandardMappings_Attribute_Standard_Name");
 
         modelBuilder.Entity<SyncRule>()
             .HasMany(sr => sr.AttributeFlowRules)
