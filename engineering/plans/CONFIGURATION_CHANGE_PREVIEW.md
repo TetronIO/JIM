@@ -95,6 +95,25 @@ public interface IConfigurationChangePreviewAdapter
 
 Adapters are registered with the framework at startup (simple registry keyed by `Surface`; no reflection scanning).
 
+### Change classification and surface migration
+
+Preview scope is **property-level, not page-level**. A single edit page mixes harmless fields with dangerous ones (renaming a Synchronisation Rule sits beside its `OutboundDeprovisionAction` dropdown), so each adapter declares a **sync-affecting property map** for its surface, assigning every property one of three classes:
+
+| Class | Meaning | Save-time behaviour | Examples |
+|---|---|---|---|
+| A: destructive | Can cascade deletions or mass deprovisioning | Preview stages 1 and 2 minimum plus a count-stating confirmation, mandatory (PRD FR3) | G3 destructive toggles, G5 deletion settings, G4 partition deselection |
+| B: sync-affecting | Changes sync outcomes without direct destruction | Preview offered via the panel; save not blocked | Scoping criteria, Object Matching Rules, Attribute Flow mappings, schema selection |
+| C: cosmetic/operational | No sync-outcome impact | Never prompts; save proceeds untouched | Names, descriptions, schedule timing, `MaxExportParallelism` (matches #827's excluded list) |
+
+On save or preview request, the framework diffs the current configuration against the proposed DTO and classifies the change by the **highest class among the properties that actually changed**; a save touching only Class C fields never sees a preview, acknowledgement, or confirmation. The classification hook is installed in every sync-affecting save path during Phase 2 (where it also gates the interim acknowledgement, so cosmetic edits never trigger that either) and is reused unchanged when the surface's adapter arrives.
+
+**Migration model:** existing configuration-change interfaces move onto the framework in two passes, both already sequenced in this plan:
+
+1. **Phase 2 (all surfaces at once):** every sync-affecting save path gains the classification hook, the acknowledgement flow, and the changed-since indicator. This is deliberately shallow per surface (no preview yet) so it can cover the whole #827 coverage map in one phase.
+2. **Phase 5 (one surface per adapter issue):** each adapter issue owns the full migration of its surface's edit UI: embed the preview panel, wire the surface's proposed-configuration DTO, add the preview API endpoint, and replace the interim acknowledgement with the preview-driven confirmation (the changed-since indicator remains permanently). **An adapter is not done until its surface is migrated**; the definition of done for every Wave issue includes the UI migration, not just the adapter class.
+
+There is no big-bang migration and no orphaned interim state: surfaces not yet migrated keep the Phase 2 interim messaging, which is exactly the mechanism PRD FR17 provides to make incremental migration safe. The inventory of surfaces to migrate is #827's coverage map (the existing-issue surfaces plus gaps G1 to G6); the excluded list in #827 defines what never migrates.
+
 ### Transition taxonomy
 
 Per the PRD constraint, the object-level vocabulary reuses #363's `ActivityRunProfileExecutionItemSyncOutcomeType` rather than a parallel enum. The preview-specific transitions that have no sync-time equivalent (fell in-scope, fell out-of-scope, would become deletion-eligible) are added to that enum as new values (additive, no renumbering). Delta rows store the outcome type plus a `WouldOccur` semantic implied by context; no separate "preview outcome" enum is introduced.
@@ -171,7 +190,8 @@ Permanent end-state components, built once, rolled everywhere; adapters later la
 
 - [ ] Extract the shared `ConsequenceConfirmationDialog.razor` from the three bespoke copies (`DeleteMetaverseAttributeDialog`, `DeleteMetaverseObjectTypeDialog`, `ConnectedSystemDangerZoneTab`): consequence list, optional counts, optional type-the-name confirmation; migrate the three existing callers to it (behaviour-preserving refactor, verified against existing UI flows).
 - [ ] "Configuration changed since last full synchronisation" indicator: driven off the existing configuration-change Activity columns (latest config-change Activity per target vs the last completed full synchronisation for the systems concerned); shared badge component surfaced on affected object types/systems.
-- [ ] Roll the acknowledgement flow across the sync-affecting surfaces catalogued on #827 (save-time acknowledgement of consequences plus the recommendation to run a full synchronisation).
+- [ ] Install the change-classification hook (per-surface sync-affecting property maps; see Change classification and surface migration) in every sync-affecting save path, so only Class A/B changes trigger any messaging; cosmetic edits are untouched.
+- [ ] Roll the acknowledgement flow across the sync-affecting surfaces catalogued on #827 (save-time acknowledgement of consequences plus the recommendation to run a full synchronisation), gated by the classification hook.
 - [ ] Coordinate with the #91 plan (`engineering/plans/doing/ATTRIBUTE_PRIORITY.md` mode 1) so both consume these same components.
 - [ ] Tests: component behaviour tests where practicable; unit tests for the changed-since determination logic.
 
@@ -194,7 +214,7 @@ Permanent end-state components, built once, rolled everywhere; adapters later la
 
 ### Phase 5: Adapter waves (follow-up issues, split per #827 acceptance criteria)
 
-Each wave is one or more GitHub issues drafted for sign-off before filing; each adapter is a thin implementation of the contract plus its surface's panel embedding and confirmation flow.
+Each wave is one or more GitHub issues drafted for sign-off before filing. Each adapter issue is a thin implementation of the contract **plus the full migration of its surface's edit UI** (panel embedding, proposed-DTO wiring, preview endpoint, interim acknowledgement replaced by the preview-driven confirmation); see Change classification and surface migration for the definition of done.
 
 - [ ] **Wave 1:** G5 deletion settings and G3 destructive toggles. **G5 is the pilot adapter that proves the framework end-to-end**; Phase 3 is not "done" until it ships.
 - [ ] **Wave 2:** G4 partition/container deselection.
@@ -208,7 +228,8 @@ Each wave is one or more GitHub issues drafted for sign-off before filing; each 
 - Grouped summary counts are exact even when delta persistence is capped, and capped drill-downs are labelled sampled
 - A 100K+ object preview completes without degrading JIM.Web for other users
 - Apply Activities reference their preview Activity; preview results survive per the RPEI retention period and are reconstructable for audit
-- Every surface without an adapter shows the acknowledgement flow and the changed-since indicator (Phase 2)
+- Every surface without an adapter shows the acknowledgement flow and the changed-since indicator (Phase 2); purely cosmetic edits (e.g. renaming a Synchronisation Rule) never trigger a preview, acknowledgement, or confirmation on any surface
+- Each shipped adapter's surface is fully migrated (panel embedded, interim acknowledgement replaced); no surface is left half-migrated
 - Zero build warnings; all new logic TDD-first per repo rules
 
 ## Dependencies

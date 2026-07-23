@@ -81,7 +81,7 @@ This PRD defines that framework. The design is deliberately **UX-first**: the ar
 
 **Interim apply-time messaging (before adapters exist)**
 
-17. Until a surface has its adapter, it MUST apply the #91 mode 1 pattern: save-time acknowledgement of consequences, a recommendation to run a full synchronisation, and a "configuration changed since last full synchronisation" indicator. Delivered as an **early phase of the framework implementation**, not a standalone pre-framework feature (decided Jul 2026): the acknowledgement component and the indicator are permanent parts of the end-state UX, so this phase builds them once and rolls them across surfaces; adapters then layer the preview on top.
+17. Until a surface has its adapter, it MUST apply the #91 mode 1 pattern: save-time acknowledgement of consequences, a recommendation to run a full synchronisation, and a "configuration changed since last full synchronisation" indicator. This (like preview itself) triggers only when **sync-affecting** properties change; purely cosmetic edits on the same surface (renames, descriptions) never prompt. Delivered as an **early phase of the framework implementation**, not a standalone pre-framework feature (decided Jul 2026): the acknowledgement component and the indicator are permanent parts of the end-state UX, so this phase builds them once and rolls them across surfaces; adapters then layer the preview on top.
 
 ### Non-Functional Requirements
 
