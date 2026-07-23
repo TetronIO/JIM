@@ -109,19 +109,20 @@ public class BuiltInMetaverseSchemaSyncTests
         await _jim.Seeding.SyncBuiltInMetaverseSchemaAsync();
 
         Assert.That(_savedNewAttributes, Is.Not.Null, "the schema changes must be persisted");
-        Assert.That(_savedNewAttributes!.Select(a => a.Name), Is.EquivalentTo(GapAttributeNames),
+        var savedNewAttributes = _savedNewAttributes!;
+        Assert.That(savedNewAttributes.Select(a => a.Name), Is.EquivalentTo(GapAttributeNames),
             "exactly the missing catalogue attributes must be created");
-        foreach (var attribute in _savedNewAttributes)
+        foreach (var attribute in savedNewAttributes)
         {
             Assert.That(attribute.BuiltIn, Is.True, $"{attribute.Name} must be created as built-in");
             Assert.That(attribute.CreatedByType, Is.EqualTo(ActivityInitiatorType.System), $"{attribute.Name} must be attributed to System");
         }
 
         // the shapes must come from the catalogue
-        var emails = _savedNewAttributes.Single(a => a.Name == Constants.BuiltInAttributes.Emails);
+        var emails = savedNewAttributes.Single(a => a.Name == Constants.BuiltInAttributes.Emails);
         Assert.That(emails.Type, Is.EqualTo(AttributeDataType.Text));
         Assert.That(emails.AttributePlurality, Is.EqualTo(AttributePlurality.MultiValued));
-        var accountEnabled = _savedNewAttributes.Single(a => a.Name == Constants.BuiltInAttributes.AccountEnabled);
+        var accountEnabled = savedNewAttributes.Single(a => a.Name == Constants.BuiltInAttributes.AccountEnabled);
         Assert.That(accountEnabled.Type, Is.EqualTo(AttributeDataType.Boolean));
 
         // bindings: the new attributes must be added to the tracked built-in Metaverse Object Types per the catalogue

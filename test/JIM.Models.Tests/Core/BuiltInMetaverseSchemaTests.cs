@@ -79,10 +79,11 @@ public class BuiltInMetaverseSchemaTests
     {
         var definition = BuiltInMetaverseSchema.Attributes.SingleOrDefault(a => a.Name == name);
         Assert.That(definition, Is.Not.Null, $"SCIM-parity gap attribute '{name}' is missing from the catalogue");
-        Assert.That(definition!.Type, Is.EqualTo(expectedType));
-        Assert.That(definition.Plurality, Is.EqualTo(expectedPlurality));
-        Assert.That(definition.ObjectTypeNames, Does.Contain(Constants.BuiltInObjectTypes.User));
-        Assert.That(definition.StandardMappings.Any(m => m.Standard == AttributeStandard.Scim), Is.True,
+        var foundDefinition = definition!;
+        Assert.That(foundDefinition.Type, Is.EqualTo(expectedType));
+        Assert.That(foundDefinition.Plurality, Is.EqualTo(expectedPlurality));
+        Assert.That(foundDefinition.ObjectTypeNames, Does.Contain(Constants.BuiltInObjectTypes.User));
+        Assert.That(foundDefinition.StandardMappings.Any(m => m.Standard == AttributeStandard.Scim), Is.True,
             $"SCIM-parity gap attribute '{name}' has no SCIM Standard Mapping");
     }
 
