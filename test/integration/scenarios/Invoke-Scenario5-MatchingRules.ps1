@@ -76,11 +76,9 @@ if (-not $DirectoryConfig) {
 $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
 
 # Admin account name for server-routed directory writes (Samba AD only), derived from the bind DN.
-# All test-created Samba objects must be written THROUGH the running server (-H ldap://localhost with
-# credentials), never directly against the sam.ldb file: the server's long-lived LDAP worker
-# processes serve stale views of objects written to the file behind their back, so a directly
-# written OU can be visible to one connection and "No such object" to the next (observed 2026-07-23:
-# Test 7's add failed five times with LDAP error 32 while a simultaneous probe SAW the parent OU).
+# Test-created Samba objects are written THROUGH the running server (-H ldap://localhost with
+# credentials) rather than directly against the sam.ldb file; direct file writes on a live domain
+# controller are an unsupported access pattern.
 $sambaAdminUser = if (-not $isOpenLDAP) { ($DirectoryConfig.BindDN -split ',')[0] -replace '^CN=', '' } else { $null }
 
 Write-TestSection "Scenario 5: Object Matching Rules"
@@ -213,30 +211,7 @@ try {
                 throw "Failed to create department OU '$dept': $result"
             }
         }
-
-        # Restart the domain controller to flush every Samba worker's view of the new OUs.
-        # Freshly created OUs are searchable immediately but adds beneath them fail with
-        # LDAP error 32 'parent does not exist' for roughly two to three minutes (observed
-        # 2026-07-23: five server-routed adds failed across 25 seconds while simultaneous
-        # server-routed probes SAW the parent OU; the identical add succeeded minutes later).
-        # Server-routed OU creation alone did not close the window, so a restart is the only
-        # deterministic flush. Safe here: Tests 1 to 6 are CSV-only and JIM opens fresh
-        # directory connections per Run Profile execution, so nothing is disrupted.
-        Write-Host "  Restarting directory container to flush worker views of the new OUs..." -ForegroundColor Gray
-        docker restart $DirectoryConfig.ContainerName 2>&1 | Out-Null
-        $directoryReady = $false
-        foreach ($readinessAttempt in 1..18) {
-            Start-Sleep -Seconds 5
-            docker exec $DirectoryConfig.ContainerName ldbsearch -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" -b $DirectoryConfig.BaseDN -s base dn 2>&1 | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                $directoryReady = $true
-                break
-            }
-        }
-        if (-not $directoryReady) {
-            throw "Directory container $($DirectoryConfig.ContainerName) did not become ready within 90 seconds of the post-OU-creation restart"
-        }
-        Write-Host "  ✓ Department OUs ready (directory restarted and healthy)" -ForegroundColor Green
+        Write-Host "  ✓ Department OUs ready" -ForegroundColor Green
     }
     else {
         # OpenLDAP: flat OU structure, no department OUs needed (users go to People)
@@ -1254,14 +1229,18 @@ employeeID: $omjEmployeeId
 "@
             $omjLdifPath = [System.IO.Path]::GetTempFileName()
             try {
-                [System.IO.File]::WriteAllText($omjLdifPath, $omjLdif)
+                # Normalise to LF line endings: this script file is CRLF, so the here-string embeds
+                # \r\n, and samba's ldb LDIF parser (unlike OpenLDAP's) does NOT strip the \r. The
+                # DN then carries an invisible trailing \r, the parent resolves to "...DC=local\r",
+                # and the add fails with LDAP error 32 "parent does not exist" even though the
+                # parent OU is right there (root-caused 2026-07-23 after the \r visually truncated
+                # the captured error message, hiding its closing quote).
+                [System.IO.File]::WriteAllText($omjLdifPath, $omjLdif.Replace("`r`n", "`n"))
                 docker cp $omjLdifPath "$($DirectoryConfig.ContainerName):/tmp/omj-user.ldif" 2>&1 | Out-Null
 
-                # A freshly restored domain controller can transiently reject adds during its first
-                # minutes (observed twice at the Nano template, whose Tests 1-6 finish inside that
-                # window; the identical command succeeds on manual re-run once the DC settles).
-                # Retry with backoff, capturing the full ldb output plus a parent-OU probe per
-                # attempt so a persistent failure is diagnosable rather than a one-line mystery.
+                # Retry with backoff as cheap insurance against genuinely transient directory
+                # conditions, capturing the full ldb output plus a parent-OU probe per attempt so
+                # any persistent failure is diagnosable rather than a one-line mystery.
                 $omjMaxAttempts = 5
                 $omjCreated = $false
                 $omjCreateText = ""
