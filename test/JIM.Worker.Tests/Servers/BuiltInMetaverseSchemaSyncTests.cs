@@ -273,11 +273,8 @@ public class BuiltInMetaverseSchemaSyncTests
         _existingAttributes = new List<MetaverseAttribute>();
 
         var nextId = 1;
-        foreach (var definition in BuiltInMetaverseSchema.Attributes)
+        foreach (var definition in BuiltInMetaverseSchema.Attributes.Where(d => includeGapAttributes || !GapAttributeNames.Contains(d.Name)))
         {
-            if (!includeGapAttributes && GapAttributeNames.Contains(definition.Name))
-                continue;
-
             var attribute = new MetaverseAttribute
             {
                 Id = nextId++,
