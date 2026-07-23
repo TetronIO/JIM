@@ -3114,7 +3114,8 @@ public class ExportExecutionTests
                     UnresolvedReferenceValue = avc.UnresolvedReferenceValue,
                     GuidValue = avc.GuidValue,
                     IntValue = avc.IntValue,
-                    ExportAttemptCount = avc.ExportAttemptCount
+                    ExportAttemptCount = avc.ExportAttemptCount,
+                    ResolvedReferenceCsoId = avc.ResolvedReferenceCsoId
                 }).ToList()
             };
         }

@@ -244,6 +244,141 @@ public class OptimisticExportApplyDatabaseTests
     }
 
     /// <summary>
+    /// Seeds a Connected System with one USER object type carrying a single-valued Reference
+    /// attribute, plus a "referenced" CSO (the resolution target) and a "source" CSO (the one the
+    /// Pending Export is against).
+    /// </summary>
+    private async Task<(ConnectedSystemObjectTypeAttribute ReferenceAttribute, ConnectedSystemObject ReferencedCso, ConnectedSystemObject SourceCso)> SeedReferenceScenarioAsync()
+    {
+        await using var seed = NewContext();
+
+        var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+        var system = new ConnectedSystem { Name = "Target System", ConnectorDefinition = connectorDefinition };
+        var csType = new ConnectedSystemObjectType { Name = "USER", ConnectedSystem = system, Selected = true };
+        var managerAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Name = "manager", ConnectedSystemObjectType = csType, Type = AttributeDataType.Reference,
+            AttributePlurality = AttributePlurality.SingleValued, Selected = true
+        };
+        csType.Attributes.Add(managerAttr);
+        seed.AddRange(connectorDefinition, system, csType, managerAttr);
+        await seed.SaveChangesAsync();
+
+        var referencedCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(), Type = csType, ConnectedSystem = system, Status = ConnectedSystemObjectStatus.Normal
+        };
+        var sourceCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(), Type = csType, ConnectedSystem = system, Status = ConnectedSystemObjectStatus.Normal
+        };
+        seed.AddRange(referencedCso, sourceCso);
+        await seed.SaveChangesAsync();
+
+        return (managerAttr, referencedCso, sourceCso);
+    }
+
+    /// <summary>
+    /// SPEC-1079B RED test 1 (persistence round-trip): <c>ResolvedReferenceCsoId</c> must survive a
+    /// real database round-trip through <c>UpdatePendingExportsAsync</c> (the path
+    /// <c>ExportExecutionServer.ProcessDeferredExportsAsync</c> uses to persist a just-resolved
+    /// reference before the deferred batch executes, and the path <c>ProcessBatchSuccessAsync</c>
+    /// uses after every export attempt). Before the property is mapped this fails: EF's
+    /// <c>[NotMapped]</c> attribute means the column is never written, so a fresh reload sees null.
+    /// </summary>
+    [Test]
+    public async Task UpdatePendingExportsAsync_PersistsResolvedReferenceCsoId_RoundTripsOnFreshReloadAsync()
+    {
+        var (managerAttr, referencedCso, sourceCso) = await SeedReferenceScenarioAsync();
+
+        await using var seed = NewContext();
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = sourceCso.ConnectedSystemId,
+            ConnectedSystemObjectId = sourceCso.Id,
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Pending,
+            MaxRetries = 3,
+            CreatedAt = DateTime.UtcNow
+        };
+        var change = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = managerAttr.Id,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            UnresolvedReferenceValue = Guid.NewGuid().ToString(),
+            Status = PendingExportAttributeChangeStatus.Pending
+        };
+        pendingExport.AttributeValueChanges.Add(change);
+        seed.Add(pendingExport);
+        await seed.SaveChangesAsync();
+
+        // Act: simulate reference resolution (TryResolveReferencesFromLookup) and persist exactly
+        // as ExportExecutionServer does - StringValue set, UnresolvedReferenceValue cleared,
+        // ResolvedReferenceCsoId stamped - via UpdatePendingExportsAsync.
+        change.StringValue = "CN=Manager,DC=test";
+        change.UnresolvedReferenceValue = null;
+        change.ResolvedReferenceCsoId = referencedCso.Id;
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+        await repository.Sync.UpdatePendingExportsAsync([pendingExport]);
+
+        await using var verify = NewContext();
+        var reloadedChange = await verify.PendingExportAttributeValueChanges.AsNoTracking()
+            .SingleAsync(c => c.Id == change.Id);
+
+        Assert.That(reloadedChange.ResolvedReferenceCsoId, Is.EqualTo(referencedCso.Id),
+            "ResolvedReferenceCsoId must survive a real database round-trip through UpdatePendingExportsAsync");
+        Assert.That(reloadedChange.StringValue, Is.EqualTo("CN=Manager,DC=test"));
+    }
+
+    /// <summary>
+    /// SPEC-1079B RED test 2 (insert path): <c>ResolvedReferenceCsoId</c> must also survive the
+    /// initial multi-row INSERT (<c>CreatePendingExportsAsync</c> -&gt;
+    /// <c>BulkInsertPendingExportAttributeValueChangesRawAsync</c>), covering a change created with
+    /// the id already set (for example a change built fresh from an already-resolved value).
+    /// </summary>
+    [Test]
+    public async Task CreatePendingExportsAsync_PersistsResolvedReferenceCsoId_RoundTripsOnFreshReloadAsync()
+    {
+        var (managerAttr, referencedCso, sourceCso) = await SeedReferenceScenarioAsync();
+
+        var change = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = managerAttr.Id,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            StringValue = "CN=Manager,DC=test",
+            ResolvedReferenceCsoId = referencedCso.Id,
+            Status = PendingExportAttributeChangeStatus.Pending
+        };
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = sourceCso.ConnectedSystemId,
+            ConnectedSystemObjectId = sourceCso.Id,
+            ChangeType = PendingExportChangeType.Update,
+            Status = PendingExportStatus.Pending,
+            MaxRetries = 3,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = [change]
+        };
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+        await repository.Sync.CreatePendingExportsAsync([pendingExport]);
+
+        await using var verify = NewContext();
+        var reloadedChange = await verify.PendingExportAttributeValueChanges.AsNoTracking()
+            .SingleAsync(c => c.Id == change.Id);
+
+        Assert.That(reloadedChange.ResolvedReferenceCsoId, Is.EqualTo(referencedCso.Id),
+            "ResolvedReferenceCsoId must survive the initial insert round-trip through CreatePendingExportsAsync");
+    }
+
+    /// <summary>
     /// (4) GetSecondaryExternalIdLookupAsync (issue #1079, regression A: the D5 fallback used to
     /// page through GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync's unindexed
     /// case-folding scan once per batch, measured at 10-15s per call over 500+ calls at scale).
