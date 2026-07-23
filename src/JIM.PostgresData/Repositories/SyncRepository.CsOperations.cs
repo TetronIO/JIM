@@ -166,12 +166,11 @@ public partial class SyncRepository
         NpgsqlTransaction transaction,
         IReadOnlyList<ConnectedSystemObject> objects)
     {
+        // Writer order below MUST match CsoBulkColumns.ConnectedSystemObjects exactly.
         await using var writer = await connection.BeginBinaryImportAsync(
-            """
+            $"""
             COPY "ConnectedSystemObjects" (
-                "Id", "ConnectedSystemId", "Created", "LastUpdated", "TypeId",
-                "ExternalIdAttributeId", "SecondaryExternalIdAttributeId",
-                "Status", "MetaverseObjectId", "JoinType", "DateJoined"
+                {BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjects)}
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -201,6 +200,15 @@ public partial class SyncRepository
                 await writer.WriteAsync(cso.DateJoined.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
+            if (cso.PartitionId.HasValue)
+                await writer.WriteAsync(cso.PartitionId.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            await writer.WriteAsync(cso.ScopeReviewPending, NpgsqlTypes.NpgsqlDbType.Boolean);
+            if (cso.LastScopeEvaluatedAt.HasValue)
+                await writer.WriteAsync(cso.LastScopeEvaluatedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            else
+                await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();
@@ -219,12 +227,11 @@ public partial class SyncRepository
         List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)> attributeValues,
         HashSet<Guid>? partitionCsoIds = null)
     {
+        // Writer order below MUST match CsoBulkColumns.ConnectedSystemObjectAttributeValues exactly.
         await using var writer = await connection.BeginBinaryImportAsync(
-            """
+            $"""
             COPY "ConnectedSystemObjectAttributeValues" (
-                "Id", "ConnectedSystemObjectId", "AttributeId", "StringValue",
-                "DateTimeValue", "IntValue", "LongValue", "DecimalValue", "ByteValue",
-                "GuidValue", "BoolValue", "ReferenceValueId", "UnresolvedReferenceValue"
+                {BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectAttributeValues)}
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -288,20 +295,21 @@ public partial class SyncRepository
     /// </summary>
     private async Task BulkInsertCsosViaEfAsync(List<ConnectedSystemObject> objects)
     {
-        const int columnsPerRow = 11;
+        // Parameter order below MUST match CsoBulkColumns.ConnectedSystemObjects exactly.
+        var columnsPerRow = CsoBulkColumns.ConnectedSystemObjects.Length;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
         {
             var sql = new StringBuilder();
-            sql.Append(@"INSERT INTO ""ConnectedSystemObjects"" (""Id"", ""ConnectedSystemId"", ""Created"", ""LastUpdated"", ""TypeId"", ""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"", ""Status"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"") VALUES ");
+            sql.Append($@"INSERT INTO ""ConnectedSystemObjects"" ({BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjects)}) VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}})");
+                sql.Append('(').Append(string.Join(", ", Enumerable.Range(offset, columnsPerRow).Select(p => $"{{{p}}}"))).Append(')');
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
@@ -315,6 +323,9 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add((int)cso.JoinType);
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.PartitionId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(cso.ScopeReviewPending);
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.LastScopeEvaluatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -333,7 +344,8 @@ public partial class SyncRepository
         foreach (var chunk in BulkSqlHelpers.ChunkList(attributeValues, chunkSize))
         {
             var sql = new StringBuilder();
-            sql.Append(@"INSERT INTO ""ConnectedSystemObjectAttributeValues"" (""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""DecimalValue"", ""ByteValue"", ""GuidValue"", ""BoolValue"", ""ReferenceValueId"", ""UnresolvedReferenceValue"") VALUES ");
+            // Parameter order below MUST match CsoBulkColumns.ConnectedSystemObjectAttributeValues exactly.
+            sql.Append($@"INSERT INTO ""ConnectedSystemObjectAttributeValues"" ({BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectAttributeValues)}) VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)

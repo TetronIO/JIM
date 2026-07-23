@@ -105,4 +105,66 @@ public class MvoChangeValuePersistenceDatabaseTests
         Assert.That(decimalChange.DecimalValue, Is.EqualTo(decimalValue),
             "The Decimal change value must survive the bulk COPY path; a missing COPY column writes NULL.");
     }
+
+    [Test]
+    public async Task CreateMetaverseObjectChangeDirectAsync_TypedValues_PersistAtFullFidelityAsync()
+    {
+        // Arrange: the direct (change-tracker-bypassing) insert path used for deletion audit records
+        const long longValue = 9999999999L;
+        const decimal decimalValue = 0.25m;
+
+        await using var seedContext = NewContext();
+        var mvoType = new MetaverseObjectType { Name = $"TestType-{Guid.NewGuid():N}", PluralName = "TestTypes" };
+        var longAttr = new MetaverseAttribute { Name = $"pwdLastSet-{Guid.NewGuid():N}", Type = AttributeDataType.LongNumber };
+        var decimalAttr = new MetaverseAttribute { Name = $"fte-{Guid.NewGuid():N}", Type = AttributeDataType.Decimal };
+        var refAttr = new MetaverseAttribute { Name = $"manager-{Guid.NewGuid():N}", Type = AttributeDataType.Reference };
+        var referencedMvo = new MetaverseObject { Id = Guid.NewGuid(), Type = mvoType, Created = DateTime.UtcNow };
+        seedContext.MetaverseAttributes.AddRange(longAttr, decimalAttr, refAttr);
+        seedContext.MetaverseObjects.Add(referencedMvo);
+        await seedContext.SaveChangesAsync();
+
+        var change = new MetaverseObjectChange
+        {
+            ChangeTime = DateTime.UtcNow,
+            ChangeType = ObjectChangeType.Deleted,
+            InitiatedByType = ActivityInitiatorType.System,
+            DeletedObjectDisplayName = "Jo Bloggs"
+        };
+        change.AddAttributeValueChange(
+            new MetaverseObjectAttributeValue { Attribute = longAttr, AttributeId = longAttr.Id, LongValue = longValue },
+            ValueChangeType.Remove);
+        change.AddAttributeValueChange(
+            new MetaverseObjectAttributeValue { Attribute = decimalAttr, AttributeId = decimalAttr.Id, DecimalValue = decimalValue },
+            ValueChangeType.Remove);
+        // FK-only reference shape: during MVO deletion the referenced MVOs are not in the change
+        // tracker, so change records carry only ReferenceValueId, not the navigation
+        change.AddAttributeValueChange(
+            new MetaverseObjectAttributeValue { Attribute = refAttr, AttributeId = refAttr.Id, ReferenceValueId = referencedMvo.Id },
+            ValueChangeType.Remove);
+
+        // Act
+        await using (var writeContext = NewContext())
+        {
+            var repository = new PostgresDataRepository(writeContext);
+            await repository.Metaverse.CreateMetaverseObjectChangeDirectAsync(change);
+        }
+
+        // Assert
+        await using var readContext = NewContext();
+        var persisted = await readContext.MetaverseObjectChangeAttributeValues
+            .Include(vc => vc.MetaverseObjectChangeAttribute)
+            .Where(vc => vc.MetaverseObjectChangeAttribute.MetaverseObjectChange.Id == change.Id)
+            .ToListAsync();
+
+        Assert.That(persisted, Has.Count.EqualTo(3));
+        var longChange = persisted.Single(vc => vc.MetaverseObjectChangeAttribute.AttributeName == longAttr.Name);
+        var decimalChange = persisted.Single(vc => vc.MetaverseObjectChangeAttribute.AttributeName == decimalAttr.Name);
+        var refChange = persisted.Single(vc => vc.MetaverseObjectChangeAttribute.AttributeName == refAttr.Name);
+        Assert.That(longChange.LongValue, Is.EqualTo(longValue),
+            "The Long Number value must survive the direct insert path at full 64-bit fidelity.");
+        Assert.That(decimalChange.DecimalValue, Is.EqualTo(decimalValue),
+            "The Decimal value must survive the direct insert path; a missing INSERT column writes NULL.");
+        Assert.That(refChange.ReferenceValueId, Is.EqualTo(referencedMvo.Id),
+            "An FK-only reference value must survive the direct insert path; reading only the navigation drops it.");
+    }
 }

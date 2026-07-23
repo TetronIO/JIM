@@ -650,6 +650,7 @@ public partial class SyncRepository
                         "OutcomeSummary" text,
                         "ErrorType" int,
                         "ErrorMessage" text,
+                        "ErrorStackTrace" text,
                         "AttributeFlowCount" int
                     ) ON COMMIT DROP
                     """;
@@ -665,7 +666,7 @@ public partial class SyncRepository
 
             // COPY binary import — streams rows without SQL parsing or parameter limits
             await using (var writer = await npgsqlConn.BeginBinaryImportAsync(
-                @"COPY _rpei_bulk_update (""Id"", ""OutcomeSummary"", ""ErrorType"", ""ErrorMessage"", ""AttributeFlowCount"") FROM STDIN (FORMAT binary)"))
+                @"COPY _rpei_bulk_update (""Id"", ""OutcomeSummary"", ""ErrorType"", ""ErrorMessage"", ""ErrorStackTrace"", ""AttributeFlowCount"") FROM STDIN (FORMAT binary)"))
             {
                 foreach (var rpei in chunk)
                 {
@@ -681,6 +682,12 @@ public partial class SyncRepository
                         await writer.WriteNullAsync();
                     if (rpei.ErrorMessage is not null)
                         await writer.WriteAsync(rpei.ErrorMessage, NpgsqlTypes.NpgsqlDbType.Text);
+                    else
+                        await writer.WriteNullAsync();
+                    // ErrorStackTrace is co-mutated with ErrorType/ErrorMessage at every worker error
+                    // site; the three must be written together as a unit.
+                    if (rpei.ErrorStackTrace is not null)
+                        await writer.WriteAsync(rpei.ErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text);
                     else
                         await writer.WriteNullAsync();
                     if (rpei.AttributeFlowCount.HasValue)
@@ -699,6 +706,7 @@ public partial class SyncRepository
                     SET "OutcomeSummary" = v."OutcomeSummary",
                         "ErrorType" = v."ErrorType",
                         "ErrorMessage" = v."ErrorMessage",
+                        "ErrorStackTrace" = v."ErrorStackTrace",
                         "AttributeFlowCount" = v."AttributeFlowCount"
                     FROM _rpei_bulk_update v
                     WHERE t."Id" = v."Id"

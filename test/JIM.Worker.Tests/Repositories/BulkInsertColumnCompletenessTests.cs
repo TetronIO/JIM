@@ -76,6 +76,67 @@ public class BulkInsertColumnCompletenessTests
         });
     }
 
+    [Test]
+    public void MetaverseObjectChangeBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(MetaverseObjectChange), "MetaverseObjectChanges", MvoChangeBulkColumns.MetaverseObjectChanges);
+    }
+
+    [Test]
+    public void MetaverseObjectChangeAttributeBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(MetaverseObjectChangeAttribute), "MetaverseObjectChangeAttributes", MvoChangeBulkColumns.MetaverseObjectChangeAttributes);
+    }
+
+    [Test]
+    public void MetaverseObjectChangeAttributeValueBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(MetaverseObjectChangeAttributeValue), "MetaverseObjectChangeAttributeValues", MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues);
+    }
+
+    [Test]
+    public void ConnectedSystemObjectBulkInsertColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Staging.ConnectedSystemObject), "ConnectedSystemObjects", CsoBulkColumns.ConnectedSystemObjects);
+    }
+
+    [Test]
+    public void ConnectedSystemObjectAttributeValueBulkInsertColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Staging.ConnectedSystemObjectAttributeValue), "ConnectedSystemObjectAttributeValues", CsoBulkColumns.ConnectedSystemObjectAttributeValues);
+    }
+
+    /// <summary>
+    /// The CSO bulk update writes the mutable subset of the insert columns. The exclusions are an
+    /// explicit list (immutable identity/creation columns, plus the scope-evaluation columns that
+    /// have their own dedicated persistence path; see CsoBulkColumns for the rationale), so a
+    /// migration that adds a mutable Connected System Object column must consciously place it in
+    /// either the update list or the exclusion list; silence fails this test.
+    /// </summary>
+    [Test]
+    public void ConnectedSystemObjectBulkUpdateColumns_AreTheMutableSubsetOfInsertColumns()
+    {
+        var expected = CsoBulkColumns.ConnectedSystemObjects
+            .Except(CsoBulkColumns.ConnectedSystemObjectsUpdateExclusions)
+            .ToHashSet();
+        var actual = CsoBulkColumns.ConnectedSystemObjectsUpdate.ToHashSet();
+
+        var missing = expected.Except(actual).OrderBy(c => c).ToList();
+        var unknown = actual.Except(expected).OrderBy(c => c).ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(missing, Is.Empty,
+                "Mutable column(s) in the insert list are in neither ConnectedSystemObjectsUpdate nor the " +
+                "documented exclusion list; the raw bulk update would silently never persist them. Add each to " +
+                "one of the two lists (and the cast/parameter writers in BulkUpdateConnectedSystemObjectsRawAsync " +
+                "if updatable): " + string.Join(", ", missing));
+            Assert.That(unknown, Is.Empty,
+                "ConnectedSystemObjectsUpdate contains column(s) not in the insert list (or listed as excluded): " +
+                string.Join(", ", unknown));
+        });
+    }
+
     private void AssertColumnListMatchesModel(Type entityClrType, string tableName, string[] bulkInsertColumns)
     {
         var entityType = _model.FindEntityType(entityClrType);

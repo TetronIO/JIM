@@ -2595,18 +2595,33 @@ public class MetaverseRepository : IMetaverseRepository
         var changeId = Guid.NewGuid();
         change.Id = changeId;
 
+        // The interpolated fragments are compile-time constant column lists, never user data.
+        var insertChangeSql =
+            $@"INSERT INTO ""MetaverseObjectChanges"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChanges)})
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}}, {{12}}, {{13}})";
+        var insertAttributeSql =
+            $@"INSERT INTO ""MetaverseObjectChangeAttributes"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributes)})
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}})";
+        var insertValueSql =
+            $@"INSERT INTO ""MetaverseObjectChangeAttributeValues"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues)})
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}})";
+
+        // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChanges exactly.
         await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"INSERT INTO ""MetaverseObjectChanges"" (""Id"", ""ChangeType"", ""ChangeTime"", ""InitiatedByType"", ""InitiatedById"", ""InitiatedByName"", ""ChangeInitiatorType"", ""DeletedMetaverseObjectId"", ""DeletedObjectTypeId"", ""DeletedObjectDisplayName"")
-              VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
+            insertChangeSql,
             changeId,
-            (int)change.ChangeType,
+            BulkSqlHelpers.NullableParam(change.MetaverseObject?.Id, NpgsqlTypes.NpgsqlDbType.Uuid),
+            BulkSqlHelpers.NullableParam(change.ActivityRunProfileExecutionItem?.Id ?? change.ActivityRunProfileExecutionItemId, NpgsqlTypes.NpgsqlDbType.Uuid),
             change.ChangeTime,
+            (int)change.ChangeType,
+            (int)change.ChangeInitiatorType,
             (int)change.InitiatedByType,
             BulkSqlHelpers.NullableParam(change.InitiatedById, NpgsqlTypes.NpgsqlDbType.Uuid),
             BulkSqlHelpers.NullableParam(change.InitiatedByName, NpgsqlTypes.NpgsqlDbType.Text),
-            (int)change.ChangeInitiatorType,
+            BulkSqlHelpers.NullableParam(change.SyncRule?.Id ?? change.SyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer),
+            BulkSqlHelpers.NullableParam(change.SyncRuleName, NpgsqlTypes.NpgsqlDbType.Text),
+            BulkSqlHelpers.NullableParam(change.DeletedObjectType?.Id ?? change.DeletedObjectTypeId, NpgsqlTypes.NpgsqlDbType.Integer),
             BulkSqlHelpers.NullableParam(change.DeletedMetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid),
-            BulkSqlHelpers.NullableParam(change.DeletedObjectTypeId, NpgsqlTypes.NpgsqlDbType.Integer),
             BulkSqlHelpers.NullableParam(change.DeletedObjectDisplayName, NpgsqlTypes.NpgsqlDbType.Text));
 
         // Insert attribute changes and their values
@@ -2615,9 +2630,9 @@ public class MetaverseRepository : IMetaverseRepository
             var attrChangeId = Guid.NewGuid();
             attrChange.Id = attrChangeId;
 
+            // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChangeAttributes exactly.
             await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"INSERT INTO ""MetaverseObjectChangeAttributes"" (""Id"", ""MetaverseObjectChangeId"", ""AttributeId"", ""AttributeName"", ""AttributeType"")
-                  VALUES ({0}, {1}, {2}, {3}, {4})",
+                insertAttributeSql,
                 attrChangeId, changeId, attrChange.Attribute!.Id, attrChange.AttributeName, (int)attrChange.AttributeType);
 
             foreach (var valueChange in attrChange.ValueChanges)
@@ -2625,19 +2640,23 @@ public class MetaverseRepository : IMetaverseRepository
                 var valueChangeId = Guid.NewGuid();
                 valueChange.Id = valueChangeId;
 
+                // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues
+                // exactly. The reference FK prefers the scalar (set when the referenced MVO is not in the
+                // change tracker, the normal shape during MVO deletion) over the navigation.
                 await Repository.Database.Database.ExecuteSqlRawAsync(
-                    @"INSERT INTO ""MetaverseObjectChangeAttributeValues"" (""Id"", ""MetaverseObjectChangeAttributeId"", ""ValueChangeType"", ""StringValue"", ""IntValue"", ""GuidValue"", ""BoolValue"", ""DateTimeValue"", ""ByteValueLength"", ""ReferenceValueId"")
-                      VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
+                    insertValueSql,
                     valueChangeId,
                     attrChangeId,
                     (int)valueChange.ValueChangeType,
                     BulkSqlHelpers.NullableParam(valueChange.StringValue, NpgsqlTypes.NpgsqlDbType.Text),
+                    BulkSqlHelpers.NullableParam(valueChange.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz),
                     BulkSqlHelpers.NullableParam(valueChange.IntValue, NpgsqlTypes.NpgsqlDbType.Integer),
+                    BulkSqlHelpers.NullableParam(valueChange.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint),
+                    BulkSqlHelpers.NullableParam(valueChange.DecimalValue, NpgsqlTypes.NpgsqlDbType.Numeric),
+                    BulkSqlHelpers.NullableParam(valueChange.ByteValueLength, NpgsqlTypes.NpgsqlDbType.Integer),
                     BulkSqlHelpers.NullableParam(valueChange.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid),
                     BulkSqlHelpers.NullableParam(valueChange.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean),
-                    BulkSqlHelpers.NullableParam(valueChange.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz),
-                    BulkSqlHelpers.NullableParam(valueChange.ByteValueLength, NpgsqlTypes.NpgsqlDbType.Integer),
-                    BulkSqlHelpers.NullableParam(valueChange.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid));
+                    BulkSqlHelpers.NullableParam(valueChange.ReferenceValueId ?? valueChange.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
         }
     }
