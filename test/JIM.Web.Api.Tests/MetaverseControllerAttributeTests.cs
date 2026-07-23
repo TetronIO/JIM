@@ -253,6 +253,75 @@ public class MetaverseControllerAttributeTests
 
     #endregion
 
+    #region Update Standard Mappings
+
+    [Test]
+    public async Task UpdateAttributeAsync_StandardMappingsOnly_ReplacesThemAndReturnsOkAsync()
+    {
+        var attribute = Attr(1, "costCentre");
+        attribute.StandardMappings.Add(new MetaverseAttributeStandardMapping { Id = 7, Standard = AttributeStandard.Ldap, CounterpartName = "obsolete" });
+
+        var request = new UpdateMetaverseAttributeRequest
+        {
+            StandardMappings = new List<StandardMappingDto>
+            {
+                new() { Standard = AttributeStandard.Scim, CounterpartName = "costCenter", Notes = "SCIM Enterprise User extension." }
+            }
+        };
+
+        var result = await _controller.UpdateAttributeAsync(1, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Once,
+            "the mappings replacement must persist through the audited attribute update path");
+        Assert.That(attribute.StandardMappings.Any(m => m.CounterpartName == "obsolete"), Is.False,
+            "mappings absent from the request must be removed");
+        Assert.That(attribute.StandardMappings.Any(m => m.Standard == AttributeStandard.Scim && m.CounterpartName == "costCenter"), Is.True);
+    }
+
+    [Test]
+    public async Task UpdateAttributeAsync_EmptyStandardMappingsList_ClearsThemAsync()
+    {
+        var attribute = Attr(1, "costCentre");
+        attribute.StandardMappings.Add(new MetaverseAttributeStandardMapping { Id = 7, Standard = AttributeStandard.Ldap, CounterpartName = "costCentre" });
+
+        var result = await _controller.UpdateAttributeAsync(1, new UpdateMetaverseAttributeRequest { StandardMappings = new List<StandardMappingDto>() });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That(attribute.StandardMappings, Is.Empty, "an empty list means clear all mappings");
+    }
+
+    [Test]
+    public async Task UpdateAttributeAsync_InvalidStandardMapping_ReturnsBadRequestAsync()
+    {
+        Attr(1, "costCentre");
+        var request = new UpdateMetaverseAttributeRequest
+        {
+            StandardMappings = new List<StandardMappingDto> { new() { Standard = AttributeStandard.NotSet, CounterpartName = "x" } }
+        };
+
+        var result = await _controller.UpdateAttributeAsync(1, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateAttributeAsync_StandardMappingsOnBuiltIn_ReturnsBadRequestAsync()
+    {
+        Attr(1, "Email", builtIn: true);
+        var request = new UpdateMetaverseAttributeRequest
+        {
+            StandardMappings = new List<StandardMappingDto> { new() { Standard = AttributeStandard.Ldap, CounterpartName = "mail" } }
+        };
+
+        var result = await _controller.UpdateAttributeAsync(1, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    #endregion
+
     #region Change schema (type / plurality)
 
     [Test]

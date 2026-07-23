@@ -43,9 +43,10 @@ public class CreateMetaverseAttributeRequest
 }
 
 /// <summary>
-/// Request DTO for updating a custom Metaverse Attribute's name and rendering configuration. Type and plurality are
-/// changed via the dedicated schema endpoint (they are gated by stored values); Object Type bindings are changed via
-/// the bind / unassign endpoints. At least one of <see cref="Name"/> or <see cref="RenderingHint"/> must be supplied.
+/// Request DTO for updating a custom Metaverse Attribute's name, rendering configuration and Standard Mappings.
+/// Type and plurality are changed via the dedicated schema endpoint (they are gated by stored values); Object Type
+/// bindings are changed via the bind / unassign endpoints. At least one of <see cref="Name"/>,
+/// <see cref="RenderingHint"/> or <see cref="StandardMappings"/> must be supplied.
 /// </summary>
 public class UpdateMetaverseAttributeRequest
 {
@@ -60,6 +61,13 @@ public class UpdateMetaverseAttributeRequest
     /// The updated rendering hint for multi-valued attributes. Omitted (or null) leaves it unchanged.
     /// </summary>
     public AttributeRenderingHint? RenderingHint { get; set; }
+
+    /// <summary>
+    /// The attribute's full set of Standard Mappings. Omitted (or null) leaves them unchanged; a supplied list
+    /// replaces them entirely, so an empty list clears them. Each mapping requires a standard and a counterpart
+    /// attribute name, unique in combination.
+    /// </summary>
+    public List<StandardMappingDto>? StandardMappings { get; set; }
 
     /// <summary>
     /// Optional reason for the change, recorded on the audit Activity and configuration change history.

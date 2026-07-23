@@ -114,6 +114,8 @@ Use PowerShell (`.ps1`) for ALL automation, integration tests, and utility scrip
 
 ## Design Principles
 
+**Surface parity (portal, REST API, PowerShell):** Every new admin-facing capability ships across all three surfaces in the same PR: read features need read parity, write features need write parity (portal dialog + REST endpoint/DTO + PowerShell parameter or cmdlet, each with tests and docs). Treat a feature as incomplete while any surface is missing; administrators script JIM as much as they click it. If parity is genuinely inapplicable (a portal-only display affordance) or is being deliberately deferred, call that out explicitly and get the user's agreement first; do not defer silently. (Rule added after #1104 shipped Standard Mappings editing portal-first, leaving REST/PowerShell writes as a gap nobody had decided on.)
+
 **Minimise environment variables:** Prefer admin UI / setup wizards. Reserve env vars for bootstrap (initial DB connection), pre-encryption secrets, and container orchestration overrides.
 
 **Self-contained and air-gap deployable:** No internet connectivity required. No cloud-service dependencies (Azure Key Vault, AWS KMS, etc.). All features must work on-premises only.
