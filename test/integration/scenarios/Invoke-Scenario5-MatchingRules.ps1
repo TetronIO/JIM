@@ -213,7 +213,30 @@ try {
                 throw "Failed to create department OU '$dept': $result"
             }
         }
-        Write-Host "  ✓ Department OUs ready" -ForegroundColor Green
+
+        # Restart the domain controller to flush every Samba worker's view of the new OUs.
+        # Freshly created OUs are searchable immediately but adds beneath them fail with
+        # LDAP error 32 'parent does not exist' for roughly two to three minutes (observed
+        # 2026-07-23: five server-routed adds failed across 25 seconds while simultaneous
+        # server-routed probes SAW the parent OU; the identical add succeeded minutes later).
+        # Server-routed OU creation alone did not close the window, so a restart is the only
+        # deterministic flush. Safe here: Tests 1 to 6 are CSV-only and JIM opens fresh
+        # directory connections per Run Profile execution, so nothing is disrupted.
+        Write-Host "  Restarting directory container to flush worker views of the new OUs..." -ForegroundColor Gray
+        docker restart $DirectoryConfig.ContainerName 2>&1 | Out-Null
+        $directoryReady = $false
+        foreach ($readinessAttempt in 1..18) {
+            Start-Sleep -Seconds 5
+            docker exec $DirectoryConfig.ContainerName ldbsearch -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" -b $DirectoryConfig.BaseDN -s base dn 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                $directoryReady = $true
+                break
+            }
+        }
+        if (-not $directoryReady) {
+            throw "Directory container $($DirectoryConfig.ContainerName) did not become ready within 90 seconds of the post-OU-creation restart"
+        }
+        Write-Host "  ✓ Department OUs ready (directory restarted and healthy)" -ForegroundColor Green
     }
     else {
         # OpenLDAP: flat OU structure, no department OUs needed (users go to People)
