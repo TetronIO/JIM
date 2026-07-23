@@ -9,6 +9,7 @@
 @inject IDialogService DialogService
 @inject NavigationManager NavigationManager
 @inject IWebHostEnvironment Environment
+@inject IUiNotificationService UiNotifications
 @implements IDisposable
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -220,6 +221,7 @@ else
     private ConnectedSystemRunProfile? _selectedConnectedSystemRunProfile;
     private List<WorkerTaskHeader> _workerTaskHeaders = new();
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private bool _hasProcessingTasks;
     private readonly HashSet<string> _collapsedGroups = new();
 
@@ -289,7 +291,16 @@ else
         _workerTaskHeaders = await jim.Tasking.GetWorkerTaskHeadersAsync();
         _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
 
-        // Setup polling for worker task header updates
+        // Event-driven refresh (issue #307): database notifications trigger an immediate refresh, so the
+        // queue reacts in real time rather than waiting for the next polling cycle.
+        UiNotifications.WorkerTaskChanged += OnWorkerTaskChanged;
+        UiNotifications.ActivityProgressChanged += OnActivityProgressChanged;
+        UiNotifications.RealTimeAvailabilityChanged += OnRealTimeAvailabilityChanged;
+
+        // Polling fallback: fast (1 second) while real-time notifications are unavailable, slow
+        // (30 seconds, a reconciliation safety net for missed notifications) while they are flowing.
+        // The interval is re-read every iteration, so availability changes take effect without
+        // restarting the loop.
         var token = _pollingCancellationTokenSource.Token;
         _ = Task.Run(async () =>
         {
@@ -297,60 +308,107 @@ else
             {
                 try
                 {
-                    var stateHasChanged = false;
-                    using var pollJim = JimFactory.Create();
-                    var newWorkerTaskHeaders = await pollJim.Tasking.GetWorkerTaskHeadersAsync();
-
-                    // Look for additions or updates
-                    foreach (var newWorkerTaskHeader in newWorkerTaskHeaders)
-                    {
-                        var workerTaskHeader = _workerTaskHeaders.SingleOrDefault(q => q.Id == newWorkerTaskHeader.Id);
-                        if (workerTaskHeader == null)
-                        {
-                            _workerTaskHeaders.Add(newWorkerTaskHeader);
-                            stateHasChanged = true;
-                        }
-                        else if (HasWorkerTaskHeaderChanged(workerTaskHeader, newWorkerTaskHeader))
-                        {
-                            var position = _workerTaskHeaders.IndexOf(workerTaskHeader);
-                            _workerTaskHeaders.Remove(workerTaskHeader);
-                            _workerTaskHeaders.Insert(position, newWorkerTaskHeader);
-                            stateHasChanged = true;
-                        }
-                    }
-
-                    // Look for removals
-                    var workerTaskHeadersToRemove = _workerTaskHeaders.Where(sth => newWorkerTaskHeaders.All(sth2 => sth2.Id != sth.Id)).ToList();
-                    foreach (var workerTaskHeaderToRemove in workerTaskHeadersToRemove)
-                    {
-                        _workerTaskHeaders.Remove(workerTaskHeaderToRemove);
-                        stateHasChanged = true;
-                    }
-
-                    if (stateHasChanged)
-                    {
-                        _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
-                        await InvokeAsync(StateHasChanged);
-                    }
-
-                    // Use a reasonable polling interval (1 second for queue updates)
-                    await Task.Delay(TimeSpan.FromSeconds(1), token);
+                    var delay = UiNotifications.IsRealTimeAvailable ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(1);
+                    await Task.Delay(delay, token);
+                    await RefreshWorkerTaskHeadersAsync();
                 }
-                catch (TaskCanceledException)
+                catch (OperationCanceledException)
                 {
                     break;
                 }
-                catch
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     // Ignore errors during polling, will retry on next interval
-                    await Task.Delay(TimeSpan.FromSeconds(1), token);
                 }
             }
         }, token);
     }
 
+    /// <summary>
+    /// Fetches the latest Worker Task headers and applies additions, updates and removals to the
+    /// displayed list, re-rendering only when something actually changed. Serves both the polling loop
+    /// and event-driven refreshes; overlapping invocations are skipped via a non-blocking semaphore.
+    /// </summary>
+    private async Task RefreshWorkerTaskHeadersAsync()
+    {
+        if (!await _refreshLock.WaitAsync(0))
+            return;
+
+        try
+        {
+            var stateHasChanged = false;
+            using var refreshJim = JimFactory.Create();
+            var newWorkerTaskHeaders = await refreshJim.Tasking.GetWorkerTaskHeadersAsync();
+
+            // Look for additions or updates
+            foreach (var newWorkerTaskHeader in newWorkerTaskHeaders)
+            {
+                var workerTaskHeader = _workerTaskHeaders.SingleOrDefault(q => q.Id == newWorkerTaskHeader.Id);
+                if (workerTaskHeader == null)
+                {
+                    _workerTaskHeaders.Add(newWorkerTaskHeader);
+                    stateHasChanged = true;
+                }
+                else if (HasWorkerTaskHeaderChanged(workerTaskHeader, newWorkerTaskHeader))
+                {
+                    var position = _workerTaskHeaders.IndexOf(workerTaskHeader);
+                    _workerTaskHeaders.Remove(workerTaskHeader);
+                    _workerTaskHeaders.Insert(position, newWorkerTaskHeader);
+                    stateHasChanged = true;
+                }
+            }
+
+            // Look for removals
+            var workerTaskHeadersToRemove = _workerTaskHeaders.Where(sth => newWorkerTaskHeaders.All(sth2 => sth2.Id != sth.Id)).ToList();
+            foreach (var workerTaskHeaderToRemove in workerTaskHeadersToRemove)
+            {
+                _workerTaskHeaders.Remove(workerTaskHeaderToRemove);
+                stateHasChanged = true;
+            }
+
+            if (stateHasChanged)
+            {
+                _hasProcessingTasks = _workerTaskHeaders.Any(t => t.Status == WorkerTaskStatus.Processing);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        finally
+        {
+            _refreshLock.Release();
+        }
+    }
+
+    private void OnWorkerTaskChanged(WorkerTaskChangeNotification notification) => TriggerNotificationRefresh();
+
+    private void OnActivityProgressChanged(Guid activityId) => TriggerNotificationRefresh();
+
+    // On reconnection, refresh immediately to reconcile anything missed while real-time was unavailable.
+    private void OnRealTimeAvailabilityChanged(bool available) => TriggerNotificationRefresh();
+
+    /// <summary>
+    /// Runs a refresh in response to a notification. Event handlers run off the sync context and must
+    /// never throw into the notification relay, so failures are swallowed; the polling fallback retries.
+    /// </summary>
+    private void TriggerNotificationRefresh()
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await RefreshWorkerTaskHeadersAsync();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Transient refresh failures are recoverable; the polling fallback covers the gap
+            }
+        });
+    }
+
     void IDisposable.Dispose()
     {
+        UiNotifications.WorkerTaskChanged -= OnWorkerTaskChanged;
+        UiNotifications.ActivityProgressChanged -= OnActivityProgressChanged;
+        UiNotifications.RealTimeAvailabilityChanged -= OnRealTimeAvailabilityChanged;
         _pollingCancellationTokenSource.Cancel();
     }
 
