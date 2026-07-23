@@ -155,11 +155,12 @@ function Add-JIMScheduleStep {
                     $maxStepIndex + 1
                 }
 
-                # Build the new step
+                # Build the new step. Enum values must be sent as names, not numbers: the API
+                # rejects numeric enum values on request DTOs (#1060).
                 $newStep = @{
                     stepIndex = [int]$newStepIndex
-                    stepType = 0  # RunProfile
-                    executionMode = if ($Parallel) { 1 } else { 0 }  # 0=Sequential, 1=ParallelWithPrevious
+                    stepType = $StepType
+                    executionMode = if ($Parallel) { 'ParallelWithPrevious' } else { 'Sequential' }
                     continueOnFailure = [bool]$ContinueOnFailure
                     connectedSystemId = [int]$ConnectedSystemId
                     runProfileId = [int]$RunProfileId
@@ -171,8 +172,11 @@ function Add-JIMScheduleStep {
                     $convertedSteps += @{
                         id = $step.id
                         stepIndex = [int]$step.stepIndex
-                        stepType = if ($step.stepType -is [int]) { $step.stepType } else { 0 }
-                        executionMode = if ($step.executionMode -is [int]) { $step.executionMode } else { 0 }
+                        # Pass enum values through verbatim: the API returns and accepts enum
+                        # names (#1060); coercing unrecognised values to a numeric default both
+                        # fails validation and silently rewrites step types.
+                        stepType = $step.stepType
+                        executionMode = $step.executionMode
                         continueOnFailure = [bool]$step.continueOnFailure
                         connectedSystemId = if ($step.connectedSystemId) { [int]$step.connectedSystemId } else { $null }
                         runProfileId = if ($step.runProfileId) { [int]$step.runProfileId } else { $null }

@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 `Add-JIMScheduleStep` works again: it now sends step type and execution mode as enum names, which the API requires since numeric enum values were disallowed. It also passes existing steps through verbatim; previously it coerced any step type or execution mode it did not recognise back to a default, which would have silently rewritten PowerShell or parallel steps.
 - 🐛 Piping a Schedule into `Get-JIMScheduleExecution` now filters executions to that Schedule. Previously the piped Schedule did not bind, so the cmdlet silently returned every execution in the system whilst appearing to filter.
 - 🐛 `Reset-JIMServiceSetting` now accepts Service Settings from the pipeline, as its documentation described.
 - 🐛 Recording an API key's last-used timestamp can no longer surface error-level log entries when the database is briefly saturated by a large synchronisation run. The stamp was written on every authenticated API request as a tracked read-then-save on the same row, so continuous API polling during heavy import write bursts queued stamp writes behind each other until they timed out, and the resulting failures logged as errors despite being tolerated best-effort bookkeeping. The stamp is now a single set-based update, throttled to at most one write per key per 30 seconds; the last-used display is unaffected beyond that coarser precision.
