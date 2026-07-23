@@ -4071,6 +4071,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             case AttributeDataType.Text when string.IsNullOrEmpty(mvoAttributeValue.StringValue):
             case AttributeDataType.Number when !mvoAttributeValue.IntValue.HasValue:
             case AttributeDataType.LongNumber when !mvoAttributeValue.LongValue.HasValue:
+            case AttributeDataType.Decimal when !mvoAttributeValue.DecimalValue.HasValue:
             case AttributeDataType.Guid when !mvoAttributeValue.GuidValue.HasValue:
                 Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: Skipping null/empty attribute value for {AttributeName}",
                     metaverseAttribute.Name);
@@ -4111,6 +4112,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.Attribute.Name == connectedSystemAttributeName &&
                     av.LongValue != null &&
                     av.LongValue == mvoAttributeValue.LongValue));
+                break;
+            case AttributeDataType.Decimal:
+                // Null check already done above. EF translates this to PostgreSQL numeric equality,
+                // which is scale-insensitive (5.0 = 5.00 is true), matching .NET decimal equality.
+                query = query.Where(cso => cso.AttributeValues.Any(av =>
+                    av.Attribute != null &&
+                    av.Attribute.Name == connectedSystemAttributeName &&
+                    av.DecimalValue != null &&
+                    av.DecimalValue == mvoAttributeValue.DecimalValue));
                 break;
             case AttributeDataType.Guid:
                 // Null check already done above
@@ -4332,6 +4342,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                                 DateTimeValue = vc.DateTimeValue,
                                 IntValue = vc.IntValue,
                                 LongValue = vc.LongValue,
+                                DecimalValue = vc.DecimalValue,
                                 ByteValueLength = vc.ByteValueLength,
                                 GuidValue = vc.GuidValue,
                                 BoolValue = vc.BoolValue,
@@ -5141,7 +5152,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             """
             COPY "ConnectedSystemObjectAttributeValues" (
                 "Id", "ConnectedSystemObjectId", "AttributeId", "StringValue", "DateTimeValue",
-                "IntValue", "LongValue", "ByteValue", "GuidValue", "BoolValue",
+                "IntValue", "LongValue", "DecimalValue", "ByteValue", "GuidValue", "BoolValue",
                 "ReferenceValueId", "UnresolvedReferenceValue"
             ) FROM STDIN (FORMAT binary)
             """);
@@ -5166,6 +5177,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 await writer.WriteNullAsync();
             if (av.LongValue.HasValue)
                 await writer.WriteAsync(av.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
+            else
+                await writer.WriteNullAsync();
+            if (av.DecimalValue.HasValue)
+                await writer.WriteAsync(av.DecimalValue.Value, NpgsqlTypes.NpgsqlDbType.Numeric);
             else
                 await writer.WriteNullAsync();
             if (av.ByteValue is not null)

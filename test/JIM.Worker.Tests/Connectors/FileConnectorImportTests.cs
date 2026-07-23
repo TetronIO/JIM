@@ -75,6 +75,12 @@ public class FileConnectorImportTests
         var numberAttr = objectType.Attributes.Single(a => a.Name == "NumberColumn");
         Assert.That(numberAttr.Type, Is.EqualTo(AttributeDataType.Number));
 
+        var longAttr = objectType.Attributes.Single(a => a.Name == "LongColumn");
+        Assert.That(longAttr.Type, Is.EqualTo(AttributeDataType.LongNumber));
+
+        var decimalAttr = objectType.Attributes.Single(a => a.Name == "DecimalColumn");
+        Assert.That(decimalAttr.Type, Is.EqualTo(AttributeDataType.Decimal));
+
         var boolAttr = objectType.Attributes.Single(a => a.Name == "BoolColumn");
         Assert.That(boolAttr.Type, Is.EqualTo(AttributeDataType.Boolean));
 
@@ -83,6 +89,38 @@ public class FileConnectorImportTests
 
         var guidAttr = objectType.Attributes.Single(a => a.Name == "GuidColumn");
         Assert.That(guidAttr.Type, Is.EqualTo(AttributeDataType.Guid));
+    }
+
+    [Test]
+    public async Task GetSchemaAsync_WithNumericValues_InfersNarrowestToWidestTypeAsync()
+    {
+        // Arrange - numeric inference must run narrowest-to-widest: whole numbers within 32-bit
+        // range infer Number, larger whole numbers infer LongNumber, and fractional or
+        // exponent-notation values infer Decimal (never Text, and never a type that can't hold them)
+        var filePath = Path.Combine(_testFilesPath, "decimal_inference.csv");
+        var settingValues = CreateSettingValues(filePath, "TestObject");
+
+        // Act
+        var schema = await _connector.GetSchemaAsync(settingValues, _logger);
+
+        // Assert
+        Assert.That(schema, Is.Not.Null);
+        var objectType = schema.ObjectTypes[0];
+
+        var wholeAttr = objectType.Attributes.Single(a => a.Name == "WholeColumn");
+        Assert.That(wholeAttr.Type, Is.EqualTo(AttributeDataType.Number));
+
+        var largeWholeAttr = objectType.Attributes.Single(a => a.Name == "LargeWholeColumn");
+        Assert.That(largeWholeAttr.Type, Is.EqualTo(AttributeDataType.LongNumber));
+
+        var fractionalAttr = objectType.Attributes.Single(a => a.Name == "FractionalColumn");
+        Assert.That(fractionalAttr.Type, Is.EqualTo(AttributeDataType.Decimal));
+
+        var exponentAttr = objectType.Attributes.Single(a => a.Name == "ExponentColumn");
+        Assert.That(exponentAttr.Type, Is.EqualTo(AttributeDataType.Decimal));
+
+        var negativeFractionAttr = objectType.Attributes.Single(a => a.Name == "NegativeFractionColumn");
+        Assert.That(negativeFractionAttr.Type, Is.EqualTo(AttributeDataType.Decimal));
     }
 
     [Test]
@@ -176,6 +214,148 @@ public class FileConnectorImportTests
         // Second object should be valid
         var secondObject = result.ImportObjects[1];
         Assert.That(secondObject.ErrorType, Is.Null);
+    }
+
+    [Test]
+    public async Task ImportAsync_WithDecimalValues_ParsesValuesAsync()
+    {
+        // Arrange - file has plain fractional, exponent-notation, negative, and empty Salary values
+        var filePath = Path.Combine(_testFilesPath, "decimal_users.csv");
+        var connectedSystem = CreateConnectedSystemWithDecimalAttr(filePath, "User");
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(4));
+
+        // Row 1: plain fractional value
+        var row1 = result.ImportObjects[0];
+        Assert.That(row1.ErrorType, Is.Null);
+        var salary1 = row1.Attributes.Single(a => a.Name == "Salary");
+        Assert.That(salary1.DecimalValues, Has.Count.EqualTo(1));
+        Assert.That(salary1.DecimalValues[0], Is.EqualTo(50000.50m));
+
+        // Row 2: exponent notation is accepted and canonicalised (1.5E3 = 1500)
+        var row2 = result.ImportObjects[1];
+        Assert.That(row2.ErrorType, Is.Null);
+        var salary2 = row2.Attributes.Single(a => a.Name == "Salary");
+        Assert.That(salary2.DecimalValues, Has.Count.EqualTo(1));
+        Assert.That(salary2.DecimalValues[0], Is.EqualTo(1500m));
+
+        // Row 3: negative fractional value
+        var row3 = result.ImportObjects[2];
+        Assert.That(row3.ErrorType, Is.Null);
+        var salary3 = row3.Attributes.Single(a => a.Name == "Salary");
+        Assert.That(salary3.DecimalValues, Has.Count.EqualTo(1));
+        Assert.That(salary3.DecimalValues[0], Is.EqualTo(-0.25m));
+
+        // Row 4: empty Decimal value results in no DecimalValues, not an error
+        var row4 = result.ImportObjects[3];
+        Assert.That(row4.ErrorType, Is.Null, "Row with empty Decimal should not cause error");
+        var salary4 = row4.Attributes.Single(a => a.Name == "Salary");
+        Assert.That(salary4.DecimalValues, Is.Empty, "Empty Decimal should result in no DecimalValues");
+    }
+
+    [Test]
+    public async Task ImportAsync_WithInvalidDecimal_RecordsErrorAsync()
+    {
+        // Arrange - first row's Salary is "lots", which is not a valid decimal
+        var filePath = Path.Combine(_testFilesPath, "invalid_decimals.csv");
+        var connectedSystem = CreateConnectedSystemWithDecimalAttr(filePath, "User");
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(3));
+
+        // First object should have an error due to "lots" not being a valid decimal
+        var firstObject = result.ImportObjects[0];
+        Assert.That(firstObject.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
+        Assert.That(firstObject.ErrorMessage, Does.Contain("Salary"));
+
+        // Third object should be valid
+        var thirdObject = result.ImportObjects[2];
+        Assert.That(thirdObject.ErrorType, Is.Null);
+        var salary = thirdObject.Attributes.Single(a => a.Name == "Salary");
+        Assert.That(salary.DecimalValues, Has.Count.EqualTo(1));
+        Assert.That(salary.DecimalValues[0], Is.EqualTo(123.45m));
+    }
+
+    [Test]
+    public async Task ImportAsync_WithOutOfRangeDecimal_RecordsErrorAsync()
+    {
+        // Arrange - second row's Salary is 1E30, which exceeds the range of decimal;
+        // it must surface as that row's import error, never be silently truncated or rounded
+        var filePath = Path.Combine(_testFilesPath, "invalid_decimals.csv");
+        var connectedSystem = CreateConnectedSystemWithDecimalAttr(filePath, "User");
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(3));
+
+        var secondObject = result.ImportObjects[1];
+        Assert.That(secondObject.ErrorType, Is.EqualTo(ConnectedSystemImportObjectError.AttributeValueError));
+        Assert.That(secondObject.ErrorMessage, Does.Contain("Salary"));
+        var salary = secondObject.Attributes.SingleOrDefault(a => a.Name == "Salary");
+        Assert.That(salary, Is.Null, "The out-of-range Salary attribute should not be imported");
+    }
+
+    [Test]
+    public async Task ImportAsync_WithMultiValuedDecimalAttribute_ParsesDelimitedValuesAsync()
+    {
+        // Arrange - Rates column holds pipe-delimited decimal values, including exponent notation
+        var filePath = Path.Combine(_testFilesPath, "multivalued_decimals.csv");
+        var connectedSystem = CreateConnectedSystemWithMultiValuedDecimalAttr(filePath, "User");
+        var runProfile = new ConnectedSystemRunProfile
+        {
+            FilePath = filePath,
+            RunType = ConnectedSystemRunType.FullImport
+        };
+
+        // Act
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+
+        // Assert
+        Assert.That(result, Is.Not.Null);
+        Assert.That(result.ImportObjects, Has.Count.EqualTo(2));
+
+        // First object should have 3 rates (3.75E1 = 37.5)
+        var firstObject = result.ImportObjects[0];
+        Assert.That(firstObject.ErrorType, Is.Null);
+        var ratesAttr = firstObject.Attributes.Single(a => a.Name == "Rates");
+        Assert.That(ratesAttr.DecimalValues, Has.Count.EqualTo(3));
+        Assert.That(ratesAttr.DecimalValues, Does.Contain(1.5m));
+        Assert.That(ratesAttr.DecimalValues, Does.Contain(2.25m));
+        Assert.That(ratesAttr.DecimalValues, Does.Contain(37.5m));
+
+        // Second object should have 1 rate
+        var secondObject = result.ImportObjects[1];
+        Assert.That(secondObject.ErrorType, Is.Null);
+        var ratesAttr2 = secondObject.Attributes.Single(a => a.Name == "Rates");
+        Assert.That(ratesAttr2.DecimalValues, Has.Count.EqualTo(1));
+        Assert.That(ratesAttr2.DecimalValues[0], Is.EqualTo(9.99m));
     }
 
     [Test]
@@ -834,6 +1014,54 @@ public class FileConnectorImportTests
             Name = "Test File Connector",
             ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
             SettingValues = CreateSettingValues(filePath, objectTypeName, multiValueDelimiter: multiValueDelimiter)
+        };
+    }
+
+    private ConnectedSystem CreateConnectedSystemWithDecimalAttr(string filePath, string objectTypeName)
+    {
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = objectTypeName,
+            Selected = true,
+            Attributes = new List<ConnectedSystemObjectTypeAttribute>
+            {
+                new() { Id = 1, Name = "Id", Type = AttributeDataType.Number, Selected = true, AttributePlurality = AttributePlurality.SingleValued },
+                new() { Id = 2, Name = "Name", Type = AttributeDataType.Text, Selected = true, AttributePlurality = AttributePlurality.SingleValued },
+                new() { Id = 3, Name = "Salary", Type = AttributeDataType.Decimal, Selected = true, AttributePlurality = AttributePlurality.SingleValued }
+            }
+        };
+
+        return new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test File Connector",
+            ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
+            SettingValues = CreateSettingValues(filePath, objectTypeName)
+        };
+    }
+
+    private ConnectedSystem CreateConnectedSystemWithMultiValuedDecimalAttr(string filePath, string objectTypeName)
+    {
+        var objectType = new ConnectedSystemObjectType
+        {
+            Id = 1,
+            Name = objectTypeName,
+            Selected = true,
+            Attributes = new List<ConnectedSystemObjectTypeAttribute>
+            {
+                new() { Id = 1, Name = "Id", Type = AttributeDataType.Number, Selected = true, AttributePlurality = AttributePlurality.SingleValued },
+                new() { Id = 2, Name = "Name", Type = AttributeDataType.Text, Selected = true, AttributePlurality = AttributePlurality.SingleValued },
+                new() { Id = 3, Name = "Rates", Type = AttributeDataType.Decimal, Selected = true, AttributePlurality = AttributePlurality.MultiValued }
+            }
+        };
+
+        return new ConnectedSystem
+        {
+            Id = 1,
+            Name = "Test File Connector",
+            ObjectTypes = new List<ConnectedSystemObjectType> { objectType },
+            SettingValues = CreateSettingValues(filePath, objectTypeName)
         };
     }
 

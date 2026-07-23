@@ -537,6 +537,54 @@ public class FileConnectorExportTests
     }
 
     [Test]
+    public async Task Export_Create_HandlesDecimalValuesAsync()
+    {
+        // Arrange
+        var settingValues = CreateExportSettingValues(_testExportPath);
+        var pendingExports = CreateSingleDecimalCreatePendingExport(12345.678m);
+
+        // Act
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+
+        // Assert
+        var content = File.ReadAllText(_testExportPath);
+        Assert.That(content, Does.Contain("12345.678"));
+    }
+
+    [Test]
+    public async Task Export_Create_DecimalValue_WritesCanonicalInvariantFormAsync()
+    {
+        // Arrange - emitted export values use the canonical form: invariant culture,
+        // plain notation, no trailing zeros (1234.50 is written as 1234.5)
+        var settingValues = CreateExportSettingValues(_testExportPath);
+        var pendingExports = CreateSingleDecimalCreatePendingExport(1234.50m);
+
+        // Act
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+
+        // Assert
+        var content = File.ReadAllText(_testExportPath);
+        Assert.That(content, Does.Contain("1234.5"));
+        Assert.That(content, Does.Not.Contain("1234.50"));
+    }
+
+    [Test]
+    public async Task Export_Create_SmallDecimalValue_NeverWritesExponentNotationAsync()
+    {
+        // Arrange - very small magnitudes must be written in plain notation, never exponent form
+        var settingValues = CreateExportSettingValues(_testExportPath);
+        var pendingExports = CreateSingleDecimalCreatePendingExport(0.0000001m);
+
+        // Act
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+
+        // Assert
+        var content = File.ReadAllText(_testExportPath);
+        Assert.That(content, Does.Contain("0.0000001"));
+        Assert.That(content, Does.Not.Contain("E-"));
+    }
+
+    [Test]
     public async Task Export_Create_HandlesBooleanValuesAsync()
     {
         // Arrange
@@ -896,6 +944,31 @@ public class FileConnectorExportTests
                         AttributeId = emailAttr.Id,
                         StringValue = email
                     }
+                }
+            }
+        };
+    }
+
+    private static List<PendingExport> CreateSingleDecimalCreatePendingExport(decimal salary)
+    {
+        var objectType = new ConnectedSystemObjectType { Id = 1, Name = "User" };
+        var externalIdAttr = CreateExternalIdAttribute(objectType);
+        var salaryAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 3, Name = "salary", Type = AttributeDataType.Decimal,
+            ConnectedSystemObjectType = objectType
+        };
+
+        return new List<PendingExport>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                ChangeType = PendingExportChangeType.Create,
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                {
+                    new() { Id = Guid.NewGuid(), Attribute = externalIdAttr, AttributeId = externalIdAttr.Id, StringValue = "emp001" },
+                    new() { Id = Guid.NewGuid(), Attribute = salaryAttr, AttributeId = salaryAttr.Id, DecimalValue = salary }
                 }
             }
         };

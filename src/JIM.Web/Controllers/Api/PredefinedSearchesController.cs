@@ -619,6 +619,13 @@ public class PredefinedSearchesController(ILogger<PredefinedSearchesController> 
                     return (null, "LongValue is required for a LongNumber criterion.");
                 criterion.LongValue = request.LongValue;
                 break;
+            case AttributeDataType.Decimal:
+                if (!SearchComparisonOperators.IsValid(op, attribute.Type))
+                    return (null, $"Operator '{op}' is not valid for the Decimal attribute '{attribute.Name}'.");
+                if (!request.DecimalValue.HasValue)
+                    return (null, "DecimalValue is required for a Decimal criterion.");
+                criterion.DecimalValue = request.DecimalValue;
+                break;
             case AttributeDataType.DateTime:
                 if (!SearchComparisonOperators.IsValid(op, attribute.Type))
                     return (null, $"Operator '{op}' is not valid for the DateTime attribute '{attribute.Name}'.");

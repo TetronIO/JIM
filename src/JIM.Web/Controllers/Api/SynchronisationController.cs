@@ -2771,6 +2771,7 @@ public class SynchronisationController(
             criterion.StringValue = null;
             criterion.IntValue = null;
             criterion.LongValue = null;
+            criterion.DecimalValue = null;
             criterion.DateTimeValue = null;
             criterion.BoolValue = null;
             criterion.GuidValue = null;
@@ -2780,6 +2781,7 @@ public class SynchronisationController(
             criterion.StringValue = request.StringValue;
             criterion.IntValue = request.IntValue;
             criterion.LongValue = request.LongValue;
+            criterion.DecimalValue = request.DecimalValue;
             criterion.DateTimeValue = request.DateTimeValue;
             criterion.BoolValue = request.BoolValue;
             criterion.GuidValue = request.GuidValue;

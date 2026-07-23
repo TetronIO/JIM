@@ -11,7 +11,7 @@ The JIM File Connector enables bi-directional synchronisation of identity data w
 - **Configurable delimiters**<br /> Comma (default), tab, pipe, semicolon, or any custom character
 - **Multi-valued attributes**<br /> Supported via duplicate column names in the header row, or via a configurable in-field delimiter (default: pipe `|`)
 - **Schema auto-discovery**<br /> Column headers are read automatically to build the schema
-- **Type detection**<br /> Attribute data types are inferred by inspecting up to 50 rows of data. Supported types: Text, Number, Boolean, Guid, DateTime
+- **Type detection**<br /> Attribute data types are inferred by inspecting up to 50 rows of data. Supported types: Text, Number, Long Number, Decimal, Boolean, Guid, DateTime
 - **Culture-aware parsing**<br /> An optional culture setting controls how numbers, dates, and other locale-sensitive values are parsed
 - **Object type support**<br /> Objects can be typed via a dedicated column in the file, or by specifying a fixed object type for the entire file
 - **Operational modes**<br /> Import Only, Export Only, or Bidirectional (export then confirming import from the same file)
@@ -125,7 +125,7 @@ When you configure a File Connector Connected System and trigger schema discover
 
 1. **Reads the header row**<br /> Column names become attribute names in the schema.
 2. **Detects multi-valued attributes**<br /> If the same column name appears more than once in the header, the attribute is marked as multi-valued.
-3. **Infers data types**<br /> JIM reads up to 50 data rows and attempts to parse each column's values as Number, Boolean, Guid, or DateTime. If none of these match, the attribute defaults to Text.
+3. **Infers data types**<br /> JIM reads up to 50 data rows and attempts to parse each column's values as Number, Long Number, Decimal, Boolean, Guid, or DateTime, in that order (narrowest numeric type first). Whole numbers within 32-bit range infer Number, larger whole numbers infer Long Number, and fractional or exponent-notation values (for example `1.5` or `1.5E3`) infer Decimal. If none of these match, the attribute defaults to Text.
 4. **Discovers object types**<br /> If an Object Type Column is configured, JIM reads through the file to find all unique object type values. Otherwise, it uses the fixed Object Type setting.
 
 In **Export Only** mode where no file exists yet, schema discovery creates a minimal schema with just the specified object type. Attributes are defined later by Synchronisation Rules.

@@ -159,6 +159,10 @@ public class MetaverseObjectChange
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
                     attributeChange, valueChangeType, (int)value.LongValue.Value));
                 break;
+            case AttributeDataType.Decimal when value.DecimalValue != null:
+                attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
+                    attributeChange, valueChangeType, value.DecimalValue.Value));
+                break;
             case AttributeDataType.Guid when value.GuidValue != null:
                 attributeChange.ValueChanges.Add(new MetaverseObjectChangeAttributeValue(
                     attributeChange, valueChangeType, (Guid)value.GuidValue));

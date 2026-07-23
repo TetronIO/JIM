@@ -236,6 +236,10 @@ public partial class SyncEngine
                 attrChange.LongValue.HasValue &&
                 csoValues.Any(v => v.LongValue == attrChange.LongValue),
 
+            AttributeDataType.Decimal =>
+                attrChange.DecimalValue.HasValue &&
+                csoValues.Any(v => v.DecimalValue == attrChange.DecimalValue),
+
             AttributeDataType.DateTime =>
                 attrChange.DateTimeValue.HasValue &&
                 csoValues.Any(v => v.DateTimeValue == attrChange.DateTimeValue),
@@ -297,6 +301,7 @@ public partial class SyncEngine
         public HashSet<string>? ReferenceValues { get; init; }
         public HashSet<int>? NumberValues { get; init; }
         public HashSet<long>? LongNumberValues { get; init; }
+        public HashSet<decimal>? DecimalValues { get; init; }
         public HashSet<Guid>? GuidValues { get; init; }
         public HashSet<bool>? BooleanValues { get; init; }
         public HashSet<long>? DateTimeTicksValues { get; init; }
@@ -340,6 +345,15 @@ public partial class SyncEngine
                 Count = values.Count,
                 RawValues = values,
                 LongNumberValues = values.Where(v => v.LongValue.HasValue).Select(v => v.LongValue!.Value).ToHashSet()
+            },
+
+            // Decimal hashing and equality are scale-insensitive (5.0m and 5.00m are one set member),
+            // so set membership is numerically correct.
+            AttributeDataType.Decimal => new AttributeValueIndex
+            {
+                Count = values.Count,
+                RawValues = values,
+                DecimalValues = values.Where(v => v.DecimalValue.HasValue).Select(v => v.DecimalValue!.Value).ToHashSet()
             },
 
             AttributeDataType.Guid => new AttributeValueIndex
@@ -403,6 +417,7 @@ public partial class SyncEngine
             AttributeDataType.Text => index.TextValues != null,
             AttributeDataType.Number => index.NumberValues != null,
             AttributeDataType.LongNumber => index.LongNumberValues != null,
+            AttributeDataType.Decimal => index.DecimalValues != null,
             AttributeDataType.DateTime => index.DateTimeTicksValues != null,
             AttributeDataType.Binary => index.BinaryValues != null,
             AttributeDataType.Boolean => index.BooleanValues != null,
@@ -429,6 +444,10 @@ public partial class SyncEngine
             AttributeDataType.LongNumber =>
                 attrChange.LongValue.HasValue &&
                 (index.LongNumberValues?.Contains(attrChange.LongValue.Value) ?? false),
+
+            AttributeDataType.Decimal =>
+                attrChange.DecimalValue.HasValue &&
+                (index.DecimalValues?.Contains(attrChange.DecimalValue.Value) ?? false),
 
             AttributeDataType.DateTime =>
                 attrChange.DateTimeValue.HasValue &&
@@ -505,6 +524,7 @@ public partial class SyncEngine
         return change.StringValue == null &&
                !change.IntValue.HasValue &&
                !change.LongValue.HasValue &&
+               !change.DecimalValue.HasValue &&
                !change.DateTimeValue.HasValue &&
                !change.BoolValue.HasValue &&
                !change.GuidValue.HasValue &&
@@ -594,6 +614,7 @@ public partial class SyncEngine
             AttributeDataType.Text => csoAttrValues.Select(v => v.StringValue).Where(v => v != null),
             AttributeDataType.Number => csoAttrValues.Select(v => v.IntValue?.ToString()).Where(v => v != null),
             AttributeDataType.LongNumber => csoAttrValues.Select(v => v.LongValue?.ToString()).Where(v => v != null),
+            AttributeDataType.Decimal => csoAttrValues.Select(v => v.DecimalValue.HasValue ? DecimalAttributeValue.ToCanonicalString(v.DecimalValue.Value) : null).Where(v => v != null),
             AttributeDataType.DateTime => csoAttrValues.Select(v => v.DateTimeValue?.ToString("O")).Where(v => v != null),
             AttributeDataType.Boolean => csoAttrValues.Select(v => v.BoolValue?.ToString()).Where(v => v != null),
             AttributeDataType.Guid => csoAttrValues.Select(v => v.GuidValue?.ToString()).Where(v => v != null),
@@ -617,6 +638,7 @@ public partial class SyncEngine
             AttributeDataType.Text => attrChange.StringValue ?? "(null)",
             AttributeDataType.Number => attrChange.IntValue?.ToString() ?? "(null)",
             AttributeDataType.LongNumber => attrChange.LongValue?.ToString() ?? "(null)",
+            AttributeDataType.Decimal => attrChange.DecimalValue.HasValue ? DecimalAttributeValue.ToCanonicalString(attrChange.DecimalValue.Value) : "(null)",
             AttributeDataType.DateTime => attrChange.DateTimeValue?.ToString("O") ?? "(null)",
             AttributeDataType.Boolean => attrChange.BoolValue?.ToString() ?? "(null)",
             AttributeDataType.Guid => attrChange.GuidValue?.ToString() ?? "(null)",

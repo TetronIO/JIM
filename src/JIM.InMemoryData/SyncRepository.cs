@@ -12,6 +12,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
+using JIM.Utilities;
 
 namespace JIM.InMemoryData;
 
@@ -730,7 +731,8 @@ public class SyncRepository : ISyncRepository
                     var av = cso.AttributeValues
                         .FirstOrDefault(a => a.AttributeId == source.ConnectedSystemAttributeId.Value);
                     sourceValue = av?.StringValue ?? av?.IntValue?.ToString() ??
-                                  av?.GuidValue?.ToString() ?? av?.LongValue?.ToString();
+                                  av?.GuidValue?.ToString() ?? av?.LongValue?.ToString() ??
+                                  (av?.DecimalValue is { } sourceDecimal ? DecimalAttributeValue.ToCanonicalString(sourceDecimal) : null);
                     if (sourceValue != null) break;
                 }
             }
@@ -752,7 +754,8 @@ public class SyncRepository : ISyncRepository
                     return mvo.AttributeValues.Any(a =>
                         a.AttributeId == targetAttrId &&
                         string.Equals(
-                            a.StringValue ?? a.IntValue?.ToString() ?? a.GuidValue?.ToString() ?? a.LongValue?.ToString(),
+                            a.StringValue ?? a.IntValue?.ToString() ?? a.GuidValue?.ToString() ?? a.LongValue?.ToString() ??
+                                (a.DecimalValue is { } targetDecimal ? DecimalAttributeValue.ToCanonicalString(targetDecimal) : null),
                             sourceValue,
                             comparison));
                 })
@@ -788,7 +791,8 @@ public class SyncRepository : ISyncRepository
                 var av = connectedSystemObject.AttributeValues
                     .FirstOrDefault(a => a.AttributeId == attrId);
                 sourceValue = av?.StringValue ?? av?.IntValue?.ToString() ??
-                              av?.GuidValue?.ToString() ?? av?.LongValue?.ToString();
+                              av?.GuidValue?.ToString() ?? av?.LongValue?.ToString() ??
+                              (av?.DecimalValue is { } sourceDecimal ? DecimalAttributeValue.ToCanonicalString(sourceDecimal) : null);
                 if (sourceValue != null) break;
             }
         }
@@ -809,7 +813,8 @@ public class SyncRepository : ISyncRepository
                 return mvo.AttributeValues.Any(a =>
                     a.AttributeId == targetAttrId &&
                     string.Equals(
-                        a.StringValue ?? a.IntValue?.ToString() ?? a.GuidValue?.ToString() ?? a.LongValue?.ToString(),
+                        a.StringValue ?? a.IntValue?.ToString() ?? a.GuidValue?.ToString() ?? a.LongValue?.ToString() ??
+                            (a.DecimalValue is { } targetDecimal ? DecimalAttributeValue.ToCanonicalString(targetDecimal) : null),
                         sourceValue,
                         comparison));
             })
@@ -852,7 +857,8 @@ public class SyncRepository : ISyncRepository
             return Task.FromResult<ConnectedSystemObject?>(null);
 
         // Empty string is treated as no value, matching the Postgres implementation's IsNullOrEmpty guard.
-        var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString() ?? mvoAttr.LongValue?.ToString();
+        var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString() ?? mvoAttr.LongValue?.ToString() ??
+                     (mvoAttr.DecimalValue is { } mvoDecimal ? DecimalAttributeValue.ToCanonicalString(mvoDecimal) : null);
         if (string.IsNullOrEmpty(mvoVal))
             return Task.FromResult<ConnectedSystemObject?>(null);
 
@@ -863,7 +869,8 @@ public class SyncRepository : ISyncRepository
             var csoAttr = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == csAttrId);
             if (csoAttr == null)
                 return false;
-            var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString() ?? csoAttr.LongValue?.ToString();
+            var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString() ?? csoAttr.LongValue?.ToString() ??
+                         (csoAttr.DecimalValue is { } csoDecimal ? DecimalAttributeValue.ToCanonicalString(csoDecimal) : null);
             return string.Equals(mvoVal, csoVal, comparison);
         }
 

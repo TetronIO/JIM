@@ -39,6 +39,8 @@ public class ConnectedSystemObjectAttributeValue
 
     public long? LongValue { get; set; }
 
+    public decimal? DecimalValue { get; set; }
+
     public byte[]? ByteValue { get; set; }
 
     public Guid? GuidValue { get; set; }
@@ -78,6 +80,9 @@ public class ConnectedSystemObjectAttributeValue
 
         if (LongValue != null)
             return LongValue.ToString();
+
+        if (DecimalValue != null)
+            return DecimalValue.Value.ToString(CultureInfo.InvariantCulture);
 
         if (ByteValue != null)
             return ByteValue.Length.ToString();

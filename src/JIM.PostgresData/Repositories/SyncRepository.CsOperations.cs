@@ -223,7 +223,7 @@ public partial class SyncRepository
             """
             COPY "ConnectedSystemObjectAttributeValues" (
                 "Id", "ConnectedSystemObjectId", "AttributeId", "StringValue",
-                "DateTimeValue", "IntValue", "LongValue", "ByteValue",
+                "DateTimeValue", "IntValue", "LongValue", "DecimalValue", "ByteValue",
                 "GuidValue", "BoolValue", "ReferenceValueId", "UnresolvedReferenceValue"
             ) FROM STDIN (FORMAT binary)
             """);
@@ -248,6 +248,10 @@ public partial class SyncRepository
                 await writer.WriteNullAsync();
             if (av.LongValue.HasValue)
                 await writer.WriteAsync(av.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
+            else
+                await writer.WriteNullAsync();
+            if (av.DecimalValue.HasValue)
+                await writer.WriteAsync(av.DecimalValue.Value, NpgsqlTypes.NpgsqlDbType.Numeric);
             else
                 await writer.WriteNullAsync();
             if (av.ByteValue is not null)
@@ -323,20 +327,20 @@ public partial class SyncRepository
     private async Task BulkInsertCsoAttributeValuesViaEfAsync(
         List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)> attributeValues)
     {
-        const int columnsPerRow = 12;
+        const int columnsPerRow = 13;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(attributeValues, chunkSize))
         {
             var sql = new StringBuilder();
-            sql.Append(@"INSERT INTO ""ConnectedSystemObjectAttributeValues"" (""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""ByteValue"", ""GuidValue"", ""BoolValue"", ""ReferenceValueId"", ""UnresolvedReferenceValue"") VALUES ");
+            sql.Append(@"INSERT INTO ""ConnectedSystemObjectAttributeValues"" (""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""DecimalValue"", ""ByteValue"", ""GuidValue"", ""BoolValue"", ""ReferenceValueId"", ""UnresolvedReferenceValue"") VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}})");
+                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}}, {{{offset + 12}}})");
 
                 var (csoId, av) = chunk[i];
                 parameters.Add(av.Id);
@@ -346,6 +350,7 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(av.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
+                parameters.Add(BulkSqlHelpers.NullableParam(av.DecimalValue, NpgsqlTypes.NpgsqlDbType.Numeric));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
@@ -927,20 +932,20 @@ public partial class SyncRepository
     /// </summary>
     private async Task BulkInsertPendingExportAttributeValueChangesRawAsync(List<(Guid PendingExportId, PendingExportAttributeValueChange Change)> changes)
     {
-        const int columnsPerRow = 16;
+        const int columnsPerRow = 17;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(changes, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""PendingExportAttributeValueChanges"" (""Id"", ""PendingExportId"", ""AttributeId"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""ByteValue"", ""GuidValue"", ""BoolValue"", ""UnresolvedReferenceValue"", ""ChangeType"", ""Status"", ""ExportAttemptCount"", ""LastExportedAt"", ""LastImportedValue"") VALUES ");
+            sql.Append(@"INSERT INTO ""PendingExportAttributeValueChanges"" (""Id"", ""PendingExportId"", ""AttributeId"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""DecimalValue"", ""ByteValue"", ""GuidValue"", ""BoolValue"", ""UnresolvedReferenceValue"", ""ChangeType"", ""Status"", ""ExportAttemptCount"", ""LastExportedAt"", ""LastImportedValue"") VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}}, {{{offset + 12}}}, {{{offset + 13}}}, {{{offset + 14}}}, {{{offset + 15}}})");
+                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}}, {{{offset + 12}}}, {{{offset + 13}}}, {{{offset + 14}}}, {{{offset + 15}}}, {{{offset + 16}}})");
 
                 var (pendingExportId, avc) = chunk[i];
                 parameters.Add(avc.Id);
@@ -950,6 +955,7 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.DecimalValue, NpgsqlTypes.NpgsqlDbType.Numeric));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));

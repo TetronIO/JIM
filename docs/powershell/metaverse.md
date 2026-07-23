@@ -293,7 +293,7 @@ New-JIMMetaverseAttribute -Name <string> -Type <string> [-AttributePlurality <st
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Name` | `string` | Yes | | The name of the new attribute |
-| `Type` | `string` | Yes | | The data type. Valid values: `Text`, `Integer`, `LongNumber`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
+| `Type` | `string` | Yes | | The data type. Valid values: `Text`, `Integer`, `LongNumber`, `Decimal`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
 | `AttributePlurality` | `string` | No | `SingleValued` | Whether the attribute holds one or many values. Valid values: `SingleValued`, `MultiValued` |
 | `ObjectTypeIds` | `int[]` | No | | Object type IDs to associate the attribute with |
 | `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
@@ -347,7 +347,7 @@ Set-JIMMetaverseAttribute -InputObject <object> [-Name <string>] [-RenderingHint
 | `InputObject` | `object` | Yes (ByInputObject) | | An attribute object from the pipeline |
 | `Name` | `string` | No | | The new name. Subject to the same case-insensitive uniqueness check as creation. |
 | `RenderingHint` | `string` | No | | How a multi-valued attribute's values display. Valid values: `Default`, `Table`, `ChipSet`, `List` |
-| `Type` | `string` | No | | The new data type. Valid values: `Text`, `Integer`, `LongNumber`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
+| `Type` | `string` | No | | The new data type. Valid values: `Text`, `Integer`, `LongNumber`, `Decimal`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
 | `AttributePlurality` | `string` | No | | The new plurality. Valid values: `SingleValued`, `MultiValued` |
 | `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 | `PassThru` | `switch` | No | `false` | Return the updated attribute definition |

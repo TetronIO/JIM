@@ -26,6 +26,8 @@ public class MetaverseObjectChangeAttributeValue
 
     public int? IntValue { get; set; }
 
+    public decimal? DecimalValue { get; set; }
+
     /// <summary>
     /// It would be inefficient, and not especially helpful to track the actual byte value changes, so just track the value lengths instead to show the change.
     /// </summary>
@@ -55,6 +57,9 @@ public class MetaverseObjectChangeAttributeValue
 
         if (IntValue.HasValue)
             return IntValue.Value.ToString();
+
+        if (DecimalValue.HasValue)
+            return DecimalValue.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         if (ByteValueLength.HasValue)
             return ByteValueLength.Value.ToString();
@@ -87,6 +92,13 @@ public class MetaverseObjectChangeAttributeValue
     public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, ValueChangeType valueChangeType, int intValue)
     {
         IntValue = intValue;
+        MetaverseObjectChangeAttribute = metaverseObjectChangeAttribute;
+        ValueChangeType = valueChangeType;
+    }
+
+    public MetaverseObjectChangeAttributeValue(MetaverseObjectChangeAttribute metaverseObjectChangeAttribute, ValueChangeType valueChangeType, decimal decimalValue)
+    {
+        DecimalValue = decimalValue;
         MetaverseObjectChangeAttribute = metaverseObjectChangeAttribute;
         ValueChangeType = valueChangeType;
     }

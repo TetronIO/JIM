@@ -477,6 +477,7 @@ public class DriftDetectionService
             AttributeDataType.Text => av.StringValue,
             AttributeDataType.Number => av.IntValue,
             AttributeDataType.LongNumber => av.LongValue,
+            AttributeDataType.Decimal => av.DecimalValue,
             AttributeDataType.DateTime => av.DateTimeValue,
             AttributeDataType.Boolean => av.BoolValue,
             AttributeDataType.Guid => av.GuidValue,
@@ -519,6 +520,7 @@ public class DriftDetectionService
             {
                 AttributeDataType.Text => attributeValue.StringValue,
                 AttributeDataType.Number => attributeValue.IntValue,
+                AttributeDataType.Decimal => attributeValue.DecimalValue,
                 AttributeDataType.DateTime => attributeValue.DateTimeValue,
                 AttributeDataType.Boolean => attributeValue.BoolValue,
                 AttributeDataType.Guid => attributeValue.GuidValue,
@@ -595,6 +597,7 @@ public class DriftDetectionService
             AttributeDataType.Text => av.StringValue,
             AttributeDataType.Number => av.IntValue,
             AttributeDataType.LongNumber => av.LongValue,
+            AttributeDataType.Decimal => av.DecimalValue,
             AttributeDataType.DateTime => av.DateTimeValue,
             AttributeDataType.Boolean => av.BoolValue,
             AttributeDataType.Guid => av.GuidValue,
@@ -843,6 +846,9 @@ public class DriftDetectionService
                 break;
             case AttributeDataType.LongNumber:
                 change.LongValue = value as long?;
+                break;
+            case AttributeDataType.Decimal:
+                change.DecimalValue = value as decimal?;
                 break;
             case AttributeDataType.DateTime:
                 change.DateTimeValue = value as DateTime?;

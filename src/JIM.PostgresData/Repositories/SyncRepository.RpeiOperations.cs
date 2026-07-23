@@ -565,7 +565,7 @@ public partial class SyncRepository
             COPY "ConnectedSystemObjectChangeAttributeValues" (
                 "Id", "ConnectedSystemObjectChangeAttributeId", "ValueChangeType",
                 "StringValue", "DateTimeValue", "IntValue", "LongValue",
-                "ByteValueLength", "GuidValue", "BoolValue", "ReferenceValueId",
+                "DecimalValue", "ByteValueLength", "GuidValue", "BoolValue", "ReferenceValueId",
                 "IsPendingExportStub"
             ) FROM STDIN (FORMAT binary)
             """);
@@ -590,6 +590,10 @@ public partial class SyncRepository
                 await writer.WriteNullAsync();
             if (v.LongValue.HasValue)
                 await writer.WriteAsync(v.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
+            else
+                await writer.WriteNullAsync();
+            if (v.DecimalValue.HasValue)
+                await writer.WriteAsync(v.DecimalValue.Value, NpgsqlTypes.NpgsqlDbType.Numeric);
             else
                 await writer.WriteNullAsync();
             if (v.ByteValueLength.HasValue)

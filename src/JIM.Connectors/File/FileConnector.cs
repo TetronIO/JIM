@@ -8,6 +8,7 @@ using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 using System.Globalization;
 namespace JIM.Connectors.File;
@@ -353,19 +354,23 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                         if (field == null || string.IsNullOrEmpty(field))
                             continue;
 
-                        // Attempt to infer the data type. Integer parsing is tried narrowest-
-                        // to-widest so we don't bucket a LongNumber value into a Number column
-                        // that can't hold it at import time. The original implementation fell
-                        // through to Number on double.TryParse, which silently mistyped any
-                        // value outside Int32 range and failed at row ingestion with
+                        // Attempt to infer the data type. Numeric parsing is tried narrowest-
+                        // to-widest (Number -> LongNumber -> Decimal) so we don't bucket a
+                        // LongNumber value into a Number column that can't hold it at import
+                        // time, and so fractional or exponent-notation values (e.g. "1.5" or
+                        // "1.5E3") infer Decimal rather than a numeric type that can't hold
+                        // them. The original implementation fell through to Number on
+                        // double.TryParse, which silently mistyped any value outside Int32
+                        // range (and any fractional value) and failed at row ingestion with
                         // "Failed to parse attribute 'X' as Number". This matters for ID
-                        // fields, large counters, and timestamps stored as epoch nanoseconds.
+                        // fields, large counters, timestamps stored as epoch nanoseconds, and
+                        // fractional values such as salaries and rates.
                         if (int.TryParse(field, out _))
                             schemaAttribute.Type = AttributeDataType.Number;
                         else if (long.TryParse(field, out _))
                             schemaAttribute.Type = AttributeDataType.LongNumber;
-                        else if (double.TryParse(field, out _))
-                            schemaAttribute.Type = AttributeDataType.Number;
+                        else if (DecimalAttributeValue.TryParse(field, out _))
+                            schemaAttribute.Type = AttributeDataType.Decimal;
                         else if (bool.TryParse(field, out _))
                             schemaAttribute.Type = AttributeDataType.Boolean;
                         else if (Guid.TryParse(field, out _))

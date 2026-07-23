@@ -993,7 +993,7 @@ public class MetaverseRepository : IMetaverseRepository
         await using (var command = connection.CreateCommand())
         {
             command.CommandText =
-                @"SELECT ""MetaverseObjectId"", ""Id"", ""AttributeId"", ""StringValue"", ""IntValue"", ""LongValue"",
+                @"SELECT ""MetaverseObjectId"", ""Id"", ""AttributeId"", ""StringValue"", ""IntValue"", ""LongValue"", ""DecimalValue"",
                          ""DateTimeValue"", ""BoolValue"", ""GuidValue"", ""NullValue""
                   FROM ""MetaverseObjectAttributeValues""
                   WHERE ""MetaverseObjectId"" = ANY(@ids) AND ""AttributeId"" = ANY(@attributeIds)";
@@ -1019,10 +1019,11 @@ public class MetaverseRepository : IMetaverseRepository
                     StringValue = reader.IsDBNull(3) ? null : reader.GetString(3),
                     IntValue = reader.IsDBNull(4) ? null : reader.GetInt32(4),
                     LongValue = reader.IsDBNull(5) ? null : reader.GetInt64(5),
-                    DateTimeValue = reader.IsDBNull(6) ? null : reader.GetDateTime(6),
-                    BoolValue = reader.IsDBNull(7) ? null : reader.GetBoolean(7),
-                    GuidValue = reader.IsDBNull(8) ? null : reader.GetGuid(8),
-                    NullValue = reader.GetBoolean(9)
+                    DecimalValue = reader.IsDBNull(6) ? null : reader.GetDecimal(6),
+                    DateTimeValue = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
+                    BoolValue = reader.IsDBNull(8) ? null : reader.GetBoolean(8),
+                    GuidValue = reader.IsDBNull(9) ? null : reader.GetGuid(9),
+                    NullValue = reader.GetBoolean(10)
                 });
             }
         }
@@ -1362,6 +1363,7 @@ public class MetaverseRepository : IMetaverseRepository
                                 StringValue = vc.StringValue,
                                 DateTimeValue = vc.DateTimeValue,
                                 IntValue = vc.IntValue,
+                                DecimalValue = vc.DecimalValue,
                                 ByteValueLength = vc.ByteValueLength,
                                 GuidValue = vc.GuidValue,
                                 BoolValue = vc.BoolValue,
@@ -1595,7 +1597,7 @@ public class MetaverseRepository : IMetaverseRepository
     /// <summary>
     /// Builds a parameterised EXISTS / NOT EXISTS SQL fragment for a single predefined-search criterion.
     /// The attribute-value column is selected to match the attribute's data type (Text, Number, LongNumber,
-    /// DateTime, Boolean, Guid) so the per-column indexes on MetaverseObjectAttributeValues stay usable, and
+    /// Decimal, DateTime, Boolean, Guid) so the per-column indexes on MetaverseObjectAttributeValues stay usable, and
     /// the requested comparison operator is validated against that data type. Adds the attribute-id and value
     /// parameters to <paramref name="parameters"/>. Throws <see cref="NotSupportedException"/> for an operator
     /// that does not apply to the attribute's data type (callers validate at the API boundary before reaching here).
@@ -1662,6 +1664,10 @@ public class MetaverseRepository : IMetaverseRepository
             case AttributeDataType.LongNumber:
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Bigint) { Value = (object?)criteria.LongValue ?? DBNull.Value });
                 return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"LongValue\"", valParam, Exists, Unsupported);
+            case AttributeDataType.Decimal:
+                // PostgreSQL numeric comparison is scale-insensitive (5.0 = 5.00 is true), matching .NET decimal equality.
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Numeric) { Value = (object?)criteria.DecimalValue ?? DBNull.Value });
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"DecimalValue\"", valParam, Exists, Unsupported);
             case AttributeDataType.DateTime:
                 // Resolve a relative criterion to a literal boundary before binding, so the SQL sees a constant
                 // and the DateTimeValue index stays usable. Absolute criteria use their stored value.
@@ -1692,7 +1698,7 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <summary>
-    /// Builds the SQL predicate for an ordered (Number / LongNumber / DateTime) comparison, supporting
+    /// Builds the SQL predicate for an ordered (Number / LongNumber / Decimal / DateTime) comparison, supporting
     /// equality and the four ordering operators. Throws for any operator that does not apply.
     /// </summary>
     private static string BuildOrderedComparisonSql(SearchComparisonType comparisonType, string column, string valParam, Func<string, string> exists, Func<NotSupportedException> unsupported)
@@ -1932,7 +1938,7 @@ public class MetaverseRepository : IMetaverseRepository
         attrCmd.CommandText = """
             SELECT av."Id", av."MetaverseObjectId", av."AttributeId",
                    ma."Id" AS "AttrId", ma."Name" AS "AttrName", ma."Type" AS "AttrType", ma."AttributePlurality" AS "AttrPlurality",
-                   av."StringValue", av."DateTimeValue", av."IntValue", av."LongValue", av."BoolValue", av."GuidValue"
+                   av."StringValue", av."DateTimeValue", av."IntValue", av."LongValue", av."DecimalValue", av."BoolValue", av."GuidValue"
             FROM "MetaverseObjectAttributeValues" av
             INNER JOIN "MetaverseAttributes" ma ON av."AttributeId" = ma."Id"
             WHERE av."MetaverseObjectId" = ANY(@objectIds) AND av."AttributeId" = ANY(@attrIds)
@@ -1963,8 +1969,9 @@ public class MetaverseRepository : IMetaverseRepository
                     DateTimeValue = reader.IsDBNull(8) ? null : reader.GetDateTime(8),
                     IntValue = reader.IsDBNull(9) ? null : reader.GetInt32(9),
                     LongValue = reader.IsDBNull(10) ? null : reader.GetInt64(10),
-                    BoolValue = reader.IsDBNull(11) ? null : reader.GetBoolean(11),
-                    GuidValue = reader.IsDBNull(12) ? null : reader.GetGuid(12)
+                    DecimalValue = reader.IsDBNull(11) ? null : reader.GetDecimal(11),
+                    BoolValue = reader.IsDBNull(12) ? null : reader.GetBoolean(12),
+                    GuidValue = reader.IsDBNull(13) ? null : reader.GetGuid(13)
                 });
             }
         }

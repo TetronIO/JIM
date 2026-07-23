@@ -138,6 +138,9 @@ public partial class SyncEngine
                             case AttributeDataType.Number:
                                 ProcessNumberAttribute(mvo, syncRuleMapping, sourceAttributeId, cso, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
                                 break;
+                            case AttributeDataType.Decimal:
+                                ProcessDecimalAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
+                                break;
                             case AttributeDataType.DateTime:
                                 ProcessDateTimeAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
                                 break;
@@ -540,6 +543,39 @@ public partial class SyncEngine
         }
     }
 
+    private static void ProcessDecimalAttribute(
+        MetaverseObject mvo,
+        SyncRuleMapping syncRuleMapping,
+        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
+    {
+        // Decimal comparison is numeric and scale-insensitive (5.0m equals 5.00m), so a scale-only
+        // difference between the CSO and MVO values never stages a removal and re-addition.
+        var currentValues = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).ToList();
+        var mvoObsoleteAttributeValues = currentValues.Where(mvoav =>
+            !csoAttributeValues.Any(csoav => csoav.DecimalValue != null && csoav.DecimalValue.Equals(mvoav.DecimalValue)));
+        mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
+
+        // csoAttributeValues holds all source values for this attribute; for a single-valued target the
+        // MVA->SVA guard in ProcessMapping has already errored and skipped when more than one is present.
+        var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
+            !currentValues.Any(mvoav => mvoav.DecimalValue != null && mvoav.DecimalValue.Equals(csoav.DecimalValue)));
+
+        foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
+        {
+            mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
+            {
+                MetaverseObject = mvo,
+                Attribute = syncRuleMapping.TargetMetaverseAttribute!,
+                AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
+                DecimalValue = newCsoNewAttributeValue.DecimalValue,
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId
+            });
+        }
+    }
+
     private static void ProcessDateTimeAttribute(
         MetaverseObject mvo,
         SyncRuleMapping syncRuleMapping,
@@ -830,6 +866,7 @@ public partial class SyncEngine
                 AttributeDataType.Text => attributeValue.StringValue,
                 AttributeDataType.Number => attributeValue.IntValue,
                 AttributeDataType.LongNumber => attributeValue.LongValue,
+                AttributeDataType.Decimal => attributeValue.DecimalValue,
                 AttributeDataType.DateTime => attributeValue.DateTimeValue,
                 AttributeDataType.Boolean => attributeValue.BoolValue,
                 AttributeDataType.Guid => attributeValue.GuidValue,
@@ -945,6 +982,26 @@ public partial class SyncEngine
                 else
                 {
                     Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Number", LogSanitiser.Sanitise(result?.ToString()));
+                    return null;
+                }
+                break;
+            case AttributeDataType.Decimal:
+                // int and long widen to decimal exactly. double/float results are deliberately rejected:
+                // binary floating point cannot represent most decimal fractions exactly, so converting
+                // would silently corrupt the value. String results parse with invariant culture and
+                // accept exponent notation (e.g. "1.5E3" becomes 1500).
+                if (result is decimal decimalVal)
+                    newMvoValue.DecimalValue = decimalVal;
+                else if (result is int decimalIntVal)
+                    newMvoValue.DecimalValue = decimalIntVal;
+                else if (result is long decimalLongVal)
+                    newMvoValue.DecimalValue = decimalLongVal;
+                else if (result is not double && result is not float &&
+                         DecimalAttributeValue.TryParse(result?.ToString(), out var parsedDecimal))
+                    newMvoValue.DecimalValue = parsedDecimal;
+                else
+                {
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Decimal", LogSanitiser.Sanitise(result?.ToString()));
                     return null;
                 }
                 break;

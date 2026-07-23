@@ -644,28 +644,28 @@ Adds an individual scoping criterion to a group. Each criterion compares an attr
 # By metaverse attribute ID
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -MetaverseAttributeId <int> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
     [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
     [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 
 # By metaverse attribute name
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -MetaverseAttributeName <string> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
     [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
     [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 
 # By Connected System attribute ID
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -ConnectedSystemAttributeId <int> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
     [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
     [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 
 # By Connected System attribute name
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -ConnectedSystemAttributeName <string> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
     [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
     [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 ```
@@ -684,6 +684,7 @@ New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
 | `StringValue` | `string` | No | | String value to compare against |
 | `IntValue` | `int` | No | | Integer value to compare against (`Number` attributes) |
 | `LongValue` | `long` | No | | 64-bit integer value to compare against (`LongNumber` attributes) |
+| `DecimalValue` | `decimal` | No | | Decimal value to compare against (`Decimal` attributes) |
 | `DateTimeValue` | `datetime` | No | | Date/time value to compare against (ISO 8601 format) |
 | `BoolValue` | `bool` | No | | Boolean value to compare against |
 | `GuidValue` | `guid` | No | | GUID value to compare against |
@@ -762,7 +763,7 @@ Updates an existing scoping criterion (a full replacement of its attribute, oper
 Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int>
     (-MetaverseAttributeId <int> | -MetaverseAttributeName <string> | -ConnectedSystemAttributeId <int> | -ConnectedSystemAttributeName <string>)
     -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
     [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
     [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>]
     [-PassThru]

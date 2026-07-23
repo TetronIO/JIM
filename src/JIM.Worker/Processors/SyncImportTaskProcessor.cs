@@ -1638,6 +1638,7 @@ public class SyncImportTaskProcessor
             attribute.GuidValues.RemoveAll(q => q.Equals(null));
             attribute.IntValues.RemoveAll(q => q.Equals(null));
             attribute.LongValues.RemoveAll(q => q.Equals(null));
+            attribute.DecimalValues.RemoveAll(q => q.Equals(null));
             attribute.StringValues.RemoveAll(string.IsNullOrEmpty);
             attribute.ByteValues.RemoveAll(q => q.Equals(null));
             attribute.ReferenceValues.RemoveAll(string.IsNullOrEmpty);
@@ -1646,6 +1647,7 @@ public class SyncImportTaskProcessor
             var noGuids = attribute.GuidValues.Count == 0;
             var noIntegers = attribute.IntValues.Count == 0;
             var noLongs = attribute.LongValues.Count == 0;
+            var noDecimals = attribute.DecimalValues.Count == 0;
             var noStrings = attribute.StringValues.Count == 0;
             var noBool = !attribute.BoolValue.HasValue;
             var noDateTime = !attribute.DateTimeValue.HasValue;
@@ -1653,7 +1655,7 @@ public class SyncImportTaskProcessor
             var noReferences = attribute.ReferenceValues.Count == 0;
 
             // if all types of values are empty, we'll add this attribute to a list for removal
-            if (noGuids && noIntegers && noLongs && noStrings && noBool && noDateTime && noBytes && noReferences)
+            if (noGuids && noIntegers && noLongs && noDecimals && noStrings && noBool && noDateTime && noBytes && noReferences)
                 nullConnectedSystemImportObjectAttributes.Add(attribute);
         }
 
@@ -1864,6 +1866,18 @@ public class SyncImportTaskProcessor
                         });
                     }
                     break;
+                case AttributeDataType.Decimal:
+                    foreach (var importObjectAttributeDecimalValue in importObjectAttribute.DecimalValues)
+                    {
+                        connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                        {
+                            Attribute = csAttribute,
+                            AttributeId = csAttribute.Id,
+                            DecimalValue = importObjectAttributeDecimalValue,
+                            ConnectedSystemObject = connectedSystemObject
+                        });
+                    }
+                    break;
                 case AttributeDataType.Binary:
                     foreach (var importObjectAttributeByteValue in importObjectAttribute.ByteValues)
                     {
@@ -2023,6 +2037,27 @@ public class SyncImportTaskProcessor
                         var newLongValues = importedObjectAttribute.LongValues.Where(sv => !csoLongSet.Contains(sv)).ToList();
                         foreach (var newLongValue in newLongValues)
                             connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, LongValue = newLongValue });
+                        break;
+                    }
+
+                    case AttributeDataType.Decimal:
+                    {
+                        // HashSet<decimal> hashing and equality are scale-insensitive, so the diff is numeric:
+                        // a CSO value of 5.00 against an imported 5.0 is NOT a change.
+                        var csoDecimalAttrValues = connectedSystemObject.AttributeValues
+                            .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.DecimalValue != null)
+                            .ToList();
+                        var importDecimalSet = new HashSet<decimal>(importedObjectAttribute.DecimalValues);
+
+                        // find values on the cso of type decimal that aren't on the imported object and remove them first
+                        var missingDecimalAttributeValues = csoDecimalAttrValues.Where(av => !importDecimalSet.Contains(av.DecimalValue!.Value)).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingDecimalAttributeValues);
+
+                        // find imported values of type decimal that aren't on the cso and add them
+                        var csoDecimalSet = csoDecimalAttrValues.Select(av => av.DecimalValue!.Value).ToHashSet();
+                        var newDecimalValues = importedObjectAttribute.DecimalValues.Where(sv => !csoDecimalSet.Contains(sv)).ToList();
+                        foreach (var newDecimalValue in newDecimalValues)
+                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DecimalValue = newDecimalValue });
                         break;
                     }
 
@@ -2300,6 +2335,21 @@ public class SyncImportTaskProcessor
                         originalLongCount - uniqueLongs.Count, attr.Name, LogSanitiser.Sanitise(csoExternalId) ?? "(unknown)", originalLongCount, uniqueLongs.Count);
                     attr.LongValues.Clear();
                     attr.LongValues.AddRange(uniqueLongs);
+                }
+            }
+
+            // Check DecimalValues collection (decimal equality is scale-insensitive, so 5.0 and 5.00 dedupe to one value)
+            var originalDecimalCount = attr.DecimalValues.Count;
+            if (originalDecimalCount > 1)
+            {
+                var uniqueDecimals = attr.DecimalValues.Distinct().ToList();
+                if (uniqueDecimals.Count < originalDecimalCount)
+                {
+                    Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate decimal value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
+                        "Original count: {OriginalCount}, Unique count: {UniqueCount}",
+                        originalDecimalCount - uniqueDecimals.Count, attr.Name, LogSanitiser.Sanitise(csoExternalId) ?? "(unknown)", originalDecimalCount, uniqueDecimals.Count);
+                    attr.DecimalValues.Clear();
+                    attr.DecimalValues.AddRange(uniqueDecimals);
                 }
             }
 
