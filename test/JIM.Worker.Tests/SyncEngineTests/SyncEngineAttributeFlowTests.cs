@@ -595,4 +595,104 @@ public class SyncEngineAttributeFlowTests
     }
 
     #endregion
+
+    #region LongNumber attribute flow
+
+    /// <summary>
+    /// Builds a CSO joined to an MVO with a single direct inbound mapping from a LongNumber CS attribute
+    /// to a LongNumber MV attribute. The caller supplies the CSO and MVO values.
+    /// </summary>
+    private static (ConnectedSystemObject Cso, MetaverseObject Mvo, SyncRule SyncRule, ConnectedSystemObjectType CsoType)
+        BuildLongNumberScenario(
+            long[] csoValues,
+            long[] mvoValues,
+            AttributePlurality targetPlurality = AttributePlurality.SingleValued,
+            AttributePlurality sourcePlurality = AttributePlurality.SingleValued)
+    {
+        var mvoAttr = new MetaverseAttribute
+        {
+            Id = 100, Name = "usnChanged", Type = AttributeDataType.LongNumber, AttributePlurality = targetPlurality
+        };
+        var csoAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 200, Name = "usnChanged", Type = AttributeDataType.LongNumber, AttributePlurality = sourcePlurality
+        };
+        var csoType = new ConnectedSystemObjectType { Id = 1, Attributes = [csoAttr] };
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        foreach (var mvoValue in mvoValues)
+            mvo.AttributeValues.Add(new MetaverseObjectAttributeValue { Attribute = mvoAttr, AttributeId = 100, LongValue = mvoValue });
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(), TypeId = 1, ConnectedSystemId = 5, MetaverseObject = mvo
+        };
+        foreach (var csoValue in csoValues)
+            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { AttributeId = 200, LongValue = csoValue });
+
+        var mapping = new SyncRuleMapping { TargetMetaverseAttribute = mvoAttr };
+        mapping.Sources.Add(new SyncRuleMappingSource { ConnectedSystemAttributeId = 200, ConnectedSystemAttribute = csoAttr, Order = 1 });
+        var syncRule = new SyncRule { AttributeFlowRules = [mapping] };
+
+        return (cso, mvo, syncRule, csoType);
+    }
+
+    [Test]
+    public void FlowInboundAttributes_LongNumberAttribute_FlowsValue()
+    {
+        // A value beyond int range proves the flow is lossless end to end.
+        var (cso, mvo, syncRule, csoType) = BuildLongNumberScenario(csoValues: [9999999999L], mvoValues: []);
+
+        var errors = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
+
+        Assert.That(mvo.PendingAttributeValueAdditions.Count, Is.EqualTo(1));
+        Assert.That(mvo.PendingAttributeValueAdditions.First().LongValue, Is.EqualTo(9999999999L));
+        Assert.That(mvo.PendingAttributeValueAdditions.First().ContributedBySystemId, Is.EqualTo(5));
+        Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty);
+        Assert.That(errors, Is.Empty);
+    }
+
+    [Test]
+    public void FlowInboundAttributes_LongNumberAttribute_ValueChanged_ReplacesValue()
+    {
+        var (cso, mvo, syncRule, csoType) = BuildLongNumberScenario(csoValues: [222L], mvoValues: [111L]);
+
+        var errors = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
+
+        Assert.That(mvo.PendingAttributeValueRemovals.Count, Is.EqualTo(1));
+        Assert.That(mvo.PendingAttributeValueRemovals.First().LongValue, Is.EqualTo(111L));
+        Assert.That(mvo.PendingAttributeValueAdditions.Count, Is.EqualTo(1));
+        Assert.That(mvo.PendingAttributeValueAdditions.First().LongValue, Is.EqualTo(222L));
+        Assert.That(errors, Is.Empty);
+    }
+
+    [Test]
+    public void FlowInboundAttributes_LongNumberAttribute_ValueUnchanged_StagesNoChange()
+    {
+        var (cso, mvo, syncRule, csoType) = BuildLongNumberScenario(csoValues: [9999999999L], mvoValues: [9999999999L]);
+
+        var errors = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
+
+        Assert.That(mvo.PendingAttributeValueRemovals, Is.Empty);
+        Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty);
+        Assert.That(errors, Is.Empty);
+    }
+
+    [Test]
+    public void FlowInboundAttributes_LongNumberMvaToSva_DoesNotFlowAndGeneratesError()
+    {
+        // Multiple long source values flowing to a single-valued target is an error (#435).
+        var (cso, mvo, syncRule, csoType) = BuildLongNumberScenario(
+            csoValues: [1L, 2L],
+            mvoValues: [],
+            sourcePlurality: AttributePlurality.MultiValued);
+
+        var errors = _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType });
+
+        Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty);
+        Assert.That(errors, Has.Count.EqualTo(1));
+        Assert.That(errors[0].ValueCount, Is.EqualTo(2));
+    }
+
+    #endregion
 }

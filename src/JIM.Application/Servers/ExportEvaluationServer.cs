@@ -2905,6 +2905,12 @@ public class ExportEvaluationServer
             return pendingChange.IntValue == existingValue.IntValue;
         }
 
+        // Long comparison
+        if (pendingChange.LongValue.HasValue || existingValue.LongValue.HasValue)
+        {
+            return pendingChange.LongValue == existingValue.LongValue;
+        }
+
         // Decimal comparison: nullable decimal == is numeric and scale-insensitive, so 5.0 matches 5.00
         if (pendingChange.DecimalValue.HasValue || existingValue.DecimalValue.HasValue)
         {
@@ -2983,15 +2989,13 @@ public class ExportEvaluationServer
 
     /// <summary>
     /// Checks if a Pending Export attribute value change represents an empty/null value.
+    /// Delegates to the sync engine's implementation so both no-net-change paths agree on
+    /// exactly which value carriers count; a divergent copy here previously omitted
+    /// LongValue, GuidValue and BoolValue, wrongly skipping exports of those types.
     /// </summary>
     private static bool IsPendingChangeEmpty(PendingExportAttributeValueChange change)
     {
-        return change.StringValue == null &&
-               !change.IntValue.HasValue &&
-               !change.DecimalValue.HasValue &&
-               !change.DateTimeValue.HasValue &&
-               change.ByteValue == null &&
-               change.UnresolvedReferenceValue == null;
+        return SyncEngine.IsPendingChangeEmpty(change);
     }
 
     /// <summary>
@@ -3032,7 +3036,7 @@ public class ExportEvaluationServer
     /// Builds a dictionary of attribute values from a Metaverse Object for expression evaluation.
     /// The dictionary keys are attribute names, and values are the attribute values.
     /// </summary>
-    private Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
+    internal Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
     {
         var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
@@ -3062,6 +3066,7 @@ public class ExportEvaluationServer
             {
                 AttributeDataType.Text => attributeValue.StringValue,
                 AttributeDataType.Number => attributeValue.IntValue,
+                AttributeDataType.LongNumber => attributeValue.LongValue,
                 AttributeDataType.Decimal => attributeValue.DecimalValue,
                 AttributeDataType.DateTime => attributeValue.DateTimeValue,
                 AttributeDataType.Boolean => attributeValue.BoolValue,

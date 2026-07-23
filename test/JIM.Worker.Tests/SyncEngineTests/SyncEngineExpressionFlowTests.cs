@@ -290,4 +290,104 @@ public class SyncEngineExpressionFlowTests
     }
 
     #endregion
+
+    #region LongNumber and Number expression targets
+
+    /// <summary>
+    /// Builds a CSO joined to an MVO (no existing target value) with a single expression-based inbound
+    /// mapping flowing to a Metaverse attribute of the given numeric type. The CSO carries one LongNumber
+    /// attribute value so real-evaluator tests can prove longs enter the expression context as System.Int64.
+    /// </summary>
+    private static (ConnectedSystemObject Cso, MetaverseObject Mvo, SyncRule SyncRule, ConnectedSystemObjectType CsoType)
+        BuildNumericTargetScenario(AttributeDataType targetType, string expression)
+    {
+        var mvoAttr = new MetaverseAttribute { Id = 100, Name = "usnChanged", Type = targetType };
+        var csoAttr = new ConnectedSystemObjectTypeAttribute { Id = 200, Name = "usnChanged", Type = AttributeDataType.LongNumber };
+        var csoType = new ConnectedSystemObjectType { Id = 1, Attributes = [csoAttr] };
+
+        var mvo = new MetaverseObject { Id = Guid.NewGuid() };
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid(), TypeId = 1, ConnectedSystemId = 5, MetaverseObject = mvo };
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue { AttributeId = 200, LongValue = 9999999999L });
+
+        var mapping = new SyncRuleMapping { TargetMetaverseAttribute = mvoAttr };
+        mapping.Sources.Add(new SyncRuleMappingSource { Expression = expression, Order = 1 });
+        var syncRule = new SyncRule { AttributeFlowRules = [mapping] };
+
+        return (cso, mvo, syncRule, csoType);
+    }
+
+    [Test]
+    public void FlowInboundAttributes_LongNumberTarget_LongResult_StoredExactly()
+    {
+        // A value beyond int range proves the result lands in LongValue without narrowing.
+        var (cso, mvo, syncRule, csoType) = BuildNumericTargetScenario(AttributeDataType.LongNumber, "cs[\"usnChanged\"]");
+
+        FlowWithMockedResult(9999999999L, cso, syncRule, csoType);
+
+        Assert.That(mvo.PendingAttributeValueAdditions, Has.Count.EqualTo(1));
+        Assert.That(mvo.PendingAttributeValueAdditions.First().LongValue, Is.EqualTo(9999999999L));
+        Assert.That(mvo.PendingAttributeValueAdditions.First().IntValue, Is.Null);
+    }
+
+    [Test]
+    public void FlowInboundAttributes_LongNumberTarget_IntResult_WidenedExactly()
+    {
+        var (cso, mvo, syncRule, csoType) = BuildNumericTargetScenario(AttributeDataType.LongNumber, "cs[\"usnChanged\"]");
+
+        FlowWithMockedResult(42, cso, syncRule, csoType);
+
+        Assert.That(mvo.PendingAttributeValueAdditions, Has.Count.EqualTo(1));
+        Assert.That(mvo.PendingAttributeValueAdditions.First().LongValue, Is.EqualTo(42L));
+    }
+
+    [Test]
+    public void FlowInboundAttributes_LongNumberTarget_StringResult_ParsedWithInvariantCulture()
+    {
+        var (cso, mvo, syncRule, csoType) = BuildNumericTargetScenario(AttributeDataType.LongNumber, "cs[\"usnChanged\"]");
+
+        FlowWithMockedResult("9999999999", cso, syncRule, csoType);
+
+        Assert.That(mvo.PendingAttributeValueAdditions, Has.Count.EqualTo(1));
+        Assert.That(mvo.PendingAttributeValueAdditions.First().LongValue, Is.EqualTo(9999999999L));
+    }
+
+    [Test]
+    public void FlowInboundAttributes_LongNumberTarget_RealEvaluator_CsoLongEntersContextAsLong()
+    {
+        // End to end with the real evaluator: BuildCsoAttributeDictionary must expose the CSO's LongNumber
+        // attribute value as System.Int64, and the result must land in LongValue unchanged.
+        var (cso, mvo, syncRule, csoType) = BuildNumericTargetScenario(AttributeDataType.LongNumber, "cs[\"usnChanged\"]");
+        var evaluator = new DynamicExpressoEvaluator();
+
+        Assert.DoesNotThrow(() =>
+            _engine.FlowInboundAttributes(cso, syncRule, new List<ConnectedSystemObjectType> { csoType }, evaluator));
+
+        Assert.That(mvo.PendingAttributeValueAdditions, Has.Count.EqualTo(1));
+        Assert.That(mvo.PendingAttributeValueAdditions.First().LongValue, Is.EqualTo(9999999999L));
+    }
+
+    [Test]
+    public void FlowInboundAttributes_NumberTarget_LongResultOutOfIntRange_RejectedAndNoValueStaged()
+    {
+        // A long beyond int range must never be narrowed into IntValue (the #871 lossy-cast class);
+        // the result is rejected (warning logged, no value staged), exactly as an unconvertible string would be.
+        var (cso, mvo, syncRule, csoType) = BuildNumericTargetScenario(AttributeDataType.Number, "cs[\"usnChanged\"]");
+
+        FlowWithMockedResult(9999999999L, cso, syncRule, csoType);
+
+        Assert.That(mvo.PendingAttributeValueAdditions, Is.Empty);
+    }
+
+    [Test]
+    public void FlowInboundAttributes_NumberTarget_LongResultWithinIntRange_ConvertedExactly()
+    {
+        var (cso, mvo, syncRule, csoType) = BuildNumericTargetScenario(AttributeDataType.Number, "cs[\"usnChanged\"]");
+
+        FlowWithMockedResult(42L, cso, syncRule, csoType);
+
+        Assert.That(mvo.PendingAttributeValueAdditions, Has.Count.EqualTo(1));
+        Assert.That(mvo.PendingAttributeValueAdditions.First().IntValue, Is.EqualTo(42));
+    }
+
+    #endregion
 }

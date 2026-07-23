@@ -493,7 +493,7 @@ public class DriftDetectionService
     /// Builds a dictionary of attribute values from a Metaverse Object for expression evaluation.
     /// The dictionary keys are attribute names, and values are the attribute values.
     /// </summary>
-    private static Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
+    internal static Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
     {
         var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
@@ -520,6 +520,7 @@ public class DriftDetectionService
             {
                 AttributeDataType.Text => attributeValue.StringValue,
                 AttributeDataType.Number => attributeValue.IntValue,
+                AttributeDataType.LongNumber => attributeValue.LongValue,
                 AttributeDataType.Decimal => attributeValue.DecimalValue,
                 AttributeDataType.DateTime => attributeValue.DateTimeValue,
                 AttributeDataType.Boolean => attributeValue.BoolValue,

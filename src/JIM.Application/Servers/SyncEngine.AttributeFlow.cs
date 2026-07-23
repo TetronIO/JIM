@@ -138,6 +138,9 @@ public partial class SyncEngine
                             case AttributeDataType.Number:
                                 ProcessNumberAttribute(mvo, syncRuleMapping, sourceAttributeId, cso, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
                                 break;
+                            case AttributeDataType.LongNumber:
+                                ProcessLongNumberAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
+                                break;
                             case AttributeDataType.Decimal:
                                 ProcessDecimalAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
                                 break;
@@ -537,6 +540,37 @@ public partial class SyncEngine
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
                 IntValue = newCsoNewAttributeValue.IntValue,
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId
+            });
+        }
+    }
+
+    private static void ProcessLongNumberAttribute(
+        MetaverseObject mvo,
+        SyncRuleMapping syncRuleMapping,
+        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
+    {
+        var currentValues = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).ToList();
+        var mvoObsoleteAttributeValues = currentValues.Where(mvoav =>
+            !csoAttributeValues.Any(csoav => csoav.LongValue != null && csoav.LongValue.Equals(mvoav.LongValue)));
+        mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
+
+        // csoAttributeValues holds all source values for this attribute; for a single-valued target the
+        // MVA->SVA guard in ProcessMapping has already errored and skipped when more than one is present.
+        var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
+            !currentValues.Any(mvoav => mvoav.LongValue != null && mvoav.LongValue.Equals(csoav.LongValue)));
+
+        foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
+        {
+            mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
+            {
+                MetaverseObject = mvo,
+                Attribute = syncRuleMapping.TargetMetaverseAttribute!,
+                AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
+                LongValue = newCsoNewAttributeValue.LongValue,
                 ContributedBySystemId = contributingSystemId,
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
@@ -973,15 +1007,32 @@ public partial class SyncEngine
                 newMvoValue.StringValue = result?.ToString();
                 break;
             case AttributeDataType.Number:
+                // A long result only converts when it fits in an int; silently narrowing would corrupt
+                // the value (the #871 lossy-cast class), so an out-of-range long is rejected like any
+                // other unconvertible result.
                 if (result is int intVal)
                     newMvoValue.IntValue = intVal;
-                else if (result is long longVal)
+                else if (result is long longVal && longVal is >= int.MinValue and <= int.MaxValue)
                     newMvoValue.IntValue = (int)longVal;
-                else if (int.TryParse(result?.ToString(), out var parsedInt))
+                else if (result is not long && int.TryParse(result?.ToString(), out var parsedInt))
                     newMvoValue.IntValue = parsedInt;
                 else
                 {
                     Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Number", LogSanitiser.Sanitise(result?.ToString()));
+                    return null;
+                }
+                break;
+            case AttributeDataType.LongNumber:
+                // int widens to long exactly. String results parse with invariant culture.
+                if (result is long longNumberVal)
+                    newMvoValue.LongValue = longNumberVal;
+                else if (result is int longNumberIntVal)
+                    newMvoValue.LongValue = longNumberIntVal;
+                else if (long.TryParse(result?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedLong))
+                    newMvoValue.LongValue = parsedLong;
+                else
+                {
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to LongNumber", LogSanitiser.Sanitise(result?.ToString()));
                     return null;
                 }
                 break;
