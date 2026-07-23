@@ -67,10 +67,8 @@ public class OptimisticExportApplyCalculatorScaleTests
             AttributeValueChanges = changes
         };
 
-        var noResolvedReferences = new Dictionary<string, Guid>();
-
         var stopwatch = Stopwatch.StartNew();
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], noResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
         stopwatch.Stop();
 
         Assert.That(delta.Additions, Has.Count.EqualTo(changeCount), "every distinct value should be queued as an addition");

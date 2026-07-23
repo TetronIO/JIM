@@ -11,7 +11,9 @@ namespace JIM.Application.Servers;
 /// Pure, stateless calculator (issue #1079: optimistic export apply) that projects a batch's
 /// successfully exported Pending Export attribute changes onto their Connected System Objects'
 /// current in-memory attribute values. No I/O; the caller (<see cref="ExportExecutionServer"/>)
-/// owns persistence and any database lookups the Reference fallback needs.
+/// owns persistence. Reference attribute changes resolve entirely from the persisted
+/// <see cref="PendingExportAttributeValueChange.ResolvedReferenceCsoId"/> column (SPEC-1079B); no
+/// database lookup is needed here.
 /// <para>
 /// Re-running <see cref="CalculateDelta"/> for the same Pending Exports against a Connected System
 /// Object graph already updated with a previous delta must yield an empty delta (idempotency, D3):
@@ -22,48 +24,6 @@ namespace JIM.Application.Servers;
 public static class OptimisticExportApplyCalculator
 {
     /// <summary>
-    /// Scans the batch for Reference attribute changes (Add/Update, non-empty payload) that need a
-    /// database lookup to resolve their Distinguished Name to a Connected System Object Id: those
-    /// whose <see cref="PendingExportAttributeValueChange.ResolvedReferenceCsoId"/> transient is
-    /// unset (either resolved in an earlier export run, or never routed through
-    /// <c>ExportExecutionServer.TryResolveReferencesFromLookup</c> at all because the Pending Export
-    /// was never deferred). Remove/RemoveAll changes are excluded: they match by string, so they
-    /// need no resolved Id. Deliberately over-inclusive rather than pre-computing whether the
-    /// change will ultimately no-op (that requires the same CSO-state walk <see cref="CalculateDelta"/>
-    /// already does): the wasted lookups are bounded by one export batch's worth of Distinguished
-    /// Names, trivial next to the millions of rows this feature exists to avoid re-materialising.
-    /// </summary>
-    public static HashSet<string> CollectUnresolvedReferenceDns(IReadOnlyCollection<PendingExport> pendingExports)
-    {
-        var dns = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (var pe in pendingExports)
-        {
-            if (pe.ChangeType == PendingExportChangeType.Delete)
-                continue;
-
-            foreach (var change in pe.AttributeValueChanges)
-            {
-                if (change.Attribute?.Type != AttributeDataType.Reference)
-                    continue;
-
-                if (change.ChangeType != PendingExportAttributeChangeType.Add &&
-                    change.ChangeType != PendingExportAttributeChangeType.Update)
-                    continue;
-
-                if (change.ResolvedReferenceCsoId.HasValue)
-                    continue;
-
-                var dn = change.StringValue ?? change.UnresolvedReferenceValue;
-                if (!string.IsNullOrEmpty(dn))
-                    dns.Add(dn);
-            }
-        }
-
-        return dns;
-    }
-
-    /// <summary>
     /// Calculates the additions/removals needed to bring each Pending Export's Connected System
     /// Object into line with what was just exported. Delete-ChangeType Pending Exports are skipped
     /// entirely (D6: the CSO obsolete/delete lifecycle owns that path); Pending Exports with no
@@ -73,12 +33,7 @@ public static class OptimisticExportApplyCalculator
     /// in-memory Connected System Object graph (<see cref="ConnectedSystemObject.AttributeValues"/>
     /// must reflect the state after any prior same-batch mutation, e.g.
     /// <c>BatchUpdateCsosAfterSuccessfulExportAsync</c>'s external Id additions).</param>
-    /// <param name="resolvedReferenceCsoIdsByDn">Distinguished Name to Connected System Object Id
-    /// map for Reference changes whose transient hint was unset, populated by the caller via
-    /// <see cref="CollectUnresolvedReferenceDns"/> and a batched database lookup.</param>
-    public static OptimisticExportApplyDelta CalculateDelta(
-        IReadOnlyCollection<PendingExport> pendingExports,
-        IReadOnlyDictionary<string, Guid> resolvedReferenceCsoIdsByDn)
+    public static OptimisticExportApplyDelta CalculateDelta(IReadOnlyCollection<PendingExport> pendingExports)
     {
         var delta = new OptimisticExportApplyDelta();
 
@@ -91,7 +46,7 @@ public static class OptimisticExportApplyCalculator
             if (cso == null)
                 continue;
 
-            ApplyPendingExport(cso, pe.AttributeValueChanges, resolvedReferenceCsoIdsByDn, delta);
+            ApplyPendingExport(cso, pe.AttributeValueChanges, delta);
         }
 
         return delta;
@@ -108,7 +63,6 @@ public static class OptimisticExportApplyCalculator
     private static void ApplyPendingExport(
         ConnectedSystemObject cso,
         List<PendingExportAttributeValueChange> changes,
-        IReadOnlyDictionary<string, Guid> resolvedReferenceCsoIdsByDn,
         OptimisticExportApplyDelta delta)
     {
         var workingByAttribute = cso.AttributeValues
@@ -151,11 +105,11 @@ public static class OptimisticExportApplyCalculator
             switch (change.ChangeType)
             {
                 case PendingExportAttributeChangeType.Add:
-                    ApplyAdd(cso, change, existing, index, resolvedReferenceCsoIdsByDn, delta);
+                    ApplyAdd(cso, change, existing, index, delta);
                     break;
 
                 case PendingExportAttributeChangeType.Update:
-                    ApplyUpdate(cso, change, existing, index, resolvedReferenceCsoIdsByDn, delta);
+                    ApplyUpdate(cso, change, existing, index, delta);
                     break;
 
                 case PendingExportAttributeChangeType.Remove:
@@ -206,7 +160,6 @@ public static class OptimisticExportApplyCalculator
         PendingExportAttributeValueChange change,
         List<ConnectedSystemObjectAttributeValue> existing,
         CalculatorAttributeIndex index,
-        IReadOnlyDictionary<string, Guid> resolvedReferenceCsoIdsByDn,
         OptimisticExportApplyDelta delta)
     {
         if (SyncEngine.IsPendingChangeEmpty(change) || FindMatchesInIndex(index, existing, change).Count > 0)
@@ -215,7 +168,7 @@ public static class OptimisticExportApplyCalculator
             return;
         }
 
-        var newValue = CreateAttributeValue(cso, change, resolvedReferenceCsoIdsByDn, delta);
+        var newValue = CreateAttributeValue(cso, change, delta);
         delta.Additions.Add(newValue);
         existing.Add(newValue);
         AddToIndex(index, newValue);
@@ -233,7 +186,6 @@ public static class OptimisticExportApplyCalculator
         PendingExportAttributeValueChange change,
         List<ConnectedSystemObjectAttributeValue> existing,
         CalculatorAttributeIndex index,
-        IReadOnlyDictionary<string, Guid> resolvedReferenceCsoIdsByDn,
         OptimisticExportApplyDelta delta)
     {
         if (SyncEngine.IsPendingChangeEmpty(change))
@@ -253,7 +205,7 @@ public static class OptimisticExportApplyCalculator
         existing.Clear();
         ClearIndex(index);
 
-        var newValue = CreateAttributeValue(cso, change, resolvedReferenceCsoIdsByDn, delta);
+        var newValue = CreateAttributeValue(cso, change, delta);
         delta.Additions.Add(newValue);
         existing.Add(newValue);
         AddToIndex(index, newValue);
@@ -623,7 +575,6 @@ public static class OptimisticExportApplyCalculator
     private static ConnectedSystemObjectAttributeValue CreateAttributeValue(
         ConnectedSystemObject cso,
         PendingExportAttributeValueChange change,
-        IReadOnlyDictionary<string, Guid> resolvedReferenceCsoIdsByDn,
         OptimisticExportApplyDelta delta)
     {
         var value = new ConnectedSystemObjectAttributeValue
@@ -665,40 +616,32 @@ public static class OptimisticExportApplyCalculator
                 break;
 
             case AttributeDataType.Reference:
-                PopulateReferenceValue(value, change, resolvedReferenceCsoIdsByDn, delta);
+                PopulateReferenceValue(value, change, delta);
                 break;
         }
 
         return value;
     }
 
+    /// <summary>
+    /// Populates a Reference attribute value from the Pending Export change. The Distinguished Name
+    /// (or other exported string form) lives in <see cref="PendingExportAttributeValueChange.StringValue"/>
+    /// after export resolution, falling back to <see cref="PendingExportAttributeValueChange.UnresolvedReferenceValue"/>
+    /// for a reference that was never routed through resolution. <see cref="PendingExportAttributeValueChange.ResolvedReferenceCsoId"/>
+    /// (persisted at resolution time - issue #1079, SPEC-1079B) supplies <see cref="ConnectedSystemObjectAttributeValue.ReferenceValueId"/>
+    /// directly with no further lookup; when unset (the reference has never been resolved), the row
+    /// still confirms and still diffs clean (it matches on <see cref="ConnectedSystemObjectAttributeValue.UnresolvedReferenceValue"/>),
+    /// it merely stays unresolved until a future import touches it.
+    /// </summary>
     private static void PopulateReferenceValue(
         ConnectedSystemObjectAttributeValue value,
         PendingExportAttributeValueChange change,
-        IReadOnlyDictionary<string, Guid> resolvedReferenceCsoIdsByDn,
         OptimisticExportApplyDelta delta)
     {
-        // After export resolution the Distinguished Name lives in StringValue; fall back to
-        // UnresolvedReferenceValue for a reference that was never routed through resolution
-        // (D5).
-        var dn = change.StringValue ?? change.UnresolvedReferenceValue;
-        value.UnresolvedReferenceValue = dn;
+        value.UnresolvedReferenceValue = change.StringValue ?? change.UnresolvedReferenceValue;
+        value.ReferenceValueId = change.ResolvedReferenceCsoId;
 
-        if (change.ResolvedReferenceCsoId.HasValue)
-        {
-            value.ReferenceValueId = change.ResolvedReferenceCsoId;
-            return;
-        }
-
-        if (dn != null && resolvedReferenceCsoIdsByDn.TryGetValue(dn, out var resolvedId))
-        {
-            value.ReferenceValueId = resolvedId;
-            return;
-        }
-
-        // Unresolvable this run: the row still confirms and still diffs clean (it matches on
-        // UnresolvedReferenceValue), it merely stays unresolved until a future import touches it.
-        value.ReferenceValueId = null;
-        delta.UnresolvedReferenceCount++;
+        if (!change.ResolvedReferenceCsoId.HasValue)
+            delta.UnresolvedReferenceCount++;
     }
 }

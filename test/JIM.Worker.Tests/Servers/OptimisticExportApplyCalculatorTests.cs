@@ -16,9 +16,6 @@ namespace JIM.Worker.Tests.Servers;
 /// </summary>
 public class OptimisticExportApplyCalculatorTests
 {
-    private static readonly IReadOnlyDictionary<string, Guid> NoResolvedReferences =
-        new Dictionary<string, Guid>();
-
     #region Add
 
     [Test]
@@ -28,7 +25,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "foo");
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Has.Count.EqualTo(1));
         Assert.That(delta.Additions[0].StringValue, Is.EqualTo("foo"));
@@ -45,7 +42,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "foo");
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Is.Empty);
         Assert.That(delta.RemovalValueIds, Is.Empty);
@@ -59,7 +56,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add);
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Is.Empty);
         Assert.That(delta.RemovalValueIds, Is.Empty);
@@ -74,7 +71,7 @@ public class OptimisticExportApplyCalculatorTests
         var change2 = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "dup");
         var pe = CreatePendingExport(cso, change1, change2);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Has.Count.EqualTo(1));
         Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
@@ -91,7 +88,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Update, stringValue: "new");
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Has.Count.EqualTo(1));
         Assert.That(delta.Additions[0].StringValue, Is.EqualTo("new"));
@@ -106,7 +103,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Update, stringValue: "same");
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Is.Empty, "identical value should not be re-inserted");
         Assert.That(delta.RemovalValueIds, Is.Empty, "identical value should not be deleted");
@@ -121,7 +118,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Update, stringValue: "new");
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.RemovalValueIds, Is.EquivalentTo(new[] { existing.Id }));
         Assert.That(delta.Additions, Has.Count.EqualTo(1));
@@ -139,7 +136,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Update, stringValue: "new");
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.RemovalValueIds, Is.EquivalentTo(new[] { existing1.Id, existing2.Id }));
         Assert.That(delta.Additions, Has.Count.EqualTo(1));
@@ -157,7 +154,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Update);
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Is.Empty);
         Assert.That(delta.RemovalValueIds, Is.Empty);
@@ -176,7 +173,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Remove, stringValue: "gone");
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.RemovalValueIds, Is.EquivalentTo(new[] { existing.Id }));
         Assert.That(delta.Additions, Is.Empty);
@@ -189,7 +186,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Remove, stringValue: "not there");
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.RemovalValueIds, Is.Empty);
         Assert.That(delta.Additions, Is.Empty);
@@ -205,7 +202,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Remove, stringValue: "remove-me");
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.RemovalValueIds, Is.EquivalentTo(new[] { toRemove.Id }));
     }
@@ -219,7 +216,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.RemoveAll);
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.RemovalValueIds, Is.EquivalentTo(new[] { v1.Id, v2.Id }));
         Assert.That(delta.Additions, Is.Empty);
@@ -232,7 +229,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.RemoveAll);
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.RemovalValueIds, Is.Empty);
         Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
@@ -249,7 +246,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Number, PendingExportAttributeChangeType.Add, intValue: 42);
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Has.Count.EqualTo(1));
         Assert.That(delta.Additions[0].IntValue, Is.EqualTo(42));
@@ -262,7 +259,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.LongNumber, PendingExportAttributeChangeType.Add, longValue: 9999999999L);
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Has.Count.EqualTo(1));
         Assert.That(delta.Additions[0].LongValue, Is.EqualTo(9999999999L));
@@ -276,7 +273,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.DateTime, PendingExportAttributeChangeType.Add, dateTimeValue: dt);
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Has.Count.EqualTo(1));
         Assert.That(delta.Additions[0].DateTimeValue, Is.EqualTo(dt));
@@ -300,7 +297,7 @@ public class OptimisticExportApplyCalculatorTests
             dateTimeValue: new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Unspecified));
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.RemovalValueIds, Is.EquivalentTo(new[] { existing.Id }),
             "a DateTime value with different Kind but equal Ticks must still match, exactly like the == comparison it replaces");
@@ -314,7 +311,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Binary, PendingExportAttributeChangeType.Add, byteValue: new byte[] { 0x01, 0x02, 0x03 });
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Is.Empty, "a different array instance with the same bytes must compare equal (SequenceEqual)");
         Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
@@ -327,7 +324,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Binary, PendingExportAttributeChangeType.Add, byteValue: new byte[] { 0x0a, 0x0b });
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Has.Count.EqualTo(1));
         Assert.That(delta.Additions[0].ByteValue, Is.EqualTo(new byte[] { 0x0a, 0x0b }));
@@ -340,7 +337,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Boolean, PendingExportAttributeChangeType.Add, boolValue: true);
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Has.Count.EqualTo(1));
         Assert.That(delta.Additions[0].BoolValue, Is.True);
@@ -354,7 +351,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Guid, PendingExportAttributeChangeType.Add, guidValue: guid);
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Has.Count.EqualTo(1));
         Assert.That(delta.Additions[0].GuidValue, Is.EqualTo(guid));
@@ -365,7 +362,7 @@ public class OptimisticExportApplyCalculatorTests
     #region Reference
 
     [Test]
-    public void CalculateDelta_ReferenceAdd_TransientResolvedId_UsesTransientDirectly()
+    public void CalculateDelta_ReferenceAdd_Resolved_UsesResolvedReferenceCsoId()
     {
         var resolvedCsoId = Guid.NewGuid();
         var cso = CreateCso();
@@ -373,30 +370,11 @@ public class OptimisticExportApplyCalculatorTests
         change.ResolvedReferenceCsoId = resolvedCsoId;
         var pe = CreatePendingExport(cso, change);
 
-        // A dictionary entry mapping to a DIFFERENT id proves the transient wins over the fallback.
-        var dictionary = new Dictionary<string, Guid> { ["CN=User1,DC=test"] = Guid.NewGuid() };
-
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], dictionary);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Has.Count.EqualTo(1));
         Assert.That(delta.Additions[0].ReferenceValueId, Is.EqualTo(resolvedCsoId));
         Assert.That(delta.Additions[0].UnresolvedReferenceValue, Is.EqualTo("CN=User1,DC=test"));
-        Assert.That(delta.UnresolvedReferenceCount, Is.EqualTo(0));
-    }
-
-    [Test]
-    public void CalculateDelta_ReferenceAdd_NoTransient_UsesDictionaryFallback()
-    {
-        var resolvedCsoId = Guid.NewGuid();
-        var cso = CreateCso();
-        var change = CreateChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Add, stringValue: "CN=User2,DC=test");
-        var pe = CreatePendingExport(cso, change);
-        var dictionary = new Dictionary<string, Guid> { ["CN=User2,DC=test"] = resolvedCsoId };
-
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], dictionary);
-
-        Assert.That(delta.Additions, Has.Count.EqualTo(1));
-        Assert.That(delta.Additions[0].ReferenceValueId, Is.EqualTo(resolvedCsoId));
         Assert.That(delta.UnresolvedReferenceCount, Is.EqualTo(0));
     }
 
@@ -407,7 +385,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Add, stringValue: "CN=Ghost,DC=test");
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Has.Count.EqualTo(1));
         Assert.That(delta.Additions[0].ReferenceValueId, Is.Null);
@@ -423,73 +401,10 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Add, unresolvedReferenceValue: "CN=User3,DC=test");
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Is.Empty);
         Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
-    }
-
-    [Test]
-    public void CollectUnresolvedReferenceDns_ReferenceAddWithoutTransient_ReturnsDn()
-    {
-        var cso = CreateCso();
-        var change = CreateChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Add, stringValue: "CN=Needs,DC=test");
-        var pe = CreatePendingExport(cso, change);
-
-        var dns = OptimisticExportApplyCalculator.CollectUnresolvedReferenceDns([pe]);
-
-        Assert.That(dns, Is.EquivalentTo(new[] { "CN=Needs,DC=test" }));
-    }
-
-    [Test]
-    public void CollectUnresolvedReferenceDns_ReferenceAddWithTransient_ExcludesDn()
-    {
-        var cso = CreateCso();
-        var change = CreateChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Add, stringValue: "CN=Resolved,DC=test");
-        change.ResolvedReferenceCsoId = Guid.NewGuid();
-        var pe = CreatePendingExport(cso, change);
-
-        var dns = OptimisticExportApplyCalculator.CollectUnresolvedReferenceDns([pe]);
-
-        Assert.That(dns, Is.Empty);
-    }
-
-    [Test]
-    public void CollectUnresolvedReferenceDns_NonReferenceChange_Excluded()
-    {
-        var cso = CreateCso();
-        var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "not a reference");
-        var pe = CreatePendingExport(cso, change);
-
-        var dns = OptimisticExportApplyCalculator.CollectUnresolvedReferenceDns([pe]);
-
-        Assert.That(dns, Is.Empty);
-    }
-
-    [Test]
-    public void CollectUnresolvedReferenceDns_RemoveChangeType_Excluded()
-    {
-        // Remove matches by string, not by resolved reference; no lookup needed.
-        var cso = CreateCso();
-        var change = CreateChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Remove, stringValue: "CN=Removed,DC=test");
-        var pe = CreatePendingExport(cso, change);
-
-        var dns = OptimisticExportApplyCalculator.CollectUnresolvedReferenceDns([pe]);
-
-        Assert.That(dns, Is.Empty);
-    }
-
-    [Test]
-    public void CollectUnresolvedReferenceDns_DeleteChangeTypePendingExport_Excluded()
-    {
-        var cso = CreateCso();
-        var change = CreateChange(1, AttributeDataType.Reference, PendingExportAttributeChangeType.Add, stringValue: "CN=Deleted,DC=test");
-        var pe = CreatePendingExport(cso, change);
-        pe.ChangeType = PendingExportChangeType.Delete;
-
-        var dns = OptimisticExportApplyCalculator.CollectUnresolvedReferenceDns([pe]);
-
-        Assert.That(dns, Is.Empty);
     }
 
     #endregion
@@ -504,7 +419,7 @@ public class OptimisticExportApplyCalculatorTests
         var pe = CreatePendingExport(cso, change);
         pe.ChangeType = PendingExportChangeType.Delete;
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Is.Empty);
         Assert.That(delta.RemovalValueIds, Is.Empty);
@@ -526,8 +441,8 @@ public class OptimisticExportApplyCalculatorTests
             AttributeValueChanges = [change]
         };
 
-        Assert.DoesNotThrow(() => OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences));
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        Assert.DoesNotThrow(() => OptimisticExportApplyCalculator.CalculateDelta([pe]));
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Is.Empty);
         Assert.That(delta.RemovalValueIds, Is.Empty);
@@ -547,7 +462,7 @@ public class OptimisticExportApplyCalculatorTests
         };
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Is.Empty);
         Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
@@ -569,7 +484,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.NotSet, PendingExportAttributeChangeType.Add, stringValue: "junk");
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Is.Empty);
         Assert.That(delta.RemovalValueIds, Is.Empty);
@@ -590,7 +505,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.NotSet, PendingExportAttributeChangeType.RemoveAll);
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.RemovalValueIds, Is.Empty);
         Assert.That(delta.SkippedChangeCount, Is.EqualTo(1));
@@ -611,7 +526,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "already-there");
         var pe = CreatePendingExport(cso, change);
 
-        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var delta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(delta.Additions, Is.Empty);
     }
@@ -627,7 +542,7 @@ public class OptimisticExportApplyCalculatorTests
         var change = CreateChange(1, AttributeDataType.Text, PendingExportAttributeChangeType.Add, stringValue: "idempotent");
         var pe = CreatePendingExport(cso, change);
 
-        var firstDelta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var firstDelta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
         Assert.That(firstDelta.Additions, Has.Count.EqualTo(1), "sanity check: first pass produces work");
 
         // Simulate persistence + the D10 in-memory sync step: apply the delta to the CSO.
@@ -637,7 +552,7 @@ public class OptimisticExportApplyCalculatorTests
         cso.AttributeValues.RemoveAll(av => removalIds.Contains(av.Id));
 
         // AttributeValueChanges are unchanged (D11: apply must not mutate them).
-        var secondDelta = OptimisticExportApplyCalculator.CalculateDelta([pe], NoResolvedReferences);
+        var secondDelta = OptimisticExportApplyCalculator.CalculateDelta([pe]);
 
         Assert.That(secondDelta.Additions, Is.Empty, "re-running apply against the updated CSO must be a no-op");
         Assert.That(secondDelta.RemovalValueIds, Is.Empty);
