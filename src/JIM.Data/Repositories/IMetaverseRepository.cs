@@ -357,6 +357,20 @@ public interface IMetaverseRepository
     #region attributes
     public Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync();
 
+    /// <summary>
+    /// Retrieves all Metaverse Attributes with their Standard Mappings, change-tracked, for the built-in schema
+    /// synchronisation pass to mutate and persist via
+    /// <see cref="ISeedingRepository.SaveBuiltInSchemaChangesAsync"/>.
+    /// </summary>
+    public Task<List<MetaverseAttribute>> GetMetaverseAttributesForSchemaSyncAsync();
+
+    /// <summary>
+    /// Retrieves the built-in Metaverse Object Types with their attribute bindings, change-tracked, for the
+    /// built-in schema synchronisation pass to mutate and persist via
+    /// <see cref="ISeedingRepository.SaveBuiltInSchemaChangesAsync"/>.
+    /// </summary>
+    public Task<List<MetaverseObjectType>> GetBuiltInMetaverseObjectTypesForSchemaSyncAsync();
+
     public Task<IList<MetaverseAttributeHeader>?> GetMetaverseAttributeHeadersAsync();
 
     /// <summary>

@@ -53,6 +53,18 @@ Once both are clear, the type can be deleted. Its softer references (its Predefi
 
 Attributes are scoped to the object types that use them: an attribute is **bound** to one or more Object Types, and only appears on objects of those types. The same attribute name can carry different meanings on different object types if you genuinely need that, though in practice most attributes are reused identically across types where they apply.
 
+### Built-in attributes
+
+JIM's built-in Metaverse Attributes are **JIM's own canonical vocabulary**: no wire standard (LDAP/AD or SCIM 2.0) is its foundation. The built-in set covers the common identity domain, including neutral attributes that let SCIM 2.0 core and enterprise resources map cleanly, for example the multi-valued `Emails`, the boolean `Account Enabled` (the natural target for SCIM `active`), `Nickname`, `Preferred Language`, `Locale`, `Time Zone`, `Middle Name`, `Honorific Prefix`, and `Honorific Suffix`.
+
+Built-in attributes are read-only and cannot be deleted, and JIM maintains them automatically: newly-introduced built-in attributes are added to existing deployments at service startup, so upgrades pick them up without any administrator action.
+
+### Standard Mappings
+
+Built-in attributes carry **Standard Mappings**: advisory metadata recording how each attribute corresponds to counterpart attributes in wire standard vocabularies (SCIM 2.0 and LDAP/AD), with notes where the correspondence has nuance (for example, SCIM `active` maps to `Account Enabled`, while Active Directory's `userAccountControl` needs a transform rather than a direct flow).
+
+Standard Mappings are **advisory only**. They exist to power Attribute Flow editor hints, connector wizard default-flow suggestions, and schema documentation; they are never consulted by the synchronisation engine. Your Attribute Flow configuration remains the single source of mapping truth. JIM seeds and maintains the mappings for built-in attributes automatically at service startup.
+
 ### Custom attributes
 
 Alongside JIM's built-in attributes (which are read-only and cannot be deleted), administrators can create their own **custom attributes** to model organisation-specific data such as `costCentre` or `buildingCode`. Manage them from the **Attributes** tab of the Schema area, or via [PowerShell](../powershell/metaverse.md) and the [REST API](../../api/reference/).
