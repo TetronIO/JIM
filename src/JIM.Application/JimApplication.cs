@@ -124,6 +124,10 @@ public class JimApplication : IDisposable
         try
         {
             await Seeding.SeedAsync();
+            // converge the built-in Metaverse schema towards the BuiltInMetaverseSchema catalogue. Runs after
+            // SeedAsync (which short-circuits on already-seeded databases) so newly-introduced built-in
+            // Metaverse Attributes and their advisory Standard Mappings reach existing deployments too.
+            await Seeding.SyncBuiltInMetaverseSchemaAsync();
             await Seeding.SeedBuiltInSchedulesAsync();
             await Seeding.SeedBuiltInRolesAsync();
             await Seeding.SyncBuiltInConnectorDefinitionsAsync();

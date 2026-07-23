@@ -22,4 +22,13 @@ public interface ISeedingRepository
         List<ExampleDataSet> exampleDataSets,
         List<ExampleDataTemplate> dataGenerationTemplates,
         List<ConnectorDefinition> connectorDefinitions);
+
+    /// <summary>
+    /// Persists the built-in schema synchronisation pass's changes in a single transaction: the given
+    /// newly-created built-in Metaverse Attributes, plus any pending modifications to change-tracked entities the
+    /// pass loaded (new Object Type bindings, Standard Mapping additions and removals). Unlike
+    /// <see cref="SeedDataAsync"/>, does not create ServiceSettings; the pass runs on every startup, including
+    /// against already-seeded databases.
+    /// </summary>
+    public Task SaveBuiltInSchemaChangesAsync(List<MetaverseAttribute> newMetaverseAttributes);
 }
