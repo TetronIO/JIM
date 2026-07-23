@@ -30,7 +30,13 @@ function Get-JIMConnectedSystemObjectAttributeValue {
         Number of items per page. Defaults to 50. Maximum is 100.
 
     .PARAMETER All
-        If specified, automatically retrieves all pages of results.
+        If specified, automatically retrieves all pages of results. Fetches at most 1000
+        pages (~50,000 values at the default page size of 50) before stopping with a
+        warning; use -Force to fetch beyond the cap.
+
+    .PARAMETER Force
+        Override the -All page ceiling (1000 pages) and fetch every page regardless of how
+        many attribute values there are. Only valid with -All.
 
     .OUTPUTS
         PSCustomObject representing attribute values.
@@ -49,6 +55,11 @@ function Get-JIMConnectedSystemObjectAttributeValue {
         Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId 1 -CsoId "a1b2c3d4-..." -AttributeName "memberOf" -All
 
         Gets all memberOf attribute values across all pages (auto-paginates).
+
+    .EXAMPLE
+        Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId 1 -CsoId "a1b2c3d4-..." -AttributeName "memberOf" -All -Force
+
+        Gets all memberOf attribute values, overriding the 1000-page safety cap for a very large group.
 
     .LINK
         Get-JIMConnectedSystemObject
@@ -84,7 +95,10 @@ function Get-JIMConnectedSystemObjectAttributeValue {
         [int]$PageSize = 50,
 
         [Parameter(Mandatory, ParameterSetName = 'All')]
-        [switch]$All
+        [switch]$All,
+
+        [Parameter(ParameterSetName = 'All')]
+        [switch]$Force
     )
 
     process {
@@ -111,23 +125,17 @@ function Get-JIMConnectedSystemObjectAttributeValue {
 
             'All' {
                 Write-Verbose "Getting all attribute values for '$AttributeName' on connector space object $CsoId in Connected System $ConnectedSystemId"
-                $currentPage = 1
-                $hasMore = $true
-
-                while ($hasMore) {
-                    $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/connector-space/$CsoId/attributes/$encodedAttributeName/values?page=$currentPage&pageSize=$PageSize"
+                $pageRequest = {
+                    param($p)
+                    $endpoint = "/api/v1/synchronisation/connected-systems/$ConnectedSystemId/connector-space/$CsoId/attributes/$encodedAttributeName/values?page=$p&pageSize=$PageSize"
                     if ($Search) {
                         $endpoint += "&search=$([System.Uri]::EscapeDataString($Search))"
                     }
-
-                    $response = Invoke-JIMApi -Endpoint $endpoint
-                    foreach ($item in $response.items) {
-                        $item
-                    }
-
-                    $hasMore = $response.hasNextPage
-                    $currentPage++
+                    Invoke-JIMApi -Endpoint $endpoint
                 }
+
+                Invoke-JIMPagedFetch -PageRequest $pageRequest -CmdletName 'Get-JIMConnectedSystemObjectAttributeValue' -PageSize $PageSize -Force:$Force `
+                    -ItemNoun 'attribute values' -NarrowHint 'filter with -Search'
             }
         }
     }

@@ -31,6 +31,8 @@ public class SyncOutcomeTests
         Assert.That(outcome.DetailCount, Is.Null);
         Assert.That(outcome.DetailMessage, Is.Null);
         Assert.That(outcome.Ordinal, Is.EqualTo(0));
+        Assert.That(outcome.SyncRuleId, Is.Null);
+        Assert.That(outcome.SyncRuleName, Is.Null);
     }
 
     [Test]

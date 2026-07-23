@@ -10,13 +10,23 @@ namespace JIM.Web.Models.Api;
 /// </summary>
 public class PaginationRequest
 {
+    /// <summary>
+    /// The maximum page number any paginated endpoint will accept. Requests beyond this depth are
+    /// rejected with a 400 rather than silently clamped, so a caller learns they have over-paged and
+    /// PostgreSQL is never asked to grind through a huge <c>OFFSET</c> scan.
+    /// Sized consistently with the PowerShell <c>-All</c> ceiling: at the maximum page size of 100
+    /// this caps retrieval at roughly 100,000 objects (1,000 pages x 100). Change this single
+    /// constant to adjust the ceiling across every paginated endpoint.
+    /// </summary>
+    public const int MaxPage = 1000;
+
     private int _page = 1;
     private int _pageSize = 25;
 
     /// <summary>
-    /// The page number (1-based). Defaults to 1.
+    /// The page number (1-based). Defaults to 1. Must not exceed <see cref="MaxPage"/>.
     /// </summary>
-    [Range(1, int.MaxValue, ErrorMessage = "Page must be at least 1.")]
+    [Range(1, MaxPage, ErrorMessage = "Page must not exceed 1000. Requests beyond this depth are rejected to protect database performance at scale; narrow the result set with a filter or search rather than paging so deep.")]
     public int Page
     {
         get => _page;

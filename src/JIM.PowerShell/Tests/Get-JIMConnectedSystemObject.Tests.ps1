@@ -191,4 +191,72 @@ Describe 'Get-JIMConnectedSystemObject' {
             $help.RelatedLinks | Should -Not -BeNullOrEmpty
         }
     }
+
+    Context 'Pagination safety (-All bounding)' {
+
+        It 'Should expose a Force switch in the ListAll parameter set' {
+            $param = (Get-Command Get-JIMConnectedSystemObject).Parameters['Force']
+            $param | Should -Not -BeNullOrEmpty
+            $param.SwitchParameter | Should -BeTrue
+            $paramAttr = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ParameterSetName -eq 'ListAll' }
+            $paramAttr | Should -Not -BeNullOrEmpty
+        }
+
+        It '-All stops at the page cap and warns when the cap is reached without -Force' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $original = $script:JIMMaxAllPages
+                try {
+                    $script:JIMMaxAllPages = 3
+                    # Always report another page so, without a cap, this would page forever.
+                    Mock Invoke-JIMApi { [PSCustomObject]@{ items = @([PSCustomObject]@{ id = [guid]::NewGuid() }); hasNextPage = $true; totalPages = 999999; totalCount = 100 } }
+
+                    Get-JIMConnectedSystemObject -ConnectedSystemId 1 -All -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
+
+                    Should -Invoke Invoke-JIMApi -Times 3 -Exactly
+                    ($warnings -join ' ') | Should -Match 'stopped after 3 pages'
+                    ($warnings -join ' ') | Should -Match '-Force'
+                }
+                finally {
+                    $script:JIMMaxAllPages = $original
+                }
+            }
+        }
+
+        It '-Force overrides the page cap and fetches every page' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $original = $script:JIMMaxAllPages
+                try {
+                    $script:JIMMaxAllPages = 2
+                    $script:csoPollCount = 0
+                    # Five pages of data; the cap is 2, so only -Force should reach page 5.
+                    Mock Invoke-JIMApi {
+                        $script:csoPollCount++
+                        [PSCustomObject]@{ items = @([PSCustomObject]@{ id = [guid]::NewGuid() }); hasNextPage = ($script:csoPollCount -lt 5); totalPages = 5; totalCount = 100 }
+                    }
+
+                    Get-JIMConnectedSystemObject -ConnectedSystemId 1 -All -Force -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
+
+                    Should -Invoke Invoke-JIMApi -Times 5 -Exactly
+                    ($warnings -join ' ') | Should -Not -Match 'stopped after'
+                }
+                finally {
+                    $script:JIMMaxAllPages = $original
+                }
+            }
+        }
+
+        It '-All warns up front when the result set is large' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                # Single page, but a large totalCount should trigger the up-front warning.
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false; totalPages = 500; totalCount = 50000 } }
+
+                Get-JIMConnectedSystemObject -ConnectedSystemId 1 -All -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
+
+                ($warnings -join ' ') | Should -Match 'large result set'
+            }
+        }
+    }
 }

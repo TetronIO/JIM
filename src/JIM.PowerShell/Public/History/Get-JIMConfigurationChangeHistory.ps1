@@ -35,6 +35,11 @@ function Get-JIMConfigurationChangeHistory {
 
     .PARAMETER All
         Automatically paginate through all change-history entries and return every row. Cannot be used with -Page.
+        Fetches at most 1000 pages before stopping with a warning; use -Force to fetch beyond the cap.
+
+    .PARAMETER Force
+        Override the -All page ceiling (1000 pages) and fetch every page regardless of how large the change
+        history is. Only valid with -All.
 
     .PARAMETER Page
         Page number for the change-history list. Defaults to 1. Cannot be used with -All.
@@ -72,6 +77,11 @@ function Get-JIMConfigurationChangeHistory {
         Get-JIMConfigurationChangeHistory -Type ConnectedSystem -Id 9 -All
 
         Returns every recorded configuration change for Connected System 9.
+
+    .EXAMPLE
+        Get-JIMConfigurationChangeHistory -Type ConnectedSystem -Id 9 -All -Force
+
+        Returns every recorded configuration change, overriding the 1000-page safety cap.
 
     .EXAMPLE
         Get-JIMConfigurationChangeHistory -Type ConnectedSystem -Id 9 -Version 7 -AsDiff
@@ -164,6 +174,9 @@ function Get-JIMConfigurationChangeHistory {
 
         [Parameter(Mandatory, ParameterSetName = 'All')]
         [switch]$All,
+
+        [Parameter(ParameterSetName = 'All')]
+        [switch]$Force,
 
         [Parameter(ParameterSetName = 'Page')]
         [ValidateRange(1, [int]::MaxValue)]
@@ -263,21 +276,24 @@ function Get-JIMConfigurationChangeHistory {
                 }
             }
             default {
-                # 'Page' or 'All': the change-history list.
-                $currentPage = if ($All) { 1 } else { $Page }
-                do {
-                    Write-Verbose "Getting $Type $Id configuration change history (Page: $currentPage, PageSize: $PageSize)"
-                    $response = Invoke-JIMApi -Endpoint "${base}?page=$currentPage&pageSize=$PageSize"
+                # 'Page' or 'All': the change-history list. The shared helper owns the -All loop, the page
+                # cap and the warnings (issue #487); a single page is fetched directly.
+                $pageRequest = {
+                    param($p)
+                    Write-Verbose "Getting $Type $Id configuration change history (Page: $p, PageSize: $PageSize)"
+                    Invoke-JIMApi -Endpoint "${base}?page=$p&pageSize=$PageSize"
+                }
 
+                if ($All) {
+                    Invoke-JIMPagedFetch -PageRequest $pageRequest -CmdletName 'Get-JIMConfigurationChangeHistory' -PageSize $PageSize -Force:$Force `
+                        -ItemNoun 'change records'
+                }
+                else {
+                    $response = & $pageRequest $Page
                     foreach ($item in $response.items) {
                         $item
                     }
-
-                    $hasMore = $All -and $response.hasNextPage -eq $true
-                    if ($hasMore) {
-                        $currentPage++
-                    }
-                } while ($hasMore)
+                }
             }
         }
     }

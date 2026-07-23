@@ -162,7 +162,23 @@ A multi-source mapping combines several source attributes into one target. This 
 
 ### Multi-valued attributes
 
-Mappings support both single-valued and multi-valued attributes. Multi-valued attributes hold a list of values (group memberships, email aliases, and so on). Mappings can flow multi-valued to multi-valued, or use functions like `Join()` and `Split()` to convert between multi-valued and single-valued representations.
+Mappings support both single-valued and multi-valued attributes. A **Multi-Valued** attribute holds a list of values (group memberships, email aliases, and so on); a **Single-Valued** attribute holds at most one. How a mapping behaves depends on the plurality of the source and the target:
+
+| Source | Target | Behaviour |
+|--------|--------|-----------|
+| Single-Valued | Single-Valued | ✅ The value flows normally. |
+| Multi-Valued | Multi-Valued | ✅ Every value flows. |
+| Single-Valued | Multi-Valued | ✅ The value flows as a single-item list. |
+| Multi-Valued | Single-Valued | ⚠️ See below. |
+
+**Multi-Valued to Single-Valued.** A Single-Valued target can hold only one value, so this mapping is only meaningful when the object actually has one value:
+
+- If the object has **one** value, it flows (import) or is exported normally.
+- If the object has **more than one** value, JIM does **not** pick one arbitrarily. An arbitrary choice would be non-deterministic (a Connected System does not guarantee value order) and, on export, could never be reconciled on the next import. Instead, JIM flows nothing for that attribute and records an error against the object; the object's other attributes still synchronise. The error appears as a `Multi-Valued to Single-Valued` item in the run's [Activity](activities.md).
+
+The Attribute Flow editor warns you at configuration time when a mapping is Multi-Valued to Single-Valued, and the mapping is flagged in the Attribute Flow list, so you can decide before running whether it is what you intend.
+
+To flow a chosen value deterministically instead of erroring, either target a Multi-Valued attribute, or use an [Expression mapping](#expression-mappings) to select one value (for example `Join()`/`Split()` or an index into the list). Reference attributes on import are exempt from this rule; they are resolved separately.
 
 ### Value processing (inbound)
 
@@ -178,6 +194,22 @@ Four controls are available:
 The transforms run in a fixed order: **trim, then collapse, then case normalisation, then the whitespace-as-no-value decision**. Because the whitespace decision runs last, a value that trims down to nothing is correctly treated as no value. Value processing is *normalisation*; it runs before [Attribute Priority](#attribute-priority) resolves which rule's value wins.
 
 When **Treat whitespace as no value** is switched off and a whitespace-only value is therefore stored, the portal flags it with a `(whitespace)` indicator rather than rendering a misleading blank cell, so administrators can tell a real-but-invisible value apart from an absent one.
+
+### Initial Export Only (outbound)
+
+Some attributes should be set once when JIM creates an object, then left alone: an initial password or API token, a one-time setup value, or any attribute the target system should own after provisioning. For **export** mappings, enabling **Initial Export Only** on a mapping does exactly that:
+
+- The attribute flows only when JIM **provisions** the object into the Connected System (the create export), and JIM retries until the initial export is confirmed.
+- Once the object is provisioned, the attribute becomes **unmanaged** on that Connected System Object: later Metaverse changes are not exported for it, and Drift Correction ([enforce state](#export-outbound)) leaves it alone, so the value can be changed freely in the Connected System.
+- Objects that **join** to pre-existing objects in the Connected System never receive the value; the external system already owns it.
+- Import mappings for the same attribute are unaffected, so the externally-owned value can still flow back into the metaverse if you map it inbound.
+
+Configure it per mapping in the Attribute Flow editor (the option appears for export Synchronisation Rules only), via `New-JIMSyncRuleMapping -InitialExportOnly` in PowerShell, or via the REST API. The Connector Space object page marks affected attributes with an **Unmanaged** indicator once the object is past provisioning.
+
+Two behaviours to be aware of:
+
+- The setting is honoured live: enabling it on an existing rule stops future exports of that attribute to already-provisioned objects, and disabling it resumes normal management (the next synchronisation and Drift Correction re-assert the Metaverse value).
+- If several export mappings target the same attribute for an object type, the attribute only becomes unmanaged when **every** such mapping is Initial Export Only; a single normally-managed mapping keeps it managed.
 
 ## Attribute Priority
 

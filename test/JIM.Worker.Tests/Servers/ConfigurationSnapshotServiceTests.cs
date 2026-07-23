@@ -137,6 +137,22 @@ public class ConfigurationSnapshotServiceTests
     }
 
     [Test]
+    public void CreateSnapshot_SyncRule_CapturesMappingInitialExportOnly()
+    {
+        // Initial Export Only (#223) changes whether an attribute keeps being exported after provisioning, so it
+        // is configuration and must be snapshotted; without it a toggle would diff as "no change".
+        var mapping = new SyncRuleMapping { Id = 100, TargetConnectedSystemAttributeId = 7, InitialExportOnly = true };
+        var rule = new SyncRule { Id = 42, Name = "Directory Outbound", Direction = SyncRuleDirection.Export };
+        rule.AttributeFlowRules.Add(mapping);
+
+        var snapshot = _service.CreateSnapshot(rule, HashKey);
+
+        var flow = Child(snapshot.Root, "attributeFlowRules")!.Children![0];
+        Assert.That(Child(flow, "initialExportOnly")!.Value, Is.EqualTo("true"));
+        Assert.That(Child(flow, "initialExportOnly")!.Label, Is.EqualTo("Initial Export Only"));
+    }
+
+    [Test]
     public void CreateSnapshot_SyncRule_OmitsSentinelPriority()
     {
         // int.MaxValue is the "sole contributor / no explicit priority" sentinel, not a real priority; rendering it

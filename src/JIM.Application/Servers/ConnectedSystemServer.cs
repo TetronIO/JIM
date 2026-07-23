@@ -4200,8 +4200,9 @@ public class ConnectedSystemServer
                 throw new ArgumentException(
                     $"Type mismatch: source attribute '{sourceAttrName}' ({sourceType}) is not compatible with target attribute '{targetAttrName}' ({targetType}). Source and target attributes must have the same type.");
 
-            // Multi-valued to single-valued is permitted (#435). The runtime selects
-            // the first value and generates a MultiValuedAttributeTruncated RPEI warning.
+            // Multi-valued to single-valued is permitted at configuration time (#435). At runtime, if a
+            // source holds more than one value for a single-valued target, the attribute is skipped and a
+            // MultiValuedToSingleValued RPEI error is raised (a single value flows normally).
         }
     }
 

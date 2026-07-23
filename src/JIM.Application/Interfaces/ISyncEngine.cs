@@ -55,8 +55,9 @@ public interface ISyncEngine
     /// the inline incumbent-comparison gate so a lower-priority contribution does not overwrite a higher-priority
     /// one; when null (the default), every mapping flows as before (last-writer-wins).
     /// </param>
-    /// <returns>A list of warnings generated during Attribute Flow, empty if none.</returns>
-    List<AttributeFlowWarning> FlowInboundAttributes(
+    /// <returns>A list of errors raised during Attribute Flow (for example, a multi-valued source flowing
+    /// to a single-valued target), empty if none.</returns>
+    List<AttributeFlowError> FlowInboundAttributes(
         ConnectedSystemObject cso,
         SyncRule syncRule,
         IReadOnlyList<ConnectedSystemObjectType> objectTypes,
