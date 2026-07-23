@@ -749,8 +749,9 @@ public partial class SyncRepository
             await createCmd.ExecuteNonQueryAsync();
         }
 
+        // Writer order below MUST match PendingExportBulkColumns.PendingExportsRetryUpdate exactly.
         await using (var writer = await npgsqlConn.BeginBinaryImportAsync(
-            """COPY _pe_bulk_update ("Id", "Status", "ChangeType", "ErrorCount", "MaxRetries", "LastAttemptedAt", "NextRetryAt", "LastErrorMessage", "LastErrorStackTrace", "HasUnresolvedReferences") FROM STDIN (FORMAT binary)"""))
+            $"""COPY _pe_bulk_update ("Id", {BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportsRetryUpdate)}) FROM STDIN (FORMAT binary)"""))
         {
             foreach (var pe in exportList)
             {
@@ -783,17 +784,9 @@ public partial class SyncRepository
 
         await using (var updateCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
         {
-            updateCmd.CommandText = """
+            updateCmd.CommandText = $"""
                 UPDATE "PendingExports" t
-                SET "Status" = v."Status",
-                    "ChangeType" = v."ChangeType",
-                    "ErrorCount" = v."ErrorCount",
-                    "MaxRetries" = v."MaxRetries",
-                    "LastAttemptedAt" = v."LastAttemptedAt",
-                    "NextRetryAt" = v."NextRetryAt",
-                    "LastErrorMessage" = v."LastErrorMessage",
-                    "LastErrorStackTrace" = v."LastErrorStackTrace",
-                    "HasUnresolvedReferences" = v."HasUnresolvedReferences"
+                SET {string.Join(", ", PendingExportBulkColumns.PendingExportsRetryUpdate.Select(c => $"\"{c}\" = v.\"{c}\""))}
                 FROM _pe_bulk_update v
                 WHERE t."Id" = v."Id"
                 """;
@@ -821,8 +814,9 @@ public partial class SyncRepository
                 await createCmd.ExecuteNonQueryAsync();
             }
 
+            // Writer order below MUST match PendingExportBulkColumns.PendingExportAttributeValueChangesConfirmationUpdate exactly.
             await using (var writer = await npgsqlConn.BeginBinaryImportAsync(
-                """COPY _peavc_bulk_update ("Id", "Status", "LastImportedValue", "ExportAttemptCount", "LastExportedAt") FROM STDIN (FORMAT binary)"""))
+                $"""COPY _peavc_bulk_update ("Id", {BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportAttributeValueChangesConfirmationUpdate)}) FROM STDIN (FORMAT binary)"""))
             {
                 foreach (var avc in allAttrChanges)
                 {
@@ -844,12 +838,9 @@ public partial class SyncRepository
 
             await using (var updateCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
             {
-                updateCmd.CommandText = """
+                updateCmd.CommandText = $"""
                     UPDATE "PendingExportAttributeValueChanges" t
-                    SET "Status" = v."Status",
-                        "LastImportedValue" = v."LastImportedValue",
-                        "ExportAttemptCount" = v."ExportAttemptCount",
-                        "LastExportedAt" = v."LastExportedAt"
+                    SET {string.Join(", ", PendingExportBulkColumns.PendingExportAttributeValueChangesConfirmationUpdate.Select(c => $"\"{c}\" = v.\"{c}\""))}
                     FROM _peavc_bulk_update v
                     WHERE t."Id" = v."Id"
                     """;
@@ -908,7 +899,8 @@ public partial class SyncRepository
         foreach (var chunk in BulkSqlHelpers.ChunkList(exports, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""PendingExports"" (""Id"", ""ConnectedSystemId"", ""ConnectedSystemObjectId"", ""ChangeType"", ""Status"", ""ErrorCount"", ""MaxRetries"", ""LastAttemptedAt"", ""NextRetryAt"", ""LastErrorMessage"", ""LastErrorStackTrace"", ""SourceMetaverseObjectId"", ""HasUnresolvedReferences"", ""CreatedAt"") VALUES ");
+            // Parameter order below MUST match PendingExportBulkColumns.PendingExports exactly.
+            sql.Append($@"INSERT INTO ""PendingExports"" ({BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExports)}) VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
@@ -950,7 +942,8 @@ public partial class SyncRepository
         foreach (var chunk in BulkSqlHelpers.ChunkList(changes, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""PendingExportAttributeValueChanges"" (""Id"", ""PendingExportId"", ""AttributeId"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""DecimalValue"", ""ByteValue"", ""GuidValue"", ""BoolValue"", ""UnresolvedReferenceValue"", ""ChangeType"", ""Status"", ""ExportAttemptCount"", ""LastExportedAt"", ""LastImportedValue"") VALUES ");
+            // Parameter order below MUST match PendingExportBulkColumns.PendingExportAttributeValueChanges exactly.
+            sql.Append($@"INSERT INTO ""PendingExportAttributeValueChanges"" ({BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportAttributeValueChanges)}) VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)

@@ -137,6 +137,104 @@ public class BulkInsertColumnCompletenessTests
         });
     }
 
+    [Test]
+    public void ConnectedSystemObjectChangeBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Staging.ConnectedSystemObjectChange), "ConnectedSystemObjectChanges", CsoChangeBulkColumns.ConnectedSystemObjectChanges);
+    }
+
+    [Test]
+    public void ConnectedSystemObjectChangeAttributeBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Staging.ConnectedSystemObjectChangeAttribute), "ConnectedSystemObjectChangeAttributes", CsoChangeBulkColumns.ConnectedSystemObjectChangeAttributes);
+    }
+
+    [Test]
+    public void ConnectedSystemObjectChangeAttributeValueBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Staging.ConnectedSystemObjectChangeAttributeValue), "ConnectedSystemObjectChangeAttributeValues", CsoChangeBulkColumns.ConnectedSystemObjectChangeAttributeValues);
+    }
+
+    [Test]
+    public void ActivityRunProfileExecutionItemBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Activities.ActivityRunProfileExecutionItem), "ActivityRunProfileExecutionItems", RpeiBulkColumns.ActivityRunProfileExecutionItems);
+    }
+
+    [Test]
+    public void ActivityRunProfileExecutionItemSyncOutcomeBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Activities.ActivityRunProfileExecutionItemSyncOutcome), "ActivityRunProfileExecutionItemSyncOutcomes", RpeiBulkColumns.ActivityRunProfileExecutionItemSyncOutcomes);
+    }
+
+    [Test]
+    public void ActivityRunProfileExecutionItemUpdateColumns_HaveAConsciousHomeForEveryColumn()
+    {
+        AssertUpdateListsCoverInsertList(
+            "ActivityRunProfileExecutionItems",
+            RpeiBulkColumns.ActivityRunProfileExecutionItems,
+            [RpeiBulkColumns.ActivityRunProfileExecutionItemsUpdate],
+            RpeiBulkColumns.ActivityRunProfileExecutionItemsUpdateExclusions);
+    }
+
+    [Test]
+    public void PendingExportBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Transactional.PendingExport), "PendingExports", PendingExportBulkColumns.PendingExports);
+    }
+
+    [Test]
+    public void PendingExportAttributeValueChangeBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Transactional.PendingExportAttributeValueChange), "PendingExportAttributeValueChanges", PendingExportBulkColumns.PendingExportAttributeValueChanges);
+    }
+
+    [Test]
+    public void PendingExportUpdateColumns_HaveAConsciousHomeForEveryColumn()
+    {
+        AssertUpdateListsCoverInsertList(
+            "PendingExports",
+            PendingExportBulkColumns.PendingExports,
+            [PendingExportBulkColumns.PendingExportsRetryUpdate, PendingExportBulkColumns.PendingExportsExportResultUpdate],
+            PendingExportBulkColumns.PendingExportsUpdateExclusions);
+    }
+
+    [Test]
+    public void PendingExportAttributeValueChangeUpdateColumns_HaveAConsciousHomeForEveryColumn()
+    {
+        AssertUpdateListsCoverInsertList(
+            "PendingExportAttributeValueChanges",
+            PendingExportBulkColumns.PendingExportAttributeValueChanges,
+            [PendingExportBulkColumns.PendingExportAttributeValueChangesConfirmationUpdate, PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate],
+            PendingExportBulkColumns.PendingExportAttributeValueChangesUpdateExclusions);
+    }
+
+    /// <summary>
+    /// Asserts every insert column appears in at least one update list or the documented exclusion
+    /// list, and that no update/exclusion column is unknown to the insert list. A table can have
+    /// more than one legitimate update shape (for example retry reconciliation vs export result);
+    /// this keeps every column consciously placed whichever shape a migration extends.
+    /// </summary>
+    private static void AssertUpdateListsCoverInsertList(string tableName, string[] insertColumns, string[][] updateLists, string[] exclusions)
+    {
+        var insert = insertColumns.ToHashSet();
+        var covered = updateLists.SelectMany(l => l).Concat(exclusions).ToHashSet();
+
+        var missing = insert.Except(covered).OrderBy(c => c).ToList();
+        var unknown = covered.Except(insert).OrderBy(c => c).ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(missing, Is.Empty,
+                $"{tableName}: column(s) are in neither an update list nor the documented exclusion list; a raw " +
+                "update would silently never persist them. Place each consciously (and extend the matching " +
+                "statement's writers if updatable): " + string.Join(", ", missing));
+            Assert.That(unknown, Is.Empty,
+                $"{tableName}: update/exclusion list(s) contain column(s) not in the insert list: " +
+                string.Join(", ", unknown));
+        });
+    }
+
     private void AssertColumnListMatchesModel(Type entityClrType, string tableName, string[] bulkInsertColumns)
     {
         var entityType = _model.FindEntityType(entityClrType);

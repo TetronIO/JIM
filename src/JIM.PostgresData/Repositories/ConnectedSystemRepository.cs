@@ -5311,7 +5311,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         foreach (var chunk in BulkSqlHelpers.ChunkList(exports, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"UPDATE ""PendingExports"" AS t SET ""Status"" = v.""Status"", ""ErrorCount"" = v.""ErrorCount"", ""MaxRetries"" = v.""MaxRetries"", ""LastAttemptedAt"" = v.""LastAttemptedAt"", ""NextRetryAt"" = v.""NextRetryAt"", ""LastErrorMessage"" = v.""LastErrorMessage"", ""LastErrorStackTrace"" = v.""LastErrorStackTrace"", ""HasUnresolvedReferences"" = v.""HasUnresolvedReferences"", ""ConnectedSystemObjectId"" = v.""ConnectedSystemObjectId"" FROM (VALUES ");
+            // Cast/parameter order below MUST match PendingExportBulkColumns.PendingExportsExportResultUpdate exactly.
+            sql.Append(@"UPDATE ""PendingExports"" AS t SET ");
+            sql.Append(string.Join(", ", PendingExportBulkColumns.PendingExportsExportResultUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
+            sql.Append(" FROM (VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
@@ -5333,7 +5336,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(pe.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
-            sql.Append(@") AS v(""Id"", ""Status"", ""ErrorCount"", ""MaxRetries"", ""LastAttemptedAt"", ""NextRetryAt"", ""LastErrorMessage"", ""LastErrorStackTrace"", ""HasUnresolvedReferences"", ""ConnectedSystemObjectId"") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@") AS v(""Id"", ");
+            sql.Append(BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportsExportResultUpdate));
+            sql.Append(@") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
@@ -5363,7 +5368,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         foreach (var chunk in BulkSqlHelpers.ChunkList(allChanges, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"UPDATE ""PendingExportAttributeValueChanges"" AS t SET ""Status"" = v.""Status"", ""ExportAttemptCount"" = v.""ExportAttemptCount"", ""LastExportedAt"" = v.""LastExportedAt"", ""StringValue"" = v.""StringValue"", ""UnresolvedReferenceValue"" = v.""UnresolvedReferenceValue"", ""LastImportedValue"" = v.""LastImportedValue"" FROM (VALUES ");
+            // Cast/parameter order below MUST match PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate exactly.
+            sql.Append(@"UPDATE ""PendingExportAttributeValueChanges"" AS t SET ");
+            sql.Append(string.Join(", ", PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
+            sql.Append(" FROM (VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
@@ -5382,7 +5390,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
             }
 
-            sql.Append(@") AS v(""Id"", ""Status"", ""ExportAttemptCount"", ""LastExportedAt"", ""StringValue"", ""UnresolvedReferenceValue"", ""LastImportedValue"") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@") AS v(""Id"", ");
+            sql.Append(BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate));
+            sql.Append(@") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
