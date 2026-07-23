@@ -2,8 +2,18 @@
 
 - **Status:** Planned
 - **Issue**: #124
-- **Related Issues**: #123 (Event-Based Sync), #121 (Outbound Sync)
-- **Last Updated**: 2026-06-10
+- **Related Issues**: #123 (Event-Based Sync), #121 (Outbound Sync), #545 (SCIM 2.0 Client Connector)
+- **Related Plans**: [`doing/SCIM_CLIENT_CONNECTOR_DESIGN.md`](doing/SCIM_CLIENT_CONNECTOR_DESIGN.md), [`METAVERSE_SCHEMA_POLICY.md`](METAVERSE_SCHEMA_POLICY.md)
+- **Last Updated**: 2026-07-23
+
+> **July 2026 cross-design review (with #545):** the following decisions supersede the corresponding details in the body of this document, which predates them. The body remains valid otherwise and will be reconciled when implementation planning starts.
+>
+> 1. **JIM-to-JIM SCIM round-trip is an explicit compatibility goal.** JIM's SCIM client connector (#545) pointed at this server must achieve paginated full import, `meta.lastModified`-filtered delta import, and ETag-conditional change detection. Index-based pagination, `meta.lastModified` filtering and ETag support therefore move into required scope; the MVP/Post-MVP splits below were written in isolation and no longer govern those items.
+> 2. **Inbound static-token authentication consolidates on JIM API Keys.** This design predates the API Key feature; the per-system "Bearer Token" connector setting sketched below would duplicate credential management. Instead, `ApiKey` gains an optional least-privilege scope binding a key to a single Connected System's SCIM endpoint (a scoped key can do nothing else); the SCIM endpoints accept `Authorization: Bearer <api-key>`, reusing central management, revocation, reporting and rate limiting. Allow two active scoped keys per system so administrators can rotate with an overlap window. Federated Identity Credential remains the secretless alternative as designed.
+> 3. **Shared protocol library `JIM.Scim`.** SCIM resource DTOs, serialisation, the PATCH operation model, filter/pagination primitives, schema URN constants and the attribute flattening convention are shared with the client connector via a dependency-light `JIM.Scim` library (referencing only `JIM.Models`). This server consumes it from `JIM.Web`; do not re-model SCIM types here.
+> 4. **One flattening convention, owned by `JIM.Scim`:** canonical-type flattening (`emails.work`, `emails.primary` from the `primary=true` entry). The first-entry-wins mapping in the Schema Mapping section below is superseded.
+> 5. **Naming:** the client (#545) and this server surface as a deliberate pair aligned to RFC 7644 role terms; the server remains a Connected System via its pseudo-connector as designed. Display names to be confirmed under #545 before either is seeded.
+> 6. **Metaverse mapping targets:** built-in flow targets for SCIM resources (Emails, Account Enabled, etc.) and advisory standard-mapping metadata are defined in [`METAVERSE_SCHEMA_POLICY.md`](METAVERSE_SCHEMA_POLICY.md).
 
 ## Overview
 

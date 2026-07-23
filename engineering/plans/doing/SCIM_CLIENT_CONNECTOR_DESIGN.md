@@ -3,8 +3,8 @@
 - **Status:** Doing (Phase 1 underway; Phases 2-7 outstanding)
 - **Issue:** [#545](https://github.com/TetronIO/JIM/issues/545)
 - **Related Issues:** #124 (SCIM 2.0 Server Support), #361 (Microsoft Graph Connector), #192 (Generic REST Connector), #875 (centralised connector dispatch)
-- **Related Plans:** [`SCIM_SERVER_DESIGN.md`](../SCIM_SERVER_DESIGN.md) (the inverse scenario: JIM as SCIM service provider)
-- **Last Updated:** 2026-07-22
+- **Related Plans:** [`SCIM_SERVER_DESIGN.md`](../SCIM_SERVER_DESIGN.md) (the inverse scenario: JIM as SCIM service provider), [`METAVERSE_SCHEMA_POLICY.md`](../METAVERSE_SCHEMA_POLICY.md) (canonical schema policy and SCIM-parity gap attributes)
+- **Last Updated:** 2026-07-23
 
 ## Overview
 
@@ -76,6 +76,7 @@ Multi-valued handling:
 - Multi-valued simple attributes map to multi-valued JIM attributes directly.
 - Multi-valued complex attributes with canonical `type` values (emails, phoneNumbers, addresses, ims, photos) are flattened per canonical type: `emails.work`, `emails.home`, plus `emails.primary` for the `primary=true` entry. This yields deterministic single-valued attributes that Attribute Flows can target, which matters more for sync than preserving the raw list shape.
 - `groups` (on User) is read-only on providers; membership is managed via the Group `members` attribute (import as `Reference` multi-valued; export via PATCH on the group).
+- **References import as raw values with deferred resolution.** `manager`, `members` and other `reference` attributes are staged as the raw referenced `id` and resolved by JIM's existing unresolved-reference handling during synchronisation, exactly as the SCIM server design resolves inbound references during Attribute Flow. Dangling references then behave identically whichever direction the data arrived from.
 - Extension schemas (Enterprise User and vendor URNs discovered via `/Schemas`) contribute attributes prefixed unambiguously (e.g. `urn:...:enterprise:2.0:User:manager` exposed as `enterpriseUser.manager`); exact prefixing finalised in Phase 3 against real provider payloads.
 
 ### Settings design
@@ -93,7 +94,16 @@ Validation: Phase 1 validates the Base URL shape (absolute URI; HTTPS required e
 1. **Provider profiles:** deferred. v1 is generic with safe defaults plus auto-detection (pagination, change detection, PATCH support) from `/ServiceProviderConfig`, which removes most of the need. Profiles can layer on later as pre-filled setting templates without schema changes.
 2. **Minimum compliance:** require `/ServiceProviderConfig` and `/Schemas` (or graceful fallback to core User/Group schemas when `/Schemas` is missing but resources respond); everything else (filtering, PATCH, bulk, ETags, sorting) is treated as optional capability discovered at runtime, with `FullScanOnly` and PUT as floors. Deviations are reported as run warnings, never silently absorbed.
 3. **Delta in v1:** per the maintainer's issue comment: `meta.lastModified` watermark and ETag strategies now; Delta Query deferred until working-group adoption or a real provider ships it.
-4. **Custom OAuth scopes / non-standard token exchange:** the Scope setting covers custom scopes; the Custom Header method plus Static Bearer Token cover providers with non-standard exchanges (operators can source tokens externally). Full custom token-exchange flows are out of scope for v1.
+4. **Custom OAuth scopes / non-standard token exchange:** the Scope setting covers custom scopes; the Custom Header method plus Static Bearer Token cover providers with non-standard exchanges (operators can source tokens externally). Full custom token-exchange flows are out of scope for v1. A federated/secretless authentication strategy (JWT-bearer / `private_key_jwt` client authentication, the client-side counterpart of the server design's Federated Identity Credential) is expected later; the Phase 2 authentication strategy abstraction must be shaped to admit it without rework.
+
+### Cross-design alignment with the SCIM 2.0 Service Provider (#124)
+
+Decisions from the July 2026 joint review of this plan and [`SCIM_SERVER_DESIGN.md`](../SCIM_SERVER_DESIGN.md):
+
+- **Shared protocol library `JIM.Scim`:** SCIM resource DTOs, serialisation, the PATCH operation model (this connector generates patches; the server applies them), filter/pagination primitives, schema URN constants, the SCIM-to-`AttributeDataType` mapping, and the multi-valued/complex flattening convention live in a new dependency-light class library referencing only `JIM.Models`, consumed by both `JIM.Connectors` and `JIM.Web`. Extraction happens at the start of Phase 2, when the first DTOs appear. `JIM.Utilities` was considered and rejected (grab-bag purpose; a protocol implementation is a cohesive domain deserving its own assembly and audit surface), as was a general `JIM.Protocols` (speculative generality; no concrete sibling exists).
+- **One flattening convention, owned by `JIM.Scim`:** canonical-type flattening (`emails.work`, `emails.primary` from the `primary=true` entry) applies on both sides; the server design's first-entry-wins sketch is superseded.
+- **JIM-to-JIM SCIM round-trip is an explicit compatibility goal:** this connector pointed at JIM's own SCIM 2.0 Service Provider must achieve paginated full import, `LastModifiedFilter` delta import and `ETagConditional` change detection (see Success Criteria). This also eventually provides a first-party integration-test harness.
+- **Metaverse mapping targets:** the [`METAVERSE_SCHEMA_POLICY.md`](../METAVERSE_SCHEMA_POLICY.md) gap attributes (Emails, Account Enabled, etc.) and advisory standard-mapping metadata should land before or alongside Phase 7, so this connector ships with clean flow targets and wizard hints.
 
 ## Implementation Phases
 
@@ -127,6 +137,8 @@ Validation: Phase 1 validates the Base URL shape (absolute URI; HTTPS required e
 ### Phase 6: Export
 
 - POST/PATCH/PUT/DELETE with per-object `ConnectedSystemExportResult` (system-assigned `id` returned as `ExternalId` on create); group membership PATCH batches; bulk `/Bulk` where advertised, respecting `maxOperations`/`maxPayloadSize`; PATCH-capability degradation to PUT.
+- **Dependency ordering is JIM's responsibility** (RFC 7644: the SCIM client creates dependencies first). Referenced objects are exported before their referrers (manager before report, users before group membership patches), leaning on the export pipeline's existing sequencing. A provider 400 `invalidValue` on a missing reference is classified as a dependency-ordering error and handled like the LDAP connector's placeholder-member pattern (recognised, retryable after the dependency lands), never as a silent skip.
+- Bulk batches are kept dependency-free (batch ordering enforces dependencies); `bulkId` intra-batch references are a possible later optimisation, not v1.
 
 ### Phase 7: Enablement, docs, integration tests
 
@@ -144,6 +156,7 @@ Validation: Phase 1 validates the Base URL shape (absolute URI; HTTPS required e
 ## Success Criteria
 
 - Schema discovery builds a correct `ConnectorSchema` against at least two dissimilar SCIM providers (one index-paged, one cursor-paged).
+- **JIM-to-JIM round-trip:** this connector pointed at JIM's own SCIM 2.0 Service Provider (#124, once built) completes paginated full import, `LastModifiedFilter` delta import, `ETagConditional` change detection, and export with confirming import.
 - Full import stages users and groups (including membership references) correctly; delta import moves only changed objects and survives restarts via the persisted watermark.
 - Export creates, updates (PATCH and PUT), and deletes resources, with every failure surfaced as an RPEI; batch operations log summary statistics.
 - Throttling (429) never fails a run outright: retries with backoff, `Retry-After` honoured, throttling reported as warnings.
