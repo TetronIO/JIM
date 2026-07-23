@@ -75,6 +75,14 @@ if (-not $DirectoryConfig) {
 }
 $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
 
+# Admin account name for server-routed directory writes (Samba AD only), derived from the bind DN.
+# All test-created Samba objects must be written THROUGH the running server (-H ldap://localhost with
+# credentials), never directly against the sam.ldb file: the server's long-lived LDAP worker
+# processes serve stale views of objects written to the file behind their back, so a directly
+# written OU can be visible to one connection and "No such object" to the next (observed 2026-07-23:
+# Test 7's add failed five times with LDAP error 32 while a simultaneous probe SAW the parent OU).
+$sambaAdminUser = if (-not $isOpenLDAP) { ($DirectoryConfig.BindDN -split ',')[0] -replace '^CN=', '' } else { $null }
+
 Write-TestSection "Scenario 5: Object Matching Rules"
 Write-Host "Step:     $Step" -ForegroundColor Gray
 Write-Host "Template: $Template" -ForegroundColor Gray
@@ -195,7 +203,7 @@ try {
         Write-Host "Creating department OUs for test users..." -ForegroundColor Gray
         $testDepartments = @("Information Technology", "Operations", "Finance", "Sales", "Marketing")
         foreach ($dept in $testDepartments) {
-            $result = docker exec $DirectoryConfig.ContainerName samba-tool ou create "OU=$dept,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" 2>&1
+            $result = docker exec $DirectoryConfig.ContainerName samba-tool ou create "OU=$dept,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ✓ Created OU: $dept" -ForegroundColor Gray
             } elseif ($result -match "already exists") {
@@ -1204,7 +1212,6 @@ userPassword: Password123!
             # "No such object: parent does not exist" even though the parent OU exists (observed 2026-07-23
             # at the Nano template). Going through the server is the supported path and eliminates the race.
             $omjUserDN = "CN=$omjDisplayName,OU=$omjDepartment,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)"
-            $sambaAdminUser = ($DirectoryConfig.BindDN -split ',')[0] -replace '^CN=', ''
             $omjLdif = @"
 dn: $omjUserDN
 objectClass: top
