@@ -200,6 +200,9 @@ try {
                 Write-Host "  ✓ Created OU: $dept" -ForegroundColor Gray
             } elseif ($result -match "already exists") {
                 Write-Host "  - OU $dept already exists" -ForegroundColor DarkGray
+            } else {
+                # Fail loudly here rather than five tests later with a confusing missing-parent error.
+                throw "Failed to create department OU '$dept': $result"
             }
         }
         Write-Host "  ✓ Department OUs ready" -ForegroundColor Green
@@ -1195,9 +1198,13 @@ userPassword: Password123!
         else {
             # Samba AD: samba-tool user create does not accept an arbitrary DN or an employeeID value, and
             # its default CN would not match the DN the export attribute flow computes from Display Name.
-            # Use ldbadd against the local sam.ldb (the same mechanism Populate-SambaAD.ps1 uses for bulk
-            # user seeding) so the object lands at the exact target DN with employeeID set in one step.
+            # Use ldbadd routed through the RUNNING server (ldap://localhost with admin credentials), not
+            # against the raw sam.ldb file: direct file access on a live domain controller races with the
+            # server's own writes and index maintenance, and intermittently fails with a phantom
+            # "No such object: parent does not exist" even though the parent OU exists (observed 2026-07-23
+            # at the Nano template). Going through the server is the supported path and eliminates the race.
             $omjUserDN = "CN=$omjDisplayName,OU=$omjDepartment,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)"
+            $sambaAdminUser = ($DirectoryConfig.BindDN -split ',')[0] -replace '^CN=', ''
             $omjLdif = @"
 dn: $omjUserDN
 objectClass: top
@@ -1219,7 +1226,7 @@ employeeID: $omjEmployeeId
             try {
                 [System.IO.File]::WriteAllText($omjLdifPath, $omjLdif)
                 docker cp $omjLdifPath "$($DirectoryConfig.ContainerName):/tmp/omj-user.ldif" 2>&1 | Out-Null
-                $omjCreateResult = docker exec $DirectoryConfig.ContainerName ldbadd -H /usr/local/samba/private/sam.ldb /tmp/omj-user.ldif 2>&1
+                $omjCreateResult = docker exec $DirectoryConfig.ContainerName ldbadd -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" /tmp/omj-user.ldif 2>&1
                 docker exec $DirectoryConfig.ContainerName rm -f /tmp/omj-user.ldif 2>&1 | Out-Null
                 $omjCreateText = if ($omjCreateResult -is [array]) { $omjCreateResult -join "`n" } else { "$omjCreateResult" }
 
