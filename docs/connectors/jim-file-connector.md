@@ -130,6 +130,20 @@ When you configure a File Connector Connected System and trigger schema discover
 
 In **Export Only** mode where no file exists yet, schema discovery creates a minimal schema with just the specified object type. Attributes are defined later by Synchronisation Rules.
 
+## Export Cell Formats
+
+When JIM writes the export file, each attribute value is rendered as text in its cell:
+
+- **Text, Number, Long Number, Guid**<br /> Written as-is, using invariant culture.
+- **Decimal**<br /> Canonical invariant form: plain notation, no trailing zeros, never exponent notation.
+- **DateTime**<br /> ISO 8601 round-trip format (for example `2025-06-15T10:30:00.0000000Z`).
+- **Boolean**<br /> Lowercase `true` or `false`.
+- **Reference**<br /> The referenced object's External ID value (for example the manager's employee ID). This is the same string form the import side parses, so a reference exported by JIM resolves back to the same object if the file is re-imported.
+- **Binary**<br /> Base64-encoded, as a CSV cell cannot carry raw bytes.
+
+!!! note "Binary is export-only"
+    The File Connector cannot import Binary attribute values: schema discovery never infers a Binary type, and a schema-declared Binary attribute fails to parse on import. Binary cells written by an export are therefore one-way; do not use Bidirectional mode for a schema that includes Binary attributes.
+
 ## Troubleshooting
 
 ### File not found

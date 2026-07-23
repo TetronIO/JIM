@@ -157,4 +157,27 @@ public class MetaverseObjectDtoTests
 
         Assert.That(dto.DecimalValue, Is.EqualTo(highPrecisionValue));
     }
+
+    [Test]
+    public void FromEntity_WithByteValue_MapsByteValue()
+    {
+        var byteValue = new byte[] { 0x01, 0x02, 0x03, 0xFF };
+        var entity = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = new MetaverseAttribute
+            {
+                Id = 13,
+                Name = "Photo",
+                Type = AttributeDataType.Binary,
+                AttributePlurality = AttributePlurality.SingleValued
+            },
+            AttributeId = 13,
+            ByteValue = byteValue
+        };
+
+        var dto = MetaverseObjectAttributeValueDto.FromEntity(entity);
+
+        Assert.That(dto.ByteValue, Is.EqualTo(byteValue));
+    }
 }

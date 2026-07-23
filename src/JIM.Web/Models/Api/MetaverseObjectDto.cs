@@ -83,6 +83,13 @@ public class MetaverseObjectAttributeValueDto
     public int? IntValue { get; set; }
     public long? LongValue { get; set; }
     public decimal? DecimalValue { get; set; }
+
+    /// <summary>
+    /// The value for Binary attributes. Serialised to JSON as a base64-encoded string
+    /// (System.Text.Json's representation for byte arrays).
+    /// </summary>
+    public byte[]? ByteValue { get; set; }
+
     public Guid? GuidValue { get; set; }
     public bool? BoolValue { get; set; }
     public Guid? ReferenceValueId { get; set; }
@@ -120,6 +127,7 @@ public class MetaverseObjectAttributeValueDto
             IntValue = entity.IntValue,
             LongValue = entity.LongValue,
             DecimalValue = entity.DecimalValue,
+            ByteValue = entity.ByteValue,
             GuidValue = entity.GuidValue,
             BoolValue = entity.BoolValue,
             ReferenceValueId = entity.ReferenceValueId,

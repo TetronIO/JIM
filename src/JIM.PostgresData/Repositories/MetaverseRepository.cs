@@ -2155,6 +2155,31 @@ public class MetaverseRepository : IMetaverseRepository
         if (source.ConnectedSystemAttribute == null)
             throw new InvalidDataException("objectMatchingRule.Sources[0].ConnectedSystemAttribute is null");
 
+        // validate the matching attribute type up front. Unsupported types must fail loudly and
+        // immediately; deferring this to the per-value filter switch would let the null-value
+        // pre-check below silently skip every value first, converting a misconfigured Object
+        // Matching Rule into a quiet no-match (the Synchronisation Integrity rules forbid that).
+        switch (source.ConnectedSystemAttribute.Type)
+        {
+            case AttributeDataType.Text:
+            case AttributeDataType.Number:
+            case AttributeDataType.LongNumber:
+            case AttributeDataType.Decimal:
+            case AttributeDataType.Guid:
+                break;
+            case AttributeDataType.DateTime:
+                throw new NotSupportedException("DateTime attributes are not supported in Object Matching Rules.");
+            case AttributeDataType.Binary:
+                throw new NotSupportedException("Binary attributes are not supported in Object Matching Rules.");
+            case AttributeDataType.Reference:
+                throw new NotSupportedException("Reference attributes are not supported in Object Matching Rules.");
+            case AttributeDataType.Boolean:
+                throw new NotSupportedException("Boolean attributes are not supported in Object Matching Rules.");
+            case AttributeDataType.NotSet:
+            default:
+                throw new InvalidDataException("Unexpected Connected System Attribute Type");
+        }
+
         // get the source attribute value(s)
         var csoAttributeValues = connectedSystemObject.AttributeValues.Where(q => q.AttributeId == source.ConnectedSystemAttribute.Id);
 
@@ -2167,8 +2192,10 @@ public class MetaverseRepository : IMetaverseRepository
             {
                 AttributeDataType.Text => !string.IsNullOrEmpty(csoAttributeValue.StringValue),
                 AttributeDataType.Number => csoAttributeValue.IntValue.HasValue,
+                AttributeDataType.LongNumber => csoAttributeValue.LongValue.HasValue,
+                AttributeDataType.Decimal => csoAttributeValue.DecimalValue.HasValue,
                 AttributeDataType.Guid => csoAttributeValue.GuidValue.HasValue,
-                _ => false
+                _ => false // unreachable: unsupported types are rejected before the loop
             };
 
             if (!hasValue)
@@ -2215,12 +2242,22 @@ public class MetaverseRepository : IMetaverseRepository
                             av.IntValue != null &&
                             av.IntValue == csoAttributeValue.IntValue));
                     break;
-                case AttributeDataType.DateTime:
-                    throw new NotSupportedException("DateTime attributes are not supported in Object Matching Rules.");
-                case AttributeDataType.Binary:
-                    throw new NotSupportedException("Binary attributes are not supported in Object Matching Rules.");
-                case AttributeDataType.Reference:
-                    throw new NotSupportedException("Reference attributes are not supported in Object Matching Rules.");
+                case AttributeDataType.LongNumber:
+                    matchQuery = matchQuery.Where(mvo =>
+                        mvo.AttributeValues.Any(av =>
+                            objectMatchingRule.TargetMetaverseAttribute != null &&
+                            av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
+                            av.LongValue != null &&
+                            av.LongValue == csoAttributeValue.LongValue));
+                    break;
+                case AttributeDataType.Decimal:
+                    matchQuery = matchQuery.Where(mvo =>
+                        mvo.AttributeValues.Any(av =>
+                            objectMatchingRule.TargetMetaverseAttribute != null &&
+                            av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
+                            av.DecimalValue != null &&
+                            av.DecimalValue == csoAttributeValue.DecimalValue));
+                    break;
                 case AttributeDataType.Guid:
                     matchQuery = matchQuery.Where(mvo =>
                         mvo.AttributeValues.Any(av =>
@@ -2229,10 +2266,9 @@ public class MetaverseRepository : IMetaverseRepository
                             av.GuidValue != null &&
                             av.GuidValue == csoAttributeValue.GuidValue));
                     break;
-                case AttributeDataType.Boolean:
-                    throw new NotSupportedException("Boolean attributes are not supported in Object Matching Rules.");
-                case AttributeDataType.NotSet:
                 default:
+                    // unsupported types were rejected with NotSupportedException before the loop;
+                    // reaching here means the up-front validation and this dispatch have diverged
                     throw new InvalidDataException("Unexpected Connected System Attribute Type");
             }
 

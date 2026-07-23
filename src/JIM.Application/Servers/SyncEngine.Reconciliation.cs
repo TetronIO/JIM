@@ -598,8 +598,9 @@ public partial class SyncEngine
 
     /// <summary>
     /// Gets the imported value as a string for debugging purposes.
+    /// Internal for testing.
     /// </summary>
-    private static string? GetImportedValueAsString(Dictionary<int, List<ConnectedSystemObjectAttributeValue>> attrValuesByAttrId, PendingExportAttributeValueChange attrChange)
+    internal static string? GetImportedValueAsString(Dictionary<int, List<ConnectedSystemObjectAttributeValue>> attrValuesByAttrId, PendingExportAttributeValueChange attrChange)
     {
         attrValuesByAttrId.TryGetValue(attrChange.AttributeId, out var csoAttrValues);
         csoAttrValues ??= new List<ConnectedSystemObjectAttributeValue>();
@@ -619,6 +620,7 @@ public partial class SyncEngine
             AttributeDataType.Boolean => csoAttrValues.Select(v => v.BoolValue?.ToString()).Where(v => v != null),
             AttributeDataType.Guid => csoAttrValues.Select(v => v.GuidValue?.ToString()).Where(v => v != null),
             AttributeDataType.Reference => csoAttrValues.Select(v => v.UnresolvedReferenceValue).Where(v => v != null),
+            AttributeDataType.Binary => csoAttrValues.Where(v => v.ByteValue != null).Select(v => $"(binary, {v.ByteValue!.Length} bytes)"),
             _ => Enumerable.Empty<string?>()
         };
 
@@ -628,8 +630,9 @@ public partial class SyncEngine
 
     /// <summary>
     /// Gets the expected (exported) value as a string for debugging purposes.
+    /// Internal for testing.
     /// </summary>
-    private static string? GetExpectedValueAsString(PendingExportAttributeValueChange attrChange)
+    internal static string? GetExpectedValueAsString(PendingExportAttributeValueChange attrChange)
     {
         var attrType = attrChange.Attribute?.Type ?? AttributeDataType.NotSet;
 

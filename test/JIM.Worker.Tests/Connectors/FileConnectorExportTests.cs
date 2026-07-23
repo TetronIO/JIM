@@ -620,6 +620,153 @@ public class FileConnectorExportTests
     }
 
     [Test]
+    public async Task Export_Create_BinaryValue_WritesBase64Async()
+    {
+        // Arrange - a CSV cell cannot carry raw bytes, so binary values must be written as base64
+        var settingValues = CreateExportSettingValues(_testExportPath);
+        var objectType = new ConnectedSystemObjectType { Id = 1, Name = "User" };
+        var externalIdAttr = CreateExternalIdAttribute(objectType);
+        var photoAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 3, Name = "photo", Type = AttributeDataType.Binary,
+            ConnectedSystemObjectType = objectType
+        };
+
+        var photoBytes = new byte[] { 0x4A, 0x49, 0x4D, 0x21 }; // "JIM!" - base64 "SklNIQ=="
+        var pendingExports = new List<PendingExport>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                ChangeType = PendingExportChangeType.Create,
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                {
+                    new() { Id = Guid.NewGuid(), Attribute = externalIdAttr, AttributeId = externalIdAttr.Id, StringValue = "emp001" },
+                    new() { Id = Guid.NewGuid(), Attribute = photoAttr, AttributeId = photoAttr.Id, ByteValue = photoBytes }
+                }
+            }
+        };
+
+        // Act
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+
+        // Assert
+        var content = File.ReadAllText(_testExportPath);
+        Assert.That(content, Does.Contain(Convert.ToBase64String(photoBytes)));
+    }
+
+    [Test]
+    public async Task Export_Update_CsoFullStateWithBinaryValue_WritesBase64Async()
+    {
+        // Arrange - full-file rewrite must carry unchanged binary values from the CSO as base64,
+        // not silently write empty cells. Seed a header-only file so the photo column exists but
+        // the row must be rebuilt entirely from the CSO's full state.
+        var settingValues = CreateExportSettingValues(_testExportPath);
+        await File.WriteAllTextAsync(_testExportPath, "employeeId,photo\n");
+
+        var objectType = new ConnectedSystemObjectType { Id = 1, Name = "User" };
+        var externalIdAttr = CreateExternalIdAttribute(objectType);
+        var photoAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 3, Name = "photo", Type = AttributeDataType.Binary,
+            ConnectedSystemObjectType = objectType
+        };
+
+        var photoBytes = new byte[] { 0x4A, 0x49, 0x4D, 0x21 }; // "JIM!" - base64 "SklNIQ=="
+        var cso = CreateCsoWithExternalId("emp001", objectType, externalIdAttr);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Attribute = photoAttr,
+            AttributeId = photoAttr.Id,
+            ByteValue = photoBytes
+        });
+
+        var pendingExports = new List<PendingExport>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                ChangeType = PendingExportChangeType.Update,
+                ConnectedSystemObject = cso,
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            }
+        };
+
+        // Act
+        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+
+        // Assert
+        Assert.That(results[0].Success, Is.True);
+        var content = File.ReadAllText(_testExportPath);
+        Assert.That(content, Does.Contain("emp001"));
+        Assert.That(content, Does.Contain(Convert.ToBase64String(photoBytes)));
+    }
+
+    [Test]
+    public async Task Export_Update_CsoFullStateWithResolvedReference_WritesReferencedExternalIdAsync()
+    {
+        // Arrange - full-file rewrite must render a resolved reference as the referenced CSO's
+        // External ID (the same string form the import side parses back into an unresolved
+        // reference), not an empty cell. Seed a header-only file so the manager column exists
+        // but the row must be rebuilt entirely from the CSO's full state.
+        var settingValues = CreateExportSettingValues(_testExportPath);
+        await File.WriteAllTextAsync(_testExportPath, "employeeId,manager\n");
+
+        var objectType = new ConnectedSystemObjectType { Id = 1, Name = "User" };
+        var externalIdAttr = CreateExternalIdAttribute(objectType);
+        var managerAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 4, Name = "manager", Type = AttributeDataType.Reference,
+            ConnectedSystemObjectType = objectType
+        };
+
+        var referencedCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            Type = objectType,
+            ExternalIdAttributeId = externalIdAttr.Id,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new()
+                {
+                    Attribute = externalIdAttr,
+                    AttributeId = externalIdAttr.Id,
+                    StringValue = "mgr001"
+                }
+            }
+        };
+
+        var cso = CreateCsoWithExternalId("emp001", objectType, externalIdAttr);
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Attribute = managerAttr,
+            AttributeId = managerAttr.Id,
+            ReferenceValue = referencedCso,
+            ReferenceValueId = referencedCso.Id
+        });
+
+        var pendingExports = new List<PendingExport>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                ChangeType = PendingExportChangeType.Update,
+                ConnectedSystemObject = cso,
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+            }
+        };
+
+        // Act
+        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+
+        // Assert
+        Assert.That(results[0].Success, Is.True);
+        var content = File.ReadAllText(_testExportPath);
+        Assert.That(content, Does.Contain("emp001"));
+        Assert.That(content, Does.Contain("mgr001"));
+    }
+
+    [Test]
     public async Task Export_Create_HandlesDateTimeValuesAsync()
     {
         // Arrange

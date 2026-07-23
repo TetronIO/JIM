@@ -493,6 +493,10 @@ internal class FileConnectorExport
         if (attrChange.BoolValue.HasValue)
             return attrChange.BoolValue.Value.ToString().ToLower();
 
+        if (attrChange.ByteValue != null)
+            // A CSV cell cannot carry raw bytes; base64 is the lossless text representation.
+            return Convert.ToBase64String(attrChange.ByteValue);
+
         if (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue))
             return attrChange.UnresolvedReferenceValue;
 
@@ -523,6 +527,10 @@ internal class FileConnectorExport
 
         if (attrValue.BoolValue.HasValue)
             return attrValue.BoolValue.Value.ToString().ToLower();
+
+        if (attrValue.ByteValue != null)
+            // A CSV cell cannot carry raw bytes; base64 is the lossless text representation.
+            return Convert.ToBase64String(attrValue.ByteValue);
 
         if (!string.IsNullOrEmpty(attrValue.UnresolvedReferenceValue))
             return attrValue.UnresolvedReferenceValue;
