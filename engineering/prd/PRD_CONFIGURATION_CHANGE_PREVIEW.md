@@ -26,7 +26,7 @@ This PRD defines that framework. The design is deliberately **UX-first**: the ar
 
 - **Not building any per-surface adapter in this PRD.** Adapters are split into follow-up issues in severity order once this design is agreed (#827 acceptance criteria)
 - **Not building the #288 preview engine itself.** The engine (evaluating what sync would do for a given object) is #288's scope; this framework consumes it for the object-level stage. Count and validation stages do not depend on it
-- **Not replacing polling with LISTEN/NOTIFY.** The framework defines a notification abstraction shaped to #307's decided architecture (PostgreSQL LISTEN/NOTIFY plus SignalR hub) and ships with polling behind it; the infrastructure swap is #307/#202's scope
+- **Not building the real-time notification infrastructure.** PostgreSQL LISTEN/NOTIFY and the SignalR/Blazor push foundation are #307/#202's scope, implemented **before** this framework (#307 blocks #827, decided Jul 2026); this framework consumes that foundation through a notification abstraction
 - **Not draft/staged configuration.** Proposed configuration is an unsaved DTO passed to the preview API; persisted draft configs are a separate future capability
 - **Not open-ended pattern inference.** Change pattern detection is a curated, tested detector registry; no fuzzy clustering or machine-learned summarisation
 
@@ -77,7 +77,7 @@ This PRD defines that framework. The design is deliberately **UX-first**: the ar
 
 **Progress notification**
 
-16. The framework defines a **progress notification abstraction** for preview generation status and stage completion, shaped to #307's decided architecture (PostgreSQL LISTEN/NOTIFY service-to-service, SignalR/Blazor circuit push to the browser). v1 implements it with the existing database polling pattern; #307/#202 later replace the internals without touching preview code or UX. Poll interval MUST be short enough that stage arrival feels responsive (1 to 2 seconds, matching the Operations page).
+16. The framework defines a **progress notification abstraction** for preview generation status and stage completion, implemented on #307's real-time foundation (PostgreSQL LISTEN/NOTIFY service-to-service, SignalR/Blazor circuit push to the browser), which is delivered before this framework (#307 blocks #827, decided Jul 2026; revised from the earlier polling-first stance). Database polling exists only as the graceful-degradation fallback when the notification path is unavailable, per #202's design.
 
 **Interim apply-time messaging (before adapters exist)**
 
@@ -153,7 +153,7 @@ The core scenario governs the whole framework; the rest exercise specific surfac
 - British English throughout UI text; JIM domain entities Title Cased
 - Framework-first is decided (#827, Jun 2026): no per-surface preview may be implemented ahead of this framework design being agreed
 - Must reuse the `SyncOutcome` causal graph model (#363, shipped) for object-level outcome representation rather than inventing a parallel vocabulary
-- Milestone tension acknowledged: #307 (real-time infrastructure) sits in v1.x at Low priority while #827 is v1.0 High; the polling-first notification abstraction exists precisely so this framework does not depend on #307's timing
+- Sequencing decided (Jul 2026, resolving the earlier milestone tension): #307 blocks #827; the real-time notification foundation (#307, then #202) is implemented before this framework, so preview progress notification is real-time from day one with polling only as a degradation fallback
 
 ## Affected Areas
 
@@ -179,7 +179,7 @@ The core scenario governs the whole framework; the rest exercise specific surfac
 
 - #288 Sync Preview Mode: the evaluation engine consumed by stage 4 (object-level). **The only true build dependency; implemented first**, before any adapter. Stages 1 to 3 do not depend on it, so framework plumbing can proceed in parallel with engine work
 - #363 `SyncOutcome` model (shipped): outcome vocabulary; nothing outstanding
-- #307 / #202: designated upgrade path for the notification abstraction's internals; **deliberately not blocking** (the polling-first abstraction exists precisely so this framework does not wait on them)
+- #307 / #202: the real-time notification foundation consumed by FR16. **Blocking; implemented first** (decided Jul 2026, #307 blocks #827 on GitHub; revised from the earlier polling-first, non-blocking stance). #307 delivers the foundation; #202 is its first feature slice
 - #91 mode 1 pattern: source of the apply-time messaging UX, delivered as an early framework phase (FR17); coordinate with the #91 plan so both consume the same shared component and indicator
 - Adapter candidates gated on this design: #204, #134/#809, #421, #91 mode 2, plus #827 gaps G1 to G6
 
@@ -201,6 +201,6 @@ The core scenario governs the whole framework; the rest exercise specific surfac
 ## Additional Context
 
 - Decision record (Jun 2026, on #827): framework-first, holistic; per-surface previews must not be built independently
-- Decision record (Jul 2026, this PRD): UX-first framing; progressive disclosure stages replace administrator-facing "tiers"; dispatch is invisible; deterministic grouping in v1 with a curated pattern detector registry as fast-follow; results persisted as queryable rows for pagination/filter/group-by and audit; notification abstraction polling-first in #307's decided shape; preview result retention governed by the existing RPEI retention period control; interim apply-time messaging delivered as an early phase of the framework implementation (revised from an earlier standalone-issue decision; no preview-adjacent work ships independently of the holistic capability); dependencies implemented first (#288 engine core before any adapter); very large previews offer a capped/sampled data set as an informed-choice default (estimated size stated up-front) rather than any hard limit, with exact summaries either way
+- Decision record (Jul 2026, this PRD): UX-first framing; progressive disclosure stages replace administrator-facing "tiers"; dispatch is invisible; deterministic grouping in v1 with a curated pattern detector registry as fast-follow; results persisted as queryable rows for pagination/filter/group-by and audit; notification abstraction in #307's decided shape (revised Jul 2026: #307/#202 are implemented before this framework, #307 blocks #827, so the abstraction is real-time from day one and polling survives only as #202's graceful-degradation fallback; supersedes the earlier polling-first stance); preview result retention governed by the existing RPEI retention period control; interim apply-time messaging delivered as an early phase of the framework implementation (revised from an earlier standalone-issue decision; no preview-adjacent work ships independently of the holistic capability); dependencies implemented first (#288 engine core before any adapter); very large previews offer a capped/sampled data set as an informed-choice default (estimated size stated up-front) rather than any hard limit, with exact summaries either way
 - Prior art precedents: #465 (validation stage), #135 (count stage), #134's proposed detailed analysis and #288 (object-level stage)
 - Operator experience with traditional ILM solutions motivating the summarisation requirements: spot-checking raw change lists was the only option; grouped/pattern summaries are the assurance capability that was always missing

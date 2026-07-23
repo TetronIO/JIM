@@ -11,10 +11,11 @@ One Configuration Change Preview framework, consumed by thin per-surface adapter
 
 This plan sequences the work per the decisions recorded on #827 and in the PRD:
 
-1. **#288 engine core first** (the only true build dependency), in parallel with framework plumbing that does not need it.
-2. **Apply-time messaging** (PRD FR17) as an early framework phase, rolled across all sync-affecting surfaces before any adapter exists.
-3. **Framework foundations** (models, persistence, orchestration, dispatch, notification, UI shell, summarisation), proven end-to-end by the first adapter.
-4. **Adapter waves** as follow-up issues in severity order: G5 and G3-destructive, then G4, then G1/G2, then G6 and the re-scoped issues (#204, #134/#809, #421, #91 mode 2).
+1. **#307 real-time notification foundation, then #202** (its first slice), before any #827 work (decided Jul 2026; #307 blocks #827). The framework's progress notification is real-time from day one; no polling-first implementation is built.
+2. **#288 engine core** (the other true build dependency), in parallel with framework plumbing that does not need it.
+3. **Apply-time messaging** (PRD FR17) as an early framework phase, rolled across all sync-affecting surfaces before any adapter exists.
+4. **Framework foundations** (models, persistence, orchestration, dispatch, notification, UI shell, summarisation), proven end-to-end by the first adapter.
+5. **Adapter waves** as follow-up issues in severity order: G5 and G3-destructive, then G4, then G1/G2, then G6 and the re-scoped issues (#204, #134/#809, #421, #91 mode 2).
 
 It also resolves the PRD's two residual open questions: the capped/sampled persistence mechanics for very large previews (Open Question 1) and the dispatch cost-estimation heuristic (Open Question 3). Both are proposed in Technical Architecture below.
 
@@ -37,7 +38,7 @@ It also resolves the PRD's two residual open questions: the capped/sampled persi
 | Count-level preview | `ConnectedSystemServer.GetDeletionPreviewAsync` (#135) and the four GET `*-preview` API endpoints | Precedent for stage 2 count queries and preview endpoints; #135 later re-platforms as an adapter |
 | Pure sync decision engine | `SyncEngine` (partial class): synchronous, no I/O, plain objects in, decision records out | Stage 4 inbound evaluation calls it directly; no refactor needed inbound |
 | Outcome vocabulary | `ActivityRunProfileExecutionItemSyncOutcomeType` (#363) | Transition taxonomy reuses these values (see below) |
-| UI progress polling | `ActivityDetail.razor` poll loop (`Task.Run` + `Task.Delay`, cancellation on dispose); Operations tabs poll at 1 to 5 seconds | The notification abstraction's v1 implementation is this pattern at 1 to 2 seconds |
+| Real-time notification foundation | #307 (PostgreSQL LISTEN/NOTIFY service-to-service, SignalR/Blazor circuit push) and #202, implemented before this framework | The notification abstraction is implemented directly on this foundation; the existing `ActivityDetail.razor` poll pattern survives only in #202's graceful-degradation fallback |
 
 Confirmed gaps the framework must build net-new: there is no shared typed-consequences confirmation dialog (three bespoke copies exist), `SyncRunMode.PreviewOnly` is honoured only in export execution, outbound evaluation (`ExportEvaluationServer`) persists Pending Exports as it evaluates, and no endpoint accepts a proposed-change DTO for a dry run (existing dry runs are GET-by-id deletion previews).
 
@@ -127,7 +128,7 @@ Apply-side linkage: `Activity` gains a nullable `PreviewActivityId` FK. When a p
 
 ### Progress notification abstraction
 
-`IPreviewProgressNotifier` in JIM.Application with two operations: `PublishStageChangedAsync(activityId, stage, status)` (called by the orchestrator) and a consumer-side subscription the UI shell uses. The v1 implementation is **polling**: publish is a no-op beyond the normal row updates, and the subscription is a 1 to 2 second poll of the `ConfigurationChangePreviews` stage-status columns, using the exact loop-with-cancellation pattern from `ActivityDetail.razor`. #307/#202 later swap the implementation for PostgreSQL LISTEN/NOTIFY plus the Blazor circuit push without touching preview code or UX; the interface is shaped so publish carries only the Activity id (matching #307's decided 8KB-payload-avoidance design: notify identity, fetch state).
+`IPreviewProgressNotifier` in JIM.Application with two operations: `PublishStageChangedAsync(activityId, stage, status)` (called by the orchestrator) and a consumer-side subscription the UI shell uses. Because #307/#202 are implemented **before** this framework (decided Jul 2026; #307 blocks #827), the implementation is real-time from day one: publish issues a PostgreSQL `NOTIFY` carrying only the Activity id (per #307's 8KB-payload-avoidance design: notify identity, fetch state), JIM.Web's LISTEN service receives it, and the panel is pushed fresh state over the Blazor circuit. When the notification path is unavailable (dropped LISTEN connection), the subscription degrades to the database polling fallback that #202 defines; no separate polling-first implementation is built for previews.
 
 ### API shape
 
@@ -146,11 +147,19 @@ Authorisation mirrors the configuration change itself (PRD NFR): the preview end
 
 ## Implementation Phases
 
-Phases 1 and 2 can proceed in parallel; Phase 3 needs neither until its final stage-4 step. Adapter waves (Phase 5) are follow-up issues, not part of this plan's direct scope.
+Phase 0 completes before any #827 work begins (decided Jul 2026; #307 blocks #827). Phases 1 and 2 can then proceed in parallel; Phase 3 needs neither until its final stage-4 step. Adapter waves (Phase 5) are follow-up issues, not part of this plan's direct scope.
 
-### Phase 1: #288 engine core (separate issue, sequenced first)
+### Phase 0: Real-time notification foundation (#307, then #202; separate issues, sequenced first)
 
-The only true build dependency. Scope belongs to #288; this plan defines only what the framework consumes:
+Scope belongs to those issues; this plan defines only what the framework consumes:
+
+- [ ] #307 Phase 1 (PostgreSQL LISTEN/NOTIFY service-to-service) and Phase 2 foundation (SignalR/Blazor circuit push in JIM.Web), including the graceful-degradation polling fallback.
+- [ ] #202 Run Profile progress push, the first feature slice proving the foundation.
+- [ ] Contract the framework consumes: publish a channel notification carrying an Activity id; JIM.Web-side subscription that pushes to Blazor components; documented fallback behaviour when the LISTEN connection drops.
+
+### Phase 1: #288 engine core (separate issue)
+
+The other true build dependency. Scope belongs to #288; this plan defines only what the framework consumes:
 
 - [ ] Inbound: `SyncEngine` is already a pure decision engine; expose an orchestration path that evaluates projection, join, and Attribute Flow decisions for a given CSO/MVO population **without persisting**, returning decision records.
 - [ ] Outbound: extract an evaluation-only path from `ExportEvaluationServer` (today it stages Pending Exports as it evaluates); generalise `SyncRunMode.PreviewOnly` beyond export execution so the mode means "evaluate, never persist" across the pipeline.
@@ -172,7 +181,7 @@ Permanent end-state components, built once, rolled everywhere; adapters later la
 - [ ] **Adapter contract and registry:** `IConfigurationChangePreviewAdapter`, `PreviewContext`, finding/count/estimate/delta records; startup registration keyed by surface.
 - [ ] **Orchestration server:** `ConfigurationChangePreviewServer` running the stage sequence, computing exact groups from the delta stream, applying the per-group cap, updating stage statuses and Activity progress, failing fast and visibly on any stage error (a failed preview never presents partial results as complete).
 - [ ] **Dispatch:** cost-estimate threshold service setting; in-process background path; `ConfigurationChangePreviewWorkerTask` + `TaskingServer.CreateWorkerTaskAsync` branch + `Worker.cs` case + `ConfigurationChangePreviewTaskProcessor` (sync-family processor pattern); cancellation via the task's cancellation source.
-- [ ] **Notification abstraction:** `IPreviewProgressNotifier` with the polling implementation (1 to 2 second interval).
+- [ ] **Notification abstraction:** `IPreviewProgressNotifier` implemented on the Phase 0 foundation (NOTIFY on stage transitions, circuit push to the panel), degrading to #202's polling fallback when the notification path is down.
 - [ ] **Retention:** RPEI retention housekeeping extended to the three preview tables; preview Activity linkage verified in the apply paths.
 - [ ] **API:** the four endpoints above, authorised per-surface; PowerShell cmdlet deferred to the first adapter.
 - [ ] **UI shell:** `ConfigurationChangePreviewPanel.razor` with progress, staged arrival, summary landing view, drill-down grid, cancel, staleness and sampled labels, cap prompt.
@@ -204,9 +213,9 @@ Each wave is one or more GitHub issues drafted for sign-off before filing; each 
 
 ## Dependencies
 
+- **#307, then #202** (real-time notification foundation): **blocking; implemented first** (decided Jul 2026, #307 blocks #827 on GitHub; revised from the earlier polling-first, non-blocking stance). The notifier is real-time from day one
 - **#288** (engine core): Phase 1; blocks stage 4 evaluation and Wave 3 adapters, not framework plumbing
 - **#363** `SyncOutcome` model: shipped; taxonomy extended additively
-- **#307/#202**: upgrade path for the notifier internals; deliberately non-blocking
 - **#91**: shares the Phase 2 components; coordinate, do not duplicate
 
 ## Risks & Mitigations
@@ -217,6 +226,7 @@ Each wave is one or more GitHub issues drafted for sign-off before filing; each 
 | Outbound evaluation extraction (#288) destabilises export staging | Behaviour-preserving refactor with the existing export integration tests as the safety net before any preview path consumes it |
 | Preview tables grow faster than expected at customer scale | Informed-choice cap defaults on above 100K rows; RPEI retention housekeeping covers the tables from day one; per-group cap bounds worst case |
 | In-process dispatch path degrades JIM.Web under load | Conservative default threshold (2,500), admin-tunable; per-stage elapsed-time telemetry recorded from v1 to tune with real data |
-| Polling at 1 to 2 seconds adds database load | Single-row reads on an indexed 1:1 table, same class of load as the existing Operations page polling; #307 removes it entirely later |
+| #307/#202 (Effort: High) delay the start of #827 | Accepted trade-off (decided Jul 2026): clearly defined units of work, no polling-first throwaway and no later swap to forget; #288 engine work can proceed in parallel with Phase 0 since neither depends on the other |
+| Dropped LISTEN connection leaves the preview panel stale | #202's graceful-degradation polling fallback; the DB remains the source of truth per #307 |
 | Shared confirmation dialog refactor breaks existing delete flows | Phase 2 migrates the three callers behaviour-preservingly and verifies each flow at runtime in the devcontainer stack |
 | Framework built speculative-shaped, wrong for real surfaces | G5 pilot adapter gates Phase 3 completion; contract only frozen once the pilot ships |
