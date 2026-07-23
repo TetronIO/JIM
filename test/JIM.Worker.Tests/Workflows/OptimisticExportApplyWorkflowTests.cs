@@ -82,7 +82,11 @@ public class OptimisticExportApplyWorkflowTests
     /// Builds the mock DbContext and SyncRepo/JimApplication once ConnectedSystemObjectsData,
     /// PendingExportsData, and ActivitiesData are fully populated for the test.
     /// </summary>
-    private void InitialiseApplication()
+    /// <param name="repositoryOverride">Optional pre-configured <see cref="SyncRepository"/> (or
+    /// subclass) to use instead of a plain instance - lets a test substitute a fake with custom
+    /// persistence behaviour (see <see cref="CrossRunReloadSyncRepository"/>) while still going
+    /// through the same seeding as every other test in this fixture.</param>
+    private void InitialiseApplication(SyncRepository? repositoryOverride = null)
     {
         MockJimDbContext = new Mock<JimDbContext>();
         TestUtilities.SetUpEmptyConnectedSystemGraphMocks(MockJimDbContext);
@@ -97,7 +101,8 @@ public class OptimisticExportApplyWorkflowTests
             .Returns(PendingExportsData.SelectMany(pe => pe.AttributeValueChanges).ToList().BuildMockDbSet().Object);
         MockJimDbContext.Setup(m => m.Activities).Returns(ActivitiesData.BuildMockDbSet().Object);
 
-        SyncRepo = TestUtilities.CreateSyncRepository(csos: ConnectedSystemObjectsData, pendingExports: PendingExportsData, activity: ActivitiesData.First());
+        SyncRepo = TestUtilities.CreateSyncRepository(csos: ConnectedSystemObjectsData, pendingExports: PendingExportsData,
+            activity: ActivitiesData.First(), repository: repositoryOverride);
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
     }
 
@@ -111,6 +116,22 @@ public class OptimisticExportApplyWorkflowTests
                 exports.Select(_ => externalId != null
                     ? ConnectedSystemExportResult.Succeeded(externalId)
                     : ConnectedSystemExportResult.Succeeded()).ToList());
+        return mockConnector;
+    }
+
+    /// <summary>
+    /// A connector whose export attempt always fails, used to simulate "run A" of a cross-run
+    /// retry scenario: the reference resolves and is persisted, but the export attempt itself does
+    /// not succeed, so the Pending Export stays Pending for a later "run B" to retry.
+    /// </summary>
+    private static Mock<IConnector> CreateFailingExportConnector(string errorMessage)
+    {
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Failing Export Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+                exports.Select(_ => ConnectedSystemExportResult.Failed(errorMessage)).ToList());
         return mockConnector;
     }
 
@@ -367,5 +388,165 @@ public class OptimisticExportApplyWorkflowTests
         // Pending Export.
         Assert.That(await SyncRepo.GetPendingExportByConnectedSystemObjectIdAsync(cso.Id), Is.Null,
             "the confirmed Pending Export must have been deleted by reconciliation");
+    }
+
+    /// <summary>
+    /// SPEC-1079B RED test 3 (cross-run retry, in-memory): a Reference change resolved in "run A" -
+    /// whose export attempt then fails, leaving the Pending Export Pending for retry - must still
+    /// resolve <see cref="ConnectedSystemObjectAttributeValue.ReferenceValueId"/> from
+    /// <see cref="PendingExportAttributeValueChange.ResolvedReferenceCsoId"/> when "run B" retries
+    /// it, even though run B reads the Pending Export fresh from
+    /// <see cref="CrossRunReloadSyncRepository"/>'s simulated persistence boundary (a brand new
+    /// clone carrying only whatever fields the fake's persist step actually keeps - exactly what a
+    /// real database does with an unmapped column). TARGET_USER's schema attribute flag for
+    /// secondary external Id exists, but the referenced CSO below carries no value for it, so the
+    /// deleted D5 fallback lookup would find nothing here even before its removal: this is
+    /// deliberately a "no fallback available" scenario (issue #1079 background: "works for every
+    /// connector type, including those with no Secondary External Id concept").
+    /// </summary>
+    [Test]
+    public async Task Workflow_CrossRunRetryAfterFailedExportAttempt_ReferenceValueIdSurvivesPersistedReloadAsync()
+    {
+        // Arrange: the referenced "manager" CSO the deferred reference resolves against.
+        var managerAttr = TargetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var managerMvoId = Guid.NewGuid();
+        var managerCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            Type = TargetUserType,
+            TypeId = TargetUserType.Id,
+            MetaverseObjectId = managerMvoId,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new() { Id = Guid.NewGuid(), Attribute = ObjectGuidAttr, AttributeId = ObjectGuidAttr.Id, GuidValue = Guid.NewGuid() }
+            }
+        };
+        ConnectedSystemObjectsData.Add(managerCso);
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            Type = TargetUserType,
+            TypeId = TargetUserType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+
+        var managerChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportAttributeChangeType.Update,
+            AttributeId = managerAttr.Id,
+            Attribute = managerAttr,
+            UnresolvedReferenceValue = managerMvoId.ToString(),
+            Status = PendingExportAttributeChangeStatus.Pending
+        };
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystem.Id,
+            ConnectedSystem = TargetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            HasUnresolvedReferences = true,
+            CreatedAt = DateTime.UtcNow,
+            MaxRetries = 3,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange> { managerChange }
+        };
+        PendingExportsData.Add(pendingExport);
+
+        ActivitiesData = TestUtilities.GetActivityData(ConnectedSystemRunType.Export, 5);
+        var crossRunRepo = new CrossRunReloadSyncRepository();
+        InitialiseApplication(crossRunRepo);
+        crossRunRepo.SeedMetaverseObject(new MetaverseObject { Id = managerMvoId });
+
+        // Act 1 ("run A"): the deferred reference resolves and is persisted (ProcessDeferredExportsAsync's
+        // PersistResolvedDeferredExports step), but the export attempt itself fails, so the Pending
+        // Export stays Pending - only whatever the persist step actually kept survives into run B.
+        var failingConnector = CreateFailingExportConnector("simulated transient connector fault");
+        await Jim.ExportExecution.ExecuteExportsAsync(TargetSystem, failingConnector.Object, SyncRunMode.PreviewAndSync);
+
+        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Pending),
+            "sanity check: the run A export attempt must have failed and stayed retryable");
+
+        // Simulate the retry backoff having elapsed - wall-clock time is not this test's concern.
+        crossRunRepo.PendingExports[pendingExport.Id].NextRetryAt = null;
+
+        // Act 2 ("run B"): a fresh export attempt against the SAME repository, reading only what
+        // survived the run A persist above.
+        var succeedingConnector = CreateSucceedingExportConnector();
+        await Jim.ExportExecution.ExecuteExportsAsync(TargetSystem, succeedingConnector.Object, SyncRunMode.PreviewAndSync);
+
+        // Assert: optimistic apply resolved the reference purely from the persisted column, with no
+        // fallback lookup available.
+        var appliedManagerValue = cso.AttributeValues.SingleOrDefault(av => av.AttributeId == managerAttr.Id);
+        Assert.That(appliedManagerValue, Is.Not.Null, "the Reference change must have been applied in run B");
+        Assert.That(appliedManagerValue!.ReferenceValueId, Is.EqualTo(managerCso.Id),
+            "ReferenceValueId must survive the persistence boundary between runs without any fallback lookup");
+    }
+
+    /// <summary>
+    /// Simulates the real cross-run persistence boundary (SPEC-1079B RED test 3): every persist
+    /// (<c>UpdatePendingExportsAsync</c>) replaces the stored Pending Export with a clone carrying
+    /// only the fields a real database round-trip actually keeps, via the base class's public
+    /// <c>SeedPendingExport</c>. Deliberately duplicates the shape of
+    /// <c>ExportExecutionTests.PersistenceIsolatingSyncRepository</c> rather than sharing it: both
+    /// are small, file-local test fakes (the established pattern in this test project - see also
+    /// <c>ThrowingOnApplySyncRepository</c>, <c>DifferentCaseDnSyncRepository</c> - one per file
+    /// exercising a different persistence-boundary scenario), and the two scenarios differ (a
+    /// single shared repository across two full <c>ExecuteExportsAsync</c> runs here, versus a
+    /// per-batch re-load within one run there).
+    /// </summary>
+    private sealed class CrossRunReloadSyncRepository : SyncRepository
+    {
+        public override Task UpdatePendingExportsAsync(IEnumerable<PendingExport> pendingExports)
+        {
+            foreach (var pe in pendingExports)
+                SeedPendingExport(ClonePersistedState(pe));
+            return Task.CompletedTask;
+        }
+
+        private static PendingExport ClonePersistedState(PendingExport source)
+        {
+            return new PendingExport
+            {
+                Id = source.Id,
+                ConnectedSystemId = source.ConnectedSystemId,
+                ConnectedSystem = source.ConnectedSystem,
+                ConnectedSystemObject = source.ConnectedSystemObject,
+                ConnectedSystemObjectId = source.ConnectedSystemObjectId,
+                SourceMetaverseObjectId = source.SourceMetaverseObjectId,
+                Status = source.Status,
+                ChangeType = source.ChangeType,
+                CreatedAt = source.CreatedAt,
+                HasUnresolvedReferences = source.HasUnresolvedReferences,
+                MaxRetries = source.MaxRetries,
+                ErrorCount = source.ErrorCount,
+                NextRetryAt = source.NextRetryAt,
+                LastAttemptedAt = source.LastAttemptedAt,
+                AttributeValueChanges = source.AttributeValueChanges.Select(avc => new PendingExportAttributeValueChange
+                {
+                    Id = avc.Id,
+                    PendingExportId = avc.PendingExportId,
+                    AttributeId = avc.AttributeId,
+                    Attribute = avc.Attribute,
+                    ChangeType = avc.ChangeType,
+                    Status = avc.Status,
+                    StringValue = avc.StringValue,
+                    UnresolvedReferenceValue = avc.UnresolvedReferenceValue,
+                    GuidValue = avc.GuidValue,
+                    IntValue = avc.IntValue,
+                    ExportAttemptCount = avc.ExportAttemptCount,
+                    ResolvedReferenceCsoId = avc.ResolvedReferenceCsoId
+                }).ToList()
+            };
+        }
     }
 }

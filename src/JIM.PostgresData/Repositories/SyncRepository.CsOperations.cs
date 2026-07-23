@@ -476,65 +476,6 @@ public partial class SyncRepository
         await writer.CompleteAsync();
     }
 
-    /// <summary>
-    /// Issue #1079 (D5 fallback, regression A): a run-scoped, whole-Connected-System projection of
-    /// secondary external Id value to Connected System Object Id, keyed case-insensitively
-    /// (Distinguished Names are case-insensitive). Raw SQL projection: no entity materialisation, no
-    /// change tracking. Replaces the per-batch paged
-    /// <see cref="ConnectedSystemRepository.GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync"/>
-    /// call, which measured 10-15 seconds per call over an unindexed <c>LOWER()</c> case-folding
-    /// scan of a ~10M-row attribute value table, at 500+ calls in one export run
-    /// (Scale500k25kGroups, 2026-07-21) - and additionally materialised and tracked matched CSOs on
-    /// the worker's long-lived context. Built once per export run instead (~525k tuples, one pass).
-    /// </summary>
-    public async Task<Dictionary<string, Guid>> GetSecondaryExternalIdLookupAsync(int connectedSystemId)
-    {
-        var lookup = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-
-        var connection = _context.Database.GetDbConnection();
-        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
-
-        await using var command = connection.CreateCommand();
-        command.CommandText =
-            """
-            SELECT av."StringValue", av."ConnectedSystemObjectId"
-            FROM "ConnectedSystemObjectAttributeValues" av
-            INNER JOIN "ConnectedSystemObjects" cso
-                ON av."ConnectedSystemObjectId" = cso."Id"
-                AND av."AttributeId" = cso."SecondaryExternalIdAttributeId"
-            WHERE cso."ConnectedSystemId" = @connectedSystemId
-                AND av."StringValue" IS NOT NULL
-            ORDER BY cso."Id"
-            """;
-        var connectedSystemIdParameter = command.CreateParameter();
-        connectedSystemIdParameter.ParameterName = "connectedSystemId";
-        connectedSystemIdParameter.Value = connectedSystemId;
-        command.Parameters.Add(connectedSystemIdParameter);
-
-        // ORDER BY cso."Id" makes "first" well-defined below: on a duplicate secondary external Id
-        // value within the same Connected System, the Connected System Object with the lowest Id
-        // is kept and the rest are ignored (mirrors the tone of the per-value warning that
-        // GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync logs, but as a single
-        // aggregate line - this lookup can cover hundreds of thousands of rows in one pass, so
-        // logging per-duplicate would itself be the kind of per-row overhead this replacement
-        // exists to eliminate).
-        var duplicateCount = 0;
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            if (!lookup.TryAdd(reader.GetString(0), reader.GetGuid(1)))
-                duplicateCount++;
-        }
-
-        if (duplicateCount > 0)
-        {
-            Log.Warning("GetSecondaryExternalIdLookupAsync: Found {DuplicateCount} duplicate secondary external Id value(s) in Connected System {ConnectedSystemId}. Keeping the first Connected System Object encountered for each; the rest were ignored. This indicates duplicate CSOs that should be investigated.",
-                duplicateCount, connectedSystemId);
-        }
-
-        return lookup;
-    }
-
     #endregion
 
     #region Cross-Batch Reference Fixup
@@ -1105,20 +1046,20 @@ public partial class SyncRepository
     /// </summary>
     private async Task BulkInsertPendingExportAttributeValueChangesRawAsync(List<(Guid PendingExportId, PendingExportAttributeValueChange Change)> changes)
     {
-        const int columnsPerRow = 16;
+        const int columnsPerRow = 17;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(changes, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""PendingExportAttributeValueChanges"" (""Id"", ""PendingExportId"", ""AttributeId"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""ByteValue"", ""GuidValue"", ""BoolValue"", ""UnresolvedReferenceValue"", ""ChangeType"", ""Status"", ""ExportAttemptCount"", ""LastExportedAt"", ""LastImportedValue"") VALUES ");
+            sql.Append(@"INSERT INTO ""PendingExportAttributeValueChanges"" (""Id"", ""PendingExportId"", ""AttributeId"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""ByteValue"", ""GuidValue"", ""BoolValue"", ""UnresolvedReferenceValue"", ""ChangeType"", ""Status"", ""ExportAttemptCount"", ""LastExportedAt"", ""LastImportedValue"", ""ResolvedReferenceCsoId"") VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}}, {{{offset + 12}}}, {{{offset + 13}}}, {{{offset + 14}}}, {{{offset + 15}}})");
+                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}}, {{{offset + 12}}}, {{{offset + 13}}}, {{{offset + 14}}}, {{{offset + 15}}}, {{{offset + 16}}})");
 
                 var (pendingExportId, avc) = chunk[i];
                 parameters.Add(avc.Id);
@@ -1137,6 +1078,7 @@ public partial class SyncRepository
                 parameters.Add(avc.ExportAttemptCount);
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.LastExportedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.ResolvedReferenceCsoId, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());

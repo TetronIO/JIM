@@ -120,8 +120,8 @@ public class ExportExecutionTests
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
-        // Optimistic apply's D5 fallback (issue #1079) reads Application.ServiceSettings.GetSyncPageSizeAsync,
-        // which dereferences this DbSet; an empty mock lets it fall back to its default page size
+        // Something in the export path under test dereferences ServiceSettingItems (via
+        // Application.ServiceSettings); an empty mock lets it fall back to its default value
         // instead of throwing NullReferenceException.
         MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(new List<ServiceSetting>().BuildMockDbSet().Object);
 
@@ -2246,14 +2246,15 @@ public class ExportExecutionTests
 
     #endregion
 
-    #region Reference Resolution Transient Stamp (issue #1079)
+    #region Reference Resolution Stamp (issue #1079, persisted per SPEC-1079B)
 
     /// <summary>
     /// Issue #1079 (optimistic export apply): when a deferred export's Reference attribute change
     /// is resolved via TryResolveReferencesFromLookup, the referenced CSO is in hand at that
-    /// moment. The transient ResolvedReferenceCsoId hint must be stamped onto the attribute change
-    /// so optimistic apply can populate ConnectedSystemObjectAttributeValue.ReferenceValueId
-    /// without a further database round-trip.
+    /// moment. ResolvedReferenceCsoId must be stamped onto the attribute change (and, from
+    /// SPEC-1079B, persisted with it) so optimistic apply can populate
+    /// ConnectedSystemObjectAttributeValue.ReferenceValueId without a further database round-trip,
+    /// this run or any later one.
     /// </summary>
     [Test]
     public async Task ExecuteExportsAsync_DeferredReferenceResolves_StampsResolvedReferenceCsoIdAsync()
@@ -2339,8 +2340,8 @@ public class ExportExecutionTests
 
         // Assert
         Assert.That(managerChange.ResolvedReferenceCsoId, Is.EqualTo(managerCso.Id),
-            "Resolving a deferred reference must stamp the transient ResolvedReferenceCsoId hint " +
-            "with the referenced CSO's Id so optimistic apply can use it without a further lookup.");
+            "Resolving a deferred reference must stamp ResolvedReferenceCsoId with the referenced " +
+            "CSO's Id so optimistic apply can use it without a further lookup.");
     }
 
     #endregion
@@ -2712,83 +2713,6 @@ public class ExportExecutionTests
     }
 
     /// <summary>
-    /// Orchestrator review finding #3 (now served by GetSecondaryExternalIdLookupAsync, regression
-    /// A's replacement for the per-batch paged fallback): the D5 fallback dictionary that maps a
-    /// Reference change's Distinguished Name to a resolved CSO Id must match case-insensitively.
-    /// Distinguished Names are case-insensitive (the import's own DN resolution,
-    /// SyncImportTaskProcessor Phase 2, matches case-insensitively for exactly this reason), so a
-    /// stored DN cased differently from the Pending Export's own recorded DN must still resolve.
-    /// </summary>
-    [Test]
-    public async Task ExecuteExportsAsync_DnFallbackLookupReturnsDifferentCase_StillResolvesReferenceValueIdAsync()
-    {
-        // Arrange
-        var caseRepo = new DifferentCaseDnSyncRepository
-        {
-            ReturnedDn = "cn=manager,dc=test"
-        };
-        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: caseRepo);
-        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
-
-        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
-        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
-        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
-
-        var cso = new ConnectedSystemObject
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystemId = targetSystem.Id,
-            Type = targetUserType,
-            TypeId = targetUserType.Id,
-            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
-        };
-        syncRepo.SeedConnectedSystemObject(cso);
-
-        // An immediate (non-deferred) export: the reference was never routed through
-        // TryResolveReferencesFromLookup, so ResolvedReferenceCsoId is unset and this change falls
-        // into the D5 database fallback bucket. The DN is recorded here in a DIFFERENT case than
-        // what the (mocked) repository lookup will return.
-        var managerChange = new PendingExportAttributeValueChange
-        {
-            Id = Guid.NewGuid(),
-            ChangeType = PendingExportAttributeChangeType.Update,
-            AttributeId = managerAttr.Id,
-            Attribute = managerAttr,
-            StringValue = "CN=Manager,DC=Test",
-            Status = PendingExportAttributeChangeStatus.Pending
-        };
-        var pendingExport = new PendingExport
-        {
-            Id = Guid.NewGuid(),
-            ConnectedSystemId = targetSystem.Id,
-            ConnectedSystem = targetSystem,
-            ConnectedSystemObject = cso,
-            ConnectedSystemObjectId = cso.Id,
-            Status = PendingExportStatus.Pending,
-            ChangeType = PendingExportChangeType.Update,
-            CreatedAt = DateTime.UtcNow,
-            AttributeValueChanges = new List<PendingExportAttributeValueChange> { managerChange }
-        };
-        syncRepo.SeedPendingExport(pendingExport);
-
-        var mockConnector = CreateSucceedingCallsConnector();
-
-        // Act
-        await jim.ExportExecution.ExecuteExportsAsync(
-            targetSystem,
-            mockConnector.Object,
-            SyncRunMode.PreviewAndSync);
-
-        // Assert
-        var appliedValue = cso.AttributeValues.SingleOrDefault(av => av.AttributeId == managerAttr.Id);
-        Assert.That(appliedValue, Is.Not.Null, "the Reference change must still have been applied");
-        Assert.That(appliedValue!.UnresolvedReferenceValue, Is.EqualTo("CN=Manager,DC=Test"),
-            "the DN is kept exactly as recorded on the Pending Export");
-        Assert.That(appliedValue.ReferenceValueId, Is.EqualTo(caseRepo.ResolvedCsoId),
-            "a DN differing only in case from the fallback lookup's returned key must still resolve (Distinguished Names are case-insensitive)");
-    }
-
-    /// <summary>
     /// Repository that throws when optimistic apply tries to persist the delta, to prove D7's
     /// failure-containment guarantee (the batch, Pending Export updates, and Activity must not fail).
     /// </summary>
@@ -2798,205 +2722,6 @@ public class ExportExecutionTests
             List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds)
         {
             throw new InvalidOperationException("Simulated optimistic export apply failure");
-        }
-    }
-
-    /// <summary>
-    /// Repository whose D5 fallback lookup (GetSecondaryExternalIdLookupAsync, issue #1079
-    /// regression A) returns the resolved DN in different case than the Pending Export's own
-    /// recorded DN, to prove the lookup still resolves case-insensitively end to end.
-    /// </summary>
-    private sealed class DifferentCaseDnSyncRepository : SyncRepository
-    {
-        public Guid ResolvedCsoId { get; } = Guid.NewGuid();
-
-        public string ReturnedDn { get; set; } = null!;
-
-        public override Task<Dictionary<string, Guid>> GetSecondaryExternalIdLookupAsync(int connectedSystemId)
-        {
-            return Task.FromResult(new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase)
-            {
-                [ReturnedDn] = ResolvedCsoId
-            });
-        }
-    }
-
-    /// <summary>
-    /// Regression A (2026-07-21 scale run, Scale500k25kGroups): the per-batch paged D5 fallback
-    /// (GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync) measured 10-15 seconds per
-    /// call over an unindexed case-folding scan, at 500+ calls across one export run (users exported
-    /// in 32m, then ~26.5k groups took ~149m). GetSecondaryExternalIdLookupAsync must be built ONCE
-    /// per export run and reused across every batch that needs it, not rebuilt per batch.
-    /// </summary>
-    [Test]
-    public async Task ExecuteExportsAsync_MultipleBatchesNeedingFallbackResolution_BuildsSecondaryExternalIdLookupOnceAsync()
-    {
-        // Arrange
-        var resolvedCsoId = Guid.NewGuid();
-        var countingRepo = new CountingSecondaryExternalIdLookupSyncRepository
-        {
-            ReturnValue = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["CN=Manager,DC=Test"] = resolvedCsoId
-            }
-        };
-        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: countingRepo);
-        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
-
-        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
-        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
-        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
-
-        // 6 immediate (non-deferred) exports, each carrying an already-resolved-to-DN Reference
-        // change (mirroring how group Pending Exports arrive at export: member references resolved
-        // to DNs at export evaluation in a prior phase, so ResolvedReferenceCsoId is unset and every
-        // one of them falls into the D5 fallback bucket).
-        const int exportCount = 6;
-        for (var i = 0; i < exportCount; i++)
-        {
-            var cso = new ConnectedSystemObject
-            {
-                Id = Guid.NewGuid(),
-                ConnectedSystemId = targetSystem.Id,
-                Type = targetUserType,
-                TypeId = targetUserType.Id,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
-            };
-            syncRepo.SeedConnectedSystemObject(cso);
-
-            var pendingExport = new PendingExport
-            {
-                Id = Guid.NewGuid(),
-                ConnectedSystemId = targetSystem.Id,
-                ConnectedSystem = targetSystem,
-                ConnectedSystemObject = cso,
-                ConnectedSystemObjectId = cso.Id,
-                Status = PendingExportStatus.Pending,
-                ChangeType = PendingExportChangeType.Update,
-                CreatedAt = DateTime.UtcNow.AddMinutes(i),
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
-                {
-                    new()
-                    {
-                        Id = Guid.NewGuid(),
-                        ChangeType = PendingExportAttributeChangeType.Update,
-                        AttributeId = managerAttr.Id,
-                        Attribute = managerAttr,
-                        StringValue = "CN=Manager,DC=Test",
-                        Status = PendingExportAttributeChangeStatus.Pending
-                    }
-                }
-            };
-            syncRepo.SeedPendingExport(pendingExport);
-        }
-
-        var mockConnector = CreateSucceedingCallsConnector();
-        var options = new ExportExecutionOptions { BatchSize = 2 }; // forces 3 sequential batches
-
-        // Act
-        var result = await jim.ExportExecution.ExecuteExportsAsync(
-            targetSystem,
-            mockConnector.Object,
-            SyncRunMode.PreviewAndSync,
-            options,
-            CancellationToken.None);
-
-        // Assert
-        Assert.That(result.SuccessCount, Is.EqualTo(exportCount));
-        Assert.That(countingRepo.CallCount, Is.EqualTo(1),
-            "the secondary external Id lookup must be built once per export run, not once per batch");
-    }
-
-    /// <summary>
-    /// Regression A, other half: a Connected System whose Pending Exports carry no Reference-type
-    /// changes at all must never build the whole-Connected-System secondary external Id lookup -
-    /// the cheap in-memory probe (CollectUnresolvedReferenceDns) must gate the build so systems
-    /// that never need D5 fallback resolution pay nothing for it.
-    /// </summary>
-    [Test]
-    public async Task ExecuteExportsAsync_NoReferenceChanges_NeverBuildsSecondaryExternalIdLookupAsync()
-    {
-        // Arrange
-        var countingRepo = new CountingSecondaryExternalIdLookupSyncRepository();
-        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: countingRepo);
-        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
-
-        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
-        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
-        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
-
-        const int exportCount = 6;
-        for (var i = 0; i < exportCount; i++)
-        {
-            var cso = new ConnectedSystemObject
-            {
-                Id = Guid.NewGuid(),
-                ConnectedSystemId = targetSystem.Id,
-                Type = targetUserType,
-                TypeId = targetUserType.Id,
-                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
-            };
-            syncRepo.SeedConnectedSystemObject(cso);
-
-            var pendingExport = new PendingExport
-            {
-                Id = Guid.NewGuid(),
-                ConnectedSystemId = targetSystem.Id,
-                ConnectedSystem = targetSystem,
-                ConnectedSystemObject = cso,
-                ConnectedSystemObjectId = cso.Id,
-                Status = PendingExportStatus.Pending,
-                ChangeType = PendingExportChangeType.Update,
-                CreatedAt = DateTime.UtcNow.AddMinutes(i),
-                AttributeValueChanges = new List<PendingExportAttributeValueChange>
-                {
-                    new()
-                    {
-                        Id = Guid.NewGuid(),
-                        ChangeType = PendingExportAttributeChangeType.Update,
-                        AttributeId = displayNameAttr.Id,
-                        Attribute = displayNameAttr,
-                        StringValue = $"Updated Name {i}",
-                        Status = PendingExportAttributeChangeStatus.Pending
-                    }
-                }
-            };
-            syncRepo.SeedPendingExport(pendingExport);
-        }
-
-        var mockConnector = CreateSucceedingCallsConnector();
-        var options = new ExportExecutionOptions { BatchSize = 2 }; // forces 3 sequential batches
-
-        // Act
-        var result = await jim.ExportExecution.ExecuteExportsAsync(
-            targetSystem,
-            mockConnector.Object,
-            SyncRunMode.PreviewAndSync,
-            options,
-            CancellationToken.None);
-
-        // Assert
-        Assert.That(result.SuccessCount, Is.EqualTo(exportCount));
-        Assert.That(countingRepo.CallCount, Is.EqualTo(0),
-            "a Connected System with no Reference-type changes should never build the secondary external Id lookup");
-    }
-
-    /// <summary>
-    /// Repository that counts calls to GetSecondaryExternalIdLookupAsync, to prove it is built once
-    /// per export run (issue #1079 regression A) rather than once per batch.
-    /// </summary>
-    private sealed class CountingSecondaryExternalIdLookupSyncRepository : SyncRepository
-    {
-        private int _callCount;
-
-        public int CallCount => _callCount;
-
-        public Dictionary<string, Guid> ReturnValue { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-
-        public override Task<Dictionary<string, Guid>> GetSecondaryExternalIdLookupAsync(int connectedSystemId)
-        {
-            Interlocked.Increment(ref _callCount);
-            return Task.FromResult(ReturnValue);
         }
     }
 
@@ -3114,7 +2839,8 @@ public class ExportExecutionTests
                     UnresolvedReferenceValue = avc.UnresolvedReferenceValue,
                     GuidValue = avc.GuidValue,
                     IntValue = avc.IntValue,
-                    ExportAttemptCount = avc.ExportAttemptCount
+                    ExportAttemptCount = avc.ExportAttemptCount,
+                    ResolvedReferenceCsoId = avc.ResolvedReferenceCsoId
                 }).ToList()
             };
         }

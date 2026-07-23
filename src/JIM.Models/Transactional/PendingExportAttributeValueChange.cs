@@ -1,24 +1,32 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
-using System.ComponentModel.DataAnnotations.Schema;
 using JIM.Models.Staging;
 namespace JIM.Models.Transactional;
 
 public class PendingExportAttributeValueChange
 {
     /// <summary>
-    /// In-memory only (never persisted): the Id of the Connected System Object that this Reference
-    /// attribute change's Distinguished Name was resolved to, when that resolution happened within
-    /// the current export run (<c>ExportExecutionServer.TryResolveReferencesFromLookup</c>). Used by
-    /// optimistic export apply (issue #1079) to populate
-    /// <see cref="JIM.Models.Staging.ConnectedSystemObjectAttributeValue.ReferenceValueId"/> without a
-    /// further database round-trip. Left null when the reference was already resolved in an earlier
-    /// export run (this run never looked the referenced Connected System Object up, even though
-    /// <see cref="StringValue"/> already holds the resolved Distinguished Name); optimistic apply
-    /// falls back to a batched database lookup in that case.
+    /// The Id of the Connected System Object that this Reference attribute change's Distinguished
+    /// Name was resolved to (<c>ExportExecutionServer.TryResolveReferencesFromLookup</c>), stamped
+    /// at resolution time and persisted from then on. Used by optimistic export apply (issue #1079)
+    /// to populate <see cref="JIM.Models.Staging.ConnectedSystemObjectAttributeValue.ReferenceValueId"/>
+    /// without a further database round-trip, including across a worker restart or a cross-run retry
+    /// (persisting this column is what makes that survive; see SPEC-1079B). Left null when the
+    /// reference has never been resolved by this or an earlier export run.
+    /// <para>
+    /// Deliberately a soft pointer: no foreign key constraint and no index. The only consumer is the
+    /// optimistic apply projection, which is never queried by value, so an index would tax the
+    /// multi-million-row create-wave insert for no read benefit. A foreign key with cascading
+    /// behaviour would also require touching every raw-SQL Connected System Object delete path
+    /// (DB-side update plus tracked-instance fix-up; see src/CLAUDE.md "Raw SQL Writes Must Fix Up or
+    /// Detach Tracked Instances"). A dangling id (the referenced Connected System Object deleted
+    /// between resolution and a later retry) is contained downstream:
+    /// <see cref="JIM.Models.Staging.ConnectedSystemObjectAttributeValue.ReferenceValueId"/> HAS a
+    /// foreign key, so the apply's insert fails, is caught and counted by optimistic apply's failure
+    /// containment, and the confirming import self-heals.
+    /// </para>
     /// </summary>
-    [NotMapped]
     public Guid? ResolvedReferenceCsoId { get; set; }
 
     public Guid Id { get; set; }
