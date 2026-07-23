@@ -379,4 +379,25 @@ public static class Constants
         public const int AuthenticatedRequestsPerMinute = 300;
         public const int UnauthenticatedRequestsPerMinute = 30;
     }
+
+    /// <summary>
+    /// PostgreSQL NOTIFY channel names used for real-time, event-driven updates between JIM services
+    /// (issue #307). Database triggers publish on these channels; services LISTEN on them via a dedicated
+    /// connection. Payloads carry identifiers only; the database remains the source of truth and every
+    /// consumer retains a polling fallback for missed notifications.
+    /// </summary>
+    public static class NotificationChannels
+    {
+        /// <summary>
+        /// Raised when a Worker Task is inserted, changes status, or is deleted (deletion signals terminal
+        /// completion or cancellation). Payload: JSON parseable by <c>WorkerTaskChangeNotification</c>.
+        /// </summary>
+        public const string WorkerTaskChange = "jim_worker_task_change";
+
+        /// <summary>
+        /// Raised when an Activity's progress or status changes (ObjectsProcessed, ObjectsToProcess,
+        /// Message or Status columns). Payload: the Activity id as text.
+        /// </summary>
+        public const string ActivityProgress = "jim_activity_progress";
+    }
 }
