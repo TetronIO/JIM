@@ -259,7 +259,7 @@ Get-JIMMetaverseAttribute -Name <string>
 
 #### Output
 
-Attribute definitions including ID, name, type, and plurality.
+Attribute definitions including ID, name, type, and plurality. Retrieving a single attribute by `-Id` also returns its Object Type bindings and advisory Standard Mappings (SCIM 2.0 and LDAP/AD counterpart attribute names with notes).
 
 #### Examples
 

@@ -65,6 +65,8 @@ Built-in attributes carry **Standard Mappings**: advisory metadata recording how
 
 Standard Mappings are **advisory only**. They exist to power Attribute Flow editor hints, connector wizard default-flow suggestions, and schema documentation; they are never consulted by the synchronisation engine. Your Attribute Flow configuration remains the single source of mapping truth. JIM seeds and maintains the mappings for built-in attributes automatically at service startup.
 
+View a built-in attribute's Standard Mappings from the view action on its row in the Schema area's **Attributes** tab. Custom attributes can carry your own Standard Mappings: add, edit or remove them from the attribute's edit dialog, documenting how organisation-specific attributes correspond to the standards. Changes are audited in the attribute's [configuration change history](activities.md#configuration-change-history), and the mappings are also returned by the REST API's attribute detail endpoint.
+
 ### Custom attributes
 
 Alongside JIM's built-in attributes (which are read-only and cannot be deleted), administrators can create their own **custom attributes** to model organisation-specific data such as `costCentre` or `buildingCode`. Manage them from the **Attributes** tab of the Schema area, or via [PowerShell](../powershell/metaverse.md) and the [REST API](../../api/reference/).

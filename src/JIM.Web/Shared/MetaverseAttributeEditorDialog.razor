@@ -31,25 +31,26 @@
                               ErrorText="@_nameError"
                               Adornment="Adornment.End"
                               AdornmentIcon="@(_checkingName ? Icons.Material.Filled.HourglassEmpty : (_nameError == null && !string.IsNullOrWhiteSpace(_name) ? Icons.Material.Filled.CheckCircle : null))"
-                              AutoFocus="true" />
+                              AutoFocus="@(!ReadOnly)"
+                              Disabled="@ReadOnly" />
 
                 <div class="d-flex gap-4">
                     <MudSelect @bind-Value="_type" T="AttributeDataType" Label="Data Type" Variant="Variant.Outlined"
                                Required="true" RequiredError="A data type is required." Class="flex-grow-1"
-                               Disabled="@(_isEdit && _schemaLocked)">
+                               Disabled="@(ReadOnly || (_isEdit && _schemaLocked))">
                         @foreach (var type in _selectableTypes)
                         {
                             <MudSelectItem Value="type">@type.ToString().SplitOnCapitalLetters()</MudSelectItem>
                         }
                     </MudSelect>
                     <MudSelect @bind-Value="_plurality" T="AttributePlurality" Label="Plurality" Variant="Variant.Outlined"
-                               Required="true" Class="flex-grow-1" Disabled="@(_isEdit && _schemaLocked)">
+                               Required="true" Class="flex-grow-1" Disabled="@(ReadOnly || (_isEdit && _schemaLocked))">
                         <MudSelectItem Value="AttributePlurality.SingleValued">Single-valued</MudSelectItem>
                         <MudSelectItem Value="AttributePlurality.MultiValued">Multi-valued</MudSelectItem>
                     </MudSelect>
                 </div>
 
-                @if (_isEdit && _schemaLocked)
+                @if (!ReadOnly && _isEdit && _schemaLocked)
                 {
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
                         Data Type and Plurality are locked because @_valuesCount Metaverse Object(s) hold a stored value for this attribute. Clear the values first to change the schema.
@@ -59,7 +60,7 @@
                 @if (_plurality == AttributePlurality.MultiValued)
                 {
                     <MudSelect @bind-Value="_renderingHint" T="AttributeRenderingHint" Label="Rendering Hint" Variant="Variant.Outlined"
-                               HelperText="How multi-valued content is displayed on object detail pages.">
+                               HelperText="How multi-valued content is displayed on object detail pages." Disabled="@ReadOnly">
                         <MudSelectItem Value="AttributeRenderingHint.Default">Default (auto)</MudSelectItem>
                         <MudSelectItem Value="AttributeRenderingHint.Table">Table</MudSelectItem>
                         <MudSelectItem Value="AttributeRenderingHint.ChipSet">Chip set</MudSelectItem>
@@ -80,15 +81,126 @@
                         }
                     </MudSelect>
                 }
+
+                @* ─── Standard Mappings ─── *@
+                <div>
+                    <MudText Typo="Typo.subtitle2">Standard Mappings</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Advisory metadata recording how this attribute corresponds to attributes in the SCIM 2.0 and LDAP/AD vocabularies.
+                        Never used by the synchronisation engine; Attribute Flows remain the single source of mapping truth.
+                        @if (ReadOnly)
+                        {
+                            <text> Maintained automatically by JIM for built-in attributes.</text>
+                        }
+                    </MudText>
+                </div>
+
+                @if (_mappings.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">No Standard Mappings.</MudText>
+                }
+                else
+                {
+                    <MudSimpleTable Dense="true">
+                        <thead>
+                            <tr>
+                                <th>Standard</th>
+                                <th>Counterpart Attribute</th>
+                                <th>Notes</th>
+                                @if (!ReadOnly)
+                                {
+                                    <th></th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var mapping in _mappings)
+                            {
+                                <tr>
+                                    <td>@StandardLabel(mapping.Standard)</td>
+                                    <td>@mapping.CounterpartName</td>
+                                    <td>
+                                        @if (string.IsNullOrEmpty(mapping.Notes))
+                                        {
+                                            <EmptyValue />
+                                        }
+                                        else
+                                        {
+                                            @mapping.Notes
+                                        }
+                                    </td>
+                                    @if (!ReadOnly)
+                                    {
+                                        <td>
+                                            <div class="d-flex justify-end">
+                                                <MudTooltip Text="Edit Standard Mapping" Arrow="true" Placement="Placement.Top">
+                                                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" Disabled="@(_editingMapping != null)"
+                                                                   OnClick="@(() => EditMapping(mapping))" />
+                                                </MudTooltip>
+                                                <MudTooltip Text="Remove Standard Mapping" Arrow="true" Placement="Placement.Top">
+                                                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Disabled="@(_editingMapping != null)"
+                                                                   OnClick="@(() => RemoveMapping(mapping))" />
+                                                </MudTooltip>
+                                            </div>
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                }
+
+                @if (!ReadOnly && _editingMapping == null)
+                {
+                    <div>
+                        <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Outlined" OnClick="AddMapping">
+                            Add Standard Mapping
+                        </MudButton>
+                    </div>
+                }
+
+                @if (_editingMapping != null)
+                {
+                    var editingMapping = _editingMapping;
+                    <div class="d-flex gap-4">
+                        <MudSelect @bind-Value="editingMapping.Standard" T="AttributeStandard" Label="Standard" Variant="Variant.Outlined" Class="flex-grow-1">
+                            @foreach (var standard in _selectableStandards)
+                            {
+                                <MudSelectItem Value="standard">@StandardLabel(standard)</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudTextField @bind-Value="editingMapping.CounterpartName" Label="Counterpart Attribute" Variant="Variant.Outlined"
+                                      Immediate="true" Class="flex-grow-1"
+                                      HelperText="The attribute name in the standard's vocabulary, e.g. name.givenName or givenName." />
+                    </div>
+                    <MudTextField @bind-Value="editingMapping.Notes" Label="Notes (optional)" Variant="Variant.Outlined" Immediate="true" />
+                    @if (MappingEditorError() is { } mappingError)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Error">@mappingError</MudText>
+                    }
+                    <div class="d-flex justify-end gap-2">
+                        <MudButton OnClick="CancelMappingEdit">Cancel</MudButton>
+                        <MudButton Color="Color.Primary" Variant="Variant.Outlined" Disabled="@(!CanSaveMapping())" OnClick="SaveMapping">
+                            @(_editingMappingIsNew ? "Add" : "Update")
+                        </MudButton>
+                    </div>
+                }
             </MudStack>
         </MudForm>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="Cancel">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled"
-                   Disabled="@(!CanSubmit())" OnClick="SubmitAsync">
-            @(_isEdit ? "Save Changes" : "Create Attribute")
-        </MudButton>
+        @if (ReadOnly)
+        {
+            <MudButton OnClick="Cancel">Close</MudButton>
+        }
+        else
+        {
+            <MudButton OnClick="Cancel">Cancel</MudButton>
+            <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                       Disabled="@(!CanSubmit())" OnClick="SubmitAsync">
+                @(_isEdit ? "Save Changes" : "Create Attribute")
+            </MudButton>
+        }
     </DialogActions>
 </MudDialog>
 
@@ -104,6 +216,13 @@
     /// </summary>
     [Parameter]
     public MetaverseAttribute? Attribute { get; set; }
+
+    /// <summary>
+    /// When true the dialog is a read-only view: all fields are disabled and nothing can be saved.
+    /// Used to inspect built-in attributes, whose definition and Standard Mappings are maintained by JIM.
+    /// </summary>
+    [Parameter]
+    public bool ReadOnly { get; set; }
 
     private bool _isEdit;
     private bool _formValid;
@@ -127,9 +246,18 @@
 
     private IList<MetaverseObjectType> _objectTypes = new List<MetaverseObjectType>();
 
+    // Working copies of the attribute's Standard Mappings; mutations stay in memory until the dialog saves.
+    private List<MetaverseAttributeStandardMapping> _mappings = new();
+    private MetaverseAttributeStandardMapping? _editingMapping;
+    private bool _editingMappingIsNew;
+    private int _editingMappingIndex = -1;
+
     // NotSet is an internal sentinel, never selectable by an administrator.
     private readonly AttributeDataType[] _selectableTypes =
         Enum.GetValues<AttributeDataType>().Where(t => t != AttributeDataType.NotSet).ToArray();
+
+    private readonly AttributeStandard[] _selectableStandards =
+        Enum.GetValues<AttributeStandard>().Where(s => s != AttributeStandard.NotSet).ToArray();
 
     protected override async Task OnInitializedAsync()
     {
@@ -146,11 +274,18 @@
             _originalType = Attribute.Type;
             _originalPlurality = Attribute.AttributePlurality;
             _originalRenderingHint = Attribute.RenderingHint;
+            _mappings = Attribute.StandardMappings
+                .OrderBy(m => m.Standard).ThenBy(m => m.CounterpartName, StringComparer.Ordinal)
+                .Select(m => new MetaverseAttributeStandardMapping { Standard = m.Standard, CounterpartName = m.CounterpartName, Notes = m.Notes })
+                .ToList();
 
-            // Lock the schema fields when stored values would block a change.
-            var schemaImpact = await jim.Metaverse.EvaluateAttributeSchemaChangeAsync(Attribute);
-            _schemaLocked = schemaImpact.BlockedByValues;
-            _valuesCount = schemaImpact.TotalObjectsWithValues;
+            if (!ReadOnly)
+            {
+                // Lock the schema fields when stored values would block a change.
+                var schemaImpact = await jim.Metaverse.EvaluateAttributeSchemaChangeAsync(Attribute);
+                _schemaLocked = schemaImpact.BlockedByValues;
+                _valuesCount = schemaImpact.TotalObjectsWithValues;
+            }
         }
         else
         {
@@ -158,6 +293,14 @@
             _objectTypes = types?.OrderBy(t => t.Name).ToList() ?? new List<MetaverseObjectType>();
         }
     }
+
+    private static string StandardLabel(AttributeStandard standard) => standard switch
+    {
+        AttributeStandard.Scim => "SCIM 2.0",
+        AttributeStandard.Ldap => "LDAP/AD",
+        AttributeStandard.Jim => "JIM",
+        _ => standard.ToString()
+    };
 
     private string NameForObjectTypeId(int id) =>
         _objectTypes.FirstOrDefault(t => t.Id == id)?.Name ?? id.ToString();
@@ -197,7 +340,11 @@
 
     private bool CanSubmit()
     {
-        if (!_formValid || _checkingName || _nameError != null || string.IsNullOrWhiteSpace(_name))
+        if (ReadOnly || !_formValid || _checkingName || _nameError != null || string.IsNullOrWhiteSpace(_name))
+            return false;
+
+        // A Standard Mapping row mid-edit must be applied or cancelled before the dialog can save.
+        if (_editingMapping != null)
             return false;
 
         // On edit, require at least one actual change.
@@ -211,7 +358,86 @@
         !string.Equals(_name.Trim(), _originalName, StringComparison.Ordinal) ||
         _type != _originalType ||
         _plurality != _originalPlurality ||
-        _renderingHint != _originalRenderingHint;
+        _renderingHint != _originalRenderingHint ||
+        MappingsChanged();
+
+    private bool MappingsChanged()
+    {
+        var original = Attribute?.StandardMappings ?? new List<MetaverseAttributeStandardMapping>();
+        if (original.Count != _mappings.Count)
+            return true;
+
+        return !_mappings.All(m => original.Any(o =>
+            o.Standard == m.Standard &&
+            string.Equals(o.CounterpartName, m.CounterpartName, StringComparison.Ordinal) &&
+            string.Equals(o.Notes ?? string.Empty, m.Notes ?? string.Empty, StringComparison.Ordinal)));
+    }
+
+    private void AddMapping()
+    {
+        _editingMapping = new MetaverseAttributeStandardMapping { Standard = AttributeStandard.Scim, CounterpartName = string.Empty };
+        _editingMappingIsNew = true;
+        _editingMappingIndex = -1;
+    }
+
+    private void EditMapping(MetaverseAttributeStandardMapping mapping)
+    {
+        _editingMapping = new MetaverseAttributeStandardMapping { Standard = mapping.Standard, CounterpartName = mapping.CounterpartName, Notes = mapping.Notes };
+        _editingMappingIsNew = false;
+        _editingMappingIndex = _mappings.IndexOf(mapping);
+    }
+
+    private void RemoveMapping(MetaverseAttributeStandardMapping mapping) => _mappings.Remove(mapping);
+
+    private void CancelMappingEdit()
+    {
+        _editingMapping = null;
+        _editingMappingIndex = -1;
+    }
+
+    /// <summary>
+    /// The single source of the row editor's blocking checks; <see cref="CanSaveMapping"/> gates the button on it.
+    /// </summary>
+    private string? MappingEditorError()
+    {
+        if (_editingMapping == null)
+            return null;
+
+        if (string.IsNullOrWhiteSpace(_editingMapping.CounterpartName))
+            return null; // incomplete rather than wrong; the button stays disabled without shouting
+
+        var trimmed = _editingMapping.CounterpartName.Trim();
+        var duplicate = _mappings
+            .Where((_, index) => index != _editingMappingIndex)
+            .Any(m => m.Standard == _editingMapping.Standard && string.Equals(m.CounterpartName, trimmed, StringComparison.Ordinal));
+        return duplicate ? $"A {StandardLabel(_editingMapping.Standard)} mapping to \"{trimmed}\" already exists." : null;
+    }
+
+    private bool CanSaveMapping() =>
+        _editingMapping != null &&
+        _editingMapping.Standard != AttributeStandard.NotSet &&
+        !string.IsNullOrWhiteSpace(_editingMapping.CounterpartName) &&
+        MappingEditorError() == null;
+
+    private void SaveMapping()
+    {
+        if (_editingMapping == null || !CanSaveMapping())
+            return;
+
+        var saved = new MetaverseAttributeStandardMapping
+        {
+            Standard = _editingMapping.Standard,
+            CounterpartName = _editingMapping.CounterpartName.Trim(),
+            Notes = string.IsNullOrWhiteSpace(_editingMapping.Notes) ? null : _editingMapping.Notes.Trim()
+        };
+
+        if (_editingMappingIndex >= 0 && _editingMappingIndex < _mappings.Count)
+            _mappings[_editingMappingIndex] = saved;
+        else
+            _mappings.Add(saved);
+
+        CancelMappingEdit();
+    }
 
     private async Task SubmitAsync()
     {
@@ -244,6 +470,9 @@
 
                 foreach (var objectTypeId in _selectedObjectTypeIds)
                     await jim.Metaverse.BindAttributeToObjectTypeAsync(attribute.Id, objectTypeId, user, changeReason);
+
+                if (_mappings.Count > 0)
+                    await jim.Metaverse.UpdateMetaverseAttributeStandardMappingsAsync(attribute.Id, _mappings, user, changeReason);
 
                 Snackbar.Add($"Created attribute \"{trimmedName}\".", Severity.Success);
             }
@@ -288,22 +517,28 @@
             }
         }
 
+        // Standard Mappings (full replacement of the advisory metadata).
+        if (MappingsChanged())
+            await jim.Metaverse.UpdateMetaverseAttributeStandardMappingsAsync(attributeId, _mappings, user, changeReason);
+
         Snackbar.Add($"Saved changes to \"{trimmedName}\".", Severity.Success);
     }
 
     private void Cancel() => MudDialog.Cancel();
 
     /// <summary>
-    /// Opens the create/edit dialog. Pass an attribute to edit, or null to create. Returns true when a change was saved.
+    /// Opens the create/edit dialog. Pass an attribute to edit, or null to create; pass readOnly to view an
+    /// attribute (used for built-ins) without any editing affordances. Returns true when a change was saved.
     /// </summary>
-    public static async Task<bool> ShowAsync(IDialogService dialogService, MetaverseAttribute? attribute = null)
+    public static async Task<bool> ShowAsync(IDialogService dialogService, MetaverseAttribute? attribute = null, bool readOnly = false)
     {
         var parameters = new DialogParameters<MetaverseAttributeEditorDialog>
         {
-            { x => x.Attribute, attribute }
+            { x => x.Attribute, attribute },
+            { x => x.ReadOnly, readOnly }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
-        var title = attribute == null ? "New Attribute" : $"Edit \"{attribute.Name}\"";
+        var title = attribute == null ? "New Attribute" : readOnly ? $"View \"{attribute.Name}\"" : $"Edit \"{attribute.Name}\"";
         var dialog = await dialogService.ShowAsync<MetaverseAttributeEditorDialog>(title, parameters, options);
         var result = await dialog.Result;
         return result is { Canceled: false, Data: true };

@@ -317,6 +317,7 @@ public class MetaverseRepository : IMetaverseRepository
     {
         var query = Repository.Database.MetaverseAttributes
             .Include(a => a.MetaverseObjectTypes)
+            .Include(a => a.StandardMappings)
             .AsQueryable();
 
         if (withChangeTracking)
