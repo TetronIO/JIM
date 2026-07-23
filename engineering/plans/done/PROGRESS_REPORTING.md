@@ -1,6 +1,8 @@
 # Event-Based Progress Reporting
 
-- **Status:** Planned
+- **Status:** Done
+- **Issue:** [#307](https://github.com/TetronIO/JIM/issues/307) (foundation), [#202](https://github.com/TetronIO/JIM/issues/202) (run-profile slice)
+- **Note:** Implemented as the #307 real-time foundation: notification triggers, listener, SignalR hub and the migration of the Operations Queue/History tabs and Example Data Template page to push updates. Polling is retained as the designed graceful-degradation fallback (slow reconciliation interval while real-time is available). The Logs page was not migrated (it reads log files, not the Activity table, so the trigger mechanism does not apply). #202's remaining run-profile-specific features (ETA and phase breakdown, operation-type counts, PowerShell live progress, lightweight progress API endpoint) are tracked on that issue.
 > **Milestone**: Post-MVP
 > **Priority**: Medium
 > **Effort**: Medium (3 phases)
@@ -122,7 +124,7 @@ If sub-second CLI updates are ever needed, a Server-Sent Events (SSE) endpoint (
 
 ## Implementation Phases
 
-### Phase 1: PostgreSQL Trigger + Notification Listener Service
+### Phase 1: PostgreSQL Trigger + Notification Listener Service ✅
 
 **PostgreSQL trigger** (EF Core migration):
 - `AFTER UPDATE` trigger on `Activities` table
@@ -140,7 +142,7 @@ If sub-second CLI updates are ever needed, a Server-Sent Events (SSE) endpoint (
 - Unit tests for reconnection logic (mocked connection)
 - Integration test: UPDATE Activity row, verify notification received
 
-### Phase 2: SignalR Hub + Blazor Component Migration
+### Phase 2: SignalR Hub + Blazor Component Migration ✅
 
 **SignalR hub** (`ActivityProgressHub`):
 - `AddSignalR()` in `Program.cs`, `MapHub<ActivityProgressHub>("/hubs/activity-progress")`
@@ -159,7 +161,7 @@ If sub-second CLI updates are ever needed, a Server-Sent Events (SSE) endpoint (
 - Unit tests for hub group management
 - UI smoke testing for each migrated page
 
-### Phase 3: Cleanup + Documentation
+### Phase 3: Cleanup + Documentation ✅
 
 - Remove polling code from migrated components (or retain as documented fallback)
 - Update `DEVELOPER_GUIDE.md` with notification architecture
