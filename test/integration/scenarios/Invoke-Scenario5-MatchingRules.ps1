@@ -1226,18 +1226,39 @@ employeeID: $omjEmployeeId
             try {
                 [System.IO.File]::WriteAllText($omjLdifPath, $omjLdif)
                 docker cp $omjLdifPath "$($DirectoryConfig.ContainerName):/tmp/omj-user.ldif" 2>&1 | Out-Null
-                $omjCreateResult = docker exec $DirectoryConfig.ContainerName ldbadd -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" /tmp/omj-user.ldif 2>&1
-                docker exec $DirectoryConfig.ContainerName rm -f /tmp/omj-user.ldif 2>&1 | Out-Null
-                $omjCreateText = if ($omjCreateResult -is [array]) { $omjCreateResult -join "`n" } else { "$omjCreateResult" }
 
-                if ($omjCreateText -match "Added 1 record" -or ($LASTEXITCODE -eq 0 -and [string]::IsNullOrWhiteSpace($omjCreateText))) {
-                    Write-Host "  ✓ Created out-of-band account $omjSamAccountName in Samba AD (DN: $omjUserDN)" -ForegroundColor Green
+                # A freshly restored domain controller can transiently reject adds during its first
+                # minutes (observed twice at the Nano template, whose Tests 1-6 finish inside that
+                # window; the identical command succeeds on manual re-run once the DC settles).
+                # Retry with backoff, capturing the full ldb output plus a parent-OU probe per
+                # attempt so a persistent failure is diagnosable rather than a one-line mystery.
+                $omjMaxAttempts = 5
+                $omjCreated = $false
+                $omjCreateText = ""
+                for ($omjAttempt = 1; $omjAttempt -le $omjMaxAttempts; $omjAttempt++) {
+                    $omjCreateResult = docker exec $DirectoryConfig.ContainerName ldbadd -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" /tmp/omj-user.ldif 2>&1 | ForEach-Object { "$_" }
+                    $omjCreateText = $omjCreateResult -join "`n"
+
+                    if ($omjCreateText -match "Added 1 record" -or ($LASTEXITCODE -eq 0 -and [string]::IsNullOrWhiteSpace($omjCreateText))) {
+                        Write-Host "  ✓ Created out-of-band account $omjSamAccountName in Samba AD (DN: $omjUserDN)" -ForegroundColor Green
+                        $omjCreated = $true
+                        break
+                    }
+                    if ($omjCreateText -match "already exists") {
+                        Write-Host "  Out-of-band account $omjSamAccountName already exists" -ForegroundColor Yellow
+                        $omjCreated = $true
+                        break
+                    }
+
+                    $omjParentProbe = (docker exec $DirectoryConfig.ContainerName ldbsearch -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" -b "OU=$omjDepartment,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" -s base dn 2>&1 | ForEach-Object { "$_" }) -join "`n"
+                    Write-Host "  Attempt $omjAttempt/$omjMaxAttempts to create out-of-band account failed: $omjCreateText" -ForegroundColor Yellow
+                    Write-Host "  Parent OU probe: $omjParentProbe" -ForegroundColor Yellow
+                    if ($omjAttempt -lt $omjMaxAttempts) { Start-Sleep -Seconds 5 }
                 }
-                elseif ($omjCreateText -match "already exists") {
-                    Write-Host "  Out-of-band account $omjSamAccountName already exists" -ForegroundColor Yellow
-                }
-                else {
-                    throw "Failed to create out-of-band Samba AD account via ldbadd: $omjCreateText"
+                docker exec $DirectoryConfig.ContainerName rm -f /tmp/omj-user.ldif 2>&1 | Out-Null
+
+                if (-not $omjCreated) {
+                    throw "Failed to create out-of-band Samba AD account via ldbadd after $omjMaxAttempts attempts: $omjCreateText"
                 }
             }
             finally {
