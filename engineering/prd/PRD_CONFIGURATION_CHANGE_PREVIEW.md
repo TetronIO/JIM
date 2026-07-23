@@ -192,11 +192,11 @@ The core scenario governs the whole framework; the rest exercise specific surfac
 
 ## Acceptance Criteria
 
-- [ ] Framework design agreed (this PRD reviewed and approved)
-- [ ] Implementation plan generated from this PRD (adapter contract, result schema, dispatch, notification abstraction, UI shell) and approved
+- [x] Framework design agreed (this PRD reviewed and approved, Jul 2026)
+- [x] Implementation plan generated from this PRD (adapter contract, result schema, dispatch, notification abstraction, UI shell) and approved (Jul 2026: [`engineering/plans/CONFIGURATION_CHANGE_PREVIEW.md`](../plans/CONFIGURATION_CHANGE_PREVIEW.md))
 - [ ] Per-surface adapter issues split out in severity order: G5 and G3-destructive first, then G4, then G1/G2, then G6 and remaining toggles; #204, #134, #421, #91 mode 2 re-scoped as adapter issues
 - [ ] Interim apply-time messaging delivered as an early phase of the framework implementation plan, covering all surfaces awaiting adapters
-- [ ] #307/#202 alignment recorded on those issues (notification abstraction shape, upgrade path)
+- [x] #307/#202 alignment recorded on those issues (Jul 2026: #307 blocks #827; sequencing and notifier contract recorded on #307 and in the implementation plan)
 
 ## Additional Context
 
