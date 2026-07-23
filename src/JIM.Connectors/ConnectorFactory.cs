@@ -38,7 +38,7 @@ public class ConnectorFactory : IConnectorFactory
             return new LdapConnector();
         if (connectorName == ConnectorConstants.FileConnectorName)
             return new FileConnector();
-        if (connectorName == ConnectorConstants.Scim2ConnectorName)
+        if (connectorName == ConnectorConstants.ScimClientConnectorName)
             return new ScimConnector();
 
         throw new NotSupportedException(

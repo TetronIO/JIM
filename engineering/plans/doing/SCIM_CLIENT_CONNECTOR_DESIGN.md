@@ -104,6 +104,7 @@ Decisions from the July 2026 joint review of this plan and [`SCIM_SERVER_DESIGN.
 - **One flattening convention, owned by `JIM.Scim`:** canonical-type flattening (`emails.work`, `emails.primary` from the `primary=true` entry) applies on both sides; the server design's first-entry-wins sketch is superseded.
 - **JIM-to-JIM SCIM round-trip is an explicit compatibility goal:** this connector pointed at JIM's own SCIM 2.0 Service Provider must achieve paginated full import, `LastModifiedFilter` delta import and `ETagConditional` change detection (see Success Criteria). This also eventually provides a first-party integration-test harness.
 - **Metaverse mapping targets:** the [`METAVERSE_SCHEMA_POLICY.md`](../METAVERSE_SCHEMA_POLICY.md) gap attributes (Emails, Account Enabled, etc.) and advisory standard-mapping metadata should land before or alongside Phase 7, so this connector ships with clean flow targets and wizard hints.
+- **Naming (confirmed):** the pair is named by JIM's role in the exchange, per RFC 7644 terms: this connector is **"JIM SCIM 2.0 Client Connector"**, the inbound server's pseudo-connector is **"JIM SCIM 2.0 Service Provider Connector"**. Both constants are registered in `ConnectorConstants`; descriptions carry the direction ("JIM acts as the SCIM client, connecting out to the service provider").
 
 ## Implementation Phases
 

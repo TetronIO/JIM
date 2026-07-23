@@ -32,9 +32,9 @@ public class ScimConnectorTests
     #region IConnector members
 
     [Test]
-    public void Name_ReturnsScim2ConnectorConstant()
+    public void Name_ReturnsScimClientConnectorConstant()
     {
-        Assert.That(_connector.Name, Is.EqualTo(ConnectorConstants.Scim2ConnectorName));
+        Assert.That(_connector.Name, Is.EqualTo(ConnectorConstants.ScimClientConnectorName));
     }
 
     #endregion

@@ -54,13 +54,20 @@ public class ConnectorFactoryTests
     }
 
     [Test]
-    public void Create_Scim2ConnectorName_ReturnsScimConnector()
+    public void Create_ScimClientConnectorName_ReturnsScimConnector()
     {
         // Act
-        var connector = _connectorFactory.Create(ConnectorConstants.Scim2ConnectorName);
+        var connector = _connectorFactory.Create(ConnectorConstants.ScimClientConnectorName);
 
         // Assert
         Assert.That(connector, Is.InstanceOf<ScimConnector>());
+    }
+
+    [Test]
+    public void Create_ScimServiceProviderConnectorName_ThrowsNotSupportedException()
+    {
+        // Act & Assert: the constant exists in ConnectorConstants but no built-in implementation exists yet (#124).
+        Assert.Throws<NotSupportedException>(() => _connectorFactory.Create(ConnectorConstants.ScimServiceProviderConnectorName));
     }
 
     [Test]

@@ -14,9 +14,9 @@ namespace JIM.Connectors.SCIM;
 public class ScimConnector : IConnector, IConnectorCapabilities, IConnectorSettings
 {
     #region IConnector members
-    public string Name => ConnectorConstants.Scim2ConnectorName;
+    public string Name => ConnectorConstants.ScimClientConnectorName;
 
-    public string? Description => "Enables bi-directional synchronisation with any system that exposes a SCIM 2.0 service provider interface.";
+    public string? Description => "Enables bi-directional synchronisation with any system that exposes a SCIM 2.0 service provider interface. JIM acts as the SCIM client, connecting out to the service provider.";
 
     public string? Url => "https://github.com/TetronIO/JIM";
     #endregion
