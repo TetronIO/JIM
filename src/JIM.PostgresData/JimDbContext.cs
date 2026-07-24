@@ -462,6 +462,14 @@ public class JimDbContext : DbContext
             .HasIndex(pe => new { pe.ConnectedSystemId, pe.Status })
             .HasDatabaseName("IX_PendingExports_ConnectedSystemId_Status");
 
+        // PendingExport: partial index for the deferred-reference second pass (#1102).
+        // Rows with unresolved references are rare (usually zero), so the partial index
+        // keeps the common no-deferred-exports probe near-free at any scale.
+        modelBuilder.Entity<PendingExport>()
+            .HasIndex(pe => pe.ConnectedSystemId)
+            .HasDatabaseName("IX_PendingExports_ConnectedSystemId_HasUnresolvedReferences")
+            .HasFilter("\"HasUnresolvedReferences\"");
+
         // PendingExport: composite index supporting keyset pagination in export batch collection
         // (ORDER BY CreatedAt, Id with a (CreatedAt, Id) > (cursor) predicate; issue #985).
         modelBuilder.Entity<PendingExport>()

@@ -432,6 +432,15 @@ public interface ISyncRepository
     Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
 
     /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
+    /// reference resolution: Pending status with unresolved reference attribute values.
+    /// The predicate is evaluated in SQL (backed by a partial index on
+    /// HasUnresolvedReferences) so the common zero-deferred case costs a single
+    /// index probe rather than hydrating every Pending Export for the system (#1102).
+    /// </summary>
+    Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId);
+
+    /// <summary>
     /// Gets the count of Pending Exports for a Connected System.
     /// Used by the export processor to determine paging.
     /// </summary>
