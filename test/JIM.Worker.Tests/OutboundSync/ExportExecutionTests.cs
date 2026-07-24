@@ -120,6 +120,10 @@ public class ExportExecutionTests
         MockJimDbContext.Setup(m => m.MetaverseObjects).Returns(MockDbSetMetaverseObjects.Object);
         MockJimDbContext.Setup(m => m.PendingExports).Returns(MockDbSetPendingExports.Object);
         MockJimDbContext.Setup(m => m.SyncRules).Returns(MockDbSetSyncRules.Object);
+        // Something in the export path under test dereferences ServiceSettingItems (via
+        // Application.ServiceSettings); an empty mock lets it fall back to its default value
+        // instead of throwing NullReferenceException.
+        MockJimDbContext.Setup(m => m.ServiceSettingItems).Returns(new List<ServiceSetting>().BuildMockDbSet().Object);
 
         // Instantiate Jim using the mocked db context
         SyncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First());
@@ -2242,6 +2246,487 @@ public class ExportExecutionTests
 
     #endregion
 
+    #region Reference Resolution Stamp (issue #1079, persisted per SPEC-1079B)
+
+    /// <summary>
+    /// Issue #1079 (optimistic export apply): when a deferred export's Reference attribute change
+    /// is resolved via TryResolveReferencesFromLookup, the referenced CSO is in hand at that
+    /// moment. ResolvedReferenceCsoId must be stamped onto the attribute change (and, from
+    /// SPEC-1079B, persisted with it) so optimistic apply can populate
+    /// ConnectedSystemObjectAttributeValue.ReferenceValueId without a further database round-trip,
+    /// this run or any later one.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeferredReferenceResolves_StampsResolvedReferenceCsoIdAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+
+        // The referenced CSO (the "manager") that the deferred reference resolves to.
+        var managerMvoId = Guid.NewGuid();
+        SyncRepo.SeedMetaverseObject(new MetaverseObject { Id = managerMvoId });
+        var managerCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObjectId = managerMvoId,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Attribute = objectGuidAttr,
+                    AttributeId = objectGuidAttr.Id,
+                    GuidValue = Guid.NewGuid()
+                }
+            }
+        };
+        SyncRepo.SeedConnectedSystemObject(managerCso);
+
+        // The CSO with the deferred (unresolved) reference to the manager.
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+        SyncRepo.SeedConnectedSystemObject(cso);
+
+        var managerChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportAttributeChangeType.Update,
+            AttributeId = managerAttr.Id,
+            Attribute = managerAttr,
+            UnresolvedReferenceValue = managerMvoId.ToString(),
+            Status = PendingExportAttributeChangeStatus.Pending
+        };
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            HasUnresolvedReferences = true,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange> { managerChange }
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+                exports.Select(_ => ConnectedSystemExportResult.Succeeded()).ToList());
+
+        // Act
+        await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert
+        Assert.That(managerChange.ResolvedReferenceCsoId, Is.EqualTo(managerCso.Id),
+            "Resolving a deferred reference must stamp ResolvedReferenceCsoId with the referenced " +
+            "CSO's Id so optimistic apply can use it without a further lookup.");
+    }
+
+    #endregion
+
+    #region Optimistic Export Apply (issue #1079)
+
+    /// <summary>
+    /// Issue #1079: on export success, the exported attribute values are applied to the CSO's
+    /// in-memory AttributeValues (D10), so the confirming import's diff finds them already present.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_SuccessfulUpdateExport_AppliesValuesToInMemoryCsoAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            Status = ConnectedSystemObjectStatus.Normal,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+        SyncRepo.SeedConnectedSystemObject(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Applied Name",
+                    Status = PendingExportAttributeChangeStatus.Pending
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = CreateSucceedingCallsConnector();
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert
+        Assert.That(cso.AttributeValues.Any(av => av.AttributeId == displayNameAttr.Id && av.StringValue == "Applied Name"), Is.True,
+            "the exported value must be applied to the CSO's in-memory AttributeValues");
+        Assert.That(result.OptimisticApplyAppliedCount, Is.EqualTo(1));
+        Assert.That(cso.LastUpdated, Is.Null, "optimistic apply must never stamp LastUpdated (D2)");
+        Assert.That(cso.Status, Is.EqualTo(ConnectedSystemObjectStatus.Normal), "optimistic apply must never touch parent CSO fields (D2)");
+    }
+
+    /// <summary>
+    /// Issue #1079 (D7): a failure during optimistic apply must be swallowed, logged, and must
+    /// never fail the batch, the Pending Export updates, or the Activity - the export itself
+    /// already succeeded against the Connected System.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_OptimisticApplyThrows_SwallowsFailureAndDoesNotFailBatchAsync()
+    {
+        // Arrange
+        var throwingRepo = new ThrowingOnApplySyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: throwingRepo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        syncRepo.SeedConnectedSystemObject(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Doomed Name",
+                    Status = PendingExportAttributeChangeStatus.Pending
+                }
+            }
+        };
+        syncRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = CreateSucceedingCallsConnector();
+
+        // Act
+        var result = await jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert: the export itself still succeeded despite optimistic apply throwing.
+        Assert.That(result.SuccessCount, Is.EqualTo(1));
+        Assert.That(result.FailedCount, Is.EqualTo(0));
+        Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Exported));
+        Assert.That(result.OptimisticApplyFailedCount, Is.EqualTo(1));
+        Assert.That(cso.AttributeValues, Is.Empty, "a failed apply must leave the CSO untouched, not partially applied");
+    }
+
+    /// <summary>
+    /// Issue #1079 (D6): Delete-ChangeType Pending Exports are skipped entirely by optimistic
+    /// apply; the CSO obsolete/delete lifecycle owns that path.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeleteChangeTypeExport_DoesNotApplyAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+        SyncRepo.SeedConnectedSystemObject(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Delete,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>()
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = CreateSucceedingCallsConnector();
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert
+        Assert.That(result.SuccessCount, Is.EqualTo(1));
+        Assert.That(result.OptimisticApplyAppliedCount, Is.EqualTo(0));
+        Assert.That(result.OptimisticApplySkippedCount, Is.EqualTo(1));
+        Assert.That(cso.AttributeValues, Is.Empty);
+    }
+
+    /// <summary>
+    /// Issue #1079: Preview mode short circuits before execution, so optimistic apply must never run.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_PreviewOnlyMode_DoesNotApplyAsync()
+    {
+        // Arrange
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        ConnectedSystemObjectsData.Add(cso);
+        SyncRepo.SeedConnectedSystemObject(cso);
+
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    AttributeId = displayNameAttr.Id,
+                    Attribute = displayNameAttr,
+                    StringValue = "Should Not Apply",
+                    Status = PendingExportAttributeChangeStatus.Pending
+                }
+            }
+        };
+        PendingExportsData.Add(pendingExport);
+        SyncRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = new Mock<IConnector>();
+        mockConnector.Setup(c => c.Name).Returns("Test Connector");
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewOnly);
+
+        // Assert
+        Assert.That(cso.AttributeValues, Is.Empty);
+        Assert.That(result.OptimisticApplyAppliedCount, Is.EqualTo(0));
+    }
+
+    /// <summary>
+    /// Orchestrator review finding #1: ProcessBatchesInParallelAsync's result aggregation lock
+    /// only copied SuccessCount/FailedCount/DeferredCount/ProcessedExportItems/
+    /// CreatedContainerExternalIds from each batch's own ExportExecutionResult into the shared
+    /// result, silently dropping the four OptimisticApply* counters whenever exports ran via the
+    /// parallel path (deferred references resolved, MaxParallelism &gt; 1). The end-of-run summary
+    /// log line must be truthful (Synchronisation Integrity: log summary statistics at the end of
+    /// every batch operation), so a parallel run's counters must match what actually happened.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_ParallelDeferredBatches_AggregatesOptimisticApplyCountersAsync()
+    {
+        // Arrange: 4 deferred (reference-bearing) exports, batch size 2 -> 2 batches, so once
+        // references resolve, ProcessDeferredExportsAsync routes them through the parallel path.
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var displayNameAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.DisplayName.ToString());
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+        var objectGuidAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.ObjectGuid.ToString());
+
+        // The referenced CSO the Manager reference on each export resolves against.
+        var managerMvoId = Guid.NewGuid();
+        SyncRepo.SeedMetaverseObject(new MetaverseObject { Id = managerMvoId });
+        var managerCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObjectId = managerMvoId,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new() { Id = Guid.NewGuid(), Attribute = objectGuidAttr, AttributeId = objectGuidAttr.Id, GuidValue = Guid.NewGuid() }
+            }
+        };
+        SyncRepo.SeedConnectedSystemObject(managerCso);
+
+        const int exportCount = 4;
+        var csos = new List<ConnectedSystemObject>();
+        for (var i = 0; i < exportCount; i++)
+        {
+            var cso = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                Type = targetUserType,
+                TypeId = targetUserType.Id,
+                AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+            };
+            ConnectedSystemObjectsData.Add(cso);
+            SyncRepo.SeedConnectedSystemObject(cso);
+            csos.Add(cso);
+
+            var pe = new PendingExport
+            {
+                Id = Guid.NewGuid(),
+                ConnectedSystemId = targetSystem.Id,
+                ConnectedSystem = targetSystem,
+                ConnectedSystemObject = cso,
+                ConnectedSystemObjectId = cso.Id,
+                Status = PendingExportStatus.Pending,
+                ChangeType = PendingExportChangeType.Update,
+                HasUnresolvedReferences = true,
+                CreatedAt = DateTime.UtcNow.AddMinutes(i),
+                AttributeValueChanges = new List<PendingExportAttributeValueChange>
+                {
+                    new()
+                    {
+                        Id = Guid.NewGuid(), ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = displayNameAttr.Id, Attribute = displayNameAttr, StringValue = $"Parallel User {i}",
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    },
+                    new()
+                    {
+                        Id = Guid.NewGuid(), ChangeType = PendingExportAttributeChangeType.Update,
+                        AttributeId = managerAttr.Id, Attribute = managerAttr, UnresolvedReferenceValue = managerMvoId.ToString(),
+                        Status = PendingExportAttributeChangeStatus.Pending
+                    }
+                }
+            };
+            PendingExportsData.Add(pe);
+            SyncRepo.SeedPendingExport(pe);
+        }
+
+        var primaryConnector = CreateSucceedingCallsConnector();
+        Func<IConnector> connectorFactory = () => CreateSucceedingCallsConnector().Object;
+        Func<JIM.Data.Repositories.ISyncRepositoryScope> repositoryFactory = () =>
+            new JIM.Data.Repositories.SyncRepositoryScope(TestUtilities.CreateSyncRepository(pendingExports: PendingExportsData));
+
+        var options = new ExportExecutionOptions
+        {
+            BatchSize = 2,
+            MaxParallelism = 2
+        };
+
+        // Act
+        var result = await Jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            primaryConnector.Object,
+            SyncRunMode.PreviewAndSync,
+            options,
+            CancellationToken.None,
+            connectorFactory: connectorFactory,
+            repositoryFactory: repositoryFactory);
+
+        // Assert
+        Assert.That(result.SuccessCount, Is.EqualTo(exportCount));
+        Assert.That(result.OptimisticApplyAppliedCount, Is.EqualTo(exportCount),
+            "the parallel path must aggregate OptimisticApplyAppliedCount from each batch's own result, not drop it");
+        foreach (var cso in csos)
+        {
+            Assert.That(cso.AttributeValues.Any(av => av.AttributeId == displayNameAttr.Id), Is.True,
+                "optimistic apply must actually have run for each parallel batch (the counter is not just coincidentally right)");
+        }
+    }
+
+    /// <summary>
+    /// Repository that throws when optimistic apply tries to persist the delta, to prove D7's
+    /// failure-containment guarantee (the batch, Pending Export updates, and Activity must not fail).
+    /// </summary>
+    private sealed class ThrowingOnApplySyncRepository : SyncRepository
+    {
+        public override Task ApplyExportedAttributeValuesAsync(
+            List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds)
+        {
+            throw new InvalidOperationException("Simulated optimistic export apply failure");
+        }
+    }
+
+    #endregion
+
     #region batch scan efficiency (issue #985)
 
     /// <summary>
@@ -2354,7 +2839,8 @@ public class ExportExecutionTests
                     UnresolvedReferenceValue = avc.UnresolvedReferenceValue,
                     GuidValue = avc.GuidValue,
                     IntValue = avc.IntValue,
-                    ExportAttemptCount = avc.ExportAttemptCount
+                    ExportAttemptCount = avc.ExportAttemptCount,
+                    ResolvedReferenceCsoId = avc.ResolvedReferenceCsoId
                 }).ToList()
             };
         }

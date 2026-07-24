@@ -222,6 +222,107 @@ public class SyncRepositoryCsoReadTests
 
     #endregion
 
+    #region Release safety (#1079 Regression B)
+
+    // ObsoleteConnectedSystemObjectAsync (deletion detection during confirming import) hydrates
+    // via GetConnectedSystemObjectByAttributeAsync and adds the result to the update-path working
+    // set, whose AttributeValues later get released once persisted. Every single-CSO getter on
+    // this repository must therefore hand back an independent instance, exactly like
+    // GetConnectedSystemObjectsByIdsAsync - otherwise that release empties the store's own copy.
+
+    [Test]
+    public async Task GetConnectedSystemObjectAsync_CallerReleasesAttributeValues_StoreCopyUnaffectedAsync()
+    {
+        var csoId = Guid.NewGuid();
+        var cso = CreateCso(id: csoId);
+        cso.AttributeValues.Add(CreateAv(AttrId, stringValue: "original-value"));
+        _repo.SeedConnectedSystemObject(cso);
+
+        var hydrated = await _repo.GetConnectedSystemObjectAsync(CsId, csoId);
+        hydrated!.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+
+        var reread = await _repo.GetConnectedSystemObjectAsync(CsId, csoId);
+        Assert.That(reread!.AttributeValues, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectByAttributeAsync_Int_CallerReleasesAttributeValues_StoreCopyUnaffectedAsync()
+    {
+        var cso = CreateCso();
+        cso.AttributeValues.Add(CreateAv(AttrId, intValue: 42));
+        _repo.SeedConnectedSystemObject(cso);
+
+        var hydrated = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, 42);
+        hydrated!.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+
+        var reread = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, 42);
+        Assert.That(reread, Is.Not.Null);
+        Assert.That(reread!.AttributeValues, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectByAttributeAsync_String_CallerReleasesAttributeValues_StoreCopyUnaffectedAsync()
+    {
+        var cso = CreateCso();
+        cso.AttributeValues.Add(CreateAv(AttrId, stringValue: "john.doe"));
+        _repo.SeedConnectedSystemObject(cso);
+
+        var hydrated = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, "john.doe");
+        hydrated!.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+
+        var reread = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, "john.doe");
+        Assert.That(reread, Is.Not.Null);
+        Assert.That(reread!.AttributeValues, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectByAttributeAsync_Guid_CallerReleasesAttributeValues_StoreCopyUnaffectedAsync()
+    {
+        var guidVal = Guid.NewGuid();
+        var cso = CreateCso();
+        cso.AttributeValues.Add(CreateAv(AttrId, guidValue: guidVal));
+        _repo.SeedConnectedSystemObject(cso);
+
+        var hydrated = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, guidVal);
+        hydrated!.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+
+        var reread = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, guidVal);
+        Assert.That(reread, Is.Not.Null);
+        Assert.That(reread!.AttributeValues, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectByAttributeAsync_Long_CallerReleasesAttributeValues_StoreCopyUnaffectedAsync()
+    {
+        var cso = CreateCso();
+        cso.AttributeValues.Add(CreateAv(AttrId, longValue: 123456789L));
+        _repo.SeedConnectedSystemObject(cso);
+
+        var hydrated = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, 123456789L);
+        hydrated!.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+
+        var reread = await _repo.GetConnectedSystemObjectByAttributeAsync(CsId, AttrId, 123456789L);
+        Assert.That(reread, Is.Not.Null);
+        Assert.That(reread!.AttributeValues, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync_CallerReleasesAttributeValues_StoreCopyUnaffectedAsync()
+    {
+        var cso = CreateCso(secondaryExternalIdAttributeId: SecondaryAttrId);
+        cso.AttributeValues.Add(CreateAv(SecondaryAttrId, stringValue: "DN123"));
+        _repo.SeedConnectedSystemObject(cso);
+
+        var hydrated = await _repo.GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(CsId, "DN123");
+        hydrated!.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+
+        var reread = await _repo.GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(CsId, "DN123");
+        Assert.That(reread, Is.Not.Null);
+        Assert.That(reread!.AttributeValues, Has.Count.EqualTo(1));
+    }
+
+    #endregion
+
     #region Secondary External ID
 
     [Test]
@@ -244,6 +345,29 @@ public class SyncRepositoryCsoReadTests
 
         var result = await _repo.GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(CsId, "DN123");
         Assert.That(result, Is.Not.Null);
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectBySecondaryExternalIdAsync_CallerReleasesAttributeValues_StoreCopyUnaffectedAsync()
+    {
+        // This is the confirming import's PendingProvisioning fallback lookup path
+        // (SyncImportTaskProcessor.HydrateCsoAsync), which - like GetConnectedSystemObjectsByIdsAsync -
+        // must hand back an independent instance, not the store's live one. #1079 Regression B: a
+        // provisioned CSO found only via this secondary external ID lookup (not the page-hydration
+        // dictionary) had its AttributeValues wiped from the STORE itself when the import processor
+        // released its working copy after persisting, because both were the same object.
+        var cso = CreateCso(secondaryExternalIdAttributeId: SecondaryAttrId);
+        cso.AttributeValues.Add(CreateAv(SecondaryAttrId, stringValue: "CN=John,DC=test"));
+        _repo.SeedConnectedSystemObject(cso);
+
+        var hydrated = await _repo.GetConnectedSystemObjectBySecondaryExternalIdAsync(CsId, ObjectTypeId, "CN=John,DC=test");
+        hydrated!.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+
+        var reread = await _repo.GetConnectedSystemObjectBySecondaryExternalIdAsync(CsId, ObjectTypeId, "CN=John,DC=test");
+        Assert.That(reread, Is.Not.Null,
+            "The store's own secondary external ID value must survive a caller releasing its hydrated clone's AttributeValues.");
+        Assert.That(reread!.AttributeValues, Has.Count.EqualTo(1),
+            "The store's own AttributeValues must survive a caller releasing its hydrated clone's list.");
     }
 
     #endregion
@@ -277,6 +401,46 @@ public class SyncRepositoryCsoReadTests
         var result = await _repo.GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(
             CsId, new[] { "DN1", "DN2" });
         Assert.That(result, Has.Count.EqualTo(1));
+    }
+
+    #endregion
+
+    #region Hydration Independence (#1079 Regression B)
+
+    [Test]
+    public async Task GetConnectedSystemObjectsByIdsAsync_CallerReleasesAttributeValues_StoreCopyUnaffectedAsync()
+    {
+        // Guards against a caller (e.g. SyncImportTaskProcessor bounding memory at import scale,
+        // #1079 Regression B) reassigning its hydrated CSO's AttributeValues to a fresh empty list
+        // after use. That must not be visible to any other reader of the store: the hydrated
+        // instance needs its own AttributeValues list, not the store's live one.
+        var cso = CreateCso();
+        cso.AttributeValues.Add(CreateAv(AttrId, stringValue: "original-value"));
+        _repo.SeedConnectedSystemObject(cso);
+
+        var hydrated = await _repo.GetConnectedSystemObjectsByIdsAsync(CsId, new[] { cso.Id });
+        var hydratedCso = hydrated.Single();
+
+        // Simulate the caller releasing its working copy once it's finished with the values.
+        hydratedCso.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+
+        var reread = await _repo.GetConnectedSystemObjectsByIdsAsync(CsId, new[] { cso.Id });
+        Assert.That(reread.Single().AttributeValues, Has.Count.EqualTo(1),
+            "The store's own AttributeValues must survive a caller releasing its hydrated clone's list.");
+    }
+
+    [Test]
+    public async Task GetConnectedSystemObjectsByIdsNoTrackingAsync_CallerReleasesAttributeValues_StoreCopyUnaffectedAsync()
+    {
+        var cso = CreateCso();
+        cso.AttributeValues.Add(CreateAv(AttrId, stringValue: "original-value"));
+        _repo.SeedConnectedSystemObject(cso);
+
+        var hydrated = await _repo.GetConnectedSystemObjectsByIdsNoTrackingAsync(CsId, new[] { cso.Id });
+        hydrated.Single().AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+
+        var reread = await _repo.GetConnectedSystemObjectsByIdsNoTrackingAsync(CsId, new[] { cso.Id });
+        Assert.That(reread.Single().AttributeValues, Has.Count.EqualTo(1));
     }
 
     #endregion
