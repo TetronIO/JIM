@@ -771,9 +771,8 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public virtual Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds)
     {
-        foreach (var csoId in affectedCsoIds.Where(_csos.ContainsKey))
+        foreach (var cso in affectedCsoIds.Where(_csos.ContainsKey).Select(id => _csos[id]))
         {
-            var cso = _csos[csoId];
             cso.ImportStateHash = null;
             cso.ImportStateFingerprint = null;
         }

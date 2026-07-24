@@ -2015,12 +2015,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         const int columnsPerRow = 3; // Id, Hash, Fingerprint
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
+        var sql = new System.Text.StringBuilder();
+        var parameters = new List<object>();
         foreach (var chunk in BulkSqlHelpers.ChunkList(stamps.ToList(), chunkSize))
         {
-            var sql = new System.Text.StringBuilder();
+            sql.Clear();
+            parameters.Clear();
             sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ""ImportStateHash"" = v.""ImportStateHash"", ""ImportStateFingerprint"" = v.""ImportStateFingerprint"" FROM (VALUES ");
 
-            var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
