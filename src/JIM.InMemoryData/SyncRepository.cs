@@ -334,6 +334,63 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    /// <summary>
+    /// SPEC-1082 D8: honest in-memory equivalent of the Postgres widened projection - reuses the
+    /// same external-id resolution as <see cref="GetAllCsoExternalIdMappingsAsync"/> but carries the
+    /// stored hash/fingerprint/status/partition alongside the CSO ID.
+    /// </summary>
+    public Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
+    {
+        var result = new Dictionary<string, CsoImportStateLookupEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cso in GetCsosForSystem(connectedSystemId))
+        {
+            var entry = new CsoImportStateLookupEntry(cso.Id, cso.ImportStateHash, cso.ImportStateFingerprint, cso.Status, cso.PartitionId);
+
+            // Try primary external ID first
+            var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
+            var primaryValue = GetExternalIdValueString(primaryAv);
+
+            if (primaryValue != null)
+            {
+                var cacheKey = $"cso:{connectedSystemId}:{cso.ExternalIdAttributeId}:{primaryValue}";
+                result.TryAdd(cacheKey, entry);
+                continue;
+            }
+
+            // Fall back to secondary external ID (PendingProvisioning CSOs)
+            if (cso.SecondaryExternalIdAttributeId.HasValue)
+            {
+                var secondaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
+                var secondaryValue = GetExternalIdValueString(secondaryAv);
+
+                if (secondaryValue != null)
+                {
+                    var cacheKey = $"cso:{connectedSystemId}:{cso.SecondaryExternalIdAttributeId.Value}:{secondaryValue}";
+                    result.TryAdd(cacheKey, entry);
+                }
+            }
+        }
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// SPEC-1082 D6: honest in-memory equivalent of the Postgres stamp writer. Since <see cref="_csos"/>
+    /// IS the live graph, stamping is a direct property assignment; deliberately does not touch
+    /// <see cref="ConnectedSystemObject.LastUpdated"/>.
+    /// </summary>
+    public Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps)
+    {
+        foreach (var (csoId, hash, fingerprint) in stamps)
+        {
+            if (_csos.TryGetValue(csoId, out var cso))
+            {
+                cso.ImportStateHash = hash;
+                cso.ImportStateFingerprint = fingerprint;
+            }
+        }
+        return Task.CompletedTask;
+    }
+
     public virtual Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
     {
         var idSet = new HashSet<Guid>(csoIds);
@@ -687,20 +744,42 @@ public class SyncRepository : ISyncRepository
                     if (!stored.AttributeValues.Contains(av))
                         stored.AttributeValues.Add(av);
                 }
+
+                // SPEC-1082 D9: null the stored hash/fingerprint for any CSO that actually received
+                // new attribute values, mirroring the Postgres raw-SQL writer's null-on-mutate behaviour.
+                if (newAvs.Count > 0)
+                {
+                    stored.ImportStateHash = null;
+                    stored.ImportStateFingerprint = null;
+                }
             }
         }
         return Task.CompletedTask;
     }
 
     /// <summary>
-    /// Issue #1079 (optimistic export apply): a no-op here. Unlike the Postgres implementation,
-    /// there is no separate persisted store to reconcile - <see cref="_csos"/> IS the live graph,
-    /// so <c>ExportExecutionServer</c> mutating <see cref="ConnectedSystemObject.AttributeValues"/>
-    /// directly (D10) is sufficient. Virtual so tests can override it to simulate a persistence
+    /// Issue #1079 (optimistic export apply): the attribute-value delta itself is a no-op here.
+    /// Unlike the Postgres implementation, there is no separate persisted store to reconcile -
+    /// <see cref="_csos"/> IS the live graph, so <c>ExportExecutionServer</c> mutating
+    /// <see cref="ConnectedSystemObject.AttributeValues"/> directly (D10) is sufficient.
+    /// SPEC-1082 D9: still nulls <see cref="ConnectedSystemObject.ImportStateHash"/> and
+    /// <see cref="ConnectedSystemObject.ImportStateFingerprint"/> for the affected CSOs directly on
+    /// the live graph, so the in-memory fake honestly mirrors the Postgres implementation's
+    /// null-on-mutate behaviour. Virtual so tests can override it to simulate a persistence
     /// failure (D7's failure-containment guarantee).
     /// </summary>
-    public virtual Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds)
-        => Task.CompletedTask;
+    public virtual Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds)
+    {
+        foreach (var csoId in affectedCsoIds)
+        {
+            if (_csos.TryGetValue(csoId, out var cso))
+            {
+                cso.ImportStateHash = null;
+                cso.ImportStateFingerprint = null;
+            }
+        }
+        return Task.CompletedTask;
+    }
 
     public Task DeleteConnectedSystemObjectsAsync(List<ConnectedSystemObject> connectedSystemObjects)
     {

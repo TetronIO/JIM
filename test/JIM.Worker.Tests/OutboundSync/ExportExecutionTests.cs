@@ -2811,7 +2811,7 @@ public class ExportExecutionTests
     private sealed class ThrowingOnApplySyncRepository : SyncRepository
     {
         public override Task ApplyExportedAttributeValuesAsync(
-            List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds)
+            List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds)
         {
             throw new InvalidOperationException("Simulated optimistic export apply failure");
         }

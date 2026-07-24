@@ -121,6 +121,18 @@ public interface IConnectedSystemRepository
     public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId);
 
     /// <summary>
+    /// SPEC-1082 D8: bulk-loads all CSO import state for a Connected System into a lightweight
+    /// dictionary, keyed by the same composite cache key as <see cref="GetAllCsoExternalIdMappingsAsync"/>.
+    /// </summary>
+    public Task<Dictionary<string, JIM.Models.Staging.CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId);
+
+    /// <summary>
+    /// SPEC-1082 D6: the only code path permitted to write ImportStateHash/ImportStateFingerprint,
+    /// and only after the batch's attribute-value writes have committed. Never touches LastUpdated.
+    /// </summary>
+    public Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps);
+
+    /// <summary>
     /// Batch-loads full CSO entity graphs by their IDs.
     /// Returns CSOs with the same Include chain as GetConnectedSystemObjectByAttributeAsync
     /// (Type.Attributes, AttributeValues.Attribute, AttributeValues.ReferenceValue.Type).

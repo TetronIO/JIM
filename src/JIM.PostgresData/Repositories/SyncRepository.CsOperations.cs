@@ -209,6 +209,13 @@ public partial class SyncRepository
                 await writer.WriteAsync(cso.LastScopeEvaluatedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
+            // SPEC-1082 D6: create writers ALWAYS write NULL for ImportStateHash/ImportStateFingerprint.
+            // This is a two-phase create: parent CSO rows commit here, in phase 1, before attribute
+            // values commit in phase 2. A non-null hash written at this point could survive a phase-2
+            // failure as a permanently believable lie about content that was never actually persisted.
+            // The only legitimate stamp is StampImportStateAsync, run after values commit (D7/D8).
+            await writer.WriteNullAsync();
+            await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();
@@ -326,6 +333,10 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.PartitionId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(cso.ScopeReviewPending);
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.LastScopeEvaluatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                // SPEC-1082 D6: create writers ALWAYS write NULL for ImportStateHash/ImportStateFingerprint.
+                // See BulkInsertCsosOnConnectionAsync above for the full stamp-ordering rationale.
+                parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -385,7 +396,7 @@ public partial class SyncRepository
     /// why <c>LastUpdated</c> must stay untouched here (it is what re-arms the Full Synchronisation
     /// unchanged-object watermark for a no-op confirming import).
     /// </summary>
-    public async Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds)
+    public async Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds)
     {
         if (additions.Count == 0 && removalValueIds.Count == 0)
             return;
@@ -395,6 +406,25 @@ public partial class SyncRepository
 
         if (additions.Count > 0)
             await BulkInsertOptimisticApplyAttributeValuesRawAsync(additions);
+
+        // SPEC-1082 D9: null the import state hash/fingerprint for every mutated CSO, set-based,
+        // in the same call. Deliberately does NOT touch LastUpdated (see the class remarks above).
+        if (affectedCsoIds.Count > 0)
+            await NullImportStateForCsosAsync(affectedCsoIds);
+    }
+
+    /// <summary>
+    /// SPEC-1082 D9: sets ImportStateHash and ImportStateFingerprint to NULL for the given CSO IDs,
+    /// via a single set-based UPDATE. Never touches LastUpdated.
+    /// </summary>
+    private async Task NullImportStateForCsosAsync(IReadOnlyCollection<Guid> csoIds)
+    {
+        if (csoIds.Count == 0)
+            return;
+
+        await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects"" SET ""ImportStateHash"" = NULL, ""ImportStateFingerprint"" = NULL WHERE ""Id"" = ANY({0})",
+            csoIds.ToArray());
     }
 
     /// <summary>

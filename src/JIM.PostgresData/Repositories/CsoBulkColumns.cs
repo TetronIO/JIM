@@ -27,7 +27,8 @@ internal static class CsoBulkColumns
         "Id", "ConnectedSystemId", "Created", "LastUpdated", "TypeId",
         "ExternalIdAttributeId", "SecondaryExternalIdAttributeId",
         "Status", "MetaverseObjectId", "JoinType", "DateJoined",
-        "PartitionId", "ScopeReviewPending", "LastScopeEvaluatedAt"
+        "PartitionId", "ScopeReviewPending", "LastScopeEvaluatedAt",
+        "ImportStateHash", "ImportStateFingerprint"
     ];
 
     /// <summary>
@@ -36,7 +37,13 @@ internal static class CsoBulkColumns
     /// identity/creation columns (Id, ConnectedSystemId, Created, TypeId) are ScopeReviewPending and
     /// LastScopeEvaluatedAt: both have dedicated persistence statements on the scope-evaluation path,
     /// and writing them from entities held across a long import flush could overwrite a concurrent
-    /// scope evaluation's newer values with stale in-memory state.
+    /// scope evaluation's newer values with stale in-memory state. ImportStateHash and
+    /// ImportStateFingerprint (SPEC-1082 D6) are excluded for the same shape of reason but a
+    /// stricter one: they are stamped EXCLUSIVELY by <c>StampImportStateAsync</c>, and only after
+    /// the batch's attribute-value writes have committed. Writing them here (from CSO entities held
+    /// across a long import flush, some of whose attribute values may not have committed yet) would
+    /// let a stale in-memory hash overwrite a fresher stamp, or stamp a hash before the values it
+    /// describes exist - the exact lie the stamp-ordering invariant exists to prevent.
     /// BulkInsertColumnCompletenessTests keeps this list in lockstep with
     /// <see cref="ConnectedSystemObjects"/> so a migration that adds a mutable column is a conscious
     /// decision here, not a silent omission.
@@ -53,7 +60,8 @@ internal static class CsoBulkColumns
     /// </summary>
     internal static readonly string[] ConnectedSystemObjectsUpdateExclusions =
     [
-        "Id", "ConnectedSystemId", "Created", "TypeId", "ScopeReviewPending", "LastScopeEvaluatedAt"
+        "Id", "ConnectedSystemId", "Created", "TypeId", "ScopeReviewPending", "LastScopeEvaluatedAt",
+        "ImportStateHash", "ImportStateFingerprint"
     ];
 
     /// <summary>

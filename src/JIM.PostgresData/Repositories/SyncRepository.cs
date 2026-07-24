@@ -98,6 +98,12 @@ public partial class SyncRepository : ISyncRepository
     public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetAllCsoExternalIdMappingsAsync(connectedSystemId);
 
+    public Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
+        => _repo.ConnectedSystems.GetAllCsoImportStateLookupAsync(connectedSystemId);
+
+    public Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps)
+        => _repo.ConnectedSystems.StampImportStateAsync(stamps);
+
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => _repo.ConnectedSystems.GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
 
