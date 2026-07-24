@@ -1484,6 +1484,23 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Gets a window of lightweight Metaverse Object headers addressed by absolute offset and count, for virtualised
+    /// (infinite-scroll) list views. Shares its query and projection with <see cref="GetMetaverseObjectHeadersPagedAsync"/>.
+    /// </summary>
+    public async Task<RangeResultSet<MetaverseObjectHeader>> GetMetaverseObjectHeadersRangeAsync(
+        PredefinedSearch predefinedSearch,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        int? hasAttributeId = null)
+    {
+        return await Application.Repository.Metaverse.GetMetaverseObjectHeadersRangeAsync(
+            predefinedSearch, offset, count, searchQuery, sortBy, sortDescending, hasAttributeId);
+    }
+
+    /// <summary>
     /// Gets a paginated list of Metaverse Objects with optional filtering by type, search query, or specific attribute value.
     /// </summary>
     /// <param name="page">The page number (1-based).</param>

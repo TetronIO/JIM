@@ -196,6 +196,28 @@ public interface IMetaverseRepository
         int? hasAttributeId = null);
 
     /// <summary>
+    /// Gets a window of lightweight Metaverse Object headers addressed by absolute offset and count, for
+    /// virtualised (infinite-scroll) list views. Shares its query, projection and filtering with
+    /// <see cref="GetMetaverseObjectHeadersPagedAsync"/>; the only difference is the caller supplies an absolute
+    /// <paramref name="offset"/> rather than a page number, so arbitrary scroll windows can be fetched directly.
+    /// </summary>
+    /// <param name="predefinedSearch">The Predefined Search defining the object type, projected attributes and criteria.</param>
+    /// <param name="offset">The zero-based index of the first item to return (clamped to zero if negative).</param>
+    /// <param name="count">The number of items to return (max 100).</param>
+    /// <param name="searchQuery">Optional search query to filter across all string attribute values.</param>
+    /// <param name="sortBy">Optional attribute name to sort by.</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <param name="hasAttributeId">Optional attribute presence filter; see <see cref="GetMetaverseObjectHeadersPagedAsync"/>.</param>
+    public Task<RangeResultSet<MetaverseObjectHeader>> GetMetaverseObjectHeadersRangeAsync(
+        PredefinedSearch predefinedSearch,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        int? hasAttributeId = null);
+
+    /// <summary>
     /// Gets a paginated list of Metaverse Objects with optional filtering by type, search query, or specific attribute value.
     /// </summary>
     /// <param name="page">The page number (1-based).</param>

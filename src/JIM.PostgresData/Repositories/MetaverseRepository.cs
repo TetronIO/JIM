@@ -1778,6 +1778,74 @@ public class MetaverseRepository : IMetaverseRepository
         if (pageSize > 100)
             pageSize = 100;
 
+        var offset = (page - 1) * pageSize;
+        var (results, grossCount) = await QueryMetaverseObjectHeadersByRangeAsync(
+            predefinedSearch, offset, pageSize, searchQuery, sortBy, sortDescending, hasAttributeId);
+
+        var pagedResultSet = new PagedResultSet<MetaverseObjectHeader>
+        {
+            PageSize = pageSize,
+            TotalResults = grossCount,
+            CurrentPage = page,
+            Results = results
+        };
+
+        if (page == 1 && pagedResultSet.TotalPages == 0)
+            return pagedResultSet;
+
+        // don't let users try and request a page that doesn't exist
+        if (page <= pagedResultSet.TotalPages)
+            return pagedResultSet;
+
+        pagedResultSet.TotalResults = 0;
+        pagedResultSet.Results.Clear();
+        return pagedResultSet;
+    }
+
+    /// <inheritdoc/>
+    public async Task<RangeResultSet<MetaverseObjectHeader>> GetMetaverseObjectHeadersRangeAsync(
+        PredefinedSearch predefinedSearch,
+        int offset,
+        int count,
+        string? searchQuery = null,
+        string? sortBy = null,
+        bool sortDescending = true,
+        int? hasAttributeId = null)
+    {
+        if (count < 1)
+            throw new ArgumentOutOfRangeException(nameof(count), "count must be a positive number");
+
+        if (offset < 0)
+            offset = 0;
+
+        // limit window size to avoid increasing latency unnecessarily (mirrors the paged path's cap)
+        if (count > 100)
+            count = 100;
+
+        var (results, grossCount) = await QueryMetaverseObjectHeadersByRangeAsync(
+            predefinedSearch, offset, count, searchQuery, sortBy, sortDescending, hasAttributeId);
+
+        return new RangeResultSet<MetaverseObjectHeader>
+        {
+            Results = results,
+            TotalResults = grossCount
+        };
+    }
+
+    /// <summary>
+    /// Shared core for the paged and range header reads: builds the projected, filtered and sorted header window for
+    /// an absolute <paramref name="offset"/>/<paramref name="count"/> and returns it alongside the total match count.
+    /// Callers own input validation and clamping; this method assumes sane values.
+    /// </summary>
+    private async Task<(List<MetaverseObjectHeader> Results, int TotalResults)> QueryMetaverseObjectHeadersByRangeAsync(
+        PredefinedSearch predefinedSearch,
+        int offset,
+        int count,
+        string? searchQuery,
+        string? sortBy,
+        bool sortDescending,
+        int? hasAttributeId)
+    {
         // Extract the attribute IDs to project from the PredefinedSearch
         var returnAttributeIds = predefinedSearch.Attributes
             .Select(a => a.MetaverseAttribute.Id)
@@ -1789,7 +1857,6 @@ public class MetaverseRepository : IMetaverseRepository
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
 
         var typeId = predefinedSearch.MetaverseObjectType.Id;
-        var offset = (page - 1) * pageSize;
 
         // Build shared WHERE clause fragments and parameters for count + page queries
         var whereClause = """m."TypeId" = @typeId""";
@@ -1916,12 +1983,12 @@ public class MetaverseRepository : IMetaverseRepository
                 FROM "MetaverseObjects" m
                 WHERE {whereClause}
                 ORDER BY {orderClause}
-                OFFSET @offset LIMIT @pageSize
+                OFFSET @offset LIMIT @count
                 """;
             foreach (var p in sharedParams)
                 pageCmd.Parameters.Add(p.Clone());
             pageCmd.Parameters.Add(new NpgsqlParameter("offset", offset));
-            pageCmd.Parameters.Add(new NpgsqlParameter("pageSize", pageSize));
+            pageCmd.Parameters.Add(new NpgsqlParameter("count", count));
             if (sortParam != null) pageCmd.Parameters.Add(sortParam);
 
             await using var reader = await pageCmd.ExecuteReaderAsync();
@@ -2008,24 +2075,7 @@ public class MetaverseRepository : IMetaverseRepository
             .Select(id => headerMap[id])
             .ToList();
 
-        var pagedResultSet = new PagedResultSet<MetaverseObjectHeader>
-        {
-            PageSize = pageSize,
-            TotalResults = grossCount,
-            CurrentPage = page,
-            Results = results
-        };
-
-        if (page == 1 && pagedResultSet.TotalPages == 0)
-            return pagedResultSet;
-
-        // don't let users try and request a page that doesn't exist
-        if (page <= pagedResultSet.TotalPages)
-            return pagedResultSet;
-
-        pagedResultSet.TotalResults = 0;
-        pagedResultSet.Results.Clear();
-        return pagedResultSet;
+        return (results, grossCount);
     }
 
     /// <summary>
