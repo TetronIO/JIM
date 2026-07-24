@@ -92,7 +92,7 @@ Universal rules (apply across code, scripts, docs, comments, UI text):
 - NUnit `[Test]`, `Assert.That()`, Moq; test naming `MethodName_Scenario_ExpectedResult`
 - EF Core in-memory database auto-tracks navigation properties - this masks missing `.Include()` bugs. Run integration tests when modifying repository queries.
 
-Test project locations: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Worker.Tests/`.
+Test project locations: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Worker.Tests/`, `test/JIM.Web.Components.Tests/` (bUnit component tests; scope rules in `test/CLAUDE.md`).
 
 > **Full patterns, debugging, integration testing runner:** `test/CLAUDE.md`
 
