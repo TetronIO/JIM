@@ -374,21 +374,49 @@ public class ExampleDataServer
         // with closures and allow thread-safe access via Interlocked/Volatile
         var objectsGeneratedHolder = new int[1];
 
-        // Report initial progress (total objects to create, none processed yet)
-        if (progressCallback != null)
-            await progressCallback(totalObjectsToCreate, 0, "Generating objects...");
+        // The job runs in equally-weighted phases, each processing every object once: generation, an optional
+        // change-history build (only when MVO change tracking is on), then persistence. Reporting each phase's own
+        // 0->total count would sweep the progress bar to 100% two or three times; instead every phase's local count
+        // is mapped onto a single continuous 0->total overall count, so the Activity progress bar advances once from
+        // 0% to 100% across the whole job rather than racing to 100% during generation and then freezing there while
+        // persistence (frequently the longest phase) runs. Fetched once here so the phase weighting is known up front.
+        var changeTrackingEnabled = await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
+        const int generationPhase = 0;
+        var changeHistoryPhase = changeTrackingEnabled ? 1 : -1;
+        var persistencePhase = changeTrackingEnabled ? 2 : 1;
+        var phaseCount = changeTrackingEnabled ? 3 : 2;
+        var reportInterval = progressUpdateInterval ?? TimeSpan.FromSeconds(2);
 
-        // Progress is reported from a dedicated background task, NOT from inside the parallel generation loop below.
-        // Reporting inline meant a generation thread ran the asynchronous Activity database write synchronously (via
-        // GetAwaiter().GetResult()) while holding _metaverseObjectLock, the same lock every other generation thread
-        // needs to add its object. That serialised the whole loop behind a blocking I/O call and starved the thread
-        // pool, so generating the built-in 10,000-object template crawled at roughly one object per second at ~0% CPU.
-        // The loop now only increments the atomic counter; this task samples it on an interval and reports
-        // asynchronously, holding no lock. It is cancelled once generation completes (before any further database work).
+        // Maps a phase-local processed count onto the overall 0->total progress value (see CalculateOverallProgress)
+        // and reports it. Guards the no-callback case; the empty-template divide-by-zero is handled in the calculation.
+        async Task ReportOverallProgressAsync(int phase, int phaseProcessed, string? message)
+        {
+            if (progressCallback == null)
+                return;
+
+            var overallProcessed = CalculateOverallProgress(phase, phaseProcessed, totalObjectsToCreate, phaseCount);
+            await progressCallback(totalObjectsToCreate, overallProcessed, message);
+        }
+
+        // Report initial progress (nothing processed yet)
+        await ReportOverallProgressAsync(generationPhase, 0, "Generating objects...");
+
+        // Generation progress is reported from a dedicated background task, NOT from inside the parallel generation
+        // loop below. Reporting inline meant a generation thread ran the asynchronous Activity database write
+        // synchronously (via GetAwaiter().GetResult()) while holding _metaverseObjectLock, the same lock every other
+        // generation thread needs to add its object. That serialised the whole loop behind a blocking I/O call and
+        // starved the thread pool, so generating the built-in 10,000-object template crawled at roughly one object per
+        // second at ~0% CPU. The loop now only increments the atomic counter; this task samples it on an interval and
+        // reports asynchronously, holding no lock. It is cancelled once generation completes (before any further
+        // database work).
         using var progressReporterCts = new CancellationTokenSource();
         var progressReporterTask = progressCallback == null
             ? Task.CompletedTask
-            : ReportGenerationProgressAsync(progressCallback, totalObjectsToCreate, objectsGeneratedHolder, progressUpdateInterval ?? TimeSpan.FromSeconds(2), progressReporterCts.Token);
+            : ReportGenerationProgressAsync(
+                generated => ReportOverallProgressAsync(generationPhase, generated, "Generating objects..."),
+                objectsGeneratedHolder,
+                reportInterval,
+                progressReporterCts.Token);
 
         // object type dependency graph needs considering
         // for now we should probably just advise people to add template object types in reverse order to how they're referenced.
@@ -536,6 +564,10 @@ public class ExampleDataServer
         progressReporterCts.Cancel();
         await progressReporterTask;
 
+        // Snap the bar to the end of the generation segment before the next phase begins, in case the last interval
+        // sample landed below the final count.
+        await ReportOverallProgressAsync(generationPhase, totalObjectsToCreate, "Generating objects...");
+
         // ensure that attribute population percentage values are respected
         // do this by assigning all attributes with values (done), then go and randomly delete the required amount
         RemoveUnnecessaryAttributeValues(template, metaverseObjectsToCreate, random);
@@ -557,13 +589,17 @@ public class ExampleDataServer
             return 0;
         }
 
-        // Create change history records for each generated object (if change tracking is enabled)
-        var changeTrackingEnabled = await Application.ServiceSettings.GetMvoChangeTrackingEnabledAsync();
+        // Create change history records for each generated object (if change tracking is enabled). This is the second
+        // progress phase: in-memory work, but O(objects), so it reports its own progress (throttled by the report
+        // interval) rather than leaving the bar frozen between the generation and persistence phases. The loop is
+        // sequential and holds no lock, so an awaited progress write here is safe (unlike the parallel generation loop).
         if (changeTrackingEnabled)
         {
             var changeTrackingStopwatch = Stopwatch.StartNew();
             Log.Information("ExecuteTemplateAsync: Creating change history records for {Count:N0} objects...", metaverseObjectsToCreate.Count);
             var emptyRemovals = new List<MetaverseObjectAttributeValue>();
+            var changeHistoryReportStopwatch = Stopwatch.StartNew();
+            var changeHistoryIndex = 0;
             foreach (var mvo in metaverseObjectsToCreate)
             {
                 await Application.Metaverse.CreateMetaverseObjectChangeAsync(
@@ -575,14 +611,20 @@ public class ExampleDataServer
                     initiatedByName,
                     ObjectChangeType.Created,
                     MetaverseObjectChangeInitiatorType.ExampleData);
+
+                changeHistoryIndex++;
+                if (changeHistoryReportStopwatch.Elapsed >= reportInterval)
+                {
+                    changeHistoryReportStopwatch.Restart();
+                    await ReportOverallProgressAsync(changeHistoryPhase, changeHistoryIndex, "Recording change history...");
+                }
             }
             changeTrackingStopwatch.Stop();
             Log.Information("ExecuteTemplateAsync: Change history records created in {Elapsed}", changeTrackingStopwatch.Elapsed);
         }
 
-        // Report that generation is complete, now starting persistence
-        if (progressCallback != null)
-            await progressCallback(totalObjectsToCreate, totalObjectsToCreate, "Persisting to database...");
+        // Entering the persistence phase (the final progress phase), nothing persisted yet.
+        await ReportOverallProgressAsync(persistencePhase, 0, "Persisting to database...");
 
         // FK scalar fixup before persistence.
         //
@@ -604,17 +646,16 @@ public class ExampleDataServer
         var persistenceStopwatch = new Stopwatch();
         persistenceStopwatch.Start();
 
-        // Create a persistence progress callback that reports during the persistence phase.
-        // Generation is already at 100%; here we surface batch-level progress and a rolling ETA so
-        // the Activity UI shows a moving "Persisting to database... batch X/Y (P/T, ETA mm:ss)"
-        // message instead of a static string while large templates flush.
+        // Persistence is the final progress phase; map each batch's real persisted count onto the overall progress
+        // value so the bar advances through this phase (previously it was pinned at 100% here and only the message
+        // moved). A rolling ETA is surfaced in the message.
         Func<PersistenceProgress, Task>? persistenceProgressCallback = null;
         if (progressCallback != null)
         {
             persistenceProgressCallback = async progress =>
             {
                 var message = FormatPersistenceProgressMessage(progress);
-                await progressCallback(totalObjectsToCreate, totalObjectsToCreate, message);
+                await ReportOverallProgressAsync(persistencePhase, progress.ObjectsPersisted, message);
             };
         }
 
@@ -648,8 +689,7 @@ public class ExampleDataServer
     /// faults the returned task and is surfaced when the caller awaits it.
     /// </summary>
     private static async Task ReportGenerationProgressAsync(
-        Func<int, int, string?, Task> progressCallback,
-        int totalObjectsToCreate,
+        Func<int, Task> reportGenerated,
         int[] objectsGeneratedHolder,
         TimeSpan interval,
         CancellationToken cancellationToken)
@@ -660,7 +700,7 @@ public class ExampleDataServer
             {
                 await Task.Delay(interval, cancellationToken);
                 var generated = Volatile.Read(ref objectsGeneratedHolder[0]);
-                await progressCallback(totalObjectsToCreate, generated, "Generating objects...");
+                await reportGenerated(generated);
             }
         }
         catch (OperationCanceledException)
@@ -670,14 +710,37 @@ public class ExampleDataServer
     }
 
     /// <summary>
+    /// Maps a phase-local processed count onto the single continuous overall progress count that spans all
+    /// equally-weighted phases of a template execution (generation, an optional change-history build, and
+    /// persistence). Each phase processes every object once, so the overall count is
+    /// (phase * total + phaseProcessed) / phaseCount, with phaseProcessed clamped to [0, total] and the result
+    /// rounded to the nearest object. This is what lets the Activity progress bar advance once from 0% to 100%
+    /// across the whole job instead of sweeping to 100% per phase. Returns 0 for an empty template (or a
+    /// non-positive phase count), avoiding a divide-by-zero.
+    /// </summary>
+    /// <param name="phase">Zero-based index of the current phase.</param>
+    /// <param name="phaseProcessed">Objects processed so far within the current phase.</param>
+    /// <param name="totalObjects">Total objects the template creates (the per-phase object count).</param>
+    /// <param name="phaseCount">Number of active phases (2 without change tracking, 3 with).</param>
+    internal static int CalculateOverallProgress(int phase, int phaseProcessed, int totalObjects, int phaseCount)
+    {
+        if (totalObjects <= 0 || phaseCount <= 0)
+            return 0;
+
+        var clamped = Math.Clamp(phaseProcessed, 0, totalObjects);
+        return (int)Math.Round(((double)phase * totalObjects + clamped) / phaseCount);
+    }
+
+    /// <summary>
     /// Formats the per-batch persistence-progress payload into a single human-readable message
-    /// suitable for the Activity UI. Includes batch counter, object counter, and a rolling ETA
-    /// derived from the elapsed persistence time, omitting the ETA on the first batch (when we
-    /// have no useful rate measurement) and on the final batch (when there is nothing left to do).
+    /// suitable for the Activity UI. Includes the batch counter and a rolling ETA derived from the
+    /// elapsed persistence time, omitting the ETA on the first batch (when we have no useful rate
+    /// measurement) and on the final batch (when there is nothing left to do). The object counter is
+    /// deliberately not repeated here: the progress bar's overall count already conveys quantity.
     /// </summary>
     internal static string FormatPersistenceProgressMessage(PersistenceProgress progress)
     {
-        var baseMessage = $"Persisting to database... batch {progress.BatchIndex:N0}/{progress.BatchCount:N0} ({progress.ObjectsPersisted:N0}/{progress.TotalObjects:N0})";
+        var baseMessage = $"Persisting to database... batch {progress.BatchIndex:N0}/{progress.BatchCount:N0}";
 
         // No ETA on batch 1 (no rate yet) or once we're done
         if (progress.BatchIndex <= 1 || progress.ObjectsPersisted >= progress.TotalObjects || progress.Elapsed <= TimeSpan.Zero)
