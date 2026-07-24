@@ -15,7 +15,7 @@ This plan sequences the work per the decisions recorded on #827 and in the PRD:
 2. **#288 engine core** (the other true build dependency), in parallel with framework plumbing that does not need it.
 3. **Apply-time messaging** (PRD FR17) as an early framework phase, rolled across all sync-affecting surfaces before any adapter exists.
 4. **Framework foundations** (models, persistence, orchestration, dispatch, notification, UI shell, summarisation), proven end-to-end by the first adapter.
-5. **Adapter waves** as follow-up issues in severity order: G5 and G3-destructive, then G4, then G1/G2, then G6 and the re-scoped issues (#204, #134/#809, #421, #91 mode 2).
+5. **Adapter waves** as follow-up issues in severity order: G5 (#1114) and G3-destructive (#1115) filed Jul 2026, then G4, then G1/G2, then G6 and the re-scoped issues (#204, #134/#809, #421, #91 mode 2).
 
 It also resolves the PRD's two residual open questions: the capped/sampled persistence mechanics for very large previews (Open Question 1) and the dispatch cost-estimation heuristic (Open Question 3). Both are proposed in Technical Architecture below.
 
@@ -225,7 +225,7 @@ Permanent end-state components, built once, rolled everywhere; adapters later la
 
 Each wave is one or more GitHub issues drafted for sign-off before filing. Each adapter issue is a thin implementation of the contract **plus the full migration of its surface's edit UI** (panel embedding, proposed-DTO wiring, preview endpoint, interim acknowledgement replaced by the preview-driven confirmation); see Change classification and surface migration for the definition of done.
 
-- [ ] **Wave 1:** G5 deletion settings and G3 destructive toggles. **G5 is the pilot adapter that proves the framework end-to-end**; Phase 3 is not "done" until it ships.
+- [ ] **Wave 1:** G5 deletion settings ([#1114](https://github.com/TetronIO/JIM/issues/1114)) and G3 destructive toggles ([#1115](https://github.com/TetronIO/JIM/issues/1115)), both filed Jul 2026. **G5 is the pilot adapter that proves the framework end-to-end**; Phase 3 is not "done" until it ships. G5 needs no #288 (deletion eligibility is a metaverse-side query), so it can start as soon as Phase 3 lands; G3 needs #288's evaluation-only outbound path.
 - [ ] **Wave 2:** G4 partition/container deselection.
 - [ ] **Wave 3:** G1/G2 (Synchronisation Rule scope and Attribute Flow changes; the heaviest evaluation, fully dependent on #288).
 - [ ] **Wave 4:** G6 and remaining toggles; re-scope #204, #134/#809, #421, and #91 mode 2 as adapter issues.
