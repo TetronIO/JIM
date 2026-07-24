@@ -433,6 +433,18 @@ html[lang] .jim-expansion-panel .mud-paper-outlined {
     100% { transform: rotate(180deg); }
 }
 
+/* Idle worker status bar: resting state (no shimmer rendered, icon static and muted) */
+.jim-worker-activity-bar--idle .jim-worker-activity-text .mud-icon-root {
+    animation: none;
+    color: var(--mud-palette-text-secondary);
+}
+
+/* Empty queue message connects flush beneath the always-present worker status bar */
+.jim-queue-empty-connected {
+    border-top-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+}
+
 /* Nested containers: tables and tab panels inside papers use a deeper surface colour
    when the theme defines --jim-inner-surface (mid-contrast themes). Falls back to
    transparent so other themes are unaffected. */

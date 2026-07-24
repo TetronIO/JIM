@@ -53,28 +53,29 @@ else
     <MudAlert Class="my-5" Severity="Severity.Warning" Variant="Variant.Outlined">Please create a <MudLink Href="/admin/connected-systems/">Connected System</MudLink> first.</MudAlert>
 }
 
+@* Worker status bar: always present so the queue region's top block keeps a stable height as tasks move through it, rather than appearing and disappearing with the processing state *@
+<div class="jim-worker-activity-bar mt-5 @(_hasProcessingTasks ? "" : "jim-worker-activity-bar--idle")">
+    @if (_hasProcessingTasks)
+    {
+        <div class="jim-worker-activity-shimmer"></div>
+    }
+    <div class="jim-worker-activity-text">
+        <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Small" />
+        <span>@(_hasProcessingTasks ? "Worker processing (from top to bottom)" : "Worker idle")</span>
+    </div>
+</div>
+
 @if (_workerTaskHeaders.Count == 0)
 {
-    <MudPaper Outlined="true" Class="mt-5 pa-6 d-flex justify-center">
+    <MudPaper Outlined="true" Class="pa-6 d-flex justify-center jim-queue-empty-connected">
         <MudText Class="mud-text-secondary">There are no tasks queued.</MudText>
     </MudPaper>
 }
 else
 {
-    @if (_hasProcessingTasks)
-    {
-        <div class="jim-worker-activity-bar mt-5">
-            <div class="jim-worker-activity-shimmer"></div>
-            <div class="jim-worker-activity-text">
-                <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Small" />
-                <span>Worker processing (from top to bottom)</span>
-            </div>
-        </div>
-    }
-
     <MudTable T="WorkerTaskHeader" Items="@GetSortedQueueItems()" Hover="true" Breakpoint="Breakpoint.Sm"
               Outlined="true" Elevation="0" Dense="true" GroupBy="@_groupDefinition"
-              Class="@(_hasProcessingTasks ? "jim-queue-table-active" : "mt-5")"
+              Class="jim-queue-table-active"
               RowClassFunc="@((item, _) => IsGroupCollapsed(item) ? "jim-queue-collapsed-row" : "")">
         <ColGroup>
             <col style="width: 70px;" />
