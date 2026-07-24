@@ -72,6 +72,7 @@ public static class SearchComparisonOperators
         AttributeDataType.DateTime => DateTimeOperators,
         AttributeDataType.Number => NumberOperators,
         AttributeDataType.LongNumber => NumberOperators,
+        AttributeDataType.Decimal => NumberOperators,
         AttributeDataType.Boolean => EqualityOperators,
         AttributeDataType.Guid => EqualityOperators,
         _ => NoOperators

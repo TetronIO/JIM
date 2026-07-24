@@ -1321,6 +1321,7 @@ public class ExportEvaluationServer
                         DateTimeValue = existingChange.DateTimeValue,
                         IntValue = existingChange.IntValue,
                         LongValue = existingChange.LongValue,
+                        DecimalValue = existingChange.DecimalValue,
                         ByteValue = existingChange.ByteValue,
                         GuidValue = existingChange.GuidValue,
                         BoolValue = existingChange.BoolValue,
@@ -2158,6 +2159,7 @@ public class ExportEvaluationServer
                         DateTimeValue = avc.DateTimeValue,
                         IntValue = avc.IntValue,
                         LongValue = avc.LongValue,
+                        DecimalValue = avc.DecimalValue,
                         ByteValue = avc.ByteValue,
                         GuidValue = avc.GuidValue,
                         BoolValue = avc.BoolValue,
@@ -2415,13 +2417,13 @@ public class ExportEvaluationServer
         //   3. By value content (fallback for unsaved non-reference values)
         HashSet<Guid>? removedReferenceValueIds = null;
         HashSet<Guid>? removedEntityIds = null;
-        HashSet<(string?, int?, long?, Guid?, bool?, DateTime?)>? removedValueContents = null;
+        HashSet<(string?, int?, long?, decimal?, Guid?, bool?, DateTime?)>? removedValueContents = null;
 
         if (removedAttributes is { Count: > 0 })
         {
             removedReferenceValueIds = new HashSet<Guid>();
             removedEntityIds = new HashSet<Guid>();
-            removedValueContents = new HashSet<(string?, int?, long?, Guid?, bool?, DateTime?)>();
+            removedValueContents = new HashSet<(string?, int?, long?, decimal?, Guid?, bool?, DateTime?)>();
 
             foreach (var rv in removedAttributes)
             {
@@ -2432,7 +2434,7 @@ public class ExportEvaluationServer
                     removedEntityIds.Add(rv.Id);
 
                 if (!rv.ReferenceValueId.HasValue && rv.Id == Guid.Empty)
-                    removedValueContents.Add((rv.StringValue, rv.IntValue, rv.LongValue, rv.GuidValue, rv.BoolValue, rv.DateTimeValue));
+                    removedValueContents.Add((rv.StringValue, rv.IntValue, rv.LongValue, rv.DecimalValue, rv.GuidValue, rv.BoolValue, rv.DateTimeValue));
             }
         }
 
@@ -2508,6 +2510,9 @@ public class ExportEvaluationServer
                                 break;
                             case long longValue:
                                 change.LongValue = longValue;
+                                break;
+                            case decimal decimalValue:
+                                change.DecimalValue = decimalValue;
                                 break;
                             case DateTime dtValue:
                                 change.DateTimeValue = dtValue;
@@ -2668,7 +2673,7 @@ public class ExportEvaluationServer
                             (mvoValue.Id != Guid.Empty && removedEntityIds!.Contains(mvoValue.Id)) ||
                             (!mvoValue.ReferenceValueId.HasValue && mvoValue.Id == Guid.Empty &&
                                 removedValueContents!.Contains((mvoValue.StringValue, mvoValue.IntValue, mvoValue.LongValue,
-                                    mvoValue.GuidValue, mvoValue.BoolValue, mvoValue.DateTimeValue))));
+                                    mvoValue.DecimalValue, mvoValue.GuidValue, mvoValue.BoolValue, mvoValue.DateTimeValue))));
 
                         Log.Debug("CreateAttributeValueChanges: Processing MVO value Id={MvoValueId}, RefValueId={RefValueId}, isRemoval={IsRemoval}",
                             mvoValue.Id, mvoValue.ReferenceValueId, isRemoval);
@@ -2732,6 +2737,9 @@ public class ExportEvaluationServer
                                 break;
                             case AttributeDataType.LongNumber:
                                 attributeChange.LongValue = mvoValue.LongValue;
+                                break;
+                            case AttributeDataType.Decimal:
+                                attributeChange.DecimalValue = mvoValue.DecimalValue;
                                 break;
                             case AttributeDataType.Reference:
                                 // For reference attributes, store the MVO ID as unresolved reference — will be
@@ -2899,6 +2907,18 @@ public class ExportEvaluationServer
             return pendingChange.IntValue == existingValue.IntValue;
         }
 
+        // Long comparison
+        if (pendingChange.LongValue.HasValue || existingValue.LongValue.HasValue)
+        {
+            return pendingChange.LongValue == existingValue.LongValue;
+        }
+
+        // Decimal comparison: nullable decimal == is numeric and scale-insensitive, so 5.0 matches 5.00
+        if (pendingChange.DecimalValue.HasValue || existingValue.DecimalValue.HasValue)
+        {
+            return pendingChange.DecimalValue == existingValue.DecimalValue;
+        }
+
         // DateTime comparison
         if (pendingChange.DateTimeValue.HasValue || existingValue.DateTimeValue.HasValue)
         {
@@ -2971,14 +2991,13 @@ public class ExportEvaluationServer
 
     /// <summary>
     /// Checks if a Pending Export attribute value change represents an empty/null value.
+    /// Delegates to the sync engine's implementation so both no-net-change paths agree on
+    /// exactly which value carriers count; a divergent copy here previously omitted
+    /// LongValue, GuidValue and BoolValue, wrongly skipping exports of those types.
     /// </summary>
     private static bool IsPendingChangeEmpty(PendingExportAttributeValueChange change)
     {
-        return change.StringValue == null &&
-               !change.IntValue.HasValue &&
-               !change.DateTimeValue.HasValue &&
-               change.ByteValue == null &&
-               change.UnresolvedReferenceValue == null;
+        return SyncEngine.IsPendingChangeEmpty(change);
     }
 
     /// <summary>
@@ -3019,7 +3038,7 @@ public class ExportEvaluationServer
     /// Builds a dictionary of attribute values from a Metaverse Object for expression evaluation.
     /// The dictionary keys are attribute names, and values are the attribute values.
     /// </summary>
-    private Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
+    internal Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
     {
         var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
@@ -3049,6 +3068,8 @@ public class ExportEvaluationServer
             {
                 AttributeDataType.Text => attributeValue.StringValue,
                 AttributeDataType.Number => attributeValue.IntValue,
+                AttributeDataType.LongNumber => attributeValue.LongValue,
+                AttributeDataType.Decimal => attributeValue.DecimalValue,
                 AttributeDataType.DateTime => attributeValue.DateTimeValue,
                 AttributeDataType.Boolean => attributeValue.BoolValue,
                 AttributeDataType.Guid => attributeValue.GuidValue,
@@ -3080,6 +3101,9 @@ public class ExportEvaluationServer
             ?? change.GuidValue?.ToString()
             ?? change.IntValue?.ToString()
             ?? change.LongValue?.ToString()
+            // Canonical form is mandatory for decimals: a raw ToString preserves trailing zeros, so 5.0
+            // and 5.00 would produce different merge keys and defeat multi-valued dedupe/merge.
+            ?? (change.DecimalValue.HasValue ? DecimalAttributeValue.ToCanonicalString(change.DecimalValue.Value) : null)
             ?? change.DateTimeValue?.ToString("O")
             ?? change.BoolValue?.ToString()
             ?? (change.ByteValue != null ? Convert.ToBase64String(change.ByteValue) : null)

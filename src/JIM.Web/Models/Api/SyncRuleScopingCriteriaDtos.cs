@@ -63,6 +63,11 @@ public class SyncRuleScopingCriteriaDto
     public long? LongValue { get; set; }
 
     /// <summary>
+    /// The decimal value to compare against (for decimal attributes).
+    /// </summary>
+    public decimal? DecimalValue { get; set; }
+
+    /// <summary>
     /// The date/time value to compare against (for datetime attributes).
     /// </summary>
     public DateTime? DateTimeValue { get; set; }
@@ -117,6 +122,7 @@ public class SyncRuleScopingCriteriaDto
             StringValue = entity.StringValue,
             IntValue = entity.IntValue,
             LongValue = entity.LongValue,
+            DecimalValue = entity.DecimalValue,
             DateTimeValue = entity.DateTimeValue,
             BoolValue = entity.BoolValue,
             GuidValue = entity.GuidValue,
@@ -268,6 +274,11 @@ public class CreateScopingCriterionRequest
     /// The long integer value to compare against (for long number attributes).
     /// </summary>
     public long? LongValue { get; set; }
+
+    /// <summary>
+    /// The decimal value to compare against (for decimal attributes).
+    /// </summary>
+    public decimal? DecimalValue { get; set; }
 
     /// <summary>
     /// The date/time value to compare against (for datetime attributes).

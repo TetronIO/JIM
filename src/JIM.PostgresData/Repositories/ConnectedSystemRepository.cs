@@ -4071,6 +4071,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             case AttributeDataType.Text when string.IsNullOrEmpty(mvoAttributeValue.StringValue):
             case AttributeDataType.Number when !mvoAttributeValue.IntValue.HasValue:
             case AttributeDataType.LongNumber when !mvoAttributeValue.LongValue.HasValue:
+            case AttributeDataType.Decimal when !mvoAttributeValue.DecimalValue.HasValue:
             case AttributeDataType.Guid when !mvoAttributeValue.GuidValue.HasValue:
                 Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: Skipping null/empty attribute value for {AttributeName}",
                     metaverseAttribute.Name);
@@ -4111,6 +4112,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.Attribute.Name == connectedSystemAttributeName &&
                     av.LongValue != null &&
                     av.LongValue == mvoAttributeValue.LongValue));
+                break;
+            case AttributeDataType.Decimal:
+                // Null check already done above. EF translates this to PostgreSQL numeric equality,
+                // which is scale-insensitive (5.0 = 5.00 is true), matching .NET decimal equality.
+                query = query.Where(cso => cso.AttributeValues.Any(av =>
+                    av.Attribute != null &&
+                    av.Attribute.Name == connectedSystemAttributeName &&
+                    av.DecimalValue != null &&
+                    av.DecimalValue == mvoAttributeValue.DecimalValue));
                 break;
             case AttributeDataType.Guid:
                 // Null check already done above
@@ -4332,6 +4342,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                                 DateTimeValue = vc.DateTimeValue,
                                 IntValue = vc.IntValue,
                                 LongValue = vc.LongValue,
+                                DecimalValue = vc.DecimalValue,
                                 ByteValueLength = vc.ByteValueLength,
                                 GuidValue = vc.GuidValue,
                                 BoolValue = vc.BoolValue,
@@ -5072,21 +5083,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private async Task BulkInsertConnectedSystemObjectsRawAsync(List<ConnectedSystemObject> objects, Func<int, Task>? onBatchPersisted = null)
     {
-        const int columnsPerRow = 11;
+        // Parameter order below MUST match CsoBulkColumns.ConnectedSystemObjects exactly.
+        var columnsPerRow = CsoBulkColumns.ConnectedSystemObjects.Length;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
         var totalPersisted = 0;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""ConnectedSystemObjects"" (""Id"", ""ConnectedSystemId"", ""Created"", ""LastUpdated"", ""TypeId"", ""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"", ""Status"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"") VALUES ");
+            sql.Append($@"INSERT INTO ""ConnectedSystemObjects"" ({BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjects)}) VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}})");
+                sql.Append('(').Append(string.Join(", ", Enumerable.Range(offset, columnsPerRow).Select(p => $"{{{p}}}"))).Append(')');
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
@@ -5100,6 +5112,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add((int)cso.JoinType);
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.PartitionId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(cso.ScopeReviewPending);
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.LastScopeEvaluatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -5137,12 +5152,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
+        // Writer order below MUST match CsoBulkColumns.ConnectedSystemObjectAttributeValues exactly.
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
-            """
+            $"""
             COPY "ConnectedSystemObjectAttributeValues" (
-                "Id", "ConnectedSystemObjectId", "AttributeId", "StringValue", "DateTimeValue",
-                "IntValue", "LongValue", "ByteValue", "GuidValue", "BoolValue",
-                "ReferenceValueId", "UnresolvedReferenceValue"
+                {BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectAttributeValues)}
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -5166,6 +5180,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 await writer.WriteNullAsync();
             if (av.LongValue.HasValue)
                 await writer.WriteAsync(av.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
+            else
+                await writer.WriteNullAsync();
+            if (av.DecimalValue.HasValue)
+                await writer.WriteAsync(av.DecimalValue.Value, NpgsqlTypes.NpgsqlDbType.Numeric);
             else
                 await writer.WriteNullAsync();
             if (av.ByteValue is not null)
@@ -5199,25 +5217,31 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Batch updates ConnectedSystemObject rows using UPDATE ... FROM (VALUES ...) pattern.
-    /// Only updates mutable columns: LastUpdated, Status, MetaverseObjectId, JoinType, DateJoined,
-    /// ExternalIdAttributeId, SecondaryExternalIdAttributeId.
+    /// Only the mutable columns in <see cref="CsoBulkColumns.ConnectedSystemObjectsUpdate"/> are
+    /// written; the SET and alias lists are generated from that list, so a column added to it
+    /// without extending the cast/parameter writers below fails loudly at runtime (column count
+    /// mismatch) instead of being silently dropped.
     /// </summary>
     private async Task BulkUpdateConnectedSystemObjectsRawAsync(List<ConnectedSystemObject> objects)
     {
-        const int columnsPerRow = 8; // Id + 7 mutable columns
+        // Id plus the mutable columns; cast/parameter order below MUST match
+        // CsoBulkColumns.ConnectedSystemObjectsUpdate exactly.
+        var columnsPerRow = 1 + CsoBulkColumns.ConnectedSystemObjectsUpdate.Length;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ""LastUpdated"" = v.""LastUpdated"", ""Status"" = v.""Status"", ""MetaverseObjectId"" = v.""MetaverseObjectId"", ""JoinType"" = v.""JoinType"", ""DateJoined"" = v.""DateJoined"", ""ExternalIdAttributeId"" = v.""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"" = v.""SecondaryExternalIdAttributeId"" FROM (VALUES ");
+            sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ");
+            sql.Append(string.Join(", ", CsoBulkColumns.ConnectedSystemObjectsUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
+            sql.Append(" FROM (VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::timestamp with time zone, {{{offset + 2}}}::integer, {{{offset + 3}}}::uuid, {{{offset + 4}}}::integer, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::integer, {{{offset + 7}}}::integer)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::timestamp with time zone, {{{offset + 2}}}::integer, {{{offset + 3}}}::uuid, {{{offset + 4}}}::integer, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::integer, {{{offset + 7}}}::integer, {{{offset + 8}}}::integer)");
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
@@ -5228,9 +5252,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(cso.ExternalIdAttributeId);
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.SecondaryExternalIdAttributeId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.PartitionId, NpgsqlTypes.NpgsqlDbType.Integer));
             }
 
-            sql.Append(@") AS v(""Id"", ""LastUpdated"", ""Status"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"", ""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@") AS v(""Id"", ");
+            sql.Append(BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectsUpdate));
+            sql.Append(@") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
@@ -5284,7 +5311,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         foreach (var chunk in BulkSqlHelpers.ChunkList(exports, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"UPDATE ""PendingExports"" AS t SET ""Status"" = v.""Status"", ""ErrorCount"" = v.""ErrorCount"", ""MaxRetries"" = v.""MaxRetries"", ""LastAttemptedAt"" = v.""LastAttemptedAt"", ""NextRetryAt"" = v.""NextRetryAt"", ""LastErrorMessage"" = v.""LastErrorMessage"", ""LastErrorStackTrace"" = v.""LastErrorStackTrace"", ""HasUnresolvedReferences"" = v.""HasUnresolvedReferences"", ""ConnectedSystemObjectId"" = v.""ConnectedSystemObjectId"" FROM (VALUES ");
+            // Cast/parameter order below MUST match PendingExportBulkColumns.PendingExportsExportResultUpdate exactly.
+            sql.Append(@"UPDATE ""PendingExports"" AS t SET ");
+            sql.Append(string.Join(", ", PendingExportBulkColumns.PendingExportsExportResultUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
+            sql.Append(" FROM (VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
@@ -5306,7 +5336,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(pe.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
-            sql.Append(@") AS v(""Id"", ""Status"", ""ErrorCount"", ""MaxRetries"", ""LastAttemptedAt"", ""NextRetryAt"", ""LastErrorMessage"", ""LastErrorStackTrace"", ""HasUnresolvedReferences"", ""ConnectedSystemObjectId"") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@") AS v(""Id"", ");
+            sql.Append(BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportsExportResultUpdate));
+            sql.Append(@") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
@@ -5338,7 +5370,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         foreach (var chunk in BulkSqlHelpers.ChunkList(allChanges, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"UPDATE ""PendingExportAttributeValueChanges"" AS t SET ""Status"" = v.""Status"", ""ExportAttemptCount"" = v.""ExportAttemptCount"", ""LastExportedAt"" = v.""LastExportedAt"", ""StringValue"" = v.""StringValue"", ""UnresolvedReferenceValue"" = v.""UnresolvedReferenceValue"", ""LastImportedValue"" = v.""LastImportedValue"", ""ResolvedReferenceCsoId"" = v.""ResolvedReferenceCsoId"" FROM (VALUES ");
+            // Cast/parameter order below MUST match PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate exactly.
+            sql.Append(@"UPDATE ""PendingExportAttributeValueChanges"" AS t SET ");
+            sql.Append(string.Join(", ", PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
+            sql.Append(" FROM (VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
@@ -5358,7 +5393,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.ResolvedReferenceCsoId, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
-            sql.Append(@") AS v(""Id"", ""Status"", ""ExportAttemptCount"", ""LastExportedAt"", ""StringValue"", ""UnresolvedReferenceValue"", ""LastImportedValue"", ""ResolvedReferenceCsoId"") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@") AS v(""Id"", ");
+            sql.Append(BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate));
+            sql.Append(@") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }

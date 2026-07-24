@@ -1,4 +1,5 @@
 @using JIM.Models.Core
+@using System.Globalization
 @using Utilities
 @inject IUserPreferenceService PreferenceService
 
@@ -109,6 +110,10 @@
         else if (attributeValue.Attribute.Type == AttributeDataType.LongNumber)
         {
             @attributeValue.LongValue
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.Decimal)
+        {
+            @attributeValue.DecimalValue?.ToString(CultureInfo.InvariantCulture)
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.DateTime && attributeValue.DateTimeValue.HasValue)
         {

@@ -22,6 +22,9 @@
     case AttributeDataType.LongNumber:
         <MudNumericField @bind-Value="Criterion.LongValue" @bind-Value:after="OnChangedAsync" Immediate="true" Label="Long Number Value" Variant="Variant.Outlined" Class="mt-5" />
         break;
+    case AttributeDataType.Decimal:
+        <MudNumericField @bind-Value="Criterion.DecimalValue" @bind-Value:after="OnChangedAsync" Immediate="true" Label="Decimal Value" Variant="Variant.Outlined" Class="mt-5" />
+        break;
     case AttributeDataType.DateTime:
         <MudRadioGroup T="DateCriteriaValueMode" Value="Criterion.ValueMode" ValueChanged="HandleValueModeChanged" Class="mt-5">
             <MudRadio T="DateCriteriaValueMode" Value="DateCriteriaValueMode.Absolute">Absolute date</MudRadio>

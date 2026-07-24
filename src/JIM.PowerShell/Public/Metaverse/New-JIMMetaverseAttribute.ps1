@@ -15,7 +15,7 @@ function New-JIMMetaverseAttribute {
 
     .PARAMETER Type
         The data type of the attribute.
-        Valid values: Text, Integer, LongNumber, DateTime, Boolean, Reference, Guid, Binary
+        Valid values: Text, Integer, LongNumber, Decimal, DateTime, Boolean, Reference, Guid, Binary
 
     .PARAMETER AttributePlurality
         Whether the attribute is single-valued or multi-valued.
@@ -66,7 +66,7 @@ function New-JIMMetaverseAttribute {
         [string]$Name,
 
         [Parameter(Mandatory)]
-        [ValidateSet('Text', 'Integer', 'LongNumber', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')]
+        [ValidateSet('Text', 'Integer', 'LongNumber', 'Decimal', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')]
         [string]$Type,
 
         [Parameter()]

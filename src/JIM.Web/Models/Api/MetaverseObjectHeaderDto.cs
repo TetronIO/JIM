@@ -38,10 +38,16 @@ public class MetaverseObjectHeaderDto
 
     /// <summary>
     /// Additional attribute values requested via the 'attributes' query parameter.
-    /// Key is the attribute name, value is the string representation of the attribute value.
-    /// DisplayName is not included here as it has its own property.
+    /// Key is the attribute name; value is the attribute value in its natural JSON type:
+    /// a string for Text, a number for Number/LongNumber/Decimal, a boolean for Boolean,
+    /// an ISO-8601 string for DateTime, a GUID string for Guid, a base64-encoded string for
+    /// Binary (System.Text.Json's representation for byte arrays), and for Reference the
+    /// referenced Metaverse Object's id as a GUID string (consistent with
+    /// MetaverseObjectAttributeValueDto.ReferenceValueId). For multi-valued attributes a
+    /// single value is surfaced (the last value wins). DisplayName is not included here as
+    /// it has its own property.
     /// </summary>
-    public Dictionary<string, string?> Attributes { get; set; } = new();
+    public Dictionary<string, object?> Attributes { get; set; } = new();
 
     /// <summary>
     /// Creates a DTO from a MetaverseObjectHeader.
@@ -62,14 +68,53 @@ public class MetaverseObjectHeaderDto
         };
 
         // Add any additional attributes (excluding DisplayName which has its own property)
-        foreach (var av in header.AttributeValues)
+        foreach (var av in header.AttributeValues.Where(av => av.Attribute.Name != Constants.BuiltInAttributes.DisplayName))
         {
-            if (av.Attribute.Name != Constants.BuiltInAttributes.DisplayName)
-            {
-                dto.Attributes[av.Attribute.Name] = av.StringValue;
-            }
+            dto.Attributes[av.Attribute.Name] = GetTypedValue(av);
         }
 
         return dto;
+    }
+
+    /// <summary>
+    /// Surfaces the populated value field for an attribute value in its natural type, so JSON
+    /// serialisation produces the right JSON type per Attribute Data Type (see the
+    /// <see cref="Attributes"/> documentation). Returns null when no value field is populated,
+    /// for example an asserted-null row.
+    /// </summary>
+    private static object? GetTypedValue(MetaverseObjectAttributeValue av)
+    {
+        if (av.StringValue != null)
+            return av.StringValue;
+
+        if (av.DateTimeValue.HasValue)
+            return av.DateTimeValue.Value;
+
+        if (av.IntValue.HasValue)
+            return av.IntValue.Value;
+
+        if (av.LongValue.HasValue)
+            return av.LongValue.Value;
+
+        if (av.DecimalValue.HasValue)
+            return av.DecimalValue.Value;
+
+        if (av.ByteValue != null)
+            return av.ByteValue;
+
+        if (av.GuidValue.HasValue)
+            return av.GuidValue.Value;
+
+        if (av.BoolValue.HasValue)
+            return av.BoolValue.Value;
+
+        if (av.ReferenceValueId.HasValue)
+            return av.ReferenceValueId.Value;
+
+        // The FK scalar is preferred above, but fall back to the navigation in case only it was populated.
+        if (av.ReferenceValue != null)
+            return av.ReferenceValue.Id;
+
+        return null;
     }
 }

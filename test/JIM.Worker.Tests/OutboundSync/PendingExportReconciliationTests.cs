@@ -1312,6 +1312,139 @@ public class PendingExportReconciliationTests
 
     #endregion
 
+    #region Decimal Value Tests (#1046)
+
+    /// <summary>
+    /// Tests that Decimal attribute values are correctly compared when they match exactly.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_DecimalValue_ConfirmsWhenMatchesAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var salaryAttr = TargetUserType.Attributes.Single(a => a.Name == "salary");
+
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = salaryAttr.Id,
+            Attribute = salaryAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            DecimalValue = 51234.56m,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // Add matching decimal value
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = salaryAttr,
+            AttributeId = salaryAttr.Id,
+            DecimalValue = 51234.56m
+        });
+
+        var service = new PendingExportReconciliationService(SyncRepo, new JIM.Application.Servers.SyncEngine());
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "Decimal value should be confirmed when matches");
+    }
+
+    /// <summary>
+    /// Tests that a Decimal attribute value is confirmed when the imported value differs only in scale:
+    /// an exported 2.50 confirmed by an imported 2.5 (decimal comparison is numeric, never string).
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_DecimalValue_ConfirmsWhenScaleDiffersOnlyAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var salaryAttr = TargetUserType.Attributes.Single(a => a.Name == "salary");
+
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = salaryAttr.Id,
+            Attribute = salaryAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            DecimalValue = 2.50m,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // The target system normalised the stored scale; the value is numerically identical.
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = salaryAttr,
+            AttributeId = salaryAttr.Id,
+            DecimalValue = 2.5m
+        });
+
+        var service = new PendingExportReconciliationService(SyncRepo, new JIM.Application.Servers.SyncEngine());
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(1), "A scale-only difference is numerically equal and must confirm");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(0), "A scale-only difference must not trigger a retry");
+    }
+
+    /// <summary>
+    /// Tests that Decimal attribute values are marked for retry when they genuinely differ.
+    /// </summary>
+    [Test]
+    public async Task ReconcileAsync_DecimalValue_RetriesWhenDoesNotMatchAsync()
+    {
+        // Arrange
+        var cso = CreateTestCso();
+        var pendingExport = CreateTestPendingExport(cso);
+        var salaryAttr = TargetUserType.Attributes.Single(a => a.Name == "salary");
+
+        var attrChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            AttributeId = salaryAttr.Id,
+            Attribute = salaryAttr,
+            ChangeType = PendingExportAttributeChangeType.Update,
+            DecimalValue = 5.0m,
+            Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation,
+            ExportAttemptCount = 1
+        };
+        pendingExport.AttributeValueChanges.Add(attrChange);
+
+        // Add genuinely different decimal value
+        cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            Attribute = salaryAttr,
+            AttributeId = salaryAttr.Id,
+            DecimalValue = 5.5m
+        });
+
+        var service = new PendingExportReconciliationService(SyncRepo, new JIM.Application.Servers.SyncEngine());
+
+        // Act
+        var result = await service.ReconcileAsync(cso);
+
+        // Assert
+        Assert.That(result.ConfirmedChanges.Count, Is.EqualTo(0), "Decimal value should not be confirmed when different");
+        Assert.That(result.RetryChanges.Count, Is.EqualTo(1), "Decimal value should be marked for retry");
+    }
+
+    #endregion
+
     #region Protected Attribute Substitution Tests
 
     /// <summary>

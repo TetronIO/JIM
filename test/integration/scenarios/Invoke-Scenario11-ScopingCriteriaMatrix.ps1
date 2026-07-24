@@ -50,7 +50,7 @@
     Run the Quick tier (~12 cells, target < 90s). Mutually exclusive with -Exhaustive.
 
 .PARAMETER Exhaustive
-    Run the Exhaustive tier (~152 cells, target < 10 min). Mutually exclusive with -Quick.
+    Run the Exhaustive tier (~176 cells, target < 10 min). Mutually exclusive with -Quick.
 
 .PARAMETER IncludeNegativeCells
     When true (default), probes API behaviour for semantically-invalid operator/type
@@ -144,6 +144,7 @@ function Add-CriterionFromManifest {
         'Text'       { $apiArgs.StringValue   = [string]$Criterion.value }
         'Number'     { $apiArgs.IntValue      = [int]$Criterion.value }
         'LongNumber' { $apiArgs.LongValue     = [long]$Criterion.value }
+        'Decimal'    { $apiArgs.DecimalValue  = [decimal]$Criterion.value }
         'DateTime'   { $apiArgs.DateTimeValue = [datetime]$Criterion.value }
         'Boolean'    { $apiArgs.BoolValue     = [bool]$Criterion.value }
         'Guid'       { $apiArgs.GuidValue     = [Guid]$Criterion.value }
@@ -291,6 +292,7 @@ $rtAttrs['Boolean']  = New-JIMMetaverseAttribute -Name 'Sc11Rt_Boolean'  -Type B
 $rtAttrs['Guid']     = New-JIMMetaverseAttribute -Name 'Sc11Rt_Guid'     -Type Guid     -ErrorAction Stop
 
 $rtAttrs['LongNumber'] = New-JIMMetaverseAttribute -Name 'Sc11Rt_LongNumber' -Type LongNumber -ErrorAction Stop
+$rtAttrs['Decimal']    = New-JIMMetaverseAttribute -Name 'Sc11Rt_Decimal'    -Type Decimal    -ErrorAction Stop
 
 $rtMvType = New-JIMMetaverseObjectType -Name 'Sc11RoundTripMVO' -PluralName 'Sc11RoundTripMVOs' `
     -AttributeIds @($rtAttrs.Values | ForEach-Object { $_.id }) -ErrorAction Stop
@@ -335,6 +337,7 @@ $rtCases = @(
     @{ key='Text';       attr=$rtAttrs['Text'].id;       op='Equals';      field='stringValue';   value='RoundTrip'                                       }
     @{ key='Number';     attr=$rtAttrs['Number'].id;     op='GreaterThan'; field='intValue';      value=42                                                }
     @{ key='LongNumber'; attr=$rtAttrs['LongNumber'].id; op='LessThan';    field='longValue';     value=8000000000                                        }
+    @{ key='Decimal';    attr=$rtAttrs['Decimal'].id;    op='GreaterThanOrEquals'; field='decimalValue'; value=[decimal]'12345.678'                       }
     @{ key='DateTime';   attr=$rtAttrs['DateTime'].id;   op='Equals';      field='dateTimeValue'; value=[datetime]'2024-06-15T00:00:00Z'                  }
     @{ key='Boolean';    attr=$rtAttrs['Boolean'].id;    op='Equals';      field='boolValue';     value=$true                                             }
     @{ key='Guid';       attr=$rtAttrs['Guid'].id;       op='Equals';      field='guidValue';     value=[Guid]'11111111-2222-3333-4444-555555555555'      }
@@ -356,6 +359,7 @@ foreach ($case in $rtCases) {
         'Text'       { $apiArgs.StringValue   = $case.value }
         'Number'     { $apiArgs.IntValue      = $case.value }
         'LongNumber' { $apiArgs.LongValue     = $case.value }
+        'Decimal'    { $apiArgs.DecimalValue  = $case.value }
         'DateTime'   { $apiArgs.DateTimeValue = $case.value }
         'Boolean'    { $apiArgs.BoolValue     = $case.value }
         'Guid'       { $apiArgs.GuidValue     = $case.value }
@@ -379,6 +383,12 @@ foreach ($case in $rtCases) {
     }
     if ($case.key -eq 'Guid') {
         $actualValue = [Guid]$actualValue
+    }
+    if ($case.key -eq 'Decimal') {
+        # JSON deserialisation may surface the value as [double]; cast both sides to
+        # [decimal] so the round-trip comparison is numeric and lossless.
+        $actualValue = [decimal]$actualValue
+        $expected = [decimal]$expected
     }
 
     $valueOk = $actualValue -eq $expected
@@ -458,6 +468,7 @@ foreach ($attr in $manifest.seedAttributes) {
         'Boolean'    { $created = New-JIMMetaverseAttribute -Name $attr.name -Type Boolean  -ErrorAction Stop }
         'Guid'       { $created = New-JIMMetaverseAttribute -Name $attr.name -Type Guid     -ErrorAction Stop }
         'LongNumber' { $created = New-JIMMetaverseAttribute -Name $attr.name -Type LongNumber -ErrorAction Stop }
+        'Decimal'    { $created = New-JIMMetaverseAttribute -Name $attr.name -Type Decimal -ErrorAction Stop }
         default      { throw "Unknown manifest attribute type '$($attr.type)' for '$($attr.name)'" }
     }
     $mvAttrIds[$attr.name] = $created.id

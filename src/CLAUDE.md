@@ -88,6 +88,16 @@ Every new source file MUST include a copyright header as the very first content.
 - ALWAYS wrap nullable parameters with a typed `NpgsqlParameter`: `NullableParam(value, NpgsqlTypes.NpgsqlDbType.Text)` (see helper method in `ConnectedSystemRepository`, `ActivitiesRepository`, `MetaverseRepository`)
 - This applies to ALL nullable columns in raw SQL INSERT/UPDATE statements: string, int, Guid, DateTime, bool, etc.
 
+**Raw SQL Column Lists (MANDATORY guard):**
+
+Raw SQL bypasses the EF model, so a hand-typed column list silently diverges from it the moment a migration adds a column: writes default the new column as NULL for every bulk-written row, with no error anywhere. This is a proven, recurring failure class (attribute-value provenance #91; Decimal audit values, CSO PartitionId and RPEI ErrorStackTrace found in one 2026-07 sweep). Three rules prevent it:
+
+1. **Never hand-type a column list in a raw SQL statement.** Every COPY / INSERT / UPDATE column list must come from the table's `*BulkColumns` constants class in `JIM.PostgresData/Repositories/` (`MvoBulkInsertColumns`, `MvoChangeBulkColumns`, `CsoBulkColumns`, `CsoChangeBulkColumns`, `RpeiBulkColumns`, `PendingExportBulkColumns`), interpolated via `BulkSqlHelpers.ToQuotedList` so the constant IS the statement's column list. The writer beside it must write values in exactly list order (comment `// ... order below MUST match ...` at the writer). Partial updates get their own named update list plus a documented exclusion list explaining why each excluded column is not written. When adding raw SQL for a table with no constants class yet, create one following the existing pattern; do not add a seventh inline list.
+2. **Every constant is guarded by `BulkInsertColumnCompletenessTests`** (JIM.Worker.Tests): insert lists are asserted against the EF model's mapped columns, and update lists plus exclusions must cover the insert list exactly. These run in every unit pass and in `build-and-test` on every PR, so a migration that adds a column fails the test run with a message naming the column and the writers to extend. A new constants class needs its tests added in the same change.
+3. **Every raw write path needs a `RequiresPostgres` round-trip test** that persists a fully populated entity through the public repository method and asserts every field on read-back (pattern: `MvoChangeValuePersistenceDatabaseTests`, `CsoPartitionIdPersistenceDatabaseTests`). The completeness test cannot catch a writer writing values in the wrong order, a wrong `NpgsqlDbType`, or a temp-table shape drifting from its UPDATE; the round-trip test catches all three, and the in-memory provider structurally cannot.
+
+Exempt from rule 1: deliberately narrow, single-purpose statements that set call-site-computed values (single-column FK fix-ups, status-mark updates, scope flags) and read-side SELECT projections, which are deliberate subsets. If in doubt whether a statement is "the write path for the entity" or a targeted mutation, treat it as the write path.
+
 **Exception Handling:**
 - NEVER use generic `catch` or `catch (Exception)` clauses; always catch a specific exception type. This applies even in diagnostic/telemetry code that "should never break callers" - enumerate the concrete failure modes for the operation instead.
 - **Sanctioned exception: worker-task / Activity execution boundaries.** The `Worker.cs` task-dispatch cases (and any equivalent top-level boundary whose contract is "any failure must be recorded on the Activity via `FailActivityWithErrorAsync`, never escape silently") MUST catch all exceptions; enumerating types there would leave an unanticipated failure with a permanently in-flight Activity, violating the Synchronisation Integrity rules (`src/JIM.Application/CLAUDE.md`), which take precedence. When the github-code-quality bot flags one of these as a "Generic catch clause", reply to the thread with this rationale and resolve it; do not narrow the catch to appease the linter (precedent: PR #911, `Worker.cs` temporal-reconciliation case).
@@ -291,7 +301,8 @@ Optional, clearable fields (e.g. `Description`) follow one convention across bot
 2. Create migration: `dotnet ef migrations add [Name] --project src/JIM.PostgresData`
 3. Review generated migration
 4. Test: `dotnet ef database update --project src/JIM.PostgresData`
-5. Commit migration files
+5. Run the unit tests: `BulkInsertColumnCompletenessTests` will fail for any table whose raw SQL writers the new column must be added to (see "Raw SQL Column Lists" above). Extend the named `*BulkColumns` constant AND the corresponding writers (values in list order), place the column consciously in the update or exclusion list, and extend the table's `RequiresPostgres` round-trip test to assert the new column persists. A schema change is not complete until these pass.
+6. Commit migration files
 
 **CRITICAL: NEVER flatten, squash, delete, or reset EF Core migrations.** Migrations are append-only. Deployed instances track applied migrations by name in `__EFMigrationsHistory`; removing old migrations and replacing them with a combined migration will break every existing deployment.
 

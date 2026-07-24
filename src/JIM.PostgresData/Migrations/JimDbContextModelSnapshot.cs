@@ -604,6 +604,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("DecimalValue")
+                        .HasColumnType("numeric");
+
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
 
@@ -637,6 +640,8 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ContributedBySystemId");
 
                     b.HasIndex("DateTimeValue");
+
+                    b.HasIndex("DecimalValue");
 
                     b.HasIndex("GuidValue");
 
@@ -765,11 +770,17 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("DecimalValue")
+                        .HasColumnType("numeric");
+
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
 
                     b.Property<int?>("IntValue")
                         .HasColumnType("integer");
+
+                    b.Property<long?>("LongValue")
+                        .HasColumnType("bigint");
 
                     b.Property<Guid>("MetaverseObjectChangeAttributeId")
                         .HasColumnType("uuid");
@@ -1644,6 +1655,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("DecimalValue")
+                        .HasColumnType("numeric");
+
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
 
@@ -2048,6 +2062,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("DecimalValue")
+                        .HasColumnType("numeric");
+
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
 
@@ -2440,6 +2457,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("DecimalValue")
+                        .HasColumnType("numeric");
+
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
 
@@ -2581,6 +2601,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("DecimalValue")
+                        .HasColumnType("numeric");
 
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
@@ -3252,6 +3275,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("DecimalValue")
+                        .HasColumnType("numeric");
 
                     b.Property<int>("ExportAttemptCount")
                         .HasColumnType("integer");

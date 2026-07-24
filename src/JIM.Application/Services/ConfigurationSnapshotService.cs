@@ -230,6 +230,7 @@ public class ConfigurationSnapshotService
             Add(children, "stringValue", criterion.StringValue, "Value");
             Add(children, "intValue", Render(criterion.IntValue), "Value");
             Add(children, "longValue", Render(criterion.LongValue), "Value");
+            Add(children, "decimalValue", Render(criterion.DecimalValue), "Value");
             Add(children, "dateTimeValue", Render(criterion.DateTimeValue), "Value");
             Add(children, "boolValue", Render(criterion.BoolValue), "Value");
             Add(children, "guidValue", Render(criterion.GuidValue), "Value");
@@ -860,6 +861,7 @@ public class ConfigurationSnapshotService
             Add(children, "stringValue", criterion.StringValue, "Value");
             Add(children, "intValue", Render(criterion.IntValue), "Value");
             Add(children, "longValue", Render(criterion.LongValue), "Value");
+            Add(children, "decimalValue", Render(criterion.DecimalValue), "Value");
             Add(children, "dateTimeValue", Render(criterion.DateTimeValue), "Value");
             Add(children, "boolValue", Render(criterion.BoolValue), "Value");
             Add(children, "guidValue", Render(criterion.GuidValue), "Value");
@@ -1141,6 +1143,10 @@ public class ConfigurationSnapshotService
     private static string? Render(int? value) => value?.ToString(CultureInfo.InvariantCulture);
 
     private static string? Render(long? value) => value?.ToString(CultureInfo.InvariantCulture);
+
+    // Canonical invariant form (no trailing zeros, never exponent notation) so numerically equal
+    // criteria values always snapshot identically.
+    private static string? Render(decimal? value) => value.HasValue ? DecimalAttributeValue.ToCanonicalString(value.Value) : null;
 
     private static string? Render(DateTime? value) => value?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 

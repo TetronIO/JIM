@@ -109,6 +109,7 @@ public class ScopingEvaluationServer
                    criterion.StringValue == null &&
                    criterion.IntValue == null &&
                    criterion.LongValue == null &&
+                   criterion.DecimalValue == null &&
                    criterion.DateTimeValue == null &&
                    criterion.BoolValue == null &&
                    criterion.GuidValue == null;
@@ -120,6 +121,7 @@ public class ScopingEvaluationServer
             AttributeDataType.Text => EvaluateStringComparison(mvoAttributeValue.StringValue, criterion.StringValue, criterion.ComparisonType, criterion.CaseSensitive),
             AttributeDataType.Number => EvaluateNumberComparison(mvoAttributeValue.IntValue, criterion.IntValue, criterion.ComparisonType),
             AttributeDataType.LongNumber => EvaluateLongNumberComparison(mvoAttributeValue.LongValue, criterion.LongValue, criterion.ComparisonType),
+            AttributeDataType.Decimal => EvaluateDecimalComparison(mvoAttributeValue.DecimalValue, criterion.DecimalValue, criterion.ComparisonType),
             AttributeDataType.DateTime => EvaluateDateTimeComparison(mvoAttributeValue.DateTimeValue, ResolveCriterionDate(criterion, nowUtc), criterion.ComparisonType),
             AttributeDataType.Boolean => EvaluateBooleanComparison(mvoAttributeValue.BoolValue, criterion.BoolValue, criterion.ComparisonType),
             AttributeDataType.Guid => EvaluateGuidComparison(mvoAttributeValue.GuidValue, criterion.GuidValue, criterion.ComparisonType),
@@ -218,6 +220,7 @@ public class ScopingEvaluationServer
                    criterion.StringValue == null &&
                    criterion.IntValue == null &&
                    criterion.LongValue == null &&
+                   criterion.DecimalValue == null &&
                    criterion.DateTimeValue == null &&
                    criterion.BoolValue == null &&
                    criterion.GuidValue == null;
@@ -229,6 +232,7 @@ public class ScopingEvaluationServer
             AttributeDataType.Text => EvaluateStringComparison(csoAttributeValue.StringValue, criterion.StringValue, criterion.ComparisonType, criterion.CaseSensitive),
             AttributeDataType.Number => EvaluateNumberComparison(csoAttributeValue.IntValue, criterion.IntValue, criterion.ComparisonType),
             AttributeDataType.LongNumber => EvaluateLongNumberComparison(csoAttributeValue.LongValue, criterion.LongValue, criterion.ComparisonType),
+            AttributeDataType.Decimal => EvaluateDecimalComparison(csoAttributeValue.DecimalValue, criterion.DecimalValue, criterion.ComparisonType),
             AttributeDataType.DateTime => EvaluateDateTimeComparison(csoAttributeValue.DateTimeValue, ResolveCriterionDate(criterion, nowUtc), criterion.ComparisonType),
             AttributeDataType.Boolean => EvaluateBooleanComparison(csoAttributeValue.BoolValue, criterion.BoolValue, criterion.ComparisonType),
             AttributeDataType.Guid => EvaluateGuidComparison(csoAttributeValue.GuidValue, criterion.GuidValue, criterion.ComparisonType),
@@ -310,6 +314,24 @@ public class ScopingEvaluationServer
 
     private bool EvaluateLongNumberComparison(long? actual, long? expected, SearchComparisonType comparisonType)
     {
+        if (!actual.HasValue || !expected.HasValue)
+            return comparisonType == SearchComparisonType.Equals && actual == expected;
+
+        return comparisonType switch
+        {
+            SearchComparisonType.Equals => actual.Value == expected.Value,
+            SearchComparisonType.NotEquals => actual.Value != expected.Value,
+            SearchComparisonType.LessThan => actual.Value < expected.Value,
+            SearchComparisonType.LessThanOrEquals => actual.Value <= expected.Value,
+            SearchComparisonType.GreaterThan => actual.Value > expected.Value,
+            SearchComparisonType.GreaterThanOrEquals => actual.Value >= expected.Value,
+            _ => false
+        };
+    }
+
+    private bool EvaluateDecimalComparison(decimal? actual, decimal? expected, SearchComparisonType comparisonType)
+    {
+        // Decimal comparison operators are numeric and scale-insensitive: an actual of 5.00 equals a criterion of 5.0.
         if (!actual.HasValue || !expected.HasValue)
             return comparisonType == SearchComparisonType.Equals && actual == expected;
 

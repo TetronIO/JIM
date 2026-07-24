@@ -13,7 +13,12 @@ public enum AttributeDataType
     Reference = 5,
     Guid = 6,
     Boolean = 7,
-    LongNumber = 8
+    LongNumber = 8,
+
+    /// <summary>
+    /// A high-precision decimal number. Maps to .NET <c>decimal</c> and PostgreSQL <c>numeric</c>.
+    /// </summary>
+    Decimal = 9
 }
 
 public enum AttributePlurality

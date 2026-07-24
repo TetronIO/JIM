@@ -28,6 +28,12 @@ internal static class BulkSqlHelpers
     }
 
     /// <summary>
+    /// Renders a column list as quoted, comma-separated SQL identifiers, e.g. "Id", "Created".
+    /// </summary>
+    internal static string ToQuotedList(string[] columns) =>
+        string.Join(", ", columns.Select(c => $"\"{c}\""));
+
+    /// <summary>
     /// Splits a list into chunks of at most the specified size.
     /// </summary>
     internal static List<List<T>> ChunkList<T>(List<T> source, int chunkSize)

@@ -2543,7 +2543,7 @@ function Assert-MvoAttributeValue {
         Asserts the attribute carries a deliberate "Null is a value" assertion (#91) rather than
         either a real value or a plain absence: exactly one row exists for the attribute, that row
         has NullValue = true, and none of its real value columns (StringValue, IntValue, LongValue,
-        DateTimeValue, BoolValue, GuidValue, ReferenceValueId) are populated. This holds for
+        DecimalValue, DateTimeValue, BoolValue, GuidValue, ReferenceValueId) are populated. This holds for
         multi-valued attributes too: an asserted-null MVA collapses to the same single marker row,
         not an empty set of per-value markers (see SyncEngine.AttributeFlow.ApplyNoValueOutcome).
         Combine with -ExpectedContributingSyncRuleName to also assert which Synchronisation Rule
@@ -2630,6 +2630,7 @@ function Assert-MvoAttributeValue {
             StringValue      = $_.stringValue
             IntValue         = $_.intValue
             LongValue        = $_.longValue
+            DecimalValue     = $_.decimalValue
             DateTimeValue    = $_.dateTimeValue
             # Rendered as 'true'/'false'/'' text for parity with the previous psql CASE expression:
             # the asserted-null corruption check below must treat an explicit false as a populated
@@ -2683,6 +2684,7 @@ function Assert-MvoAttributeValue {
         if ($markerRow.StringValue) { $populatedRealColumns += "StringValue='$($markerRow.StringValue)'" }
         if ($markerRow.IntValue) { $populatedRealColumns += "IntValue='$($markerRow.IntValue)'" }
         if ($markerRow.LongValue) { $populatedRealColumns += "LongValue='$($markerRow.LongValue)'" }
+        if ($markerRow.DecimalValue) { $populatedRealColumns += "DecimalValue='$($markerRow.DecimalValue)'" }
         if ($markerRow.DateTimeValue) { $populatedRealColumns += "DateTimeValue='$($markerRow.DateTimeValue)'" }
         if ($markerRow.BoolValue) { $populatedRealColumns += "BoolValue='$($markerRow.BoolValue)'" }
         if ($markerRow.GuidValue) { $populatedRealColumns += "GuidValue='$($markerRow.GuidValue)'" }
@@ -2744,6 +2746,7 @@ function Assert-MvoAttributeValue {
             if ($r.StringValue) { $r.StringValue }
             elseif ($r.IntValue) { $r.IntValue }
             elseif ($r.LongValue) { $r.LongValue }
+            elseif ($r.DecimalValue) { $r.DecimalValue }
             elseif ($r.DateTimeValue) { $r.DateTimeValue }
             elseif ($r.BoolValue) { $r.BoolValue }
             elseif ($r.GuidValue) { $r.GuidValue }
@@ -2761,6 +2764,7 @@ function Assert-MvoAttributeValue {
             elseif ($_.ReferenceValueId) { $_.ReferenceValueId }
             elseif ($_.IntValue) { $_.IntValue }
             elseif ($_.LongValue) { $_.LongValue }
+            elseif ($_.DecimalValue) { $_.DecimalValue }
             elseif ($_.DateTimeValue) { $_.DateTimeValue }
             elseif ($_.GuidValue) { $_.GuidValue }
             else { $null }

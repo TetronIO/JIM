@@ -87,6 +87,71 @@ public class ExportEvaluationMergeTests
     }
 
     [Test]
+    public void GetAttributeChangeKey_DecimalValue_ReturnsCanonicalString()
+    {
+        var change = new PendingExportAttributeValueChange
+        {
+            AttributeId = DescriptionAttributeId,
+            DecimalValue = 42.5m,
+            ChangeType = PendingExportAttributeChangeType.Update
+        };
+
+        var key = ExportEvaluationServer.GetAttributeChangeKey(change);
+
+        Assert.That(key, Is.EqualTo($"{DescriptionAttributeId}:42.5"));
+    }
+
+    [Test]
+    public void GetAttributeChangeKey_DecimalScaleVariants_ReturnSameKey()
+    {
+        // 5.0 and 5.00 are numerically equal; the canonical form must produce identical merge keys,
+        // otherwise multi-valued dedupe/merge treats them as different values.
+        var change1 = new PendingExportAttributeValueChange
+        {
+            AttributeId = DescriptionAttributeId,
+            DecimalValue = 5.0m,
+            ChangeType = PendingExportAttributeChangeType.Add
+        };
+        var change2 = new PendingExportAttributeValueChange
+        {
+            AttributeId = DescriptionAttributeId,
+            DecimalValue = 5.00m,
+            ChangeType = PendingExportAttributeChangeType.Add
+        };
+
+        var key1 = ExportEvaluationServer.GetAttributeChangeKey(change1);
+        var key2 = ExportEvaluationServer.GetAttributeChangeKey(change2);
+
+        Assert.That(key1, Is.EqualTo(key2));
+        Assert.That(key1, Is.EqualTo($"{DescriptionAttributeId}:5"));
+    }
+
+    [Test]
+    public void GetAttributeChangeKey_DecimalExtremeValues_NeverExponentNotation()
+    {
+        var tiny = new PendingExportAttributeValueChange
+        {
+            AttributeId = DescriptionAttributeId,
+            DecimalValue = 0.0000000001m,
+            ChangeType = PendingExportAttributeChangeType.Update
+        };
+        var huge = new PendingExportAttributeValueChange
+        {
+            AttributeId = DescriptionAttributeId,
+            DecimalValue = 79228162514264337593543950335m, // decimal.MaxValue
+            ChangeType = PendingExportAttributeChangeType.Update
+        };
+
+        var tinyKey = ExportEvaluationServer.GetAttributeChangeKey(tiny);
+        var hugeKey = ExportEvaluationServer.GetAttributeChangeKey(huge);
+
+        Assert.That(tinyKey, Is.EqualTo($"{DescriptionAttributeId}:0.0000000001"));
+        Assert.That(hugeKey, Is.EqualTo($"{DescriptionAttributeId}:79228162514264337593543950335"));
+        Assert.That(tinyKey, Does.Not.Contain("E").And.Not.Contain("e"));
+        Assert.That(hugeKey, Does.Not.Contain("E").And.Not.Contain("e"));
+    }
+
+    [Test]
     public void GetAttributeChangeKey_NoValues_ReturnsAttributeIdWithEmptyValue()
     {
         var change = new PendingExportAttributeValueChange
@@ -348,6 +413,43 @@ public class ExportEvaluationMergeTests
 
         // Same MVO ID = same key, so drift version is excluded (export eval wins)
         Assert.That(driftOnlyChanges, Has.Count.EqualTo(0));
+    }
+
+    [Test]
+    public void MergeScenario_MultiValuedDecimal_ScaleVariantsDeduplicateByCanonicalKey()
+    {
+        // A drift Remove of 5.00 and an export eval Add of 5.0 target the SAME numeric value on a
+        // multi-valued Decimal attribute. The canonical merge key must make them collide so export
+        // eval wins; a raw ToString would produce "5.00" vs "5.0" and both changes would survive.
+        var multiValuedDecimalAttr = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = DescriptionAttributeId,
+            Name = "unitPrices",
+            Type = AttributeDataType.Decimal,
+            AttributePlurality = AttributePlurality.MultiValued
+        };
+        var driftChange = new PendingExportAttributeValueChange
+        {
+            AttributeId = DescriptionAttributeId,
+            Attribute = multiValuedDecimalAttr,
+            DecimalValue = 5.00m,
+            ChangeType = PendingExportAttributeChangeType.Remove
+        };
+        var exportEvalChange = new PendingExportAttributeValueChange
+        {
+            AttributeId = DescriptionAttributeId,
+            Attribute = multiValuedDecimalAttr,
+            DecimalValue = 5.0m,
+            ChangeType = PendingExportAttributeChangeType.Add
+        };
+
+        var exportEvalKeys = new List<PendingExportAttributeValueChange> { exportEvalChange }
+            .Select(ExportEvaluationServer.GetAttributeChangeMergeKey).ToHashSet();
+        var driftOnlyChanges = new List<PendingExportAttributeValueChange> { driftChange }
+            .Where(dc => !exportEvalKeys.Contains(ExportEvaluationServer.GetAttributeChangeMergeKey(dc))).ToList();
+
+        Assert.That(driftOnlyChanges, Is.Empty,
+            "5.00 and 5.0 are numerically equal; the canonical merge key must collide so export eval wins");
     }
 
     #endregion
