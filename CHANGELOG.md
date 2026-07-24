@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 The portal's stylesheets and scripts now carry a content-based version stamp, so after a JIM upgrade your browser fetches the new assets immediately instead of potentially serving a stale cached copy (which could leave the interface looking or behaving as it did before the upgrade until a manual hard refresh).
 - 🐛 MVO Deleted and MVO Deletion Scheduled outcomes in an execution item's Causality Tree no longer render as bare labels when an out-of-scope disconnection triggered the deletion. Every such outcome now shows the deleted Identity's display name (captured before deletion), why the Metaverse Object Deletion Rule fired (for example "last connector disconnected"), the grace period for scheduled deletions, and a link to the deletion record browser, so you can see exactly which Identity was removed and why without leaving the Activity. (#1086)
 - 🐛 Piping a Schedule into `Get-JIMScheduleExecution` now filters executions to that Schedule. Previously the piped Schedule did not bind, so the cmdlet silently returned every execution in the system whilst appearing to filter.
 - 🐛 `Reset-JIMServiceSetting` now accepts Service Settings from the pipeline, as its documentation described.
