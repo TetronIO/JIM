@@ -4888,6 +4888,10 @@ public class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
+        // SPEC-1082 D10: Verification Mode only applies to Full Import.
+        if (connectedSystemRunProfile.VerifyImportContentHashes && connectedSystemRunProfile.RunType != ConnectedSystemRunType.FullImport)
+            throw new ArgumentException("VerifyImportContentHashes can only be enabled on a Full Import Run Profile.");
+
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
 
@@ -4915,6 +4919,10 @@ public class ConnectedSystemServer
     {
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
+
+        // SPEC-1082 D10: Verification Mode only applies to Full Import.
+        if (connectedSystemRunProfile.VerifyImportContentHashes && connectedSystemRunProfile.RunType != ConnectedSystemRunType.FullImport)
+            throw new ArgumentException("VerifyImportContentHashes can only be enabled on a Full Import Run Profile.");
 
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
@@ -5138,6 +5146,12 @@ public class ConnectedSystemServer
             return false;
 
         if (runProfile.RunType == ConnectedSystemRunType.Export && !connectedSystem.ConnectorDefinition.SupportsExport)
+            return false;
+
+        // SPEC-1082 D10: Verification Mode only applies to Full Import. Validated here (not just in
+        // the REST controller) so the portal, which calls this Application-layer method directly, is
+        // also protected.
+        if (runProfile.VerifyImportContentHashes && runProfile.RunType != ConnectedSystemRunType.FullImport)
             return false;
 
         return true;
