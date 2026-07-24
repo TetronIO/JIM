@@ -1207,9 +1207,21 @@ public class SyncRepository : ISyncRepository
 
     #region Pending Exports
 
-    public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
+    public virtual Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
     {
         var result = GetPendingExportsForSystem(connectedSystemId).ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
+    /// reference resolution: Pending status with unresolved reference attribute values (#1102).
+    /// </summary>
+    public virtual Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
+    {
+        var result = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.HasUnresolvedReferences && pe.Status == PendingExportStatus.Pending)
+            .ToList();
         return Task.FromResult(result);
     }
 

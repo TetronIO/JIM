@@ -235,6 +235,16 @@ public partial class SyncRepository : ISyncRepository
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetPendingExportsAsync(connectedSystemId);
 
+    /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
+    /// reference resolution: Pending status with unresolved reference attribute values.
+    /// The predicate is evaluated in SQL (backed by a partial index on
+    /// HasUnresolvedReferences) so the common zero-deferred case costs a single
+    /// index probe rather than hydrating every Pending Export for the system (#1102).
+    /// </summary>
+    public Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
+        => _repo.ConnectedSystems.GetPendingExportsWithUnresolvedReferencesAsync(connectedSystemId);
+
     public Task<int> GetPendingExportsCountAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
 
