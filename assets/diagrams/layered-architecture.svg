@@ -1,0 +1,45 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- JIM's layered software architecture (Concepts > Architecture): each -->
+<!-- layer depends only on the layer beneath it; Integration sits at the -->
+<!-- base alongside data access (association link, not a dependency arrow). -->
+<!-- Static structure, so no packet animation (packets trace data in flight). -->
+<!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
+<!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: keep this file free of blank lines AND of comments inside the -->
+<!-- <svg> element; it is inlined into markdown via pymdownx.snippets, and -->
+<!-- python-markdown ends the raw-HTML block at either. Structure is -->
+<!-- expressed with <g> groups instead. -->
+<svg class="jim-diagram" viewBox="0 0 1160 496" role="img" aria-labelledby="jimdg-la-title jimdg-la-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="jimdg-la-title">JIM's layered architecture</title>
+  <desc id="jimdg-la-desc">A vertical stack of five layers. Presentation (JIM.Web, the Blazor UI and REST API) depends on Application (JIM.Application, the domain servers), which depends on Domain (JIM.Models, the entities and DTOs), which depends on Data (JIM.PostgresData, Entity Framework Core). Integration (JIM.Connectors, connectivity to external systems) sits at the base alongside the Data layer.</desc>
+  <g id="jimdg-la-layers">
+    <rect class="jimdg-stage" x="300" y="20" width="560" height="64" rx="8"/>
+    <text class="jimdg-stage-label" x="580" y="46">Presentation</text>
+    <text class="jimdg-system-sub" x="580" y="67">JIM.Web · Blazor UI + REST API</text>
+    <rect class="jimdg-stage" x="300" y="118" width="560" height="64" rx="8"/>
+    <text class="jimdg-stage-label" x="580" y="144">Application</text>
+    <text class="jimdg-system-sub" x="580" y="165">JIM.Application · domain servers</text>
+    <rect class="jimdg-stage" x="300" y="216" width="560" height="64" rx="8"/>
+    <text class="jimdg-stage-label" x="580" y="242">Domain</text>
+    <text class="jimdg-system-sub" x="580" y="263">JIM.Models · entities &amp; DTOs</text>
+    <rect class="jimdg-stage" x="300" y="314" width="560" height="64" rx="8"/>
+    <text class="jimdg-stage-label" x="580" y="340">Data</text>
+    <text class="jimdg-system-sub" x="580" y="361">JIM.PostgresData · EF Core</text>
+    <rect class="jimdg-stage" x="300" y="412" width="560" height="64" rx="8"/>
+    <text class="jimdg-stage-label" x="580" y="438">Integration</text>
+    <text class="jimdg-system-sub" x="580" y="459">JIM.Connectors · external systems</text>
+  </g>
+  <g id="jimdg-la-edges">
+    <line class="jimdg-flow" x1="580" y1="84" x2="580" y2="108"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,118) rotate(90)"/>
+    <line class="jimdg-flow" x1="580" y1="182" x2="580" y2="206"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,216) rotate(90)"/>
+    <line class="jimdg-flow" x1="580" y1="280" x2="580" y2="304"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,314) rotate(90)"/>
+    <line class="jimdg-spoke" x1="580" y1="378" x2="580" y2="412"/>
+    <circle class="jimdg-link-end" cx="580" cy="378" r="3.5"/>
+    <circle class="jimdg-link-end" cx="580" cy="412" r="3.5"/>
+  </g>
+</svg>

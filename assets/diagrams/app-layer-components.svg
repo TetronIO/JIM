@@ -1,0 +1,113 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- Inside the Application Layer (Developer Guide > Architecture): the -->
+<!-- JimApplication facade and domain servers used by Web and Scheduler, and -->
+<!-- the sync orchestration path used by the Worker's task processors. -->
+<!-- Simplified for legibility; SyncServer also uses ISyncRepository -->
+<!-- directly, and the deep-dive process diagrams carry the exact flows. -->
+<!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
+<!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: keep this file free of blank lines AND of comments inside the -->
+<!-- <svg> element; it is inlined into markdown via pymdownx.snippets, and -->
+<!-- python-markdown ends the raw-HTML block at either. Structure is -->
+<!-- expressed with <g> groups instead. -->
+<svg class="jim-diagram" viewBox="0 0 1160 840" role="img" aria-labelledby="jimdg-al-title jimdg-al-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="jimdg-al-title">Inside the Application Layer</title>
+  <desc id="jimdg-al-desc">JIM.Web and JIM.Scheduler call the JimApplication facade, the single entry point to the domain servers: Metaverse, ConnectedSystem, ObjectMatching, Search, Security, Auth, Scheduler, Tasking, Activity, ChangeHistory, Certificate, ServiceSettings, FileSystem, ExampleData and System, plus the configuration services. The JIM.Worker task processors bypass the facade and use SyncServer, which orchestrates the sync evaluation and execution servers (ExportEvaluation, ExportExecution, ScopingEvaluation, ScopeReconciliation and DriftDetection), and SyncEngine, the stateless sync domain logic with no I/O. Domain servers reach PostgreSQL through IJimRepository; the sync servers use the dedicated ISyncRepository.</desc>
+  <g id="jimdg-al-callers">
+    <rect class="jimdg-stage" x="150" y="20" width="240" height="64" rx="8"/>
+    <text class="jimdg-stage-label" x="270" y="46">JIM.Web</text>
+    <text class="jimdg-system-sub" x="270" y="67">Blazor UI + REST API</text>
+    <rect class="jimdg-stage" x="460" y="20" width="240" height="64" rx="8"/>
+    <text class="jimdg-stage-label" x="580" y="46">JIM.Scheduler</text>
+    <text class="jimdg-system-sub" x="580" y="67">schedule triggers</text>
+    <rect class="jimdg-stage" x="770" y="20" width="240" height="64" rx="8"/>
+    <text class="jimdg-stage-label" x="890" y="46">JIM.Worker</text>
+    <text class="jimdg-system-sub" x="890" y="67">task processors</text>
+  </g>
+  <g id="jimdg-al-boundary">
+    <rect class="jimdg-hub" x="90" y="140" width="980" height="520" rx="8"/>
+    <text class="jimdg-hub-title" x="580" y="176">JIM.Application</text>
+  </g>
+  <g id="jimdg-al-entry">
+    <rect class="jimdg-stage" x="270" y="210" width="310" height="70" rx="8"/>
+    <text class="jimdg-stage-label" x="425" y="239">JimApplication facade</text>
+    <text class="jimdg-system-sub" x="425" y="261">single entry point</text>
+    <rect class="jimdg-stage" x="650" y="210" width="200" height="70" rx="8"/>
+    <text class="jimdg-stage-label" x="750" y="239">SyncServer</text>
+    <text class="jimdg-system-sub" x="750" y="261">sync orchestration</text>
+    <rect class="jimdg-stage" x="880" y="210" width="170" height="70" rx="8"/>
+    <text class="jimdg-stage-label" x="965" y="239">SyncEngine</text>
+    <text class="jimdg-system-sub" x="965" y="261">stateless · no I/O</text>
+  </g>
+  <g id="jimdg-al-servers">
+    <rect class="jimdg-layer" x="130" y="340" width="440" height="150" rx="8"/>
+    <text class="jimdg-layer-title" x="350" y="368">Domain servers</text>
+    <text class="jimdg-system-sub" x="350" y="396">Metaverse · ConnectedSystem · ObjectMatching · Search</text>
+    <text class="jimdg-system-sub" x="350" y="417">Security · Auth · Scheduler · Tasking · Activity</text>
+    <text class="jimdg-system-sub" x="350" y="438">ChangeHistory · Certificate · ServiceSettings · FileSystem</text>
+    <text class="jimdg-system-sub" x="350" y="459">ExampleData · System · configuration services</text>
+    <rect class="jimdg-layer" x="630" y="340" width="420" height="150" rx="8"/>
+    <text class="jimdg-layer-title" x="840" y="368">Sync evaluation &amp; execution</text>
+    <text class="jimdg-system-sub" x="840" y="400">ExportEvaluation · ExportExecution</text>
+    <text class="jimdg-system-sub" x="840" y="424">ScopingEvaluation · ScopeReconciliation</text>
+    <text class="jimdg-system-sub" x="840" y="448">DriftDetection</text>
+  </g>
+  <g id="jimdg-al-repos">
+    <rect class="jimdg-stage" x="240" y="550" width="220" height="64" rx="8"/>
+    <text class="jimdg-stage-label" x="350" y="576">IJimRepository</text>
+    <text class="jimdg-system-sub" x="350" y="597">general data access</text>
+    <rect class="jimdg-stage" x="730" y="550" width="220" height="64" rx="8"/>
+    <text class="jimdg-stage-label" x="840" y="576">ISyncRepository</text>
+    <text class="jimdg-system-sub" x="840" y="597">bulk sync data access</text>
+  </g>
+  <g id="jimdg-al-db">
+    <path class="jimdg-stage" d="M470,716 A110,16 0 0 1 690,716 L690,796 A110,16 0 0 1 470,796 Z"/>
+    <ellipse class="jimdg-stage" cx="580" cy="716" rx="110" ry="16"/>
+    <text class="jimdg-stage-label" x="580" y="752">PostgreSQL</text>
+    <text class="jimdg-system-sub" x="580" y="774">single data store</text>
+  </g>
+  <g id="jimdg-al-edges">
+    <line class="jimdg-flow" x1="270" y1="84" x2="373.4" y2="202.5"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(380,210) rotate(48.9)"/>
+    <line class="jimdg-flow" x1="580" y1="84" x2="476.6" y2="202.5"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(470,210) rotate(131.1)"/>
+    <line class="jimdg-flow" x1="890" y1="84" x2="796.2" y2="202.2"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(790,210) rotate(128.4)"/>
+    <line class="jimdg-flow" x1="890" y1="84" x2="945.7" y2="201"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(950,210) rotate(64.5)"/>
+    <line class="jimdg-flow" x1="425" y1="280" x2="357.8" y2="333.7"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(350,340) rotate(141.3)"/>
+    <line class="jimdg-flow" x1="425" y1="280" x2="690.2" y2="337.9"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(700,340) rotate(12.3)"/>
+    <line class="jimdg-flow" x1="750" y1="280" x2="802.9" y2="332.9"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(810,340) rotate(45)"/>
+    <line class="jimdg-flow" x1="350" y1="490" x2="350" y2="540"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(350,550) rotate(90)"/>
+    <line class="jimdg-flow" x1="840" y1="490" x2="840" y2="540"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(840,550) rotate(90)"/>
+    <line class="jimdg-flow" x1="350" y1="614" x2="511.2" y2="701.2"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(520,706) rotate(28.4)"/>
+    <line class="jimdg-flow" x1="840" y1="614" x2="649.1" y2="701.8"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(640,706) rotate(155.3)"/>
+  </g>
+  <g id="jimdg-al-packets">
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.2s" begin="0s" repeatCount="indefinite" path="M270,84 L372,201"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.2s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.2s" begin="-1.1s" repeatCount="indefinite" path="M890,84 L797,201"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.2s" begin="-1.1s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.4s" begin="-0.6s" repeatCount="indefinite" path="M350,614 L510,700"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-0.6s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.4s" begin="-1.7s" repeatCount="indefinite" path="M840,614 L650,701"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.4s" begin="-1.7s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>

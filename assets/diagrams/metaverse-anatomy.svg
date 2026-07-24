@@ -1,0 +1,96 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- Metaverse anatomy concept (Configuration > Metaverse page). -->
+<!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
+<!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: keep this file free of blank lines AND of comments inside the -->
+<!-- <svg> element; it is inlined into markdown via pymdownx.snippets, and -->
+<!-- python-markdown ends the raw-HTML block at either. Structure is -->
+<!-- expressed with <g> groups instead. -->
+<svg class="jim-diagram" viewBox="0 0 1160 640" role="img" aria-labelledby="jimdg-mv-title jimdg-mv-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="jimdg-mv-title">Anatomy of the Metaverse</title>
+  <desc id="jimdg-mv-desc">Inside the Metaverse, a Schema layer holds administrator-defined Object Types such as person, group and device; the person type defines attributes like displayName, mail, manager and memberOf. Below it, the Objects layer holds the identity records themselves as instances of those types, such as a person named Ada Lovelace and a group named Engineering. Connector links join Metaverse Objects to their Connected System Objects in external systems such as Active Directory and an HR system; identity data flows across these links during synchronisation.</desc>
+  <g id="jimdg-mv-boundary">
+    <rect class="jimdg-hub" x="310" y="28" width="830" height="584" rx="8"/>
+    <text class="jimdg-hub-title" x="725" y="66">Metaverse</text>
+  </g>
+  <g id="jimdg-mv-schema">
+    <rect class="jimdg-layer" x="340" y="88" width="770" height="204" rx="8"/>
+    <text class="jimdg-layer-title" x="725" y="114">Schema</text>
+    <g id="jimdg-mv-type-person">
+      <rect class="jimdg-stage" x="364" y="132" width="300" height="136" rx="8"/>
+      <text class="jimdg-card-title" x="380" y="156">person</text>
+      <text class="jimdg-card-tag" x="648" y="156">Object Type</text>
+      <line class="jimdg-card-divider" x1="380" y1="166" x2="648" y2="166"/>
+      <text class="jimdg-list-item" x="380" y="188"><tspan class="jimdg-attr-name">displayName</tspan> · String</text>
+      <text class="jimdg-list-item" x="380" y="207"><tspan class="jimdg-attr-name">mail</tspan> · String</text>
+      <text class="jimdg-list-item" x="380" y="226"><tspan class="jimdg-attr-name">manager</tspan> · Reference</text>
+      <text class="jimdg-list-item" x="380" y="245"><tspan class="jimdg-attr-name">memberOf</tspan> · Multi-valued</text>
+    </g>
+    <g id="jimdg-mv-type-group">
+      <rect class="jimdg-stage" x="700" y="132" width="180" height="56" rx="8"/>
+      <text class="jimdg-stage-label" x="790" y="157">group</text>
+      <text class="jimdg-system-sub" x="790" y="176">Object Type</text>
+    </g>
+    <g id="jimdg-mv-type-device">
+      <rect class="jimdg-stage" x="904" y="132" width="180" height="56" rx="8"/>
+      <text class="jimdg-stage-label" x="994" y="157">device</text>
+      <text class="jimdg-system-sub" x="994" y="176">Object Type</text>
+    </g>
+    <text class="jimdg-note" x="892" y="226">…plus any types your organisation defines</text>
+  </g>
+  <g id="jimdg-mv-instances-flow">
+    <line class="jimdg-flow" x1="725" y1="292" x2="725" y2="322"/>
+    <polygon class="jimdg-flow-arrow" points="725,332 719.5,322 730.5,322"/>
+    <text class="jimdg-flow-label" x="737" y="315">instances</text>
+  </g>
+  <g id="jimdg-mv-objects">
+    <rect class="jimdg-layer" x="340" y="332" width="770" height="228" rx="8"/>
+    <text class="jimdg-layer-title" x="725" y="358">Objects</text>
+    <g id="jimdg-mv-object-ada">
+      <rect class="jimdg-stage" x="364" y="376" width="330" height="150" rx="8"/>
+      <text class="jimdg-card-title" x="380" y="400">Ada Lovelace</text>
+      <text class="jimdg-card-tag" x="678" y="400">person</text>
+      <line class="jimdg-card-divider" x1="380" y1="410" x2="678" y2="410"/>
+      <text class="jimdg-list-item" x="380" y="432"><tspan class="jimdg-attr-name">displayName</tspan> · Ada Lovelace</text>
+      <text class="jimdg-list-item" x="380" y="451"><tspan class="jimdg-attr-name">mail</tspan> · ada.lovelace@example.org</text>
+      <text class="jimdg-list-item" x="380" y="470"><tspan class="jimdg-attr-name">manager</tspan> · → Charles Babbage</text>
+      <text class="jimdg-list-item" x="380" y="489"><tspan class="jimdg-attr-name">memberOf</tspan> · Engineering (+2)</text>
+    </g>
+    <g id="jimdg-mv-object-engineering">
+      <rect class="jimdg-stage" x="730" y="376" width="220" height="76" rx="8"/>
+      <text class="jimdg-card-title" x="746" y="400">Engineering</text>
+      <text class="jimdg-card-tag" x="934" y="400">group</text>
+      <line class="jimdg-card-divider" x1="746" y1="410" x2="934" y2="410"/>
+      <text class="jimdg-list-item" x="746" y="432"><tspan class="jimdg-attr-name">members</tspan> · 42</text>
+    </g>
+  </g>
+  <g id="jimdg-mv-connected">
+    <rect class="jimdg-system" x="20" y="376" width="230" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="135" y="404">Active Directory</text>
+    <text class="jimdg-system-sub" x="135" y="425">Connected System Object</text>
+    <rect class="jimdg-system" x="20" y="466" width="230" height="64" rx="8"/>
+    <text class="jimdg-system-name" x="135" y="494">HR System</text>
+    <text class="jimdg-system-sub" x="135" y="515">Connected System Object</text>
+    <text class="jimdg-note" x="135" y="560">connector links</text>
+  </g>
+  <g id="jimdg-mv-links">
+    <line class="jimdg-spoke" x1="254" y1="408" x2="360" y2="408"/>
+    <circle class="jimdg-link-end" cx="254" cy="408" r="3.5"/>
+    <circle class="jimdg-link-end" cx="360" cy="408" r="3.5"/>
+    <line class="jimdg-spoke" x1="254" y1="498" x2="360" y2="498"/>
+    <circle class="jimdg-link-end" cx="254" cy="498" r="3.5"/>
+    <circle class="jimdg-link-end" cx="360" cy="498" r="3.5"/>
+  </g>
+  <g id="jimdg-mv-packets">
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="3s" begin="0s" repeatCount="indefinite" path="M360,408 L254,408"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="3s" begin="-1.5s" repeatCount="indefinite" path="M254,498 L360,498"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="3s" begin="-1.5s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>

@@ -1,0 +1,678 @@
+/* Space Grotesk for marketing/publication-feel headings (hero title, header
+   site title). Body text remains IBM Plex Sans (set via mkdocs.yml).
+   Variable font: weight axis pulled at 600 + 700. */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&display=swap');
+
+/* JIM Brand Colour Overrides */
+
+/* Primary colour - JIM Purple #5A45A2 */
+:root {
+  --md-primary-fg-color: #5A45A2;
+  --md-primary-fg-color--light: #7B68B8;
+  --md-primary-fg-color--dark: #483790;
+  --md-accent-fg-color: #5A45A2;
+}
+
+/* ========================================
+   Light mode (Navy O6 Light palette)
+   ======================================== */
+
+[data-md-color-scheme="default"] {
+  /* Header and page background */
+  --md-primary-fg-color: #f3f3f3;            /* header background */
+  --md-primary-fg-color--light: #f3f3f3;
+  --md-primary-bg-color: #121b29;            /* header text (dark on grey) */
+  --md-default-bg-color: #ffffff;            /* page background */
+  --md-default-bg-color--light: #f3f3f3;
+
+  /* Footer */
+  --md-footer-bg-color: #f3f3f3;             /* match header */
+  --md-footer-bg-color--dark: #e8e8e8;       /* slightly darker for prev/next nav */
+  --md-footer-fg-color: #121b29;             /* dark text */
+  --md-footer-fg-color--light: #4a5568;      /* secondary text */
+  --md-footer-fg-color--lighter: #4a5568;
+
+  /* Search */
+  --md-primary-bg-color--light: #4a5568;     /* search placeholder text */
+
+  /* Links */
+  --md-typeset-a-color: #0076d3;             /* --jim-link-color */
+  --md-accent-fg-color: #0076d3;
+
+  /* Grid card surfaces: soft light grey (lightened a touch from JIM.Web's navy-o6
+     #f3f3f3 background), deepening slightly on hover */
+  --jim-card-bg: #f7f7f7;
+  --jim-card-bg-hover: #efefef;
+  --jim-card-border: rgba(0, 0, 0, 0.13);   /* a touch darker than Material's default lightest */
+
+}
+
+/* Light mode: search bar styling */
+[data-md-color-scheme="default"] .md-search__input {
+  background-color: #ffffff;                 /* white input on grey header */
+  border: 1px solid rgba(30, 58, 95, 0.28);  /* --mud-palette-lines-default */
+}
+
+/* Light mode: header/footer border to separate from page */
+[data-md-color-scheme="default"] .md-header,
+[data-md-color-scheme="default"] .md-footer {
+  border-bottom: 1px solid rgba(30, 58, 95, 0.12);
+}
+
+/* Light mode: when tabs row is present, shift the separator to its bottom edge */
+[data-md-color-scheme="default"] .md-header:has(+ .md-tabs) {
+  border-bottom: none;
+}
+
+/* Light mode: tabs bar matches the header for a unified header block */
+[data-md-color-scheme="default"] .md-tabs {
+  background-color: #f3f3f3;
+  color: #121b29;
+  border-bottom: 1px solid rgba(30, 58, 95, 0.12);
+}
+
+/* Light mode: soften the scroll drop-shadow; the default reads too strongly on a pale header */
+[data-md-color-scheme="default"] .md-header--shadow {
+  box-shadow: 0 0 0.2rem rgba(0, 0, 0, 0.07), 0 0.2rem 0.4rem rgba(0, 0, 0, 0.1);
+}
+
+[data-md-color-scheme="default"] .md-footer {
+  border-bottom: none;
+  border-top: 1px solid rgba(30, 58, 95, 0.12);
+}
+
+[data-md-color-scheme="default"] .md-typeset a:hover,
+[data-md-color-scheme="default"] .md-nav__link:hover {
+  color: #005da8;                            /* --jim-link-hover-color */
+}
+
+[data-md-color-scheme="default"] .md-nav__link:focus,
+[data-md-color-scheme="default"] .md-nav__link:focus-visible,
+[data-md-color-scheme="default"] .md-nav__link:active {
+  color: #005da8;                            /* --jim-link-hover-color */
+}
+
+/* Light mode: nav active link */
+[data-md-color-scheme="default"] .md-nav__link--active,
+[data-md-color-scheme="default"] .md-nav__link:is([data-md-state="active"]) {
+  color: #0076d3;                            /* --jim-link-color */
+}
+
+/* ========================================
+   Dark mode (Navy O6 Dark palette)
+   ======================================== */
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #1d1a3d;            /* header background: purple-navy bridge to brand */
+  --md-primary-fg-color--light: #1d1a3d;
+  --md-primary-fg-color--dark: #1d1a3d;
+  --md-primary-bg-color: #e0e4ea;            /* header text (light on dark) */
+  --md-default-bg-color: #051526;            /* page background */
+  --md-default-bg-color--light: #0d1e30;
+  --md-accent-fg-color: #7B68B8;
+
+  /* Footer */
+  --md-footer-bg-color: #0d1e30;             /* surface colour */
+  --md-footer-bg-color--dark: #15293c;       /* slightly lighter for prev/next nav */
+  --md-footer-fg-color: #e0e4ea;             /* light text */
+  --md-footer-fg-color--light: #8a9eb4;      /* secondary text */
+  --md-footer-fg-color--lighter: #8a9eb4;
+
+  /* Search */
+  --md-primary-bg-color--light: #8a9eb4;     /* search placeholder text */
+
+  /* Links */
+  --md-typeset-a-color: #67b9ff;             /* --jim-link-color */
+
+  /* Grid card surfaces: raised navy panel, lifting a touch lighter on hover */
+  --jim-card-bg: #0d1e30;
+  --jim-card-bg-hover: #14293f;
+  --jim-card-border: var(--md-default-fg-color--lightest);   /* unchanged from Material default */
+
+}
+
+/* Dark mode: search bar styling */
+[data-md-color-scheme="slate"] .md-search__input {
+  background-color: #0d1e30;                 /* surface colour */
+  border: 1px solid #243a52;                  /* --mud-palette-lines-default */
+}
+
+/* Dark mode: tabs bar in deep plum, bridging header to purple hero */
+[data-md-color-scheme="slate"] .md-tabs {
+  background-color: #1d1a3d;
+}
+
+[data-md-color-scheme="slate"] .md-typeset a:hover,
+[data-md-color-scheme="slate"] .md-nav__link:hover {
+  color: #9ad0ff;                             /* --jim-link-hover-color */
+}
+
+[data-md-color-scheme="slate"] .md-nav__link:focus,
+[data-md-color-scheme="slate"] .md-nav__link:focus-visible,
+[data-md-color-scheme="slate"] .md-nav__link:active {
+  color: #9ad0ff;                             /* --jim-link-hover-color */
+}
+
+/* Dark mode: nav active link */
+[data-md-color-scheme="slate"] .md-nav__link--active,
+[data-md-color-scheme="slate"] .md-nav__link:is([data-md-state="active"]) {
+  color: #67b9ff;                             /* --jim-link-color */
+}
+
+/* ========================================
+   Quick Start navigation cards
+   ======================================== */
+
+.quickstart-cards {
+  margin-bottom: 2rem;
+}
+
+.quickstart-cards > ul > li {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.quickstart-cards > ul > li:hover {
+  border-color: var(--md-accent-fg-color);
+}
+
+/* Material grid cards: give each panel a subtly toned surface so it reads as a
+   distinct card rather than a bordered void, and lift both the surface and the
+   border on hover. Applies site-wide (feature grids, quick links, connector
+   cards, etc.). 2D look, no shadow. */
+.md-typeset .grid.cards > :is(ul, ol) > li,
+.md-typeset .grid > .card {
+  position: relative;   /* positioning context for the stretched-link overlay below */
+  background-color: var(--jim-card-bg);
+  border-color: var(--jim-card-border);
+  border-radius: 8px;   /* match the JIM.Web portal's container/panel radius */
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.md-typeset .grid.cards > :is(ul, ol) > li:hover,
+.md-typeset .grid > .card:hover {
+  border-color: var(--md-default-fg-color--lighter);
+  background-color: var(--jim-card-bg-hover);
+  box-shadow: none;
+}
+
+/* Make the whole panel a single click target. Each card carries at most one link
+   (a linked title, or a single call-to-action); stretch that link's hit area over
+   the entire card via a transparent ::after overlay, so the user clicks anywhere on
+   the panel rather than hunting for the link text (which otherwise floats at a
+   different height per card depending on body length). This is the Bootstrap
+   "stretched-link" pattern; the trade-off is that body text inside a linked card is
+   no longer selectable, which is acceptable for navigation cards. */
+.md-typeset .grid.cards > :is(ul, ol) > li a::after,
+.md-typeset .grid > .card a::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+/* A linked card title should read as a heading, not a blue link; the whole-card
+   hover (surface + border) is the affordance. Reveal the accent colour on hover to
+   confirm the panel is interactive. Bottom call-to-action links (not bold) keep
+   their normal link colour. */
+.md-typeset .grid.cards > :is(ul, ol) > li strong a,
+.md-typeset .grid > .card strong a {
+  color: inherit;
+}
+
+.md-typeset .grid.cards > :is(ul, ol) > li:hover strong a,
+.md-typeset .grid > .card:hover strong a {
+  color: var(--md-accent-fg-color);
+}
+
+/* ========================================
+   GLightbox theme-aware overlay
+   ======================================== */
+
+/* Light mode: give the image a white background so transparent SVGs look correct */
+[data-md-color-scheme="default"] .gslide-image img {
+  background-color: #ffffff;
+  border-radius: 4px;
+}
+
+/* Dark mode: give the image a dark background matching the page surface */
+[data-md-color-scheme="slate"] .gslide-image img {
+  background-color: #051526;
+  border-radius: 4px;
+}
+
+/* ========================================
+   Homepage hero (full-bleed) and layout
+   Scoped via .jim-hero / .jim-home from
+   docs/overrides/home.html
+   ======================================== */
+
+.jim-hero {
+  width: 100%;
+  padding: 1.75rem 1rem 3.5rem;
+  background: linear-gradient(135deg, #5A45A2 0%, #483790 60%, #2f2466 100%);
+  color: #ffffff;
+  text-align: center;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.jim-hero__inner {
+  max-width: 56rem;
+  margin: 0 auto;
+}
+
+.jim-hero__logo {
+  width: 160px;
+  height: auto;
+  margin: 0 auto 1.75rem;
+  display: block;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.25));
+  transform-origin: 50% 50%;
+  animation: jim-logo-pulse 32s ease-in-out infinite;
+}
+
+/* Four "pick up, quarter-turn, set down" actions per cycle.
+   Each action takes ~3s, followed by a ~9s rest. The logo never
+   rotates backwards and never moves while at rest. After four
+   actions the cumulative rotation reaches 360° which equals 0°,
+   so the iteration boundary is visually seamless. */
+@keyframes jim-logo-pulse {
+  /* --- Quarter-turn 1 (0deg -> 90deg) --- */
+  0%   { transform: scale(1)    rotate(0); }
+  2%   { transform: scale(1.15) rotate(0); }       /* grow */
+  4%   { transform: scale(1.15) rotate(90deg); }   /* rotate while enlarged */
+  6%   { transform: scale(1)    rotate(90deg); }   /* shrink, hold rotation */
+  25%  { transform: scale(1)    rotate(90deg); }   /* rest */
+
+  /* --- Quarter-turn 2 (90deg -> 180deg) --- */
+  27%  { transform: scale(1.15) rotate(90deg); }
+  29%  { transform: scale(1.15) rotate(180deg); }
+  31%  { transform: scale(1)    rotate(180deg); }
+  50%  { transform: scale(1)    rotate(180deg); }  /* rest */
+
+  /* --- Quarter-turn 3 (180deg -> 270deg) --- */
+  52%  { transform: scale(1.15) rotate(180deg); }
+  54%  { transform: scale(1.15) rotate(270deg); }
+  56%  { transform: scale(1)    rotate(270deg); }
+  75%  { transform: scale(1)    rotate(270deg); }  /* rest */
+
+  /* --- Quarter-turn 4 (270deg -> 360deg) --- */
+  77%  { transform: scale(1.15) rotate(270deg); }
+  79%  { transform: scale(1.15) rotate(360deg); }
+  81%  { transform: scale(1)    rotate(360deg); }
+  100% { transform: scale(1)    rotate(360deg); }  /* rest; equals rotate(0) */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jim-hero__logo {
+    animation: none;
+  }
+}
+
+.jim-hero__title {
+  font-family: 'Space Grotesk', 'IBM Plex Sans', -apple-system, sans-serif;
+  font-size: 3rem;
+  font-weight: 700;
+  margin: 0 0 1rem;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  color: #ffffff;
+}
+
+/* Header site title (and animated current-page title) in the display sans
+   accent for a more "design-forward" feel. Nav, body and code remain IBM Plex. */
+.md-header__title .md-ellipsis {
+  font-family: 'Space Grotesk', 'IBM Plex Sans', -apple-system, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Page heading colour and weight.
+   Material's default H1 uses --md-default-fg-color--light (dimmer than body)
+   and weight 300, which makes the page title look greyer than the H2/H3
+   headings below it. Pin the H1 to the regular foreground colour and bump
+   weights across the board for a stronger hierarchy. */
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6 {
+  color: var(--md-default-fg-color);
+}
+
+.md-typeset h1 { font-weight: 400; }
+.md-typeset h2 { font-weight: 500; }
+.md-typeset h3 { font-weight: 500; }
+.md-typeset h4 { font-weight: 500; }
+
+/* Bump table and admonition body text from Material's 0.64rem (80% of body)
+   to 0.72rem (90% of body) for slightly easier reading. */
+.md-typeset table:not([class]),
+.md-typeset .admonition,
+.md-typeset details {
+  font-size: 0.72rem;
+}
+
+.jim-hero__tagline {
+  font-size: 1.2rem;
+  line-height: 1.55;
+  margin: 0 auto 2.25rem;
+  max-width: 42rem;
+  opacity: 0.92;
+}
+
+.jim-hero__ctas {
+  display: flex;
+  gap: 0.85rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.jim-hero__cta {
+  display: inline-block;
+  padding: 0.75rem 1.75rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.jim-hero__cta--primary {
+  background: #ffffff;
+  color: #5A45A2;
+}
+
+.jim-hero__cta--primary:hover {
+  background: #f5f3fa;
+  color: #483790;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.jim-hero__cta--secondary {
+  background: transparent;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.jim-hero__cta--secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+/* Smaller hero on mobile/tablet */
+@media screen and (max-width: 76.1875em) {
+  .jim-hero {
+    padding: 1.25rem 1rem 2.25rem;
+  }
+  .jim-hero__logo {
+    width: 120px;
+    margin-bottom: 1.25rem;
+  }
+  .jim-hero__title {
+    font-size: 2rem;
+  }
+  .jim-hero__tagline {
+    font-size: 1rem;
+    margin-bottom: 1.75rem;
+  }
+}
+
+/* Widen the content grid on the homepage only.
+   Targets the page rendered with overrides/home.html via :has(). */
+body:has(.jim-home) .md-main__inner.md-grid,
+body:has(.jim-home) .md-content {
+  max-width: none;
+}
+
+body:has(.jim-home) .md-content__inner {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding-top: 2rem;
+  padding-left: 2rem;
+  padding-right: 2rem;
+}
+
+/* Hide the auto-generated edit button on the homepage; it looks odd under the hero */
+body:has(.jim-home) .md-content__button {
+  display: none;
+}
+
+/* Hide the auto-generated "Home" h1 (the hero already serves as the page title) */
+.jim-home > h1:first-of-type {
+  display: none;
+}
+
+/* ========================================
+   Homepage capability pills
+   ("What Makes JIM Different" section)
+   ======================================== */
+
+.jim-capabilities ul,
+.md-typeset .jim-capabilities ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 1.5rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.jim-capabilities li,
+.md-typeset .jim-capabilities ul li {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  background: var(--md-default-bg-color--light);
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+/* Strip the <p> wrapper margin that python-markdown injects inside list items */
+.md-typeset .jim-capabilities ul li p {
+  margin: 0;
+}
+
+.jim-capabilities li .twemoji,
+.jim-capabilities li svg {
+  width: 1.1em;
+  height: 1.1em;
+  fill: #2e9e5a;       /* green check to reinforce the affirmative */
+  flex-shrink: 0;
+}
+
+/* Light mode: pin the check green. Material's own `.md-typeset .twemoji svg`
+   rule (fill: currentColor) outranks the base rule above on specificity and
+   would otherwise paint the tick the monochrome body colour; the scheme-prefixed
+   selector here matches the specificity that already lets the dark rule win. */
+[data-md-color-scheme="default"] .jim-capabilities li .twemoji,
+[data-md-color-scheme="default"] .jim-capabilities li svg {
+  fill: #2e9e5a;
+}
+
+/* Dark mode: soften the pill background and brighten the check */
+[data-md-color-scheme="slate"] .jim-capabilities li {
+  background: #0d1e30;
+  border-color: #243a52;
+}
+
+[data-md-color-scheme="slate"] .jim-capabilities li .twemoji,
+[data-md-color-scheme="slate"] .jim-capabilities li svg {
+  fill: #4ade80;
+}
+
+/* ========================================
+   Concept diagrams (inline SVG)
+   Hand-authored SVGs inlined into pages via pymdownx.snippets
+   (e.g. docs/assets/diagrams/hub-and-spoke.svg). One SVG serves
+   both themes: geometry lives in the SVG, every colour lives here
+   as a --jimdg-* token so the site theme toggle restyles it.
+   Token values: engineering/DESIGN.md > Diagrams.
+   ======================================== */
+
+[data-md-color-scheme="default"] {
+  --jimdg-hub-fill: #f8f6fd;
+  --jimdg-hub-stroke: #5A45A2;
+  --jimdg-hub-text: #483790;
+  --jimdg-layer-fill: #ede8f8;
+  --jimdg-layer-stroke: #7B68B8;
+  --jimdg-layer-text: #483790;
+  --jimdg-chip-fill: #ffffff;
+  --jimdg-chip-stroke: #7B68B8;
+  --jimdg-chip-text: #483790;
+  --jimdg-chip-muted-fill: #f7f7f7;
+  --jimdg-chip-muted-stroke: #b7bfca;
+  --jimdg-chip-muted-text: #7a8a9a;
+  --jimdg-node-fill: #ffffff;
+  --jimdg-node-stroke: #b7bfca;
+  --jimdg-node-text: #121b29;
+  --jimdg-core-fill: #5A45A2;
+  --jimdg-core-stroke: #483790;
+  --jimdg-core-text: #ffffff;
+  --jimdg-system-fill: #ffffff;
+  --jimdg-system-stroke: #1e3a5f;
+  --jimdg-system-text: #1A2B45;
+  --jimdg-sub-text: #4a5568;
+  --jimdg-muted-fill: #f7f7f7;
+  --jimdg-muted-stroke: #b7bfca;
+  --jimdg-muted-text: #7a8a9a;
+  --jimdg-edge: #4a5568;
+  --jimdg-edge-muted: #7a8a9a;
+  --jimdg-flow: #5A45A2;
+  --jimdg-flow-text: #483790;
+  --jimdg-packet: #5A45A2;
+}
+
+[data-md-color-scheme="slate"] {
+  --jimdg-hub-fill: #1d1a3d;
+  --jimdg-hub-stroke: #7B68B8;
+  --jimdg-hub-text: #c9bfe8;
+  --jimdg-layer-fill: #2a2352;
+  --jimdg-layer-stroke: #7B68B8;
+  --jimdg-layer-text: #d5ccef;
+  --jimdg-chip-fill: #1d1a3d;
+  --jimdg-chip-stroke: #7B68B8;
+  --jimdg-chip-text: #d5ccef;
+  --jimdg-chip-muted-fill: #141230;
+  --jimdg-chip-muted-stroke: #3d3564;
+  --jimdg-chip-muted-text: #8a86a8;
+  --jimdg-node-fill: #0d1e30;
+  --jimdg-node-stroke: #243a52;
+  --jimdg-node-text: #e0e4ea;
+  --jimdg-core-fill: #6a4fc2;
+  --jimdg-core-stroke: #7B68B8;
+  --jimdg-core-text: #ffffff;
+  --jimdg-system-fill: #0d1e30;
+  --jimdg-system-stroke: #2a4e7a;
+  --jimdg-system-text: #e0e4ea;
+  --jimdg-sub-text: #8a9eb4;
+  --jimdg-muted-fill: #0a1a2c;
+  --jimdg-muted-stroke: #243a52;
+  --jimdg-muted-text: #8a9eb4;
+  --jimdg-edge: #8a9eb4;
+  --jimdg-edge-muted: #5c718a;
+  --jimdg-flow: #7B68B8;
+  --jimdg-flow-text: #c9bfe8;
+  --jimdg-packet: #9d86e8;
+}
+
+.jim-diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 1.25rem 0 0;
+  font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+}
+
+/* Containers and nodes (flat fills, no shadows, 8px radii in the SVG) */
+.jim-diagram .jimdg-hub    { fill: var(--jimdg-hub-fill);   stroke: var(--jimdg-hub-stroke);   stroke-width: 2; }
+.jim-diagram .jimdg-layer  { fill: var(--jimdg-layer-fill); stroke: var(--jimdg-layer-stroke); stroke-width: 1; }
+.jim-diagram .jimdg-chip   { fill: var(--jimdg-chip-fill);  stroke: var(--jimdg-chip-stroke);  stroke-width: 1; }
+.jim-diagram .jimdg-stage  { fill: var(--jimdg-node-fill);  stroke: var(--jimdg-node-stroke);  stroke-width: 1; }
+.jim-diagram .jimdg-core   { fill: var(--jimdg-core-fill);  stroke: var(--jimdg-core-stroke);  stroke-width: 2; }
+.jim-diagram .jimdg-system { fill: var(--jimdg-system-fill); stroke: var(--jimdg-system-stroke); stroke-width: 2; }
+
+/* Planned (roadmap) variants: dashed and muted */
+.jim-diagram .jimdg-chip-planned   { fill: var(--jimdg-chip-muted-fill); stroke: var(--jimdg-chip-muted-stroke); stroke-width: 1; stroke-dasharray: 5 4; }
+.jim-diagram .jimdg-system-planned { fill: var(--jimdg-muted-fill);      stroke: var(--jimdg-muted-stroke);      stroke-width: 2; stroke-dasharray: 5 4; }
+
+/* Edges: spokes (system <-> JIM) and internal flows */
+.jim-diagram .jimdg-spoke         { stroke: var(--jimdg-edge);       stroke-width: 2; }
+.jim-diagram .jimdg-spoke-planned { stroke: var(--jimdg-edge-muted); stroke-width: 2; stroke-dasharray: 6 5; }
+.jim-diagram .jimdg-arrow         { fill: var(--jimdg-edge); }
+.jim-diagram .jimdg-arrow-planned { fill: var(--jimdg-edge-muted); }
+.jim-diagram .jimdg-flow          { stroke: var(--jimdg-flow); stroke-width: 2; }
+.jim-diagram .jimdg-flow-arrow    { fill: var(--jimdg-flow); }
+
+/* Text: sizes in SVG user units; the viewBox scales them with the diagram */
+.jim-diagram text { text-anchor: middle; }
+.jim-diagram .jimdg-hub-title    { font-size: 22px; font-weight: 700; fill: var(--jimdg-hub-text); }
+.jim-diagram .jimdg-layer-title  { font-size: 14px; font-weight: 600; fill: var(--jimdg-layer-text); }
+.jim-diagram .jimdg-chip-label   { font-size: 13.5px; font-weight: 600; fill: var(--jimdg-chip-text); }
+.jim-diagram .jimdg-chip-sub     { font-size: 11px; fill: var(--jimdg-chip-text); opacity: 0.78; }
+.jim-diagram .jimdg-chip-label-planned { font-size: 12.5px; font-weight: 600; fill: var(--jimdg-chip-muted-text); }
+.jim-diagram .jimdg-chip-sub-planned   { font-size: 11px; fill: var(--jimdg-chip-muted-text); }
+.jim-diagram .jimdg-stage-label  { font-size: 16px; font-weight: 600; fill: var(--jimdg-node-text); }
+.jim-diagram .jimdg-core-title   { font-size: 19px; font-weight: 700; fill: var(--jimdg-core-text); }
+.jim-diagram .jimdg-core-sub     { font-size: 13.5px; fill: var(--jimdg-core-text); opacity: 0.85; }
+.jim-diagram .jimdg-system-name  { font-size: 17px; font-weight: 600; fill: var(--jimdg-system-text); }
+.jim-diagram .jimdg-system-sub   { font-size: 13px; fill: var(--jimdg-sub-text); }
+.jim-diagram .jimdg-system-name-planned { font-size: 17px; font-weight: 600; fill: var(--jimdg-muted-text); }
+.jim-diagram .jimdg-system-sub-planned  { font-size: 13px; fill: var(--jimdg-muted-text); }
+.jim-diagram .jimdg-flow-label   { font-size: 12.5px; font-weight: 500; fill: var(--jimdg-flow-text); text-anchor: start; }
+.jim-diagram .jimdg-anchor-end   { text-anchor: end; }
+.jim-diagram .jimdg-anchor-middle { text-anchor: middle; }
+
+/* Detail-card anatomy: left-aligned card headings with a right-aligned type
+   tag, a hairline divider, and small attribute/value rows (used by the
+   Metaverse anatomy diagram; reusable by any card-style diagram) */
+.jim-diagram .jimdg-card-title   { font-size: 15px; font-weight: 600; fill: var(--jimdg-node-text); text-anchor: start; }
+.jim-diagram .jimdg-card-tag     { font-size: 12px; fill: var(--jimdg-sub-text); text-anchor: end; }
+.jim-diagram .jimdg-card-divider { stroke: var(--jimdg-node-stroke); stroke-width: 1; }
+.jim-diagram .jimdg-list-item    { font-size: 12.5px; fill: var(--jimdg-sub-text); text-anchor: start; }
+.jim-diagram .jimdg-attr-name    { fill: var(--jimdg-node-text); font-weight: 500; }
+.jim-diagram .jimdg-note         { font-size: 12.5px; fill: var(--jimdg-sub-text); }
+
+/* Connector links: undirected joins (line + round terminators), as opposed
+   to the directed spoke/flow arrows */
+.jim-diagram .jimdg-link-end     { fill: var(--jimdg-edge); }
+.jim-diagram .jimdg-link-end-planned { fill: var(--jimdg-edge-muted); }
+
+/* Edge labels on spokes (grey family, matching the edge colour), and
+   anchor helpers for placing labels beside vertical lines */
+.jim-diagram .jimdg-spoke-label  { font-size: 12.5px; fill: var(--jimdg-edge); }
+.jim-diagram .jimdg-anchor-start { text-anchor: start; }
+
+/* People glyphs (C4 person affordance): a small silhouette / terminal mark
+   drawn inside the card, tinted like secondary text */
+.jim-diagram .jimdg-person-glyph { fill: var(--jimdg-sub-text); opacity: 0.9; }
+.jim-diagram .jimdg-glyph-code   { font-family: "IBM Plex Mono", Consolas, monospace; font-size: 10px; font-weight: 600; fill: var(--jimdg-sub-text); }
+
+/* Data packets: dots travelling along live edges (SMIL animateMotion in the
+   SVG). Planned edges carry no packets - nothing flows there yet. */
+.jim-diagram .jimdg-packet { fill: var(--jimdg-packet); }
+
+/* Diagram footnote: a muted, centred caption decoding the visual encoding.
+   Text that refers to the packet animation goes in .jimdg-caption-motion so
+   it disappears alongside the dots under reduced motion. */
+.md-typeset .jim-diagram-caption {
+  margin: 0.6rem auto 1.6rem;
+  max-width: 34rem;
+  text-align: center;
+  font-size: 0.66rem;
+  color: var(--md-default-fg-color--light);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jim-diagram .jimdg-packet,
+  .md-typeset .jim-diagram-caption .jimdg-caption-motion {
+    display: none;
+  }
+}

@@ -1,0 +1,56 @@
+<!-- Copyright (c) Tetron Limited. All rights reserved. -->
+<!-- Licensed under the Tetron Commercial License. See LICENSE file in the project root. -->
+<!-- The Docker Compose stack (Administration > Deployment): the running -->
+<!-- services by their compose names. All three JIM services coordinate -->
+<!-- through PostgreSQL. -->
+<!-- Hand-authored inline SVG, themed by the .jimdg-* classes in -->
+<!-- docs/assets/stylesheets/custom.css (single source, light + dark). -->
+<!-- Visual language: engineering/DESIGN.md > Diagrams. -->
+<!-- NOTE: keep this file free of blank lines AND of comments inside the -->
+<!-- <svg> element; it is inlined into markdown via pymdownx.snippets, and -->
+<!-- python-markdown ends the raw-HTML block at either. Structure is -->
+<!-- expressed with <g> groups instead. -->
+<svg class="jim-diagram" viewBox="0 0 1160 310" role="img" aria-labelledby="jimdg-ds-title jimdg-ds-desc" xmlns="http://www.w3.org/2000/svg">
+  <title id="jimdg-ds-title">The JIM Docker Compose stack</title>
+  <desc id="jimdg-ds-desc">Four Docker Compose services. jim.web hosts the Blazor UI and REST API, jim.worker processes synchronisation tasks, and jim.scheduler triggers scheduled runs. All three connect to jim.database, a PostgreSQL instance that can be the bundled container or an external server.</desc>
+  <g id="jimdg-ds-services">
+    <rect class="jimdg-stage" x="125" y="20" width="250" height="80" rx="8"/>
+    <text class="jimdg-stage-label" x="250" y="53">jim.web</text>
+    <text class="jimdg-system-sub" x="250" y="76">Blazor UI + REST API</text>
+    <rect class="jimdg-stage" x="455" y="20" width="250" height="80" rx="8"/>
+    <text class="jimdg-stage-label" x="580" y="53">jim.worker</text>
+    <text class="jimdg-system-sub" x="580" y="76">sync processor</text>
+    <rect class="jimdg-stage" x="785" y="20" width="250" height="80" rx="8"/>
+    <text class="jimdg-stage-label" x="910" y="53">jim.scheduler</text>
+    <text class="jimdg-system-sub" x="910" y="76">cron &amp; interval triggers</text>
+  </g>
+  <g id="jimdg-ds-database">
+    <path class="jimdg-stage" d="M470,196 A110,16 0 0 1 690,196 L690,276 A110,16 0 0 1 470,276 Z"/>
+    <ellipse class="jimdg-stage" cx="580" cy="196" rx="110" ry="16"/>
+    <text class="jimdg-stage-label" x="580" y="232">jim.database</text>
+    <text class="jimdg-system-sub" x="580" y="254">PostgreSQL 18</text>
+    <text class="jimdg-system-sub" x="580" y="272">bundled or external</text>
+  </g>
+  <g id="jimdg-ds-edges">
+    <line class="jimdg-flow" x1="250" y1="100" x2="495.5" y2="184.7"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(505,188) rotate(19)"/>
+    <line class="jimdg-flow" x1="580" y1="100" x2="580" y2="170"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(580,180) rotate(90)"/>
+    <line class="jimdg-flow" x1="910" y1="100" x2="664.5" y2="184.7"/>
+    <polygon class="jimdg-flow-arrow" points="0,0 -10,-5.5 -10,5.5" transform="translate(655,188) rotate(161)"/>
+  </g>
+  <g id="jimdg-ds-packets">
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.6s" begin="0s" repeatCount="indefinite" path="M250,100 L494,184"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.6s" begin="0s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2s" begin="-0.9s" repeatCount="indefinite" path="M580,100 L580,178"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2s" begin="-0.9s" repeatCount="indefinite"/>
+    </circle>
+    <circle class="jimdg-packet" r="4.5">
+      <animateMotion dur="2.6s" begin="-1.8s" repeatCount="indefinite" path="M910,100 L666,184"/>
+      <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.85;1" dur="2.6s" begin="-1.8s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>
