@@ -171,6 +171,13 @@ public class ExportExecutionServer
 
         result.CompletedAt = DateTime.UtcNow;
 
+        // Synchronisation Integrity: log summary statistics at the end of every batch operation.
+        Log.Information("ExecuteExportsAsync: Optimistic export apply summary for {SystemName}: " +
+            "{AppliedCount} Pending Exports applied, {SkippedCount} skipped (Delete change type), " +
+            "{FailedCount} failed (confirming import will self-heal), {UnresolvedCount} Reference values left unresolved",
+            connectedSystem.Name, result.OptimisticApplyAppliedCount, result.OptimisticApplySkippedCount,
+            result.OptimisticApplyFailedCount, result.OptimisticApplyUnresolvedReferenceCount);
+
         // Report completion
         await ReportProgressAsync(progressCallback, new ExportProgressInfo
         {
@@ -495,8 +502,7 @@ public class ExportExecutionServer
                             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessBatchSuccess")
                                 .SetTag("batchSize", immediateExports.Count))
                             {
-                                await ProcessBatchSuccessAsync(immediateExports, exportResults, result,
-                                    SyncRepo);
+                                await ProcessBatchSuccessAsync(immediateExports, exportResults, result, SyncRepo);
                             }
                         }
                         catch (OperationCanceledException)
@@ -964,6 +970,10 @@ public class ExportExecutionServer
                         result.SuccessCount += batchResult.SuccessCount;
                         result.FailedCount += batchResult.FailedCount;
                         result.DeferredCount += batchResult.DeferredCount;
+                        result.OptimisticApplyAppliedCount += batchResult.OptimisticApplyAppliedCount;
+                        result.OptimisticApplySkippedCount += batchResult.OptimisticApplySkippedCount;
+                        result.OptimisticApplyFailedCount += batchResult.OptimisticApplyFailedCount;
+                        result.OptimisticApplyUnresolvedReferenceCount += batchResult.OptimisticApplyUnresolvedReferenceCount;
                         if (batchCompletedCallback == null)
                             result.ProcessedExportItems.AddRange(batchResult.ProcessedExportItems);
                         if (batchContainerIds != null)
@@ -1069,6 +1079,7 @@ public class ExportExecutionServer
     {
         var exportsToUpdate = new List<PendingExport>();
         var csosToUpdate = new List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)>();
+        var successfulNonDeleteExports = new List<PendingExport>();
 
         for (var i = 0; i < batch.Count; i++)
         {
@@ -1124,6 +1135,14 @@ public class ExportExecutionServer
             exportsToUpdate.Add(export);
             result.SuccessCount++;
             Log.Debug("ProcessBatchSuccessAsync: Successfully exported {ExportId}, awaiting confirmation via import", export.Id);
+
+            // Issue #1079: Delete exports are skipped entirely by optimistic apply (D6, the CSO
+            // obsolete/delete lifecycle owns that path) and one without a CSO has nothing to apply
+            // values to; both are tracked as skipped rather than silently dropped.
+            if (export.ChangeType == PendingExportChangeType.Delete || export.ConnectedSystemObject == null)
+                result.OptimisticApplySkippedCount++;
+            else
+                successfulNonDeleteExports.Add(export);
         }
 
         // Batch update all Pending Exports
@@ -1140,6 +1159,92 @@ public class ExportExecutionServer
         if (csosToUpdate.Count > 0)
         {
             await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, repository);
+        }
+
+        // Issue #1079: optimistic export apply. Runs LAST, after BatchUpdateCsosAfterSuccessfulExportAsync,
+        // so its external-Id additions are already reflected in each CSO's in-memory AttributeValues
+        // (D9's dedupe guarantee depends on this ordering; see D11).
+        if (successfulNonDeleteExports.Count > 0)
+        {
+            await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, repository);
+        }
+    }
+
+    /// <summary>
+    /// Applies a batch's successfully exported attribute values to their Connected System Objects'
+    /// in-memory state (issue #1079), so the confirming import's diff finds them already present
+    /// instead of re-materialising millions of rows. This is a performance optimisation only, never
+    /// authoritative: the export itself already succeeded against the Connected System, so any
+    /// failure here (calculation, database persistence, reference resolution) is caught, logged as
+    /// a Warning (not Error - integration tooling treats ERR lines as fatal for a run, and this
+    /// failure does not end the run; the confirming import self-heals by re-materialising the CSO's
+    /// attribute values from the target system), and swallowed. It must never fail the batch, the
+    /// Pending Export updates, or the Activity (D7).
+    /// </summary>
+    private async Task ApplyOptimisticExportUpdatesAsync(
+        List<PendingExport> successfulNonDeleteExports,
+        ExportExecutionResult result,
+        ISyncRepository repository)
+    {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("OptimisticApply")
+            .SetTag("count", successfulNonDeleteExports.Count);
+        // A plain Stopwatch alongside the span: OperationSpan.Duration is only valid after
+        // Dispose(), so it cannot drive the in-flight slow-instance Warning below. Added per #1079
+        // ("255 slow apply instances totalling 77.5 minutes" was diagnosed from the span alone;
+        // making a slow batch visible in the logs too, not just traces, costs one Stopwatch).
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            // Reference changes resolve entirely from the persisted ResolvedReferenceCsoId column
+            // (SPEC-1079B); no database lookup is needed here (the run-scoped D5 fallback this
+            // replaced is gone).
+            var delta = OptimisticExportApplyCalculator.CalculateDelta(successfulNonDeleteExports);
+
+            if (delta.Additions.Count > 0 || delta.RemovalValueIds.Count > 0)
+                await repository.ApplyExportedAttributeValuesAsync(delta.Additions, delta.RemovalValueIds);
+
+            // D10: keep the in-memory CSO graph consistent so later passes in the same run
+            // (deferred references, a repeated batch touching the same CSO) compute idempotently.
+            if (delta.RemovalValueIds.Count > 0)
+            {
+                var removalIdSet = new HashSet<Guid>(delta.RemovalValueIds);
+                foreach (var cso in successfulNonDeleteExports
+                    .Select(pe => pe.ConnectedSystemObject)
+                    .Where(cso => cso != null)
+                    .Distinct())
+                    cso!.AttributeValues.RemoveAll(av => removalIdSet.Contains(av.Id));
+            }
+
+            foreach (var addition in delta.Additions)
+                addition.ConnectedSystemObject.AttributeValues.Add(addition);
+
+            result.OptimisticApplyAppliedCount += successfulNonDeleteExports.Count;
+            result.OptimisticApplyUnresolvedReferenceCount += delta.UnresolvedReferenceCount;
+
+            stopwatch.Stop();
+            Log.Debug("ApplyOptimisticExportUpdatesAsync: Applied optimistic export updates for {Count} Pending Exports in " +
+                "{ElapsedMs}ms ({Additions} additions, {Removals} removals, {Unresolved} unresolved references, {Skipped} no-op changes)",
+                successfulNonDeleteExports.Count, stopwatch.ElapsedMilliseconds, delta.Additions.Count, delta.RemovalValueIds.Count,
+                delta.UnresolvedReferenceCount, delta.SkippedChangeCount);
+
+            // #1079: full-scale validation diagnosed 255 slow OptimisticApply instances totalling
+            // 77.5 minutes from the span alone; a Warning here makes a slow batch visible in the
+            // logs too (Debug is often filtered out in production), without waiting on trace
+            // tooling to notice. 1 second is generous for a healthy batch (typically low
+            // milliseconds); this fires only when something is genuinely off.
+            if (stopwatch.Elapsed > TimeSpan.FromSeconds(1))
+            {
+                Log.Warning("ApplyOptimisticExportUpdatesAsync: Slow optimistic apply for Connected System {ConnectedSystemId} - " +
+                    "{Count} Pending Exports took {ElapsedMs}ms",
+                    successfulNonDeleteExports[0].ConnectedSystemId, successfulNonDeleteExports.Count, stopwatch.ElapsedMilliseconds);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            result.OptimisticApplyFailedCount += successfulNonDeleteExports.Count;
+            Log.Warning(ex, "ApplyOptimisticExportUpdatesAsync: Optimistic export apply failed for Connected System {ConnectedSystemId} " +
+                "({Count} Pending Exports); the confirming import will self-heal",
+                successfulNonDeleteExports[0].ConnectedSystemId, successfulNonDeleteExports.Count);
         }
     }
 
@@ -1511,6 +1616,13 @@ public class ExportExecutionServer
                 // Update attribute change statuses to ExportedPendingConfirmation
                 UpdateAttributeChangeStatusesAfterExport(export);
 
+                // Issue #1079 (optimistic export apply): deliberately NOT wired up here. This
+                // path's batch loader (GetExecutableExportsAsync) does not include the CSO's
+                // current AttributeValues, unlike the calls-path loader (GetExecutableExportBatchAsync);
+                // widening that include for every file export at scale is a memory-profile trade-off
+                // not taken here. File-connector exports keep today's behaviour: the confirming
+                // import re-materialises the CSO's attribute values as before.
+
                 if (autoConfirm)
                 {
                     // Auto-confirm: for file-based exports where the file system is the source of truth,
@@ -1661,6 +1773,13 @@ public class ExportExecutionServer
                                              resolvedAttr.GuidValue?.ToString() ??
                                              resolvedAttr.IntValue?.ToString();
                     attrChange.UnresolvedReferenceValue = null;
+
+                    // Issue #1079 (optimistic export apply, persisted per SPEC-1079B): the
+                    // referenced CSO is in hand right here, so stamp its Id. This is the single
+                    // resolution site; the column then persists with the rest of the change, so
+                    // optimistic apply can populate ConnectedSystemObjectAttributeValue.ReferenceValueId
+                    // without a further database round-trip, this run or any later one.
+                    attrChange.ResolvedReferenceCsoId = referencedCso.Id;
 
                     Log.Debug("Resolved reference for MVO {MvoId} to {Value} using {IdType}",
                         referencedMvoId,

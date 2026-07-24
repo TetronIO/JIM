@@ -62,7 +62,7 @@ internal static class PendingExportBulkColumns
         "Id", "PendingExportId", "AttributeId", "StringValue", "DateTimeValue",
         "IntValue", "LongValue", "DecimalValue", "ByteValue", "GuidValue", "BoolValue",
         "UnresolvedReferenceValue", "ChangeType", "Status", "ExportAttemptCount",
-        "LastExportedAt", "LastImportedValue"
+        "LastExportedAt", "LastImportedValue", "ResolvedReferenceCsoId"
     ];
 
     /// <summary>
@@ -77,12 +77,13 @@ internal static class PendingExportBulkColumns
     /// <summary>
     /// Update columns for the export-result bulk update (ConnectedSystemRepository): confirmation
     /// tracking plus the reference-resolution rewrites (a resolved reference moves from
-    /// UnresolvedReferenceValue into StringValue before export).
+    /// UnresolvedReferenceValue into StringValue before export, and the resolved target CSO is
+    /// stamped onto ResolvedReferenceCsoId, #1079).
     /// </summary>
     internal static readonly string[] PendingExportAttributeValueChangesExportResultUpdate =
     [
         "Status", "ExportAttemptCount", "LastExportedAt", "StringValue",
-        "UnresolvedReferenceValue", "LastImportedValue"
+        "UnresolvedReferenceValue", "LastImportedValue", "ResolvedReferenceCsoId"
     ];
 
     /// <summary>

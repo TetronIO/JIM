@@ -5351,7 +5351,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Bulk updates PendingExportAttributeValueChange confirmation tracking columns via raw SQL.
-    /// Called after export to persist the ExportedPendingConfirmation status set by UpdateAttributeChangeStatusesAfterExport.
+    /// Called after export to persist the ExportedPendingConfirmation status set by UpdateAttributeChangeStatusesAfterExport,
+    /// and to persist reference resolution (StringValue, UnresolvedReferenceValue, ResolvedReferenceCsoId
+    /// - issue #1079) stamped by ExportExecutionServer.TryResolveReferencesFromLookup.
     /// </summary>
     private async Task BulkUpdatePendingExportAttributeValueChangesRawAsync(List<PendingExport> exports)
     {
@@ -5362,7 +5364,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (allChanges.Count == 0)
             return;
 
-        const int columnsPerRow = 7; // Id + 6 mutable columns
+        const int columnsPerRow = 8; // Id + 7 mutable columns
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(allChanges, chunkSize))
@@ -5378,7 +5380,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::text, {{{offset + 5}}}::text, {{{offset + 6}}}::text)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::text, {{{offset + 5}}}::text, {{{offset + 6}}}::text, {{{offset + 7}}}::uuid)");
 
                 var avc = chunk[i];
                 parameters.Add(avc.Id);
@@ -5388,6 +5390,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.ResolvedReferenceCsoId, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
             sql.Append(@") AS v(""Id"", ");

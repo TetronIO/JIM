@@ -1326,6 +1326,7 @@ public class ExportEvaluationServer
                         GuidValue = existingChange.GuidValue,
                         BoolValue = existingChange.BoolValue,
                         UnresolvedReferenceValue = existingChange.UnresolvedReferenceValue,
+                        ResolvedReferenceCsoId = existingChange.ResolvedReferenceCsoId,
                         ChangeType = existingChange.ChangeType
                     };
                 }
@@ -2163,6 +2164,7 @@ public class ExportEvaluationServer
                         GuidValue = avc.GuidValue,
                         BoolValue = avc.BoolValue,
                         UnresolvedReferenceValue = avc.UnresolvedReferenceValue,
+                        ResolvedReferenceCsoId = avc.ResolvedReferenceCsoId,
                         ChangeType = avc.ChangeType
                     })
                     .ToList();

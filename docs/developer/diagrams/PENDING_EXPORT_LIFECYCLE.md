@@ -1,6 +1,6 @@
 # Pending Export Lifecycle
 
-> Last updated: 2026-04-22, JIM v0.10.0
+> Last updated: 2026-07-21, JIM v0.13.0
 
 This diagram shows the full lifecycle of a Pending Export from creation during synchronisation, through export execution, to confirmation during a confirming import. Pending Exports are the mechanism by which JIM propagates changes from the metaverse to target Connected Systems.
 
@@ -85,6 +85,8 @@ flowchart LR
         Success -->|Yes, Update| ExpResult[Status = Exported<br/>RPEI: Exported]
         Success -->|Yes, Delete| DeprovResult[Delete PE + CSO<br/>RPEI: Deprovisioned]
         Success -->|No| FailResult[Increment ErrorCount<br/>Set NextRetryAt<br/>Status = ExportNotConfirmed]
+        ProvResult --> OptimisticApply
+        ExpResult --> OptimisticApply[Optimistic apply #1079:<br/>Project exported attribute<br/>changes onto the CSO's<br/>in-memory + persisted values<br/>calls-based connectors only;<br/>never stamps LastUpdated/Status]
     end
 
     subgraph "3. Confirming Import"
@@ -96,8 +98,7 @@ flowchart LR
     end
 
     PersistPE --> GetExecutable
-    ProvResult --> ImportData
-    ExpResult --> ImportData
+    OptimisticApply --> ImportData
     FailResult -.->|Next export run<br/>after backoff| GetExecutable
     PartialConfirm -.->|Next export run| GetExecutable
     NoneConfirm -.->|Next export run| GetExecutable
@@ -204,3 +205,15 @@ This prevents silent loss of drift corrections when merging with export evaluati
 - **Pre-export CREATE→DELETE reconciliation** (#218)<br /> Dual-layer reconciliation cancels contradictory Pending Exports before they reach the connector. At **flush time** (during sync), deferred CREATE/UPDATE PEs are checked against persisted DELETE PEs for the same CSO: CREATE+DELETE pairs cancel both (no net change), UPDATE+DELETE cancels the UPDATE (deletion still needed). At **export time**, the same logic runs across all Pending Exports to catch pairs persisted in different sync runs. This prevents unnecessary export operations and connector errors.
 
 - **Exponential backoff**<br /> Failed exports use increasing retry delays (`NextRetryAt`) to avoid hammering a target system that's experiencing issues.
+
+- **Optimistic export apply** (#1079)<br /> On export success, `ExportExecutionServer.ProcessBatchSuccessAsync` projects the exported attribute changes onto the CSO's attribute values (add-if-absent, replace-on-Update, delete-if-present, delete-all) at export time rather than waiting for the confirming import to re-materialise them. This means the confirming import's "Compare each import attribute against existing CSO values" step (see [Full Import Flow](FULL_IMPORT_FLOW.md)) usually finds nothing to do, avoiding millions of redundant attribute value inserts at scale. Two rules keep this safe:
+  - The parent CSO row (`Status`, `LastUpdated`, and every other field) is never touched. `LastUpdated` staying untouched is what lets a no-op confirming import skip the object entirely under the Full Synchronisation unchanged-object watermark; a status transition (e.g. `PendingProvisioning` → `Normal`) is still a genuine change and is stamped by the confirming import as before.
+  - Only the calls-based connector paths (sequential, parallel, deferred references) apply; the file-connector export path is excluded because its batch loader does not load the CSO's attribute-value graph, and widening that Include for every file export is a memory-profile trade-off not taken here. File-connector exports keep the pre-#1079 behaviour: the confirming import re-materialises the CSO's attribute values as it always did.
+
+  A failure during optimistic apply is caught, logged as a Warning, and never fails the batch, the Pending Export updates, or the Activity - the export itself already succeeded against the Connected System, and the confirming import self-heals by re-materialising the values regardless.
+
+  Reference-typed attribute changes (for example a group's member list) resolve their Connected System Object Id purely from `PendingExportAttributeValueChange.ResolvedReferenceCsoId`, a persisted column stamped once at the point of resolution (`ExportExecutionServer.TryResolveReferencesFromLookup`, SPEC-1079B). An earlier version of optimistic apply kept this as an in-memory-only hint and fell back to a database lookup whenever a change crossed a persistence boundary without it (cross-run retry, or the parallel batch path's per-batch fresh-context reload); that fallback queried the whole Connected System once per export run, and an even earlier per-batch version of the same fallback cost 10-15 seconds per call over an unindexed scan at Scale500k25kGroups (2026-07-21). Persisting the column removes the loss the fallback was compensating for, so no database lookup is needed here at all: a Pending Export whose Reference change has never been resolved simply applies unresolved (matched on `UnresolvedReferenceValue`, self-healing on the next import) rather than triggering a lookup. No foreign key or index backs the column - see its XML doc for the trade-off.
+
+  Optimistic apply means the confirming import's update path still hydrates every matched CSO's full attribute-value graph to run the diff, even though the diff usually confirms there's nothing to change. At Scale500k25kGroups this held ~9.8M attribute value objects in memory simultaneously across a 524,997-CSO run, tripling the confirming import's live heap versus the pre-#1079 baseline and causing an OOM kill. `SyncImportTaskProcessor.PerformImportAsync` now releases each update-path CSO's hydrated attribute values once its batch has been persisted (`ReleaseHydratedAttributeValues`), well after the diff, the change-history write, and the CSO cache refresh have all read what they needed - reconciliation, which runs afterwards, is unaffected because it reloads each CSO's attribute values fresh from the database per page rather than reading the released in-memory copies.
+
+  `OptimisticExportApplyCalculator.ApplyAdd`/`ApplyRemove` originally called `SyncEngine.ValueExistsOnCso`/a linear scan once per attribute change, while every accepted Add appended to that same growing per-attribute list - O(M^2) for a Pending Export with M Add changes. The live database has groups with up to 495,008 members, and a full-scale run measured 255 slow `OptimisticApply` instances totalling 77.5 minutes, all in the group-batch wave. The calculator now builds a per-attribute index once per Pending Export (a `Dictionary` of value to matching row instances, keyed exactly like `ValueExistsOnCso`'s per-type comparisons - DateTime on `Ticks`, Reference on the CSO row's `UnresolvedReferenceValue`, Binary left as a linear `SequenceEqual` scan since byte arrays do not hash usefully and are never large multi-valued sets) and maintains it incrementally as changes are applied, turning the existence/match check into an O(1) average-case lookup.

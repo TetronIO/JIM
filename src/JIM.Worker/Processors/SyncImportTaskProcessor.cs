@@ -691,14 +691,18 @@ public class SyncImportTaskProcessor
                         _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
                 }
 
-                // Clear the change tracker after each update batch. The batch has been fully persisted
-                // (raw SQL for parent rows + SaveChangesAsync for attribute changes), so tracked
-                // entities are no longer needed. This prevents tracker bloat from accumulating
-                // across 50+ batches of 2000 CSOs each.
-                // NOTE: this clears navigation properties on the batch CSOs, but those CSOs have
-                // already been saved. Reconciliation uses pre-loaded PendingExports (not CSO nav
-                // props) for the comparison data, and rebuilds CSO attribute lookups from a fresh
-                // database query if needed.
+                // Release this batch's hydrated AttributeValues now that it's been persisted and
+                // the cache eviction/refresh above has read what it needed from them. See
+                // ReleaseHydratedAttributeValues for why this is safe (#1079 Regression B: an OOM
+                // kill on 2026-07-21 traced to these values otherwise staying resident for the
+                // rest of the run). Note this batch was hydrated via GetConnectedSystemObjectsByIdsAsync
+                // with AsNoTrackingWithIdentityResolution, so it was never in the change tracker in
+                // the first place; ClearChangeTracker() below does not touch it.
+                ReleaseHydratedAttributeValues(csoBatch);
+
+                // Clear the change tracker after each update batch, in case anything else in this
+                // DbContext scope (e.g. RPEIs/Activity entities) was tracked during the batch. This
+                // prevents tracker bloat from accumulating across 50+ batches of 2000 CSOs each.
                 _syncRepo.ClearChangeTracker();
 
                 _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
@@ -729,13 +733,15 @@ public class SyncImportTaskProcessor
             return;
         }
 
-        // Note: we intentionally do NOT clear the change tracker here. The import phase leaves
-        // 100K+ tracked CSO entities whose AttributeValues navigation properties are populated.
-        // ClearChangeTracker() detaches entities and EF Core's fixup clears navigation collections,
-        // which would empty AttributeValues on the in-memory CSOs and break reconciliation
-        // (every attribute comparison would see "(no values)" and mark changes as not confirmed).
-        // The batch persist now uses raw SQL (COPY binary + UPDATE FROM), so tracker bloat no
-        // longer causes performance issues during reconciliation.
+        // Note: connectedSystemObjectsToBeUpdated's CSOs no longer have populated AttributeValues
+        // at this point - ReleaseHydratedAttributeValues cleared each batch's above, once
+        // persisted, to bound memory at scale (#1079 Regression B). This is safe: reconciliation
+        // below only needs each CSO's Id from this list (allPendingExportsByCsoId lookup) and
+        // reloads fresh AttributeValues from the database per page via
+        // GetConnectedSystemObjectsByIdsNoTrackingAsync - see ReconcilePendingExportsAsync.
+        // We don't call ClearChangeTracker() again here: these CSOs were hydrated with
+        // AsNoTrackingWithIdentityResolution and persisted via raw SQL, so nothing here was ever
+        // added to the change tracker in the first place.
 
         _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
         _activity.ObjectsProcessed = 0;
@@ -1623,6 +1629,29 @@ public class SyncImportTaskProcessor
         var errorCount = _activityRunProfileExecutionItems.Count(x => x.ErrorType != null && x.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet);
         Log.Information("ProcessImportObjectsAsync: SUMMARY - Total objects: {Total}, Processed successfully: {Success}, Errors: {Errors}, Duplicates detected: {Duplicates}. Seen external IDs tracked: {SeenCount}",
             connectedSystemImportResult.ImportObjects.Count, successCount, errorCount, duplicateCount, seenExternalIds.Count);
+    }
+
+    /// <summary>
+    /// Releases each CSO's hydrated AttributeValues after its update-save batch has been
+    /// persisted and any code that still needs them (cache eviction/refresh) has run. Import runs
+    /// at scale otherwise retain every attribute value touched by the update path in memory for
+    /// the rest of the run (through reconciliation), which caused an OOM kill in production on
+    /// 2026-07-21 with 524,997 updated CSOs holding ~9.8M attribute value objects (#1079
+    /// Regression B). Nothing downstream needs the in-memory values: reconciliation reloads CSOs
+    /// fresh from the database per page (see ReconcilePendingExportsAsync), deletion detection
+    /// queries the database directly, and reference resolution reads
+    /// PendingAttributeValueAdditions, which is already applied and cleared by
+    /// ProcessConnectedSystemObjectAttributeValueChanges before this runs.
+    /// Reassigns the collection rather than clearing it in place: PendingAttributeValueRemovals
+    /// keeps its own references to removed value instances for change-history records, and those
+    /// must not be disturbed.
+    /// Internal (not private) so it can be unit-tested directly - see
+    /// JIM.Worker.Tests.Synchronisation.ImportUpdatePathAttributeValueReleaseTests.
+    /// </summary>
+    internal static void ReleaseHydratedAttributeValues(IEnumerable<ConnectedSystemObject> csoBatch)
+    {
+        foreach (var cso in csoBatch)
+            cso.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
     }
 
     /// <summary>

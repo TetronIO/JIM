@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace JIM.PostgresData.Migrations
 {
     [DbContext(typeof(JimDbContext))]
-    partial class JimDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260723071207_PersistResolvedReferenceCsoIdOnPendingExportChanges")]
+    partial class PersistResolvedReferenceCsoIdOnPendingExportChanges
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -386,12 +389,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ParentSyncOutcomeId")
                         .HasColumnType("uuid");
 
-                    b.Property<int?>("SyncRuleId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("SyncRuleName")
-                        .HasColumnType("text");
-
                     b.Property<string>("TargetEntityDescription")
                         .HasColumnType("text");
 
@@ -488,36 +485,6 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("MetaverseAttributes");
                 });
 
-            modelBuilder.Entity("JIM.Models.Core.MetaverseAttributeStandardMapping", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("CounterpartName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("MetaverseAttributeId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("text");
-
-                    b.Property<int>("Standard")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MetaverseAttributeId", "Standard", "CounterpartName")
-                        .IsUnique()
-                        .HasDatabaseName("IX_MetaverseAttributeStandardMappings_Attribute_Standard_Name");
-
-                    b.ToTable("MetaverseAttributeStandardMappings");
-                });
-
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>
                 {
                     b.Property<Guid>("Id")
@@ -604,9 +571,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<decimal?>("DecimalValue")
-                        .HasColumnType("numeric");
-
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
 
@@ -640,8 +604,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ContributedBySystemId");
 
                     b.HasIndex("DateTimeValue");
-
-                    b.HasIndex("DecimalValue");
 
                     b.HasIndex("GuidValue");
 
@@ -770,17 +732,11 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<decimal?>("DecimalValue")
-                        .HasColumnType("numeric");
-
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
 
                     b.Property<int?>("IntValue")
                         .HasColumnType("integer");
-
-                    b.Property<long?>("LongValue")
-                        .HasColumnType("bigint");
 
                     b.Property<Guid>("MetaverseObjectChangeAttributeId")
                         .HasColumnType("uuid");
@@ -1551,11 +1507,6 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(1);
 
-                    b.Property<bool>("InitialExportOnly")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
                     b.Property<DateTime?>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
 
@@ -1654,9 +1605,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal?>("DecimalValue")
-                        .HasColumnType("numeric");
 
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
@@ -2062,9 +2010,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<decimal?>("DecimalValue")
-                        .HasColumnType("numeric");
-
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
 
@@ -2457,9 +2402,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<decimal?>("DecimalValue")
-                        .HasColumnType("numeric");
-
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
 
@@ -2601,9 +2543,6 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal?>("DecimalValue")
-                        .HasColumnType("numeric");
 
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
@@ -3276,9 +3215,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<decimal?>("DecimalValue")
-                        .HasColumnType("numeric");
-
                     b.Property<int>("ExportAttemptCount")
                         .HasColumnType("integer");
 
@@ -3523,17 +3459,6 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("ActivityId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("JIM.Models.Core.MetaverseAttributeStandardMapping", b =>
-                {
-                    b.HasOne("JIM.Models.Core.MetaverseAttribute", "MetaverseAttribute")
-                        .WithMany("StandardMappings")
-                        .HasForeignKey("MetaverseAttributeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("MetaverseAttribute");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>
@@ -4360,8 +4285,6 @@ namespace JIM.PostgresData.Migrations
             modelBuilder.Entity("JIM.Models.Core.MetaverseAttribute", b =>
                 {
                     b.Navigation("PredefinedSearchAttributes");
-
-                    b.Navigation("StandardMappings");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>
