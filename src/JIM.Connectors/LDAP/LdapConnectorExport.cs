@@ -1676,6 +1676,13 @@ internal class LdapConnectorExport
         if (attrChange.LongValue.HasValue)
             return attrChange.LongValue.Value.ToString();
 
+        if (attrChange.DecimalValue.HasValue)
+            // Defensive probe: no LDAP syntax maps to the Decimal data type, so a Decimal-bearing
+            // change should never reach this connector. Returning the canonical invariant string
+            // keeps an unexpected carrier from falling through to the null return below, which the
+            // caller treats as an instruction to clear the attribute (silent data loss).
+            return DecimalAttributeValue.ToCanonicalString(attrChange.DecimalValue.Value);
+
         if (attrChange.DateTimeValue.HasValue)
             return ConvertDateTimeToLdapFormat(attrChange.DateTimeValue.Value);
 

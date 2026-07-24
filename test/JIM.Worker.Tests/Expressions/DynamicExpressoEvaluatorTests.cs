@@ -1562,4 +1562,82 @@ public class DynamicExpressoEvaluatorTests
     }
 
     #endregion
+
+    #region ToDecimal Function Tests (#1046)
+
+    [Test]
+    public void Evaluate_ToDecimal_DecimalInput_ReturnsValueUnchanged()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "salary", 10.5m } });
+
+        var result = _evaluator.Evaluate("ToDecimal(cs[\"salary\"])", context);
+
+        Assert.That(result, Is.EqualTo(10.5m));
+        Assert.That(result, Is.TypeOf<decimal>());
+    }
+
+    [Test]
+    public void Evaluate_ToDecimal_IntInput_WidensExactly()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "count", 42 } });
+
+        var result = _evaluator.Evaluate("ToDecimal(cs[\"count\"])", context);
+
+        Assert.That(result, Is.EqualTo(42m));
+    }
+
+    [Test]
+    public void Evaluate_ToDecimal_LongInput_WidensExactly()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "big", 9999999999L } });
+
+        var result = _evaluator.Evaluate("ToDecimal(cs[\"big\"])", context);
+
+        Assert.That(result, Is.EqualTo(9999999999m));
+    }
+
+    [Test]
+    public void Evaluate_ToDecimal_ExponentNotationString_ParsesWithInvariantCulture()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "value", "1.5E3" } });
+
+        var result = _evaluator.Evaluate("ToDecimal(cs[\"value\"])", context);
+
+        Assert.That(result, Is.EqualTo(1500m));
+    }
+
+    [Test]
+    public void Evaluate_ToDecimal_InvalidString_ReturnsZero()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "value", "not a number" } });
+
+        var result = _evaluator.Evaluate("ToDecimal(cs[\"value\"])", context);
+
+        Assert.That(result, Is.EqualTo(0m));
+    }
+
+    [Test]
+    public void Evaluate_ToDecimal_ArithmeticOnResult_StaysDecimal()
+    {
+        var context = new ExpressionContext(
+            new Dictionary<string, object?>(),
+            new Dictionary<string, object?> { { "salary", "10.5" } });
+
+        var result = _evaluator.Evaluate("ToDecimal(cs[\"salary\"]) * 2", context);
+
+        Assert.That(result, Is.EqualTo(21m));
+        Assert.That(result, Is.TypeOf<decimal>());
+    }
+
+    #endregion
 }

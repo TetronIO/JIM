@@ -493,6 +493,9 @@ public class ExampleDataServer
                                 case AttributeDataType.LongNumber:
                                     GenerateMetaverseLongNumberValue(metaverseObject, templateAttribute, random, trackers);
                                     break;
+                                case AttributeDataType.Decimal:
+                                    GenerateMetaverseDecimalValue(metaverseObject, templateAttribute, random, trackers);
+                                    break;
                                 case AttributeDataType.DateTime:
                                     GenerateMetaverseDateTimeValue(metaverseObject, templateAttribute, random);
                                     break;
@@ -860,6 +863,8 @@ public class ExampleDataServer
             return attributeValue.IntValue.Value;
         if (attributeValue.LongValue.HasValue)
             return attributeValue.LongValue.Value;
+        if (attributeValue.DecimalValue.HasValue)
+            return attributeValue.DecimalValue.Value;
         if (attributeValue.BoolValue.HasValue)
             return attributeValue.BoolValue.Value;
         if (attributeValue.DateTimeValue.HasValue)
@@ -914,6 +919,25 @@ public class ExampleDataServer
         {
             Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
             LongValue = value
+        });
+    }
+
+    private void GenerateMetaverseDecimalValue(
+        MetaverseObject metaverseObject,
+        ExampleDataTemplateAttribute dataGenerationTemplateAttribute,
+        Random random,
+        ExampleDataValueTrackerStore trackerStore)
+    {
+        if (dataGenerationTemplateAttribute.MetaverseAttribute == null)
+            throw new ArgumentNullException(nameof(dataGenerationTemplateAttribute));
+
+        // Generate a decimal value - for now, use the int generator (an int widens to decimal exactly),
+        // mirroring the LongNumber approach above.
+        var value = GenerateNumberValue(metaverseObject.Type, dataGenerationTemplateAttribute, random, trackerStore);
+        metaverseObject.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Attribute = dataGenerationTemplateAttribute.MetaverseAttribute,
+            DecimalValue = value
         });
     }
 

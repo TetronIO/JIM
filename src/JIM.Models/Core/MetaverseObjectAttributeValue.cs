@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,7 @@ namespace JIM.Models.Core;
 [Index(nameof(DateTimeValue))]
 [Index(nameof(IntValue))]
 [Index(nameof(LongValue))]
+[Index(nameof(DecimalValue))]
 [Index(nameof(ReferenceValue))]
 [Index(nameof(UnresolvedReferenceValue))]
 [Index(nameof(GuidValue))]
@@ -24,6 +26,7 @@ public class MetaverseObjectAttributeValue
     public DateTime? DateTimeValue { get; set; }
     public int? IntValue { get; set; }
     public long? LongValue { get; set; }
+    public decimal? DecimalValue { get; set; }
     public byte[]? ByteValue { get; set; }
 
     /// <summary>
@@ -89,6 +92,7 @@ public class MetaverseObjectAttributeValue
                DateTimeValue == null &&
                IntValue == null &&
                LongValue == null &&
+               DecimalValue == null &&
                ByteValue == null &&
                GuidValue == null &&
                BoolValue == null &&
@@ -124,6 +128,12 @@ public class MetaverseObjectAttributeValue
         if (LongValue != null)
         {
             output += LongValue.ToString();
+            return output;
+        }
+
+        if (DecimalValue != null)
+        {
+            output += DecimalValue.Value.ToString(CultureInfo.InvariantCulture);
             return output;
         }
 

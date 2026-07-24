@@ -103,14 +103,11 @@ public partial class SyncRepository
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
+        // Writer order below MUST match MvoChangeBulkColumns.MetaverseObjectChanges exactly.
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
-            """
+            $"""
             COPY "MetaverseObjectChanges" (
-                "Id", "MetaverseObjectId", "ActivityRunProfileExecutionItemId",
-                "ChangeTime", "ChangeType", "ChangeInitiatorType",
-                "InitiatedByType", "InitiatedById", "InitiatedByName",
-                "SyncRuleId", "SyncRuleName",
-                "DeletedObjectTypeId", "DeletedMetaverseObjectId", "DeletedObjectDisplayName"
+                {BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChanges)}
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -178,10 +175,11 @@ public partial class SyncRepository
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
+        // Writer order below MUST match MvoChangeBulkColumns.MetaverseObjectChangeAttributes exactly.
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
-            """
+            $"""
             COPY "MetaverseObjectChangeAttributes" (
-                "Id", "MetaverseObjectChangeId", "AttributeId", "AttributeName", "AttributeType"
+                {BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributes)}
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -209,12 +207,11 @@ public partial class SyncRepository
         var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
+        // Writer order below MUST match MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues exactly.
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
-            """
+            $"""
             COPY "MetaverseObjectChangeAttributeValues" (
-                "Id", "MetaverseObjectChangeAttributeId", "ValueChangeType",
-                "StringValue", "DateTimeValue", "IntValue",
-                "ByteValueLength", "GuidValue", "BoolValue", "ReferenceValueId"
+                {BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues)}
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -234,6 +231,14 @@ public partial class SyncRepository
                 await writer.WriteNullAsync();
             if (v.IntValue.HasValue)
                 await writer.WriteAsync(v.IntValue.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (v.LongValue.HasValue)
+                await writer.WriteAsync(v.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
+            else
+                await writer.WriteNullAsync();
+            if (v.DecimalValue.HasValue)
+                await writer.WriteAsync(v.DecimalValue.Value, NpgsqlTypes.NpgsqlDbType.Numeric);
             else
                 await writer.WriteNullAsync();
             if (v.ByteValueLength.HasValue)

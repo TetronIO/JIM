@@ -10,6 +10,7 @@ using DynamicExpresso;
 using DynamicExpresso.Exceptions;
 using JIM.Models.Expressions;
 using JIM.Models.Interfaces;
+using JIM.Utilities;
 using Serilog;
 
 namespace JIM.Application.Expressions;
@@ -254,6 +255,14 @@ public class DynamicExpressoEvaluator : IExpressionEvaluator
         // Conversion functions
         target.SetFunction("ToString", (Func<object?, string?>)(o => o?.ToString()));
         target.SetFunction("ToInt", (Func<object?, int>)(o => int.TryParse(AsString(o), out var i) ? i : 0));
+        // ToDecimal: exact for decimal/int/long inputs; strings parse with invariant culture and accept
+        // exponent notation (e.g. "1.5E3" becomes 1500). Deliberately no double/float path: binary
+        // floating point cannot represent most decimal fractions exactly.
+        target.SetFunction("ToDecimal", (Func<object?, decimal>)(o =>
+            o is decimal d ? d :
+            o is int i ? i :
+            o is long l ? l :
+            DecimalAttributeValue.TryParse(AsString(o), out var parsed) ? parsed : 0m));
 
         // DN Helper functions
         target.SetFunction("EscapeDN", (Func<object?, string?>)(o => EscapeDN(AsString(o))));

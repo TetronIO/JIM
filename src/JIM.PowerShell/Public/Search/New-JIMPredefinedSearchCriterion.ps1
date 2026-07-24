@@ -12,7 +12,7 @@ function New-JIMPredefinedSearchCriterion {
         a Number attribute, -DateTimeValue for a DateTime attribute). The operator must be applicable
         to the attribute's data type:
         - Text: Equals, NotEquals, StartsWith, NotStartsWith, EndsWith, NotEndsWith, Contains, NotContains
-        - Number, LongNumber, DateTime: Equals, NotEquals, LessThan, LessThanOrEquals, GreaterThan, GreaterThanOrEquals
+        - Number, LongNumber, Decimal, DateTime: Equals, NotEquals, LessThan, LessThanOrEquals, GreaterThan, GreaterThanOrEquals
         - Boolean, Guid: Equals, NotEquals
 
     .PARAMETER PredefinedSearchId
@@ -38,6 +38,11 @@ function New-JIMPredefinedSearchCriterion {
 
     .PARAMETER LongValue
         The 64-bit integer value to compare against (for LongNumber attributes).
+
+    .PARAMETER DecimalValue
+        The decimal value to compare against (for Decimal attributes). For high-precision values use
+        PowerShell's decimal literal suffix (for example 123.456789012345678d) or a quoted string,
+        because a bare numeric literal is parsed as a double first and can lose precision.
 
     .PARAMETER DateTimeValue
         The date/time value to compare against (for DateTime attributes). Interpreted as UTC.
@@ -121,6 +126,9 @@ function New-JIMPredefinedSearchCriterion {
         [long]$LongValue,
 
         [Parameter()]
+        [decimal]$DecimalValue,
+
+        [Parameter()]
         [datetime]$DateTimeValue,
 
         [Parameter()]
@@ -179,6 +187,7 @@ function New-JIMPredefinedSearchCriterion {
         if ($PSBoundParameters.ContainsKey('StringValue')) { $body.stringValue = $StringValue }
         if ($PSBoundParameters.ContainsKey('IntValue')) { $body.intValue = $IntValue }
         if ($PSBoundParameters.ContainsKey('LongValue')) { $body.longValue = $LongValue }
+        if ($PSBoundParameters.ContainsKey('DecimalValue')) { $body.decimalValue = $DecimalValue }
         if ($PSBoundParameters.ContainsKey('DateTimeValue')) { $body.dateTimeValue = $DateTimeValue.ToString('o') }
         if ($PSBoundParameters.ContainsKey('BoolValue')) { $body.boolValue = $BoolValue }
         if ($PSBoundParameters.ContainsKey('GuidValue')) { $body.guidValue = $GuidValue.ToString() }

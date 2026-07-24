@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Core;
 using JIM.Models.Search;
 using JIM.Models.Staging;
@@ -31,6 +32,8 @@ public class SyncRuleScopingCriteria : ICriterionValues
     public int? IntValue { get; set; }
 
     public long? LongValue { get; set; }
+
+    public decimal? DecimalValue { get; set; }
 
     public DateTime? DateTimeValue { get; set; }
 
@@ -101,6 +104,7 @@ public class SyncRuleScopingCriteria : ICriterionValues
             AttributeDataType.Text => "Text: " + StringValue,
             AttributeDataType.Number => "Number: " + IntValue,
             AttributeDataType.LongNumber => "LongNumber: " + LongValue,
+            AttributeDataType.Decimal => "Decimal: " + (DecimalValue.HasValue ? DecimalValue.Value.ToString(CultureInfo.InvariantCulture) : null),
             AttributeDataType.Boolean => "Boolean: " + (BoolValue is null ? "Null" : BoolValue.Value.ToString()),
             AttributeDataType.DateTime => DescribeDateValue(),
             AttributeDataType.Guid => "Guid: " + GuidValue,

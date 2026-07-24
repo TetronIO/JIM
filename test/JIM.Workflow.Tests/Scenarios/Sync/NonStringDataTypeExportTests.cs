@@ -299,6 +299,72 @@ public class NonStringDataTypeExportTests
             "PendingExport should be deleted after successful int reconciliation");
     }
 
+    /// <summary>
+    /// Verifies that Decimal attribute values are correctly exported and reconciled, including
+    /// confirmation by a scale-differing imported value (export 2.50, import 2.5): decimal
+    /// comparison is numeric, so the reconciliation must confirm and delete the Pending Export.
+    /// </summary>
+    [Test]
+    public async Task DecimalExport_ValueCorrectlyExportedAndReconciledAsync()
+    {
+        // Arrange
+        await SetUpDecimalExportScenarioAsync();
+        await _harness.TakeSnapshotAsync("Initial");
+
+        const decimal testSalary = 51234.50m;
+
+        // Act Step 1: Import from source
+        var sourceConnector = _harness.GetConnector("HR");
+        sourceConnector.QueueImportObjects(new List<ConnectedSystemImportObject>
+        {
+            new()
+            {
+                ChangeType = ObjectChangeType.NotSet,
+                ObjectType = "User",
+                Attributes = new List<ConnectedSystemImportObjectAttribute>
+                {
+                    new() { Name = "employeeId", GuidValues = new List<Guid> { Guid.NewGuid() } },
+                    new() { Name = "displayName", StringValues = new List<string> { "Test User 1" } },
+                    new() { Name = "salary", DecimalValues = new List<decimal> { testSalary } }
+                }
+            }
+        });
+
+        await _harness.ExecuteFullImportAsync("HR");
+        await _harness.ExecuteFullSyncAsync("HR");
+        var afterSync = await _harness.TakeSnapshotAsync("After Full Sync");
+
+        Assert.That(afterSync.MvoCount, Is.EqualTo(1), "Should have 1 MVO after sync");
+        Assert.That(afterSync.PendingExportCount, Is.EqualTo(1), "Should have 1 PendingExport");
+
+        // Assert: PendingExport has DecimalValue set (not converted to string)
+        var pendingExport = _harness.SyncRepo.PendingExports.Values.First();
+
+        var remunerationChange = pendingExport.AttributeValueChanges
+            .FirstOrDefault(avc => avc.Attribute?.Name == "remuneration");
+
+        Assert.That(remunerationChange, Is.Not.Null, "Should have remuneration attribute value change");
+        Assert.That(remunerationChange!.DecimalValue, Is.EqualTo(testSalary),
+            "DecimalValue should be set correctly (not converted to string)");
+        Assert.That(remunerationChange.StringValue, Is.Null,
+            "StringValue should be null (decimal should use DecimalValue property)");
+
+        // Export and confirm with a SCALE-DIFFERING value: the target system stored 51234.5
+        // where JIM exported 51234.50. Numerically identical, so reconciliation must confirm.
+        await _harness.ExecuteExportAsync("AD");
+
+        var adConnector = _harness.GetConnector("AD");
+        adConnector.WithConfirmingImportFactory(pe => GenerateConfirmingImportObjectWithDecimal(pe, 51234.5m));
+        adConnector.QueueConfirmingImport();
+
+        await _harness.ExecuteConfirmingImportAsync("AD");
+        var afterConfirmingImport = await _harness.TakeSnapshotAsync("After Confirming Import");
+
+        Assert.That(afterConfirmingImport.PendingExportCount, Is.EqualTo(0),
+            "PendingExport should be deleted after successful decimal reconciliation, " +
+            "including when the imported value differs only in scale (2.50 vs 2.5 semantics)");
+    }
+
     #region Setup Helpers
 
     private async Task SetUpBoolExportScenarioAsync()
@@ -569,6 +635,73 @@ public class NonStringDataTypeExportTests
                 .WithExpressionFlow("\"CN=\" + mv[\"displayName\"] + \",OU=Users,DC=test,DC=local\"", adDn));
     }
 
+    private async Task SetUpDecimalExportScenarioAsync()
+    {
+        // Create HR (source) system
+        await _harness.CreateConnectedSystemAsync("HR");
+        await _harness.CreateObjectTypeAsync("HR", "User", t => t
+            .WithGuidExternalId("employeeId")
+            .WithStringAttribute("displayName")
+            .WithDecimalAttribute("salary"));
+
+        // Create AD (target) system
+        await _harness.CreateConnectedSystemAsync("AD");
+        await _harness.CreateObjectTypeAsync("AD", "User", t => t
+            .WithGuidExternalId("objectGUID")
+            .WithStringSecondaryExternalId("distinguishedName")
+            .WithStringAttribute("cn")
+            .WithDecimalAttribute("remuneration"));
+
+        // Create MV type
+        var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
+            .WithGuidAttribute("employeeId")
+            .WithStringAttribute("displayName")
+            .WithDecimalAttribute("salary")
+            .WithStringAttribute("Type"));
+
+        // Get attributes for flow rules
+        var hrUserType = _harness.GetObjectType("HR", "User");
+        var adUserType = _harness.GetObjectType("AD", "User");
+
+        var hrDisplayName = hrUserType.Attributes.First(a => a.Name == "displayName");
+        var hrSalary = hrUserType.Attributes.First(a => a.Name == "salary");
+
+        var adCn = adUserType.Attributes.First(a => a.Name == "cn");
+        var adDn = adUserType.Attributes.First(a => a.Name == "distinguishedName");
+        var adRemuneration = adUserType.Attributes.First(a => a.Name == "remuneration");
+
+        // Get MV attributes
+        var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
+        var mvSalary = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "salary");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
+
+        // Create import Synchronisation Rule
+        await _harness.CreateSyncRuleAsync(
+            "HR Import",
+            "HR",
+            "User",
+            personType,
+            SyncRuleDirection.Import,
+            r => r
+                .WithProjection()
+                .WithAttributeFlow(mvDisplayName, hrDisplayName)
+                .WithAttributeFlow(mvSalary, hrSalary)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
+
+        // Create export Synchronisation Rule
+        await _harness.CreateSyncRuleAsync(
+            "AD Export",
+            "AD",
+            "User",
+            personType,
+            SyncRuleDirection.Export,
+            r => r
+                .WithProvisioning()
+                .WithAttributeFlow(mvDisplayName, adCn)
+                .WithAttributeFlow(mvSalary, adRemuneration)
+                .WithExpressionFlow("\"CN=\" + mv[\"displayName\"] + \",OU=Users,DC=test,DC=local\"", adDn));
+    }
+
     #endregion
 
     #region Confirming Import Helpers
@@ -641,6 +774,29 @@ public class NonStringDataTypeExportTests
                 new() { Name = "distinguishedName", StringValues = new List<string> { dn } },
                 new() { Name = "cn", StringValues = new List<string> { cn } },
                 new() { Name = "hireDate", DateTimeValue = expectedDate }
+            }
+        };
+    }
+
+    private ConnectedSystemImportObject GenerateConfirmingImportObjectWithDecimal(PendingExport pe, decimal importedValue)
+    {
+        var dn = pe.AttributeValueChanges
+            .FirstOrDefault(avc => avc.Attribute?.Name == "distinguishedName")
+            ?.StringValue ?? "CN=Unknown,OU=Users,DC=test,DC=local";
+        var cn = pe.AttributeValueChanges
+            .FirstOrDefault(avc => avc.Attribute?.Name == "cn")
+            ?.StringValue ?? "Unknown";
+
+        return new ConnectedSystemImportObject
+        {
+            ChangeType = ObjectChangeType.NotSet,
+            ObjectType = "User",
+            Attributes = new List<ConnectedSystemImportObjectAttribute>
+            {
+                new() { Name = "objectGUID", GuidValues = new List<Guid> { Guid.NewGuid() } },
+                new() { Name = "distinguishedName", StringValues = new List<string> { dn } },
+                new() { Name = "cn", StringValues = new List<string> { cn } },
+                new() { Name = "remuneration", DecimalValues = new List<decimal> { importedValue } }
             }
         };
     }

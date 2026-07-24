@@ -3837,6 +3837,9 @@ public class ConnectedSystemServer
             case AttributeDataType.LongNumber when connectedSystemObjectAttributeValue.LongValue != null:
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (long)connectedSystemObjectAttributeValue.LongValue));
                 break;
+            case AttributeDataType.Decimal when connectedSystemObjectAttributeValue.DecimalValue != null:
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.DecimalValue.Value));
+                break;
             case AttributeDataType.Guid when connectedSystemObjectAttributeValue.GuidValue != null:
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (Guid)connectedSystemObjectAttributeValue.GuidValue));
                 break;

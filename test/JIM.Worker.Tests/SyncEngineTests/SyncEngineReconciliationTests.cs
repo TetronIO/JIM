@@ -80,6 +80,80 @@ public class SyncEngineReconciliationTests
     }
 
     [Test]
+    public void IsAttributeChangeConfirmed_DecimalAdd_ValuePresent_ReturnsTrue()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Decimal, decimalValue: 1234.56m);
+        var change = CreateAttrChange(1, AttributeDataType.Decimal, PendingExportAttributeChangeType.Add, decimalValue: 1234.56m);
+
+        Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.True);
+    }
+
+    [Test]
+    public void IsAttributeChangeConfirmed_DecimalAdd_ScaleDiffersOnly_ReturnsTrue()
+    {
+        // Decimal comparison is numeric and scale-insensitive: an exported 5.00 is confirmed by an imported 5.0.
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Decimal, decimalValue: 5.0m);
+        var change = CreateAttrChange(1, AttributeDataType.Decimal, PendingExportAttributeChangeType.Add, decimalValue: 5.00m);
+
+        Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.True);
+    }
+
+    [Test]
+    public void IsAttributeChangeConfirmed_DecimalAdd_ValueMismatch_ReturnsFalse()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Decimal, decimalValue: 5.0m);
+        var change = CreateAttrChange(1, AttributeDataType.Decimal, PendingExportAttributeChangeType.Add, decimalValue: 5.5m);
+
+        Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.False);
+    }
+
+    [Test]
+    public void IsAttributeChangeConfirmed_DecimalUpdate_ValuePresent_ReturnsTrue()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Decimal, decimalValue: 99.99m);
+        var change = CreateAttrChange(1, AttributeDataType.Decimal, PendingExportAttributeChangeType.Update, decimalValue: 99.99m);
+
+        Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.True);
+    }
+
+    [Test]
+    public void IsAttributeChangeConfirmed_DecimalRemove_ValueAbsent_ReturnsTrue()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Decimal, decimalValue: 1.1m);
+        var change = CreateAttrChange(1, AttributeDataType.Decimal, PendingExportAttributeChangeType.Remove, decimalValue: 2.2m);
+
+        Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.True);
+    }
+
+    [Test]
+    public void IsAttributeChangeConfirmed_DecimalRemove_ScaleVariantStillPresent_ReturnsFalse()
+    {
+        // 2.20 on the CSO is numerically the same value as the 2.2 being removed, so the removal is not confirmed.
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Decimal, decimalValue: 2.20m);
+        var change = CreateAttrChange(1, AttributeDataType.Decimal, PendingExportAttributeChangeType.Remove, decimalValue: 2.2m);
+
+        Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.False);
+    }
+
+    [Test]
+    public void IsAttributeChangeConfirmed_DecimalRemoveAll_NoValuesLeft_ReturnsTrue()
+    {
+        var cso = new ConnectedSystemObject { Id = Guid.NewGuid() };
+        var change = CreateAttrChange(1, AttributeDataType.Decimal, PendingExportAttributeChangeType.RemoveAll);
+
+        Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.True);
+    }
+
+    [Test]
+    public void IsAttributeChangeConfirmed_DecimalRemoveAll_ValuesStillExist_ReturnsFalse()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Decimal, decimalValue: 3.14m);
+        var change = CreateAttrChange(1, AttributeDataType.Decimal, PendingExportAttributeChangeType.RemoveAll);
+
+        Assert.That(_engine.IsAttributeChangeConfirmed(cso, change), Is.False);
+    }
+
+    [Test]
     public void IsAttributeChangeConfirmed_DateTimeAdd_ValuePresent_ReturnsTrue()
     {
         var dt = new DateTime(2026, 3, 1, 12, 0, 0, DateTimeKind.Utc);
@@ -277,6 +351,21 @@ public class SyncEngineReconciliationTests
     public void IsPendingChangeEmpty_HasLongValue_ReturnsFalse()
     {
         var change = new PendingExportAttributeValueChange { LongValue = 1L };
+        Assert.That(SyncEngine.IsPendingChangeEmpty(change), Is.False);
+    }
+
+    [Test]
+    public void IsPendingChangeEmpty_HasDecimalValue_ReturnsFalse()
+    {
+        var change = new PendingExportAttributeValueChange { DecimalValue = 1.5m };
+        Assert.That(SyncEngine.IsPendingChangeEmpty(change), Is.False);
+    }
+
+    [Test]
+    public void IsPendingChangeEmpty_HasZeroDecimalValue_ReturnsFalse()
+    {
+        // Zero is a real value, not an empty change.
+        var change = new PendingExportAttributeValueChange { DecimalValue = 0m };
         Assert.That(SyncEngine.IsPendingChangeEmpty(change), Is.False);
     }
 
@@ -613,6 +702,53 @@ public class SyncEngineReconciliationTests
         _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
 
         Assert.That(result.PendingExportDeleted, Is.True);
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_DecimalAdd_Confirmed_MarksForDeletion()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Decimal, decimalValue: 1234.56m);
+        var attrChange = CreateAttrChange(1, AttributeDataType.Decimal, PendingExportAttributeChangeType.Add, decimalValue: 1234.56m);
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.PendingExportDeleted, Is.True);
+        Assert.That(result.ConfirmedChanges, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_DecimalAdd_ScaleDiffersOnly_Confirmed_MarksForDeletion()
+    {
+        // The fast-index path must confirm a pending 5.00 against an imported 5.0: HashSet<decimal>
+        // membership is scale-insensitive, so no phantom retry is raised for a scale-only difference.
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Decimal, decimalValue: 5.0m);
+        var attrChange = CreateAttrChange(1, AttributeDataType.Decimal, PendingExportAttributeChangeType.Add, decimalValue: 5.00m);
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.PendingExportDeleted, Is.True);
+        Assert.That(result.ConfirmedChanges, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void ReconcileCsoAgainstPendingExport_DecimalAdd_Unconfirmed_MarksForRetry()
+    {
+        var cso = CreateCsoWithAttributeValue(1, attributeType: AttributeDataType.Decimal, decimalValue: 5.0m);
+        var attrChange = CreateAttrChange(1, AttributeDataType.Decimal, PendingExportAttributeChangeType.Add, decimalValue: 5.5m);
+        attrChange.Status = PendingExportAttributeChangeStatus.ExportedPendingConfirmation;
+        var pe = new PendingExport { Id = Guid.NewGuid(), Status = PendingExportStatus.Exported, AttributeValueChanges = [attrChange] };
+        var result = new PendingExportReconciliationResult();
+
+        _engine.ReconcileCsoAgainstPendingExport(cso, pe, result);
+
+        Assert.That(result.RetryChanges, Has.Count.EqualTo(1));
+        Assert.That(result.ConfirmedChanges, Is.Empty);
     }
 
     [Test]
@@ -1001,6 +1137,7 @@ public class SyncEngineReconciliationTests
         string? stringValue = null,
         int? intValue = null,
         long? longValue = null,
+        decimal? decimalValue = null,
         DateTime? dateTimeValue = null,
         byte[]? byteValue = null,
         bool? boolValue = null,
@@ -1015,6 +1152,7 @@ public class SyncEngineReconciliationTests
             StringValue = stringValue,
             IntValue = intValue,
             LongValue = longValue,
+            DecimalValue = decimalValue,
             DateTimeValue = dateTimeValue,
             ByteValue = byteValue,
             BoolValue = boolValue,
@@ -1031,6 +1169,7 @@ public class SyncEngineReconciliationTests
         string? stringValue = null,
         int? intValue = null,
         long? longValue = null,
+        decimal? decimalValue = null,
         DateTime? dateTimeValue = null,
         byte[]? byteValue = null,
         bool? boolValue = null,
@@ -1046,6 +1185,7 @@ public class SyncEngineReconciliationTests
             StringValue = stringValue,
             IntValue = intValue,
             LongValue = longValue,
+            DecimalValue = decimalValue,
             DateTimeValue = dateTimeValue,
             ByteValue = byteValue,
             BoolValue = boolValue,

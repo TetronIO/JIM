@@ -4,8 +4,8 @@
   "seedAttributes": [
     {
       "name": "Sc11EmployeeId",
-      "isExternalId": true,
-      "type": "Text"
+      "type": "Text",
+      "isExternalId": true
     },
     {
       "name": "Sc11Department",
@@ -22,6 +22,10 @@
     {
       "name": "Sc11LongEmployeeNumber",
       "type": "LongNumber"
+    },
+    {
+      "name": "Sc11DecimalSalary",
+      "type": "Decimal"
     },
     {
       "name": "Sc11HireDate",
@@ -43,6 +47,7 @@
       "Sc11JobTitle": "Manager",
       "Sc11EmployeeNumber": 100,
       "Sc11LongEmployeeNumber": 5000000000,
+      "Sc11DecimalSalary": 50000.5,
       "Sc11HireDate": "2020-01-15T00:00:00Z",
       "Sc11IsActive": true,
       "Sc11DepartmentId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
@@ -53,6 +58,7 @@
       "Sc11JobTitle": "Senior Manager",
       "Sc11EmployeeNumber": 200,
       "Sc11LongEmployeeNumber": 6000000000,
+      "Sc11DecimalSalary": 60000.75,
       "Sc11HireDate": "2021-06-30T00:00:00Z",
       "Sc11IsActive": false,
       "Sc11DepartmentId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
@@ -63,6 +69,7 @@
       "Sc11JobTitle": "Director",
       "Sc11EmployeeNumber": 1000,
       "Sc11LongEmployeeNumber": -1,
+      "Sc11DecimalSalary": -1.25,
       "Sc11HireDate": "2022-03-01T00:00:00Z",
       "Sc11IsActive": true,
       "Sc11DepartmentId": "cccccccc-cccc-cccc-cccc-cccccccccccc"
@@ -73,6 +80,7 @@
       "Sc11JobTitle": "VP",
       "Sc11EmployeeNumber": 5000,
       "Sc11LongEmployeeNumber": 1,
+      "Sc11DecimalSalary": 0.01,
       "Sc11HireDate": "2023-08-15T00:00:00Z",
       "Sc11IsActive": true,
       "Sc11DepartmentId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
@@ -83,6 +91,7 @@
       "Sc11JobTitle": "Executive",
       "Sc11EmployeeNumber": 50,
       "Sc11LongEmployeeNumber": 0,
+      "Sc11DecimalSalary": 123.45,
       "Sc11HireDate": "1970-01-01T00:00:00Z",
       "Sc11IsActive": false,
       "Sc11DepartmentId": "dddddddd-dddd-dddd-dddd-dddddddddddd"
@@ -93,6 +102,7 @@
       "Sc11JobTitle": "Rep",
       "Sc11EmployeeNumber": 75,
       "Sc11LongEmployeeNumber": 100,
+      "Sc11DecimalSalary": 100.5,
       "Sc11HireDate": "2024-01-01T00:00:00Z",
       "Sc11IsActive": true,
       "Sc11DepartmentId": "dddddddd-dddd-dddd-dddd-dddddddddddd"
@@ -103,6 +113,7 @@
       "Sc11JobTitle": "Engineer",
       "Sc11EmployeeNumber": -10,
       "Sc11LongEmployeeNumber": 99999999999,
+      "Sc11DecimalSalary": 99999.99,
       "Sc11HireDate": "2025-11-15T00:00:00Z",
       "Sc11IsActive": true,
       "Sc11DepartmentId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
@@ -113,6 +124,7 @@
       "Sc11JobTitle": "Senior Engineer",
       "Sc11EmployeeNumber": 10000,
       "Sc11LongEmployeeNumber": 4000000000,
+      "Sc11DecimalSalary": 42000.42,
       "Sc11HireDate": "2026-01-01T00:00:00Z",
       "Sc11IsActive": false,
       "Sc11DepartmentId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
@@ -123,6 +135,7 @@
       "Sc11JobTitle": "Officer",
       "Sc11EmployeeNumber": 250,
       "Sc11LongEmployeeNumber": 2500000000,
+      "Sc11DecimalSalary": 25000.25,
       "Sc11HireDate": "2019-05-20T00:00:00Z",
       "Sc11IsActive": true,
       "Sc11DepartmentId": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
@@ -133,6 +146,7 @@
       "Sc11JobTitle": "Lead",
       "Sc11EmployeeNumber": 0,
       "Sc11LongEmployeeNumber": 3000000000,
+      "Sc11DecimalSalary": 3000.3,
       "Sc11HireDate": "2018-12-01T00:00:00Z",
       "Sc11IsActive": false,
       "Sc11DepartmentId": "ffffffff-ffff-ffff-ffff-ffffffffffff"
@@ -143,6 +157,7 @@
       "Sc11JobTitle": "Manager",
       "Sc11EmployeeNumber": -1,
       "Sc11LongEmployeeNumber": 1500000000,
+      "Sc11DecimalSalary": 1500000.05,
       "Sc11HireDate": "2026-03-15T00:00:00Z",
       "Sc11IsActive": true,
       "Sc11DepartmentId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
@@ -153,6 +168,7 @@
       "Sc11JobTitle": "Junior",
       "Sc11EmployeeNumber": 1,
       "Sc11LongEmployeeNumber": 100000,
+      "Sc11DecimalSalary": 1.5,
       "Sc11HireDate": "2025-06-01T00:00:00Z",
       "Sc11IsActive": false,
       "Sc11DepartmentId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
@@ -163,6 +179,7 @@
       "Sc11JobTitle": "Senior",
       "Sc11EmployeeNumber": 30,
       "Sc11LongEmployeeNumber": 7500000000,
+      "Sc11DecimalSalary": 75000.5,
       "Sc11HireDate": "2017-09-09T00:00:00Z",
       "Sc11IsActive": true,
       "Sc11DepartmentId": "cccccccc-cccc-cccc-cccc-cccccccccccc"
@@ -173,6 +190,7 @@
       "Sc11JobTitle": "Specialist",
       "Sc11EmployeeNumber": 500,
       "Sc11LongEmployeeNumber": 800000,
+      "Sc11DecimalSalary": 800.8,
       "Sc11HireDate": "2024-12-31T00:00:00Z",
       "Sc11IsActive": true,
       "Sc11DepartmentId": "dddddddd-dddd-dddd-dddd-dddddddddddd"
@@ -183,24 +201,25 @@
       "Sc11JobTitle": null,
       "Sc11EmployeeNumber": null,
       "Sc11LongEmployeeNumber": null,
+      "Sc11DecimalSalary": null,
       "Sc11HireDate": null,
       "Sc11IsActive": null,
       "Sc11DepartmentId": null
     }
   ],
   "secondaryCriterion": {
+    "attribute": "Sc11IsActive",
     "operator": "Equals",
-    "caseSensitive": true,
-    "value": true,
     "valueType": "Boolean",
-    "attribute": "Sc11IsActive"
+    "value": true,
+    "caseSensitive": true
   },
   "tertiaryCriterion": {
+    "attribute": "Sc11Department",
     "operator": "Equals",
-    "caseSensitive": true,
-    "value": "HR",
     "valueType": "Text",
-    "attribute": "Sc11Department"
+    "value": "HR",
+    "caseSensitive": true
   },
   "cells": [
     {
@@ -212,11 +231,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "expected": [
         "E001"
@@ -230,11 +249,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "expected": [
         "E001",
@@ -250,11 +269,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -280,11 +299,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEquals",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "expected": [
         "E003",
@@ -310,11 +329,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "StartsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -329,11 +348,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "StartsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "expected": [
         "E001",
@@ -350,11 +369,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotStartsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -379,11 +398,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotStartsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "expected": [
         "E004",
@@ -408,11 +427,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "EndsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -427,11 +446,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "EndsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "expected": [
         "E001",
@@ -448,11 +467,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEndsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -477,11 +496,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEndsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "expected": [
         "E003",
@@ -506,11 +525,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Contains",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -526,11 +545,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Contains",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "expected": [
         "E001",
@@ -548,11 +567,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotContains",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -576,11 +595,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotContains",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "expected": [
         "E005",
@@ -603,11 +622,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "expected": [
         "E001"
@@ -621,11 +640,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -652,11 +671,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "LessThan",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "expected": [
         "E005",
@@ -677,11 +696,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "LessThanOrEquals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -703,11 +722,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "GreaterThan",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -727,11 +746,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "GreaterThanOrEquals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -751,11 +770,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "expected": [
         "E001"
@@ -769,11 +788,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -799,11 +818,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "LessThan",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -826,11 +845,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "LessThanOrEquals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -854,11 +873,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "GreaterThan",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -874,16 +893,160 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "GreaterThanOrEquals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
         "E002",
         "E007",
+        "E013"
+      ]
+    },
+    {
+      "name": "Decimal.Equals.Single",
+      "tiers": [
+        "Default",
+        "Exhaustive"
+      ],
+      "group": "Single",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "Equals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E001"
+      ]
+    },
+    {
+      "name": "Decimal.NotEquals.Single",
+      "tiers": [
+        "Default",
+        "Exhaustive"
+      ],
+      "group": "Single",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "NotEquals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E002",
+        "E003",
+        "E004",
+        "E005",
+        "E006",
+        "E007",
+        "E008",
+        "E009",
+        "E010",
+        "E011",
+        "E012",
+        "E013",
+        "E014"
+      ]
+    },
+    {
+      "name": "Decimal.LessThan.Single",
+      "tiers": [
+        "Default",
+        "Exhaustive"
+      ],
+      "group": "Single",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "LessThan",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E003",
+        "E004",
+        "E005",
+        "E006",
+        "E008",
+        "E009",
+        "E010",
+        "E012",
+        "E014"
+      ]
+    },
+    {
+      "name": "Decimal.LessThanOrEquals.Single",
+      "tiers": [
+        "Default",
+        "Exhaustive"
+      ],
+      "group": "Single",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "LessThanOrEquals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E001",
+        "E003",
+        "E004",
+        "E005",
+        "E006",
+        "E008",
+        "E009",
+        "E010",
+        "E012",
+        "E014"
+      ]
+    },
+    {
+      "name": "Decimal.GreaterThan.Single",
+      "tiers": [
+        "Default",
+        "Exhaustive"
+      ],
+      "group": "Single",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "GreaterThan",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E002",
+        "E007",
+        "E011",
+        "E013"
+      ]
+    },
+    {
+      "name": "Decimal.GreaterThanOrEquals.Single",
+      "tiers": [
+        "Default",
+        "Exhaustive"
+      ],
+      "group": "Single",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "GreaterThanOrEquals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E001",
+        "E002",
+        "E007",
+        "E011",
         "E013"
       ]
     },
@@ -895,11 +1058,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "expected": []
     },
@@ -911,11 +1074,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -942,11 +1105,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "LessThan",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -965,11 +1128,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "LessThanOrEquals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -988,11 +1151,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "GreaterThan",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -1013,11 +1176,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "GreaterThanOrEquals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -1038,11 +1201,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -1064,11 +1227,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11IsActive",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -1086,11 +1249,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11DepartmentId",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         "valueType": "Guid",
-        "attribute": "Sc11DepartmentId"
+        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -1107,11 +1270,11 @@
       ],
       "group": "Single",
       "primary": {
+        "attribute": "Sc11DepartmentId",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         "valueType": "Guid",
-        "attribute": "Sc11DepartmentId"
+        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -1134,18 +1297,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001"
@@ -1159,18 +1322,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -1192,25 +1355,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -1225,18 +1388,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001"
@@ -1249,18 +1412,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -1282,25 +1445,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -1315,18 +1478,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -1346,18 +1509,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -1383,25 +1546,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -1421,18 +1584,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEquals",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -1452,18 +1615,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEquals",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -1488,25 +1651,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEquals",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -1526,18 +1689,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "StartsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -1551,18 +1714,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "StartsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -1583,25 +1746,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "StartsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -1617,18 +1780,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "StartsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -1642,18 +1805,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "StartsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -1675,25 +1838,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "StartsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -1709,18 +1872,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotStartsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E004",
@@ -1739,18 +1902,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotStartsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -1776,25 +1939,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotStartsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E004",
@@ -1813,18 +1976,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotStartsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E004",
@@ -1843,18 +2006,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotStartsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E004",
@@ -1879,25 +2042,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotStartsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E004",
@@ -1916,18 +2079,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "EndsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -1941,18 +2104,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "EndsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -1973,25 +2136,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "EndsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -2007,18 +2170,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "EndsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -2032,18 +2195,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "EndsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -2065,25 +2228,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "EndsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -2099,18 +2262,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEndsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -2129,18 +2292,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEndsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -2166,25 +2329,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEndsWith",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -2203,18 +2366,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEndsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -2233,18 +2396,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEndsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -2269,25 +2432,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotEndsWith",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -2306,18 +2469,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Contains",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -2332,18 +2495,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Contains",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -2364,25 +2527,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Contains",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -2399,18 +2562,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Contains",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -2425,18 +2588,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Contains",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -2458,25 +2621,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "Contains",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -2493,18 +2656,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotContains",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E006",
@@ -2522,18 +2685,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotContains",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -2559,25 +2722,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotContains",
-        "caseSensitive": true,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E006",
@@ -2595,18 +2758,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotContains",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E006",
@@ -2624,18 +2787,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotContains",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E005",
@@ -2660,25 +2823,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11Department",
         "operator": "NotContains",
-        "caseSensitive": false,
-        "value": "Finance",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "Finance",
+        "caseSensitive": false
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E006",
@@ -2696,18 +2859,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001"
@@ -2720,18 +2883,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -2752,25 +2915,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -2785,18 +2948,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -2816,18 +2979,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -2853,25 +3016,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -2891,18 +3054,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "LessThan",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E006",
@@ -2918,18 +3081,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "LessThan",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E005",
@@ -2953,25 +3116,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "LessThan",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E006",
@@ -2988,18 +3151,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "LessThanOrEquals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3016,18 +3179,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "LessThanOrEquals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3051,25 +3214,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "LessThanOrEquals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3087,18 +3250,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "GreaterThan",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -3114,18 +3277,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "GreaterThan",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -3148,25 +3311,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "GreaterThan",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -3183,18 +3346,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "GreaterThanOrEquals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3211,18 +3374,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "GreaterThanOrEquals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3245,25 +3408,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11EmployeeNumber",
         "operator": "GreaterThanOrEquals",
-        "caseSensitive": true,
-        "value": 100,
         "valueType": "Number",
-        "attribute": "Sc11EmployeeNumber"
+        "value": 100,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3281,18 +3444,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001"
@@ -3305,18 +3468,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3337,25 +3500,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3370,18 +3533,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -3401,18 +3564,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -3438,25 +3601,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -3476,18 +3639,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "LessThan",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -3505,18 +3668,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "LessThan",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -3541,25 +3704,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "LessThan",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -3577,18 +3740,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "LessThanOrEquals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3607,18 +3770,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "LessThanOrEquals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3643,25 +3806,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "LessThanOrEquals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3680,18 +3843,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "GreaterThan",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E007",
@@ -3705,18 +3868,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "GreaterThan",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -3738,25 +3901,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "GreaterThan",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E007",
@@ -3772,18 +3935,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "GreaterThanOrEquals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3798,18 +3961,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "GreaterThanOrEquals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3831,25 +3994,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11LongEmployeeNumber",
         "operator": "GreaterThanOrEquals",
-        "caseSensitive": true,
-        "value": 5000000000,
         "valueType": "LongNumber",
-        "attribute": "Sc11LongEmployeeNumber"
+        "value": 5000000000,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3860,24 +4023,609 @@
       ]
     },
     {
+      "name": "Decimal.Equals.AllPair",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "AllPair",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "Equals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E001"
+      ]
+    },
+    {
+      "name": "Decimal.Equals.AnyPair",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "AnyPair",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "Equals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E001",
+        "E003",
+        "E004",
+        "E006",
+        "E007",
+        "E009",
+        "E011",
+        "E013",
+        "E014"
+      ]
+    },
+    {
+      "name": "Decimal.Equals.Nested",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "Nested",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "Equals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "tertiary": {
+        "attribute": "Sc11Department",
+        "operator": "Equals",
+        "valueType": "Text",
+        "value": "HR",
+        "caseSensitive": true
+      },
+      "expected": [
+        "E001",
+        "E009",
+        "E011"
+      ]
+    },
+    {
+      "name": "Decimal.NotEquals.AllPair",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "AllPair",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "NotEquals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E003",
+        "E004",
+        "E006",
+        "E007",
+        "E009",
+        "E011",
+        "E013",
+        "E014"
+      ]
+    },
+    {
+      "name": "Decimal.NotEquals.AnyPair",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "AnyPair",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "NotEquals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E002",
+        "E003",
+        "E004",
+        "E005",
+        "E006",
+        "E007",
+        "E008",
+        "E009",
+        "E010",
+        "E011",
+        "E012",
+        "E013",
+        "E014",
+        "E001"
+      ]
+    },
+    {
+      "name": "Decimal.NotEquals.Nested",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "Nested",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "NotEquals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "tertiary": {
+        "attribute": "Sc11Department",
+        "operator": "Equals",
+        "valueType": "Text",
+        "value": "HR",
+        "caseSensitive": true
+      },
+      "expected": [
+        "E003",
+        "E004",
+        "E006",
+        "E007",
+        "E009",
+        "E011",
+        "E013",
+        "E014"
+      ]
+    },
+    {
+      "name": "Decimal.LessThan.AllPair",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "AllPair",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "LessThan",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E003",
+        "E004",
+        "E006",
+        "E009",
+        "E014"
+      ]
+    },
+    {
+      "name": "Decimal.LessThan.AnyPair",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "AnyPair",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "LessThan",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E003",
+        "E004",
+        "E005",
+        "E006",
+        "E008",
+        "E009",
+        "E010",
+        "E012",
+        "E014",
+        "E001",
+        "E007",
+        "E011",
+        "E013"
+      ]
+    },
+    {
+      "name": "Decimal.LessThan.Nested",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "Nested",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "LessThan",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "tertiary": {
+        "attribute": "Sc11Department",
+        "operator": "Equals",
+        "valueType": "Text",
+        "value": "HR",
+        "caseSensitive": true
+      },
+      "expected": [
+        "E003",
+        "E004",
+        "E006",
+        "E009",
+        "E014",
+        "E011"
+      ]
+    },
+    {
+      "name": "Decimal.LessThanOrEquals.AllPair",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "AllPair",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "LessThanOrEquals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E001",
+        "E003",
+        "E004",
+        "E006",
+        "E009",
+        "E014"
+      ]
+    },
+    {
+      "name": "Decimal.LessThanOrEquals.AnyPair",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "AnyPair",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "LessThanOrEquals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E001",
+        "E003",
+        "E004",
+        "E005",
+        "E006",
+        "E008",
+        "E009",
+        "E010",
+        "E012",
+        "E014",
+        "E007",
+        "E011",
+        "E013"
+      ]
+    },
+    {
+      "name": "Decimal.LessThanOrEquals.Nested",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "Nested",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "LessThanOrEquals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "tertiary": {
+        "attribute": "Sc11Department",
+        "operator": "Equals",
+        "valueType": "Text",
+        "value": "HR",
+        "caseSensitive": true
+      },
+      "expected": [
+        "E001",
+        "E003",
+        "E004",
+        "E006",
+        "E009",
+        "E014",
+        "E011"
+      ]
+    },
+    {
+      "name": "Decimal.GreaterThan.AllPair",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "AllPair",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "GreaterThan",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E007",
+        "E011",
+        "E013"
+      ]
+    },
+    {
+      "name": "Decimal.GreaterThan.AnyPair",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "AnyPair",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "GreaterThan",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E002",
+        "E007",
+        "E011",
+        "E013",
+        "E001",
+        "E003",
+        "E004",
+        "E006",
+        "E009",
+        "E014"
+      ]
+    },
+    {
+      "name": "Decimal.GreaterThan.Nested",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "Nested",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "GreaterThan",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "tertiary": {
+        "attribute": "Sc11Department",
+        "operator": "Equals",
+        "valueType": "Text",
+        "value": "HR",
+        "caseSensitive": true
+      },
+      "expected": [
+        "E007",
+        "E011",
+        "E013",
+        "E009"
+      ]
+    },
+    {
+      "name": "Decimal.GreaterThanOrEquals.AllPair",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "AllPair",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "GreaterThanOrEquals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E001",
+        "E007",
+        "E011",
+        "E013"
+      ]
+    },
+    {
+      "name": "Decimal.GreaterThanOrEquals.AnyPair",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "AnyPair",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "GreaterThanOrEquals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "expected": [
+        "E001",
+        "E002",
+        "E007",
+        "E011",
+        "E013",
+        "E003",
+        "E004",
+        "E006",
+        "E009",
+        "E014"
+      ]
+    },
+    {
+      "name": "Decimal.GreaterThanOrEquals.Nested",
+      "tiers": [
+        "Exhaustive"
+      ],
+      "group": "Nested",
+      "primary": {
+        "attribute": "Sc11DecimalSalary",
+        "operator": "GreaterThanOrEquals",
+        "valueType": "Decimal",
+        "value": 50000.5,
+        "caseSensitive": true
+      },
+      "secondary": {
+        "attribute": "Sc11IsActive",
+        "operator": "Equals",
+        "valueType": "Boolean",
+        "value": true,
+        "caseSensitive": true
+      },
+      "tertiary": {
+        "attribute": "Sc11Department",
+        "operator": "Equals",
+        "valueType": "Text",
+        "value": "HR",
+        "caseSensitive": true
+      },
+      "expected": [
+        "E001",
+        "E007",
+        "E011",
+        "E013",
+        "E009"
+      ]
+    },
+    {
       "name": "DateTime.Equals.AllPair",
       "tiers": [
         "Exhaustive"
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": []
     },
@@ -3888,18 +4636,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3920,25 +4668,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E009",
@@ -3952,18 +4700,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -3984,18 +4732,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -4021,25 +4769,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -4060,18 +4808,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "LessThan",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -4086,18 +4834,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "LessThan",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -4121,25 +4869,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "LessThan",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -4155,18 +4903,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "LessThanOrEquals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -4181,18 +4929,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "LessThanOrEquals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -4216,25 +4964,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "LessThanOrEquals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -4250,18 +4998,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "GreaterThan",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -4279,18 +5027,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "GreaterThan",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -4313,25 +5061,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "GreaterThan",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -4350,18 +5098,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "GreaterThanOrEquals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -4379,18 +5127,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "GreaterThanOrEquals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -4413,25 +5161,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11HireDate",
         "operator": "GreaterThanOrEquals",
-        "caseSensitive": true,
-        "value": "2022-01-01T00:00:00Z",
         "valueType": "DateTime",
-        "attribute": "Sc11HireDate"
+        "value": "2022-01-01T00:00:00Z",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -4450,18 +5198,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -4482,18 +5230,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -4514,25 +5262,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -4553,18 +5301,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11IsActive",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": []
     },
@@ -4575,18 +5323,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11IsActive",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -4612,25 +5360,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11IsActive",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E009",
@@ -4644,18 +5392,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11DepartmentId",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         "valueType": "Guid",
-        "attribute": "Sc11DepartmentId"
+        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -4671,18 +5419,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11DepartmentId",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         "valueType": "Guid",
-        "attribute": "Sc11DepartmentId"
+        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -4703,25 +5451,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11DepartmentId",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         "valueType": "Guid",
-        "attribute": "Sc11DepartmentId"
+        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E001",
@@ -4738,18 +5486,18 @@
       ],
       "group": "AllPair",
       "primary": {
+        "attribute": "Sc11DepartmentId",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         "valueType": "Guid",
-        "attribute": "Sc11DepartmentId"
+        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E003",
@@ -4766,18 +5514,18 @@
       ],
       "group": "AnyPair",
       "primary": {
+        "attribute": "Sc11DepartmentId",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         "valueType": "Guid",
-        "attribute": "Sc11DepartmentId"
+        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "expected": [
         "E002",
@@ -4803,25 +5551,25 @@
       ],
       "group": "Nested",
       "primary": {
+        "attribute": "Sc11DepartmentId",
         "operator": "NotEquals",
-        "caseSensitive": true,
-        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         "valueType": "Guid",
-        "attribute": "Sc11DepartmentId"
+        "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "caseSensitive": true
       },
       "secondary": {
+        "attribute": "Sc11IsActive",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": true,
         "valueType": "Boolean",
-        "attribute": "Sc11IsActive"
+        "value": true,
+        "caseSensitive": true
       },
       "tertiary": {
+        "attribute": "Sc11Department",
         "operator": "Equals",
-        "caseSensitive": true,
-        "value": "HR",
         "valueType": "Text",
-        "attribute": "Sc11Department"
+        "value": "HR",
+        "caseSensitive": true
       },
       "expected": [
         "E003",

@@ -33,7 +33,7 @@ function Set-JIMMetaverseAttribute {
 
     .PARAMETER Type
         The new data type for the attribute.
-        Valid values: Text, Integer, LongNumber, DateTime, Boolean, Reference, Guid, Binary
+        Valid values: Text, Integer, LongNumber, Decimal, DateTime, Boolean, Reference, Guid, Binary
 
     .PARAMETER AttributePlurality
         The new plurality setting.
@@ -100,7 +100,7 @@ function Set-JIMMetaverseAttribute {
         [string]$RenderingHint,
 
         [Parameter()]
-        [ValidateSet('Text', 'Integer', 'LongNumber', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')]
+        [ValidateSet('Text', 'Integer', 'LongNumber', 'Decimal', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')]
         [string]$Type,
 
         [Parameter()]

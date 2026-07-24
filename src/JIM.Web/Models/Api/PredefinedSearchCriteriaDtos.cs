@@ -27,7 +27,7 @@ public class PredefinedSearchCriteriaDto
     public string? MetaverseAttributeName { get; set; }
 
     /// <summary>
-    /// The data type of the attribute (Text, Number, LongNumber, DateTime, Boolean, Guid).
+    /// The data type of the attribute (Text, Number, LongNumber, Decimal, DateTime, Boolean, Guid).
     /// </summary>
     public string AttributeDataType { get; set; } = null!;
 
@@ -50,6 +50,11 @@ public class PredefinedSearchCriteriaDto
     /// The long integer value to compare against (for LongNumber attributes).
     /// </summary>
     public long? LongValue { get; set; }
+
+    /// <summary>
+    /// The decimal value to compare against (for Decimal attributes).
+    /// </summary>
+    public decimal? DecimalValue { get; set; }
 
     /// <summary>
     /// The date/time value to compare against (for DateTime attributes). Stored and compared in UTC.
@@ -107,6 +112,7 @@ public class PredefinedSearchCriteriaDto
             StringValue = entity.StringValue,
             IntValue = entity.IntValue,
             LongValue = entity.LongValue,
+            DecimalValue = entity.DecimalValue,
             DateTimeValue = entity.DateTimeValue,
             BoolValue = entity.BoolValue,
             GuidValue = entity.GuidValue,
@@ -224,7 +230,7 @@ public class PredefinedSearchCriterionRequest
     /// <summary>
     /// The comparison operator: Equals, NotEquals, Contains, NotContains, StartsWith, NotStartsWith,
     /// EndsWith, NotEndsWith (Text only); LessThan, LessThanOrEquals, GreaterThan, GreaterThanOrEquals
-    /// (Number, LongNumber, DateTime); Equals, NotEquals (Boolean, Guid).
+    /// (Number, LongNumber, Decimal, DateTime); Equals, NotEquals (Boolean, Guid).
     /// </summary>
     [Required]
     public string ComparisonType { get; set; } = null!;
@@ -243,6 +249,11 @@ public class PredefinedSearchCriterionRequest
     /// The long integer value to compare against (for LongNumber attributes).
     /// </summary>
     public long? LongValue { get; set; }
+
+    /// <summary>
+    /// The decimal value to compare against (for Decimal attributes).
+    /// </summary>
+    public decimal? DecimalValue { get; set; }
 
     /// <summary>
     /// The date/time value to compare against (for DateTime attributes). Interpreted as UTC.

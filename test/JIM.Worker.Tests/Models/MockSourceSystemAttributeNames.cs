@@ -34,5 +34,7 @@ public enum MockSourceSystemAttributeNames
     CERTIFICATES = 24, // mva byte -- TODO: move this to the AD target system mock
     GROUP_UID = 25, // sva guid
     MEMBER = 26, // mva reference
-    EMPLOYEE_TYPE = 27 // string
+    EMPLOYEE_TYPE = 27, // string
+    SALARY = 28, // decimal
+    COURSE_FEES = 29 // mva decimal
 }

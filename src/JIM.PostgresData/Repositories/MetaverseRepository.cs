@@ -1018,7 +1018,7 @@ public class MetaverseRepository : IMetaverseRepository
         await using (var command = connection.CreateCommand())
         {
             command.CommandText =
-                @"SELECT ""MetaverseObjectId"", ""Id"", ""AttributeId"", ""StringValue"", ""IntValue"", ""LongValue"",
+                @"SELECT ""MetaverseObjectId"", ""Id"", ""AttributeId"", ""StringValue"", ""IntValue"", ""LongValue"", ""DecimalValue"",
                          ""DateTimeValue"", ""BoolValue"", ""GuidValue"", ""NullValue""
                   FROM ""MetaverseObjectAttributeValues""
                   WHERE ""MetaverseObjectId"" = ANY(@ids) AND ""AttributeId"" = ANY(@attributeIds)";
@@ -1044,10 +1044,11 @@ public class MetaverseRepository : IMetaverseRepository
                     StringValue = reader.IsDBNull(3) ? null : reader.GetString(3),
                     IntValue = reader.IsDBNull(4) ? null : reader.GetInt32(4),
                     LongValue = reader.IsDBNull(5) ? null : reader.GetInt64(5),
-                    DateTimeValue = reader.IsDBNull(6) ? null : reader.GetDateTime(6),
-                    BoolValue = reader.IsDBNull(7) ? null : reader.GetBoolean(7),
-                    GuidValue = reader.IsDBNull(8) ? null : reader.GetGuid(8),
-                    NullValue = reader.GetBoolean(9)
+                    DecimalValue = reader.IsDBNull(6) ? null : reader.GetDecimal(6),
+                    DateTimeValue = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
+                    BoolValue = reader.IsDBNull(8) ? null : reader.GetBoolean(8),
+                    GuidValue = reader.IsDBNull(9) ? null : reader.GetGuid(9),
+                    NullValue = reader.GetBoolean(10)
                 });
             }
         }
@@ -1387,6 +1388,8 @@ public class MetaverseRepository : IMetaverseRepository
                                 StringValue = vc.StringValue,
                                 DateTimeValue = vc.DateTimeValue,
                                 IntValue = vc.IntValue,
+                                LongValue = vc.LongValue,
+                                DecimalValue = vc.DecimalValue,
                                 ByteValueLength = vc.ByteValueLength,
                                 GuidValue = vc.GuidValue,
                                 BoolValue = vc.BoolValue,
@@ -1620,7 +1623,7 @@ public class MetaverseRepository : IMetaverseRepository
     /// <summary>
     /// Builds a parameterised EXISTS / NOT EXISTS SQL fragment for a single predefined-search criterion.
     /// The attribute-value column is selected to match the attribute's data type (Text, Number, LongNumber,
-    /// DateTime, Boolean, Guid) so the per-column indexes on MetaverseObjectAttributeValues stay usable, and
+    /// Decimal, DateTime, Boolean, Guid) so the per-column indexes on MetaverseObjectAttributeValues stay usable, and
     /// the requested comparison operator is validated against that data type. Adds the attribute-id and value
     /// parameters to <paramref name="parameters"/>. Throws <see cref="NotSupportedException"/> for an operator
     /// that does not apply to the attribute's data type (callers validate at the API boundary before reaching here).
@@ -1687,6 +1690,10 @@ public class MetaverseRepository : IMetaverseRepository
             case AttributeDataType.LongNumber:
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Bigint) { Value = (object?)criteria.LongValue ?? DBNull.Value });
                 return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"LongValue\"", valParam, Exists, Unsupported);
+            case AttributeDataType.Decimal:
+                // PostgreSQL numeric comparison is scale-insensitive (5.0 = 5.00 is true), matching .NET decimal equality.
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Numeric) { Value = (object?)criteria.DecimalValue ?? DBNull.Value });
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"DecimalValue\"", valParam, Exists, Unsupported);
             case AttributeDataType.DateTime:
                 // Resolve a relative criterion to a literal boundary before binding, so the SQL sees a constant
                 // and the DateTimeValue index stays usable. Absolute criteria use their stored value.
@@ -1717,7 +1724,7 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <summary>
-    /// Builds the SQL predicate for an ordered (Number / LongNumber / DateTime) comparison, supporting
+    /// Builds the SQL predicate for an ordered (Number / LongNumber / Decimal / DateTime) comparison, supporting
     /// equality and the four ordering operators. Throws for any operator that does not apply.
     /// </summary>
     private static string BuildOrderedComparisonSql(SearchComparisonType comparisonType, string column, string valParam, Func<string, string> exists, Func<NotSupportedException> unsupported)
@@ -1957,7 +1964,7 @@ public class MetaverseRepository : IMetaverseRepository
         attrCmd.CommandText = """
             SELECT av."Id", av."MetaverseObjectId", av."AttributeId",
                    ma."Id" AS "AttrId", ma."Name" AS "AttrName", ma."Type" AS "AttrType", ma."AttributePlurality" AS "AttrPlurality",
-                   av."StringValue", av."DateTimeValue", av."IntValue", av."LongValue", av."BoolValue", av."GuidValue"
+                   av."StringValue", av."DateTimeValue", av."IntValue", av."LongValue", av."DecimalValue", av."BoolValue", av."GuidValue"
             FROM "MetaverseObjectAttributeValues" av
             INNER JOIN "MetaverseAttributes" ma ON av."AttributeId" = ma."Id"
             WHERE av."MetaverseObjectId" = ANY(@objectIds) AND av."AttributeId" = ANY(@attrIds)
@@ -1988,8 +1995,9 @@ public class MetaverseRepository : IMetaverseRepository
                     DateTimeValue = reader.IsDBNull(8) ? null : reader.GetDateTime(8),
                     IntValue = reader.IsDBNull(9) ? null : reader.GetInt32(9),
                     LongValue = reader.IsDBNull(10) ? null : reader.GetInt64(10),
-                    BoolValue = reader.IsDBNull(11) ? null : reader.GetBoolean(11),
-                    GuidValue = reader.IsDBNull(12) ? null : reader.GetGuid(12)
+                    DecimalValue = reader.IsDBNull(11) ? null : reader.GetDecimal(11),
+                    BoolValue = reader.IsDBNull(12) ? null : reader.GetBoolean(12),
+                    GuidValue = reader.IsDBNull(13) ? null : reader.GetGuid(13)
                 });
             }
         }
@@ -2173,6 +2181,31 @@ public class MetaverseRepository : IMetaverseRepository
         if (source.ConnectedSystemAttribute == null)
             throw new InvalidDataException("objectMatchingRule.Sources[0].ConnectedSystemAttribute is null");
 
+        // validate the matching attribute type up front. Unsupported types must fail loudly and
+        // immediately; deferring this to the per-value filter switch would let the null-value
+        // pre-check below silently skip every value first, converting a misconfigured Object
+        // Matching Rule into a quiet no-match (the Synchronisation Integrity rules forbid that).
+        switch (source.ConnectedSystemAttribute.Type)
+        {
+            case AttributeDataType.Text:
+            case AttributeDataType.Number:
+            case AttributeDataType.LongNumber:
+            case AttributeDataType.Decimal:
+            case AttributeDataType.Guid:
+                break;
+            case AttributeDataType.DateTime:
+                throw new NotSupportedException("DateTime attributes are not supported in Object Matching Rules.");
+            case AttributeDataType.Binary:
+                throw new NotSupportedException("Binary attributes are not supported in Object Matching Rules.");
+            case AttributeDataType.Reference:
+                throw new NotSupportedException("Reference attributes are not supported in Object Matching Rules.");
+            case AttributeDataType.Boolean:
+                throw new NotSupportedException("Boolean attributes are not supported in Object Matching Rules.");
+            case AttributeDataType.NotSet:
+            default:
+                throw new InvalidDataException("Unexpected Connected System Attribute Type");
+        }
+
         // get the source attribute value(s)
         var csoAttributeValues = connectedSystemObject.AttributeValues.Where(q => q.AttributeId == source.ConnectedSystemAttribute.Id);
 
@@ -2185,8 +2218,10 @@ public class MetaverseRepository : IMetaverseRepository
             {
                 AttributeDataType.Text => !string.IsNullOrEmpty(csoAttributeValue.StringValue),
                 AttributeDataType.Number => csoAttributeValue.IntValue.HasValue,
+                AttributeDataType.LongNumber => csoAttributeValue.LongValue.HasValue,
+                AttributeDataType.Decimal => csoAttributeValue.DecimalValue.HasValue,
                 AttributeDataType.Guid => csoAttributeValue.GuidValue.HasValue,
-                _ => false
+                _ => false // unreachable: unsupported types are rejected before the loop
             };
 
             if (!hasValue)
@@ -2233,12 +2268,22 @@ public class MetaverseRepository : IMetaverseRepository
                             av.IntValue != null &&
                             av.IntValue == csoAttributeValue.IntValue));
                     break;
-                case AttributeDataType.DateTime:
-                    throw new NotSupportedException("DateTime attributes are not supported in Object Matching Rules.");
-                case AttributeDataType.Binary:
-                    throw new NotSupportedException("Binary attributes are not supported in Object Matching Rules.");
-                case AttributeDataType.Reference:
-                    throw new NotSupportedException("Reference attributes are not supported in Object Matching Rules.");
+                case AttributeDataType.LongNumber:
+                    matchQuery = matchQuery.Where(mvo =>
+                        mvo.AttributeValues.Any(av =>
+                            objectMatchingRule.TargetMetaverseAttribute != null &&
+                            av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
+                            av.LongValue != null &&
+                            av.LongValue == csoAttributeValue.LongValue));
+                    break;
+                case AttributeDataType.Decimal:
+                    matchQuery = matchQuery.Where(mvo =>
+                        mvo.AttributeValues.Any(av =>
+                            objectMatchingRule.TargetMetaverseAttribute != null &&
+                            av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
+                            av.DecimalValue != null &&
+                            av.DecimalValue == csoAttributeValue.DecimalValue));
+                    break;
                 case AttributeDataType.Guid:
                     matchQuery = matchQuery.Where(mvo =>
                         mvo.AttributeValues.Any(av =>
@@ -2247,10 +2292,9 @@ public class MetaverseRepository : IMetaverseRepository
                             av.GuidValue != null &&
                             av.GuidValue == csoAttributeValue.GuidValue));
                     break;
-                case AttributeDataType.Boolean:
-                    throw new NotSupportedException("Boolean attributes are not supported in Object Matching Rules.");
-                case AttributeDataType.NotSet:
                 default:
+                    // unsupported types were rejected with NotSupportedException before the loop;
+                    // reaching here means the up-front validation and this dispatch have diverged
                     throw new InvalidDataException("Unexpected Connected System Attribute Type");
             }
 
@@ -2576,18 +2620,33 @@ public class MetaverseRepository : IMetaverseRepository
         var changeId = Guid.NewGuid();
         change.Id = changeId;
 
+        // The interpolated fragments are compile-time constant column lists, never user data.
+        var insertChangeSql =
+            $@"INSERT INTO ""MetaverseObjectChanges"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChanges)})
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}}, {{12}}, {{13}})";
+        var insertAttributeSql =
+            $@"INSERT INTO ""MetaverseObjectChangeAttributes"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributes)})
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}})";
+        var insertValueSql =
+            $@"INSERT INTO ""MetaverseObjectChangeAttributeValues"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues)})
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}})";
+
+        // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChanges exactly.
         await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"INSERT INTO ""MetaverseObjectChanges"" (""Id"", ""ChangeType"", ""ChangeTime"", ""InitiatedByType"", ""InitiatedById"", ""InitiatedByName"", ""ChangeInitiatorType"", ""DeletedMetaverseObjectId"", ""DeletedObjectTypeId"", ""DeletedObjectDisplayName"")
-              VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
+            insertChangeSql,
             changeId,
-            (int)change.ChangeType,
+            BulkSqlHelpers.NullableParam(change.MetaverseObject?.Id, NpgsqlTypes.NpgsqlDbType.Uuid),
+            BulkSqlHelpers.NullableParam(change.ActivityRunProfileExecutionItem?.Id ?? change.ActivityRunProfileExecutionItemId, NpgsqlTypes.NpgsqlDbType.Uuid),
             change.ChangeTime,
+            (int)change.ChangeType,
+            (int)change.ChangeInitiatorType,
             (int)change.InitiatedByType,
             BulkSqlHelpers.NullableParam(change.InitiatedById, NpgsqlTypes.NpgsqlDbType.Uuid),
             BulkSqlHelpers.NullableParam(change.InitiatedByName, NpgsqlTypes.NpgsqlDbType.Text),
-            (int)change.ChangeInitiatorType,
+            BulkSqlHelpers.NullableParam(change.SyncRule?.Id ?? change.SyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer),
+            BulkSqlHelpers.NullableParam(change.SyncRuleName, NpgsqlTypes.NpgsqlDbType.Text),
+            BulkSqlHelpers.NullableParam(change.DeletedObjectType?.Id ?? change.DeletedObjectTypeId, NpgsqlTypes.NpgsqlDbType.Integer),
             BulkSqlHelpers.NullableParam(change.DeletedMetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid),
-            BulkSqlHelpers.NullableParam(change.DeletedObjectTypeId, NpgsqlTypes.NpgsqlDbType.Integer),
             BulkSqlHelpers.NullableParam(change.DeletedObjectDisplayName, NpgsqlTypes.NpgsqlDbType.Text));
 
         // Insert attribute changes and their values
@@ -2596,9 +2655,9 @@ public class MetaverseRepository : IMetaverseRepository
             var attrChangeId = Guid.NewGuid();
             attrChange.Id = attrChangeId;
 
+            // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChangeAttributes exactly.
             await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"INSERT INTO ""MetaverseObjectChangeAttributes"" (""Id"", ""MetaverseObjectChangeId"", ""AttributeId"", ""AttributeName"", ""AttributeType"")
-                  VALUES ({0}, {1}, {2}, {3}, {4})",
+                insertAttributeSql,
                 attrChangeId, changeId, attrChange.Attribute!.Id, attrChange.AttributeName, (int)attrChange.AttributeType);
 
             foreach (var valueChange in attrChange.ValueChanges)
@@ -2606,19 +2665,23 @@ public class MetaverseRepository : IMetaverseRepository
                 var valueChangeId = Guid.NewGuid();
                 valueChange.Id = valueChangeId;
 
+                // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues
+                // exactly. The reference FK prefers the scalar (set when the referenced MVO is not in the
+                // change tracker, the normal shape during MVO deletion) over the navigation.
                 await Repository.Database.Database.ExecuteSqlRawAsync(
-                    @"INSERT INTO ""MetaverseObjectChangeAttributeValues"" (""Id"", ""MetaverseObjectChangeAttributeId"", ""ValueChangeType"", ""StringValue"", ""IntValue"", ""GuidValue"", ""BoolValue"", ""DateTimeValue"", ""ByteValueLength"", ""ReferenceValueId"")
-                      VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
+                    insertValueSql,
                     valueChangeId,
                     attrChangeId,
                     (int)valueChange.ValueChangeType,
                     BulkSqlHelpers.NullableParam(valueChange.StringValue, NpgsqlTypes.NpgsqlDbType.Text),
+                    BulkSqlHelpers.NullableParam(valueChange.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz),
                     BulkSqlHelpers.NullableParam(valueChange.IntValue, NpgsqlTypes.NpgsqlDbType.Integer),
+                    BulkSqlHelpers.NullableParam(valueChange.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint),
+                    BulkSqlHelpers.NullableParam(valueChange.DecimalValue, NpgsqlTypes.NpgsqlDbType.Numeric),
+                    BulkSqlHelpers.NullableParam(valueChange.ByteValueLength, NpgsqlTypes.NpgsqlDbType.Integer),
                     BulkSqlHelpers.NullableParam(valueChange.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid),
                     BulkSqlHelpers.NullableParam(valueChange.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean),
-                    BulkSqlHelpers.NullableParam(valueChange.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz),
-                    BulkSqlHelpers.NullableParam(valueChange.ByteValueLength, NpgsqlTypes.NpgsqlDbType.Integer),
-                    BulkSqlHelpers.NullableParam(valueChange.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid));
+                    BulkSqlHelpers.NullableParam(valueChange.ReferenceValueId ?? valueChange.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
         }
     }
