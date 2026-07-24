@@ -1634,13 +1634,11 @@ public class SyncImportTaskProcessor
         var nullConnectedSystemImportObjectAttributes = new List<ConnectedSystemImportObjectAttribute>();
         foreach (var attribute in connectedSystemImportObject.Attributes)
         {
-            // first remove any null attribute values. this might mean we'll be left with no values at all
-            attribute.GuidValues.RemoveAll(q => q.Equals(null));
-            attribute.IntValues.RemoveAll(q => q.Equals(null));
-            attribute.LongValues.RemoveAll(q => q.Equals(null));
-            attribute.DecimalValues.RemoveAll(q => q.Equals(null));
+            // first remove any null attribute values. this might mean we'll be left with no values at all.
+            // the Guid/int/long/decimal collections hold non-nullable value types, so they cannot
+            // contain nulls and need no sweep; only the reference-typed collections can.
             attribute.StringValues.RemoveAll(string.IsNullOrEmpty);
-            attribute.ByteValues.RemoveAll(q => q.Equals(null));
+            attribute.ByteValues.RemoveAll(q => q == null);
             attribute.ReferenceValues.RemoveAll(string.IsNullOrEmpty);
 
             // now work out if we're left with any values at all

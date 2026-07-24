@@ -97,7 +97,7 @@ public class FileConnectorImportTests
         // Arrange - numeric inference must run narrowest-to-widest: whole numbers within 32-bit
         // range infer Number, larger whole numbers infer LongNumber, and fractional or
         // exponent-notation values infer Decimal (never Text, and never a type that can't hold them)
-        var filePath = Path.Combine(_testFilesPath, "decimal_inference.csv");
+        var filePath = Path.Join(_testFilesPath, "decimal_inference.csv");
         var settingValues = CreateSettingValues(filePath, "TestObject");
 
         // Act
@@ -220,7 +220,7 @@ public class FileConnectorImportTests
     public async Task ImportAsync_WithDecimalValues_ParsesValuesAsync()
     {
         // Arrange - file has plain fractional, exponent-notation, negative, and empty Salary values
-        var filePath = Path.Combine(_testFilesPath, "decimal_users.csv");
+        var filePath = Path.Join(_testFilesPath, "decimal_users.csv");
         var connectedSystem = CreateConnectedSystemWithDecimalAttr(filePath, "User");
         var runProfile = new ConnectedSystemRunProfile
         {
@@ -267,7 +267,7 @@ public class FileConnectorImportTests
     public async Task ImportAsync_WithInvalidDecimal_RecordsErrorAsync()
     {
         // Arrange - first row's Salary is "lots", which is not a valid decimal
-        var filePath = Path.Combine(_testFilesPath, "invalid_decimals.csv");
+        var filePath = Path.Join(_testFilesPath, "invalid_decimals.csv");
         var connectedSystem = CreateConnectedSystemWithDecimalAttr(filePath, "User");
         var runProfile = new ConnectedSystemRunProfile
         {
@@ -300,7 +300,7 @@ public class FileConnectorImportTests
     {
         // Arrange - second row's Salary is 1E30, which exceeds the range of decimal;
         // it must surface as that row's import error, never be silently truncated or rounded
-        var filePath = Path.Combine(_testFilesPath, "invalid_decimals.csv");
+        var filePath = Path.Join(_testFilesPath, "invalid_decimals.csv");
         var connectedSystem = CreateConnectedSystemWithDecimalAttr(filePath, "User");
         var runProfile = new ConnectedSystemRunProfile
         {
@@ -326,7 +326,7 @@ public class FileConnectorImportTests
     public async Task ImportAsync_WithMultiValuedDecimalAttribute_ParsesDelimitedValuesAsync()
     {
         // Arrange - Rates column holds pipe-delimited decimal values, including exponent notation
-        var filePath = Path.Combine(_testFilesPath, "multivalued_decimals.csv");
+        var filePath = Path.Join(_testFilesPath, "multivalued_decimals.csv");
         var connectedSystem = CreateConnectedSystemWithMultiValuedDecimalAttr(filePath, "User");
         var runProfile = new ConnectedSystemRunProfile
         {
