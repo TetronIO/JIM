@@ -179,7 +179,7 @@ The core scenario governs the whole framework; the rest exercise specific surfac
 
 - #288 Sync Preview Mode: the evaluation engine consumed by stage 4 (object-level). **The only true build dependency; implemented first**, before any adapter. Stages 1 to 3 do not depend on it, so framework plumbing can proceed in parallel with engine work
 - #363 `SyncOutcome` model (shipped): outcome vocabulary; nothing outstanding
-- #307 / #202: the real-time notification foundation consumed by FR16. **Blocking; implemented first** (decided Jul 2026, #307 blocks #827 on GitHub; revised from the earlier polling-first, non-blocking stance). #307 delivers the foundation; #202 is its first feature slice
+- #307 / #202: the real-time notification foundation consumed by FR16. **Satisfied** (both delivered and closed Jul 2026; was blocking, decided Jul 2026). The delivered `IUiNotificationService` and `jim_activity_progress` trigger are consumed directly, so FR16's abstraction needs no preview-specific notifier; see the implementation plan's Progress notification section
 - #91 mode 1 pattern: source of the apply-time messaging UX, delivered as an early framework phase (FR17); coordinate with the #91 plan so both consume the same shared component and indicator
 - Adapter candidates gated on this design: #204, #134/#809, #421, #91 mode 2, plus #827 gaps G1 to G6
 
