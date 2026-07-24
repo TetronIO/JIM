@@ -209,4 +209,45 @@ public class SyncRepositoryPendingExportTests
         var result = await _repo.GetPendingExportsAsync(CsId);
         Assert.That(result[0].AttributeValueChanges, Is.Empty);
     }
+
+    /// <summary>
+    /// <see cref="SyncRepository.GetPendingExportsWithUnresolvedReferencesAsync"/> must return only
+    /// rows that are Pending status AND have unresolved references, for the requested Connected
+    /// System (#1102). Verifies against a filter matrix: a resolved Pending row, unresolved rows in
+    /// non-Pending statuses (Exported, Failed), and an unresolved Pending row for another Connected
+    /// System are all excluded.
+    /// </summary>
+    [Test]
+    public async Task GetPendingExportsWithUnresolvedReferencesAsync_ReturnsOnlyPendingUnresolvedForSystemAsync()
+    {
+        var matchingPe = CreatePe();
+        matchingPe.Status = PendingExportStatus.Pending;
+        matchingPe.HasUnresolvedReferences = true;
+        _repo.SeedPendingExport(matchingPe);
+
+        var resolvedPe = CreatePe();
+        resolvedPe.Status = PendingExportStatus.Pending;
+        resolvedPe.HasUnresolvedReferences = false;
+        _repo.SeedPendingExport(resolvedPe);
+
+        var exportedPe = CreatePe();
+        exportedPe.Status = PendingExportStatus.Exported;
+        exportedPe.HasUnresolvedReferences = true;
+        _repo.SeedPendingExport(exportedPe);
+
+        var failedPe = CreatePe();
+        failedPe.Status = PendingExportStatus.Failed;
+        failedPe.HasUnresolvedReferences = true;
+        _repo.SeedPendingExport(failedPe);
+
+        var otherSystemPe = CreatePe(connectedSystemId: 2);
+        otherSystemPe.Status = PendingExportStatus.Pending;
+        otherSystemPe.HasUnresolvedReferences = true;
+        _repo.SeedPendingExport(otherSystemPe);
+
+        var result = await _repo.GetPendingExportsWithUnresolvedReferencesAsync(CsId);
+
+        Assert.That(result, Has.Count.EqualTo(1));
+        Assert.That(result[0].Id, Is.EqualTo(matchingPe.Id));
+    }
 }

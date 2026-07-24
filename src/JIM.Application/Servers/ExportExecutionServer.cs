@@ -1818,15 +1818,14 @@ public class ExportExecutionServer
         IConnector connector,
         ExportExecutionResult result)
     {
-        // Get any exports that were marked as having unresolved references
-        List<PendingExport> deferredExports;
+        // Get any exports that were marked as having unresolved references. Filtered in SQL:
+        // loading every Pending Export here cost ~11 minutes at 500k scale with zero
+        // deferred exports (#1102).
+        List<PendingExport> unresolvedExports;
         using (Diagnostics.Diagnostics.Database.StartSpan("GetPendingExportsForDeferredResolution"))
         {
-            deferredExports = await SyncRepo.GetPendingExportsAsync(connectedSystem.Id);
+            unresolvedExports = await SyncRepo.GetPendingExportsWithUnresolvedReferencesAsync(connectedSystem.Id);
         }
-        var unresolvedExports = deferredExports
-            .Where(pe => pe.HasUnresolvedReferences && pe.Status == PendingExportStatus.Pending)
-            .ToList();
 
         if (unresolvedExports.Count == 0)
             return;

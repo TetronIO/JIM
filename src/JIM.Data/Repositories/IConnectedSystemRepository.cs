@@ -142,6 +142,16 @@ public interface IConnectedSystemRepository
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
 
     /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
+    /// reference resolution: Pending status with unresolved reference attribute values.
+    /// The predicate is evaluated in SQL (backed by a partial index on
+    /// HasUnresolvedReferences) so the common zero-deferred case costs a single
+    /// index probe rather than hydrating every Pending Export for the system (#1102).
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
+    public Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId);
+
+    /// <summary>
     /// Retrieves Pending Exports that are ready for execution, filtering at the database level.
     /// Excludes exports that have exceeded max retries or are not yet due for retry.
     /// Results are ordered by CreatedAt (oldest first).

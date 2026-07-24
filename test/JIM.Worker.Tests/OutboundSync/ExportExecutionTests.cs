@@ -2344,6 +2344,98 @@ public class ExportExecutionTests
             "CSO's Id so optimistic apply can use it without a further lookup.");
     }
 
+    /// <summary>
+    /// Spy repository counting calls to the broad and targeted deferred-reference lookups (#1102).
+    /// </summary>
+    private sealed class DeferredReferenceQueryCountingSyncRepository : SyncRepository
+    {
+        public int GetPendingExportsCalls;
+        public int GetPendingExportsWithUnresolvedReferencesCalls;
+
+        public override Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
+        {
+            Interlocked.Increment(ref GetPendingExportsCalls);
+            return base.GetPendingExportsAsync(connectedSystemId);
+        }
+
+        public override Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
+        {
+            Interlocked.Increment(ref GetPendingExportsWithUnresolvedReferencesCalls);
+            return base.GetPendingExportsWithUnresolvedReferencesAsync(connectedSystemId);
+        }
+    }
+
+    /// <summary>
+    /// Issue #1102: at scale, loading every Pending Export for the Connected System to find the
+    /// (usually zero) deferred ones cost ~11 minutes with nothing to show for it. The deferred pass
+    /// must call the new SQL-filtered lookup and must never fall back to the broad
+    /// <c>GetPendingExportsAsync</c> method.
+    /// </summary>
+    [Test]
+    public async Task ExecuteExportsAsync_DeferredExports_UsesTargetedUnresolvedReferencesQueryNotBroadGetPendingExportsAsync()
+    {
+        // Arrange: a fresh application wired to a query-counting repository.
+        var countingRepo = new DeferredReferenceQueryCountingSyncRepository();
+        var syncRepo = TestUtilities.CreateSyncRepository(activity: ActivitiesData.First(), repository: countingRepo);
+        using var jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: syncRepo);
+
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var managerAttr = targetUserType.Attributes.Single(a => a.Name == MockTargetSystemAttributeNames.Manager.ToString());
+
+        var managerMvoId = Guid.NewGuid();
+        countingRepo.SeedMetaverseObject(new MetaverseObject { Id = managerMvoId });
+
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>()
+        };
+        countingRepo.SeedConnectedSystemObject(cso);
+
+        var managerChange = new PendingExportAttributeValueChange
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportAttributeChangeType.Update,
+            AttributeId = managerAttr.Id,
+            Attribute = managerAttr,
+            UnresolvedReferenceValue = managerMvoId.ToString(),
+            Status = PendingExportAttributeChangeStatus.Pending
+        };
+        var pendingExport = new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            ConnectedSystem = targetSystem,
+            ConnectedSystemObject = cso,
+            ConnectedSystemObjectId = cso.Id,
+            Status = PendingExportStatus.Pending,
+            ChangeType = PendingExportChangeType.Update,
+            HasUnresolvedReferences = true,
+            CreatedAt = DateTime.UtcNow,
+            AttributeValueChanges = new List<PendingExportAttributeValueChange> { managerChange }
+        };
+        countingRepo.SeedPendingExport(pendingExport);
+
+        var mockConnector = CreateSucceedingCallsConnector();
+
+        // Act
+        await jim.ExportExecution.ExecuteExportsAsync(
+            targetSystem,
+            mockConnector.Object,
+            SyncRunMode.PreviewAndSync);
+
+        // Assert: the deferred pass must use the targeted, SQL-filtered lookup, not the broad
+        // GetPendingExportsAsync method that hydrates every Pending Export for the system (#1102).
+        Assert.That(countingRepo.GetPendingExportsWithUnresolvedReferencesCalls, Is.EqualTo(1),
+            "ExecuteDeferredReferencesAsync must call the new targeted lookup exactly once.");
+        Assert.That(countingRepo.GetPendingExportsCalls, Is.EqualTo(0),
+            "ExecuteDeferredReferencesAsync must not call the broad GetPendingExportsAsync method (#1102).");
+    }
+
     #endregion
 
     #region Optimistic Export Apply (issue #1079)

@@ -16,6 +16,45 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Expand-LDIFFoldedLine {
+    <#
+    .SYNOPSIS
+        Splits raw LDIF search output into logical lines, unfolding RFC 2849
+        continuation lines (a line beginning with a single space continues the
+        previous line; ldapsearch folds long values, such as DNs, at 78 columns).
+        Also strips trailing carriage returns: samba's ldb tooling emits CRLF
+        line endings which would otherwise embed \r in parsed values.
+    #>
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$RawLdif
+    )
+
+    $logicalLines = [System.Collections.Generic.List[string]]::new()
+
+    foreach ($rawLine in ($RawLdif -split "`n")) {
+        # Strip a trailing \r (CRLF from samba's ldb) before the fold check, so a
+        # continuation marker on a CRLF-terminated line is still recognised.
+        $line = $rawLine.TrimEnd("`r")
+
+        if ($line.StartsWith(' ') -and $logicalLines.Count -gt 0) {
+            # Continuation line: append everything after the single leading space
+            # to the previous logical line.
+            $logicalLines[$logicalLines.Count - 1] += $line.Substring(1)
+        }
+        else {
+            # A leading-space line with no predecessor (defensive) is kept as-is,
+            # as are ordinary lines, comments, base64 markers, and blank lines.
+            $logicalLines.Add($line)
+        }
+    }
+
+    # The unary comma forces array output: PowerShell otherwise unwraps a single-element
+    # array to a bare scalar on return, which would silently break the [string[]] contract
+    # (and turn indexed access like $lines[0] into character indexing on the string).
+    return ,$logicalLines.ToArray()
+}
+
 function Test-LDAPConnection {
     <#
     .SYNOPSIS
@@ -193,9 +232,10 @@ function Get-LDAPUser {
         return $null
     }
 
-    # Parse LDIF output
+    # Parse LDIF output. Unfold RFC 2849 continuation lines first (ldapsearch folds long
+    # values, such as DNs, at 78 columns) so a folded value is not silently truncated.
     $user = @{}
-    $lines = $result -split "`n"
+    $lines = Expand-LDIFFoldedLine -RawLdif ($result -join "`n")
 
     foreach ($line in $lines) {
         # LDIF comments start with '#' (referrals like '# refldap://...' appear in Samba AD
@@ -396,9 +436,10 @@ function Get-LDAPGroup {
         return $null
     }
 
-    # Parse LDIF output — handle multi-valued attributes (e.g. member)
+    # Parse LDIF output, handle multi-valued attributes (e.g. member). Unfold RFC 2849
+    # continuation lines first: member DNs routinely exceed the 78-column fold width.
     $group = @{}
-    $lines = $result -split "`n"
+    $lines = Expand-LDIFFoldedLine -RawLdif ($result -join "`n")
 
     foreach ($line in $lines) {
         if ($line -match "^([^:]+):\s*(.+)$") {
@@ -549,7 +590,7 @@ function Get-LDAPGroupList {
     }
 
     $groups = @()
-    $lines = $result -split "`n"
+    $lines = Expand-LDIFFoldedLine -RawLdif ($result -join "`n")
     foreach ($line in $lines) {
         if ($line -match "^cn:\s*(.+)$") {
             $groups += $matches[1].Trim()

@@ -2900,6 +2900,34 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
+    /// reference resolution: Pending status with unresolved reference attribute values.
+    /// The predicate is evaluated in SQL (backed by a partial index on
+    /// HasUnresolvedReferences) so the common zero-deferred case costs a single
+    /// index probe rather than hydrating every Pending Export for the system (#1102).
+    /// </summary>
+    public async Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
+    {
+        // AttributeValueChanges and their Attribute definitions are needed by
+        // TryResolveReferencesFromLookup (UnresolvedReferenceValue, StringValue,
+        // ResolvedReferenceCsoId stamping) and its logging (Attribute.Name).
+        // The CSO graph is deliberately NOT included: the deferred pass reads only the
+        // ConnectedSystemObjectId scalar, and the referenced CSOs are bulk-fetched
+        // separately via GetConnectedSystemObjectsByMetaverseObjectIdsAsync.
+        // AsNoTracking: mutations are persisted via UpdatePendingExportsAsync (raw bulk
+        // SQL + tracker detach), not EF change tracking.
+        return await Repository.Database.PendingExports
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.HasUnresolvedReferences
+                      && pe.Status == PendingExportStatus.Pending)
+            .ToListAsync();
+    }
+
+    /// <summary>
     /// Retrieves Pending Exports that are ready for execution, filtering at the database level.
     /// Excludes exports that have exceeded max retries or are not yet due for retry.
     /// Results are ordered by CreatedAt (oldest first).
