@@ -16,6 +16,7 @@ using JIM.Models.Core;
 using JIM.Models.Security;
 using JIM.PostgresData;
 using JIM.Utilities;
+using JIM.Web.Hubs;
 using JIM.Web.Logging;
 using JIM.Web.Middleware;
 using JIM.Web.Middleware.Api;
@@ -549,6 +550,17 @@ try
     // User preferences service for storing UI settings in browser localStorage
     builder.Services.AddScoped<IUserPreferenceService, UserPreferenceService>();
 
+    // Real-time UI notifications (issue #307): a background service listens for PostgreSQL NOTIFY events
+    // on a dedicated non-pooled connection and fans them out to the in-process relay (consumed by Blazor
+    // Server components) and the SignalR hub (for non-Blazor consumers). The listener connection string is
+    // resolved lazily, so OpenAPI generation mode (which never starts hosted services) is unaffected.
+    builder.Services.AddSignalR();
+    builder.Services.AddSingleton<UiNotificationService>();
+    builder.Services.AddSingleton<IUiNotificationService>(sp => sp.GetRequiredService<UiNotificationService>());
+    builder.Services.AddSingleton<IDatabaseNotificationListener>(_ =>
+        new PostgresNotificationListener(JimDbContext.BuildListenerConnectionString()));
+    builder.Services.AddHostedService<NotificationListenerService>();
+
     var app = builder.Build();
 
     // Configure the HTTP request pipeline.
@@ -718,6 +730,10 @@ try
 
     // Map Blazor endpoints
     app.MapBlazorHub();
+
+    // Map the real-time notification hub for non-Blazor consumers (issue #307)
+    app.MapHub<JimNotificationHub>("/hubs/notifications");
+
     app.MapFallbackToPage("/_Host");
 
     // only enable request logging if configured to do so from env vars, as it adds a LOT to the logs

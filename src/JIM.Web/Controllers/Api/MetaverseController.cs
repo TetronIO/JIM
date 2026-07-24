@@ -414,7 +414,9 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     public async Task<IActionResult> GetAttributeAsync(int id)
     {
         _logger.LogTrace("Requested attribute: {Id}", id);
-        var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
+        // the detail DTO projects the object type associations and Standard Mappings, so the retrieval must
+        // eager-load them; the include-free overload would silently return them empty against a real database.
+        var attribute = await _application.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(id);
         if (attribute == null)
             return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {id} not found."));
 
@@ -474,7 +476,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
 
         _logger.LogInformation("Created metaverse attribute: {Id} ({Name})", attribute.Id, LogSanitiser.Sanitise(attribute.Name));
 
-        var result = await _application.Metaverse.GetMetaverseAttributeAsync(attribute.Id);
+        // reload with associations so the response body matches the detail DTO's shape (see GetAttributeAsync)
+        var result = await _application.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(attribute.Id);
         // Use Created with explicit URL instead of CreatedAtAction to avoid API versioning route generation issues
         return Created($"/api/v1/metaverse/attributes/{attribute.Id}", MetaverseAttributeDetailDto.FromEntity(result!));
     }
@@ -527,8 +530,8 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
     {
         _logger.LogInformation("Updating metaverse attribute: {Id}", id);
 
-        if (string.IsNullOrWhiteSpace(request.Name) && !request.RenderingHint.HasValue)
-            return BadRequest(ApiErrorResponse.BadRequest("Supply a new Name and/or RenderingHint to update."));
+        if (string.IsNullOrWhiteSpace(request.Name) && !request.RenderingHint.HasValue && request.StandardMappings == null)
+            return BadRequest(ApiErrorResponse.BadRequest("Supply a new Name, RenderingHint and/or StandardMappings to update."));
 
         var attribute = await _application.Metaverse.GetMetaverseAttributeAsync(id);
         if (attribute == null)
@@ -567,6 +570,25 @@ public class MetaverseController(ILogger<MetaverseController> logger, JimApplica
                     await _application.Metaverse.UpdateMetaverseAttributeAsync(tracked, apiKey, request.ChangeReason);
                 else
                     await _application.Metaverse.UpdateMetaverseAttributeAsync(tracked, user, request.ChangeReason);
+            }
+        }
+
+        // Standard Mappings via the audited replacement path (a supplied list replaces the full set).
+        if (request.StandardMappings != null)
+        {
+            var requestedMappings = request.StandardMappings
+                .Select(m => new MetaverseAttributeStandardMapping { Standard = m.Standard, CounterpartName = m.CounterpartName, Notes = m.Notes })
+                .ToList();
+            try
+            {
+                if (apiKey != null)
+                    await _application.Metaverse.UpdateMetaverseAttributeStandardMappingsAsync(id, requestedMappings, apiKey, request.ChangeReason);
+                else
+                    await _application.Metaverse.UpdateMetaverseAttributeStandardMappingsAsync(id, requestedMappings, user, request.ChangeReason);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
             }
         }
 

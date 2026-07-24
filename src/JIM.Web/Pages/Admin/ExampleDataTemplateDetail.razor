@@ -5,9 +5,10 @@
 @using JIM.Models.Core
 @using JIM.Models.Tasking
 @using JIM.Web.Pages.Admin.Components
-@using System.Diagnostics
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
+@inject IUiNotificationService UiNotifications
+@implements IDisposable
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -212,6 +213,8 @@
     private bool _isExecuting;
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private int _changeCount;
+    private Timer? _statusPollTimer;
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
 
     protected override async Task OnInitializedAsync()
     {
@@ -234,32 +237,112 @@
 
         _changeCount = (await jim.ChangeHistory.GetConfigurationChangeHistoryAsync(ActivityTargetType.ExampleDataTemplate, _template.Id, 1, 1)).TotalResults;
 
-        // has this template already been scheduled, or is already being processed on the service queue?
-        // continuously update the UI to show any change in status
-        // POLLING_TO_REPLACE - tagging this functionality for replacement with an event-based ui update approach in the future
-        new Timer(async _ =>
+        // Has this template already been scheduled, or is it already being processed on the service queue?
+        // Event-driven refresh (issue #307): a Worker Task change notification triggers an immediate
+        // status refresh; the timer is the polling fallback, re-armed each cycle at 2 seconds while
+        // real-time notifications are unavailable or 30 seconds (a reconciliation safety net) while they
+        // are flowing.
+        UiNotifications.WorkerTaskChanged += OnWorkerTaskChanged;
+        UiNotifications.RealTimeAvailabilityChanged += OnRealTimeAvailabilityChanged;
+        await RefreshWorkerTaskStatusAsync();
+        _statusPollTimer = new Timer(async _ => await OnStatusPollTimerElapsedAsync(), null, GetPollingInterval(), Timeout.InfiniteTimeSpan);
+    }
+
+    public void Dispose()
+    {
+        UiNotifications.WorkerTaskChanged -= OnWorkerTaskChanged;
+        UiNotifications.RealTimeAvailabilityChanged -= OnRealTimeAvailabilityChanged;
+        _statusPollTimer?.Dispose();
+        _statusPollTimer = null;
+    }
+
+    private TimeSpan GetPollingInterval()
+    {
+        return UiNotifications.IsRealTimeAvailable ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(2);
+    }
+
+    private async Task OnStatusPollTimerElapsedAsync()
+    {
+        try
         {
-            Debug.WriteLine("Timer loop executing...");
-            if (_template != null)
+            await RefreshWorkerTaskStatusAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Transient refresh failures are recoverable; the next timer cycle retries
+        }
+        finally
+        {
+            // Re-arm the one-shot timer with the interval for the current real-time availability
+            try
             {
-                using var timerJim = JimFactory.Create();
-                _status = await timerJim.Tasking.GetFirstExampleDataTemplateWorkerTaskStatus(_template.Id);
-                if (_status != null)
-                    Debug.WriteLine("TimerLoop: status is " + _status);
-                else
-                {
-                    Debug.WriteLine("TimerLoop: status is null");
-                    // Reset the executing flag when the task completes (status becomes null)
-                    _isExecuting = false;
-                }
+                _statusPollTimer?.Change(GetPollingInterval(), Timeout.InfiniteTimeSpan);
             }
-            else
+            catch (ObjectDisposedException)
             {
-                Debug.WriteLine("TimerLoop: template is null");
+                // The component was disposed while this callback was running; nothing to re-arm
+            }
+        }
+    }
+
+    private void OnWorkerTaskChanged(WorkerTaskChangeNotification notification) => TriggerNotificationRefresh();
+
+    // On reconnection, refresh immediately to reconcile anything missed while real-time was unavailable.
+    private void OnRealTimeAvailabilityChanged(bool available) => TriggerNotificationRefresh();
+
+    /// <summary>
+    /// Runs a status refresh in response to a notification. Event handlers run off the sync context and
+    /// must never throw into the notification relay, so failures are swallowed; the timer fallback retries.
+    /// </summary>
+    private void TriggerNotificationRefresh()
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await RefreshWorkerTaskStatusAsync();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Transient refresh failures are recoverable; the timer fallback covers the gap
+            }
+        });
+    }
+
+    /// <summary>
+    /// Fetches the current Worker Task status for this template and re-renders only when it changed.
+    /// Serves both the timer fallback and event-driven refreshes; overlapping invocations are skipped
+    /// via a non-blocking semaphore.
+    /// </summary>
+    private async Task RefreshWorkerTaskStatusAsync()
+    {
+        if (_template == null)
+            return;
+
+        if (!await _refreshLock.WaitAsync(0))
+            return;
+
+        try
+        {
+            using var refreshJim = JimFactory.Create();
+            var newStatus = await refreshJim.Tasking.GetFirstExampleDataTemplateWorkerTaskStatus(_template.Id);
+            var stateHasChanged = newStatus != _status;
+            _status = newStatus;
+
+            // Reset the executing flag when the task completes (status becomes null)
+            if (newStatus == null && _isExecuting)
+            {
+                _isExecuting = false;
+                stateHasChanged = true;
             }
 
-            await InvokeAsync(StateHasChanged);
-        }, null, 2000, 2000);
+            if (stateHasChanged)
+                await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            _refreshLock.Release();
+        }
     }
 
     private async Task ExecuteTemplateAsync()

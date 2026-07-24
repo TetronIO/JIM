@@ -128,9 +128,15 @@ JIM runs as a set of Docker services:
 |---------|-------------|
 | **jim.web** | Blazor Server UI with integrated REST API at `/api/`. Listens on port 80 in-container; reached at `http://localhost:5200` in the development Docker stack (HTTPS is terminated by a reverse proxy in production). Interactive [Scalar](https://scalar.com/) API reference available at `/api/reference` in every environment, backed by a build-time OpenAPI document for instant loading. |
 | **jim.worker** | Background task processor. Polls the task queue, processes sync/import/export operations. Uses `ISyncEngine`/`ISyncRepository` separation for testability. |
-| **jim.scheduler** | Schedule management with a 30-second polling cycle. Detects parallel step groups and queues them for concurrent worker dispatch. |
+| **jim.scheduler** | Schedule management. Reacts to task completion instantly via PostgreSQL notifications, with a 30-second polling cycle as the fallback. Detects parallel step groups and queues them for concurrent worker dispatch. |
 | **jim.database** | PostgreSQL 18 database. |
 | **jim.keycloak** | Bundled Keycloak IdP for development SSO (port 8181). Not included in production deployments. |
+
+### Real-Time Notifications
+
+The services coordinate through the database, and the database also tells them when something changed: triggers on the Worker Task and Activity tables publish PostgreSQL `NOTIFY` events (on commit) that services receive over a dedicated `LISTEN` connection. The Scheduler uses them to react to task completion in under a second, and the web application pushes them to the browser, so the Operations page updates without frequent polling. A SignalR hub at `/hubs/notifications` broadcasts the same events for non-Blazor consumers.
+
+Notifications are fire-and-forget hints carrying identifiers only; the database remains the source of truth. Every consumer keeps a polling fallback (the Scheduler's 30-second cycle, the UI's background refresh), so a dropped notification degrades latency, never correctness. No additional infrastructure is required, keeping JIM self-contained and air-gap deployable.
 
 ## Worker Architecture
 

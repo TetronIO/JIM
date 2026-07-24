@@ -92,6 +92,28 @@ public class MetaverseControllerAttributeTests
         return a;
     }
 
+    #region Get
+
+    [Test]
+    public async Task GetAttributeAsync_WithStandardMappings_ProjectsThemIntoTheDetailDtoAsync()
+    {
+        var attribute = Attr(1, "costCentre");
+        attribute.StandardMappings.Add(new MetaverseAttributeStandardMapping { Standard = AttributeStandard.Ldap, CounterpartName = "costCentre" });
+        attribute.StandardMappings.Add(new MetaverseAttributeStandardMapping { Standard = AttributeStandard.Scim, CounterpartName = "costCenter", Notes = "SCIM Enterprise User extension." });
+
+        var result = await _controller.GetAttributeAsync(1);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        var dto = ((OkObjectResult)result).Value as MetaverseAttributeDetailDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.StandardMappings, Has.Count.EqualTo(2));
+        var scimMapping = dto!.StandardMappings.Single(m => m.Standard == AttributeStandard.Scim);
+        Assert.That(scimMapping.CounterpartName, Is.EqualTo("costCenter"));
+        Assert.That(scimMapping.Notes, Is.EqualTo("SCIM Enterprise User extension."));
+    }
+
+    #endregion
+
     #region Create
 
     [Test]
@@ -99,7 +121,7 @@ public class MetaverseControllerAttributeTests
     {
         MetaverseAttribute? captured = null;
         _mv.Setup(r => r.CreateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>())).Callback<MetaverseAttribute>(a => { a.Id = 5; captured = a; });
-        _mv.Setup(r => r.GetMetaverseAttributeAsync(5, It.IsAny<bool>())).ReturnsAsync(() => captured);
+        _mv.Setup(r => r.GetMetaverseAttributeWithObjectTypesAsync(5, It.IsAny<bool>())).ReturnsAsync(() => captured);
 
         var result = await _controller.CreateAttributeAsync(new CreateMetaverseAttributeRequest { Name = "costCentre", Type = AttributeDataType.Text });
 
@@ -125,7 +147,7 @@ public class MetaverseControllerAttributeTests
         _mv.Setup(r => r.GetMetaverseObjectTypeAsync(1, false)).ReturnsAsync(new MetaverseObjectType { Id = 1, Name = "User" });
         _mv.Setup(r => r.GetMetaverseObjectTypeAsync(2, false)).ReturnsAsync(new MetaverseObjectType { Id = 2, Name = "Group" });
         _mv.Setup(r => r.CreateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>())).Callback<MetaverseAttribute>(a => { a.Id = 5; captured = a; });
-        _mv.Setup(r => r.GetMetaverseAttributeAsync(5, It.IsAny<bool>())).ReturnsAsync(() => captured);
+        _mv.Setup(r => r.GetMetaverseAttributeWithObjectTypesAsync(5, It.IsAny<bool>())).ReturnsAsync(() => captured);
 
         await _controller.CreateAttributeAsync(new CreateMetaverseAttributeRequest { Name = "costCentre", Type = AttributeDataType.Text, ObjectTypeIds = [1, 2] });
 
@@ -226,6 +248,75 @@ public class MetaverseControllerAttributeTests
     public async Task UpdateAttributeAsync_WithNoFields_ReturnsBadRequestAsync()
     {
         var result = await _controller.UpdateAttributeAsync(1, new UpdateMetaverseAttributeRequest());
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    #endregion
+
+    #region Update Standard Mappings
+
+    [Test]
+    public async Task UpdateAttributeAsync_StandardMappingsOnly_ReplacesThemAndReturnsOkAsync()
+    {
+        var attribute = Attr(1, "costCentre");
+        attribute.StandardMappings.Add(new MetaverseAttributeStandardMapping { Id = 7, Standard = AttributeStandard.Ldap, CounterpartName = "obsolete" });
+
+        var request = new UpdateMetaverseAttributeRequest
+        {
+            StandardMappings = new List<StandardMappingDto>
+            {
+                new() { Standard = AttributeStandard.Scim, CounterpartName = "costCenter", Notes = "SCIM Enterprise User extension." }
+            }
+        };
+
+        var result = await _controller.UpdateAttributeAsync(1, request);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Once,
+            "the mappings replacement must persist through the audited attribute update path");
+        Assert.That(attribute.StandardMappings.Any(m => m.CounterpartName == "obsolete"), Is.False,
+            "mappings absent from the request must be removed");
+        Assert.That(attribute.StandardMappings.Any(m => m.Standard == AttributeStandard.Scim && m.CounterpartName == "costCenter"), Is.True);
+    }
+
+    [Test]
+    public async Task UpdateAttributeAsync_EmptyStandardMappingsList_ClearsThemAsync()
+    {
+        var attribute = Attr(1, "costCentre");
+        attribute.StandardMappings.Add(new MetaverseAttributeStandardMapping { Id = 7, Standard = AttributeStandard.Ldap, CounterpartName = "costCentre" });
+
+        var result = await _controller.UpdateAttributeAsync(1, new UpdateMetaverseAttributeRequest { StandardMappings = new List<StandardMappingDto>() });
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        Assert.That(attribute.StandardMappings, Is.Empty, "an empty list means clear all mappings");
+    }
+
+    [Test]
+    public async Task UpdateAttributeAsync_InvalidStandardMapping_ReturnsBadRequestAsync()
+    {
+        Attr(1, "costCentre");
+        var request = new UpdateMetaverseAttributeRequest
+        {
+            StandardMappings = new List<StandardMappingDto> { new() { Standard = AttributeStandard.NotSet, CounterpartName = "x" } }
+        };
+
+        var result = await _controller.UpdateAttributeAsync(1, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mv.Verify(r => r.UpdateMetaverseAttributeAsync(It.IsAny<MetaverseAttribute>()), Times.Never);
+    }
+
+    [Test]
+    public async Task UpdateAttributeAsync_StandardMappingsOnBuiltIn_ReturnsBadRequestAsync()
+    {
+        Attr(1, "Email", builtIn: true);
+        var request = new UpdateMetaverseAttributeRequest
+        {
+            StandardMappings = new List<StandardMappingDto> { new() { Standard = AttributeStandard.Ldap, CounterpartName = "mail" } }
+        };
+
+        var result = await _controller.UpdateAttributeAsync(1, request);
+
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
     }
 

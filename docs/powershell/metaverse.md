@@ -259,7 +259,7 @@ Get-JIMMetaverseAttribute -Name <string>
 
 #### Output
 
-Attribute definitions including ID, name, type, and plurality.
+Attribute definitions including ID, name, type, and plurality. Retrieving a single attribute by `-Id` also returns its Object Type bindings and Standard Mappings (the counterpart attribute names in the SCIM 2.0 and LDAP/Active Directory standards, with notes).
 
 #### Examples
 
@@ -332,11 +332,11 @@ Modifies an existing metaverse attribute definition.
 ```powershell
 # ById (default)
 Set-JIMMetaverseAttribute -Id <int> [-Name <string>] [-RenderingHint <string>] [-Type <string>]
-    [-AttributePlurality <string>] [-ChangeReason <string>] [-PassThru]
+    [-AttributePlurality <string>] [-StandardMappings <array>] [-ChangeReason <string>] [-PassThru]
 
 # ByInputObject
 Set-JIMMetaverseAttribute -InputObject <object> [-Name <string>] [-RenderingHint <string>]
-    [-Type <string>] [-AttributePlurality <string>] [-ChangeReason <string>] [-PassThru]
+    [-Type <string>] [-AttributePlurality <string>] [-StandardMappings <array>] [-ChangeReason <string>] [-PassThru]
 ```
 
 #### Parameters
@@ -349,6 +349,7 @@ Set-JIMMetaverseAttribute -InputObject <object> [-Name <string>] [-RenderingHint
 | `RenderingHint` | `string` | No | | How a multi-valued attribute's values display. Valid values: `Default`, `Table`, `ChipSet`, `List` |
 | `Type` | `string` | No | | The new data type. Valid values: `Text`, `Integer`, `LongNumber`, `Decimal`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
 | `AttributePlurality` | `string` | No | | The new plurality. Valid values: `SingleValued`, `MultiValued` |
+| `StandardMappings` | `array` | No | | The attribute's full set of Standard Mappings, replacing any existing ones; an empty array (`@()`) clears them. Each element is a hashtable with a `Standard` (`Scim`, `Ldap` or `Jim`), a `CounterpartName`, and optional `Notes`. Guidance only; never affects synchronisation. |
 | `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 | `PassThru` | `switch` | No | `false` | Return the updated attribute definition |
 
@@ -374,6 +375,13 @@ Get-JIMMetaverseAttribute -Name "proxyAddresses" | Set-JIMMetaverseAttribute -Re
 
 ```powershell title="Change an attribute's data type (refused if any object holds a value)"
 Set-JIMMetaverseAttribute -Id 42 -Type Integer
+```
+
+```powershell title="Record how a custom attribute corresponds to the SCIM 2.0 and LDAP standards"
+Set-JIMMetaverseAttribute -Id 42 -StandardMappings @(
+    @{ Standard = 'Scim'; CounterpartName = 'costCenter'; Notes = 'SCIM Enterprise User extension.' },
+    @{ Standard = 'Ldap'; CounterpartName = 'costCentre' }
+)
 ```
 
 ---

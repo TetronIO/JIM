@@ -488,6 +488,36 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("MetaverseAttributes");
                 });
 
+            modelBuilder.Entity("JIM.Models.Core.MetaverseAttributeStandardMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CounterpartName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("MetaverseAttributeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Standard")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MetaverseAttributeId", "Standard", "CounterpartName")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MetaverseAttributeStandardMappings_Attribute_Standard_Name");
+
+                    b.ToTable("MetaverseAttributeStandardMappings");
+                });
+
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3492,6 +3522,17 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("JIM.Models.Core.MetaverseAttributeStandardMapping", b =>
+                {
+                    b.HasOne("JIM.Models.Core.MetaverseAttribute", "MetaverseAttribute")
+                        .WithMany("StandardMappings")
+                        .HasForeignKey("MetaverseAttributeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MetaverseAttribute");
+                });
+
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>
                 {
                     b.HasOne("JIM.Models.Core.MetaverseObjectType", "Type")
@@ -4316,6 +4357,8 @@ namespace JIM.PostgresData.Migrations
             modelBuilder.Entity("JIM.Models.Core.MetaverseAttribute", b =>
                 {
                     b.Navigation("PredefinedSearchAttributes");
+
+                    b.Navigation("StandardMappings");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>

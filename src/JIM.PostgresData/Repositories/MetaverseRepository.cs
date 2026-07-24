@@ -189,6 +189,30 @@ public class MetaverseRepository : IMetaverseRepository
         return await Repository.Database.MetaverseAttributes.OrderBy(x => x.Name).ToListAsync();
     }
 
+    public async Task<List<MetaverseAttribute>> GetMetaverseAttributesForSchemaSyncAsync()
+    {
+        // AsTracking is required: the built-in schema synchronisation pass mutates these entities (Standard
+        // Mapping additions/removals) and persists them via SaveBuiltInSchemaChangesAsync; the DbContext
+        // defaults to NoTracking.
+        return await Repository.Database.MetaverseAttributes
+            .AsTracking()
+            .Include(a => a.StandardMappings)
+            .OrderBy(a => a.Name)
+            .ToListAsync();
+    }
+
+    public async Task<List<MetaverseObjectType>> GetBuiltInMetaverseObjectTypesForSchemaSyncAsync()
+    {
+        // AsTracking is required: the built-in schema synchronisation pass adds attribute bindings to these
+        // entities and persists them via SaveBuiltInSchemaChangesAsync; the DbContext defaults to NoTracking.
+        return await Repository.Database.MetaverseObjectTypes
+            .AsTracking()
+            .Include(t => t.Attributes)
+            .Where(t => t.BuiltIn)
+            .OrderBy(t => t.Name)
+            .ToListAsync();
+    }
+
     public async Task<IList<MetaverseAttributeHeader>?> GetMetaverseAttributeHeadersAsync()
     {
         return await Repository.Database.MetaverseAttributes.OrderBy(a => a.Name).Select(a => new MetaverseAttributeHeader
@@ -293,6 +317,7 @@ public class MetaverseRepository : IMetaverseRepository
     {
         var query = Repository.Database.MetaverseAttributes
             .Include(a => a.MetaverseObjectTypes)
+            .Include(a => a.StandardMappings)
             .AsQueryable();
 
         if (withChangeTracking)

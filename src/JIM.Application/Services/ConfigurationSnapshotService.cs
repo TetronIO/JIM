@@ -625,6 +625,7 @@ public class ConfigurationSnapshotService
         Add(children, "builtIn", Render(attribute.BuiltIn), "Built-in");
         AddEnum(children, "renderingHint", attribute.RenderingHint, "Rendering hint");
         children.Add(BuildObjectTypeAssociations(attribute.MetaverseObjectTypes));
+        children.Add(BuildStandardMappings(attribute.StandardMappings));
 
         return new ConfigurationSnapshot
         {
@@ -633,6 +634,22 @@ public class ConfigurationSnapshotService
             ObjectName = attribute.Name,
             Root = ConfigurationSnapshotNode.ObjectNode("metaverseAttribute", children, "Metaverse Attribute")
         };
+    }
+
+    private static ConfigurationSnapshotNode BuildStandardMappings(List<MetaverseAttributeStandardMapping>? standardMappings)
+    {
+        // advisory Standard Mappings (#1104) are configuration: editable for custom attributes, so edits must be
+        // diffable in the change history. Ordered by (standard, counterpart name) for stable snapshots.
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var mapping in (standardMappings ?? []).OrderBy(m => m.Standard).ThenBy(m => m.CounterpartName, StringComparer.Ordinal))
+        {
+            var children = new List<ConfigurationSnapshotNode>();
+            AddEnum(children, "standard", mapping.Standard, "Standard");
+            Add(children, "counterpartName", mapping.CounterpartName, "Counterpart attribute name");
+            Add(children, "notes", mapping.Notes, "Notes");
+            items.Add(ConfigurationSnapshotNode.ObjectNode("standardMapping", children, $"{mapping.Standard}: {mapping.CounterpartName}", mapping.Id));
+        }
+        return ConfigurationSnapshotNode.CollectionNode("standardMappings", items, "Standard Mappings");
     }
 
     private static ConfigurationSnapshotNode BuildObjectTypeAssociations(List<MetaverseObjectType>? objectTypes)
