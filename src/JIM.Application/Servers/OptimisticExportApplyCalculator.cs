@@ -37,16 +37,12 @@ public static class OptimisticExportApplyCalculator
     {
         var delta = new OptimisticExportApplyDelta();
 
-        foreach (var pe in pendingExports)
+        // Delete-ChangeType Pending Exports are excluded (D6: the CSO obsolete/delete lifecycle owns
+        // that path); Pending Exports with no Connected System Object are excluded defensively.
+        foreach (var pe in pendingExports.Where(pe =>
+                     pe.ChangeType != PendingExportChangeType.Delete && pe.ConnectedSystemObject != null))
         {
-            if (pe.ChangeType == PendingExportChangeType.Delete)
-                continue;
-
-            var cso = pe.ConnectedSystemObject;
-            if (cso == null)
-                continue;
-
-            ApplyPendingExport(cso, pe.AttributeValueChanges, delta);
+            ApplyPendingExport(pe.ConnectedSystemObject!, pe.AttributeValueChanges, delta);
         }
 
         return delta;
