@@ -6,7 +6,9 @@ using JIM.Application;
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
 using JIM.Utilities;
+using JIM.Web.Models;
 using JIM.Web.Models.Api;
+using JIM.Web.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -25,10 +27,11 @@ namespace JIM.Web.Controllers.Api;
 [ApiVersion("1.0")]
 [Authorize(Roles = "Administrator")]
 [Produces("application/json")]
-public class ActivitiesController(ILogger<ActivitiesController> logger, JimApplication application) : ControllerBase
+public class ActivitiesController(ILogger<ActivitiesController> logger, JimApplication application, IActivityEtaTracker etaTracker) : ControllerBase
 {
     private readonly ILogger<ActivitiesController> _logger = logger;
     private readonly JimApplication _application = application;
+    private readonly IActivityEtaTracker _etaTracker = etaTracker;
 
     /// <summary>
     /// List Activities
@@ -147,6 +150,47 @@ public class ActivitiesController(ILogger<ActivitiesController> logger, JimAppli
 
         var stats = await _application.Activities.GetActivityRunProfileExecutionStatsAsync(id);
         return Ok(ActivityRunProfileExecutionStatsDto.FromEntity(stats));
+    }
+
+    /// <summary>
+    /// Get live Activity progress
+    /// </summary>
+    /// <remarks>
+    /// A lightweight progress snapshot designed for frequent polling while a Run Profile
+    /// executes: current status, phase message, object counts, percentage complete, throughput
+    /// and estimated time remaining, plus a live operation-type breakdown (for example Added /
+    /// Updated / Deleted counts). Much cheaper to serve than the full Activity detail response.
+    /// Stop polling once <c>status</c> reaches a terminal value (Complete, CompleteWithWarning,
+    /// CompleteWithError, FailedWithError or Cancelled).
+    /// </remarks>
+    /// <param name="id">The unique identifier (GUID) of the Activity.</param>
+    /// <returns>The Activity's live progress snapshot.</returns>
+    /// <response code="200">Returns the progress snapshot.</response>
+    /// <response code="404">If the Activity is not found.</response>
+    /// <response code="401">If the user is not authenticated.</response>
+    [HttpGet("{id:guid}/progress", Name = "GetActivityProgress")]
+    [ProducesResponseType(typeof(ActivityProgressDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetActivityProgressAsync(Guid id)
+    {
+        _logger.LogDebug("Getting activity progress: {Id}", id);
+
+        var progress = await _application.Activities.GetActivityProgressAsync(id);
+        if (progress == null)
+        {
+            return NotFound(ApiErrorResponse.NotFound($"Activity with ID {id} not found."));
+        }
+
+        // Feed the shared ETA tracker while the run is in flight so successive reads (from any
+        // consumer) refine the rate; release the per-Activity state once the run has finished.
+        ActivityEtaEstimate eta = default;
+        if (progress.Status == ActivityStatus.InProgress)
+            eta = _etaTracker.RecordSample(id, progress.ObjectsProcessed, progress.ObjectsToProcess);
+        else if (progress.Status.IsTerminal())
+            _etaTracker.Remove(id);
+
+        return Ok(ActivityProgressDto.FromEntity(progress, eta, DateTime.UtcNow));
     }
 
     /// <summary>

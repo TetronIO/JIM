@@ -274,7 +274,7 @@ Start-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Wait] [-
 | `ConnectedSystemName` | `string` | Yes (ByName, ByNameAndId sets) | | Name of the Connected System that owns the Run Profile. Must be an exact match. |
 | `RunProfileId` | `int` | Yes (ById, ByNameAndId sets) | | ID of the Run Profile to execute. Alias: `Id`. Accepts pipeline input by property name (ById set). |
 | `RunProfileName` | `string` | Yes (ByName, ByIdAndName sets) | | Name of the Run Profile to execute. Must be an exact match. |
-| `Wait` | `switch` | No | `$false` | Blocks until execution completes, displaying a progress indicator. Polls every 2 seconds. |
+| `Wait` | `switch` | No | `$false` | Blocks until execution completes, displaying live progress: current phase, object counts, throughput and estimated time remaining. Polls the lightweight Activity progress endpoint every 2 seconds. |
 | `Timeout` | `int` | No | | Maximum number of seconds to wait when `-Wait` is specified. If exceeded, an error is thrown containing the Activity ID for manual follow-up. |
 | `PassThru` | `switch` | No | `$false` | Returns the execution response object to the pipeline. |
 
@@ -333,7 +333,7 @@ try {
 ### Notes
 
 - The Run Profile is queued as an asynchronous task on the JIM worker service. Without `-Wait`, the cmdlet returns immediately after the task is queued.
-- When `-Wait` is specified, the cmdlet polls the Activity status every 2 seconds and displays a progress bar. If authentication tokens expire during polling, the cmdlet retries up to 3 times before failing.
+- When `-Wait` is specified, the cmdlet polls the lightweight Activity progress endpoint (`/activities/{id}/progress`) every 2 seconds and displays a progress bar with the current phase, object counts, throughput and estimated time remaining. If authentication tokens expire during polling, the cmdlet retries up to 3 times before failing.
 - If `-Timeout` is exceeded, the cmdlet throws a terminating error that includes the Activity ID, allowing you to check progress manually via [Get-JIMActivity](activities.md) or the JIM web interface.
 - Run Profiles that are already executing will be rejected by the server; you do not need to check for running profiles before calling this cmdlet.
 

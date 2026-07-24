@@ -23,23 +23,31 @@ Get-JIMActivity -Id <guid>
 
 # Get execution items for a Run Profile activity
 Get-JIMActivity -Id <guid> -ExecutionItems
+
+# Follow an in-progress activity's live progress until it completes
+Get-JIMActivity -Id <guid> -Follow [-IntervalSeconds <int>] [-MaxPolls <int>]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `guid` | Yes (ById, ExecutionItems sets) | | ID of the activity to retrieve. Alias: `ActivityId`. Accepts pipeline input by property name. |
+| `Id` | `guid` | Yes (ById, ExecutionItems, Follow sets) | | ID of the activity to retrieve. Alias: `ActivityId`. Accepts pipeline input by property name. |
 | `Search` | `string` | No (List set) | | Filters activities by target name or type. For example, searching for "Active Directory" returns activities related to that Connected System. |
 | `Page` | `int` | No (List set) | `1` | Page number for paginated results. |
 | `PageSize` | `int` | No (List set) | `20` | Number of activities per page. |
 | `ExecutionItems` | `switch` | Yes (ExecutionItems set) | | Retrieves the Run Profile execution items (RPEIs) associated with the activity, providing detailed per-object processing results. |
+| `Follow` | `switch` | Yes (Follow set) | | Follows the activity's live progress (like `tail -f`): renders a progress bar with the current phase, object counts, throughput and estimated time remaining until the activity completes. Press Ctrl+C to stop early. |
+| `IntervalSeconds` | `int` | No (Follow set) | `2` | Polling interval in seconds when following. Range 1-300. |
+| `MaxPolls` | `int` | No (Follow set) | | Maximum number of progress polls before following stops, whether or not the activity has completed. Useful for scripts that must not block indefinitely. |
 
 ### Output
 
 When using the **List** or **ById** parameter sets, returns one or more `PSCustomObject` instances representing activities, each containing properties such as `Id`, `Created`, `Executed`, `Status`, `TargetType`, `TargetOperationType`, `TargetName`, `InitiatedByName`, and per-run totals such as `TotalErrors`.
 
 When using the **ExecutionItems** parameter set, returns `PSCustomObject` instances representing individual execution items, each containing properties such as `ExternalIdValue`, `DisplayName`, `ConnectedSystemObjectType`, `ObjectChangeType`, `ErrorType`, and `OutcomeSummary`.
+
+When using the **Follow** parameter set, progress renders to the host while following; when following ends, the final activity object is emitted (the same shape as **ById**).
 
 ### Examples
 
@@ -70,6 +78,15 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -ExecutionItems
 ```powershell title="Pipeline from Start-JIMRunProfile"
 $result = Start-JIMRunProfile -RunProfileId 42 -Wait -PassThru
 Get-JIMActivity -Id $result.ActivityId
+```
+
+```powershell title="Follow an in-progress activity until it completes"
+Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Follow
+```
+
+```powershell title="Follow with a bounded duration for scripts"
+# Polls every 5 seconds, for at most 60 polls (5 minutes)
+Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Follow -IntervalSeconds 5 -MaxPolls 60
 ```
 
 ```powershell title="Review errors in execution items"
