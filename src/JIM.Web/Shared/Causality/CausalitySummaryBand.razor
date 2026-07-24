@@ -4,10 +4,12 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The causality summary band: a run context chip (Connected System · Run Profile with a status
-   dot), the execution timestamp, the plain-English summary sentence with entity mentions rendered
-   as highlighted token chips (linked where possible), and the colour-coded outcome pill strip.
-   Sentence segments are rendered as text through Blazor's encoder; MarkupString is never used, so
-   values sourced from connected systems cannot inject markup. *@
+   dot), the execution timestamp, an optional right-aligned Actions slot (the panel's view switcher
+   and technical-names toggle share this head row rather than a separate toolbar band above), the
+   plain-English summary sentence with entity mentions rendered as highlighted token chips (linked
+   where possible), and the colour-coded outcome pill strip. Sentence segments are rendered as text
+   through Blazor's encoder; MarkupString is never used, so values sourced from connected systems
+   cannot inject markup. *@
 
 <div class="summary">
     <div class="summary-head">
@@ -25,6 +27,10 @@
         {
             var localTimestamp = Timestamp.Value.ToLocalTime();
             <span class="summary-time" title="@localTimestamp.ToFriendlyDate()">@localTimestamp.ToRelativeTime()</span>
+        }
+        @if (Actions != null)
+        {
+            <div class="summary-actions">@Actions</div>
         }
     </div>
     <div class="summary-sentence">
@@ -83,6 +89,13 @@
     /// </summary>
     [Parameter]
     public CausalityTone StatusTone { get; set; } = CausalityTone.Success;
+
+    /// <summary>
+    /// Optional controls rendered right-aligned on the head row (the panel places its view switcher
+    /// and technical-names toggle here so they sit on the same row as the run chip and timestamp).
+    /// </summary>
+    [Parameter]
+    public RenderFragment? Actions { get; set; }
 
     private string? GetRunChipLabel()
     {

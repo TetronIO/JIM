@@ -380,16 +380,4 @@ public class CausalityModelBuilderTests
         Assert.That(rows[0].Operation, Is.EqualTo(CausalityAttributeOperation.Remove));
         Assert.That(rows[0].Value, Is.EqualTo("0700 900123"));
     }
-
-    [Test]
-    public void Build_EventSentenceSegments_LeadWithPlainLabelText()
-    {
-        var model = CausalityModelBuilder.Build(CausalityTestData.NewJoinerItem(), CausalityTestData.NewJoinerContext());
-        var projected = model.Roots[0];
-
-        Assert.That(projected.SentenceSegments, Is.Not.Empty);
-        var first = projected.SentenceSegments[0] as SummarySegment.Text;
-        Assert.That(first, Is.Not.Null);
-        Assert.That(first!.Value, Does.StartWith("Identity created"));
-    }
 }

@@ -8,8 +8,9 @@
 @* The causality visualisation panel for a Run Profile Execution Item. Owns the current view, the
    technical-names toggle, the Timeline's expanded event and the Flow and Graph views' selected
    event (whose attribute detail renders in the shared bottom drawer); builds the causality model
-   and summary once per (Item, Context) pair and renders the toolbar, summary band, the active view
-   and the drawer. Persisted view and technical-names preferences load on first render per the
+   and summary once per (Item, Context) pair and renders the summary band (whose head row carries
+   the view switcher and technical-names toggle in its Actions slot), the active view and the
+   drawer. Persisted view and technical-names preferences load on first render per the
    TableDensityToggle idiom; the Flow view is the default, and a stored preference for an unknown
    view falls back to it without being overwritten. *@
 
@@ -25,26 +26,26 @@
     }
     else if (_model != null && _summary != null)
     {
-        <div class="causality-toolbar">
-            @if (AvailableViews.Count > 1)
-            {
-                <div class="seg" role="group" aria-label="Causality view">
-                    @foreach (var view in AvailableViews)
-                    {
-                        <button type="button" class="@(view == _view ? "on" : null)"
-                                aria-pressed="@(view == _view ? "true" : "false")"
-                                @onclick="() => SelectViewAsync(view)">@GetViewLabel(view)</button>
-                    }
-                </div>
-            }
-            <button type="button" class="toggle-line @(_technicalNames ? "on" : null)"
-                    aria-pressed="@(_technicalNames ? "true" : "false")"
-                    @onclick="ToggleTechnicalNamesAsync">
-                <span class="track" aria-hidden="true"></span> Technical names
-            </button>
-        </div>
-
-        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()" />
+        <CausalitySummaryBand Summary="_summary" Context="Context" Timestamp="Timestamp" StatusTone="GetStatusTone()">
+            <Actions>
+                @if (AvailableViews.Count > 1)
+                {
+                    <div class="seg" role="group" aria-label="Causality view">
+                        @foreach (var view in AvailableViews)
+                        {
+                            <button type="button" class="@(view == _view ? "on" : null)"
+                                    aria-pressed="@(view == _view ? "true" : "false")"
+                                    @onclick="() => SelectViewAsync(view)">@GetViewLabel(view)</button>
+                        }
+                    </div>
+                }
+                <button type="button" class="toggle-line @(_technicalNames ? "on" : null)"
+                        aria-pressed="@(_technicalNames ? "true" : "false")"
+                        @onclick="ToggleTechnicalNamesAsync">
+                    <span class="track" aria-hidden="true"></span> Technical names
+                </button>
+            </Actions>
+        </CausalitySummaryBand>
 
         <div class="canvas-wrap">
             @switch (_view)

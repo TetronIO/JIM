@@ -87,12 +87,6 @@ public sealed class CausalityEvent
     public IReadOnlyList<CausalityEntityLink> Links { get; init; } = [];
 
     /// <summary>
-    /// The event rendered as a sentence for the Timeline view: plain label first, then entity
-    /// mentions as segments.
-    /// </summary>
-    public IReadOnlyList<SummarySegment> SentenceSegments { get; init; } = [];
-
-    /// <summary>
     /// Normalised attribute change rows for events that expose attribute detail; empty otherwise.
     /// </summary>
     public IReadOnlyList<CausalityAttributeRow> AttributeRows { get; init; } = [];

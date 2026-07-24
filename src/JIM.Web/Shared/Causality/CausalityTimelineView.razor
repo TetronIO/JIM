@@ -7,8 +7,9 @@
 @* The causality Timeline view: a vertical narrative of tone-coloured dots on indented rails.
    The source row (the processed record and its Connected System) comes first, then each causality
    event as a plain-language verb with the technical label demoted alongside (swapped when the
-   technical-names toggle is on), the event sentence, entity chips, badges, action links and an
-   inline attribute detail expander. Child events nest through indented rail containers. *@
+   technical-names toggle is on), an optional contextual detail message, entity chips (each entity
+   named once), badges, action links and an inline attribute detail expander. Child events nest
+   through indented rail containers. *@
 
 <div class="tl">
     @* ─── Source row: the record that was processed ─── *@
@@ -113,26 +114,6 @@
                     @if (causalityEvent.Badge != null)
                     {
                         <span class="evt-badge" style="--tone: @toneVar">@causalityEvent.Badge</span>
-                    }
-                </div>
-                <div class="tl-detail-line">
-                    @foreach (var segment in causalityEvent.SentenceSegments)
-                    {
-                        @if (segment is SummarySegment.Text text)
-                        {
-                            @text.Value
-                        }
-                        else if (segment is SummarySegment.Entity entity)
-                        {
-                            @if (!string.IsNullOrEmpty(entity.Href))
-                            {
-                                <a href="@entity.Href">@entity.Label</a>
-                            }
-                            else
-                            {
-                                <b>@entity.Label</b>
-                            }
-                        }
                     }
                 </div>
                 @if (!string.IsNullOrWhiteSpace(causalityEvent.DetailMessage))

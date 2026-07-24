@@ -40,15 +40,17 @@
     color: var(--cz-text);
 }
 
-/* ─── Panel toolbar: view switcher + technical-names toggle ─── */
+/* ─── Head-row controls: view switcher + technical-names toggle ─── */
 
-.causality-panel .causality-toolbar {
-    display: flex;
+/* Right-aligned on the summary head row so the controls share the row with the run chip and
+   timestamp rather than sitting in a separate band above them. */
+.causality-panel .summary-actions {
+    display: inline-flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
     gap: 10px 18px;
-    padding: 14px 24px 0;
+    margin-left: auto;
 }
 
 .causality-panel .seg {
@@ -92,6 +94,14 @@
 .causality-panel a:focus-visible {
     outline: 2px solid var(--cz-primary);
     outline-offset: 2px;
+}
+
+/* A focusable SVG node draws the browser's default focus ring on mouse :focus (a squared box that
+   pokes past the card's rounded corners, reading as a black border with white corners). Suppress it
+   for pointer focus only; the .selected accent already marks the choice, and keyboard focus keeps
+   the styled :focus-visible ring above for accessibility. */
+.causality-panel .g-node:focus:not(:focus-visible) {
+    outline: none;
 }
 
 .causality-panel .toggle-line {
@@ -280,11 +290,18 @@
     color: var(--cz-text);
     white-space: nowrap;
     text-decoration: none;
+    transition: background 0.15s;
 }
 
+/* Linked chips lift on hover by strengthening the background and glyph, matching JIM's MudChip
+   convention (background/avatar colour change) rather than a border outline. */
 .causality-panel a.chip:hover {
     text-decoration: none;
-    box-shadow: inset 0 0 0 1px var(--cz-line);
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 18%, transparent);
+}
+
+.causality-panel a.chip:hover .glyph {
+    filter: brightness(1.12);
 }
 
 .causality-panel .chip .glyph {
@@ -300,6 +317,7 @@
     letter-spacing: 0.02em;
     background: var(--cz-secondary);
     color: var(--mud-palette-secondary-text, #fff);
+    transition: filter 0.15s;
 }
 
 .causality-panel .chip .glyph.sys {

@@ -81,7 +81,6 @@ public static class CausalityModelBuilder
             SyncRuleId = outcome.SyncRuleId,
             SyncRuleName = outcome.SyncRuleName,
             Links = links,
-            SentenceSegments = BuildEventSentence(display, links),
             AttributeRows = GetAttributeRows(outcome, itemAttributeRows),
             Children = childOutcomes
                 .Select(c => BuildEvent(c, childrenByParentId, context, itemAttributeRows))
@@ -273,31 +272,6 @@ public static class CausalityModelBuilder
         return !string.IsNullOrEmpty(context.MvoTypePluralName)
             ? JimUtilities.GetMetaverseObjectHref(mvoId, context.MvoTypePluralName)
             : $"/identity/search/{mvoId}";
-    }
-
-    /// <summary>
-    /// Builds the per-event sentence for the Timeline view: the plain label, then the event's entity
-    /// mentions with a joiner appropriate to the outcome (e.g. "Joined to Identity: Liam Allen").
-    /// </summary>
-    private static List<SummarySegment> BuildEventSentence(OutcomeDisplay display, IReadOnlyList<CausalityEntityLink> links)
-    {
-        var segments = new List<SummarySegment>();
-        if (links.Count == 0)
-        {
-            segments.Add(new SummarySegment.Text(display.PlainLabel));
-            return segments;
-        }
-
-        segments.Add(new SummarySegment.Text($"{display.PlainLabel}: "));
-        for (var i = 0; i < links.Count; i++)
-        {
-            if (i > 0)
-                segments.Add(new SummarySegment.Text(", "));
-            var link = links[i];
-            segments.Add(new SummarySegment.Entity(link.Label, link.Href, link.Kind));
-        }
-
-        return segments;
     }
 
     /// <summary>

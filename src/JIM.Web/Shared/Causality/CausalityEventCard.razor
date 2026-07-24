@@ -4,10 +4,12 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The Flow view event card: a tone-accented card with an icon tile, the plain-language title with
-   the technical label demoted alongside (swapped when the technical-names toggle is on), the event
-   sentence with entity mentions, entity chips, an attention badge, and a footer carrying the
-   attribute count plus up to two action links. Cards with attribute detail are clickable and
-   keyboard operable (role button, tabbable, Enter/Space) to open the shared attribute drawer. *@
+   the technical label demoted alongside (swapped when the technical-names toggle is on), an optional
+   contextual detail message, entity chips, an attention badge, and a footer carrying the attribute
+   count plus up to two action links. Each entity is named exactly once (as a chip or a footer link);
+   in a Downstream system group the owning system's chip is suppressed via HideSystemChip because the
+   group header already names it. Cards with attribute detail are clickable and keyboard operable
+   (role button, tabbable, Enter/Space) to open the shared attribute drawer. *@
 
 <div class="evt-card @(IsClickable ? "clickable" : null) @(Selected ? "selected" : null)"
      data-flow-id="@FlowId" style="--tone: @CausalityToneCss.CssVar(Event.Tone)"
@@ -24,32 +26,15 @@
             <span class="evt-badge">@Event.Badge</span>
         }
     </div>
-    <div class="evt-sub">
-        @foreach (var segment in Event.SentenceSegments)
-        {
-            @if (segment is SummarySegment.Text text)
-            {
-                @text.Value
-            }
-            else if (segment is SummarySegment.Entity entity)
-            {
-                @if (!string.IsNullOrEmpty(entity.Href))
-                {
-                    <a href="@entity.Href">@entity.Label</a>
-                }
-                else
-                {
-                    <b>@entity.Label</b>
-                }
-            }
-        }
-    </div>
     @if (!string.IsNullOrWhiteSpace(Event.DetailMessage))
     {
         <div class="evt-sub">@Event.DetailMessage</div>
     }
     @{
-        var chipLinks = Event.Links.Where(l => ChipKinds.Contains(l.Kind)).ToList();
+        var chipLinks = Event.Links
+            .Where(l => ChipKinds.Contains(l.Kind))
+            .Where(l => !(HideSystemChip && l.Kind == CausalityEntityKind.ConnectedSystem))
+            .ToList();
         var actionLinks = Event.Links
             .Where(l => !ChipKinds.Contains(l.Kind) && !string.IsNullOrEmpty(l.Href))
             .Take(2)
@@ -113,6 +98,13 @@
     /// </summary>
     [Parameter]
     public bool Selected { get; set; }
+
+    /// <summary>
+    /// When true, the owning Connected System's chip is suppressed (the Downstream column's system
+    /// group header already names it, so repeating it on every card in the group is redundant).
+    /// </summary>
+    [Parameter]
+    public bool HideSystemChip { get; set; }
 
     /// <summary>
     /// The card's data-flow-id for connector measurement; null renders no id.
