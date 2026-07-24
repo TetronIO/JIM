@@ -160,7 +160,7 @@ function Set-JIMRunProfile {
         }
 
         # Checking $PSBoundParameters distinguishes "-VerifyImportContentHashes $false" (intentional)
-        # from "-VerifyImportContentHashes not provided" (leave unchanged) — [bool] alone cannot
+        # from "-VerifyImportContentHashes not provided" (leave unchanged); [bool] alone cannot
         # express this (mirrors Set-JIMPredefinedSearch -IsEnabled).
         if ($PSBoundParameters.ContainsKey('VerifyImportContentHashes')) {
             $body.verifyImportContentHashes = $VerifyImportContentHashes

@@ -823,13 +823,12 @@ public class SyncImportTaskProcessor
 
         await _syncRepo.UpdateActivityAsync(_activity);
 
-        // SPEC-1082 D12: end-of-import summary, alongside the phase timings above. British English,
-        // Title Case for domain entities, no em dashes.
-        Log.Information("PerformImportAsync: Content hash summary — Total objects: {TotalObjects}, Skipped by hash: {SkippedByHash}, Hydrated/diffed: {Hydrated}, Created: {Created}, Updated: {Updated}",
-            totalObjectsImported, _hashSkippedCount, connectedSystemObjectsToBeUpdated.Count, createdCount, connectedSystemObjectsToBeUpdated.Count);
+        // SPEC-1082 D12: end-of-import summary, alongside the phase timings above.
+        Log.Information("PerformImportAsync: Content hash summary: Total objects: {TotalObjects}, Skipped by hash: {SkippedByHash}, Created: {Created}, Updated (hydrated and diffed): {Updated}",
+            totalObjectsImported, _hashSkippedCount, createdCount, connectedSystemObjectsToBeUpdated.Count);
         if (_connectedSystemRunProfile.VerifyImportContentHashes)
         {
-            Log.Information("PerformImportAsync: Verification Mode summary — Dangerous disagreements: {DangerousDisagreements}, Benign mismatches: {BenignMismatches}",
+            Log.Information("PerformImportAsync: Verification Mode summary: Dangerous disagreements: {DangerousDisagreements}, Benign mismatches: {BenignMismatches}",
                 _verificationDangerousDisagreementCount, _verificationBenignMismatchCount);
         }
 

@@ -1928,7 +1928,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// dictionary, keyed by the same composite cache key as the external-id-only mapping above.
     /// Widens that query's projection with the stored content hash, schema fingerprint, status,
     /// and partition, so a Full Import can evaluate the skip predicate for every matched object
-    /// without any additional database round trip. Uses AsNoTracking — results are read-only index data.
+    /// without any additional database round trip. Uses AsNoTracking; results are read-only index data.
     /// </summary>
     public async Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
     {
