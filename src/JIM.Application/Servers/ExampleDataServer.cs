@@ -450,6 +450,14 @@ public class ExampleDataServer
                 exampleDataSets.Add(exampleDataSet);
         }
 
+        // Re-point every template attribute's data set instances at the fully-loaded sets (#1112). The
+        // template retrieval does not include set values, and under a NoTracking context (JIM.Web) EF
+        // identity-map fix-up never fills them in, so without this substitution pattern-based generation
+        // indexes into empty value collections and crashes. Substituting once here makes generation
+        // independent of the caller's tracking behaviour; a set that genuinely has no values fails fast
+        // with an actionable error instead of an ArgumentOutOfRangeException from a generation thread.
+        SubstituteFullyLoadedExampleDataSets(template, exampleDataSets);
+
         // Cap generation parallelism to leave one core (and thus a thread-pool thread) free for the background
         // progress reporter and the worker's heartbeat. An unbounded Parallel.For here is CPU-bound and greedily
         // consumes every thread the pool injects, so the ~1-second reporter's continuations were starved for many
@@ -525,7 +533,7 @@ public class ExampleDataServer
                             switch (templateAttribute.MetaverseAttribute.Type)
                             {
                                 case AttributeDataType.Text:
-                                    GenerateMetaverseStringValue(metaverseObject, templateAttribute, exampleDataSets, random, trackers);
+                                    GenerateMetaverseStringValue(metaverseObject, templateAttribute, random, trackers);
                                     break;
                                 case AttributeDataType.Guid:
                                     GenerateMetaverseGuidValue(metaverseObject, templateAttribute);
@@ -782,10 +790,34 @@ public class ExampleDataServer
     #endregion
 
     #region Attribute Generation
+    /// <summary>
+    /// Re-points every template attribute's <see cref="ExampleDataSetInstance.ExampleDataSet"/> at the
+    /// matching fully-loaded set (values included), so generation never depends on the template
+    /// retrieval's include chain or the context's tracking behaviour (#1112). Throws when a referenced
+    /// set has no values even in its fully-loaded form; generation cannot produce a value from an empty
+    /// set, and failing here names the set instead of surfacing an index error from a generation thread.
+    /// </summary>
+    private static void SubstituteFullyLoadedExampleDataSets(ExampleDataTemplate template, IReadOnlyCollection<ExampleDataSet> fullyLoadedSets)
+    {
+        var instances = template.ObjectTypes
+            .SelectMany(objectType => objectType.TemplateAttributes)
+            .SelectMany(templateAttribute => templateAttribute.ExampleDataSetInstances)
+            .Where(instance => instance.ExampleDataSet is not null);
+
+        foreach (var instance in instances)
+        {
+            var fullyLoadedSet = fullyLoadedSets.SingleOrDefault(s => s.Id == instance.ExampleDataSet.Id);
+            if (fullyLoadedSet != null)
+                instance.ExampleDataSet = fullyLoadedSet;
+
+            if (instance.ExampleDataSet.Values.Count == 0)
+                throw new InvalidDataException($"Example Data Set '{instance.ExampleDataSet.Name}' has no values, so no attribute value can be generated from it. Add values to the set or remove it from the template attribute.");
+        }
+    }
+
     private void GenerateMetaverseStringValue(
         MetaverseObject metaverseObject,
         ExampleDataTemplateAttribute dataGenerationTemplateAttribute,
-        IEnumerable<ExampleDataSet> exampleDataSets,
         Random random,
         ExampleDataValueTrackerStore trackerStore)
     {
@@ -811,19 +843,12 @@ public class ExampleDataServer
             // - if no pattern: handle one or more data set value assignments
             // - if pattern: replace attribute vars, replace system vars and replace example data set vars
 
+            // Every instance's ExampleDataSet was substituted with its fully-loaded (values included)
+            // form before generation began (see SubstituteFullyLoadedExampleDataSets, #1112), so the
+            // value collections below are always populated.
             string output;
             if (string.IsNullOrEmpty(dataGenerationTemplateAttribute.Pattern) && dataGenerationTemplateAttribute.ExampleDataSetInstances.Count == 1)
             {
-                // for some reason, this sometimes loads with zero values and an exception is thrown
-                // no idea why. need to spend time trying to diagnose this. For now, skip the scenario.
-                if (dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values.Count == 0)
-                {
-                    //Log.Error("GenerateMetaverseStringValue: dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values.Count was zero!");
-                    //return;
-
-                    dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet = exampleDataSets.Single(q => q.Id == dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Id);
-                }
-
                 // single example-data set based
                 var valueIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values.Count);
                 output = dataGenerationTemplateAttribute.ExampleDataSetInstances[0].ExampleDataSet.Values[valueIndex].StringValue;
@@ -832,19 +857,8 @@ public class ExampleDataServer
             {
                 // multiple example-data set based:
                 // just choose randomly a value from across the datasets. simplest for now
-                // would prefer to end up with an even distribution of values from across the datasets, but I ran out of time.                 
+                // would prefer to end up with an even distribution of values from across the datasets, but I ran out of time.
                 var dataSetIndex = random.Next(0, dataGenerationTemplateAttribute.ExampleDataSetInstances.Count);
-
-                // for some reason, Firstnames Female sometimes loads with zero values and an exception is thrown
-                // no idea why. need to spend time trying to diagnose this. For now, skip the scenario.
-                if (dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count == 0)
-                {
-                    //Log.Error("GenerateMetaverseStringValue: dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count was zero!");
-                    //return;
-
-                    dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet = exampleDataSets.Single(q => q.Id == dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Id);
-                }
-
                 var valueIndexMaxValue = dataGenerationTemplateAttribute.ExampleDataSetInstances[dataSetIndex].ExampleDataSet.Values.Count;
                 var valueIndex = random.Next(0, valueIndexMaxValue);
 
