@@ -422,7 +422,12 @@ public class ExampleDataServer
         // for now we should probably just advise people to add template object types in reverse order to how they're referenced.
         // note: entity framework might handle dependency sequencing for us at time of persistence
 
-        var random = new Random();
+        // Random.Shared, not new Random(): this instance is used concurrently from the Parallel.For generation
+        // loop below, and System.Random is not thread-safe. Concurrent access corrupts its internal state and can
+        // return values outside the requested range, which then index a data set collection out of bounds and crash
+        // generation (or silently skew values). Random.Shared is thread-safe with per-thread state, so it is both
+        // safe and contention-free here. Not security-sensitive (example data), so a PRNG is appropriate.
+        var random = Random.Shared;
         var metaverseObjectsToCreate = new List<MetaverseObject>();
         var trackerStore = new ExampleDataValueTrackerStore();
             
@@ -445,6 +450,16 @@ public class ExampleDataServer
                 exampleDataSets.Add(exampleDataSet);
         }
 
+        // Cap generation parallelism to leave one core (and thus a thread-pool thread) free for the background
+        // progress reporter and the worker's heartbeat. An unbounded Parallel.For here is CPU-bound and greedily
+        // consumes every thread the pool injects, so the ~1-second reporter's continuations were starved for many
+        // seconds and the Activity progress bar sat frozen during generation (measured: a ~13s stall at 0 objects on
+        // a 16-core host). Leaving one core costs a few percent of generation throughput and restores ~1s updates.
+        var generationParallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1)
+        };
+
         foreach (var objectType in template.ObjectTypes)
         {
             if (cancellationToken.IsCancellationRequested)
@@ -461,7 +476,7 @@ public class ExampleDataServer
             // first. Computed once per object type (the dependency graph is static across generated objects), and any
             // circular dependency throws here, before generation begins. See ExampleDataObjectType.
             var orderedTemplateAttributes = objectType.GetTemplateAttributesInDependencyOrder();
-            Parallel.For(0, objectType.ObjectsToCreate,
+            Parallel.For(0, objectType.ObjectsToCreate, generationParallelOptions,
                 index =>
                 {
                     var metaverseObject = new MetaverseObject
