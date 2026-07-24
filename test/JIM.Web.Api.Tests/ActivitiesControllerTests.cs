@@ -6,7 +6,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using JIM.Web.Controllers.Api;
+using JIM.Web.Models;
 using JIM.Web.Models.Api;
+using JIM.Web.Services;
 using JIM.Application;
 using JIM.Data;
 using JIM.Data.Repositories;
@@ -27,6 +29,7 @@ public class ActivitiesControllerTests
     private Mock<IRepository> _mockRepository = null!;
     private Mock<IActivityRepository> _mockActivityRepo = null!;
     private Mock<ILogger<ActivitiesController>> _mockLogger = null!;
+    private Mock<IActivityEtaTracker> _mockEtaTracker = null!;
     private JimApplication _application = null!;
     private ActivitiesController _controller = null!;
 
@@ -37,8 +40,9 @@ public class ActivitiesControllerTests
         _mockActivityRepo = new Mock<IActivityRepository>();
         _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
         _mockLogger = new Mock<ILogger<ActivitiesController>>();
+        _mockEtaTracker = new Mock<IActivityEtaTracker>();
         _application = new JimApplication(_mockRepository.Object);
-        _controller = new ActivitiesController(_mockLogger.Object, _application);
+        _controller = new ActivitiesController(_mockLogger.Object, _application, _mockEtaTracker.Object);
     }
 
     #region GetActivitiesAsync tests
@@ -357,6 +361,120 @@ public class ActivitiesControllerTests
         var result = await _controller.GetActivityStatsAsync(activityId);
 
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    #endregion
+
+    #region GetActivityProgressAsync tests
+
+    private static ActivityProgress NewInProgressActivityProgress(Guid id) => new()
+    {
+        ActivityId = id,
+        Status = ActivityStatus.InProgress,
+        Message = "Importing objects from Connected System",
+        ObjectsProcessed = 250,
+        ObjectsToProcess = 1000,
+        Created = DateTime.UtcNow.AddMinutes(-2),
+        Executed = DateTime.UtcNow.AddMinutes(-1),
+        TargetType = ActivityTargetType.ConnectedSystemRunProfile,
+        RunType = JIM.Models.Staging.ConnectedSystemRunType.FullImport,
+        OperationCounts = new Dictionary<string, long> { ["Added"] = 200, ["Updated"] = 50 },
+        TotalErrors = 3
+    };
+
+    [Test]
+    public async Task GetActivityProgressAsync_UnknownActivity_ReturnsNotFound()
+    {
+        _mockActivityRepo.Setup(r => r.GetActivityProgressAsync(It.IsAny<Guid>()))
+            .ReturnsAsync((ActivityProgress?)null);
+
+        var result = await _controller.GetActivityProgressAsync(Guid.NewGuid());
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public async Task GetActivityProgressAsync_InProgressActivity_ReturnsProgressWithEta()
+    {
+        var activityId = Guid.NewGuid();
+        _mockActivityRepo.Setup(r => r.GetActivityProgressAsync(activityId))
+            .ReturnsAsync(NewInProgressActivityProgress(activityId));
+        _mockEtaTracker.Setup(t => t.RecordSample(activityId, 250, 1000))
+            .Returns(new ActivityEtaEstimate(12.5d, 60d));
+
+        var result = await _controller.GetActivityProgressAsync(activityId);
+
+        var okResult = result as OkObjectResult;
+        Assert.That(okResult, Is.Not.Null);
+        var dto = okResult!.Value as ActivityProgressDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.Id, Is.EqualTo(activityId));
+        Assert.That(dto!.Status, Is.EqualTo(ActivityStatus.InProgress));
+        Assert.That(dto!.Message, Is.EqualTo("Importing objects from Connected System"));
+        Assert.That(dto!.ObjectsProcessed, Is.EqualTo(250));
+        Assert.That(dto!.ObjectsToProcess, Is.EqualTo(1000));
+        Assert.That(dto!.PercentComplete, Is.EqualTo(25d).Within(0.001));
+        Assert.That(dto!.ObjectsPerSecond, Is.EqualTo(12.5d).Within(0.001));
+        Assert.That(dto!.EstimatedSecondsRemaining, Is.EqualTo(60d).Within(0.001));
+        Assert.That(dto!.ElapsedSeconds, Is.EqualTo(60d).Within(5d));
+        Assert.That(dto!.OperationCounts["Added"], Is.EqualTo(200));
+        Assert.That(dto!.TotalErrors, Is.EqualTo(3));
+        _mockEtaTracker.Verify(t => t.RecordSample(activityId, 250, 1000), Times.Once);
+    }
+
+    [Test]
+    public async Task GetActivityProgressAsync_IndeterminateTotal_ReturnsNullPercentComplete()
+    {
+        var activityId = Guid.NewGuid();
+        var progress = NewInProgressActivityProgress(activityId);
+        progress.ObjectsToProcess = 0;
+        _mockActivityRepo.Setup(r => r.GetActivityProgressAsync(activityId)).ReturnsAsync(progress);
+        _mockEtaTracker.Setup(t => t.RecordSample(activityId, 250, 0))
+            .Returns(new ActivityEtaEstimate(null, null));
+
+        var result = await _controller.GetActivityProgressAsync(activityId);
+
+        var okResult = result as OkObjectResult;
+        Assert.That(okResult, Is.Not.Null);
+        var dto = okResult!.Value as ActivityProgressDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.PercentComplete, Is.Null);
+    }
+
+    [Test]
+    public async Task GetActivityProgressAsync_CompletedActivity_ReleasesEtaStateAndRecordsNoSample()
+    {
+        var activityId = Guid.NewGuid();
+        var progress = NewInProgressActivityProgress(activityId);
+        progress.Status = ActivityStatus.Complete;
+        _mockActivityRepo.Setup(r => r.GetActivityProgressAsync(activityId)).ReturnsAsync(progress);
+
+        var result = await _controller.GetActivityProgressAsync(activityId);
+
+        var okResult = result as OkObjectResult;
+        Assert.That(okResult, Is.Not.Null);
+        var dto = okResult!.Value as ActivityProgressDto;
+        Assert.That(dto, Is.Not.Null);
+        Assert.That(dto!.Status, Is.EqualTo(ActivityStatus.Complete));
+        Assert.That(dto!.ObjectsPerSecond, Is.Null);
+        Assert.That(dto!.EstimatedSecondsRemaining, Is.Null);
+        _mockEtaTracker.Verify(t => t.RecordSample(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+        _mockEtaTracker.Verify(t => t.Remove(activityId), Times.Once);
+    }
+
+    [Test]
+    public async Task GetActivityProgressAsync_QueuedActivity_NeitherRecordsNorRemovesEtaState()
+    {
+        var activityId = Guid.NewGuid();
+        var progress = NewInProgressActivityProgress(activityId);
+        progress.Status = ActivityStatus.NotSet;
+        _mockActivityRepo.Setup(r => r.GetActivityProgressAsync(activityId)).ReturnsAsync(progress);
+
+        var result = await _controller.GetActivityProgressAsync(activityId);
+
+        Assert.That(result, Is.InstanceOf<OkObjectResult>());
+        _mockEtaTracker.Verify(t => t.RecordSample(It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+        _mockEtaTracker.Verify(t => t.Remove(It.IsAny<Guid>()), Times.Never);
     }
 
     #endregion
