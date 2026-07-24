@@ -314,6 +314,9 @@ public class TaskingRepository : ITaskingRepository
                 // use the name of the Connected System (may be null if already deleted)
                 var systemToDelete = db.ConnectedSystems.SingleOrDefault(q => q.Id == deleteConnectedSystemTask.ConnectedSystemId);
                 return systemToDelete?.Name ?? $"Connected System {deleteConnectedSystemTask.ConnectedSystemId}";
+            case TemporalScopeReconciliationWorkerTask:
+                // the sweep carries no per-instance configuration, so the feature name is the display name
+                return "Temporal Scope Reconciliation";
             default:
                 return "Unknown WorkerTask type";
         }
@@ -327,6 +330,7 @@ public class TaskingRepository : ITaskingRepository
             SynchronisationWorkerTask => nameof(SynchronisationWorkerTask).SplitOnCapitalLetters(),
             ClearConnectedSystemObjectsWorkerTask => nameof(ClearConnectedSystemObjectsWorkerTask).SplitOnCapitalLetters(),
             DeleteConnectedSystemWorkerTask => nameof(DeleteConnectedSystemWorkerTask).SplitOnCapitalLetters(),
+            TemporalScopeReconciliationWorkerTask => nameof(TemporalScopeReconciliationWorkerTask).SplitOnCapitalLetters(),
             _ => "Unknown Worker Task Type"
         };
     }
