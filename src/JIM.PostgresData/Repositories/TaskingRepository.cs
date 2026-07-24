@@ -147,14 +147,32 @@ public class TaskingRepository : ITaskingRepository
         return await Repository.Database.ExampleDataTemplateWorkerTasks.OrderBy(q => q.Timestamp).FirstOrDefaultAsync(q => q.TemplateId == dataGenerationTemplateId);
     }
 
-    public async Task<WorkerTaskStatus?> GetFirstExampleDataTemplateWorkerTaskStatus(int templateId)
+    public async Task<WorkerTaskHeader?> GetFirstExampleDataTemplateWorkerTaskHeaderAsync(int templateId)
     {
-        await using var db = new JimDbContext();
-        var result = await db.ExampleDataTemplateWorkerTasks.Where(q => q.TemplateId == templateId).OrderBy(q => q.Id).Select(q => q.Status).Take(1).ToListAsync();
-        if (result.Count == 1)
-            return result[0];
+        var workerTask = await Repository.Database.ExampleDataTemplateWorkerTasks
+            .Include(q => q.Activity)
+            .Where(q => q.TemplateId == templateId)
+            .OrderBy(q => q.Id)
+            .FirstOrDefaultAsync();
 
-        return null;
+        if (workerTask == null)
+            return null;
+
+        return new WorkerTaskHeader
+        {
+            Id = workerTask.Id,
+            Status = workerTask.Status,
+            Timestamp = workerTask.Timestamp,
+            Name = await GetWorkerHeaderNameAsync(workerTask),
+            Type = GetWorkerTaskType(workerTask),
+            InitiatedByType = workerTask.InitiatedByType,
+            InitiatedById = workerTask.InitiatedById,
+            InitiatedByName = workerTask.InitiatedByName,
+            ActivityId = workerTask.Activity?.Id,
+            ObjectsToProcess = workerTask.Activity?.ObjectsToProcess,
+            ObjectsProcessed = workerTask.Activity?.ObjectsProcessed,
+            ProgressMessage = workerTask.Activity?.Message
+        };
     }
 
     public async Task UpdateWorkerTaskAsync(WorkerTask workerTask)

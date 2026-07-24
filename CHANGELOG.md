@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- 🖥️ Executing an Example Data Template now shows a live progress bar on the template page itself, updating in real time as objects are generated and persisted, so you no longer have to switch to the Operations page to watch progress. (#307)
 - ✨ The Operations page now updates in real time: the queue and history react the moment tasks are queued, progress or complete, pushed from the database via PostgreSQL notifications instead of frequent polling, with automatic fallback to polling if the notification channel is unavailable. (#307)
 - ⚡ Schedules now advance between steps and complete near-instantly: the Scheduler is notified the moment a step's tasks finish, rather than waiting for its next 30-second polling cycle. (#307)
 - ✨ Run Profile executions now report rich live progress everywhere you watch them: the Activity detail page updates in real time (pushed from the database, no more fixed 3-second polling) and shows throughput and an estimated time remaining alongside the progress bar and live operation counts; a new lightweight `GET /activities/{id}/progress` REST endpoint serves the same snapshot cheaply for scripts and integrations; and PowerShell gains `Get-JIMActivity -Follow` to follow a running Activity live, while `Start-JIMRunProfile -Wait` now displays phase, throughput and time remaining as it waits. (#202)

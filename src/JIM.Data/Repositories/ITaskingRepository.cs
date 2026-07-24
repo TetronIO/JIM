@@ -31,7 +31,12 @@ public interface ITaskingRepository
 
     public Task<List<WorkerTask>> GetNextWorkerTasksToProcessAsync();
 
-    public Task<WorkerTaskStatus?> GetFirstExampleDataTemplateWorkerTaskStatus(int templateId);
+    /// <summary>
+    /// Gets a lightweight header (status plus live progress from the associated Activity) for the first
+    /// Worker Task belonging to the given Example Data Template, or null if none is queued or processing.
+    /// Lets the template page show progress in place, without loading the whole task or Activity graph.
+    /// </summary>
+    public Task<WorkerTaskHeader?> GetFirstExampleDataTemplateWorkerTaskHeaderAsync(int templateId);
 
     public Task UpdateWorkerTaskAsync(WorkerTask serviceTask);
 

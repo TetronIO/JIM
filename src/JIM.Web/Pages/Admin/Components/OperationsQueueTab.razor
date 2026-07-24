@@ -171,7 +171,7 @@ else
                 <MudChip T="string" Variant="Variant.Text" Color="GetTaskStatusColor(context.Status)" Class="ml-0">@GetTaskStatusDisplay(context)</MudChip>
             </MudTd>
             <MudTd DataLabel="Progress">
-                @RenderProgress(context)
+                <WorkerTaskProgress Status="@context.Status" ObjectsToProcess="@context.ObjectsToProcess" ObjectsProcessed="@context.ObjectsProcessed" ProgressMessage="@context.ProgressMessage" />
             </MudTd>
             <MudTd DataLabel="Initiated By">
                 @if (context.InitiatedByType == JIM.Models.Activities.ActivityInitiatorType.User)
@@ -506,37 +506,6 @@ else
         WorkerTaskStatus.CancellationRequested => Color.Warning,
         WorkerTaskStatus.Queued => Color.Info,
         _ => Color.Default
-    };
-
-    private static RenderFragment RenderProgress(WorkerTaskHeader context) => __builder =>
-    {
-        if (context.Status == WorkerTaskStatus.Processing)
-        {
-            if (context.ObjectsToProcess.HasValue && context.ObjectsToProcess.Value > 0 && context.ObjectsProcessed.HasValue)
-            {
-                var processed = context.ObjectsProcessed.Value;
-                var total = context.ObjectsToProcess.Value;
-                var percentage = (double)processed / total * 100;
-                <MudProgressLinear Value="@percentage" Color="Color.Info" Rounded="true" />
-                <MudText Typo="Typo.caption" Class="mt-3">@processed.ToString("N0") / @total.ToString("N0")@(!string.IsNullOrEmpty(context.ProgressMessage) ? $" - {context.ProgressMessage}" : "")</MudText>
-            }
-            else
-            {
-                <MudProgressLinear Indeterminate="true" Color="Color.Info" Rounded="true" />
-                if (!string.IsNullOrEmpty(context.ProgressMessage))
-                {
-                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.ProgressMessage</MudText>
-                }
-            }
-        }
-        else if (context.Status == WorkerTaskStatus.Queued)
-        {
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">Waiting...</MudText>
-        }
-        else if (context.Status == WorkerTaskStatus.WaitingForPreviousStep)
-        {
-            <MudText Typo="Typo.caption" Class="mud-text-secondary">Waiting for previous step...</MudText>
-        }
     };
 
     private static List<WorkerTaskHeader> GenerateDemoData(Guid currentUserId, string currentUserName)
