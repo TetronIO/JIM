@@ -74,7 +74,7 @@ else
 
     <MudTable T="WorkerTaskHeader" Items="@GetSortedQueueItems()" Hover="true" Breakpoint="Breakpoint.Sm"
               Outlined="true" Elevation="0" Dense="true" GroupBy="@_groupDefinition"
-              Class="@(_hasProcessingTasks ? "jim-queue-table-active" : "")"
+              Class="@(_hasProcessingTasks ? "jim-queue-table-active" : "mt-5")"
               RowClassFunc="@((item, _) => IsGroupCollapsed(item) ? "jim-queue-collapsed-row" : "")">
         <ColGroup>
             <col style="width: 70px;" />
