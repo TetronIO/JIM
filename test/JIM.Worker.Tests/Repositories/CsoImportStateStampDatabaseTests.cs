@@ -202,4 +202,47 @@ public class CsoImportStateStampDatabaseTests
         Assert.That(stored.ImportStateHash, Is.EqualTo(hash), "the parent bulk update must not overwrite a previously stamped hash (D6 exclusion list)");
         Assert.That(stored.ImportStateFingerprint, Is.EqualTo(fingerprint), "the parent bulk update must not overwrite a previously stamped fingerprint (D6 exclusion list)");
     }
+
+    /// <summary>
+    /// D10 regression (found at runtime, 2026-07-24): <c>UpdateConnectedSystemRunProfileAsync</c>
+    /// persists via a hand-typed field copy onto a re-fetched tracked entity, so a field missing
+    /// from that copy is silently dropped while the API response (mapped from the caller's mutated
+    /// instance) still echoes the new value. This round-trip proves
+    /// <c>VerifyImportContentHashes</c> survives the repository's update path on a fresh context.
+    /// </summary>
+    [Test]
+    public async Task UpdateConnectedSystemRunProfileAsync_VerificationModeFlag_RoundTripsAsync()
+    {
+        int runProfileId;
+        await using (var seed = NewContext())
+        {
+            var connectorDefinition = new ConnectorDefinition { Name = "Test Connector", BuiltIn = true };
+            var system = new ConnectedSystem { Name = "Yellowstone HR", ConnectorDefinition = connectorDefinition };
+            seed.ConnectedSystems.Add(system);
+            await seed.SaveChangesAsync();
+
+            var runProfile = new ConnectedSystemRunProfile
+            {
+                Name = "Full Import", ConnectedSystemId = system.Id, RunType = ConnectedSystemRunType.FullImport
+            };
+            seed.ConnectedSystemRunProfiles.Add(runProfile);
+            await seed.SaveChangesAsync();
+            runProfileId = runProfile.Id;
+        }
+
+        // Mirror the API controller's shape: load without tracking, mutate, persist through the
+        // repository method, then verify on a FRESH context.
+        await using (var updateCtx = NewContext())
+        {
+            var repository = new PostgresDataRepository(updateCtx);
+            var loaded = await updateCtx.ConnectedSystemRunProfiles.AsNoTracking().SingleAsync(rp => rp.Id == runProfileId);
+            loaded.VerifyImportContentHashes = true;
+            await repository.ConnectedSystems.UpdateConnectedSystemRunProfileAsync(loaded);
+        }
+
+        await using var verify = NewContext();
+        var stored = await verify.ConnectedSystemRunProfiles.SingleAsync(rp => rp.Id == runProfileId);
+        Assert.That(stored.VerifyImportContentHashes, Is.True,
+            "UpdateConnectedSystemRunProfileAsync must persist VerifyImportContentHashes; a hand-typed field copy that omits it silently drops the write");
+    }
 }

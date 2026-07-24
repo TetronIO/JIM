@@ -2921,6 +2921,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         tracked.PageSize = runProfile.PageSize;
         tracked.FilePath = runProfile.FilePath;
         tracked.Partition = runProfile.Partition;
+        tracked.VerifyImportContentHashes = runProfile.VerifyImportContentHashes;
         tracked.LastUpdated = runProfile.LastUpdated;
         tracked.LastUpdatedByType = runProfile.LastUpdatedByType;
         tracked.LastUpdatedById = runProfile.LastUpdatedById;
