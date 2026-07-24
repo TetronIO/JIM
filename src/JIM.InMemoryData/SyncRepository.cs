@@ -380,13 +380,14 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps)
     {
-        foreach (var (csoId, hash, fingerprint) in stamps)
+        var matches = stamps
+            .Select(s => (Stamp: s, Cso: _csos.TryGetValue(s.CsoId, out var cso) ? cso : null))
+            .Where(m => m.Cso != null);
+
+        foreach (var (stamp, cso) in matches)
         {
-            if (_csos.TryGetValue(csoId, out var cso))
-            {
-                cso.ImportStateHash = hash;
-                cso.ImportStateFingerprint = fingerprint;
-            }
+            cso!.ImportStateHash = stamp.Hash;
+            cso.ImportStateFingerprint = stamp.Fingerprint;
         }
         return Task.CompletedTask;
     }
@@ -770,13 +771,11 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public virtual Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds)
     {
-        foreach (var csoId in affectedCsoIds)
+        foreach (var csoId in affectedCsoIds.Where(_csos.ContainsKey))
         {
-            if (_csos.TryGetValue(csoId, out var cso))
-            {
-                cso.ImportStateHash = null;
-                cso.ImportStateFingerprint = null;
-            }
+            var cso = _csos[csoId];
+            cso.ImportStateHash = null;
+            cso.ImportStateFingerprint = null;
         }
         return Task.CompletedTask;
     }

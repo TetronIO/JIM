@@ -1207,19 +1207,14 @@ public class ExportExecutionServer
             // from the removal value IDs (matched against each export's CSO's current in-memory
             // AttributeValues, before removal) plus every addition's owning CSO.
             var removalIdSet = new HashSet<Guid>(delta.RemovalValueIds);
-            var affectedCsoIds = new HashSet<Guid>();
-            foreach (var addition in delta.Additions)
-                affectedCsoIds.Add(addition.ConnectedSystemObject.Id);
+            var affectedCsoIds = new HashSet<Guid>(delta.Additions.Select(a => a.ConnectedSystemObject.Id));
             if (removalIdSet.Count > 0)
             {
-                foreach (var cso in successfulNonDeleteExports
+                affectedCsoIds.UnionWith(successfulNonDeleteExports
                     .Select(pe => pe.ConnectedSystemObject)
-                    .Where(cso => cso != null)
-                    .Distinct())
-                {
-                    if (cso!.AttributeValues.Any(av => removalIdSet.Contains(av.Id)))
-                        affectedCsoIds.Add(cso.Id);
-                }
+                    .Where(cso => cso != null && cso.AttributeValues.Any(av => removalIdSet.Contains(av.Id)))
+                    .Select(cso => cso!.Id)
+                    .Distinct());
             }
 
             if (delta.Additions.Count > 0 || delta.RemovalValueIds.Count > 0)

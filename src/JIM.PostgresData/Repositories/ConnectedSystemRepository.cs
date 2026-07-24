@@ -1920,10 +1920,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
     {
         var lookup = await GetAllCsoImportStateLookupAsync(connectedSystemId);
-        var result = new Dictionary<string, Guid>(lookup.Count, StringComparer.OrdinalIgnoreCase);
-        foreach (var (key, entry) in lookup)
-            result[key] = entry.CsoId;
-        return result;
+        return lookup.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.CsoId, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
