@@ -119,7 +119,7 @@ public class ObjectMatchingRuleDtoTests
     {
         // Arrange
         var csAttr = new ConnectedSystemObjectTypeAttribute { Id = 10, Name = "empNo" };
-        var mvAttr = new MetaverseAttribute { Id = 20, Name = "employeeId" };
+        var csAttr2 = new ConnectedSystemObjectTypeAttribute { Id = 11, Name = "empNo2" };
 
         var rule = new ObjectMatchingRule
         {
@@ -139,8 +139,8 @@ public class ObjectMatchingRuleDtoTests
                 {
                     Id = 101,
                     Order = 1,
-                    MetaverseAttributeId = mvAttr.Id,
-                    MetaverseAttribute = mvAttr
+                    ConnectedSystemAttributeId = csAttr2.Id,
+                    ConnectedSystemAttribute = csAttr2
                 }
             }
         };
@@ -152,7 +152,7 @@ public class ObjectMatchingRuleDtoTests
         Assert.That(dto.Sources, Has.Count.EqualTo(2));
         Assert.That(dto.Sources[0].ConnectedSystemAttributeId, Is.EqualTo(10));
         Assert.That(dto.Sources[0].ConnectedSystemAttributeName, Is.EqualTo("empNo"));
-        Assert.That(dto.Sources[1].MetaverseAttributeId, Is.EqualTo(20));
-        Assert.That(dto.Sources[1].MetaverseAttributeName, Is.EqualTo("employeeId"));
+        Assert.That(dto.Sources[1].ConnectedSystemAttributeId, Is.EqualTo(11));
+        Assert.That(dto.Sources[1].ConnectedSystemAttributeName, Is.EqualTo("empNo2"));
     }
 }

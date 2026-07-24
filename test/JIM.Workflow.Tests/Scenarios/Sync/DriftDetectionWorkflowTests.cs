@@ -722,6 +722,112 @@ public class DriftDetectionWorkflowTests
             "import filter converts that sentinel back to null. This test verifies the sync engine side.");
     }
 
+    /// <summary>
+    /// Verifies that drift is detected for a genuinely different Decimal value and that the
+    /// corrective Pending Export carries the expected value in DecimalValue (via
+    /// DriftDetectionService.SetAttributeChangeValue), never as a string.
+    /// </summary>
+    [Test]
+    public async Task DriftDetected_DecimalValueChanged_CorrectiveExportCarriesDecimalValueAsync()
+    {
+        // Arrange: HR (source) with a Decimal salary attribute → MV → AD (target) remuneration
+        await SetUpDecimalDriftDetectionScenarioAsync();
+
+        const decimal expectedSalary = 51234.56m;
+
+        var hrConnector = _harness.GetConnector("HR");
+        hrConnector.QueueImportObjects(new List<ConnectedSystemImportObject>
+        {
+            new()
+            {
+                ChangeType = ObjectChangeType.NotSet,
+                ObjectType = "User",
+                Attributes = new List<ConnectedSystemImportObjectAttribute>
+                {
+                    new() { Name = "employeeId", GuidValues = new List<Guid> { Guid.NewGuid() } },
+                    new() { Name = "displayName", StringValues = new List<string> { "Decimal Drift User" } },
+                    new() { Name = "salary", DecimalValues = new List<decimal> { expectedSalary } }
+                }
+            }
+        });
+
+        await _harness.ExecuteFullImportAsync("HR");
+        await _harness.ExecuteFullSyncAsync("HR");
+
+        // Execute exports and populate CSO values (simulating a confirming import)
+        await _harness.ExecuteExportAsync("AD");
+        PopulateCsoAttributeValuesFromPendingExports();
+        ClearPendingExports();
+
+        var beforeDrift = await _harness.TakeSnapshotAsync("Before Drift");
+        Assert.That(beforeDrift.PendingExportCount, Is.EqualTo(0));
+
+        // Act: simulate an unauthorised change to the decimal value directly in AD, then detect drift
+        SimulateUnauthorisedCsoDecimalChange("AD", "remuneration", 99.99m);
+        await _harness.ExecuteDeltaSyncAsync("AD");
+        var afterDriftDetection = await _harness.TakeSnapshotAsync("After Drift Detection");
+
+        // Assert: a corrective Pending Export restores the MVO value, carried in DecimalValue
+        Assert.That(afterDriftDetection.PendingExportCount, Is.GreaterThan(0),
+            "A corrective Pending Export should be created when a Decimal value drifts");
+
+        var pendingExport = _harness.SyncRepo.PendingExports.Values.First();
+        var remunerationChange = pendingExport.AttributeValueChanges
+            .FirstOrDefault(avc => avc.Attribute?.Name == "remuneration");
+
+        Assert.That(remunerationChange, Is.Not.Null, "remuneration should be in the corrective export");
+        Assert.That(remunerationChange!.DecimalValue, Is.EqualTo(expectedSalary),
+            "The corrective export must carry the expected value in DecimalValue");
+        Assert.That(remunerationChange.StringValue, Is.Null,
+            "The corrective export must not carry the decimal as a string");
+    }
+
+    /// <summary>
+    /// Verifies that NO drift is reported when the CSO holds a value that differs from the MVO's
+    /// only in scale (CSO 51234.50 vs MVO 51234.5): drift comparison is numeric, never string,
+    /// so a scale-only difference must not produce a phantom corrective export.
+    /// </summary>
+    [Test]
+    public async Task DriftNotDetected_DecimalScaleDiffersOnly_NoPhantomDriftAsync()
+    {
+        // Arrange
+        await SetUpDecimalDriftDetectionScenarioAsync();
+
+        var hrConnector = _harness.GetConnector("HR");
+        hrConnector.QueueImportObjects(new List<ConnectedSystemImportObject>
+        {
+            new()
+            {
+                ChangeType = ObjectChangeType.NotSet,
+                ObjectType = "User",
+                Attributes = new List<ConnectedSystemImportObjectAttribute>
+                {
+                    new() { Name = "employeeId", GuidValues = new List<Guid> { Guid.NewGuid() } },
+                    new() { Name = "displayName", StringValues = new List<string> { "Decimal Scale User" } },
+                    new() { Name = "salary", DecimalValues = new List<decimal> { 51234.5m } }
+                }
+            }
+        });
+
+        await _harness.ExecuteFullImportAsync("HR");
+        await _harness.ExecuteFullSyncAsync("HR");
+
+        await _harness.ExecuteExportAsync("AD");
+        PopulateCsoAttributeValuesFromPendingExports();
+        ClearPendingExports();
+
+        // Act: the target system stores the value with a different scale (51234.50 vs 51234.5).
+        // Numerically identical, so drift detection must not react.
+        SimulateUnauthorisedCsoDecimalChange("AD", "remuneration", 51234.50m);
+        await _harness.ExecuteDeltaSyncAsync("AD");
+        var afterDriftCheck = await _harness.TakeSnapshotAsync("After Drift Check");
+
+        // Assert
+        Assert.That(afterDriftCheck.PendingExportCount, Is.EqualTo(0),
+            "Should have NO Pending Exports: 51234.50 and 51234.5 are numerically equal, so a " +
+            "scale-only difference must never be reported as drift (numeric comparison, never string)");
+    }
+
     #endregion
 
     #region Setup Helpers
@@ -930,6 +1036,79 @@ public class DriftDetectionWorkflowTests
                 .WithExpressionFlow("\"CN=\" + mv[\"displayName\"] + \",OU=Users,DC=test,DC=local\"", adDn));
     }
 
+    /// <summary>
+    /// Sets up a Decimal drift detection scenario:
+    /// - HR has salary (Decimal), imported into the MV salary attribute
+    /// - AD has remuneration (Decimal), exported from the MV salary attribute with EnforceState on
+    /// </summary>
+    private async Task SetUpDecimalDriftDetectionScenarioAsync()
+    {
+        // Create HR (source) system with Decimal attribute
+        await _harness.CreateConnectedSystemAsync("HR");
+        await _harness.CreateObjectTypeAsync("HR", "User", t => t
+            .WithGuidExternalId("employeeId")
+            .WithStringAttribute("displayName")
+            .WithDecimalAttribute("salary"));
+
+        // Create AD (target) system with Decimal attribute
+        await _harness.CreateConnectedSystemAsync("AD");
+        await _harness.CreateObjectTypeAsync("AD", "User", t => t
+            .WithGuidExternalId("objectGUID")
+            .WithStringSecondaryExternalId("distinguishedName")
+            .WithStringAttribute("cn")
+            .WithDecimalAttribute("remuneration"));
+
+        // Create MV type with Decimal attribute
+        var personType = await _harness.CreateMetaverseObjectTypeAsync("Person", t => t
+            .WithGuidAttribute("employeeId")
+            .WithStringAttribute("displayName")
+            .WithDecimalAttribute("salary")
+            .WithStringAttribute("Type"));
+
+        // Get attributes for flow rules
+        var hrUserType = _harness.GetObjectType("HR", "User");
+        var adUserType = _harness.GetObjectType("AD", "User");
+
+        var hrDisplayName = hrUserType.Attributes.First(a => a.Name == "displayName");
+        var hrSalary = hrUserType.Attributes.First(a => a.Name == "salary");
+
+        var adCn = adUserType.Attributes.First(a => a.Name == "cn");
+        var adDn = adUserType.Attributes.First(a => a.Name == "distinguishedName");
+        var adRemuneration = adUserType.Attributes.First(a => a.Name == "remuneration");
+
+        // Get MV attributes
+        var mvDisplayName = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "displayName");
+        var mvSalary = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "salary");
+        var mvType = await _harness.DbContext.MetaverseAttributes.FirstAsync(a => a.Name == "Type");
+
+        // Create import Synchronisation Rule (HR → MV)
+        await _harness.CreateSyncRuleAsync(
+            "HR Import",
+            "HR",
+            "User",
+            personType,
+            SyncRuleDirection.Import,
+            r => r
+                .WithProjection()
+                .WithAttributeFlow(mvDisplayName, hrDisplayName)
+                .WithAttributeFlow(mvSalary, hrSalary)
+                .WithExpressionFlow("\"PersonEntity\"", mvType));
+
+        // Create export Synchronisation Rule (MV → AD) with EnforceState on
+        await _harness.CreateSyncRuleAsync(
+            "AD Export",
+            "AD",
+            "User",
+            personType,
+            SyncRuleDirection.Export,
+            r => r
+                .WithProvisioning()
+                .WithEnforceState(true)
+                .WithAttributeFlow(mvDisplayName, adCn)
+                .WithAttributeFlow(mvSalary, adRemuneration)
+                .WithExpressionFlow("\"CN=\" + mv[\"displayName\"] + \",OU=Users,DC=test,DC=local\"", adDn));
+    }
+
     #endregion
 
     #region Test Data Generators
@@ -1011,6 +1190,7 @@ public class DriftDetectionWorkflowTests
                 existingAttrValue.StringValue = avc.StringValue;
                 existingAttrValue.IntValue = avc.IntValue;
                 existingAttrValue.LongValue = avc.LongValue;
+                existingAttrValue.DecimalValue = avc.DecimalValue;
                 existingAttrValue.DateTimeValue = avc.DateTimeValue;
                 existingAttrValue.ByteValue = avc.ByteValue;
                 existingAttrValue.GuidValue = avc.GuidValue;
@@ -1471,6 +1651,43 @@ public class DriftDetectionWorkflowTests
 
             // Update to drifted value
             attrValue.StringValue = newValue;
+
+            // Mark CSO as having been updated (to trigger delta sync processing)
+            cso.LastUpdated = DateTime.UtcNow;
+        }
+    }
+
+    /// <summary>
+    /// Simulates an unauthorised change to a Decimal attribute made directly in the target system,
+    /// bypassing JIM. The Decimal sibling of <see cref="SimulateUnauthorisedCsoChange"/>.
+    /// </summary>
+    private void SimulateUnauthorisedCsoDecimalChange(string systemName, string attributeName, decimal newValue)
+    {
+        var system = _harness.GetConnectedSystem(systemName);
+
+        var csos = _harness.SyncRepo.ConnectedSystemObjects.Values
+            .Where(cso => cso.ConnectedSystemId == system.Id)
+            .ToList();
+
+        foreach (var cso in csos)
+        {
+            var attribute = cso.Type.Attributes.FirstOrDefault(a => a.Name == attributeName);
+            if (attribute == null) continue;
+
+            var attrValue = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == attribute.Id);
+
+            if (attrValue == null)
+            {
+                attrValue = new ConnectedSystemObjectAttributeValue
+                {
+                    ConnectedSystemObject = cso,
+                    AttributeId = attribute.Id
+                };
+                cso.AttributeValues.Add(attrValue);
+            }
+
+            // Update to drifted value
+            attrValue.DecimalValue = newValue;
 
             // Mark CSO as having been updated (to trigger delta sync processing)
             cso.LastUpdated = DateTime.UtcNow;

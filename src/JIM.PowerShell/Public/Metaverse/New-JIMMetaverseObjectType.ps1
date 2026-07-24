@@ -107,14 +107,6 @@ function New-JIMMetaverseObjectType {
             return
         }
 
-        # Map deletion rule string to MetaverseObjectDeletionRule enum integer value
-        # (Manual = 0, WhenLastConnectorDisconnected = 1, WhenAuthoritativeSourceDisconnected = 2)
-        $deletionRuleMap = @{
-            'Manual'                              = 0
-            'WhenLastConnectorDisconnected'       = 1
-            'WhenAuthoritativeSourceDisconnected' = 2
-        }
-
         # Build request body
         $body = @{
             name = $Name
@@ -130,7 +122,10 @@ function New-JIMMetaverseObjectType {
         }
 
         if ($PSBoundParameters.ContainsKey('DeletionRule')) {
-            $body.deletionRule = $deletionRuleMap[$DeletionRule]
+            # Enum sent as its string name; -DeletionRule's ValidateSet equals the
+            # MetaverseObjectDeletionRule member names. The API rejects numeric ordinals
+            # (JsonStringEnumConverter allowIntegerValues:false, PR #1060).
+            $body.deletionRule = $DeletionRule
         }
 
         if ($PSBoundParameters.ContainsKey('DeletionGracePeriod')) {

@@ -130,7 +130,7 @@ gh pr merge <n> --squash --delete-branch --auto
    gh api repos/TetronIO/JIM/pulls/<n>/comments
    ```
    - Look for comments authored by `github-code-quality[bot]`.
-   - Also check `gh pr checks <n>` for any failed required checks (build-and-test, scan-base-images-summary, three CodeQL analyses, claude-review).
+   - Also check `gh pr checks <n>` for any failed required checks (build-and-test, scan-base-images-summary, three CodeQL analyses, changelog-lint).
 
 2. **For each comment, decide whether to apply:**
    - **Apply when** the suggestion is correct on the merits (genuine null-safety, clear redundancy, security issue, or a pattern called out in `src/CLAUDE.md` under "Code Quality"). Common JIM patterns:

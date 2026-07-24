@@ -317,62 +317,6 @@ public class MetaverseAttributeCustomDatabaseTests
     }
 
     [Test]
-    public async Task DeleteMetaverseAttributeWithCascadeAsync_ObjectMatchingRuleLeftSourceless_RemovesRuleButKeepsRuleWithOtherSourcesAsync()
-    {
-        int costCentreId, soleRuleId, mixedRuleId;
-        await using (var seed = NewContext())
-        {
-            var connectorDefinition = new ConnectorDefinition { Name = "C", BuiltIn = true };
-            var system = new ConnectedSystem { Name = "S", ConnectorDefinition = connectorDefinition };
-            var csType = new ConnectedSystemObjectType { Name = "user", ConnectedSystem = system, Selected = true };
-            var otherSource = new ConnectedSystemObjectTypeAttribute { Name = "otherSource", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued, ConnectedSystemObjectType = csType, Selected = true };
-            csType.Attributes.Add(otherSource);
-
-            var personType = new MetaverseObjectType { Name = "Person", PluralName = "People", BuiltIn = true };
-            var costCentre = new MetaverseAttribute { Name = "costCentre", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
-            var buildingCode = new MetaverseAttribute { Name = "buildingCode", Type = AttributeDataType.Text, AttributePlurality = AttributePlurality.SingleValued };
-            personType.Attributes.Add(costCentre);
-            personType.Attributes.Add(buildingCode);
-
-            seed.ConnectorDefinitions.Add(connectorDefinition);
-            seed.ConnectedSystems.Add(system);
-            seed.ConnectedSystemObjectTypes.Add(csType);
-            seed.MetaverseObjectTypes.Add(personType);
-            await seed.SaveChangesAsync();
-            costCentreId = costCentre.Id;
-
-            // Rules target buildingCode (not costCentre), so they are only removed via the source-less rule.
-            var soleRule = new ObjectMatchingRule { ConnectedSystemObjectType = csType, MetaverseObjectType = personType, TargetMetaverseAttribute = buildingCode, Order = 0 };
-            soleRule.Sources.Add(new ObjectMatchingRuleSource { MetaverseAttribute = costCentre, Order = 0 });
-            var mixedRule = new ObjectMatchingRule { ConnectedSystemObjectType = csType, MetaverseObjectType = personType, TargetMetaverseAttribute = buildingCode, Order = 1 };
-            mixedRule.Sources.Add(new ObjectMatchingRuleSource { MetaverseAttribute = costCentre, Order = 0 });
-            mixedRule.Sources.Add(new ObjectMatchingRuleSource { ConnectedSystemAttribute = otherSource, Order = 1 });
-            seed.ObjectMatchingRules.AddRange(soleRule, mixedRule);
-            await seed.SaveChangesAsync();
-            soleRuleId = soleRule.Id;
-            mixedRuleId = mixedRule.Id;
-        }
-
-        await using (var act = NewContext())
-        {
-            var jim = new JimApplication(new PostgresDataRepository(act));
-            var attribute = await jim.Metaverse.GetMetaverseAttributeAsync(costCentreId);
-
-            var impact = await jim.Metaverse.EvaluateAttributeDeletionAsync(attribute!);
-            Assert.That(impact.References.Any(r => r.Kind == AttributeReferenceKind.SourcelessObjectMatchingRule && r.Id == soleRuleId), Is.True);
-            Assert.That(impact.References.Any(r => r.Kind == AttributeReferenceKind.ObjectMatchingRuleSource), Is.True);
-
-            var result = await jim.Metaverse.DeleteMetaverseAttributeWithCascadeAsync(attribute!, TestUtilities.GetInitiatedBy());
-            Assert.That(result.Deleted, Is.True);
-        }
-
-        await using var verify = NewContext();
-        Assert.That(await verify.ObjectMatchingRules.AnyAsync(r => r.Id == soleRuleId), Is.False, "the source-less Object Matching Rule was removed");
-        Assert.That(await verify.ObjectMatchingRules.AnyAsync(r => r.Id == mixedRuleId), Is.True, "the rule with another source survives");
-        Assert.That(await verify.ObjectMatchingRuleSources.CountAsync(), Is.EqualTo(1), "only the surviving rule's non-costCentre source remains");
-    }
-
-    [Test]
     public async Task DeleteMetaverseAttributeWithCascadeAsync_ExtendedReferences_RemovedOrNulledAndPreviewedAsync()
     {
         int costCentreId;

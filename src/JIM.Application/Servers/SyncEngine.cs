@@ -32,11 +32,11 @@ public partial class SyncEngine : ISyncEngine
         if (projectionSyncRule == null)
             return ProjectionDecision.NoProjection();
 
-        return ProjectionDecision.Project(projectionSyncRule.MetaverseObjectType!);
+        return ProjectionDecision.Project(projectionSyncRule.MetaverseObjectType!, projectionSyncRule);
     }
 
     /// <inheritdoc />
-    public List<AttributeFlowWarning> FlowInboundAttributes(
+    public List<AttributeFlowError> FlowInboundAttributes(
         ConnectedSystemObject cso,
         SyncRule syncRule,
         IReadOnlyList<ConnectedSystemObjectType> objectTypes,
@@ -46,12 +46,12 @@ public partial class SyncEngine : ISyncEngine
         bool isFinalReferencePass = false,
         AttributePriorityContext? priorityContext = null)
     {
-        var warnings = new List<AttributeFlowWarning>();
+        var errors = new List<AttributeFlowError>();
 
         if (cso.MetaverseObject == null)
         {
-            Log.Error("FlowInboundAttributes: CSO ({Cso}) has no MVO!", cso);
-            return warnings;
+            Log.Error("FlowInboundAttributes: CSO ({CsoId}) has no MVO!", cso.Id);
+            return errors;
         }
 
         foreach (var syncRuleMapping in syncRule.AttributeFlowRules)
@@ -61,10 +61,10 @@ public partial class SyncEngine : ISyncEngine
 
             ProcessMapping(cso, syncRuleMapping, objectTypes, expressionEvaluator,
                 skipReferenceAttributes, onlyReferenceAttributes, isFinalReferencePass,
-                cso.ConnectedSystemId, warnings, syncRule.MetaverseObjectTypeId, priorityContext);
+                cso.ConnectedSystemId, errors, syncRule.MetaverseObjectTypeId, priorityContext);
         }
 
-        return warnings;
+        return errors;
     }
 
     /// <inheritdoc />

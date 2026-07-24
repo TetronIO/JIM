@@ -2,7 +2,7 @@
 
 - **Status:** Planned
 - **Created:** 2026-05-22
-- **Author:** Jay Van der Zant
+- **Author:** Jay
 - **Issue:** #[number] *(to be filed after PRD review)*
 
 ## Problem Statement

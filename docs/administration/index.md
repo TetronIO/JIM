@@ -38,7 +38,7 @@ This section covers everything you need to deploy, configure, and maintain JIM i
 
     ---
 
-    Procedures for upgrading JIM in connected and air-gapped environments, including backup recommendations and migration notes.
+    Procedures for upgrading JIM in connected and air-gapped environments, including pre-upgrade backups, pausing Schedules, verification, and rolling back.
 
 -   **[Backup & Disaster Recovery](backup-recovery.md)**
 

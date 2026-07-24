@@ -107,15 +107,45 @@ public class ApiKeyRepository : IApiKeyRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// The minimum interval between persisted usage stamps for one API key. LastUsedAt is a
+    /// coarse "recently used" indicator, so sub-interval churn carries no information; throttling
+    /// bounds the write volume when automation polls the API continuously (hundreds of requests
+    /// per minute during integration runs) and prevents a hot-row convoy on the ApiKeys row when
+    /// the database is briefly stalled by bulk synchronisation writes.
+    /// </summary>
+    public static readonly TimeSpan UsageStampInterval = TimeSpan.FromSeconds(30);
+
     public async Task RecordUsageAsync(Guid id, string? ipAddress)
     {
+        var now = DateTime.UtcNow;
+        var threshold = now - UsageStampInterval;
+
+        if (Repository.Database.Database.IsRelational())
+        {
+            // Single set-based UPDATE with the throttle in the predicate: no SELECT round trip,
+            // no tracked SaveChanges (so a transient timeout here cannot emit EF's
+            // SaveChangesFailed error log for what callers treat as tolerated best-effort
+            // bookkeeping), and concurrent stamps for the same key collapse to no-ops instead of
+            // queueing writes on the row lock. Same relational/in-memory split as
+            // ActivityRepository.IncrementAggregatedFailedAuthenticationAsync.
+            await Repository.Database.ApiKeys
+                .Where(ak => ak.Id == id && (ak.LastUsedAt == null || ak.LastUsedAt < threshold))
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(ak => ak.LastUsedAt, now)
+                    .SetProperty(ak => ak.LastUsedFromIp, ipAddress));
+            return;
+        }
+
+        // The in-memory test provider does not support ExecuteUpdateAsync; fall back to a
+        // tracked load/update/save with the same throttle semantics.
         var apiKey = await Repository.Database.ApiKeys
             .AsTracking()
-            .SingleOrDefaultAsync(ak => ak.Id == id);
+            .SingleOrDefaultAsync(ak => ak.Id == id && (ak.LastUsedAt == null || ak.LastUsedAt < threshold));
 
         if (apiKey != null)
         {
-            apiKey.LastUsedAt = DateTime.UtcNow;
+            apiKey.LastUsedAt = now;
             apiKey.LastUsedFromIp = ipAddress;
             await Repository.Database.SaveChangesAsync();
         }

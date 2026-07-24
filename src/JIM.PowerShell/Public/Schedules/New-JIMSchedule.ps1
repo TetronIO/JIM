@@ -152,29 +152,14 @@ function New-JIMSchedule {
         if ($PSCmdlet.ShouldProcess($Name, "Create Schedule")) {
             Write-Verbose "Creating Schedule: $Name"
 
-            # Map TriggerType to API enum
-            $triggerTypeValue = switch ($TriggerType) {
-                'Cron' { 0 }
-                'Manual' { 1 }
-            }
-
-            # Map PatternType to API enum
-            $patternTypeValue = switch ($PatternType) {
-                'SpecificTimes' { 0 }
-                'Interval' { 1 }
-                'Custom' { 2 }
-            }
-
-            # Map IntervalUnit to API enum
-            $intervalUnitValue = switch ($IntervalUnit) {
-                'Minutes' { 0 }
-                'Hours' { 1 }
-            }
-
+            # Enum values are sent as their string names; -TriggerType, -PatternType and
+            # -IntervalUnit are ValidateSet-constrained to the exact enum member names.
+            # The API rejects numeric ordinals (JsonStringEnumConverter
+            # allowIntegerValues:false, PR #1060).
             $body = @{
                 name = $Name
-                triggerType = $triggerTypeValue
-                patternType = $patternTypeValue
+                triggerType = $TriggerType
+                patternType = $PatternType
                 isEnabled = [bool]$Enabled
                 steps = @()
             }
@@ -203,7 +188,7 @@ function New-JIMSchedule {
                         if ($IntervalValue) {
                             $body.intervalValue = $IntervalValue
                         }
-                        $body.intervalUnit = $intervalUnitValue
+                        $body.intervalUnit = $IntervalUnit
                         if ($IntervalWindowStart) {
                             $body.intervalWindowStart = $IntervalWindowStart
                         }

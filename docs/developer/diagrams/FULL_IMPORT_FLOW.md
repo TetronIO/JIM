@@ -1,6 +1,6 @@
 # Full Import Flow
 
-> Last updated: 2026-04-22, JIM v0.10.0
+> Last updated: 2026-07-21, JIM v0.13.0
 
 This diagram shows how objects are imported from a Connected System into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
 
@@ -113,7 +113,7 @@ flowchart TD
     CsoExists -->|Yes| CheckProvisioning{CSO status =<br/>PendingProvisioning?}
     CheckProvisioning -->|Yes| TransitionNormal[Transition to Normal status<br/>Object confirmed in target system]
     CheckProvisioning -->|No| UpdateCso
-    TransitionNormal --> UpdateCso[Update CSO attributes<br/>Compare each import attribute<br/>against existing CSO values<br/>Only stage actual changes]
+    TransitionNormal --> UpdateCso[Update CSO attributes<br/>Compare each import attribute<br/>against existing CSO values<br/>Only stage actual changes<br/>usually a no-op for a CSO whose<br/>export was optimistically applied #1079]
     UpdateCso --> HasChanges{Attribute<br/>changes?}
     HasChanges -->|Yes| RpeiUpdated[RPEI: Updated]
     HasChanges -->|No| RpeiNoChange[No RPEI created<br/>CSO still added to update list<br/>for reference resolution]
@@ -240,3 +240,5 @@ flowchart TD
 - **Cancellation safety**<br /> When a cancellation is requested, the current page flush completes before exiting. This ensures no data loss; partially processed pages are fully persisted before the operation stops.
 
 - **Per-page change tracker clearing**<br /> `ClearChangeTracker` is called at page boundaries to detach processed entities from the EF Core change tracker, keeping memory consumption bounded regardless of total import size.
+
+- **Optimistic export apply** (#1079)<br /> No import-side behaviour changed for this feature; it is purely an export-side optimisation (see [Pending Export Lifecycle](PENDING_EXPORT_LIFECYCLE.md)). It changes the practical *outcome* of the "Update CSO attributes" step above: a CSO whose export was optimistically applied already carries the exported values, so the confirming import's set-diff typically finds nothing to stage, and no `Updated` RPEI is created for it.

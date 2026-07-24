@@ -8,6 +8,7 @@ using JIM.Models.Core;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 
 namespace JIM.Application.Services;
@@ -113,8 +114,10 @@ public class DriftDetectionService
 
         foreach (var exportRule in applicableExportRules)
         {
-            // Check each Attribute Flow mapping in the export rule
-            foreach (var mapping in exportRule.AttributeFlowRules)
+            // Check each Attribute Flow mapping in the export rule. Initial Export Only mappings (#223)
+            // are excluded: their target attribute is unmanaged by JIM once the Connected System Object is
+            // past provisioning, so a diverged value is external ownership, not drift.
+            foreach (var mapping in exportRule.AttributeFlowRules.Where(m => !m.InitialExportOnly))
             {
                 if (mapping.TargetConnectedSystemAttribute == null)
                 {
@@ -474,6 +477,7 @@ public class DriftDetectionService
             AttributeDataType.Text => av.StringValue,
             AttributeDataType.Number => av.IntValue,
             AttributeDataType.LongNumber => av.LongValue,
+            AttributeDataType.Decimal => av.DecimalValue,
             AttributeDataType.DateTime => av.DateTimeValue,
             AttributeDataType.Boolean => av.BoolValue,
             AttributeDataType.Guid => av.GuidValue,
@@ -489,7 +493,7 @@ public class DriftDetectionService
     /// Builds a dictionary of attribute values from a Metaverse Object for expression evaluation.
     /// The dictionary keys are attribute names, and values are the attribute values.
     /// </summary>
-    private static Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
+    internal static Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
     {
         var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
@@ -516,6 +520,8 @@ public class DriftDetectionService
             {
                 AttributeDataType.Text => attributeValue.StringValue,
                 AttributeDataType.Number => attributeValue.IntValue,
+                AttributeDataType.LongNumber => attributeValue.LongValue,
+                AttributeDataType.Decimal => attributeValue.DecimalValue,
                 AttributeDataType.DateTime => attributeValue.DateTimeValue,
                 AttributeDataType.Boolean => attributeValue.BoolValue,
                 AttributeDataType.Guid => attributeValue.GuidValue,
@@ -592,6 +598,7 @@ public class DriftDetectionService
             AttributeDataType.Text => av.StringValue,
             AttributeDataType.Number => av.IntValue,
             AttributeDataType.LongNumber => av.LongValue,
+            AttributeDataType.Decimal => av.DecimalValue,
             AttributeDataType.DateTime => av.DateTimeValue,
             AttributeDataType.Boolean => av.BoolValue,
             AttributeDataType.Guid => av.GuidValue,
@@ -627,8 +634,20 @@ public class DriftDetectionService
                 return false;
             }
 
-            // Check if all expected values are in the actual set
-            foreach (var expectedValue in expectedSet)
+            // Fast path: hash-based set equality. Covers the overwhelmingly common case where both
+            // sets hold same-typed values (reference attributes always yield Guids on both sides) and
+            // the target has not drifted. The pairwise scan below is O(n^2); on a 20,000-member group
+            // that is 400M comparisons (~36s of CPU per group measured at Scale500k25kGroups), where
+            // this is O(n). Hash equality implies SingleValueEquals equality for every type produced
+            // by the value extractors (ordinal for strings, value equality for Guids and numerics,
+            // reference equality for byte arrays), so a true result here is always safe.
+            if (expectedSet.SetEquals(actualSet))
+                return true;
+
+            // Fallback: pairwise scan preserving the cross-type semantics hash equality cannot see
+            // (Guid vs its string representation, byte array content). The O(1) hash lookup filters
+            // first, so only genuinely hash-missing values pay for a linear scan.
+            foreach (var expectedValue in expectedSet.Where(v => !actualSet.Contains(v)))
             {
                 var found = actualSet.Any(actualValue => SingleValueEquals(expectedValue, actualValue));
                 if (!found)
@@ -829,6 +848,9 @@ public class DriftDetectionService
             case AttributeDataType.LongNumber:
                 change.LongValue = value as long?;
                 break;
+            case AttributeDataType.Decimal:
+                change.DecimalValue = value as decimal?;
+                break;
             case AttributeDataType.DateTime:
                 change.DateTimeValue = value as DateTime?;
                 break;
@@ -868,13 +890,13 @@ public class DriftDetectionService
             if (hashSet.Count == 0)
                 return "(empty set)";
 
-            var formattedValues = hashSet.Select(v => v?.ToString() ?? "(null)").Take(5);
+            var formattedValues = hashSet.Select(v => LogSanitiser.Sanitise(v?.ToString()) ?? "(null)").Take(5);
             var result = string.Join(", ", formattedValues);
             if (hashSet.Count > 5)
                 result += $"... (+{hashSet.Count - 5} more)";
             return $"[{result}] ({hashSet.Count} values)";
         }
 
-        return value.ToString() ?? "(null)";
+        return LogSanitiser.Sanitise(value.ToString()) ?? "(null)";
     }
 }

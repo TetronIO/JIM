@@ -77,6 +77,29 @@ olcObjectClasses: ( 1.3.6.1.4.1.99999.1.2.2 NAME 'jimPerson' DESC 'Extended pers
 SCHEMA
 echo "[openldap-init] JIM schema extensions loaded"
 
+# Keep large multi-valued attributes sorted for O(log N) value lookups.
+# Without sortvals, slapd duplicate-checks each added value against every existing
+# value with a linear scan, so appending members to a large group costs
+# O(existing members) per modify and a big-group export becomes quadratic in the
+# member count (measured on Scale500k25kGroups: ~0.02s per 100-member modify on a
+# small entry rising to ~1.3s at 350K members). sortvals stores the values sorted
+# so the duplicate check is a binary search.
+# olcSortVals lives on the frontend database entry (settings there apply to all
+# databases) and only affects entries written while it is active, so it MUST be
+# applied before any group data is populated.
+# Deliberately NOT reconciled in start-openldap.sh: applying sortvals to snapshot
+# data whose entries were stored unsorted breaks value lookups (binary search over
+# unsorted values). This script is part of the snapshot content hash, so existing
+# snapshots rebuild automatically with sortvals active from creation.
+echo "[openldap-init] Enabling sorted storage for multi-valued 'member' (sortvals)..."
+ldapmodify -x -H "$LDAP_URI" -D "$CONFIG_ADMIN_DN" -w "$CONFIG_ADMIN_PW" <<SORTVALS
+dn: olcDatabase={-1}frontend,cn=config
+changetype: modify
+add: olcSortVals
+olcSortVals: member
+SORTVALS
+echo "[openldap-init] sortvals enabled for 'member'"
+
 # Hash the password for the new database's rootpw
 HASHED_PW=$($SLAPPASSWD -s "$DATA_ADMIN_PW")
 

@@ -167,8 +167,10 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
             }}
         });
 
-        // Create export Synchronisation Rule for target
-        await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export");
+        // Create export Synchronisation Rule for target; its Delete action drives the delete
+        // export when the MVO is deleted (issue #655)
+        await CreateExportSyncRuleAsync(targetSystem.Id, targetType, mvType, "AD Export",
+            deprovisionAction: OutboundDeprovisionAction.Delete);
         await CreateMatchingRuleAsync(targetType, mvType, "EmployeeId");
 
         // Create CSO and run Full Sync to project and flow attributes
@@ -573,7 +575,8 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
         ConnectedSystemObjectType csoType,
         MetaverseObjectType mvType,
         string name,
-        bool enableProvisioning = true)
+        bool enableProvisioning = true,
+        OutboundDeprovisionAction deprovisionAction = OutboundDeprovisionAction.Disconnect)
     {
         var syncRule = new SyncRule
         {
@@ -585,7 +588,8 @@ public class NugatoryWorkOptimisationTests : WorkflowTestBase
             ConnectedSystemObjectType = csoType,
             MetaverseObjectTypeId = mvType.Id,
             MetaverseObjectType = mvType,
-            ProvisionToConnectedSystem = enableProvisioning
+            ProvisionToConnectedSystem = enableProvisioning,
+            OutboundDeprovisionAction = deprovisionAction
         };
 
         DbContext.SyncRules.Add(syncRule);

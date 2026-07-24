@@ -75,6 +75,37 @@ public class ExportExecutionResult
     /// Used by JIM to auto-select newly created containers in the hierarchy.
     /// </summary>
     public List<string> CreatedContainerExternalIds { get; set; } = [];
+
+    #region Optimistic Export Apply (issue #1079)
+
+    /// <summary>
+    /// Number of successful, non-Delete Pending Exports whose exported attribute values were
+    /// applied to their Connected System Object's in-memory attribute values.
+    /// </summary>
+    public int OptimisticApplyAppliedCount { get; set; }
+
+    /// <summary>
+    /// Number of Pending Exports skipped by optimistic apply because they were Delete-ChangeType
+    /// (D6: the CSO obsolete/delete lifecycle owns that path).
+    /// </summary>
+    public int OptimisticApplySkippedCount { get; set; }
+
+    /// <summary>
+    /// Number of Pending Exports for which optimistic apply failed and was skipped (D7:
+    /// failure-contained; the export itself already succeeded, and the confirming import
+    /// self-heals). Never fails the batch, the Pending Export updates, or the Activity.
+    /// </summary>
+    public int OptimisticApplyFailedCount { get; set; }
+
+    /// <summary>
+    /// Number of Reference attribute values applied with <c>UnresolvedReferenceValue</c> populated
+    /// but <c>ReferenceValueId</c> left null, because the referenced Connected System Object could
+    /// not be resolved this run (D5). These rows still confirm and still diff clean on the
+    /// confirming import.
+    /// </summary>
+    public int OptimisticApplyUnresolvedReferenceCount { get; set; }
+
+    #endregion
 }
 
 /// <summary>

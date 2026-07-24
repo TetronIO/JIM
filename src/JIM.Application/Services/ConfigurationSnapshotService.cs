@@ -148,6 +148,10 @@ public class ConfigurationSnapshotService
                 Add(children, "priority", Render(mapping.Priority), "Priority");
             Add(children, "nullIsValue", Render(mapping.NullIsValue), "Null is a value");
 
+            // Initial Export Only (#223) governs whether the attribute keeps being exported after provisioning,
+            // so a toggle must appear in the configuration change history.
+            Add(children, "initialExportOnly", Render(mapping.InitialExportOnly), "Initial Export Only");
+
             children.Add(BuildMappingSources(mapping.Sources));
             items.Add(ConfigurationSnapshotNode.ObjectNode("attributeFlowRule", children, "Attribute Flow", mapping.Id));
         }
@@ -193,7 +197,6 @@ public class ConfigurationSnapshotService
             var children = new List<ConfigurationSnapshotNode>();
             Add(children, "order", Render(source.Order), "Order");
             AddReference(children, "connectedSystemAttributeId", source.ConnectedSystemAttributeId, source.ConnectedSystemAttribute?.Name, "Connected System Attribute");
-            AddReference(children, "metaverseAttributeId", source.MetaverseAttributeId, source.MetaverseAttribute?.Name, "Metaverse Attribute");
             Add(children, "expression", source.Expression, "Expression");
             items.Add(ConfigurationSnapshotNode.ObjectNode("source", children, "Source", source.Id));
         }
@@ -227,6 +230,7 @@ public class ConfigurationSnapshotService
             Add(children, "stringValue", criterion.StringValue, "Value");
             Add(children, "intValue", Render(criterion.IntValue), "Value");
             Add(children, "longValue", Render(criterion.LongValue), "Value");
+            Add(children, "decimalValue", Render(criterion.DecimalValue), "Value");
             Add(children, "dateTimeValue", Render(criterion.DateTimeValue), "Value");
             Add(children, "boolValue", Render(criterion.BoolValue), "Value");
             Add(children, "guidValue", Render(criterion.GuidValue), "Value");
@@ -254,6 +258,7 @@ public class ConfigurationSnapshotService
         // belong in a configuration change history (it would record phantom changes around deletion attempts).
         AddReference(children, "connectorDefinitionId", connectedSystem.ConnectorDefinitionId, connectedSystem.ConnectorDefinition?.Name, "Connector");
         AddEnum(children, "objectMatchingRuleMode", connectedSystem.ObjectMatchingRuleMode, "Object matching rule mode");
+        AddEnum(children, "unresolvedReferenceHandling", connectedSystem.UnresolvedReferenceHandling, "Unresolved reference handling");
         // SettingValuesValid is deliberately excluded: it is internal UI-flow state (whether the connector has validated
         // the settings), not configuration, so it does not belong in a configuration change history.
         Add(children, "maxExportParallelism", Render(connectedSystem.MaxExportParallelism), "Max export parallelism");
@@ -620,6 +625,7 @@ public class ConfigurationSnapshotService
         Add(children, "builtIn", Render(attribute.BuiltIn), "Built-in");
         AddEnum(children, "renderingHint", attribute.RenderingHint, "Rendering hint");
         children.Add(BuildObjectTypeAssociations(attribute.MetaverseObjectTypes));
+        children.Add(BuildStandardMappings(attribute.StandardMappings));
 
         return new ConfigurationSnapshot
         {
@@ -628,6 +634,22 @@ public class ConfigurationSnapshotService
             ObjectName = attribute.Name,
             Root = ConfigurationSnapshotNode.ObjectNode("metaverseAttribute", children, "Metaverse Attribute")
         };
+    }
+
+    private static ConfigurationSnapshotNode BuildStandardMappings(List<MetaverseAttributeStandardMapping>? standardMappings)
+    {
+        // advisory Standard Mappings (#1104) are configuration: editable for custom attributes, so edits must be
+        // diffable in the change history. Ordered by (standard, counterpart name) for stable snapshots.
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var mapping in (standardMappings ?? []).OrderBy(m => m.Standard).ThenBy(m => m.CounterpartName, StringComparer.Ordinal))
+        {
+            var children = new List<ConfigurationSnapshotNode>();
+            AddEnum(children, "standard", mapping.Standard, "Standard");
+            Add(children, "counterpartName", mapping.CounterpartName, "Counterpart attribute name");
+            Add(children, "notes", mapping.Notes, "Notes");
+            items.Add(ConfigurationSnapshotNode.ObjectNode("standardMapping", children, $"{mapping.Standard}: {mapping.CounterpartName}", mapping.Id));
+        }
+        return ConfigurationSnapshotNode.CollectionNode("standardMappings", items, "Standard Mappings");
     }
 
     private static ConfigurationSnapshotNode BuildObjectTypeAssociations(List<MetaverseObjectType>? objectTypes)
@@ -839,6 +861,7 @@ public class ConfigurationSnapshotService
             Add(children, "stringValue", criterion.StringValue, "Value");
             Add(children, "intValue", Render(criterion.IntValue), "Value");
             Add(children, "longValue", Render(criterion.LongValue), "Value");
+            Add(children, "decimalValue", Render(criterion.DecimalValue), "Value");
             Add(children, "dateTimeValue", Render(criterion.DateTimeValue), "Value");
             Add(children, "boolValue", Render(criterion.BoolValue), "Value");
             Add(children, "guidValue", Render(criterion.GuidValue), "Value");
@@ -1120,6 +1143,10 @@ public class ConfigurationSnapshotService
     private static string? Render(int? value) => value?.ToString(CultureInfo.InvariantCulture);
 
     private static string? Render(long? value) => value?.ToString(CultureInfo.InvariantCulture);
+
+    // Canonical invariant form (no trailing zeros, never exponent notation) so numerically equal
+    // criteria values always snapshot identically.
+    private static string? Render(decimal? value) => value.HasValue ? DecimalAttributeValue.ToCanonicalString(value.Value) : null;
 
     private static string? Render(DateTime? value) => value?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 

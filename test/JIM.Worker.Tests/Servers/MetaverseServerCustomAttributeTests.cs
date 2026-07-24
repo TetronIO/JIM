@@ -235,7 +235,7 @@ public class MetaverseServerCustomAttributeTests
         var references = new List<AttributeReference>
         {
             new() { Kind = AttributeReferenceKind.ExportAttributeFlowMapping, Id = 11, SyncRuleId = 5, SyncRuleName = "Export Users", Description = "Export mapping (source-less)" },
-            new() { Kind = AttributeReferenceKind.SourcelessObjectMatchingRule, Id = 30, Description = "OMR (source-less)" },
+            new() { Kind = AttributeReferenceKind.ObjectMatchingRuleTarget, Id = 30, Description = "Object Matching Rule" },
             new() { Kind = AttributeReferenceKind.PredefinedSearchAttribute, Id = 40, Description = "Predefined Search column" },
             new() { Kind = AttributeReferenceKind.PredefinedSearchCriterion, Id = 41, Description = "Predefined Search criterion" },
             new() { Kind = AttributeReferenceKind.ExampleDataTemplateAttribute, Id = 50, Description = "Example Data template attribute" },
@@ -259,7 +259,7 @@ public class MetaverseServerCustomAttributeTests
         Assert.That(children.Count(c => c.TargetType == ActivityTargetType.PredefinedSearch), Is.EqualTo(2));
         Assert.That(children.Count(c => c.TargetType == ActivityTargetType.ExampleDataTemplate), Is.EqualTo(2));
         Assert.That(children.Count(c => c.TargetType == ActivityTargetType.ServiceSetting), Is.EqualTo(1));
-        // SourcelessObjectMatchingRule maps to ObjectMatchingRule; ExportAttributeFlowMapping to SynchronisationRule.
+        // ObjectMatchingRuleTarget maps to ObjectMatchingRule; ExportAttributeFlowMapping to SynchronisationRule.
         Assert.That(children.Count(c => c.TargetType == ActivityTargetType.ObjectMatchingRule), Is.EqualTo(1));
         Assert.That(children.Count(c => c.TargetType == ActivityTargetType.SynchronisationRule), Is.EqualTo(1));
         Assert.That(children.Count(c => c.TargetType == ActivityTargetType.MetaverseAttribute && c.Message!.Contains("Removed Metaverse Attribute")), Is.EqualTo(1));

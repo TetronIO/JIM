@@ -143,6 +143,74 @@ Describe 'Get-JIMMetaverseObject' {
             $help.RelatedLinks | Should -Not -BeNullOrEmpty
         }
     }
+
+    Context 'Pagination safety (-All bounding)' {
+
+        It 'Should expose a Force switch in the ListAll parameter set' {
+            $param = (Get-Command Get-JIMMetaverseObject).Parameters['Force']
+            $param | Should -Not -BeNullOrEmpty
+            $param.SwitchParameter | Should -BeTrue
+            $paramAttr = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ParameterSetName -eq 'ListAll' }
+            $paramAttr | Should -Not -BeNullOrEmpty
+        }
+
+        It '-All stops at the page cap and warns when the cap is reached without -Force' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $original = $script:JIMMaxAllPages
+                try {
+                    $script:JIMMaxAllPages = 3
+                    # Always report another page so, without a cap, this would page forever.
+                    Mock Invoke-JIMApi { [PSCustomObject]@{ items = @([PSCustomObject]@{ id = [guid]::NewGuid() }); hasNextPage = $true; totalPages = 999999; totalCount = 100 } }
+
+                    Get-JIMMetaverseObject -All -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
+
+                    Should -Invoke Invoke-JIMApi -Times 3 -Exactly
+                    ($warnings -join ' ') | Should -Match 'stopped after 3 pages'
+                    ($warnings -join ' ') | Should -Match '-Force'
+                }
+                finally {
+                    $script:JIMMaxAllPages = $original
+                }
+            }
+        }
+
+        It '-Force overrides the page cap and fetches every page' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $original = $script:JIMMaxAllPages
+                try {
+                    $script:JIMMaxAllPages = 2
+                    $script:allPollCount = 0
+                    # Five pages of data; the cap is 2, so only -Force should reach page 5.
+                    Mock Invoke-JIMApi {
+                        $script:allPollCount++
+                        [PSCustomObject]@{ items = @([PSCustomObject]@{ id = [guid]::NewGuid() }); hasNextPage = ($script:allPollCount -lt 5); totalPages = 5; totalCount = 100 }
+                    }
+
+                    Get-JIMMetaverseObject -All -Force -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
+
+                    Should -Invoke Invoke-JIMApi -Times 5 -Exactly
+                    ($warnings -join ' ') | Should -Not -Match 'stopped after'
+                }
+                finally {
+                    $script:JIMMaxAllPages = $original
+                }
+            }
+        }
+
+        It '-All warns up front when the result set is large' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                # Single page, but a large totalCount should trigger the up-front warning.
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false; totalPages = 500; totalCount = 50000 } }
+
+                Get-JIMMetaverseObject -All -WarningVariable warnings -WarningAction SilentlyContinue | Out-Null
+
+                ($warnings -join ' ') | Should -Match 'large result set'
+            }
+        }
+    }
 }
 
 Describe 'Search-JIMMetaverseObject' {
@@ -473,12 +541,34 @@ Describe 'Move-JIMMetaverseAttributePriority' {
     }
 }
 
+Describe 'New-JIMMetaverseAttribute' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command New-JIMMetaverseAttribute
+        }
+
+        It 'Should have a Type parameter whose ValidateSet includes Decimal after LongNumber' {
+            $set = $command.Parameters['Type'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $set.ValidValues | Should -Contain 'LongNumber'
+            $set.ValidValues | Should -Contain 'Decimal'
+        }
+    }
+}
+
 Describe 'Set-JIMMetaverseAttribute' {
 
     Context 'Parameter Validation' {
 
         BeforeAll {
             $command = Get-Command Set-JIMMetaverseAttribute
+        }
+
+        It 'Should have a Type parameter whose ValidateSet includes Decimal after LongNumber' {
+            $set = $command.Parameters['Type'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $set.ValidValues | Should -Contain 'LongNumber'
+            $set.ValidValues | Should -Contain 'Decimal'
         }
 
         It 'Should have a RenderingHint parameter with the expected values' {
@@ -533,8 +623,83 @@ Describe 'Set-JIMMetaverseAttribute' {
 
                 Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
                     $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1/schema' -and
-                    $Body.type -eq 2 -and $Body.attributePlurality -eq 1
+                    $Body.type -eq 'Number' -and $Body.attributePlurality -eq 'MultiValued'
                 }
+            }
+        }
+
+        It 'Sends -Type Decimal to the schema endpoint verbatim (no alias normalisation)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -ne 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'Text'; attributePlurality = 'SingleValued' } }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' } { $null }
+
+                Set-JIMMetaverseAttribute -Id 1 -Type Decimal -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1/schema' -and
+                    $Body.type -is [string] -and $Body.type -eq 'Decimal' -and $Body.attributePlurality -eq 'SingleValued'
+                }
+            }
+        }
+
+        It 'Sends Standard Mappings as a normalised array on the attribute PATCH body' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMMetaverseAttribute -Id 1 -StandardMappings @(
+                    @{ Standard = 'Scim'; CounterpartName = 'costCenter'; Notes = 'SCIM Enterprise User extension.' },
+                    @{ Standard = 'Ldap'; CounterpartName = 'costCentre' }
+                ) -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1' -and
+                    $Body.standardMappings.Count -eq 2 -and
+                    $Body.standardMappings[0].standard -eq 'Scim' -and
+                    $Body.standardMappings[0].counterpartName -eq 'costCenter' -and
+                    $Body.standardMappings[0].notes -eq 'SCIM Enterprise User extension.' -and
+                    $Body.standardMappings[1].standard -eq 'Ldap' -and
+                    $Body.standardMappings[1].counterpartName -eq 'costCentre'
+                }
+            }
+        }
+
+        It 'Sends an empty Standard Mappings array to clear all mappings' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMMetaverseAttribute -Id 1 -StandardMappings @() -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1' -and
+                    $Body.ContainsKey('standardMappings') -and $Body.standardMappings.Count -eq 0
+                }
+            }
+        }
+
+        It 'Rejects a Standard Mapping with an unknown standard before calling the API' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                { Set-JIMMetaverseAttribute -Id 1 -StandardMappings @(@{ Standard = 'Bogus'; CounterpartName = 'x' }) -Confirm:$false -ErrorAction Stop } |
+                    Should -Throw '*Standard*'
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'PATCH' }
+            }
+        }
+
+        It 'Rejects a Standard Mapping without a counterpart attribute name before calling the API' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                { Set-JIMMetaverseAttribute -Id 1 -StandardMappings @(@{ Standard = 'Scim' }) -Confirm:$false -ErrorAction Stop } |
+                    Should -Throw '*CounterpartName*'
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'PATCH' }
             }
         }
     }

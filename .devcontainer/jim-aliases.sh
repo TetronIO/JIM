@@ -605,6 +605,10 @@ jim-prd() {
   echo "  1. Fill in the required sections in the PRD"
   echo "  2. Create a GitHub issue linking to it"
   echo "  3. Ask Claude to generate an implementation plan from the PRD"
+  echo ""
+  echo "Lifecycle: this PRD starts as 'Status: Planned' here in engineering/prd/."
+  echo "  When work starts:  set 'Status: Doing' and git mv it into engineering/prd/doing/"
+  echo "  When implemented:  set 'Status: Done'  and git mv it into engineering/prd/done/"
 }
 
 # Auto-tune PostgreSQL for devcontainer specs

@@ -14,12 +14,21 @@ function Get-JIMMetaverseObjectChangeHistory {
         By default, returns a single page of results. Use -All to automatically paginate
         through all change records and return every row.
 
+        For safety, -All fetches at most 1000 pages (~50,000 records at the default page
+        size of 50) and then stops with a warning. Supply -Force to override the cap and
+        fetch every page.
+
     .PARAMETER Id
         The unique identifier (GUID) of the Metaverse Object whose change history is being retrieved.
 
     .PARAMETER All
         Automatically paginate through all results and return every change record.
-        Cannot be used with -Page.
+        Cannot be used with -Page. Fetches at most 1000 pages before stopping with a
+        warning; use -Force to fetch beyond the cap.
+
+    .PARAMETER Force
+        Override the -All page ceiling (1000 pages) and fetch every page regardless of
+        how large the change history is. Only valid with -All.
 
     .PARAMETER Page
         Page number for paginated results. Defaults to 1. Cannot be used with -All.
@@ -39,6 +48,11 @@ function Get-JIMMetaverseObjectChangeHistory {
         Get-JIMMetaverseObjectChangeHistory -Id "12345678-1234-1234-1234-123456789abc" -All
 
         Gets every change record for the specified Metaverse Object, paginating automatically.
+
+    .EXAMPLE
+        Get-JIMMetaverseObjectChangeHistory -Id "12345678-1234-1234-1234-123456789abc" -All -Force
+
+        Gets every change record, overriding the 1000-page safety cap for a very long change history.
 
     .EXAMPLE
         Get-JIMMetaverseObjectChangeHistory -Id "12345678-1234-1234-1234-123456789abc" -PageSize 100
@@ -66,6 +80,9 @@ function Get-JIMMetaverseObjectChangeHistory {
         [Parameter(Mandatory, ParameterSetName = 'All')]
         [switch]$All,
 
+        [Parameter(ParameterSetName = 'All')]
+        [switch]$Force,
+
         [Parameter(ParameterSetName = 'Page')]
         [ValidateRange(1, [int]::MaxValue)]
         [int]$Page = 1,
@@ -82,21 +99,23 @@ function Get-JIMMetaverseObjectChangeHistory {
             return
         }
 
-        $currentPage = if ($All) { 1 } else { $Page }
-        do {
-            Write-Verbose "Getting change history for Metaverse Object $Id (Page: $currentPage, PageSize: $PageSize)"
-            $endpoint = "/api/v1/metaverse/objects/$Id/change-history?page=$currentPage&pageSize=$PageSize"
-            $response = Invoke-JIMApi -Endpoint $endpoint
+        # The shared helper owns the -All loop, the page cap and the warnings (issue #487); a single
+        # page is fetched directly.
+        $pageRequest = {
+            param($p)
+            Write-Verbose "Getting change history for Metaverse Object $Id (Page: $p, PageSize: $PageSize)"
+            Invoke-JIMApi -Endpoint "/api/v1/metaverse/objects/$Id/change-history?page=$p&pageSize=$PageSize"
+        }
 
+        if ($All) {
+            Invoke-JIMPagedFetch -PageRequest $pageRequest -CmdletName 'Get-JIMMetaverseObjectChangeHistory' -PageSize $PageSize -Force:$Force `
+                -ItemNoun 'change records'
+        }
+        else {
+            $response = & $pageRequest $Page
             foreach ($item in $response.items) {
                 $item
             }
-
-            $hasMore = $All -and $response.hasNextPage -eq $true
-            if ($hasMore) {
-                $currentPage++
-                Write-Verbose "Fetching page $currentPage of $($response.totalPages)..."
-            }
-        } while ($hasMore)
+        }
     }
 }

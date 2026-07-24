@@ -746,6 +746,8 @@ try {
         $exportRule = $existingRules | Where-Object { $_.name -eq $exportRuleName }
 
         if (-not $exportRule) {
+            # Delete deprovisioning action: leavers must be removed from the directory when
+            # their Metaverse Object is deleted (issue #655; asserted by Scenario 4)
             $exportRule = New-JIMSyncRule `
                 -Name $exportRuleName `
                 -ConnectedSystemId $ldapSystem.id `
@@ -753,6 +755,7 @@ try {
                 -MetaverseObjectTypeId $mvUserType.id `
                 -Direction Export `
                 -ProvisionToConnectedSystem `
+                -OutboundDeprovisionAction Delete `
                 -PassThru
             Write-Host "  ✓ Created export sync rule: $exportRuleName" -ForegroundColor Green
         }
@@ -833,6 +836,7 @@ try {
                     -MetaverseObjectTypeId $mvUserType.id `
                     -Direction Export `
                     -ProvisionToConnectedSystem `
+                    -OutboundDeprovisionAction Delete `
                     -PassThru
                 Write-Host "  ✓ Created Cross-Domain export sync rule: $crossDomainExportRuleName" -ForegroundColor Green
             }

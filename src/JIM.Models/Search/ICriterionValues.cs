@@ -14,6 +14,7 @@ public interface ICriterionValues
     string? StringValue { get; set; }
     int? IntValue { get; set; }
     long? LongValue { get; set; }
+    decimal? DecimalValue { get; set; }
     DateTime? DateTimeValue { get; set; }
     bool? BoolValue { get; set; }
     Guid? GuidValue { get; set; }

@@ -359,3 +359,47 @@ Describe 'Remove-JIMRunProfile' {
         }
     }
 }
+
+Describe 'Start-JIMRunProfile -Wait progress polling' {
+
+    Context 'Wait behaviour' {
+
+        It 'Polls the lightweight progress endpoint rather than the full Activity detail' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:waitPollCount = 0
+                Mock Invoke-JIMApi {
+                    if ($Endpoint -like '*/execute') {
+                        return [PSCustomObject]@{
+                            activityId = '11111111-1111-1111-1111-111111111111'
+                            taskId = '22222222-2222-2222-2222-222222222222'
+                        }
+                    }
+                    if ($Endpoint -like '*/progress') {
+                        $script:waitPollCount++
+                        $status = if ($script:waitPollCount -ge 2) { 'Complete' } else { 'InProgress' }
+                        return [PSCustomObject]@{
+                            status = $status
+                            objectsProcessed = 5 * $script:waitPollCount
+                            objectsToProcess = 10
+                            percentComplete = 50 * $script:waitPollCount
+                            estimatedSecondsRemaining = 4
+                            objectsPerSecond = 2.5
+                            message = 'Syncing'
+                        }
+                    }
+                    return $null
+                }
+
+                # -Timeout bounds the red case: without the progress-endpoint implementation the
+                # wait loop would otherwise poll forever against this mock.
+                Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -Wait -Timeout 30
+
+                Should -Invoke Invoke-JIMApi -Times 2 -Exactly -ParameterFilter { $Endpoint -like '*/progress' }
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter {
+                    $Endpoint -like '*/activities/*' -and $Endpoint -notlike '*/progress'
+                }
+            }
+        }
+    }
+}

@@ -1,12 +1,14 @@
 @using JIM.Models.Activities
 @using JIM.Models.Enums
 @using JIM.Models.Staging
+@using JIM.Models.Tasking
 @using JIM.Models.Utility
 @using JIM.Utilities
 @using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IUserPreferenceService PreferenceService
+@inject IUiNotificationService UiNotifications
 @implements IDisposable
 
 @if (_preferencesLoaded)
@@ -797,6 +799,7 @@
     private bool _panelOpen;
     private Activity? _selectedActivity;
     private readonly CancellationTokenSource _pollingCancellationTokenSource = new();
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private bool _pollingPaused;
 
     // Table data managed directly (no ServerData) to avoid MudTable's internal loading flicker
@@ -833,7 +836,17 @@
         using var jim = JimFactory.Create();
         _filterOptions = await jim.Activities.GetWorkerTaskActivityFilterOptionsAsync();
 
-        // Setup polling for auto-refresh, only updating when data has actually changed
+        // Event-driven refresh (issue #307): a Worker Task deletion means a run finished (so history
+        // changes) and Activity progress updates drive the in-progress rows; both trigger an immediate
+        // refresh instead of waiting for the next polling cycle.
+        UiNotifications.WorkerTaskChanged += OnWorkerTaskChanged;
+        UiNotifications.ActivityProgressChanged += OnActivityProgressChanged;
+        UiNotifications.RealTimeAvailabilityChanged += OnRealTimeAvailabilityChanged;
+
+        // Polling fallback, only updating when data has actually changed: fast (1 second) while real-time
+        // notifications are unavailable, slow (30 seconds, a reconciliation safety net) while they are
+        // flowing. The interval is re-read every iteration, so availability changes take effect without
+        // restarting the loop.
         var token = _pollingCancellationTokenSource.Token;
         _ = Task.Run(async () =>
         {
@@ -841,43 +854,90 @@
             {
                 try
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(1), token);
-
-                    // Only auto-refresh when on page 1, panel is closed, and not paused
-                    if (_currentPage != 0 || _panelOpen || _pollingPaused)
-                        continue;
-
-                    // Fetch current data and compare with what's displayed
-                    var connectedSystems = _filterConnectedSystems.Any() ? _filterConnectedSystems : null;
-                    var runProfiles = _filterRunProfiles.Any() ? _filterRunProfiles : null;
-                    var statuses = _filterStatuses.Any() ? _filterStatuses : null;
-                    var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
-
-                    using var pollJim = JimFactory.Create();
-                    var result = await pollJim.Activities.GetWorkerTaskActivitiesAsync(
-                        1, _rowsPerPage, connectedSystems, runProfiles, statuses, initiatedBy,
-                        _currentSortLabel, _currentSortDescending,
-                        _filterHasChildren ? true : null);
-
-                    var fingerprint = BuildFingerprint(result.Results);
-                    if (fingerprint != _lastDataFingerprint)
-                    {
-                        _lastDataFingerprint = fingerprint;
-                        _items = result.Results;
-                        _totalItems = result.TotalResults;
-                        await InvokeAsync(StateHasChanged);
-                    }
+                    var delay = UiNotifications.IsRealTimeAvailable ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(1);
+                    await Task.Delay(delay, token);
+                    await RefreshIfChangedAsync();
                 }
-                catch (TaskCanceledException)
+                catch (OperationCanceledException)
                 {
                     break;
                 }
-                catch
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     // Ignore errors during polling, will retry on next interval
                 }
             }
         }, token);
+    }
+
+    /// <summary>
+    /// Fetches page one with the current filters and re-renders only when the data fingerprint changed.
+    /// Serves both the polling loop and event-driven refreshes, so both respect the same guard: no
+    /// auto-refresh unless on page one with the panel closed and auto-refresh not paused. Overlapping
+    /// invocations are skipped via a non-blocking semaphore.
+    /// </summary>
+    private async Task RefreshIfChangedAsync()
+    {
+        // Only auto-refresh when on page 1, panel is closed, and not paused
+        if (_currentPage != 0 || _panelOpen || _pollingPaused)
+            return;
+
+        if (!await _refreshLock.WaitAsync(0))
+            return;
+
+        try
+        {
+            // Fetch current data and compare with what's displayed
+            var connectedSystems = _filterConnectedSystems.Any() ? _filterConnectedSystems : null;
+            var runProfiles = _filterRunProfiles.Any() ? _filterRunProfiles : null;
+            var statuses = _filterStatuses.Any() ? _filterStatuses : null;
+            var initiatedBy = string.IsNullOrWhiteSpace(_filterInitiatedBy) ? null : _filterInitiatedBy;
+
+            using var refreshJim = JimFactory.Create();
+            var result = await refreshJim.Activities.GetWorkerTaskActivitiesAsync(
+                1, _rowsPerPage, connectedSystems, runProfiles, statuses, initiatedBy,
+                _currentSortLabel, _currentSortDescending,
+                _filterHasChildren ? true : null);
+
+            var fingerprint = BuildFingerprint(result.Results);
+            if (fingerprint != _lastDataFingerprint)
+            {
+                _lastDataFingerprint = fingerprint;
+                _items = result.Results;
+                _totalItems = result.TotalResults;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        finally
+        {
+            _refreshLock.Release();
+        }
+    }
+
+    private void OnWorkerTaskChanged(WorkerTaskChangeNotification notification) => TriggerNotificationRefresh();
+
+    private void OnActivityProgressChanged(Guid activityId) => TriggerNotificationRefresh();
+
+    // On reconnection, refresh immediately to reconcile anything missed while real-time was unavailable.
+    private void OnRealTimeAvailabilityChanged(bool available) => TriggerNotificationRefresh();
+
+    /// <summary>
+    /// Runs a refresh in response to a notification. Event handlers run off the sync context and must
+    /// never throw into the notification relay, so failures are swallowed; the polling fallback retries.
+    /// </summary>
+    private void TriggerNotificationRefresh()
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await RefreshIfChangedAsync();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Transient refresh failures are recoverable; the polling fallback covers the gap
+            }
+        });
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -901,6 +961,9 @@
 
     void IDisposable.Dispose()
     {
+        UiNotifications.WorkerTaskChanged -= OnWorkerTaskChanged;
+        UiNotifications.ActivityProgressChanged -= OnActivityProgressChanged;
+        UiNotifications.RealTimeAvailabilityChanged -= OnRealTimeAvailabilityChanged;
         _pollingCancellationTokenSource.Cancel();
     }
 

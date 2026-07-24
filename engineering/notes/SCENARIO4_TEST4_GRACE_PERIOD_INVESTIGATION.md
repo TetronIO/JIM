@@ -8,10 +8,12 @@ Ran Scenario 4 on `feature/integration-test-error-detection` @ bae58cd8 against 
 
 | Template | Step | Result | Log |
 |----------|------|--------|-----|
-| Nano | `-Step AuthoritativeGracePeriod` only | PASS | [Scenario4-DeletionRules-Nano-2026-04-20_073914.log](../../test/integration/results/logs/Scenario4-DeletionRules-Nano-2026-04-20_073914.log) |
-| Nano | Full scenario (Tests 1-7) | PASS | [Scenario4-DeletionRules-Nano-2026-04-20_084749.log](../../test/integration/results/logs/Scenario4-DeletionRules-Nano-2026-04-20_084749.log) |
-| Medium | Full scenario | PASS | [Scenario4-DeletionRules-Medium-2026-04-20_085924.log](../../test/integration/results/logs/Scenario4-DeletionRules-Medium-2026-04-20_085924.log) |
-| Large | Full scenario | PASS | [Scenario4-DeletionRules-Large-2026-04-20_091024.log](../../test/integration/results/logs/Scenario4-DeletionRules-Large-2026-04-20_091024.log) |
+| Nano | `-Step AuthoritativeGracePeriod` only | PASS | `Scenario4-DeletionRules-Nano-2026-04-20_073914.log` |
+| Nano | Full scenario (Tests 1-7) | PASS | `Scenario4-DeletionRules-Nano-2026-04-20_084749.log` |
+| Medium | Full scenario | PASS | `Scenario4-DeletionRules-Medium-2026-04-20_085924.log` |
+| Large | Full scenario | PASS | `Scenario4-DeletionRules-Large-2026-04-20_091024.log` |
+
+Log files are named for the record only; `test/integration/results/` is gitignored, so these are local run artefacts rather than committed files.
 
 At Large specifically — the template where the failure was originally reported — both Test 4 assertions now pass: `MVO still exists (grace period not yet elapsed)` and `MVO deleted after grace period elapsed (housekeeping processed it)`. `errors-*.log` for all four runs is empty.
 

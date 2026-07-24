@@ -95,11 +95,14 @@ public enum ActivityRunProfileExecutionItemErrorType
     ExpressionEvaluationError,
 
     /// <summary>
-    /// During import Attribute Flow, a multi-valued source attribute was mapped to a single-valued
-    /// target attribute. The first value was used. This is informational — the sync succeeded,
-    /// but the administrator should verify the correct value was selected.
+    /// During Attribute Flow, a multi-valued source attribute held more than one value but the target
+    /// attribute is single-valued. A single-valued target can hold only one value, and JIM will not
+    /// select one arbitrarily, so no value was flowed for that attribute (import) or no Pending Export
+    /// was generated for it (export); the object's other attributes are unaffected. The administrator
+    /// should map the source to a multi-valued target, reduce the source to a single value, or use an
+    /// Expression to select one value deterministically.
     /// </summary>
-    MultiValuedAttributeTruncated,
+    MultiValuedToSingleValued,
 
     /// <summary>
     /// A delta import could not be performed because the directory's change tracking watermark

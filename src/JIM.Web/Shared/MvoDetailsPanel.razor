@@ -1,5 +1,6 @@
 @using JIM.Models.Core
 @using JIM.Web.Services
+@using System.Globalization
 @using Utilities
 @inject IJimApplicationFactory JimFactory
 @inject IUserPreferenceService UserPreferences
@@ -89,6 +90,10 @@
         else if (attributeValue.Attribute.Type == AttributeDataType.LongNumber)
         {
             @attributeValue.LongValue
+        }
+        else if (attributeValue.Attribute.Type == AttributeDataType.Decimal)
+        {
+            @attributeValue.DecimalValue?.ToString(CultureInfo.InvariantCulture)
         }
         else if (attributeValue.Attribute.Type == AttributeDataType.DateTime && attributeValue.DateTimeValue.HasValue)
         {
@@ -686,6 +691,8 @@
             return value.IntValue.Value.ToString();
         if (value.LongValue.HasValue)
             return value.LongValue.Value.ToString();
+        if (value.DecimalValue.HasValue)
+            return value.DecimalValue.Value.ToString(CultureInfo.InvariantCulture);
         if (value.GuidValue.HasValue)
             return value.GuidValue.Value.ToString();
         if (value.BoolValue.HasValue)

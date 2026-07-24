@@ -259,7 +259,7 @@ Get-JIMMetaverseAttribute -Name <string>
 
 #### Output
 
-Attribute definitions including ID, name, type, and plurality.
+Attribute definitions including ID, name, type, and plurality. Retrieving a single attribute by `-Id` also returns its Object Type bindings and Standard Mappings (the counterpart attribute names in the SCIM 2.0 and LDAP/Active Directory standards, with notes).
 
 #### Examples
 
@@ -293,7 +293,7 @@ New-JIMMetaverseAttribute -Name <string> -Type <string> [-AttributePlurality <st
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Name` | `string` | Yes | | The name of the new attribute |
-| `Type` | `string` | Yes | | The data type. Valid values: `Text`, `Integer`, `LongNumber`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
+| `Type` | `string` | Yes | | The data type. Valid values: `Text`, `Integer`, `LongNumber`, `Decimal`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
 | `AttributePlurality` | `string` | No | `SingleValued` | Whether the attribute holds one or many values. Valid values: `SingleValued`, `MultiValued` |
 | `ObjectTypeIds` | `int[]` | No | | Object type IDs to associate the attribute with |
 | `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
@@ -332,11 +332,11 @@ Modifies an existing metaverse attribute definition.
 ```powershell
 # ById (default)
 Set-JIMMetaverseAttribute -Id <int> [-Name <string>] [-RenderingHint <string>] [-Type <string>]
-    [-AttributePlurality <string>] [-ChangeReason <string>] [-PassThru]
+    [-AttributePlurality <string>] [-StandardMappings <array>] [-ChangeReason <string>] [-PassThru]
 
 # ByInputObject
 Set-JIMMetaverseAttribute -InputObject <object> [-Name <string>] [-RenderingHint <string>]
-    [-Type <string>] [-AttributePlurality <string>] [-ChangeReason <string>] [-PassThru]
+    [-Type <string>] [-AttributePlurality <string>] [-StandardMappings <array>] [-ChangeReason <string>] [-PassThru]
 ```
 
 #### Parameters
@@ -347,8 +347,9 @@ Set-JIMMetaverseAttribute -InputObject <object> [-Name <string>] [-RenderingHint
 | `InputObject` | `object` | Yes (ByInputObject) | | An attribute object from the pipeline |
 | `Name` | `string` | No | | The new name. Subject to the same case-insensitive uniqueness check as creation. |
 | `RenderingHint` | `string` | No | | How a multi-valued attribute's values display. Valid values: `Default`, `Table`, `ChipSet`, `List` |
-| `Type` | `string` | No | | The new data type. Valid values: `Text`, `Integer`, `LongNumber`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
+| `Type` | `string` | No | | The new data type. Valid values: `Text`, `Integer`, `LongNumber`, `Decimal`, `DateTime`, `Boolean`, `Reference`, `Guid`, `Binary` |
 | `AttributePlurality` | `string` | No | | The new plurality. Valid values: `SingleValued`, `MultiValued` |
+| `StandardMappings` | `array` | No | | The attribute's full set of Standard Mappings, replacing any existing ones; an empty array (`@()`) clears them. Each element is a hashtable with a `Standard` (`Scim`, `Ldap` or `Jim`), a `CounterpartName`, and optional `Notes`. Guidance only; never affects synchronisation. |
 | `ChangeReason` | `string` | No | | Optional reason for the change, recorded in the object's [configuration change history](history.md#get-jimconfigurationchangehistory) |
 | `PassThru` | `switch` | No | `false` | Return the updated attribute definition |
 
@@ -374,6 +375,13 @@ Get-JIMMetaverseAttribute -Name "proxyAddresses" | Set-JIMMetaverseAttribute -Re
 
 ```powershell title="Change an attribute's data type (refused if any object holds a value)"
 Set-JIMMetaverseAttribute -Id 42 -Type Integer
+```
+
+```powershell title="Record how a custom attribute corresponds to the SCIM 2.0 and LDAP standards"
+Set-JIMMetaverseAttribute -Id 42 -StandardMappings @(
+    @{ Standard = 'Scim'; CounterpartName = 'costCenter'; Notes = 'SCIM Enterprise User extension.' },
+    @{ Standard = 'Ldap'; CounterpartName = 'costCentre' }
+)
 ```
 
 ---
@@ -692,7 +700,7 @@ Search-JIMMetaverseObject -PredefinedSearchUri <string> [-Search <string>] [-Has
 
 # ListAll
 Search-JIMMetaverseObject -PredefinedSearchUri <string> [-Search <string>] [-HasAttribute <string>]
-    [-SortBy <string>] [-SortDirection <string>] [-PageSize <int>] -All
+    [-SortBy <string>] [-SortDirection <string>] [-PageSize <int>] -All [-Force]
 ```
 
 #### Parameters
@@ -704,7 +712,8 @@ Search-JIMMetaverseObject -PredefinedSearchUri <string> [-Search <string>] [-Has
 | `HasAttribute` | `string` | No | | Return only objects that hold a value for the named Metaverse Attribute. Matched case-insensitively; a multi-valued attribute counts once; an unrecognised name yields no results. |
 | `SortBy` | `string` | No | | Attribute name to sort results by (defaults to creation date) |
 | `SortDirection` | `string` | No | `desc` | Sort direction: `asc` or `desc` |
-| `All` | `switch` | No | `false` | Automatically paginate through all results |
+| `All` | `switch` | No | `false` | Automatically paginate through all results. Fetches at most 1000 pages (~100,000 objects at the default page size) and then stops with a warning; a warning is also emitted up front when the result set is large |
+| `Force` | `switch` | No | `false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All` |
 | `Page` | `int` | No | `1` | Page number for paginated results (cannot be used with `-All`) |
 | `PageSize` | `int` | No | `100` | Number of items per page (maximum 100) |
 
@@ -724,6 +733,11 @@ Search-JIMMetaverseObject -PredefinedSearchUri "users" -Search "Smith"
 
 ```powershell title="Get all users with auto-pagination"
 Search-JIMMetaverseObject -PredefinedSearchUri "users" -All
+```
+
+```powershell title="Get all users, overriding the -All safety cap for a very large result set"
+# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything.
+Search-JIMMetaverseObject -PredefinedSearchUri "users" -All -Force
 ```
 
 ```powershell title="Find users that hold a value for an attribute"
@@ -753,7 +767,7 @@ Get-JIMMetaverseObject -Id <guid> [-Attributes <string[]>]
 
 # ListAll
 Get-JIMMetaverseObject [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search <string>]
-    [-AttributeName <string> -AttributeValue <string>] [-Attributes <string[]>] -All
+    [-AttributeName <string> -AttributeValue <string>] [-Attributes <string[]>] -All [-Force]
 ```
 
 #### Parameters
@@ -767,7 +781,8 @@ Get-JIMMetaverseObject [-ObjectTypeId <int>] [-ObjectTypeName <string>] [-Search
 | `AttributeName` | `string` | No | | Attribute name to search on; requires `AttributeValue` |
 | `AttributeValue` | `string` | No | | Attribute value to match; requires `AttributeName` |
 | `Attributes` | `string[]` | No | | Attribute names to include in results; use `"*"` to return all attributes |
-| `All` | `switch` | No | `false` | Automatically paginate through all results |
+| `All` | `switch` | No | `false` | Automatically paginate through all results. Fetches at most 1000 pages (~100,000 objects at the default page size) and then stops with a warning; a warning is also emitted up front when the result set is large |
+| `Force` | `switch` | No | `false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All` |
 | `Page` | `int` | No | `1` | Page number for paginated results |
 | `PageSize` | `int` | No | `100` | Number of results per page (maximum 100) |
 
@@ -797,6 +812,11 @@ Get-JIMMetaverseObject -AttributeName "Employee Id" -AttributeValue "12345" -Att
 Get-JIMMetaverseObject -ObjectTypeName "Group" -All -Attributes @("Display Name", "Member")
 ```
 
+```powershell title="Fetch a very large metaverse, overriding the -All safety cap"
+# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything.
+Get-JIMMetaverseObject -ObjectTypeName "Person" -All -Force
+```
+
 ```powershell title="Page through results manually"
 Get-JIMMetaverseObject -ObjectTypeName "Person" -Page 3 -PageSize 50
 ```
@@ -814,7 +834,7 @@ Retrieves the change history for a Metaverse Object. Each record carries the ini
 Get-JIMMetaverseObjectChangeHistory -Id <guid> [-Page <int>] [-PageSize <int>]
 
 # All
-Get-JIMMetaverseObjectChangeHistory -Id <guid> -All [-PageSize <int>]
+Get-JIMMetaverseObjectChangeHistory -Id <guid> -All [-Force] [-PageSize <int>]
 ```
 
 #### Parameters
@@ -822,7 +842,8 @@ Get-JIMMetaverseObjectChangeHistory -Id <guid> -All [-PageSize <int>]
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Id` | `guid` | Yes | | Metaverse Object identifier. Accepts pipeline input by property name. |
-| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. |
+| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. Fetches at most 1000 pages (~50,000 records at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 | `Page` | `int` | No | `1` | Page number for paginated results. Cannot be used with `-All`. |
 | `PageSize` | `int` | No | `50` | Number of items per page. Maximum: `100`. |
 

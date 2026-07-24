@@ -43,7 +43,7 @@ function Reset-JIMServiceSetting {
     [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
     [OutputType([PSCustomObject])]
     param(
-        [Parameter(Mandatory, Position = 0)]
+        [Parameter(Mandatory, Position = 0, ValueFromPipelineByPropertyName)]
         [string]$Key,
 
         [Parameter()]

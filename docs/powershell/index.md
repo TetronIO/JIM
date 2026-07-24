@@ -143,9 +143,13 @@ PowerShell member access is case-insensitive, so a script that reads the wire ca
 
 **Exception: dictionaries keyed by your data keep their keys exactly as supplied.** A Metaverse Object's `Attributes` map is keyed by attribute name, so those keys follow your schema's casing rather than PascalCase:
 
+The `Attributes` map is only present on the list form, and only carries the attributes you asked for with `-Attributes`; retrieving a single object by `-Id` returns an `AttributeValues` list instead.
+
 ```powershell
-$mvo.Attributes.mail          # attribute-name keys are verbatim...
-$mvo.Attributes.employeeID    # ...not 'Mail' / 'EmployeeID'
+$person = Get-JIMMetaverseObject -Search "j.smith" -Attributes mail, employeeID |
+    Select-Object -First 1
+$person.Attributes.mail          # attribute-name keys are verbatim...
+$person.Attributes.employeeID    # ...not 'Mail' / 'EmployeeID'
 ```
 
 The same applies to any other data-keyed map, such as a log entry's `Properties`.

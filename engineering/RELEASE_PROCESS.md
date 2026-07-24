@@ -317,12 +317,13 @@ JIM automatically applies any pending database migrations on first startup; no m
 docker compose logs jim.worker --tail=50
 ```
 
-Look for "Database migrations applied" or "Database is up to date" in the worker logs. The web interface will show a loading screen until migrations complete and the worker signals readiness.
+The worker prepares the database before it starts accepting work, and `jim.web` will not serve requests until that has finished; while it waits, `jim.web` logs `JIM.Application is not ready yet. Sleeping...` once per second. The definitive signal is the readiness endpoint, which returns `503 Service Unavailable` until JIM is ready and `200 OK` afterwards:
 
-> **Troubleshooting**: If migrations fail (e.g., due to a permissions issue), the worker logs will contain the full error. Fix the underlying issue and restart the services. As a manual fallback:
-> ```bash
-> docker compose exec jim.web dotnet ef database update
-> ```
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:5200/api/v1/health/ready
+```
+
+> **Troubleshooting**: If the database setup fails (e.g., due to a permissions issue), the worker logs will contain the full error. Fix the underlying issue and restart the services. There is no manual fallback command: the service images carry no .NET SDK or `dotnet-ef` tool, so applying migrations by hand inside a container is not possible.
 
 #### Step 10: Access JIM
 
@@ -462,22 +463,18 @@ docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
 
 Docker images are immutable; the previous version's images are still available locally (or in GHCR for online environments). This is the fastest rollback path.
 
-### 2. Roll Back Database Migrations (If Needed)
+### 2. Restore the Database (If the Release Applied Migrations)
 
-If the new release applied database migrations, you may need to reverse them. First, identify the previous migration:
+If the release applied migrations, the schema is now ahead of the previous version, and reverting the images alone is not a rollback. Restore the pre-upgrade backup: the database **and** the encryption key set, from the same backup set.
 
-```bash
-# List applied migrations
-docker compose exec jim.web dotnet ef migrations list
-```
+The operative procedure is the customer-facing one; do not duplicate it here:
 
-Then roll back to the migration that was active before the upgrade:
+- [Upgrading -> Rolling back](../docs/administration/upgrading.md#rolling-back)
+- [Backup & Disaster Recovery -> Restoring](../docs/administration/backup-recovery.md#restoring)
 
-```bash
-docker compose exec jim.web dotnet ef database update <PreviousMigrationName>
-```
+> **Do not reach for `dotnet ef database update`.** The shipped `jim.web` image is built on the ASP.NET **runtime** base image, which contains neither the .NET SDK nor the `dotnet-ef` tool, so `docker compose exec jim.web dotnet ef ...` fails on any real deployment. Reversing a migration in place is a development-environment operation, not a production rollback path.
 
-> **Important**: This only works if the migration has a `Down()` method. Always verify migration reversibility before releasing. If the migration is not reversible, restore from your pre-upgrade database backup instead.
+**Release-time implication:** because restoring a backup is the only production rollback, a migration that cannot be rolled forward past a bad release is expensive for customers. Review migrations for destructive changes (dropped columns, narrowed types) before releasing, and prefer additive, tolerant schema changes so that a fix-forward release is always possible.
 
 ### 3. Roll Back PowerShell Module
 
@@ -499,7 +496,7 @@ If you need to retract the release:
 
 ### Prevention
 
-- **Always backup your database** before upgrading JIM
+- **Always back up the database *and* the encryption key set** before upgrading JIM, as a matched pair; a database backup without its keys cannot decrypt any stored secret when restored (see [Backup & Disaster Recovery](../docs/administration/backup-recovery.md))
 - Deploy to a staging environment first and run smoke tests before promoting to production
 - Keep previous Docker images available locally; do not prune images immediately after upgrading
 
@@ -574,4 +571,4 @@ If versions appear inconsistent:
 1. **Verify checksums**: Always verify SHA256 checksums before deploying in production
 2. **Verify signatures**: Use cosign to verify image signatures when possible
 3. **Review changes**: Check CHANGELOG.md for security-relevant changes before upgrading
-4. **Backup before upgrade**: Always backup your database before upgrading JIM
+4. **Backup before upgrade**: Always back up the database and the encryption key set together before upgrading JIM; see [Upgrading](../docs/administration/upgrading.md)

@@ -1,6 +1,6 @@
 # RPEI Outcome Graph: Causal Chain Tracking Per Object
 
-- **Status:** Complete
+- **Status:** Done
 - **Milestone:** Post-MVP
 - **Created:** 2026-03-01
 - **Issue:** #363

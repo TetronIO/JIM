@@ -39,7 +39,8 @@ Get-JIMConnectedSystem -Id <int> -DeletionPreview
 
 ### Output
 
-- **List / ById**: Connected System Objects with properties such as `Id`, `Name`, `Description`, `ConnectorDefinitionId`, and configuration state.
+- **List**: Connected System headers with properties such as `Id`, `Name`, `Description`, `Status`, `ObjectCount`, `ConnectorName`, and `ConnectorId`.
+- **ById**: the full Connected System, including its nested `Connector` (use `$cs.Connector.Id` for the connector definition ID) and configuration state.
 - **ObjectTypes**: Object type definitions for the specified Connected System.
 - **DeletionPreview**: Deletion impact preview with counts and warnings.
 
@@ -117,12 +118,14 @@ Updates the configuration of an existing Connected System.
 ```powershell
 # ById (default)
 Set-JIMConnectedSystem -Id <int> [-Name <string>] [-Description <string>]
-    [-SettingValues <hashtable>] [-MaxExportParallelism <int>] [-PassThru]
+    [-SettingValues <hashtable>] [-MaxExportParallelism <int>]
+    [-UnresolvedReferenceHandling <string>] [-PassThru]
 
 # ByInputObject
 Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
     [-Description <string>] [-SettingValues <hashtable>]
-    [-MaxExportParallelism <int>] [-ChangeReason <string>] [-PassThru]
+    [-MaxExportParallelism <int>] [-UnresolvedReferenceHandling <string>]
+    [-ChangeReason <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -135,6 +138,7 @@ Set-JIMConnectedSystem -InputObject <PSCustomObject> [-Name <string>]
 | `Description` | `string` | No | | New description |
 | `SettingValues` | `hashtable` | No | | Connector-specific settings. Keys are setting IDs; values are hashtables with `stringValue`, `intValue`, or `checkboxValue`. |
 | `MaxExportParallelism` | `int` | No | | Maximum number of parallel export threads (1 to 16). Leave unset to let the connector recommend a conservative value (the LDAP Connector recommends 2 for capable directories, those tuned to a high Export Concurrency); JIM stays sequential (1) if the connector offers no recommendation. An explicitly set value always takes precedence. |
+| `UnresolvedReferenceHandling` | `string` | No | `Error` | How import-time reference values that cannot be resolved to a Connected System Object are treated: `Error`, `Warn`, or `Ignore`. See [Unresolved reference handling](../configuration/connected-systems.md#unresolved-reference-handling). |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Connected System Object |
 
@@ -207,7 +211,9 @@ Remove-JIMConnectedSystem -Id 3
 Remove-JIMConnectedSystem -Id 3 -Force
 ```
 
-```powershell title="Pipeline deletion"
+```powershell title="Delete every Connected System matching a name pattern"
+# -Name supports wildcards, so this deletes ALL matching Connected Systems and
+# their connector spaces. Run it without -Force first to confirm the matches.
 Get-JIMConnectedSystem -Name "Decommissioned*" | Remove-JIMConnectedSystem -Force
 ```
 
@@ -351,7 +357,11 @@ Get-JIMConnectorDefinition -Id 1
 ```
 
 ```powershell title="Find connectors that support delta import"
-Get-JIMConnectorDefinition | Where-Object { $_.Capabilities -contains "DeltaImport" }
+# The list form returns headers, which carry no capability flags; fetch each
+# definition by ID to see what it supports.
+Get-JIMConnectorDefinition |
+    ForEach-Object { Get-JIMConnectorDefinition -Id $_.Id } |
+    Where-Object { $_.SupportsDeltaImport }
 ```
 
 ---
@@ -622,7 +632,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId <int> [-Search <string>] [-Statu
     [-Page <int>] [-PageSize <int>]
 
 # ListAll
-Get-JIMConnectedSystemObject -ConnectedSystemId <int> -All [-Search <string>] [-Status <string>]
+Get-JIMConnectedSystemObject -ConnectedSystemId <int> -All [-Force] [-Search <string>] [-Status <string>]
     [-ObjectTypeId <int>] [-JoinType <string>] [-SortBy <string>] [-Ascending] [-PageSize <int>]
 
 # ById
@@ -634,7 +644,7 @@ Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
 
 # AttributeValuesAll
 Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
-    -AttributeName <string> [-Search <string>] -All
+    -AttributeName <string> [-Search <string>] -All [-Force]
 ```
 
 ### Parameters
@@ -652,7 +662,8 @@ Get-JIMConnectedSystemObject -ConnectedSystemId <int> -Id <guid>
 | `Ascending` | `switch` | No | `$false` | Sort the object list ascending instead of the default descending |
 | `Page` | `int` | No | `1` | Page number for paginated results |
 | `PageSize` | `int` | No | `50` | Number of results per page (maximum 100) |
-| `All` | `switch` | No | `$false` | Returns all objects, or all attribute values, without paging |
+| `All` | `switch` | No | `$false` | Returns all objects, or all attribute values, auto-paginating. Fetches at most 1000 pages (~100,000 items at the default page size) and then stops with a warning; a warning is also emitted up front when the result set is large |
+| `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All` |
 
 ### Output
 
@@ -672,6 +683,11 @@ Get-JIMConnectedSystemObject -ConnectedSystemId 3 -Search "smith" -Status Obsole
 
 ```powershell title="Get every object in a Connected System"
 Get-JIMConnectedSystemObject -ConnectedSystemId 3 -All
+```
+
+```powershell title="Get every object in a very large connector space, overriding the -All safety cap"
+# -All stops after 1000 pages (~100,000 objects) by default; -Force fetches everything.
+Get-JIMConnectedSystemObject -ConnectedSystemId 3 -All -Force
 ```
 
 ```powershell title="Get a specific connector space object"
@@ -704,7 +720,7 @@ Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid>
     [-Page <int>] [-PageSize <int>]
 
 # All
-Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid> -All [-PageSize <int>]
+Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid> -All [-Force] [-PageSize <int>]
 ```
 
 ### Parameters
@@ -713,7 +729,8 @@ Get-JIMConnectedSystemObjectChangeHistory -ConnectedSystemId <int> -Id <guid> -A
 |------|------|----------|---------|-------------|
 | `ConnectedSystemId` | `int` | Yes | | Connected System identifier. Accepts pipeline input by property name. |
 | `Id` | `guid` | Yes | | Connector space object identifier. Accepts pipeline input by property name. |
-| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. |
+| `All` | `switch` | No | `$false` | Automatically paginates through all results. Cannot be used with `-Page`. Fetches at most 1000 pages (~50,000 records at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 | `Page` | `int` | No | `1` | Page number for paginated results. Cannot be used with `-All`. |
 | `PageSize` | `int` | No | `50` | Number of items per page. Maximum: `100`. |
 
@@ -750,7 +767,7 @@ Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId <int> -CsoId <guid
 
 # All
 Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId <int> -CsoId <guid>
-    -AttributeName <string> [-Search <string>] -All
+    -AttributeName <string> [-Search <string>] -All [-Force]
 ```
 
 ### Parameters
@@ -763,7 +780,8 @@ Get-JIMConnectedSystemObjectAttributeValue -ConnectedSystemId <int> -CsoId <guid
 | `Search` | `string` | No | | Filter values by search term |
 | `Page` | `int` | No | `1` | Page number |
 | `PageSize` | `int` | No | `50` | Number of values per page (maximum 100) |
-| `All` | `switch` | No | `$false` | Returns all values without paging |
+| `All` | `switch` | No | `$false` | Returns all values, auto-paginating. Fetches at most 1000 pages (~50,000 values at the default page size) and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 
 ### Output
 
@@ -892,7 +910,7 @@ Get-JIMPendingExport -ConnectedSystemId <int> [-Search <string>]
     [-Page <int>] [-PageSize <int>]
 
 # ListAll
-Get-JIMPendingExport -ConnectedSystemId <int> [-Search <string>] -All
+Get-JIMPendingExport -ConnectedSystemId <int> [-Search <string>] -All [-Force]
 
 # ById
 Get-JIMPendingExport -Id <guid>
@@ -902,7 +920,7 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string>
     [-Search <string>] [-Page <int>] [-PageSize <int>]
 
 # AttributeChangesAll
-Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All
+Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All [-Force]
 ```
 
 ### Parameters
@@ -915,7 +933,8 @@ Get-JIMPendingExport -Id <guid> -AttributeName <string> [-Search <string>] -All
 | `Search` | `string` | No | | Filter results by search term |
 | `Page` | `int` | No | `1` | Page number |
 | `PageSize` | `int` | No | `50` | Number of results per page (maximum 100) |
-| `All` | `switch` | No | `$false` | Returns all results without paging |
+| `All` | `switch` | No | `$false` | Returns all results, auto-paginating. Fetches at most 1000 pages and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `Force` | `switch` | No | `$false` | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 
 ### Output
 
@@ -986,7 +1005,7 @@ Get-JIMConnectedSystem | ForEach-Object {
     $preview = $_ | Get-JIMConnectedSystemDeletionPreview
     [PSCustomObject]@{
         Name = $_.Name
-        CSOCount = $preview.ConnectorSpaceObjectCount
+        CSOCount = $preview.ConnectedSystemObjectCount
         SyncRules = $preview.SyncRuleCount
     }
 }

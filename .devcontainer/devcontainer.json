@@ -76,6 +76,8 @@
         // Code quality
         "editorconfig.editorconfig",
         "streetsidesoftware.code-spell-checker",
+        // YAML
+        "redhat.vscode-yaml",
         // GitHub Actions workflow support
         "github.vscode-github-actions",
         // GitHub Pull Requests & Issues
@@ -329,7 +331,7 @@
   ],
   // Container environment variables
   "containerEnv": {
-    "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+    "DOTNET_CLI_TELEMETRY_OPTOUT": "0",
     "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
     "ASPNETCORE_ENVIRONMENT": "Development",
     // Force Claude Code to use the distro ripgrep installed in the Dockerfile

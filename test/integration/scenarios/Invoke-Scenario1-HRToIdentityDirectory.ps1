@@ -43,7 +43,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Disable", "Enable", "Reconnection", "ImportOnly", "SyncOnly", "All")]
+    [ValidateSet("Joiner", "Leaver", "Mover", "Mover-Rename", "Mover-Move", "Disable", "Enable", "Reconnection", "InitialExportOnly", "ImportOnly", "SyncOnly", "All")]
     [string]$Step = "All",
 
     [Parameter(Mandatory=$false)]
@@ -195,6 +195,84 @@ function Invoke-SyncSequence {
     }
 
     return $results
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers for the InitialExportOnly step (ported from the former standalone Scenario 15, #223).
+# Kept here rather than inline in the step so the step body reads as three phases, not plumbing.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Runs the outbound half of the flow: export to the directory, wait for it to settle, then the
+# confirming delta import and delta synchronisation so Pending Exports confirm and the
+# provisioned object transitions out of PendingProvisioning.
+function Invoke-InitialExportOnlyExportAndConfirm {
+    param([hashtable]$Config, [string]$Label)
+    $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
+    Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "$Label LDAP Export"
+    Start-Sleep -Seconds 5
+    $confirmImportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPDeltaImportProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $confirmImportResult.activityId -Name "$Label LDAP Delta Import (confirming)"
+    $confirmSyncResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPDeltaSyncProfileId -Wait -PassThru
+    Assert-ActivitySuccess -ActivityId $confirmSyncResult.activityId -Name "$Label LDAP Delta Sync"
+}
+
+# Collects the attribute names carried by every Pending Export currently staged for the system.
+function Get-PendingExportAttributeNames {
+    param([int]$SystemId)
+    $names = @()
+    $pendingExports = @(Get-JIMPendingExport -ConnectedSystemId $SystemId -All)
+    foreach ($pendingExport in $pendingExports) {
+        $detail = Get-JIMPendingExport -Id $pendingExport.Id
+        if ($detail -and $detail.AttributeChanges) {
+            $names += @($detail.AttributeChanges | ForEach-Object { $_.AttributeName })
+        }
+    }
+    return $names
+}
+
+# Replaces attribute values on a directory user via ldapmodify, branching on directory type
+# (mirrors the Scenario 2 external-modification patterns).
+function Set-DirectoryUserAttributes {
+    param([string]$UserDn, [hashtable]$Values, [string]$Label)
+
+    $ldifLines = @("dn: $UserDn", "changetype: modify")
+    $first = $true
+    foreach ($attributeName in $Values.Keys) {
+        if (-not $first) { $ldifLines += "-" }
+        $ldifLines += "replace: $attributeName"
+        $ldifLines += "${attributeName}: $($Values[$attributeName])"
+        $first = $false
+    }
+    $ldif = $ldifLines -join "`n"
+
+    if ($isOpenLDAP) {
+        $result = $ldif | docker exec -i $DirectoryConfig.ContainerName ldapmodify -x -H "ldap://localhost:$($DirectoryConfig.Port)" -D "$($DirectoryConfig.BindDN)" -w "$($DirectoryConfig.BindPassword)" 2>&1
+    }
+    else {
+        $result = docker exec $DirectoryConfig.ContainerName bash -c "cat > /tmp/scenario1-ieo-modify.ldif << 'LDIFEOF'
+$ldif
+LDIFEOF
+ldapmodify -x -H ldap://localhost -D '$($DirectoryConfig.BindDN)' -w '$($DirectoryConfig.BindPassword)' -f /tmp/scenario1-ieo-modify.ldif" 2>&1
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Label failed to modify directory user ${UserDn}: $result"
+    }
+}
+
+function Get-InitialExportOnlyDirectoryUser {
+    param([string]$SamAccountName, [string]$Label)
+    $directoryUser = Get-LDAPUser -UserIdentifier $SamAccountName -DirectoryConfig $DirectoryConfig
+    if (-not $directoryUser) { throw "$Label expected user '$SamAccountName' to exist in $($DirectoryConfig.ConnectedSystemName), but it was not found" }
+    return $directoryUser
+}
+
+function Assert-DirectoryAttribute {
+    param([hashtable]$DirectoryUser, [string]$AttributeName, [string]$ExpectedValue, [string]$Label)
+    $actual = if ($DirectoryUser.ContainsKey($AttributeName)) { $DirectoryUser[$AttributeName] } else { $null }
+    if ("$actual" -ne $ExpectedValue) {
+        throw "$Label expected directory attribute '$AttributeName' to be '$ExpectedValue' but it was '$actual'"
+    }
+    Write-Host "    OK $AttributeName = '$ExpectedValue'" -ForegroundColor Green
 }
 
 Write-TestSection "Scenario 1: HR to Enterprise Directory"
@@ -1193,6 +1271,213 @@ try {
             }
             $stepTimings["4. Reconnection"] = (Get-Date) - $step4Start
         }
+    }
+
+    # Test 5: Initial Export Only Attribute Flows (#223)
+    #
+    # Layers an Employee Type -> employeeType export mapping marked Initial Export Only on top of
+    # Scenario 1's proven HR CSV -> directory configuration, then proves it end-to-end in three
+    # phases against a fresh joiner (a user provisioned AFTER the mapping exists):
+    #   1. Provisioning export: the one-time value flows on Create exactly like any other mapping.
+    #   2. Source change: once past provisioning, a Metaverse change to the attribute must not
+    #      stage or export; the sibling managed (title) mapping keeps flowing.
+    #   3. External change: an external directory edit to the attribute must survive Drift
+    #      Detection; the managed sibling's external edit is corrected back in the same run,
+    #      proving enforce state is genuinely active.
+    if ($Step -eq "InitialExportOnly" -or $Step -eq "All") {
+        $stepIeoStart = Get-Date
+        Write-TestSection "Test 5: Initial Export Only Attribute Flows (#223)"
+
+        $ieoManagedAttribute = "title"
+        $ieoLdapAttribute = "employeeType"
+        $ieoSuccess = $true
+        $ieoErrorMessage = ""
+
+        try {
+            # --- Configuration: enforce state, select the spare directory attribute, and add the
+            # Initial Export Only mapping (idempotently, so re-runs against an existing environment
+            # do not fail on a duplicate mapping). ---
+            Write-Host "Configuring Initial Export Only mapping..." -ForegroundColor Gray
+
+            $exportRuleName = "$($DirectoryConfig.ConnectedSystemName) Export Users"
+            $exportRule = (Get-JIMSyncRule) | Where-Object { $_.name -eq $exportRuleName }
+            if (-not $exportRule) { throw "Synchronisation Rule '$exportRuleName' not found" }
+
+            # Enforce state must be on so the External Change phase genuinely exercises Drift Detection.
+            Set-JIMSyncRule -Id $exportRule.id -EnforceState $true | Out-Null
+
+            # Select the spare directory attribute the Initial Export Only mapping targets. Both the
+            # AD and inetOrgPerson schemas define employeeType; Scenario 1's minimal selection excludes it.
+            $ldapObjectTypes = Get-JIMConnectedSystemObjectType -ConnectedSystemId $config.LDAPSystemId
+            $ldapUserType = $ldapObjectTypes | Where-Object { $_.name -eq $DirectoryConfig.UserObjectClass } | Select-Object -First 1
+            if (-not $ldapUserType) { throw "Directory user object type '$($DirectoryConfig.UserObjectClass)' not found" }
+            $employeeTypeAttr = $ldapUserType.attributes | Where-Object { $_.name -eq $ieoLdapAttribute }
+            if (-not $employeeTypeAttr) {
+                throw "Directory attribute '$ieoLdapAttribute' not found in the $($DirectoryConfig.UserObjectClass) schema. This usually means the directory image is outdated and needs rebuilding."
+            }
+            Set-JIMConnectedSystemAttribute -ConnectedSystemId $config.LDAPSystemId -ObjectTypeId $ldapUserType.id -AttributeUpdates @{ $employeeTypeAttr.id = @{ selected = $true } } | Out-Null
+            Write-Host "  OK Selected directory attribute '$ieoLdapAttribute'" -ForegroundColor Green
+
+            # Add the Initial Export Only mapping: Employee Type (MV) -> employeeType (directory).
+            $mvEmployeeTypeAttr = Get-JIMMetaverseAttribute | Where-Object { $_.name -eq "Employee Type" }
+            if (-not $mvEmployeeTypeAttr) { throw "Metaverse attribute 'Employee Type' not found" }
+
+            $existingMappings = @(Get-JIMSyncRuleMapping -SyncRuleId $exportRule.id)
+            $ieoMapping = $existingMappings | Where-Object { $_.TargetConnectedSystemAttributeId -eq $employeeTypeAttr.id }
+            if (-not $ieoMapping) {
+                $ieoMapping = New-JIMSyncRuleMapping -SyncRuleId $exportRule.id `
+                    -TargetConnectedSystemAttributeId $employeeTypeAttr.id `
+                    -SourceMetaverseAttributeId $mvEmployeeTypeAttr.id `
+                    -InitialExportOnly
+                Write-Host "  OK Created Initial Export Only mapping (Employee Type -> $ieoLdapAttribute)" -ForegroundColor Green
+            }
+            else {
+                Write-Host "  Initial Export Only mapping already exists" -ForegroundColor Gray
+            }
+
+            # Prove the flag round-tripped through the API.
+            $persistedMapping = Get-JIMSyncRuleMapping -SyncRuleId $exportRule.id | Where-Object { $_.TargetConnectedSystemAttributeId -eq $employeeTypeAttr.id }
+            if (-not $persistedMapping -or -not $persistedMapping.InitialExportOnly) {
+                throw "Expected the Employee Type -> $ieoLdapAttribute mapping to persist InitialExportOnly=true, but it did not"
+            }
+            Write-Host "  OK Mapping persisted with InitialExportOnly=true" -ForegroundColor Green
+
+            # --- Phase 1 (fresh joiner): the test needs a user provisioned AFTER the mapping
+            # exists, so a brand-new CSV row is appended (deterministically beyond the template's
+            # user count, so it can never collide with generated rows). ---
+            $scale = Get-TemplateScale -Template $Template
+            $ieoUser = New-TestUser -Index ($scale.Users + 15)
+            $ieoSamAccountName = $ieoUser.SamAccountName
+            $csvPath = "$PSScriptRoot/../../test-data/hr-users.csv"
+
+            Write-Host "Adding fresh joiner $ieoSamAccountName to HR CSV (title='$($ieoUser.Title)', employeeType='$($ieoUser.EmployeeType)')..." -ForegroundColor Gray
+            $csv = Import-Csv $csvPath
+            $ieoRow = $csv[0].PSObject.Copy()
+            $ieoRow.employeeId = $ieoUser.EmployeeId
+            $ieoRow.firstName = $ieoUser.FirstName
+            $ieoRow.lastName = $ieoUser.LastName
+            $ieoRow.email = $ieoUser.Email
+            $ieoRow.department = $ieoUser.Department
+            $ieoRow.title = $ieoUser.Title
+            $ieoRow.company = $ieoUser.Company
+            $ieoRow.samAccountName = $ieoUser.SamAccountName
+            $ieoRow.displayName = $ieoUser.DisplayName
+            $ieoRow.status = "Active"
+            $ieoRow.userPrincipalName = "$($ieoUser.SamAccountName)@$($DirectoryConfig.Domain)"
+            $ieoRow.employeeType = $ieoUser.EmployeeType
+            $ieoRow.employeeEndDate = ""
+            $csv = @($csv) + $ieoRow
+            $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+            Copy-CsvToConnectorFiles -SourcePath $csvPath
+            Write-Host "  OK Added $ieoSamAccountName to HR CSV" -ForegroundColor Green
+
+            $ieoImportResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $ieoImportResult.activityId -Name "IEO Provision CSV Full Import"
+            $ieoSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $ieoSyncResult.activityId -Name "IEO Provision CSV Delta Synchronisation"
+
+            Invoke-InitialExportOnlyExportAndConfirm -Config $config -Label "IEO Provision"
+
+            $directoryUser = Get-InitialExportOnlyDirectoryUser -SamAccountName $ieoSamAccountName -Label "IEO Provision"
+            Assert-DirectoryAttribute -DirectoryUser $directoryUser -AttributeName $ieoManagedAttribute -ExpectedValue $ieoUser.Title -Label "IEO Provision"
+            Assert-DirectoryAttribute -DirectoryUser $directoryUser -AttributeName $ieoLdapAttribute -ExpectedValue $ieoUser.EmployeeType -Label "IEO Provision"
+            Write-Host "  OK Provisioning exported both the managed title and the Initial Export Only employeeType" -ForegroundColor Green
+
+            # --- Phase 2 (source change): once the object is past provisioning, a Metaverse change
+            # to the Initial Export Only attribute must not stage or export; the sibling managed
+            # mapping keeps flowing. ---
+            $ieoChangedTitle = "IEO Managed Title"
+            $ieoChangedEmployeeType = "IEO Should Not Flow"
+
+            Write-Host "Updating title and employeeType in the HR CSV..." -ForegroundColor Gray
+            $csv = Import-Csv $csvPath
+            $csvRow = $csv | Where-Object { $_.samAccountName -eq $ieoSamAccountName }
+            if (-not $csvRow) { throw "Could not find $ieoSamAccountName in $csvPath" }
+            $csvRow.title = $ieoChangedTitle
+            $csvRow.employeeType = $ieoChangedEmployeeType
+            $csv | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+            Copy-CsvToConnectorFiles -SourcePath $csvPath
+            Write-Host "  OK Changed $ieoSamAccountName title to '$ieoChangedTitle' and employeeType to '$ieoChangedEmployeeType'" -ForegroundColor Green
+
+            $ieoImportResult2 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $ieoImportResult2.activityId -Name "IEO Source Change CSV Full Import"
+            $ieoSyncResult2 = Start-JIMRunProfile -ConnectedSystemId $config.CSVSystemId -RunProfileId $config.CSVDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $ieoSyncResult2.activityId -Name "IEO Source Change CSV Delta Synchronisation"
+
+            # The staged Pending Export must carry the managed attribute and not the unmanaged one.
+            $stagedAttributeNames = @(Get-PendingExportAttributeNames -SystemId $config.LDAPSystemId)
+            if ($stagedAttributeNames -notcontains $ieoManagedAttribute) {
+                throw "Expected a Pending Export carrying '$ieoManagedAttribute' (managed sibling must keep flowing); staged attributes: [$($stagedAttributeNames -join ', ')]"
+            }
+            if ($stagedAttributeNames -contains $ieoLdapAttribute) {
+                throw "Staged a Pending Export for '$ieoLdapAttribute': the Initial Export Only attribute must be unmanaged after provisioning"
+            }
+            Write-Host "  OK Pending Export carries '$ieoManagedAttribute' only (staged: [$($stagedAttributeNames -join ', ')])" -ForegroundColor Green
+
+            Invoke-InitialExportOnlyExportAndConfirm -Config $config -Label "IEO Source Change"
+
+            $directoryUser = Get-InitialExportOnlyDirectoryUser -SamAccountName $ieoSamAccountName -Label "IEO Source Change"
+            Assert-DirectoryAttribute -DirectoryUser $directoryUser -AttributeName $ieoManagedAttribute -ExpectedValue $ieoChangedTitle -Label "IEO Source Change"
+            Assert-DirectoryAttribute -DirectoryUser $directoryUser -AttributeName $ieoLdapAttribute -ExpectedValue $ieoUser.EmployeeType -Label "IEO Source Change"
+            Write-Host "  OK Metaverse change flowed for the managed title only; the Initial Export Only employeeType kept its provisioning value" -ForegroundColor Green
+
+            # --- Phase 3 (external change): an external edit to the Initial Export Only attribute
+            # must survive Drift Detection; the managed sibling's external edit is corrected back,
+            # proving enforce state is genuinely active in the same run. ---
+            $ieoExternalTitle = "IEO External Drift Title"
+            $ieoExternalEmployeeType = "IEO Externally Owned"
+
+            $directoryUser = Get-InitialExportOnlyDirectoryUser -SamAccountName $ieoSamAccountName -Label "IEO External Change"
+            $ieoUserDn = $directoryUser["dn"]
+
+            Write-Host "Modifying title and employeeType directly in $($DirectoryConfig.ConnectedSystemName)..." -ForegroundColor Gray
+            Set-DirectoryUserAttributes -UserDn $ieoUserDn -Label "IEO External Change" -Values @{
+                $ieoManagedAttribute = $ieoExternalTitle
+                $ieoLdapAttribute = $ieoExternalEmployeeType
+            }
+            Write-Host "  OK Set title to '$ieoExternalTitle' and employeeType to '$ieoExternalEmployeeType' externally" -ForegroundColor Green
+
+            # Import the external changes and synchronise: Drift Detection evaluates the diverged
+            # values and stages corrective exports for managed attributes only.
+            $ieoExternalImportResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaImportProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $ieoExternalImportResult.activityId -Name "IEO External Change LDAP Delta Import"
+            $ieoExternalSyncResult = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPDeltaSyncProfileId -Wait -PassThru
+            Assert-ActivitySuccess -ActivityId $ieoExternalSyncResult.activityId -Name "IEO External Change LDAP Delta Synchronisation (drift evaluation)"
+
+            $stagedAttributeNames = @(Get-PendingExportAttributeNames -SystemId $config.LDAPSystemId)
+            if ($stagedAttributeNames -notcontains $ieoManagedAttribute) {
+                throw "Expected a corrective Pending Export for '$ieoManagedAttribute' (enforce state must revert managed drift); staged attributes: [$($stagedAttributeNames -join ', ')]"
+            }
+            if ($stagedAttributeNames -contains $ieoLdapAttribute) {
+                throw "Staged a corrective Pending Export for '$ieoLdapAttribute': Drift Correction must not touch an Initial Export Only attribute"
+            }
+            Write-Host "  OK Corrective Pending Export carries '$ieoManagedAttribute' only (staged: [$($stagedAttributeNames -join ', ')])" -ForegroundColor Green
+
+            Invoke-InitialExportOnlyExportAndConfirm -Config $config -Label "IEO External Change"
+
+            $directoryUser = Get-InitialExportOnlyDirectoryUser -SamAccountName $ieoSamAccountName -Label "IEO External Change"
+            Assert-DirectoryAttribute -DirectoryUser $directoryUser -AttributeName $ieoManagedAttribute -ExpectedValue $ieoChangedTitle -Label "IEO External Change"
+            Assert-DirectoryAttribute -DirectoryUser $directoryUser -AttributeName $ieoLdapAttribute -ExpectedValue $ieoExternalEmployeeType -Label "IEO External Change"
+            Write-Host "  OK Drift Correction reverted the managed title and left the externally-owned employeeType untouched" -ForegroundColor Green
+        }
+        catch {
+            $ieoSuccess = $false
+            $ieoErrorMessage = $_.Exception.Message
+            Write-Host "  FAIL $_" -ForegroundColor Red
+        }
+
+        if ($ieoSuccess) {
+            $testResults.Steps += @{ Name = "InitialExportOnly"; Success = $true }
+        }
+        else {
+            $testResults.Steps += @{ Name = "InitialExportOnly"; Success = $false; Error = $ieoErrorMessage }
+            if (-not $ContinueOnError) {
+                Write-Host ""
+                Write-Host "Test failed. Stopping execution. Use -ContinueOnError to continue despite failures." -ForegroundColor Red
+                exit 1
+            }
+        }
+        $stepTimings["5. InitialExportOnly"] = (Get-Date) - $stepIeoStart
     }
 
     # Summary

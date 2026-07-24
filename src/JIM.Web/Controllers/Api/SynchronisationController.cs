@@ -973,6 +973,9 @@ public class SynchronisationController(
         if (request.MaxExportParallelism.HasValue)
             connectedSystem.MaxExportParallelism = request.MaxExportParallelism.Value;
 
+        if (request.UnresolvedReferenceHandling.HasValue)
+            connectedSystem.UnresolvedReferenceHandling = request.UnresolvedReferenceHandling.Value;
+
         // Update setting values if provided
         if (request.SettingValues != null)
         {
@@ -1732,7 +1735,8 @@ public class SynchronisationController(
             ProjectToMetaverse = request.ProjectToMetaverse,
             ProvisionToConnectedSystem = request.ProvisionToConnectedSystem,
             Enabled = request.Enabled,
-            EnforceState = request.EnforceState
+            EnforceState = request.EnforceState,
+            OutboundDeprovisionAction = request.OutboundDeprovisionAction ?? OutboundDeprovisionAction.Disconnect
         };
 
         var apiKey = await GetCurrentApiKeyAsync();
@@ -2191,6 +2195,11 @@ public class SynchronisationController(
 
             mapping.TargetConnectedSystemAttributeId = csAttr.Id;
             mapping.TargetConnectedSystemAttribute = csAttr;
+
+            // Initial Export Only applies to export mappings only (#223). The entity default is false;
+            // only override when the request supplies a value.
+            if (request.InitialExportOnly.HasValue)
+                mapping.InitialExportOnly = request.InitialExportOnly.Value;
         }
 
         // Add sources
@@ -2762,6 +2771,7 @@ public class SynchronisationController(
             criterion.StringValue = null;
             criterion.IntValue = null;
             criterion.LongValue = null;
+            criterion.DecimalValue = null;
             criterion.DateTimeValue = null;
             criterion.BoolValue = null;
             criterion.GuidValue = null;
@@ -2771,6 +2781,7 @@ public class SynchronisationController(
             criterion.StringValue = request.StringValue;
             criterion.IntValue = request.IntValue;
             criterion.LongValue = request.LongValue;
+            criterion.DecimalValue = request.DecimalValue;
             criterion.DateTimeValue = request.DateTimeValue;
             criterion.BoolValue = request.BoolValue;
             criterion.GuidValue = request.GuidValue;
@@ -2994,17 +3005,9 @@ public class SynchronisationController(
                 source.ConnectedSystemAttributeId = csAttr.Id;
                 source.ConnectedSystemAttribute = csAttr;
             }
-            else if (sourceRequest.MetaverseAttributeId.HasValue)
-            {
-                var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
-                if (mvAttr == null)
-                    return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
-                source.MetaverseAttributeId = mvAttr.Id;
-                source.MetaverseAttribute = mvAttr;
-            }
             else
             {
-                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
             }
 
             rule.Sources.Add(source);
@@ -3101,7 +3104,6 @@ public class SynchronisationController(
         if (request.Sources != null)
         {
             var objectType = connectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == rule.ConnectedSystemObjectTypeId);
-            var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
 
             // Clear existing sources and add new ones
             rule.Sources.Clear();
@@ -3122,17 +3124,9 @@ public class SynchronisationController(
                     source.ConnectedSystemAttributeId = csAttr.Id;
                     source.ConnectedSystemAttribute = csAttr;
                 }
-                else if (sourceRequest.MetaverseAttributeId.HasValue)
-                {
-                    var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
-                    if (mvAttr == null)
-                        return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
-                    source.MetaverseAttributeId = mvAttr.Id;
-                    source.MetaverseAttribute = mvAttr;
-                }
                 else
                 {
-                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
                 }
 
                 rule.Sources.Add(source);
@@ -3334,17 +3328,9 @@ public class SynchronisationController(
                 source.ConnectedSystemAttributeId = csAttr.Id;
                 source.ConnectedSystemAttribute = csAttr;
             }
-            else if (sourceRequest.MetaverseAttributeId.HasValue)
-            {
-                var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
-                if (mvAttr == null)
-                    return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
-                source.MetaverseAttributeId = mvAttr.Id;
-                source.MetaverseAttribute = mvAttr;
-            }
             else
             {
-                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+                return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
             }
 
             rule.Sources.Add(source);
@@ -3430,7 +3416,6 @@ public class SynchronisationController(
         if (request.Sources != null)
         {
             var objectType = syncRule.ConnectedSystemObjectType;
-            var mvAttributes = await _application.Metaverse.GetMetaverseAttributesAsync();
 
             rule.Sources.Clear();
 
@@ -3450,17 +3435,9 @@ public class SynchronisationController(
                     source.ConnectedSystemAttributeId = csAttr.Id;
                     source.ConnectedSystemAttribute = csAttr;
                 }
-                else if (sourceRequest.MetaverseAttributeId.HasValue)
-                {
-                    var mvAttr = mvAttributes?.FirstOrDefault(a => a.Id == sourceRequest.MetaverseAttributeId.Value);
-                    if (mvAttr == null)
-                        return NotFound(ApiErrorResponse.NotFound($"Metaverse attribute with ID {sourceRequest.MetaverseAttributeId} not found."));
-                    source.MetaverseAttributeId = mvAttr.Id;
-                    source.MetaverseAttribute = mvAttr;
-                }
                 else
                 {
-                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify either ConnectedSystemAttributeId or MetaverseAttributeId."));
+                    return BadRequest(ApiErrorResponse.BadRequest("Each source must specify ConnectedSystemAttributeId."));
                 }
 
                 rule.Sources.Add(source);

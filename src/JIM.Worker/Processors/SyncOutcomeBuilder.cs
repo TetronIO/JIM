@@ -22,7 +22,9 @@ internal static class SyncOutcomeBuilder
         Guid? targetEntityId = null,
         string? targetEntityDescription = null,
         int? detailCount = null,
-        string? detailMessage = null)
+        string? detailMessage = null,
+        int? syncRuleId = null,
+        string? syncRuleName = null)
     {
         var outcome = new ActivityRunProfileExecutionItemSyncOutcome
         {
@@ -31,6 +33,8 @@ internal static class SyncOutcomeBuilder
             TargetEntityDescription = targetEntityDescription,
             DetailCount = detailCount,
             DetailMessage = detailMessage,
+            SyncRuleId = syncRuleId,
+            SyncRuleName = syncRuleName,
             Ordinal = rpei.SyncOutcomes.Count
         };
 
@@ -49,7 +53,9 @@ internal static class SyncOutcomeBuilder
         Guid? targetEntityId = null,
         string? targetEntityDescription = null,
         int? detailCount = null,
-        string? detailMessage = null)
+        string? detailMessage = null,
+        int? syncRuleId = null,
+        string? syncRuleName = null)
     {
         var outcome = new ActivityRunProfileExecutionItemSyncOutcome
         {
@@ -59,6 +65,8 @@ internal static class SyncOutcomeBuilder
             TargetEntityDescription = targetEntityDescription,
             DetailCount = detailCount,
             DetailMessage = detailMessage,
+            SyncRuleId = syncRuleId,
+            SyncRuleName = syncRuleName,
             Ordinal = parent.Children.Count
         };
 

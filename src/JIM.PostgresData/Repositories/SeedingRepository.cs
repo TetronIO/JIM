@@ -80,4 +80,21 @@ public class SeedingRepository : ISeedingRepository
         await Repository.Database.SaveChangesAsync();
         Log.Information("SeedDataAsync: All seed data committed successfully");
     }
+
+    /// <summary>
+    /// Persists the built-in schema synchronisation pass's changes in a single transaction: the given
+    /// newly-created built-in Metaverse Attributes, plus any pending modifications to change-tracked entities the
+    /// pass loaded (new Object Type bindings, Standard Mapping additions and removals).
+    /// </summary>
+    public async Task SaveBuiltInSchemaChangesAsync(List<MetaverseAttribute> newMetaverseAttributes)
+    {
+        if (newMetaverseAttributes.Count > 0)
+        {
+            Repository.Database.MetaverseAttributes.AddRange(newMetaverseAttributes);
+            Log.Information($"SaveBuiltInSchemaChangesAsync: Creating {newMetaverseAttributes.Count} built-in MetaverseAttributes");
+        }
+
+        await Repository.Database.SaveChangesAsync();
+        Log.Information("SaveBuiltInSchemaChangesAsync: Built-in schema changes committed successfully");
+    }
 }

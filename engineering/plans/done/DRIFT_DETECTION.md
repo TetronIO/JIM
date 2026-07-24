@@ -278,18 +278,18 @@ The `EnforceState` setting should be hidden in an **Advanced Options** section t
 #### Phase 1: Schema and Model Changes ✅
 
 - [x] **1.1** Add `EnforceState` property to `SyncRule` model (default: true)
-  - Added to [SyncRule.cs](../../src/JIM.Models/Logic/SyncRule.cs)
-  - Added to [SyncRuleHeader.cs](../../src/JIM.Models/Logic/DTOs/SyncRuleHeader.cs)
+  - Added to [SyncRule.cs](../../../src/JIM.Models/Logic/SyncRule.cs)
+  - Added to [SyncRuleHeader.cs](../../../src/JIM.Models/Logic/DTOs/SyncRuleHeader.cs)
 - [x] **1.2** Create database migration
-  - Created [20260117121840_AddEnforceStateToSyncRule.cs](../../src/JIM.PostgresData/Migrations/20260117121840_AddEnforceStateToSyncRule.cs)
+  - Created `20260117121840_AddEnforceStateToSyncRule.cs` (since consolidated away; the `EnforceState` column survives in the current model snapshot)
 - [x] **1.3** Update API DTOs for sync rule configuration
-  - Updated [SyncRuleRequestDtos.cs](../../src/JIM.Web/Models/Api/SyncRuleRequestDtos.cs)
-  - Updated [SynchronisationController.cs](../../src/JIM.Web/Controllers/Api/SynchronisationController.cs)
+  - Updated [SyncRuleRequestDtos.cs](../../../src/JIM.Web/Models/Api/SyncRuleRequestDtos.cs)
+  - Updated [SynchronisationController.cs](../../../src/JIM.Web/Controllers/Api/SynchronisationController.cs)
 
 #### Phase 2: Drift Detection Logic ✅
 
 - [x] **2.1** Create `DriftDetectionService` in `src/JIM.Application/Services/`
-  - Created [DriftDetectionService.cs](../../src/JIM.Application/Services/DriftDetectionService.cs)
+  - Created [DriftDetectionService.cs](../../../src/JIM.Application/Services/DriftDetectionService.cs)
   - `EvaluateDriftAsync(cso, mvo, exportRules, importMappingCache)`
   - `HasImportRuleForAttribute(connectedSystemId, mvoAttributeId, cache)`
   - `BuildImportMappingCache(syncRules)` static helper
@@ -298,8 +298,8 @@ The `EnforceState` setting should be hidden in an **Advanced Options** section t
   - Added `BuildDriftDetectionCache()` method
   - Added `EvaluateDriftAndEnforceStateAsync()` method
   - Integrated into `ProcessMetaverseObjectChangesAsync()`
-  - Updated [SyncFullSyncTaskProcessor.cs](../../src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs)
-  - Updated [SyncDeltaSyncTaskProcessor.cs](../../src/JIM.Worker/Processors/SyncDeltaSyncTaskProcessor.cs)
+  - Updated [SyncFullSyncTaskProcessor.cs](../../../src/JIM.Worker/Processors/SyncFullSyncTaskProcessor.cs)
+  - Updated [SyncDeltaSyncTaskProcessor.cs](../../../src/JIM.Worker/Processors/SyncDeltaSyncTaskProcessor.cs)
 
 - [x] **2.3** Add performance optimisations
   - Cache import mapping lookups per sync run (`_importMappingCache`)
@@ -309,7 +309,7 @@ The `EnforceState` setting should be hidden in an **Advanced Options** section t
 #### Phase 3: UI Updates ✅
 
 - [x] **3.1** Add "Advanced Options" expandable section to export sync rule configuration page
-  - Updated [SyncRuleDetail.razor](../../src/JIM.Web/Pages/Admin/SyncRuleDetail.razor)
+  - Updated [SyncRuleDetail.razor](../../../src/JIM.Web/Pages/Admin/SyncRuleDetail.razor)
 - [x] **3.2** Add `EnforceState` checkbox inside "Advanced Options" section with appropriate help text
   - Displayed only for Export direction rules
   - Includes tooltip and explanatory alert text
@@ -317,7 +317,7 @@ The `EnforceState` setting should be hidden in an **Advanced Options** section t
 #### Phase 4: Testing ✅
 
 - [x] **4.1** Unit tests for `DriftDetectionService`
-  - Created [DriftDetectionTests.cs](../../test/JIM.Worker.Tests/OutboundSync/DriftDetectionTests.cs)
+  - Created [DriftDetectionTests.cs](../../../test/JIM.Worker.Tests/OutboundSync/DriftDetectionTests.cs)
   - 12 unit tests covering:
     - Drift detected when non-contributor system changes attribute
     - No drift flagged when contributor system changes attribute

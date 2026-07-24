@@ -1,5 +1,6 @@
 @using JIM.Models.Transactional
 @using JIM.Utilities
+@using System.Globalization
 @inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
@@ -118,6 +119,9 @@
 
         if (change.LongValue.HasValue)
             return change.LongValue.Value.ToString();
+
+        if (change.DecimalValue.HasValue)
+            return change.DecimalValue.Value.ToString(CultureInfo.InvariantCulture);
 
         if (change.GuidValue.HasValue)
             return change.GuidValue.Value.ToString();

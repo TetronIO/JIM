@@ -612,6 +612,8 @@ try {
     $targetExportRule = $existingRules | Where-Object { $_.name -eq $targetExportRuleName }
 
     if (-not $targetExportRule) {
+        # Delete deprovisioning action: provisioned target users are removed when their
+        # Metaverse Object is deleted (issue #655)
         $targetExportRule = New-JIMSyncRule `
             -Name $targetExportRuleName `
             -ConnectedSystemId $targetSystem.id `
@@ -619,6 +621,7 @@ try {
             -MetaverseObjectTypeId $mvUserType.id `
             -Direction Export `
             -ProvisionToConnectedSystem `
+            -OutboundDeprovisionAction Delete `
             -PassThru
         Write-Host "  ✓ Created export sync rule: $targetExportRuleName" -ForegroundColor Green
     }

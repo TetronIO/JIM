@@ -93,6 +93,10 @@ For performance, exports can be processed in batches. Connectors that support pa
 
 JIM performs intelligent reconciliation before export. For example, if an object is created and then deleted before the export runs, the redundant Pending Exports are automatically cancelled -- avoiding unnecessary operations on the target system.
 
+### Applying Exported Changes Straight Away
+
+When an export to a Connected System succeeds, JIM applies the exported attribute values to its own record of that Connected System Object immediately, rather than waiting for the next import to bring them back. The confirming import still runs as usual, comparing what the Connected System reports against what JIM expects, but for a successfully exported object it typically finds nothing left to do. At large scale (hundreds of thousands of objects), this avoids re-processing millions of attribute values that JIM itself just wrote, and it keeps the confirming import fast.
+
 ## Putting It Together
 
 A typical synchronisation cycle follows this pattern:

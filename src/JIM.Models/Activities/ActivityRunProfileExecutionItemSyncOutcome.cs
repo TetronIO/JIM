@@ -46,6 +46,23 @@ public class ActivityRunProfileExecutionItemSyncOutcome
     public string? TargetEntityDescription { get; set; }
 
     /// <summary>
+    /// The id of the Synchronisation Rule attributed to this outcome, when one was determinable at
+    /// decision time; for example the rule whose scope a Connected System Object fell out of for
+    /// DisconnectedOutOfScope outcomes, or the rule that caused a Projected or Provisioned outcome.
+    /// Stored as a plain scalar (no foreign key), matching the snapshot approach of
+    /// <see cref="TargetEntityId"/>, so the attribution survives later rule deletion; resolve
+    /// against live rules at display time and fall back to <see cref="SyncRuleName"/>.
+    /// </summary>
+    public int? SyncRuleId { get; set; }
+
+    /// <summary>
+    /// Snapshot of the attributed Synchronisation Rule's name at the time the outcome was recorded.
+    /// Preserved for display without joins even if the rule is later renamed or deleted, matching
+    /// the <see cref="TargetEntityDescription"/> snapshot pattern.
+    /// </summary>
+    public string? SyncRuleName { get; set; }
+
+    /// <summary>
     /// Quantitative detail (e.g., "12 attributes flowed", "3 attributes exported").
     /// </summary>
     public int? DetailCount { get; set; }

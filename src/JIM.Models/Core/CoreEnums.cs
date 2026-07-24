@@ -13,13 +13,43 @@ public enum AttributeDataType
     Reference = 5,
     Guid = 6,
     Boolean = 7,
-    LongNumber = 8
+    LongNumber = 8,
+
+    /// <summary>
+    /// A high-precision decimal number. Maps to .NET <c>decimal</c> and PostgreSQL <c>numeric</c>.
+    /// </summary>
+    Decimal = 9
 }
 
 public enum AttributePlurality
 {
     SingleValued = 0,
     MultiValued = 1
+}
+
+/// <summary>
+/// Identifies the vocabulary a Standard Mapping's counterpart attribute name belongs to.
+/// Used by the advisory Standard Mapping metadata on Metaverse Attributes; never consulted
+/// by the synchronisation engine.
+/// </summary>
+public enum AttributeStandard
+{
+    NotSet = 0,
+
+    /// <summary>
+    /// SCIM 2.0 (RFC 7643) core and enterprise extension attribute names, e.g. "name.givenName".
+    /// </summary>
+    Scim = 1,
+
+    /// <summary>
+    /// LDAP and Active Directory attribute names, e.g. "givenName".
+    /// </summary>
+    Ldap = 2,
+
+    /// <summary>
+    /// JIM's own canonical vocabulary, i.e. built-in Metaverse Attribute names.
+    /// </summary>
+    Jim = 3
 }
 
 /// <summary>

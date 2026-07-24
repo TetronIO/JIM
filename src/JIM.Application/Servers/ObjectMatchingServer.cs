@@ -139,56 +139,5 @@ public class ObjectMatchingServer
         return null;
     }
 
-    /// <summary>
-    /// Evaluates a single matching rule to compute the expected external ID value that would be used
-    /// to create a new object in the Connected System. This is used during provisioning to pre-populate
-    /// CSO attributes before export.
-    /// </summary>
-    /// <param name="metaverseObject">The source MVO being provisioned.</param>
-    /// <param name="matchingRule">The matching rule defining how to compute the value.</param>
-    /// <returns>The computed value, or null if the value cannot be computed.</returns>
-    public object? ComputeMatchingValueFromMvo(MetaverseObject metaverseObject, ObjectMatchingRule matchingRule)
-    {
-        if (matchingRule.Sources.Count == 0)
-            return null;
-
-        var source = matchingRule.Sources.OrderBy(s => s.Order).First();
-
-        // For export matching, the source should reference an MVO attribute
-        if (source.MetaverseAttribute != null)
-        {
-            var attributeValue = metaverseObject.AttributeValues
-                .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id || av.Attribute?.Id == source.MetaverseAttribute.Id);
-
-            if (attributeValue == null)
-                return null;
-
-            // Return the appropriate value based on what's populated
-            if (!string.IsNullOrEmpty(attributeValue.StringValue))
-                return attributeValue.StringValue;
-            if (attributeValue.IntValue.HasValue)
-                return attributeValue.IntValue.Value;
-            if (attributeValue.GuidValue.HasValue)
-                return attributeValue.GuidValue.Value;
-            if (attributeValue.BoolValue.HasValue)
-                return attributeValue.BoolValue.Value;
-            if (attributeValue.DateTimeValue.HasValue)
-                return attributeValue.DateTimeValue.Value;
-            if (attributeValue.ByteValue != null)
-                return attributeValue.ByteValue;
-
-            return null;
-        }
-
-        // Expression-based sources not yet supported in object matching
-        if (!string.IsNullOrWhiteSpace(source.Expression))
-        {
-            Log.Warning("ComputeMatchingValueFromMvo: Expression-based matching rules not yet supported");
-            return null;
-        }
-
-        return null;
-    }
-
     #endregion
 }

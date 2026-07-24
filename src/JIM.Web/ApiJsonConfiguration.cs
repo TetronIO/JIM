@@ -21,8 +21,15 @@ public static class ApiJsonConfiguration
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        // Serialise enums as their string names rather than numeric values.
-        options.Converters.Add(new JsonStringEnumConverter());
+        // Serialise enums as their string names rather than numeric values, and reject numeric
+        // values on the way in (allowIntegerValues: false). The default converter also accepts
+        // integers on deserialisation, which lets a client send an out-of-range number for any
+        // enum-typed request DTO property (for example {"mode": 99}); it binds without error,
+        // passes model validation, and can be persisted as an undefined enum value that downstream
+        // switch statements never account for. Rejecting integers wire-wide closes this hole for
+        // every current and future request DTO at one site. Undefined string values already fail
+        // deserialisation. Response serialisation is unaffected (it always emits string names).
+        options.Converters.Add(new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false));
 
         // Reject payloads containing duplicate JSON property names. The JSON specification
         // does not define which value wins, so duplicates are ambiguous and are a known

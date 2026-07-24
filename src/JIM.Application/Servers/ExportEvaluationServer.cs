@@ -11,6 +11,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 
 namespace JIM.Application.Servers;
@@ -397,7 +398,7 @@ public class ExportEvaluationServer
             {
                 var (pendingExport, provisioningCso, csoAlreadyCurrentCount) = await CreateOrUpdatePendingExportWithNoNetChangeAsync(
                     mvo, exportRule, changedAttributes, cache, deferSave, removedAttributes, existingPendingExports,
-                    mvAttributeDictionary, preResolvedForSystem, recallSemantics);
+                    mvAttributeDictionary, preResolvedForSystem, recallSemantics, result.AttributeFlowErrors);
 
                 result.CsoAlreadyCurrentCount += csoAlreadyCurrentCount;
 
@@ -406,10 +407,13 @@ public class ExportEvaluationServer
                     result.PendingExports.Add(pendingExport);
                 }
 
-                // Collect provisioning CSOs for batch creation when deferSave is true
+                // Collect provisioning CSOs for batch creation when deferSave is true, recording
+                // which export Synchronisation Rule caused each provisioning so the worker can
+                // attribute the Provisioned sync outcome to it (#1085).
                 if (provisioningCso != null)
                 {
                     result.ProvisioningCsosToCreate.Add(provisioningCso);
+                    result.ProvisioningSyncRulesByCsoId[provisioningCso.Id] = exportRule;
                 }
             }
         }
@@ -546,26 +550,37 @@ public class ExportEvaluationServer
 
     /// <summary>
     /// Evaluates export rules for an MVO that is being deleted.
-    /// Implements Q4 decision: only create delete exports for Provisioned CSOs.
+    /// Deprovisioning is driven by each matching export Synchronisation Rule's
+    /// OutboundDeprovisionAction, regardless of the CSO's join type (issue #655).
     /// Stores the secondary external ID (e.g., DN for LDAP) in AttributeValueChanges
     /// so the delete export can be processed even after the CSO is deleted.
     /// Also disconnects CSOs from the MVO to prevent spurious sync processing.
     /// </summary>
-    public async Task<List<PendingExport>> EvaluateMvoDeletionAsync(MetaverseObject mvo)
-        => await EvaluateMvoDeletionsAsync([mvo]);
+    /// <param name="mvo">The Metaverse Object about to be deleted.</param>
+    /// <param name="exportEvaluationCache">Optional pre-built cache carrying the export rules;
+    /// when omitted, the enabled export Synchronisation Rules are loaded from the repository.</param>
+    public async Task<List<PendingExport>> EvaluateMvoDeletionAsync(
+        MetaverseObject mvo,
+        ExportEvaluationCache? exportEvaluationCache = null)
+        => await EvaluateMvoDeletionsAsync([mvo], exportEvaluationCache);
 
     /// <summary>
-    /// Set-based form of <see cref="EvaluateMvoDeletionAsync"/> (issue #993): evaluates all the
-    /// given MVOs' deletions with one CSO fetch, one existing Pending Export lookup, one bulk
-    /// Pending Export replace/create, and one CSO disconnect statement, instead of several round
-    /// trips per object. Per-object semantics are identical: delete Pending Exports are ensured
-    /// for Provisioned CSOs (reusing an existing Delete PE, replacing any other change type), and
-    /// every joined CSO is disconnected from its MVO.
+    /// Set-based form of <see cref="EvaluateMvoDeletionAsync(MetaverseObject, ExportEvaluationCache?)"/>
+    /// (issue #993): evaluates all the given MVOs' deletions with one CSO fetch, one existing
+    /// Pending Export lookup, one bulk Pending Export replace/create, and one CSO disconnect
+    /// statement, instead of several round trips per object. Per-object semantics are identical:
+    /// delete Pending Exports are ensured for CSOs matched by an export Synchronisation Rule whose
+    /// OutboundDeprovisionAction is Delete (issue #655; reusing an existing Delete PE, replacing
+    /// any other change type), and every joined CSO is disconnected from its MVO.
     /// </summary>
     /// <param name="mvos">The Metaverse Objects about to be deleted.</param>
-    /// <returns>The Delete Pending Exports for the MVOs' Provisioned CSOs: newly created ones plus
-    /// any existing Delete Pending Exports that were reused.</returns>
-    public async Task<List<PendingExport>> EvaluateMvoDeletionsAsync(IReadOnlyCollection<MetaverseObject> mvos)
+    /// <param name="exportEvaluationCache">Optional pre-built cache carrying the export rules;
+    /// when omitted, the enabled export Synchronisation Rules are loaded from the repository.</param>
+    /// <returns>The Delete Pending Exports for the CSOs whose export Synchronisation Rule action is
+    /// Delete: newly created ones plus any existing Delete Pending Exports that were reused.</returns>
+    public async Task<List<PendingExport>> EvaluateMvoDeletionsAsync(
+        IReadOnlyCollection<MetaverseObject> mvos,
+        ExportEvaluationCache? exportEvaluationCache = null)
     {
         var pendingExports = new List<PendingExport>();
         if (mvos.Count == 0)
@@ -575,42 +590,86 @@ public class ExportEvaluationServer
         // values only, which is all the delete PE stamping below needs).
         var csosByMvo = await SyncRepo.GetConnectedSystemObjectsForMvoDeletionAsync(
             mvos.Select(m => m.Id).ToList());
+        if (csosByMvo.Count == 0)
+            return pendingExports;
 
-        // Q4 Decision: Only create delete exports for Provisioned CSOs. Non-Provisioned CSOs are
-        // still disconnected to prevent spurious sync processing after the MVO is deleted.
+        // Issue #655: deprovisioning is driven by each matching export Synchronisation Rule's
+        // OutboundDeprovisionAction, not by the CSO's join type. A rule matches a CSO on the full
+        // (Connected System, Connected System Object Type, Metaverse Object Type) triple; Delete
+        // wins when multiple matching rules disagree. CSOs with no matching rule, or whose rules
+        // all say Disconnect, are still disconnected to prevent spurious sync processing after the
+        // MVO is deleted, but nothing is exported to the Connected System.
+        var exportRulesByMvoTypeId = exportEvaluationCache?.ExportRulesByMvoTypeId
+            ?? await GetExportRulesByMvoTypeIdAsync();
+        var mvoTypeIdsByMvoId = mvos.ToDictionary(m => m.Id, m => m.Type?.Id);
+
         // The fetched dictionary is iterated directly: its keys are exactly the given MVOs that
         // have joined CSOs, so no per-MVO lookup or implicit filtering is needed.
         var csoIdsToDisconnect = new List<Guid>();
-        var provisionedCsos = new List<(ConnectedSystemObject Cso, Guid MvoId)>();
+        var csosToDelete = new List<(ConnectedSystemObject Cso, Guid MvoId)>();
+        var disconnectedByRuleCount = 0;
+        var noMatchingRuleCount = 0;
         foreach (var (mvoId, joinedCsos) in csosByMvo)
         {
+            List<SyncRule>? typeExportRules = null;
+            if (!mvoTypeIdsByMvoId.TryGetValue(mvoId, out var mvoTypeId) || mvoTypeId == null)
+            {
+                Log.Warning("EvaluateMvoDeletionsAsync: MVO {MvoId} has no Type set; cannot match export Synchronisation Rules. Its CSOs will be disconnected only.",
+                    mvoId);
+            }
+            else
+            {
+                exportRulesByMvoTypeId.TryGetValue(mvoTypeId.Value, out typeExportRules);
+            }
+
             foreach (var cso in joinedCsos)
             {
                 csoIdsToDisconnect.Add(cso.Id);
-                if (cso.JoinType == ConnectedSystemObjectJoinType.Provisioned)
+
+                var matchingRules = typeExportRules?
+                    .Where(r => r.ConnectedSystemId == cso.ConnectedSystemId && r.ConnectedSystemObjectTypeId == cso.TypeId)
+                    .ToList();
+                if (matchingRules == null || matchingRules.Count == 0)
                 {
-                    provisionedCsos.Add((cso, mvoId));
+                    noMatchingRuleCount++;
+                    Log.Debug("EvaluateMvoDeletionsAsync: No export Synchronisation Rule matches CSO {CsoId} (system {SystemId}, object type {TypeId}); disconnecting only",
+                        cso.Id, cso.ConnectedSystemId, cso.TypeId);
+                    continue;
                 }
-                else
+
+                var deleteRule = matchingRules.Find(r => r.OutboundDeprovisionAction == OutboundDeprovisionAction.Delete);
+                if (deleteRule == null)
                 {
-                    Log.Debug("EvaluateMvoDeletionsAsync: Skipping delete for CSO {CsoId} - JoinType is {JoinType}, not Provisioned; disconnecting only",
-                        cso.Id, cso.JoinType);
+                    disconnectedByRuleCount++;
+                    Log.Debug("EvaluateMvoDeletionsAsync: CSO {CsoId} matches export Synchronisation Rule(s) whose action is Disconnect; disconnecting only",
+                        cso.Id);
+                    continue;
                 }
+
+                if (matchingRules.Count > 1 && matchingRules.Exists(r => r.OutboundDeprovisionAction != OutboundDeprovisionAction.Delete))
+                {
+                    Log.Information("EvaluateMvoDeletionsAsync: {RuleCount} export Synchronisation Rules match CSO {CsoId} with conflicting deprovisioning actions; Delete wins via rule '{RuleName}'",
+                        matchingRules.Count, cso.Id, LogSanitiser.Sanitise(deleteRule.Name));
+                }
+
+                Log.Information("EvaluateMvoDeletionsAsync: Staging delete Pending Export for CSO {CsoId} (join type {JoinType}) per export Synchronisation Rule '{RuleName}'",
+                    cso.Id, cso.JoinType, LogSanitiser.Sanitise(deleteRule.Name));
+                csosToDelete.Add((cso, mvoId));
             }
         }
 
-        if (provisionedCsos.Count > 0)
+        if (csosToDelete.Count > 0)
         {
             // Delete-PE collision policy, set-based. PendingExports has a unique index on
             // ConnectedSystemObjectId, so only one PE per CSO is allowed: an existing Delete PE
             // is reused; any other change type is deleted and replaced with a Delete PE (the same
             // policy EnsureDeletePendingExportAsync applies on the singular path).
             var existingPesByCsoId = await SyncRepo.GetPendingExportsLightweightByConnectedSystemObjectIdsAsync(
-                provisionedCsos.Select(p => p.Cso.Id).ToList());
+                csosToDelete.Select(p => p.Cso.Id).ToList());
 
             var replacedPeCsoIds = new List<Guid>();
             var newPendingExports = new List<PendingExport>();
-            foreach (var (cso, mvoId) in provisionedCsos)
+            foreach (var (cso, mvoId) in csosToDelete)
             {
                 if (existingPesByCsoId.TryGetValue(cso.Id, out var existingPe))
                 {
@@ -645,7 +704,7 @@ public class ExportEvaluationServer
                     });
 
                     Log.Debug("EvaluateMvoDeletionsAsync: Will store secondary external ID '{Value}' (attr {AttrName}) on delete PE for CSO {CsoId}",
-                        secondaryIdAttrValue.StringValue, secondaryIdAttrValue.Attribute.Name, cso.Id);
+                        LogSanitiser.Sanitise(secondaryIdAttrValue.StringValue), secondaryIdAttrValue.Attribute.Name, cso.Id);
                 }
                 else
                 {
@@ -689,11 +748,25 @@ public class ExportEvaluationServer
         if (csoIdsToDisconnect.Count > 0)
         {
             await SyncRepo.DisconnectConnectedSystemObjectsAsync(csoIdsToDisconnect);
-            Log.Information("EvaluateMvoDeletionsAsync: Disconnected {CsoCount} CSO(s) across {MvoCount} MVO(s); {PeCount} delete Pending Export(s) ensured",
-                csoIdsToDisconnect.Count, mvos.Count, pendingExports.Count);
+            Log.Information("EvaluateMvoDeletionsAsync: Disconnected {CsoCount} CSO(s) across {MvoCount} MVO(s); {PeCount} delete Pending Export(s) ensured, {ByRuleCount} disconnect-only by rule action, {NoRuleCount} with no matching export Synchronisation Rule",
+                csoIdsToDisconnect.Count, mvos.Count, pendingExports.Count, disconnectedByRuleCount, noMatchingRuleCount);
         }
 
         return pendingExports;
+    }
+
+    /// <summary>
+    /// Loads all enabled export Synchronisation Rules grouped by Metaverse Object Type ID.
+    /// Fallback for deletion-evaluation callers with no <see cref="ExportEvaluationCache"/>
+    /// (the housekeeping grace-period path); sync task processors pass their run-scoped cache.
+    /// </summary>
+    private async Task<Dictionary<int, List<SyncRule>>> GetExportRulesByMvoTypeIdAsync()
+    {
+        var allSyncRules = await SyncRepo.GetAllSyncRulesAsync();
+        return allSyncRules
+            .Where(sr => sr.Enabled && sr.Direction == SyncRuleDirection.Export)
+            .GroupBy(sr => sr.MetaverseObjectTypeId)
+            .ToDictionary(g => g.Key, g => g.ToList());
     }
 
     /// <summary>
@@ -1248,10 +1321,12 @@ public class ExportEvaluationServer
                         DateTimeValue = existingChange.DateTimeValue,
                         IntValue = existingChange.IntValue,
                         LongValue = existingChange.LongValue,
+                        DecimalValue = existingChange.DecimalValue,
                         ByteValue = existingChange.ByteValue,
                         GuidValue = existingChange.GuidValue,
                         BoolValue = existingChange.BoolValue,
                         UnresolvedReferenceValue = existingChange.UnresolvedReferenceValue,
+                        ResolvedReferenceCsoId = existingChange.ResolvedReferenceCsoId,
                         ChangeType = existingChange.ChangeType
                     };
                 }
@@ -1780,7 +1855,8 @@ public class ExportEvaluationServer
         List<PendingExport>? existingPendingExports = null,
         Dictionary<string, object?>? mvAttributeDictionary = null,
         IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null,
-        bool recallSemantics = false)
+        bool recallSemantics = false,
+        List<AttributeFlowError>? flowErrors = null)
     {
         // Find existing CSO using cached lookup instead of database query
         var lookupKey = (mvo.Id, exportRule.ConnectedSystemId);
@@ -1838,19 +1914,39 @@ public class ExportEvaluationServer
 
                 if (matchedCso != null)
                 {
+                    // Claim the CSO atomically: the eligibility check above is a point-in-time read,
+                    // so two Metaverse Objects can both reach here for the same CSO in overlapping
+                    // evaluations (#1051). The conditional UPDATE re-checks MetaverseObjectId IS NULL
+                    // at write time, so only one caller wins the join; on failure, fall through to
+                    // provisioning below by clearing matchedCso.
+                    var dateJoined = DateTime.UtcNow;
+                    var claimed = await SyncRepo.TryClaimConnectedSystemObjectForJoinAsync(matchedCso.Id, mvo.Id, dateJoined);
+                    if (!claimed)
+                    {
+                        Log.Warning("CreateOrUpdatePendingExportWithNoNetChangeAsync: Export matching found Connected System Object {CsoId} for Metaverse Object {MvoId} in system {SystemId}, but another Metaverse Object claimed it first; falling back to provisioning",
+                            matchedCso.Id, mvo.Id, exportRule.ConnectedSystemId);
+                        matchedCso = null;
+                    }
+                    else
+                    {
+                        // Fix up the tracked instance to match the conditional UPDATE: raw SQL bypasses
+                        // the change tracker, so without this the next SaveChangesAsync could write
+                        // stale values back over the claimed row.
+                        matchedCso.MetaverseObjectId = mvo.Id;
+                        matchedCso.Status = ConnectedSystemObjectStatus.Normal;
+                        matchedCso.JoinType = ConnectedSystemObjectJoinType.Joined;
+                        matchedCso.DateJoined = dateJoined;
+
+                        Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: Export matching found existing CSO {CsoId} for MVO {MvoId} in system {SystemId}: joined instead of provisioning",
+                            matchedCso.Id, mvo.Id, exportRule.ConnectedSystemId);
+                    }
+                }
+
+                if (matchedCso != null)
+                {
                     // Join the MVO to the existing CSO instead of provisioning
-                    matchedCso.MetaverseObjectId = mvo.Id;
-                    matchedCso.Status = ConnectedSystemObjectStatus.Normal;
-                    matchedCso.JoinType = ConnectedSystemObjectJoinType.Joined;
-                    matchedCso.DateJoined = DateTime.UtcNow;
-
-                    await SyncRepo.UpdateConnectedSystemObjectAsync(matchedCso);
-
                     // Update cache so subsequent lookups find the joined CSO
                     cache.CsoLookup[lookupKey] = matchedCso;
-
-                    Log.Information("CreateOrUpdatePendingExportWithNoNetChangeAsync: Export matching found existing CSO {CsoId} for MVO {MvoId} in system {SystemId} — joined instead of provisioning",
-                        matchedCso.Id, mvo.Id, exportRule.ConnectedSystemId);
 
                     csoForExport = matchedCso;
                     needsProvisioning = false;
@@ -1858,7 +1954,7 @@ public class ExportEvaluationServer
                 }
                 else
                 {
-                    // No match found — create CSO with PendingProvisioning status to establish the relationship before export
+                    // No match found: create CSO with PendingProvisioning status to establish the relationship before export
                     // When deferSave is true, CSO is created in-memory and the caller batch-saves it
                     using (JIM.Application.Diagnostics.Diagnostics.Sync.StartSpan("CreateProvisioningCso"))
                     {
@@ -1909,7 +2005,7 @@ public class ExportEvaluationServer
             attributeChanges = CreateAttributeValueChanges(mvo, exportRule, changedAttributes, changeType,
                 existingCso: existingCso, csoAttributeCache: cache.CsoAttributeValues, out csoAlreadyCurrentCount,
                 removedAttributes: removedAttributes, mvAttributeDictionary: mvAttributeDictionary,
-                preResolvedReferenceValues: preResolvedReferenceValues);
+                preResolvedReferenceValues: preResolvedReferenceValues, flowErrors: flowErrors);
 
             attrSpan.SetTag("changeCount", attributeChanges.Count);
             attrSpan.SetTag("skippedNoNetChange", csoAlreadyCurrentCount);
@@ -2063,10 +2159,12 @@ public class ExportEvaluationServer
                         DateTimeValue = avc.DateTimeValue,
                         IntValue = avc.IntValue,
                         LongValue = avc.LongValue,
+                        DecimalValue = avc.DecimalValue,
                         ByteValue = avc.ByteValue,
                         GuidValue = avc.GuidValue,
                         BoolValue = avc.BoolValue,
                         UnresolvedReferenceValue = avc.UnresolvedReferenceValue,
+                        ResolvedReferenceCsoId = avc.ResolvedReferenceCsoId,
                         ChangeType = avc.ChangeType
                     })
                     .ToList();
@@ -2251,7 +2349,7 @@ public class ExportEvaluationServer
         }
 
         Log.Debug("AddSecondaryExternalIdToCsoAsync: Added secondary external ID value '{SecondaryIdValue}' to CSO {CsoId} for confirming import matching (deferSave={DeferSave})",
-            secondaryIdChange.StringValue ?? secondaryIdChange.IntValue?.ToString() ?? "unknown", cso.Id, deferSave);
+            LogSanitiser.Sanitise(secondaryIdChange.StringValue ?? secondaryIdChange.IntValue?.ToString() ?? "unknown"), cso.Id, deferSave);
     }
 
     /// <summary>
@@ -2301,7 +2399,8 @@ public class ExportEvaluationServer
         out int csoAlreadyCurrentCount,
         HashSet<MetaverseObjectAttributeValue>? removedAttributes = null,
         Dictionary<string, object?>? mvAttributeDictionary = null,
-        IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null)
+        IReadOnlyDictionary<Guid, string>? preResolvedReferenceValues = null,
+        List<AttributeFlowError>? flowErrors = null)
     {
         var changes = new List<PendingExportAttributeValueChange>();
         var isCreateOperation = changeType == PendingExportChangeType.Create;
@@ -2318,13 +2417,13 @@ public class ExportEvaluationServer
         //   3. By value content (fallback for unsaved non-reference values)
         HashSet<Guid>? removedReferenceValueIds = null;
         HashSet<Guid>? removedEntityIds = null;
-        HashSet<(string?, int?, long?, Guid?, bool?, DateTime?)>? removedValueContents = null;
+        HashSet<(string?, int?, long?, decimal?, Guid?, bool?, DateTime?)>? removedValueContents = null;
 
         if (removedAttributes is { Count: > 0 })
         {
             removedReferenceValueIds = new HashSet<Guid>();
             removedEntityIds = new HashSet<Guid>();
-            removedValueContents = new HashSet<(string?, int?, long?, Guid?, bool?, DateTime?)>();
+            removedValueContents = new HashSet<(string?, int?, long?, decimal?, Guid?, bool?, DateTime?)>();
 
             foreach (var rv in removedAttributes)
             {
@@ -2335,11 +2434,13 @@ public class ExportEvaluationServer
                     removedEntityIds.Add(rv.Id);
 
                 if (!rv.ReferenceValueId.HasValue && rv.Id == Guid.Empty)
-                    removedValueContents.Add((rv.StringValue, rv.IntValue, rv.LongValue, rv.GuidValue, rv.BoolValue, rv.DateTimeValue));
+                    removedValueContents.Add((rv.StringValue, rv.IntValue, rv.LongValue, rv.DecimalValue, rv.GuidValue, rv.BoolValue, rv.DateTimeValue));
             }
         }
 
-        foreach (var mapping in exportRule.AttributeFlowRules)
+        // Initial Export Only mappings (#223) flow solely during the provisioning (Create) export; for
+        // Update exports the target attribute is unmanaged by JIM and must be skipped before any evaluation.
+        foreach (var mapping in exportRule.AttributeFlowRules.Where(m => isCreateOperation || !m.InitialExportOnly))
         {
             // For export rules, the target is the CSO attribute
             if (mapping.TargetConnectedSystemAttribute == null)
@@ -2410,6 +2511,9 @@ public class ExportEvaluationServer
                             case long longValue:
                                 change.LongValue = longValue;
                                 break;
+                            case decimal decimalValue:
+                                change.DecimalValue = decimalValue;
+                                break;
                             case DateTime dtValue:
                                 change.DateTimeValue = dtValue;
                                 break;
@@ -2452,6 +2556,32 @@ public class ExportEvaluationServer
                 // Handle direct Attribute Flow mappings
                 if (source.MetaverseAttribute == null)
                     continue;
+
+                // MVA -> SVA guard (#435): a multi-valued Metaverse source flowing to a single-valued Connected
+                // System attribute can only carry one value. If the Metaverse Object holds more than one value for
+                // the source attribute, JIM will not pick one arbitrarily; an arbitrary export could never be
+                // reconciled on the next import (JIM would not know which value is authoritative). No Pending Export
+                // is generated for this attribute and an error is recorded; the object's other attributes still export.
+                if (mapping.TargetConnectedSystemAttribute.AttributePlurality == AttributePlurality.SingleValued &&
+                    source.MetaverseAttribute.AttributePlurality == AttributePlurality.MultiValued)
+                {
+                    var mvoValueCount = mvo.AttributeValues.Count(av => av.AttributeId == source.MetaverseAttribute.Id && !av.NullValue);
+                    if (mvoValueCount > 1)
+                    {
+                        Log.Error("CreateAttributeValueChanges: Multi-valued source attribute '{SourceAttr}' has {ValueCount} values but " +
+                            "target attribute '{TargetAttr}' is single-valued. No Pending Export generated for this attribute. MVO {MvoId}",
+                            source.MetaverseAttribute.Name, mvoValueCount, mapping.TargetConnectedSystemAttribute.Name, mvo.Id);
+
+                        flowErrors?.Add(new AttributeFlowError
+                        {
+                            SourceAttributeName = source.MetaverseAttribute.Name,
+                            TargetAttributeName = mapping.TargetConnectedSystemAttribute.Name,
+                            ValueCount = mvoValueCount
+                        });
+
+                        continue;
+                    }
+                }
 
                 // Get attribute values - handling differs for single-valued vs multi-valued attributes
                 // Multi-valued attributes (like member) have multiple MVO attribute values with the same attribute ID
@@ -2543,7 +2673,7 @@ public class ExportEvaluationServer
                             (mvoValue.Id != Guid.Empty && removedEntityIds!.Contains(mvoValue.Id)) ||
                             (!mvoValue.ReferenceValueId.HasValue && mvoValue.Id == Guid.Empty &&
                                 removedValueContents!.Contains((mvoValue.StringValue, mvoValue.IntValue, mvoValue.LongValue,
-                                    mvoValue.GuidValue, mvoValue.BoolValue, mvoValue.DateTimeValue))));
+                                    mvoValue.DecimalValue, mvoValue.GuidValue, mvoValue.BoolValue, mvoValue.DateTimeValue))));
 
                         Log.Debug("CreateAttributeValueChanges: Processing MVO value Id={MvoValueId}, RefValueId={RefValueId}, isRemoval={IsRemoval}",
                             mvoValue.Id, mvoValue.ReferenceValueId, isRemoval);
@@ -2607,6 +2737,9 @@ public class ExportEvaluationServer
                                 break;
                             case AttributeDataType.LongNumber:
                                 attributeChange.LongValue = mvoValue.LongValue;
+                                break;
+                            case AttributeDataType.Decimal:
+                                attributeChange.DecimalValue = mvoValue.DecimalValue;
                                 break;
                             case AttributeDataType.Reference:
                                 // For reference attributes, store the MVO ID as unresolved reference — will be
@@ -2774,6 +2907,18 @@ public class ExportEvaluationServer
             return pendingChange.IntValue == existingValue.IntValue;
         }
 
+        // Long comparison
+        if (pendingChange.LongValue.HasValue || existingValue.LongValue.HasValue)
+        {
+            return pendingChange.LongValue == existingValue.LongValue;
+        }
+
+        // Decimal comparison: nullable decimal == is numeric and scale-insensitive, so 5.0 matches 5.00
+        if (pendingChange.DecimalValue.HasValue || existingValue.DecimalValue.HasValue)
+        {
+            return pendingChange.DecimalValue == existingValue.DecimalValue;
+        }
+
         // DateTime comparison
         if (pendingChange.DateTimeValue.HasValue || existingValue.DateTimeValue.HasValue)
         {
@@ -2834,26 +2979,25 @@ public class ExportEvaluationServer
             // Check if the pending change is also null/empty
             var isEmpty = IsPendingChangeEmpty(pendingChange);
             Log.Debug("IsSingleValueMatch: existingValue is null, pendingChange empty={IsEmpty}, IntValue={IntValue}, StringValue={StringValue}",
-                isEmpty, pendingChange.IntValue, pendingChange.StringValue);
+                isEmpty, pendingChange.IntValue, LogSanitiser.Sanitise(pendingChange.StringValue));
             return isEmpty;
         }
 
         var result = ValuesMatch(pendingChange, existingValue);
         Log.Debug("IsSingleValueMatch: Comparing pendingChange (IntValue={PendingInt}, StringValue={PendingStr}) with existingValue (IntValue={ExistingInt}, StringValue={ExistingStr}). Result={Result}",
-            pendingChange.IntValue, pendingChange.StringValue, existingValue.IntValue, existingValue.StringValue, result);
+            pendingChange.IntValue, LogSanitiser.Sanitise(pendingChange.StringValue), existingValue.IntValue, LogSanitiser.Sanitise(existingValue.StringValue), result);
         return result;
     }
 
     /// <summary>
     /// Checks if a Pending Export attribute value change represents an empty/null value.
+    /// Delegates to the sync engine's implementation so both no-net-change paths agree on
+    /// exactly which value carriers count; a divergent copy here previously omitted
+    /// LongValue, GuidValue and BoolValue, wrongly skipping exports of those types.
     /// </summary>
     private static bool IsPendingChangeEmpty(PendingExportAttributeValueChange change)
     {
-        return change.StringValue == null &&
-               !change.IntValue.HasValue &&
-               !change.DateTimeValue.HasValue &&
-               change.ByteValue == null &&
-               change.UnresolvedReferenceValue == null;
+        return SyncEngine.IsPendingChangeEmpty(change);
     }
 
     /// <summary>
@@ -2894,7 +3038,7 @@ public class ExportEvaluationServer
     /// Builds a dictionary of attribute values from a Metaverse Object for expression evaluation.
     /// The dictionary keys are attribute names, and values are the attribute values.
     /// </summary>
-    private Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
+    internal Dictionary<string, object?> BuildAttributeDictionary(MetaverseObject mvo)
     {
         var attributes = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
@@ -2924,6 +3068,8 @@ public class ExportEvaluationServer
             {
                 AttributeDataType.Text => attributeValue.StringValue,
                 AttributeDataType.Number => attributeValue.IntValue,
+                AttributeDataType.LongNumber => attributeValue.LongValue,
+                AttributeDataType.Decimal => attributeValue.DecimalValue,
                 AttributeDataType.DateTime => attributeValue.DateTimeValue,
                 AttributeDataType.Boolean => attributeValue.BoolValue,
                 AttributeDataType.Guid => attributeValue.GuidValue,
@@ -2955,6 +3101,9 @@ public class ExportEvaluationServer
             ?? change.GuidValue?.ToString()
             ?? change.IntValue?.ToString()
             ?? change.LongValue?.ToString()
+            // Canonical form is mandatory for decimals: a raw ToString preserves trailing zeros, so 5.0
+            // and 5.00 would produce different merge keys and defeat multi-valued dedupe/merge.
+            ?? (change.DecimalValue.HasValue ? DecimalAttributeValue.ToCanonicalString(change.DecimalValue.Value) : null)
             ?? change.DateTimeValue?.ToString("O")
             ?? change.BoolValue?.ToString()
             ?? (change.ByteValue != null ? Convert.ToBase64String(change.ByteValue) : null)

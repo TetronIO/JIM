@@ -15,7 +15,7 @@ function New-JIMMetaverseAttribute {
 
     .PARAMETER Type
         The data type of the attribute.
-        Valid values: Text, Integer, LongNumber, DateTime, Boolean, Reference, Guid, Binary
+        Valid values: Text, Integer, LongNumber, Decimal, DateTime, Boolean, Reference, Guid, Binary
 
     .PARAMETER AttributePlurality
         Whether the attribute is single-valued or multi-valued.
@@ -66,7 +66,7 @@ function New-JIMMetaverseAttribute {
         [string]$Name,
 
         [Parameter(Mandatory)]
-        [ValidateSet('Text', 'Integer', 'LongNumber', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')]
+        [ValidateSet('Text', 'Integer', 'LongNumber', 'Decimal', 'DateTime', 'Boolean', 'Reference', 'Guid', 'Binary')]
         [string]$Type,
 
         [Parameter()]
@@ -88,36 +88,17 @@ function New-JIMMetaverseAttribute {
             return
         }
 
-        # Map type string to enum integer value (AttributeDataType enum)
-        $typeMap = @{
-            'Text'       = 1
-            'Number'     = 2
-            'Integer'    = 2  # Alias for Number
-            'DateTime'   = 3
-            'Binary'     = 4
-            'Reference'  = 5
-            'Guid'       = 6
-            'Boolean'    = 7
-            'LongNumber' = 8
-        }
-        $typeValue = $typeMap[$Type]
-        if ($null -eq $typeValue) {
-            Write-Error "Invalid type '$Type'. Valid values: Text, Number, Integer, LongNumber, DateTime, Binary, Reference, Guid, Boolean"
-            return
-        }
-
-        # Map plurality string to enum integer value (AttributePlurality enum)
-        $pluralityMap = @{
-            'SingleValued' = 0
-            'MultiValued'  = 1
-        }
-        $pluralityValue = $pluralityMap[$AttributePlurality]
+        # Enum values are sent as their string names; the API rejects numeric ordinals
+        # (JsonStringEnumConverter allowIntegerValues:false, PR #1060). -Type's ValidateSet
+        # exposes 'Integer' as a friendly alias for the AttributeDataType member 'Number';
+        # all other -Type and -AttributePlurality values are already exact enum member names.
+        $typeName = if ($Type -eq 'Integer') { 'Number' } else { $Type }
 
         # Build request body
         $body = @{
             name = $Name
-            type = $typeValue
-            attributePlurality = $pluralityValue
+            type = $typeName
+            attributePlurality = $AttributePlurality
         }
 
         if ($ObjectTypeIds) {

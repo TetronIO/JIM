@@ -46,7 +46,7 @@ function Set-JIMSyncRule {
           - RemainJoined: keep the join intact and stop further attribute flow.
 
     .PARAMETER OutboundDeprovisionAction
-        For Export rules: action to take when an MVO falls out of this rule's scope.
+        For Export rules: action to take when an MVO falls out of this rule's scope or is deleted.
         Valid values: Disconnect (break the join, leave the CSO untouched in the target system),
         Delete (queue a delete PendingExport so the CSO is removed from the target system).
 

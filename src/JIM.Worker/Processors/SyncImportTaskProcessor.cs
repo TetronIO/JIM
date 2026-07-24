@@ -15,6 +15,7 @@ using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using JIM.Worker.Models;
@@ -40,6 +41,11 @@ public class SyncImportTaskProcessor
     // so that ReconcilePendingExportsAsync can merge outcomes onto already-persisted RPEIs.
     // Only contains RPEIs for updated CSOs (not created CSOs, which can't have Pending Exports).
     private readonly Dictionary<Guid, ActivityRunProfileExecutionItem> _reconciliationRpeiLookup = new();
+    // Companion ID set for the connectedSystemObjectsToBeUpdated list, giving O(1) membership
+    // checks. The previous linear List.Any scan per existing object was O(n^2) across the import:
+    // ~1.4x10^11 Guid comparisons at Scale500k25kGroups (524,997 existing CSOs). Maintain this set
+    // at every site that appends to the update list.
+    private readonly HashSet<Guid> _csoIdsQueuedForUpdate = new();
     private readonly CancellationTokenSource _cancellationTokenSource;
 
     /// <summary>
@@ -280,7 +286,7 @@ public class SyncImportTaskProcessor
                     // queries on subsequent pages.
                     if (result.PersistedConnectorData != null && newPersistedData == null)
                     {
-                        Log.Debug($"ExecuteAsync: captured new persisted connector data from page {pageNumber}. old value: '{originalPersistedData}', new value: '{result.PersistedConnectorData}'");
+                        Log.Debug($"ExecuteAsync: captured new persisted connector data from page {pageNumber}. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(result.PersistedConnectorData)}'");
                         newPersistedData = result.PersistedConnectorData;
                     }
 
@@ -310,7 +316,7 @@ public class SyncImportTaskProcessor
                 // with the new watermark captured from the first page.
                 if (newPersistedData != null && newPersistedData != originalPersistedData)
                 {
-                    Log.Debug($"ExecuteAsync: updating persisted connector data after all pages. old value: '{originalPersistedData}', new value: '{newPersistedData}'");
+                    Log.Debug($"ExecuteAsync: updating persisted connector data after all pages. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(newPersistedData)}'");
                     await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, newPersistedData);
                 }
 
@@ -321,7 +327,7 @@ public class SyncImportTaskProcessor
                 if (connectorWarningMessage != null)
                 {
                     _activity.WarningMessage = connectorWarningMessage;
-                    Log.Warning("PerformImportAsync: Connector reported warning: {WarningMessage}", connectorWarningMessage);
+                    Log.Warning("PerformImportAsync: Connector reported warning: {WarningMessage}", LogSanitiser.Sanitise(connectorWarningMessage));
                 }
 
                 using (Diagnostics.Connector.StartSpan("CloseImportConnection"))
@@ -459,7 +465,7 @@ public class SyncImportTaskProcessor
                 Log.Warning("About to persist {RpeiCount} RPEIs. {RpeiErrorCount} have errors: {ErrorDetails}",
                     _activityRunProfileExecutionItems.Count,
                     rpeiWithErrors.Count,
-                    string.Join("; ", rpeiWithErrors.Select(r => $"[Id={r.Id}, ErrorType={r.ErrorType}, Message={r.ErrorMessage}]")));
+                    string.Join("; ", rpeiWithErrors.Select(r => $"[Id={r.Id}, ErrorType={r.ErrorType}, Message={LogSanitiser.Sanitise(r.ErrorMessage)}]")));
             }
 
             // Pre-generate IDs for ALL CSOs before batch saves begin. This eliminates
@@ -685,14 +691,18 @@ public class SyncImportTaskProcessor
                         _syncServer.AddCsoToCache(_connectedSystem.Id, updatedCso.ExternalIdAttributeId, extIdValue.GuidValue.Value.ToString(), updatedCso.Id);
                 }
 
-                // Clear the change tracker after each update batch. The batch has been fully persisted
-                // (raw SQL for parent rows + SaveChangesAsync for attribute changes), so tracked
-                // entities are no longer needed. This prevents tracker bloat from accumulating
-                // across 50+ batches of 2000 CSOs each.
-                // NOTE: this clears navigation properties on the batch CSOs, but those CSOs have
-                // already been saved. Reconciliation uses pre-loaded PendingExports (not CSO nav
-                // props) for the comparison data, and rebuilds CSO attribute lookups from a fresh
-                // database query if needed.
+                // Release this batch's hydrated AttributeValues now that it's been persisted and
+                // the cache eviction/refresh above has read what it needed from them. See
+                // ReleaseHydratedAttributeValues for why this is safe (#1079 Regression B: an OOM
+                // kill on 2026-07-21 traced to these values otherwise staying resident for the
+                // rest of the run). Note this batch was hydrated via GetConnectedSystemObjectsByIdsAsync
+                // with AsNoTrackingWithIdentityResolution, so it was never in the change tracker in
+                // the first place; ClearChangeTracker() below does not touch it.
+                ReleaseHydratedAttributeValues(csoBatch);
+
+                // Clear the change tracker after each update batch, in case anything else in this
+                // DbContext scope (e.g. RPEIs/Activity entities) was tracked during the batch. This
+                // prevents tracker bloat from accumulating across 50+ batches of 2000 CSOs each.
                 _syncRepo.ClearChangeTracker();
 
                 _activity.ObjectsProcessed = createdCount + batchStart + batchSize;
@@ -723,13 +733,15 @@ public class SyncImportTaskProcessor
             return;
         }
 
-        // Note: we intentionally do NOT clear the change tracker here. The import phase leaves
-        // 100K+ tracked CSO entities whose AttributeValues navigation properties are populated.
-        // ClearChangeTracker() detaches entities and EF Core's fixup clears navigation collections,
-        // which would empty AttributeValues on the in-memory CSOs and break reconciliation
-        // (every attribute comparison would see "(no values)" and mark changes as not confirmed).
-        // The batch persist now uses raw SQL (COPY binary + UPDATE FROM), so tracker bloat no
-        // longer causes performance issues during reconciliation.
+        // Note: connectedSystemObjectsToBeUpdated's CSOs no longer have populated AttributeValues
+        // at this point - ReleaseHydratedAttributeValues cleared each batch's above, once
+        // persisted, to bound memory at scale (#1079 Regression B). This is safe: reconciliation
+        // below only needs each CSO's Id from this list (allPendingExportsByCsoId lookup) and
+        // reloads fresh AttributeValues from the database per page via
+        // GetConnectedSystemObjectsByIdsNoTrackingAsync - see ReconcilePendingExportsAsync.
+        // We don't call ClearChangeTracker() again here: these CSOs were hydrated with
+        // AsNoTrackingWithIdentityResolution and persisted via raw SQL, so nothing here was ever
+        // added to the change tracker in the first place.
 
         _activity.ObjectsToProcess = connectedSystemObjectsToBeUpdated.Count;
         _activity.ObjectsProcessed = 0;
@@ -758,7 +770,7 @@ public class SyncImportTaskProcessor
                 var extId = orphanedRpei.ConnectedSystemObject?.ExternalIdAttributeValue?.StringValue ?? "[unknown]";
                 var hasCsoRef = orphanedRpei.ConnectedSystemObject != null;
                 Log.Error("VALIDATION FAILURE: RPEI has ObjectChangeType=Create but no ConnectedSystemObjectId and no error. HasCsoRef={HasCsoRef}, ExtId={ExtId}. This is a bug! Setting error type.",
-                    hasCsoRef, extId);
+                    hasCsoRef, LogSanitiser.Sanitise(extId));
                 orphanedRpei.ErrorType = ActivityRunProfileExecutionItemErrorType.CsoCreationFailed;
                 orphanedRpei.ErrorMessage = $"Internal error: RPEI was created for import (ExtId={extId}) but CSO was not persisted. CSO reference exists={hasCsoRef}. This indicates a bug in the persistence layer.";
             }
@@ -997,7 +1009,7 @@ public class SyncImportTaskProcessor
 
         if (cso == null)
         {
-            Log.Information($"ObsoleteConnectedSystemObjectAsync: CSO with external id '{connectedSystemObjectExternalId}' not found. No work to do.");
+            Log.Information($"ObsoleteConnectedSystemObjectAsync: CSO with external id '{LogSanitiser.Sanitise(connectedSystemObjectExternalId?.ToString())}' not found. No work to do.");
             return;
         }
 
@@ -1044,6 +1056,7 @@ public class SyncImportTaskProcessor
         }
 
         // add it to the list of objects to be updated. this will persist and create a change object in the activity tree.
+        _csoIdsQueuedForUpdate.Add(cso.Id);
         connectedSystemObjectsToBeUpdated.Add(cso);
     }
 
@@ -1167,6 +1180,15 @@ public class SyncImportTaskProcessor
         // per-object hydration inside the loop below.
         var hydratedCsoPage = await HydrateCsoPageAsync(connectedSystemImportResult);
 
+        // Batch-fetch the reference external ID lookups for the whole hydrated page in one query.
+        // The per-object loop below previously issued GetReferenceExternalIdsAsync once per
+        // existing CSO: 535K individual round trips at Scale500k25kGroups. Every hydrated CSO ID
+        // is guaranteed a (possibly empty) entry, so only CSOs matched outside the hydrated page
+        // fall back to the single-CSO query.
+        var pageReferenceExternalIds = hydratedCsoPage.Count > 0
+            ? await _syncRepo.GetReferenceExternalIdsForCsosAsync(hydratedCsoPage.Keys)
+            : new Dictionary<Guid, Dictionary<Guid, string>>();
+
         // Track external IDs seen in THIS batch to detect same-batch duplicates.
         // Key: "objectTypeId:externalIdValue" (composite key to handle multiple object types)
         // Value: Tuple of (index in ImportObjects, RPEI, CSO if created)
@@ -1271,7 +1293,7 @@ public class SyncImportTaskProcessor
 
                         // DEBUG: Log the external ID value extracted
                         Log.Debug("ProcessImportObjectsAsync: Extracted external ID value '{ExternalIdValue}' from import object at index {Index}. Duplicate key: {DuplicateKey}",
-                            externalIdValue, importIndex, duplicateKey);
+                            LogSanitiser.Sanitise(externalIdValue), importIndex, LogSanitiser.Sanitise(duplicateKey));
 
                         // Snapshot the external ID for error reporting
                         activityRunProfileExecutionItem.ExternalIdSnapshot = externalIdValue;
@@ -1285,7 +1307,7 @@ public class SyncImportTaskProcessor
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
                             activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found across import pages. This object was already processed on a previous page. This may indicate a directory server paging issue.";
                             Log.Warning("ProcessImportObjectsAsync: Cross-page duplicate external ID '{ExternalId}' at index {Index}. Object was already imported on a previous page. Skipping.",
-                                externalIdValue, importIndex);
+                                LogSanitiser.Sanitise(externalIdValue), importIndex);
                             continue;
                         }
 
@@ -1295,7 +1317,7 @@ public class SyncImportTaskProcessor
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
                             activityRunProfileExecutionItem.ErrorMessage = $"Duplicate external ID '{externalIdValue}' found in the same import batch. All objects with this external ID have been rejected. Fix the source data to ensure unique external IDs.";
                             Log.Warning("ProcessImportObjectsAsync: Duplicate external ID '{ExternalId}' (3rd+ occurrence) at index {Index}. Marking as error.",
-                                externalIdValue, importIndex);
+                                LogSanitiser.Sanitise(externalIdValue), importIndex);
                             continue;
                         }
 
@@ -1303,7 +1325,7 @@ public class SyncImportTaskProcessor
                         {
                             // Duplicate found! Error BOTH objects.
                             Log.Warning("ProcessImportObjectsAsync: Duplicate external ID '{ExternalId}' found at index {CurrentIndex}. First occurrence was at index {FirstIndex}. Erroring BOTH objects.",
-                                externalIdValue, importIndex, firstOccurrence.index);
+                                LogSanitiser.Sanitise(externalIdValue), importIndex, firstOccurrence.index);
 
                             // Mark THIS object as duplicate
                             activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.DuplicateObject;
@@ -1322,7 +1344,7 @@ public class SyncImportTaskProcessor
                                 if (removed)
                                 {
                                     Log.Debug("ProcessImportObjectsAsync: Removed CSO for first occurrence of duplicate external ID '{ExternalId}' from create list.",
-                                        externalIdValue);
+                                        LogSanitiser.Sanitise(externalIdValue));
                                 }
                                 // Clear the CSO reference from the RPEI since we're not persisting it
                                 firstOccurrence.rpei.ConnectedSystemObject = null;
@@ -1365,6 +1387,7 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObject.Status = ConnectedSystemObjectStatus.Obsolete;
                         connectedSystemObject.LastUpdated = DateTime.UtcNow;
+                        _csoIdsQueuedForUpdate.Add(connectedSystemObject.Id);
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
 
                         // Record a DeletionDetected outcome so the outcome tree shows what happened during import.
@@ -1457,7 +1480,7 @@ public class SyncImportTaskProcessor
                             var extIdForError = activityRunProfileExecutionItem.ExternalIdSnapshot ?? "[unknown]";
                             activityRunProfileExecutionItem.ErrorMessage = $"Failed to create Connected System Object for import object with external ID '{extIdForError}'. No specific error was recorded.";
                             Log.Error("ProcessImportObjectsAsync: CSO creation failed for external ID '{ExternalId}' with no specific error. This indicates a bug in import processing.",
-                                extIdForError);
+                                LogSanitiser.Sanitise(extIdForError));
                         }
                     }
                 }
@@ -1495,7 +1518,10 @@ public class SyncImportTaskProcessor
                     // This provides a reliable fallback when EF's AsSplitQuery() fails to materialise
                     // ReferenceValue navigations (dotnet/efcore#33826), preventing spurious
                     // removal and re-addition of resolved reference attribute values.
-                    var refExternalIds = await _syncRepo.GetReferenceExternalIdsAsync(connectedSystemObject.Id);
+                    // Served from the page-level batch fetch above; only CSOs matched outside the
+                    // hydrated page (e.g. per-object cache-miss lookups) query individually.
+                    if (!pageReferenceExternalIds.TryGetValue(connectedSystemObject.Id, out var refExternalIds))
+                        refExternalIds = await _syncRepo.GetReferenceExternalIdsAsync(connectedSystemObject.Id);
 
                     // Calculate attribute changes before processing
                     UpdateConnectedSystemObjectFromImportObject(importObject, connectedSystemObject, csObjectType, activityRunProfileExecutionItem, refExternalIds);
@@ -1506,7 +1532,7 @@ public class SyncImportTaskProcessor
 
                     // Always add to update list - needed for reference resolution even if no attribute changes
                     // The update list is used by ResolveReferencesAsync to resolve references between objects
-                    if (!connectedSystemObjectsToBeUpdated.Any(cso => cso.Id == connectedSystemObject.Id))
+                    if (_csoIdsQueuedForUpdate.Add(connectedSystemObject.Id))
                     {
                         connectedSystemObjectsToBeUpdated.Add(connectedSystemObject);
                     }
@@ -1606,6 +1632,29 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
+    /// Releases each CSO's hydrated AttributeValues after its update-save batch has been
+    /// persisted and any code that still needs them (cache eviction/refresh) has run. Import runs
+    /// at scale otherwise retain every attribute value touched by the update path in memory for
+    /// the rest of the run (through reconciliation), which caused an OOM kill in production on
+    /// 2026-07-21 with 524,997 updated CSOs holding ~9.8M attribute value objects (#1079
+    /// Regression B). Nothing downstream needs the in-memory values: reconciliation reloads CSOs
+    /// fresh from the database per page (see ReconcilePendingExportsAsync), deletion detection
+    /// queries the database directly, and reference resolution reads
+    /// PendingAttributeValueAdditions, which is already applied and cleared by
+    /// ProcessConnectedSystemObjectAttributeValueChanges before this runs.
+    /// Reassigns the collection rather than clearing it in place: PendingAttributeValueRemovals
+    /// keeps its own references to removed value instances for change-history records, and those
+    /// must not be disturbed.
+    /// Internal (not private) so it can be unit-tested directly - see
+    /// JIM.Worker.Tests.Synchronisation.ImportUpdatePathAttributeValueReleaseTests.
+    /// </summary>
+    internal static void ReleaseHydratedAttributeValues(IEnumerable<ConnectedSystemObject> csoBatch)
+    {
+        foreach (var cso in csoBatch)
+            cso.AttributeValues = new List<ConnectedSystemObjectAttributeValue>();
+    }
+
+    /// <summary>
     /// It's possible the Connector has supplied some attributes with null values. These shouldn't be passed to JIM,
     /// so as a precaution let's ensure we have only populated attributes.
     /// </summary>
@@ -1614,18 +1663,18 @@ public class SyncImportTaskProcessor
         var nullConnectedSystemImportObjectAttributes = new List<ConnectedSystemImportObjectAttribute>();
         foreach (var attribute in connectedSystemImportObject.Attributes)
         {
-            // first remove any null attribute values. this might mean we'll be left with no values at all
-            attribute.GuidValues.RemoveAll(q => q.Equals(null));
-            attribute.IntValues.RemoveAll(q => q.Equals(null));
-            attribute.LongValues.RemoveAll(q => q.Equals(null));
+            // first remove any null attribute values. this might mean we'll be left with no values at all.
+            // the Guid/int/long/decimal collections hold non-nullable value types, so they cannot
+            // contain nulls and need no sweep; only the reference-typed collections can.
             attribute.StringValues.RemoveAll(string.IsNullOrEmpty);
-            attribute.ByteValues.RemoveAll(q => q.Equals(null));
+            attribute.ByteValues.RemoveAll(q => q == null);
             attribute.ReferenceValues.RemoveAll(string.IsNullOrEmpty);
 
             // now work out if we're left with any values at all
             var noGuids = attribute.GuidValues.Count == 0;
             var noIntegers = attribute.IntValues.Count == 0;
             var noLongs = attribute.LongValues.Count == 0;
+            var noDecimals = attribute.DecimalValues.Count == 0;
             var noStrings = attribute.StringValues.Count == 0;
             var noBool = !attribute.BoolValue.HasValue;
             var noDateTime = !attribute.DateTimeValue.HasValue;
@@ -1633,7 +1682,7 @@ public class SyncImportTaskProcessor
             var noReferences = attribute.ReferenceValues.Count == 0;
 
             // if all types of values are empty, we'll add this attribute to a list for removal
-            if (noGuids && noIntegers && noLongs && noStrings && noBool && noDateTime && noBytes && noReferences)
+            if (noGuids && noIntegers && noLongs && noDecimals && noStrings && noBool && noDateTime && noBytes && noReferences)
                 nullConnectedSystemImportObjectAttributes.Add(attribute);
         }
 
@@ -1727,7 +1776,7 @@ public class SyncImportTaskProcessor
         if (secondaryCso != null && secondaryCso.Status == ConnectedSystemObjectStatus.PendingProvisioning)
         {
             Log.Information("HydrateCsoAsync: Found PendingProvisioning CSO {CsoId} by secondary external ID '{SecondaryId}'. This confirms a provisioned object.",
-                secondaryCso.Id, secondaryIdImportAttr.StringValues[0]);
+                secondaryCso.Id, LogSanitiser.Sanitise(secondaryIdImportAttr.StringValues[0]));
             return secondaryCso;
         }
 
@@ -1844,6 +1893,18 @@ public class SyncImportTaskProcessor
                         });
                     }
                     break;
+                case AttributeDataType.Decimal:
+                    foreach (var importObjectAttributeDecimalValue in importObjectAttribute.DecimalValues)
+                    {
+                        connectedSystemObject.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+                        {
+                            Attribute = csAttribute,
+                            AttributeId = csAttribute.Id,
+                            DecimalValue = importObjectAttributeDecimalValue,
+                            ConnectedSystemObject = connectedSystemObject
+                        });
+                    }
+                    break;
                 case AttributeDataType.Binary:
                     foreach (var importObjectAttributeByteValue in importObjectAttribute.ByteValues)
                     {
@@ -1917,7 +1978,7 @@ public class SyncImportTaskProcessor
         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
 
         stopwatch.Stop();
-        Log.Debug($"CreateConnectedSystemObjectFromImportObject: completed for {connectedSystemObject.Type.Name} ExtId: '{connectedSystemObject.ExternalIdAttributeValue}', SecExtId: '{connectedSystemObject.SecondaryExternalIdAttributeValue}' in {stopwatch.Elapsed}");
+        Log.Debug($"CreateConnectedSystemObjectFromImportObject: completed for {connectedSystemObject.Type.Name} ExtId: '{LogSanitiser.Sanitise(connectedSystemObject.ExternalIdAttributeValue?.ToString())}', SecExtId: '{LogSanitiser.Sanitise(connectedSystemObject.SecondaryExternalIdAttributeValue?.ToString())}' in {stopwatch.Elapsed}");
 
         return connectedSystemObject;
     }
@@ -2006,6 +2067,27 @@ public class SyncImportTaskProcessor
                         break;
                     }
 
+                    case AttributeDataType.Decimal:
+                    {
+                        // HashSet<decimal> hashing and equality are scale-insensitive, so the diff is numeric:
+                        // a CSO value of 5.00 against an imported 5.0 is NOT a change.
+                        var csoDecimalAttrValues = connectedSystemObject.AttributeValues
+                            .Where(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id && av.DecimalValue != null)
+                            .ToList();
+                        var importDecimalSet = new HashSet<decimal>(importedObjectAttribute.DecimalValues);
+
+                        // find values on the cso of type decimal that aren't on the imported object and remove them first
+                        var missingDecimalAttributeValues = csoDecimalAttrValues.Where(av => !importDecimalSet.Contains(av.DecimalValue!.Value)).ToList();
+                        connectedSystemObject.PendingAttributeValueRemovals.AddRange(missingDecimalAttributeValues);
+
+                        // find imported values of type decimal that aren't on the cso and add them
+                        var csoDecimalSet = csoDecimalAttrValues.Select(av => av.DecimalValue!.Value).ToHashSet();
+                        var newDecimalValues = importedObjectAttribute.DecimalValues.Where(sv => !csoDecimalSet.Contains(sv)).ToList();
+                        foreach (var newDecimalValue in newDecimalValues)
+                            connectedSystemObject.PendingAttributeValueAdditions.Add(new ConnectedSystemObjectAttributeValue { ConnectedSystemObject = connectedSystemObject, Attribute = csoAttribute, DecimalValue = newDecimalValue });
+                        break;
+                    }
+
                     case AttributeDataType.DateTime:
                         // date time attribute types can only be single-valued by nature. handle differently to multivalued attribute types.
                         var existingCsoDateTimeAttributeValue = connectedSystemObject.AttributeValues.SingleOrDefault(av => (av.AttributeId != 0 ? av.AttributeId : av.Attribute?.Id) == csoAttribute.Id);
@@ -2055,7 +2137,7 @@ public class SyncImportTaskProcessor
                         foreach (var existingRef in csoRefAttrValues.Take(3)) // Log first 3 for brevity
                         {
                             var refCsoId = existingRef.ReferenceValueId?.ToString() ?? "(null)";
-                            var unresolved = existingRef.UnresolvedReferenceValue ?? "(null)";
+                            var unresolved = LogSanitiser.Sanitise(existingRef.UnresolvedReferenceValue) ?? "(null)";
                             Log.Debug("  Existing ref: ReferenceValueId={RefCsoId}, UnresolvedRef={Unresolved}",
                                 refCsoId, unresolved);
                         }
@@ -2247,7 +2329,7 @@ public class SyncImportTaskProcessor
                 {
                     Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate string value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
                         "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                        originalStringCount - uniqueStrings.Count, attr.Name, csoExternalId ?? "(unknown)", originalStringCount, uniqueStrings.Count);
+                        originalStringCount - uniqueStrings.Count, attr.Name, LogSanitiser.Sanitise(csoExternalId) ?? "(unknown)", originalStringCount, uniqueStrings.Count);
                     attr.StringValues.Clear();
                     attr.StringValues.AddRange(uniqueStrings);
                 }
@@ -2262,7 +2344,7 @@ public class SyncImportTaskProcessor
                 {
                     Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate int value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
                         "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                        originalIntCount - uniqueInts.Count, attr.Name, csoExternalId ?? "(unknown)", originalIntCount, uniqueInts.Count);
+                        originalIntCount - uniqueInts.Count, attr.Name, LogSanitiser.Sanitise(csoExternalId) ?? "(unknown)", originalIntCount, uniqueInts.Count);
                     attr.IntValues.Clear();
                     attr.IntValues.AddRange(uniqueInts);
                 }
@@ -2277,9 +2359,24 @@ public class SyncImportTaskProcessor
                 {
                     Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate long value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
                         "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                        originalLongCount - uniqueLongs.Count, attr.Name, csoExternalId ?? "(unknown)", originalLongCount, uniqueLongs.Count);
+                        originalLongCount - uniqueLongs.Count, attr.Name, LogSanitiser.Sanitise(csoExternalId) ?? "(unknown)", originalLongCount, uniqueLongs.Count);
                     attr.LongValues.Clear();
                     attr.LongValues.AddRange(uniqueLongs);
+                }
+            }
+
+            // Check DecimalValues collection (decimal equality is scale-insensitive, so 5.0 and 5.00 dedupe to one value)
+            var originalDecimalCount = attr.DecimalValues.Count;
+            if (originalDecimalCount > 1)
+            {
+                var uniqueDecimals = attr.DecimalValues.Distinct().ToList();
+                if (uniqueDecimals.Count < originalDecimalCount)
+                {
+                    Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate decimal value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
+                        "Original count: {OriginalCount}, Unique count: {UniqueCount}",
+                        originalDecimalCount - uniqueDecimals.Count, attr.Name, LogSanitiser.Sanitise(csoExternalId) ?? "(unknown)", originalDecimalCount, uniqueDecimals.Count);
+                    attr.DecimalValues.Clear();
+                    attr.DecimalValues.AddRange(uniqueDecimals);
                 }
             }
 
@@ -2292,7 +2389,7 @@ public class SyncImportTaskProcessor
                 {
                     Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate GUID value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
                         "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                        originalGuidCount - uniqueGuids.Count, attr.Name, csoExternalId ?? "(unknown)", originalGuidCount, uniqueGuids.Count);
+                        originalGuidCount - uniqueGuids.Count, attr.Name, LogSanitiser.Sanitise(csoExternalId) ?? "(unknown)", originalGuidCount, uniqueGuids.Count);
                     attr.GuidValues.Clear();
                     attr.GuidValues.AddRange(uniqueGuids);
                 }
@@ -2307,7 +2404,7 @@ public class SyncImportTaskProcessor
                 {
                     Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate reference value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
                         "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                        originalRefCount - uniqueRefs.Count, attr.Name, csoExternalId ?? "(unknown)", originalRefCount, uniqueRefs.Count);
+                        originalRefCount - uniqueRefs.Count, attr.Name, LogSanitiser.Sanitise(csoExternalId) ?? "(unknown)", originalRefCount, uniqueRefs.Count);
                     attr.ReferenceValues.Clear();
                     attr.ReferenceValues.AddRange(uniqueRefs);
                 }
@@ -2322,7 +2419,7 @@ public class SyncImportTaskProcessor
                 {
                     Log.Warning("DeduplicateImportObjectAttributes: Detected and removed {DuplicateCount} duplicate binary value(s) from attribute '{AttributeName}' on import object '{ExternalId}'. " +
                         "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                        originalBinaryCount - uniqueBinaries.Count, attr.Name, csoExternalId ?? "(unknown)", originalBinaryCount, uniqueBinaries.Count);
+                        originalBinaryCount - uniqueBinaries.Count, attr.Name, LogSanitiser.Sanitise(csoExternalId) ?? "(unknown)", originalBinaryCount, uniqueBinaries.Count);
                     attr.ByteValues.Clear();
                     attr.ByteValues.AddRange(uniqueBinaries);
                 }
@@ -2373,6 +2470,10 @@ public class SyncImportTaskProcessor
         // Use sync page size for consistent progress persistence across all sync operations
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
         var processedCount = 0;
+
+        // Read once, not per item: how this Connected System wants unresolved references reported.
+        var unresolvedReferenceHandling = _connectedSystem.UnresolvedReferenceHandling;
+        var unresolvedReferenceCount = 0;
 
         // Build RPEI lookup dictionary for O(1) error reporting instead of O(N) linear scans
         var rpeiLookup = new Dictionary<ConnectedSystemObject, ActivityRunProfileExecutionItem>();
@@ -2497,7 +2598,7 @@ public class SyncImportTaskProcessor
                 if (referencedCso != null)
                 {
                     Log.Debug("ResolveReferencesAsync: Matched an unresolved reference ({UnresolvedRef}) to CSO: {CsoId} (from database batch query)",
-                        attrValue.UnresolvedReferenceValue, referencedCso.Id);
+                        LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), referencedCso.Id);
                     attrValue.ReferenceValue = referencedCso;
                     // Also set the FK explicitly — the referencedCso was loaded from a separate DB query context
                     // and may not be tracked by the same DbContext instance that will save this attribute value,
@@ -2507,20 +2608,55 @@ public class SyncImportTaskProcessor
                 else
                 {
                     // reference not found. referenced object probably out of container scope!
-                    // todo (#873): make it a per-Connected System setting whether to raise an error, or ignore. sometimes this is desirable.
-                    rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
-                    if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
-                    {
-                        activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {attrValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
-                        activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
-                    }
-                    else
-                    {
-                        Log.Warning($"ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {cso.Id}, unresolved reference: {attrValue.UnresolvedReferenceValue}");
-                    }
+                    // how this is reported (error, warning or silently logged) is a per-Connected System setting.
+                    unresolvedReferenceCount++;
 
-                    Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {attrValue.UnresolvedReferenceValue}");
+                    switch (unresolvedReferenceHandling)
+                    {
+                        case UnresolvedReferenceHandling.Error:
+                            rpeiLookup.TryGetValue(cso, out var activityRunProfileExecutionItem);
+                            if (activityRunProfileExecutionItem != null && (activityRunProfileExecutionItem.ErrorType == null || activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet))
+                            {
+                                activityRunProfileExecutionItem.ErrorMessage = $"Couldn't resolve a reference to a Connected System Object: {attrValue.UnresolvedReferenceValue} (there may be more, view the Connected System Object for unresolved references). Make sure that Container Scope for the Connected System includes the location of the referenced object.";
+                                activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.UnresolvedReference;
+                            }
+                            else
+                            {
+                                Log.Warning($"ResolveReferencesAsync: Couldn't find an ActivityRunProfileExecutionItem for cso: {cso.Id}, unresolved reference: {LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue)}");
+                            }
+
+                            Log.Debug($"ResolveReferencesAsync: Couldn't resolve a CSO reference: {LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue)}");
+                            break;
+
+                        case UnresolvedReferenceHandling.Warn:
+                            // Run Profile Execution Item is deliberately left un-errored; the Activity picks up a
+                            // summary warning after the loop instead (see below).
+                            Log.Warning("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. The referenced object may be outside the configured Container Scope.",
+                                LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id);
+                            break;
+
+                        case UnresolvedReferenceHandling.Ignore:
+                        default:
+                            Log.Debug("ResolveReferencesAsync: Couldn't resolve a CSO reference ({UnresolvedRef}) for CSO {CsoId}. Ignored per Connected System setting.",
+                                LogSanitiser.Sanitise(attrValue.UnresolvedReferenceValue), cso.Id);
+                            break;
+                    }
                 }
+            }
+        }
+
+        // Summary statistics: always logged when references were left unresolved, regardless of handling mode.
+        if (unresolvedReferenceCount > 0)
+        {
+            Log.Information("ResolveReferencesAsync: {Count} reference value(s) could not be resolved to Connected System Objects (handling: {UnresolvedReferenceHandling}).",
+                unresolvedReferenceCount, unresolvedReferenceHandling);
+
+            if (unresolvedReferenceHandling == UnresolvedReferenceHandling.Warn)
+            {
+                var warningSummary = $"{unresolvedReferenceCount} reference value(s) could not be resolved to Connected System Objects. The referenced objects may be outside the configured Container Scope. View the affected Connected System Objects for details.";
+                _activity.WarningMessage = string.IsNullOrEmpty(_activity.WarningMessage)
+                    ? warningSummary
+                    : $"{_activity.WarningMessage}\n{warningSummary}";
             }
         }
 
@@ -2621,7 +2757,7 @@ public class SyncImportTaskProcessor
             ? referencedConnectedSystemObject.Id.ToString()
             : referencedConnectedSystemObject.ExternalIdAttributeValue?.ToString() ?? "(unknown)";
         Log.Debug("ResolveReferencesAsync: Matched an unresolved reference ({UnresolvedRef}) to CSO: {CsoIdentifier}",
-            referenceAttributeValue.UnresolvedReferenceValue, csoIdentifier);
+            LogSanitiser.Sanitise(referenceAttributeValue.UnresolvedReferenceValue), LogSanitiser.Sanitise(csoIdentifier));
         referenceAttributeValue.ReferenceValue = referencedConnectedSystemObject;
         // Also set the FK when the referenced CSO already has a real ID (existing/updated CSOs).
         // For newly-created CSOs (Id == Guid.Empty), the FK is fixed up later in

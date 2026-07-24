@@ -807,11 +807,150 @@ internal class SeedingServer
     }
 
     /// <summary>
-    /// Synchronises rendering hints for built-in metaverse attributes.
-    /// This should be called on every application startup to ensure existing deployments
-    /// get rendering hints set correctly without requiring a fresh seed.
-    /// Uses the repository directly to avoid creating audit Activities for system-level changes.
+    /// Converges the database towards <see cref="BuiltInMetaverseSchema"/> (issue #1104): creates missing built-in
+    /// Metaverse Attributes (with a System-attributed baseline under the System Initialisation Activity), adds
+    /// missing built-in Object Type bindings, and reconciles advisory Standard Mappings. Runs on every application
+    /// startup, mirroring <see cref="SyncBuiltInConnectorDefinitionsAsync"/>: SeedAsync short-circuits once
+    /// ServiceSettings exists, so this pass is how newly-introduced built-in schema reaches existing deployments.
+    /// Idempotent: a converged database results in no writes and no Activities.
     /// </summary>
+    internal async Task SyncBuiltInMetaverseSchemaAsync()
+    {
+        var stopwatch = new Stopwatch();
+        stopwatch.Start();
+
+        var objectTypes = await Application.Repository.Metaverse.GetBuiltInMetaverseObjectTypesForSchemaSyncAsync();
+        var attributes = await Application.Repository.Metaverse.GetMetaverseAttributesForSchemaSyncAsync();
+        var objectTypesByName = objectTypes.ToDictionary(t => t.Name, StringComparer.OrdinalIgnoreCase);
+
+        // built tolerantly rather than via ToDictionary: attribute names are unique case-insensitively at the
+        // application layer, but no database constraint enforces it, and a pre-existing anomaly must not crash
+        // startup. Built-in attributes win the name so the converge targets the right instance.
+        var attributesByName = new Dictionary<string, MetaverseAttribute>(StringComparer.OrdinalIgnoreCase);
+        foreach (var attribute in attributes.OrderByDescending(a => a.BuiltIn))
+        {
+            var added = attributesByName.TryAdd(attribute.Name, attribute);
+            if (!added)
+                Log.Error($"SyncBuiltInMetaverseSchemaAsync: Multiple Metaverse Attributes share the name '{attribute.Name}' (case-insensitively); ignoring attribute id {attribute.Id}. Investigate and resolve the duplicate.");
+        }
+
+        var newAttributes = new List<MetaverseAttribute>();
+        var bindingsAdded = 0;
+        var mappingsAdded = 0;
+        var mappingsRemoved = 0;
+        var mappingsUpdated = 0;
+
+        foreach (var definition in BuiltInMetaverseSchema.Attributes)
+        {
+            if (!attributesByName.TryGetValue(definition.Name, out var attribute))
+            {
+                attribute = new MetaverseAttribute
+                {
+                    Name = definition.Name,
+                    Type = definition.Type,
+                    AttributePlurality = definition.Plurality,
+                    RenderingHint = definition.RenderingHint,
+                    BuiltIn = true
+                };
+                AuditHelper.SetCreatedBySystem(attribute);
+                newAttributes.Add(attribute);
+                attributesByName.Add(definition.Name, attribute);
+                Log.Information($"SyncBuiltInMetaverseSchemaAsync: Preparing built-in Metaverse Attribute '{definition.Name}'");
+            }
+            else if (!attribute.BuiltIn)
+            {
+                // a custom attribute already uses this name (most likely created before an upgrade introduced the
+                // built-in definition). Adopting it would force bindings, overwrite its Standard Mappings, and leave
+                // its shape contradicting the catalogue, so skip the definition entirely and tell the administrator
+                // how to resolve it. Everything else still converges; this is not a startup failure.
+                Log.Error($"SyncBuiltInMetaverseSchemaAsync: A custom Metaverse Attribute already uses the name '{definition.Name}', so the built-in attribute of that name cannot be created. Rename the custom attribute to receive the built-in definition.");
+                continue;
+            }
+            else if (attribute.Type != definition.Type || attribute.AttributePlurality != definition.Plurality || attribute.RenderingHint != definition.RenderingHint)
+            {
+                // shape drift can only come from database tampering or a catalogue edit; built-in attributes are
+                // immutable to administrators. Surface it, but do not modify the attribute: changing type or
+                // plurality under stored values is a data-integrity operation this pass must not perform.
+                Log.Warning($"SyncBuiltInMetaverseSchemaAsync: Built-in Metaverse Attribute '{definition.Name}' has a different shape to the catalogue (type/plurality/rendering hint); leaving it unmodified. Investigate the drift.");
+            }
+
+            // ensure the attribute is bound to each built-in Metaverse Object Type the catalogue declares.
+            // bindings are only ever added, never removed: the catalogue is the floor, not a ceiling.
+            foreach (var objectTypeName in definition.ObjectTypeNames)
+            {
+                if (!objectTypesByName.TryGetValue(objectTypeName, out var objectType))
+                {
+                    // the built-in Object Types are created by SeedAsync before this pass runs, so this indicates
+                    // a seriously malformed database; fail fast rather than continue with a partial converge.
+                    throw new InvalidOperationException(
+                        $"SyncBuiltInMetaverseSchemaAsync: Built-in Metaverse Object Type '{objectTypeName}' was not found; cannot bind built-in Metaverse Attribute '{definition.Name}'.");
+                }
+
+                if (!objectType.Attributes.Any(a => a.Name.Equals(definition.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    objectType.Attributes.Add(attribute);
+                    bindingsAdded++;
+                    Log.Information($"SyncBuiltInMetaverseSchemaAsync: Binding '{definition.Name}' to '{objectTypeName}'");
+                }
+            }
+
+            // reconcile the advisory Standard Mappings to the catalogue. built-in attributes are immutable to
+            // administrators, so every mapping on one is system-seeded and full reconciliation (add missing,
+            // update drifted notes, remove stale) is safe and self-healing.
+            foreach (var mappingDefinition in definition.StandardMappings)
+            {
+                var existingMapping = attribute.StandardMappings.SingleOrDefault(m =>
+                    m.Standard == mappingDefinition.Standard && m.CounterpartName == mappingDefinition.CounterpartName);
+                if (existingMapping == null)
+                {
+                    attribute.StandardMappings.Add(new MetaverseAttributeStandardMapping
+                    {
+                        Standard = mappingDefinition.Standard,
+                        CounterpartName = mappingDefinition.CounterpartName,
+                        Notes = mappingDefinition.Notes
+                    });
+                    mappingsAdded++;
+                }
+                else if (existingMapping.Notes != mappingDefinition.Notes)
+                {
+                    existingMapping.Notes = mappingDefinition.Notes;
+                    mappingsUpdated++;
+                }
+            }
+
+            var staleMappings = attribute.StandardMappings
+                .Where(m => !definition.StandardMappings.Any(d => d.Standard == m.Standard && d.CounterpartName == m.CounterpartName))
+                .ToList();
+            foreach (var staleMapping in staleMappings)
+            {
+                attribute.StandardMappings.Remove(staleMapping);
+                mappingsRemoved++;
+                Log.Information($"SyncBuiltInMetaverseSchemaAsync: Removing stale Standard Mapping '{staleMapping}' from '{definition.Name}'");
+            }
+        }
+
+        var hasChanges = newAttributes.Count > 0 || bindingsAdded > 0 || mappingsAdded > 0 || mappingsRemoved > 0 || mappingsUpdated > 0;
+        if (hasChanges)
+        {
+            // persist repository-direct in one transaction. mapping and binding reconciliation follows the
+            // SyncConnectorDefinitionAsync precedent (no per-change Activity); newly created attributes are
+            // baselined below, matching the batch-seed baseline pattern in SeedAsync.
+            await Application.Repository.Seeding.SaveBuiltInSchemaChangesAsync(newAttributes);
+
+            if (newAttributes.Count > 0)
+            {
+                var parentActivityId = await GetOrCreateSeedingActivityAsync();
+                foreach (var attribute in newAttributes)
+                    await Application.Metaverse.RecordSeededMetaverseAttributeBaselineAsync(attribute.Id, attribute.Name, parentActivityId);
+            }
+        }
+
+        stopwatch.Stop();
+        Log.Information($"SyncBuiltInMetaverseSchemaAsync: Completed in {stopwatch.Elapsed}. " +
+                        $"Attributes created: {newAttributes.Count}, bindings added: {bindingsAdded}, Standard Mappings added: {mappingsAdded}, " +
+                        $"updated: {mappingsUpdated}, removed: {mappingsRemoved}.");
+    }
+
     /// <summary>
     /// Re-records System-attributed version-1 baseline Activities for every preserved built-in configuration object,
     /// grouped under the seeding pass's parent Activity. Called after a factory reset: the reset truncates the

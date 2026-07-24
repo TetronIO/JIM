@@ -83,13 +83,15 @@ Creates a new Synchronisation Rule for a Connected System. The rule defines how 
 New-JIMSyncRule -Name <string> -ConnectedSystemId <int>
     -ConnectedSystemObjectTypeId <int> -MetaverseObjectTypeId <int>
     -Direction <string> [-Description <string>] [-ProjectToMetaverse]
-    [-ProvisionToConnectedSystem] [-Enabled <bool>] [-ChangeReason <string>] [-PassThru]
+    [-ProvisionToConnectedSystem] [-Enabled <bool>]
+    [-OutboundDeprovisionAction <string>] [-ChangeReason <string>] [-PassThru]
 
 # By Connected System name
 New-JIMSyncRule -Name <string> -ConnectedSystemName <string>
     -ConnectedSystemObjectTypeId <int> -MetaverseObjectTypeId <int>
     -Direction <string> [-Description <string>] [-ProjectToMetaverse]
-    [-ProvisionToConnectedSystem] [-Enabled <bool>] [-ChangeReason <string>] [-PassThru]
+    [-ProvisionToConnectedSystem] [-Enabled <bool>]
+    [-OutboundDeprovisionAction <string>] [-ChangeReason <string>] [-PassThru]
 ```
 
 ### Parameters
@@ -106,6 +108,7 @@ New-JIMSyncRule -Name <string> -ConnectedSystemName <string>
 | `ProjectToMetaverse` | `switch` | No | `$false` | When set, import rules will project new Metaverse Objects. Only applicable when Direction is `Import`. |
 | `ProvisionToConnectedSystem` | `switch` | No | `$false` | When set, export rules will provision new Connected System Objects. Only applicable when Direction is `Export`. |
 | `Enabled` | `bool` | No | `$true` | Whether the Synchronisation Rule is active |
+| `OutboundDeprovisionAction` | `string` | No | `Disconnect` | Export rules: action when an MVO falls out of the rule's scope or is deleted. `Disconnect` leaves the CSO untouched in the target system; `Delete` queues a delete so the CSO is removed from the target |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the created Synchronisation Rule object |
 
@@ -135,6 +138,16 @@ New-JIMSyncRule -Name "AD User Export" `
     -MetaverseObjectTypeId 1 `
     -Direction Export `
     -ProvisionToConnectedSystem
+```
+
+```powershell title="Create an export Synchronisation Rule that deletes leavers from the target system"
+New-JIMSyncRule -Name "AD User Export" `
+    -ConnectedSystemId 2 `
+    -ConnectedSystemObjectTypeId 3 `
+    -MetaverseObjectTypeId 1 `
+    -Direction Export `
+    -ProvisionToConnectedSystem `
+    -OutboundDeprovisionAction Delete
 ```
 
 ```powershell title="Create a disabled Synchronisation Rule"
@@ -187,7 +200,7 @@ Set-JIMSyncRule -InputObject <PSCustomObject> [-Name <string>] [-Description <st
 | `ProjectToMetaverse` | `bool` | No | | Controls whether the rule projects new Metaverse Objects |
 | `ProvisionToConnectedSystem` | `bool` | No | | Controls whether the rule provisions new Connected System Objects |
 | `InboundOutOfScopeAction` | `string` | No | | Import rules: action when a CSO falls out of the rule's scope. `Disconnect` breaks the CSO to MVO join; `RemainJoined` keeps the join and stops further Attribute Flow |
-| `OutboundDeprovisionAction` | `string` | No | | Export rules: action when an MVO falls out of the rule's scope. `Disconnect` leaves the CSO untouched in the target system; `Delete` queues a delete so the CSO is removed from the target |
+| `OutboundDeprovisionAction` | `string` | No | | Export rules: action when an MVO falls out of the rule's scope or is deleted. `Disconnect` leaves the CSO untouched in the target system; `Delete` queues a delete so the CSO is removed from the target |
 | `EnforceState` | `bool` | No | | Enables drift detection: re-asserts the rule's expected attribute values when the target system has drifted from them |
 | `ChangeReason` | `string` | No | | Optional reason ("commit message") recorded with this change and shown in the configuration change history. Maximum 2000 characters. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Synchronisation Rule object |
@@ -631,28 +644,28 @@ Adds an individual scoping criterion to a group. Each criterion compares an attr
 # By metaverse attribute ID
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -MetaverseAttributeId <int> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
     [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
     [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 
 # By metaverse attribute name
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -MetaverseAttributeName <string> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
     [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
     [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 
 # By Connected System attribute ID
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -ConnectedSystemAttributeId <int> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
     [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
     [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 
 # By Connected System attribute name
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -ConnectedSystemAttributeName <string> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
     [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
     [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 ```
@@ -671,6 +684,7 @@ New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
 | `StringValue` | `string` | No | | String value to compare against |
 | `IntValue` | `int` | No | | Integer value to compare against (`Number` attributes) |
 | `LongValue` | `long` | No | | 64-bit integer value to compare against (`LongNumber` attributes) |
+| `DecimalValue` | `decimal` | No | | Decimal value to compare against (`Decimal` attributes) |
 | `DateTimeValue` | `datetime` | No | | Date/time value to compare against (ISO 8601 format) |
 | `BoolValue` | `bool` | No | | Boolean value to compare against |
 | `GuidValue` | `guid` | No | | GUID value to compare against |
@@ -749,7 +763,7 @@ Updates an existing scoping criterion (a full replacement of its attribute, oper
 Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int>
     (-MetaverseAttributeId <int> | -MetaverseAttributeName <string> | -ConnectedSystemAttributeId <int> | -ConnectedSystemAttributeName <string>)
     -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
     [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
     [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>]
     [-PassThru]
@@ -897,20 +911,13 @@ Get-JIMMatchingRule -ConnectedSystemId 1 -Id 5
 
 ### New-JIMMatchingRule
 
-Creates a new matching rule for a Connected System Object Type. Rules can match on a Connected System attribute or a metaverse attribute as the source.
+Creates a new matching rule for a Connected System Object Type. The source is a Connected System attribute, matched against the rule's target metaverse attribute.
 
 #### Syntax
 
 ```powershell
-# Source: Connected System attribute
 New-JIMMatchingRule -ConnectedSystemId <int> -ObjectTypeId <int>
     -MetaverseObjectTypeId <int> -SourceAttributeId <int>
-    -TargetMetaverseAttributeId <int> [-Order <int>]
-    [-CaseSensitive <bool>] [-PassThru]
-
-# Source: metaverse attribute
-New-JIMMatchingRule -ConnectedSystemId <int> -ObjectTypeId <int>
-    -MetaverseObjectTypeId <int> -SourceMetaverseAttributeId <int>
     -TargetMetaverseAttributeId <int> [-Order <int>]
     [-CaseSensitive <bool>] [-PassThru]
 ```
@@ -922,8 +929,7 @@ New-JIMMatchingRule -ConnectedSystemId <int> -ObjectTypeId <int>
 | `ConnectedSystemId` | `int` | Yes | | The ID of the Connected System |
 | `ObjectTypeId` | `int` | Yes | | The Connected System Object Type ID |
 | `MetaverseObjectTypeId` | `int` | Yes | | The Metaverse Object Type ID to match against |
-| `SourceAttributeId` | `int` | Yes (CSAttribute set) | | The Connected System attribute ID to use as the match source |
-| `SourceMetaverseAttributeId` | `int` | Yes (MVAttribute set) | | The metaverse attribute ID to use as the match source |
+| `SourceAttributeId` | `int` | Yes | | The Connected System attribute ID to use as the match source |
 | `TargetMetaverseAttributeId` | `int` | Yes | | The metaverse attribute ID to match against |
 | `Order` | `int` | No | | Evaluation order; lower numbers are evaluated first |
 | `CaseSensitive` | `bool` | No | `$false` | Whether the match comparison is case-sensitive |
@@ -959,7 +965,7 @@ Modifies an existing per-object-type matching rule. Setting a source attribute r
 Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int>
     [-Order <int>] [-MetaverseObjectTypeId <int>]
     [-TargetMetaverseAttributeId <int>] [-SourceAttributeId <int>]
-    [-SourceMetaverseAttributeId <int>] [-CaseSensitive <bool>] [-PassThru]
+    [-CaseSensitive <bool>] [-PassThru]
 ```
 
 #### Parameters
@@ -972,13 +978,12 @@ Set-JIMMatchingRule -ConnectedSystemId <int> -Id <int>
 | `MetaverseObjectTypeId` | `int` | No | | New Metaverse Object Type ID |
 | `TargetMetaverseAttributeId` | `int` | No | | New target metaverse attribute ID |
 | `SourceAttributeId` | `int` | No | | New Connected System source attribute ID |
-| `SourceMetaverseAttributeId` | `int` | No | | New metaverse source attribute ID |
 | `CaseSensitive` | `bool` | No | | Whether the match comparison is case-sensitive |
 | `PassThru` | `switch` | No | `$false` | Returns the updated matching rule object |
 
 #### Notes
 
-- Setting `SourceAttributeId` or `SourceMetaverseAttributeId` replaces all existing source attributes on the rule.
+- Setting `SourceAttributeId` replaces all existing source attributes on the rule.
 
 #### Examples
 
@@ -1076,14 +1081,8 @@ Creates a new matching rule on a specific Synchronisation Rule. The Metaverse Ob
 #### Syntax
 
 ```powershell
-# Source: Connected System attribute
 New-JIMSyncRuleMatchingRule -SyncRuleId <int>
     -SourceAttributeId <int> -TargetMetaverseAttributeId <int>
-    [-Order <int>] [-CaseSensitive <bool>] [-PassThru]
-
-# Source: metaverse attribute
-New-JIMSyncRuleMatchingRule -SyncRuleId <int>
-    -SourceMetaverseAttributeId <int> -TargetMetaverseAttributeId <int>
     [-Order <int>] [-CaseSensitive <bool>] [-PassThru]
 ```
 
@@ -1092,8 +1091,7 @@ New-JIMSyncRuleMatchingRule -SyncRuleId <int>
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `SyncRuleId` | `int` | Yes | | The ID of the Synchronisation Rule |
-| `SourceAttributeId` | `int` | Yes (CSAttribute set) | | The Connected System attribute ID to use as the match source |
-| `SourceMetaverseAttributeId` | `int` | Yes (MVAttribute set) | | The metaverse attribute ID to use as the match source |
+| `SourceAttributeId` | `int` | Yes | | The Connected System attribute ID to use as the match source |
 | `TargetMetaverseAttributeId` | `int` | Yes | | The metaverse attribute ID to match against |
 | `Order` | `int` | No | | Evaluation order; lower numbers are evaluated first |
 | `CaseSensitive` | `bool` | No | `$false` | Whether the match comparison is case-sensitive |
@@ -1130,7 +1128,7 @@ Modifies an existing per-Synchronisation-Rule matching rule.
 ```powershell
 Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int>
     [-Order <int>] [-TargetMetaverseAttributeId <int>]
-    [-SourceAttributeId <int>] [-SourceMetaverseAttributeId <int>]
+    [-SourceAttributeId <int>]
     [-CaseSensitive <bool>] [-PassThru]
 ```
 
@@ -1143,7 +1141,6 @@ Set-JIMSyncRuleMatchingRule -SyncRuleId <int> -Id <int>
 | `Order` | `int` | No | | New evaluation order |
 | `TargetMetaverseAttributeId` | `int` | No | | New target metaverse attribute ID |
 | `SourceAttributeId` | `int` | No | | New Connected System source attribute ID |
-| `SourceMetaverseAttributeId` | `int` | No | | New metaverse source attribute ID |
 | `CaseSensitive` | `bool` | No | | Whether the match comparison is case-sensitive |
 | `PassThru` | `switch` | No | `$false` | Returns the updated matching rule object |
 

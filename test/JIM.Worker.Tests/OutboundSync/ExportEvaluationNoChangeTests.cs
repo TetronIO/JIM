@@ -182,6 +182,208 @@ public class ExportEvaluationNoChangeTests
     }
 
     [Test]
+    public void IsCsoAttributeAlreadyCurrent_UpdateDecimalMatch_ReturnsTrueAsync()
+    {
+        // Arrange
+        var csoAttributeValue = CreateCsoAttributeValue(decimalValue: 51234.56m);
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, decimalValue: 51234.56m);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
+
+        // Assert
+        Assert.That(result, Is.True, "Should return true when decimal values match for Update");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_UpdateDecimalScaleDiffersOnly_ReturnsTrueAsync()
+    {
+        // Arrange - 5.00 and 5.0 are numerically equal; scale must not defeat no-net-change detection
+        var csoAttributeValue = CreateCsoAttributeValue(decimalValue: 5.0m);
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, decimalValue: 5.00m);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
+
+        // Assert
+        Assert.That(result, Is.True, "Decimal comparison is numeric; a scale-only difference is a no-net-change");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_UpdateDecimalMismatch_ReturnsFalseAsync()
+    {
+        // Arrange
+        var csoAttributeValue = CreateCsoAttributeValue(decimalValue: 5.0m);
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, decimalValue: 5.5m);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
+
+        // Assert
+        Assert.That(result, Is.False, "Should return false when decimal values differ for Update");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_AddDecimalWhenValueExistsWithDifferentScale_ReturnsTrueAsync()
+    {
+        // Arrange - CSO already holds a numerically equal value (different scale)
+        var existingValues = new[]
+        {
+            CreateCsoAttributeValue(decimalValue: 1.5m),
+            CreateCsoAttributeValue(decimalValue: 2.50m)
+        };
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Add, decimalValue: 2.5m);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, existingValues);
+
+        // Assert
+        Assert.That(result, Is.True, "Should return true (skip Add) when a numerically equal decimal already exists");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_RemoveDecimalWhenValueExists_ReturnsFalseAsync()
+    {
+        // Arrange - CSO still holds the value being removed
+        var existingValues = new[] { CreateCsoAttributeValue(decimalValue: 2.5m) };
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Remove, decimalValue: 2.50m);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, existingValues);
+
+        // Assert
+        Assert.That(result, Is.False, "Should return false (proceed with Remove) when a numerically equal decimal exists");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_RemoveDecimalWhenValueNotExists_ReturnsTrueAsync()
+    {
+        // Arrange
+        var existingValues = new[] { CreateCsoAttributeValue(decimalValue: 1.5m) };
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Remove, decimalValue: 2.5m);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, existingValues);
+
+        // Assert
+        Assert.That(result, Is.True, "Should return true (skip Remove) when the decimal value is absent");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_UpdateDecimalPendingHasValueCsoEmpty_ReturnsFalseAsync()
+    {
+        // Arrange
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, decimalValue: 1.5m);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, Array.Empty<ConnectedSystemObjectAttributeValue>());
+
+        // Assert
+        Assert.That(result, Is.False, "A decimal-only pending change is not empty; it must not be skipped when the CSO has no value");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_UpdateLongMatch_ReturnsTrueAsync()
+    {
+        // Arrange - a value beyond int range proves the comparison is on LongValue, not a narrowed copy
+        var csoAttributeValue = CreateCsoAttributeValue(longValue: 9999999999L);
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, longValue: 9999999999L);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
+
+        // Assert
+        Assert.That(result, Is.True, "Should return true when long values match for Update");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_UpdateLongMismatch_ReturnsFalseAsync()
+    {
+        // Arrange
+        var csoAttributeValue = CreateCsoAttributeValue(longValue: 9999999999L);
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, longValue: 8888888888L);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, new[] { csoAttributeValue });
+
+        // Assert
+        Assert.That(result, Is.False, "Should return false when long values differ for Update");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_AddLongWhenValueExists_ReturnsTrueAsync()
+    {
+        // Arrange - CSO already holds the value being added
+        var existingValues = new[]
+        {
+            CreateCsoAttributeValue(longValue: 1L),
+            CreateCsoAttributeValue(longValue: 9999999999L)
+        };
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Add, longValue: 9999999999L);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, existingValues);
+
+        // Assert
+        Assert.That(result, Is.True, "Should return true (skip Add) when the long value already exists");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_RemoveLongWhenValueNotExists_ReturnsTrueAsync()
+    {
+        // Arrange
+        var existingValues = new[] { CreateCsoAttributeValue(longValue: 1L) };
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Remove, longValue: 2L);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, existingValues);
+
+        // Assert
+        Assert.That(result, Is.True, "Should return true (skip Remove) when the long value is absent");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_UpdateLongPendingHasValueCsoEmpty_ReturnsFalseAsync()
+    {
+        // Arrange
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update, longValue: 9999999999L);
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, Array.Empty<ConnectedSystemObjectAttributeValue>());
+
+        // Assert
+        Assert.That(result, Is.False, "A long-only pending change is not empty; it must not be skipped when the CSO has no value");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_UpdateGuidPendingHasValueCsoEmpty_ReturnsFalseAsync()
+    {
+        // Arrange
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update);
+        pendingChange.GuidValue = Guid.NewGuid();
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, Array.Empty<ConnectedSystemObjectAttributeValue>());
+
+        // Assert
+        Assert.That(result, Is.False, "A guid-only pending change is not empty; it must not be skipped when the CSO has no value");
+    }
+
+    [Test]
+    public void IsCsoAttributeAlreadyCurrent_UpdateBoolPendingHasValueCsoEmpty_ReturnsFalseAsync()
+    {
+        // Arrange
+        var pendingChange = CreatePendingChange(PendingExportAttributeChangeType.Update);
+        pendingChange.BoolValue = false;
+
+        // Act
+        var result = ExportEvaluationServer.IsCsoAttributeAlreadyCurrent(pendingChange, Array.Empty<ConnectedSystemObjectAttributeValue>());
+
+        // Assert
+        Assert.That(result, Is.False, "A bool-only pending change is not empty; it must not be skipped when the CSO has no value");
+    }
+
+    [Test]
     public void IsCsoAttributeAlreadyCurrent_UpdateDateTimeMatch_ReturnsTrueAsync()
     {
         // Arrange
@@ -1296,6 +1498,8 @@ public class ExportEvaluationNoChangeTests
     private static ConnectedSystemObjectAttributeValue CreateCsoAttributeValue(
         string? stringValue = null,
         int? intValue = null,
+        long? longValue = null,
+        decimal? decimalValue = null,
         DateTime? dateTimeValue = null,
         byte[]? byteValue = null,
         string? unresolvedReferenceValue = null)
@@ -1306,6 +1510,8 @@ public class ExportEvaluationNoChangeTests
             AttributeId = 1,
             StringValue = stringValue,
             IntValue = intValue,
+            LongValue = longValue,
+            DecimalValue = decimalValue,
             DateTimeValue = dateTimeValue,
             ByteValue = byteValue,
             UnresolvedReferenceValue = unresolvedReferenceValue,
@@ -1317,6 +1523,8 @@ public class ExportEvaluationNoChangeTests
         PendingExportAttributeChangeType changeType = PendingExportAttributeChangeType.Update,
         string? stringValue = null,
         int? intValue = null,
+        long? longValue = null,
+        decimal? decimalValue = null,
         DateTime? dateTimeValue = null,
         byte[]? byteValue = null,
         string? unresolvedReferenceValue = null)
@@ -1327,6 +1535,8 @@ public class ExportEvaluationNoChangeTests
             AttributeId = 1,
             StringValue = stringValue,
             IntValue = intValue,
+            LongValue = longValue,
+            DecimalValue = decimalValue,
             DateTimeValue = dateTimeValue,
             ByteValue = byteValue,
             UnresolvedReferenceValue = unresolvedReferenceValue,

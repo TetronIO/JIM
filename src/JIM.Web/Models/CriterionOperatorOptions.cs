@@ -51,7 +51,7 @@ public static class CriterionOperatorOptions
             };
         }
 
-        if (type is AttributeDataType.Number or AttributeDataType.LongNumber)
+        if (type is AttributeDataType.Number or AttributeDataType.LongNumber or AttributeDataType.Decimal)
         {
             return op switch
             {

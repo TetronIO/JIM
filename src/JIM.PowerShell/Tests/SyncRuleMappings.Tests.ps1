@@ -95,6 +95,47 @@ Describe 'New-JIMSyncRuleMapping' {
         }
     }
 
+    Context 'Initial Export Only (#223)' {
+
+        BeforeAll {
+            $command = Get-Command New-JIMSyncRuleMapping
+        }
+
+        It 'InitialExportOnly should be available only on export parameter sets' {
+            $setNames = $command.Parameters['InitialExportOnly'].ParameterSets.Keys
+            $setNames | Should -Contain 'ExportAttribute'
+            $setNames | Should -Contain 'ExportExpression'
+            $setNames | Should -Not -Contain 'ImportAttribute'
+            $setNames | Should -Not -Contain 'ImportExpression'
+        }
+
+        It 'Sends initialExportOnly when the switch is supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 15 -SourceMetaverseAttributeId 8 -InitialExportOnly -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.initialExportOnly -eq $true
+                }
+            }
+        }
+
+        It 'Omits initialExportOnly when the switch is not supplied' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                New-JIMSyncRuleMapping -SyncRuleId 2 -TargetConnectedSystemAttributeId 15 -SourceMetaverseAttributeId 8 -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('initialExportOnly')
+                }
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {

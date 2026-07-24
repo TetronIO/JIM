@@ -122,6 +122,16 @@ public class SyncRuleMapping : IAuditable
     public bool NullIsValue { get; set; }
 
     /// <summary>
+    /// When true, this mapping only flows during the initial provisioning (Create) export to the Connected
+    /// System. Once the Connected System Object is past provisioning, the target attribute is unmanaged by JIM:
+    /// Update export evaluation skips this mapping and Drift Correction does not re-assert the value, allowing
+    /// the external system to own it. Connected System Objects that join to pre-existing objects in the target
+    /// system never receive the value. Only applies to export mappings (mappings with a
+    /// <see cref="TargetConnectedSystemAttribute"/>); ignored for import mappings.
+    /// </summary>
+    public bool InitialExportOnly { get; set; }
+
+    /// <summary>
     /// Helper method to provide a description for the user on what type of source configuration this is.
     /// </summary>
     public SyncRuleMappingSourcesType GetSourceType()

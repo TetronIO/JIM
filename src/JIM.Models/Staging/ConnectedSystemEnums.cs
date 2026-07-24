@@ -40,6 +40,30 @@ public enum ObjectMatchingRuleMode
     SyncRule = 1
 }
 
+/// <summary>
+/// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object is
+/// treated, per Connected System. Applies only to import-side reference resolution; export-side (Pending Export)
+/// unresolved reference handling is unaffected.
+/// </summary>
+public enum UnresolvedReferenceHandling
+{
+    /// <summary>
+    /// Default: the affected object's Run Profile Execution Item is marked with an unresolved reference error, and
+    /// the Activity completes with a warning or failed status accordingly.
+    /// </summary>
+    Error = 0,
+    /// <summary>
+    /// The Run Profile Execution Item is not marked as errored. The Activity still completes with a warning status,
+    /// carrying a summary of how many reference values could not be resolved.
+    /// </summary>
+    Warn = 1,
+    /// <summary>
+    /// The Run Profile Execution Item is not marked as errored and no Activity warning is raised. Unresolved
+    /// references are recorded only in the logs.
+    /// </summary>
+    Ignore = 2
+}
+
 public enum ConnectedSystemObjectJoinType
 {
     /// <summary>

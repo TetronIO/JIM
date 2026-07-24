@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Logic;
 
 namespace JIM.Models.Sync;
 
@@ -22,12 +23,21 @@ public readonly struct ProjectionDecision
     public MetaverseObjectType? MetaverseObjectType { get; init; }
 
     /// <summary>
+    /// The Synchronisation Rule that caused the projection, when <see cref="ShouldProject"/> is true.
+    /// Carried so callers can attribute the resulting Projected sync outcome to the rule (#1085).
+    /// </summary>
+    public SyncRule? ProjectionSyncRule { get; init; }
+
+    /// <summary>
     /// Creates a decision indicating a new MVO should be projected.
     /// </summary>
-    public static ProjectionDecision Project(MetaverseObjectType mvoType) => new()
+    /// <param name="mvoType">The Metaverse Object Type for the new MVO.</param>
+    /// <param name="projectionSyncRule">The Synchronisation Rule that caused the projection, for outcome attribution.</param>
+    public static ProjectionDecision Project(MetaverseObjectType mvoType, SyncRule? projectionSyncRule = null) => new()
     {
         ShouldProject = true,
-        MetaverseObjectType = mvoType
+        MetaverseObjectType = mvoType,
+        ProjectionSyncRule = projectionSyncRule
     };
 
     /// <summary>

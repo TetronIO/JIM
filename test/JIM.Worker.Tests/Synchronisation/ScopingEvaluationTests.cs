@@ -796,6 +796,184 @@ public class ScopingEvaluationTests
 
     #endregion
 
+    #region Decimal scoping tests (#1046)
+
+    /// <summary>
+    /// Evaluates a single Decimal scoping criterion against an MVO whose attribute holds
+    /// <paramref name="mvoValue"/> (or no value at all when null).
+    /// </summary>
+    private bool EvaluateMvoDecimalCriterion(decimal? mvoValue, decimal? criterionValue, SearchComparisonType comparisonType)
+    {
+        var salaryAttr = new MetaverseAttribute { Id = 20, Name = "Salary", Type = AttributeDataType.Decimal };
+        var mvo = CreateTestMvo();
+        if (mvoValue.HasValue)
+        {
+            mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+            {
+                AttributeId = 20,
+                Attribute = salaryAttr,
+                DecimalValue = mvoValue.Value
+            });
+        }
+
+        var exportRule = CreateExportSyncRule();
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            MetaverseAttribute = salaryAttr,
+            ComparisonType = comparisonType,
+            DecimalValue = criterionValue
+        });
+        exportRule.ObjectScopingCriteriaGroups.Add(group);
+
+        return _scopingEvaluation.IsMvoInScopeForExportRule(mvo, exportRule);
+    }
+
+    /// <summary>
+    /// Evaluates a single Decimal scoping criterion against a CSO whose attribute holds
+    /// <paramref name="csoValue"/> (or no value at all when null).
+    /// </summary>
+    private bool EvaluateCsoDecimalCriterion(decimal? csoValue, decimal? criterionValue, SearchComparisonType comparisonType)
+    {
+        var salaryAttr = new ConnectedSystemObjectTypeAttribute { Id = 20, Name = "salary", Type = AttributeDataType.Decimal };
+        var cso = CreateTestCso();
+        if (csoValue.HasValue)
+        {
+            cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+            {
+                AttributeId = 20,
+                Attribute = salaryAttr,
+                DecimalValue = csoValue.Value
+            });
+        }
+
+        var importRule = CreateImportSyncRule();
+        var group = new SyncRuleScopingCriteriaGroup { Type = SearchGroupType.All };
+        group.Criteria.Add(new SyncRuleScopingCriteria
+        {
+            ConnectedSystemAttribute = salaryAttr,
+            ComparisonType = comparisonType,
+            DecimalValue = criterionValue
+        });
+        importRule.ObjectScopingCriteriaGroups.Add(group);
+
+        return _scopingEvaluation.IsCsoInScopeForImportRule(cso, importRule);
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_DecimalEquals_EvaluatesNumerically()
+    {
+        Assert.That(EvaluateMvoDecimalCriterion(5.5m, 5.5m, SearchComparisonType.Equals), Is.True);
+        Assert.That(EvaluateMvoDecimalCriterion(5.5m, 5.6m, SearchComparisonType.Equals), Is.False);
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_DecimalEquals_ScaleDiffersOnly_ReturnsTrue()
+    {
+        // 5.00 on the object and 5.0 on the criterion are numerically equal; scale must not matter.
+        Assert.That(EvaluateMvoDecimalCriterion(5.00m, 5.0m, SearchComparisonType.Equals), Is.True);
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_DecimalNotEquals_EvaluatesNumerically()
+    {
+        Assert.That(EvaluateMvoDecimalCriterion(5.5m, 5.6m, SearchComparisonType.NotEquals), Is.True);
+        Assert.That(EvaluateMvoDecimalCriterion(5.50m, 5.5m, SearchComparisonType.NotEquals), Is.False,
+            "A scale-only difference is numeric equality, so NotEquals must be false");
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_DecimalLessThan_EvaluatesNumerically()
+    {
+        Assert.That(EvaluateMvoDecimalCriterion(5.4m, 5.5m, SearchComparisonType.LessThan), Is.True);
+        Assert.That(EvaluateMvoDecimalCriterion(5.5m, 5.5m, SearchComparisonType.LessThan), Is.False);
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_DecimalLessThanOrEquals_EvaluatesNumerically()
+    {
+        Assert.That(EvaluateMvoDecimalCriterion(5.50m, 5.5m, SearchComparisonType.LessThanOrEquals), Is.True);
+        Assert.That(EvaluateMvoDecimalCriterion(5.6m, 5.5m, SearchComparisonType.LessThanOrEquals), Is.False);
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_DecimalGreaterThan_EvaluatesNumerically()
+    {
+        Assert.That(EvaluateMvoDecimalCriterion(5.6m, 5.5m, SearchComparisonType.GreaterThan), Is.True);
+        Assert.That(EvaluateMvoDecimalCriterion(5.5m, 5.5m, SearchComparisonType.GreaterThan), Is.False);
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_DecimalGreaterThanOrEquals_EvaluatesNumerically()
+    {
+        Assert.That(EvaluateMvoDecimalCriterion(5.50m, 5.5m, SearchComparisonType.GreaterThanOrEquals), Is.True);
+        Assert.That(EvaluateMvoDecimalCriterion(5.4m, 5.5m, SearchComparisonType.GreaterThanOrEquals), Is.False);
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_DecimalMissingValue_NullCriterionEquals_ReturnsTrue()
+    {
+        // An Equals criterion with no value matches an object with no value for the attribute.
+        Assert.That(EvaluateMvoDecimalCriterion(null, null, SearchComparisonType.Equals), Is.True);
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_DecimalMissingValue_PopulatedCriterion_ReturnsFalse()
+    {
+        // The all-null check must include DecimalValue: a populated decimal criterion must NOT match
+        // an object with no value (omitting the check would silently mis-scope).
+        Assert.That(EvaluateMvoDecimalCriterion(null, 5.5m, SearchComparisonType.Equals), Is.False);
+    }
+
+    [Test]
+    public void IsCsoInScopeForImportRule_DecimalEquals_EvaluatesNumerically()
+    {
+        Assert.That(EvaluateCsoDecimalCriterion(5.5m, 5.5m, SearchComparisonType.Equals), Is.True);
+        Assert.That(EvaluateCsoDecimalCriterion(5.00m, 5.0m, SearchComparisonType.Equals), Is.True,
+            "A scale-only difference is numeric equality");
+        Assert.That(EvaluateCsoDecimalCriterion(5.5m, 5.6m, SearchComparisonType.Equals), Is.False);
+    }
+
+    [Test]
+    public void IsCsoInScopeForImportRule_DecimalNotEquals_EvaluatesNumerically()
+    {
+        Assert.That(EvaluateCsoDecimalCriterion(5.5m, 5.6m, SearchComparisonType.NotEquals), Is.True);
+        Assert.That(EvaluateCsoDecimalCriterion(5.50m, 5.5m, SearchComparisonType.NotEquals), Is.False);
+    }
+
+    [Test]
+    public void IsCsoInScopeForImportRule_DecimalRangeOperators_EvaluateNumerically()
+    {
+        Assert.That(EvaluateCsoDecimalCriterion(5.4m, 5.5m, SearchComparisonType.LessThan), Is.True);
+        Assert.That(EvaluateCsoDecimalCriterion(5.50m, 5.5m, SearchComparisonType.LessThanOrEquals), Is.True);
+        Assert.That(EvaluateCsoDecimalCriterion(5.6m, 5.5m, SearchComparisonType.GreaterThan), Is.True);
+        Assert.That(EvaluateCsoDecimalCriterion(5.50m, 5.5m, SearchComparisonType.GreaterThanOrEquals), Is.True);
+        Assert.That(EvaluateCsoDecimalCriterion(5.5m, 5.4m, SearchComparisonType.LessThan), Is.False);
+        Assert.That(EvaluateCsoDecimalCriterion(5.4m, 5.5m, SearchComparisonType.GreaterThan), Is.False);
+    }
+
+    [Test]
+    public void IsCsoInScopeForImportRule_DecimalMissingValue_NullCriterionEquals_ReturnsTrue()
+    {
+        Assert.That(EvaluateCsoDecimalCriterion(null, null, SearchComparisonType.Equals), Is.True);
+    }
+
+    [Test]
+    public void IsCsoInScopeForImportRule_DecimalMissingValue_PopulatedCriterion_ReturnsFalse()
+    {
+        Assert.That(EvaluateCsoDecimalCriterion(null, 5.5m, SearchComparisonType.Equals), Is.False);
+    }
+
+    [Test]
+    public void IsMvoInScopeForExportRule_TextOperatorOnDecimalAttribute_ThrowsInvalidOperationException()
+    {
+        // A text operator cannot apply to a Decimal attribute; the evaluator must fail loudly.
+        Assert.Throws<InvalidOperationException>(() =>
+            EvaluateMvoDecimalCriterion(5.5m, 5.5m, SearchComparisonType.StartsWith));
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static MetaverseObject CreateTestMvo()

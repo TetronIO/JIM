@@ -71,6 +71,13 @@ public class MetaverseAttribute : IAuditable
 
     public List<PredefinedSearchAttribute> PredefinedSearchAttributes { get; set; } = null!;
 
+    /// <summary>
+    /// Advisory Standard Mapping metadata documenting how this attribute corresponds to attributes
+    /// in wire standard vocabularies (SCIM 2.0, LDAP/AD). Never consulted by the synchronisation
+    /// engine; Attribute Flow configuration remains the single source of mapping truth.
+    /// </summary>
+    public List<MetaverseAttributeStandardMapping> StandardMappings { get; set; } = new();
+
     public override string ToString()
     {
         return Name;

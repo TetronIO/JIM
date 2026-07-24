@@ -147,6 +147,53 @@ public class SyncOutcomeBuilderTests
 
     #endregion
 
+    #region Synchronisation Rule Attribution (#1085)
+
+    [Test]
+    public void AddRootOutcome_WithSyncRuleAttribution_SetsSyncRuleFields()
+    {
+        var rpei = CreateRpei();
+
+        var outcome = SyncOutcomeBuilder.AddRootOutcome(rpei,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
+            syncRuleId: 42,
+            syncRuleName: "HR Import");
+
+        Assert.That(outcome.SyncRuleId, Is.EqualTo(42));
+        Assert.That(outcome.SyncRuleName, Is.EqualTo("HR Import"));
+    }
+
+    [Test]
+    public void AddRootOutcome_WithoutSyncRuleAttribution_LeavesSyncRuleFieldsNull()
+    {
+        var rpei = CreateRpei();
+
+        var outcome = SyncOutcomeBuilder.AddRootOutcome(rpei,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope);
+
+        Assert.That(outcome.SyncRuleId, Is.Null,
+            "The null case (no Synchronisation Rule determinable) must remain valid");
+        Assert.That(outcome.SyncRuleName, Is.Null);
+    }
+
+    [Test]
+    public void AddChildOutcome_WithSyncRuleAttribution_SetsSyncRuleFields()
+    {
+        var rpei = CreateRpei();
+        var root = SyncOutcomeBuilder.AddRootOutcome(rpei,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Projected);
+
+        var child = SyncOutcomeBuilder.AddChildOutcome(rpei, root,
+            ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned,
+            syncRuleId: 7,
+            syncRuleName: "AD Export");
+
+        Assert.That(child.SyncRuleId, Is.EqualTo(7));
+        Assert.That(child.SyncRuleName, Is.EqualTo("AD Export"));
+    }
+
+    #endregion
+
     #region BuildOutcomeSummary
 
     [Test]

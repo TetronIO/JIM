@@ -7,8 +7,8 @@ function Set-JIMConnectedSystem {
         Updates an existing Connected System in JIM.
 
     .DESCRIPTION
-        Updates the name, description, setting values, and/or export parallelism of an existing
-        Connected System. Only the parameters provided will be updated.
+        Updates the name, description, setting values, export parallelism, and/or unresolved reference handling
+        of an existing Connected System. Only the parameters provided will be updated.
 
     .PARAMETER Id
         The unique identifier of the Connected System to update.
@@ -30,6 +30,13 @@ function Set-JIMConnectedSystem {
         Maximum number of export batches to process concurrently (1-16).
         Only applicable when the connector supports parallel export.
         Default is 1 (sequential processing).
+
+    .PARAMETER UnresolvedReferenceHandling
+        Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
+        is treated: 'Error' (default; marks the affected Run Profile Execution Item as errored), 'Warn' (no
+        per-object error, but the Activity completes with a warning summarising the count), or 'Ignore' (no
+        per-object error and no Activity warning; unresolved references are still logged and remain visible on the
+        Connected System Object).
 
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Connected System's change history.
@@ -70,6 +77,12 @@ function Set-JIMConnectedSystem {
 
         Enables parallel export batch processing with up to 4 concurrent batches.
 
+    .EXAMPLE
+        Set-JIMConnectedSystem -Id 1 -UnresolvedReferenceHandling Ignore
+
+        Suppresses errors and warnings for import-time unresolved references (e.g. group members outside the
+        configured Container Scope), while still logging each occurrence.
+
     .LINK
         Get-JIMConnectedSystem
         New-JIMConnectedSystem
@@ -97,6 +110,10 @@ function Set-JIMConnectedSystem {
         [Parameter()]
         [ValidateRange(1, 16)]
         [int]$MaxExportParallelism,
+
+        [Parameter()]
+        [ValidateSet('Error', 'Warn', 'Ignore')]
+        [string]$UnresolvedReferenceHandling,
 
         [Parameter()]
         [ValidateNotNullOrEmpty()]
@@ -137,6 +154,10 @@ function Set-JIMConnectedSystem {
 
         if ($PSBoundParameters.ContainsKey('MaxExportParallelism')) {
             $body.maxExportParallelism = $MaxExportParallelism
+        }
+
+        if ($PSBoundParameters.ContainsKey('UnresolvedReferenceHandling')) {
+            $body.unresolvedReferenceHandling = $UnresolvedReferenceHandling
         }
 
         # A change reason alone is not an update; require at least one actual property change first.

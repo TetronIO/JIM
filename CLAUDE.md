@@ -6,6 +6,7 @@ This file holds cross-cutting rules and pointers. Detailed conventions live in f
 - `src/CLAUDE.md` - code style, copyright headers, layer rules, common dev tasks
 - `src/JIM.Web/CLAUDE.md` - Blazor/MudBlazor UI conventions, shared UI components
 - `src/JIM.Application/CLAUDE.md` - synchronisation integrity (full requirements)
+- `src/JIM.PowerShell/CLAUDE.md` - cmdlet parameter aliases, documenting output shapes, destructive examples, Pester
 - `test/CLAUDE.md` - TDD patterns, test data, integration testing
 - `.devcontainer/CLAUDE.md` - commands, aliases, Docker, environment
 - `engineering/CLAUDE.md` - PRDs, plans, changelog, release process
@@ -113,6 +114,8 @@ Use PowerShell (`.ps1`) for ALL automation, integration tests, and utility scrip
 
 ## Design Principles
 
+**Surface parity (portal, REST API, PowerShell):** Every new admin-facing capability ships across all three surfaces in the same PR: read features need read parity, write features need write parity (portal dialog + REST endpoint/DTO + PowerShell parameter or cmdlet, each with tests and docs). Treat a feature as incomplete while any surface is missing; administrators script JIM as much as they click it. If parity is genuinely inapplicable (a portal-only display affordance) or is being deliberately deferred, call that out explicitly and get the user's agreement first; do not defer silently. (Rule added after #1104 shipped Standard Mappings editing portal-first, leaving REST/PowerShell writes as a gap nobody had decided on.)
+
 **Minimise environment variables:** Prefer admin UI / setup wizards. Reserve env vars for bootstrap (initial DB connection), pre-encryption secrets, and container orchestration overrides.
 
 **Self-contained and air-gap deployable:** No internet connectivity required. No cloud-service dependencies (Azure Key Vault, AWS KMS, etc.). All features must work on-premises only.
@@ -169,7 +172,9 @@ For new features or significant changes:
 2. Fill in required sections; create a GitHub issue linking to the PRD
 3. Ask Claude to generate the implementation plan from the PRD
 
-> **PRD template, plan structure, plan filing (planned/doing/done):** `engineering/CLAUDE.md`
+PRDs and plans share the same three-state lifecycle: created at the top level of `engineering/prd/` (or `engineering/plans/`) as `Status: Planned`, then `Status: Doing` + `git mv` into `doing/` when work starts, then `Status: Done` + `git mv` into `done/` when implemented. Keep the Status field and the folder in agreement, and update cross-references when moving.
+
+> **PRD template, plan structure, PRD/plan filing (planned/doing/done):** `engineering/CLAUDE.md`
 
 ## Workflow & Git
 
@@ -179,6 +184,10 @@ For new features or significant changes:
 - Never automatically create a PR or merge to `main` - the user must explicitly instruct
 - Build and test pass before commit (per Critical Rules); push and PR only when the user asks
 - Before filing a new GitHub issue, ALWAYS search existing open and closed issues for duplicates: `gh issue list --state all --search "<keywords>"`. Surface any close matches to the user before creating a new one.
+- **Record issue relationships with GitHub's native features, never as comments or body-text markers.** The plain `gh issue` commands have no flags for these; use the API directly:
+  - Sequencing ("must land first"): the blocked-by relationship, via REST: `gh api -X POST repos/TetronIO/JIM/issues/<blocked>/dependencies/blocked_by -F issue_id=<id>` where `<id>` is the blocking issue's database id (`gh api repos/TetronIO/JIM/issues/<n> --jq .id`). Inspect with `GET .../dependencies/blocked_by`; remove with `DELETE .../dependencies/blocked_by/<id>`.
+  - Containment (epic → part): parent/sub-issue, via GraphQL `addSubIssue` / `removeSubIssue` mutations with the two issues' node ids (`--jq .node_id`).
+  - Pick blocked-by for ordering and parent/sub-issue for hierarchy; they are not interchangeable. Issue bodies may state the *rationale* for a relationship, but the relationship itself must exist as the native link (it shows in the sidebar, rolls up, and is queryable; prose goes stale).
 - Dependabot does not auto-rebase PRs when they fall behind `main`. After merging any PR in a batch, comment `@dependabot rebase` on each remaining open Dependabot PR via `gh pr comment <num> --body '@dependabot rebase'`.
 
 ### Bringing a feature branch up to date with `main`
@@ -195,7 +204,7 @@ git merge origin/main      # then git push (no force needed)
 
 ### Merging via gh CLI
 
-`main` is protected by a ruleset that requires eight status checks to pass before a merge is allowed: `build-and-test`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), `claude-review`, and `changelog-lint`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.
+`main` is protected by a ruleset that requires seven status checks to pass before a merge is allowed: `build-and-test`, `discover-base-images`, `scan-base-images-summary`, the three CodeQL analyses (`Analyze (actions)`, `Analyze (csharp)`, `Analyze (javascript-typescript)`), and `changelog-lint`. Strict mode is on, so the PR must be up to date with `main`. Zero approvals are required, but unresolved review threads block the merge.
 
 - Default merge command: `gh pr merge <n> --squash --delete-branch --auto`. The `--auto` flag queues the merge so it lands the moment all required checks go green.
 - An immediate `gh pr merge` failure right after `gh pr create` is **expected**, not a blocker. The checks haven't started yet. Don't escalate it; just use `--auto`.

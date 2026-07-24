@@ -23,23 +23,31 @@ Get-JIMActivity -Id <guid>
 
 # Get execution items for a Run Profile activity
 Get-JIMActivity -Id <guid> -ExecutionItems
+
+# Follow an in-progress activity's live progress until it completes
+Get-JIMActivity -Id <guid> -Follow [-IntervalSeconds <int>] [-MaxPolls <int>]
 ```
 
 ### Parameters
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
-| `Id` | `guid` | Yes (ById, ExecutionItems sets) | | ID of the activity to retrieve. Alias: `ActivityId`. Accepts pipeline input by property name. |
+| `Id` | `guid` | Yes (ById, ExecutionItems, Follow sets) | | ID of the activity to retrieve. Alias: `ActivityId`. Accepts pipeline input by property name. |
 | `Search` | `string` | No (List set) | | Filters activities by target name or type. For example, searching for "Active Directory" returns activities related to that Connected System. |
 | `Page` | `int` | No (List set) | `1` | Page number for paginated results. |
 | `PageSize` | `int` | No (List set) | `20` | Number of activities per page. |
 | `ExecutionItems` | `switch` | Yes (ExecutionItems set) | | Retrieves the Run Profile execution items (RPEIs) associated with the activity, providing detailed per-object processing results. |
+| `Follow` | `switch` | Yes (Follow set) | | Follows the activity's live progress (like `tail -f`): renders a progress bar with the current phase, object counts, throughput and estimated time remaining until the activity completes. Press Ctrl+C to stop early. |
+| `IntervalSeconds` | `int` | No (Follow set) | `2` | Polling interval in seconds when following. Range 1-300. |
+| `MaxPolls` | `int` | No (Follow set) | | Maximum number of progress polls before following stops, whether or not the activity has completed. Useful for scripts that must not block indefinitely. |
 
 ### Output
 
-When using the **List** or **ById** parameter sets, returns one or more `PSCustomObject` instances representing activities, each containing properties such as `Id`, `Name`, `Type`, `Status`, `StartTime`, `EndTime`, and `TargetName`.
+When using the **List** or **ById** parameter sets, returns one or more `PSCustomObject` instances representing activities, each containing properties such as `Id`, `Created`, `Executed`, `Status`, `TargetType`, `TargetOperationType`, `TargetName`, `InitiatedByName`, and per-run totals such as `TotalErrors`.
 
-When using the **ExecutionItems** parameter set, returns `PSCustomObject` instances representing individual execution items, each containing properties such as `ObjectType`, `ObjectName`, `Operation`, `Status`, and `ErrorDetails`.
+When using the **ExecutionItems** parameter set, returns `PSCustomObject` instances representing individual execution items, each containing properties such as `ExternalIdValue`, `DisplayName`, `ConnectedSystemObjectType`, `ObjectChangeType`, `ErrorType`, and `OutcomeSummary`.
+
+When using the **Follow** parameter set, progress renders to the host while following; when following ends, the final activity object is emitted (the same shape as **ById**).
 
 ### Examples
 
@@ -72,10 +80,19 @@ $result = Start-JIMRunProfile -RunProfileId 42 -Wait -PassThru
 Get-JIMActivity -Id $result.ActivityId
 ```
 
+```powershell title="Follow an in-progress activity until it completes"
+Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Follow
+```
+
+```powershell title="Follow with a bounded duration for scripts"
+# Polls every 5 seconds, for at most 60 polls (5 minutes)
+Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -Follow -IntervalSeconds 5 -MaxPolls 60
+```
+
 ```powershell title="Review errors in execution items"
 $result = Start-JIMRunProfile -RunProfileId 42 -Wait -PassThru
 Get-JIMActivity -Id $result.ActivityId -ExecutionItems |
-    Where-Object { $_.Status -eq "Error" }
+    Where-Object { $null -ne $_.ErrorType }
 ```
 
 ---
@@ -98,7 +115,7 @@ Get-JIMActivityStats -Id <guid>
 
 ### Output
 
-Returns a `PSCustomObject` containing execution statistics with properties such as `TotalObjects`, `SuccessCount`, `ErrorCount`, `WarningCount`, `Duration`, and timing breakdowns.
+Returns a `PSCustomObject` containing execution statistics with properties such as `TotalObjectsProcessed`, `TotalObjectChangeCount`, `TotalUnchanged`, `TotalObjectErrors`, and `TotalObjectTypes`, plus per-operation breakdowns (`TotalCsoAdds`, `TotalJoins`, `TotalAttributeFlows`, `TotalExported`, and similar).
 
 ### Examples
 
@@ -119,10 +136,10 @@ Get-JIMActivityStats -Id $result.ActivityId
 ```powershell title="Check for errors after execution"
 $result = Start-JIMRunProfile -RunProfileId 42 -Wait -PassThru
 $stats = Get-JIMActivityStats -Id $result.ActivityId
-if ($stats.ErrorCount -gt 0) {
-    Write-Warning "Sync completed with $($stats.ErrorCount) errors"
+if ($stats.TotalObjectErrors -gt 0) {
+    Write-Warning "Sync completed with $($stats.TotalObjectErrors) errors"
     Get-JIMActivity -Id $result.ActivityId -ExecutionItems |
-        Where-Object { $_.Status -eq "Error" }
+        Where-Object { $null -ne $_.ErrorType }
 }
 ```
 
@@ -141,7 +158,7 @@ The underlying API returns a paginated response envelope, but this cmdlet unwrap
 Get-JIMActivityChildren -Id <guid> [-Page <int>] [-PageSize <int>]
 
 # Get every child activity, paginating automatically
-Get-JIMActivityChildren -Id <guid> -All [-PageSize <int>]
+Get-JIMActivityChildren -Id <guid> -All [-Force] [-PageSize <int>]
 ```
 
 ### Parameters
@@ -151,11 +168,12 @@ Get-JIMActivityChildren -Id <guid> -All [-PageSize <int>]
 | `Id` | `guid` | Yes | | ID of the parent activity whose children to retrieve. Accepts pipeline input by property name. |
 | `Page` | `int` | No (Page set) | `1` | Page number for the child activity list. Cannot be used with `-All`. |
 | `PageSize` | `int` | No | `50` | Number of child activities per page. Maximum is 100. |
-| `All` | `switch` | Yes (All set) | | Automatically paginates through all child activities and returns every one. Cannot be used with `-Page`. |
+| `All` | `switch` | Yes (All set) | | Automatically paginates through all child activities and returns every one. Cannot be used with `-Page`. Fetches at most 1000 pages and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `Force` | `switch` | No (All set) | | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 
 ### Output
 
-Returns one or more `PSCustomObject` instances representing child activities, each containing the same properties as a standard activity object: `Id`, `Name`, `Type`, `Status`, `StartTime`, `EndTime`, and `TargetName`.
+Returns one or more `PSCustomObject` instances representing child activities, each containing the same properties as a standard activity object: `Id`, `Created`, `Executed`, `Status`, `TargetType`, `TargetOperationType`, and `TargetName`.
 
 ### Examples
 
@@ -176,12 +194,12 @@ Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" |
 Get-JIMActivity -Search "Nightly Sync Schedule" |
     Select-Object -First 1 |
     Get-JIMActivityChildren -All |
-    Format-Table Name, Status, StartTime, EndTime
+    Format-Table TargetName, Status, Created, Executed
 ```
 
 ```powershell title="Find failed child activities"
 Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -All |
-    Where-Object { $_.Status -eq "Failed" }
+    Where-Object { $_.Status -eq "FailedWithError" }
 ```
 
 ```powershell title="Get statistics for each child activity"

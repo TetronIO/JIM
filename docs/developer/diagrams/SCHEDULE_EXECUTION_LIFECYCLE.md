@@ -12,9 +12,11 @@ JIM uses three services that collaborate on scheduled execution:
 
 | Service | Role | Polling Interval |
 |---------|------|-----------------|
-| **JIM.Scheduler** | Detects due schedules, creates executions, queues tasks, recovery | 30 seconds |
+| **JIM.Scheduler** | Detects due schedules, creates executions, queues tasks, recovery | 30 seconds, woken instantly by task-completion notifications |
 | **JIM.Worker** | Executes tasks, drives step advancement on completion | 2 seconds |
 | **JIM.Web** | Manual run requests (creates worker tasks directly) | On-demand |
+
+The Scheduler does not rely on the 30-second cycle alone: a database trigger publishes a PostgreSQL `NOTIFY` whenever a Worker Task changes, and the Scheduler listens on a dedicated connection. When a task belonging to a Schedule Execution reaches a terminal state, the Scheduler wakes within about half a second and runs its next cycle immediately; the 30-second interval remains as the fallback for missed notifications (#307).
 
 ## Scheduler Polling Cycle
 
@@ -29,7 +31,7 @@ flowchart TD
     Step1 --> Step2[Step 2: Process due schedules<br/>See Due Schedule Processing below]
     Step2 --> Step3[Step 3: Recover stuck executions<br/>Safety net for worker crashes<br/>See Recovery section below]
     Step3 --> Step4[Step 4: Recover stale worker tasks<br/>Heartbeat-based crash detection]
-    Step4 --> Sleep[Sleep 30 seconds]
+    Step4 --> Sleep[Wait up to 30 seconds<br/>Woken early by task-completion<br/>notifications]
     Sleep --> PollLoop
 ```
 

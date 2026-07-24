@@ -43,6 +43,7 @@ internal static class MetaverseReferenceRowCleanup
                 AND ""DateTimeValue"" IS NULL
                 AND ""IntValue"" IS NULL
                 AND ""LongValue"" IS NULL
+                AND ""DecimalValue"" IS NULL
                 AND ""ByteValue"" IS NULL
                 AND ""GuidValue"" IS NULL
                 AND ""BoolValue"" IS NULL

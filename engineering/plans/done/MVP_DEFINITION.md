@@ -1,10 +1,9 @@
 # JIM MVP Definition
 
-| | |
-|---|---|
-| **Version** | 1.16 |
-| **Last Updated** | 2026-02-20 |
-| **Status** | MVP Complete (100%); Post-MVP enhancements in progress |
+- **Status:** Done
+- **Note:** MVP is 100% complete; this document is retained as the MVP completion record and post-MVP roadmap. Post-MVP enhancements are tracked separately, not under this document.
+- **Version:** 1.16
+- **Last Updated:** 2026-02-20
 
 ---
 

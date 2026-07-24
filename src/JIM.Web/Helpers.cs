@@ -429,6 +429,7 @@ public static class Helpers
             AttributeDataType.Guid => Color.Warning,
             AttributeDataType.Number => Color.Success,
             AttributeDataType.LongNumber => Color.Success,
+            AttributeDataType.Decimal => Color.Success,
             AttributeDataType.Text => Color.Tertiary,
             AttributeDataType.Reference => Color.Primary,
             _ => Color.Default

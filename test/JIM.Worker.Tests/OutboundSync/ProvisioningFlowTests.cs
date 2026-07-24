@@ -443,6 +443,7 @@ public class ProvisioningFlowTests
         // Arrange
         var objectType = ConnectedSystemObjectTypesData[0];
         var mvAttr = MetaverseObjectTypesData[0].Attributes.First();
+        var csAttr = objectType.Attributes.First();
 
         var mvoType = MetaverseObjectTypesData[0];
         var matchingRule = new ObjectMatchingRule
@@ -461,8 +462,8 @@ public class ProvisioningFlowTests
                 {
                     Id = 1,
                     Order = 1,
-                    MetaverseAttribute = mvAttr,
-                    MetaverseAttributeId = mvAttr.Id
+                    ConnectedSystemAttribute = csAttr,
+                    ConnectedSystemAttributeId = csAttr.Id
                 }
             }
         };

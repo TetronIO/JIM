@@ -18,7 +18,7 @@ namespace JIM.PostgresData.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasAnnotation("ProductVersion", "10.0.10")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -183,6 +183,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int?>("RoleId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("RunProfileExecutionStatsFinalised")
+                        .HasColumnType("boolean");
 
                     b.Property<Guid?>("ScheduleExecutionId")
                         .HasColumnType("uuid");
@@ -383,6 +386,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<Guid?>("ParentSyncOutcomeId")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("SyncRuleId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SyncRuleName")
+                        .HasColumnType("text");
+
                     b.Property<string>("TargetEntityDescription")
                         .HasColumnType("text");
 
@@ -402,6 +411,26 @@ namespace JIM.PostgresData.Migrations
                         .HasDatabaseName("IX_ActivityRunProfileExecutionItemSyncOutcomes_RpeiId_OutcomeType");
 
                     b.ToTable("ActivityRunProfileExecutionItemSyncOutcomes");
+                });
+
+            modelBuilder.Entity("JIM.Models.Activities.ActivityStatCounter", b =>
+                {
+                    b.Property<Guid>("ActivityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Dimension")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<long>("Count")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("ActivityId", "Dimension", "Key");
+
+                    b.ToTable("ActivityStatCounters");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseAttribute", b =>
@@ -457,6 +486,36 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("Name");
 
                     b.ToTable("MetaverseAttributes");
+                });
+
+            modelBuilder.Entity("JIM.Models.Core.MetaverseAttributeStandardMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CounterpartName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("MetaverseAttributeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Standard")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MetaverseAttributeId", "Standard", "CounterpartName")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MetaverseAttributeStandardMappings_Attribute_Standard_Name");
+
+                    b.ToTable("MetaverseAttributeStandardMappings");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>
@@ -545,6 +604,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("DecimalValue")
+                        .HasColumnType("numeric");
+
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
 
@@ -578,6 +640,8 @@ namespace JIM.PostgresData.Migrations
                     b.HasIndex("ContributedBySystemId");
 
                     b.HasIndex("DateTimeValue");
+
+                    b.HasIndex("DecimalValue");
 
                     b.HasIndex("GuidValue");
 
@@ -706,11 +770,17 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("DecimalValue")
+                        .HasColumnType("numeric");
+
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
 
                     b.Property<int?>("IntValue")
                         .HasColumnType("integer");
+
+                    b.Property<long?>("LongValue")
+                        .HasColumnType("bigint");
 
                     b.Property<Guid>("MetaverseObjectChangeAttributeId")
                         .HasColumnType("uuid");
@@ -1358,9 +1428,6 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("Expression")
                         .HasColumnType("text");
 
-                    b.Property<int?>("MetaverseAttributeId")
-                        .HasColumnType("integer");
-
                     b.Property<int>("ObjectMatchingRuleId")
                         .HasColumnType("integer");
 
@@ -1370,8 +1437,6 @@ namespace JIM.PostgresData.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ConnectedSystemAttributeId");
-
-                    b.HasIndex("MetaverseAttributeId");
 
                     b.HasIndex("ObjectMatchingRuleId");
 
@@ -1486,6 +1551,11 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(1);
 
+                    b.Property<bool>("InitialExportOnly")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<DateTime?>("LastUpdated")
                         .HasColumnType("timestamp with time zone");
 
@@ -1584,6 +1654,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("DecimalValue")
+                        .HasColumnType("numeric");
 
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
@@ -1989,6 +2062,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("DecimalValue")
+                        .HasColumnType("numeric");
+
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
 
@@ -2235,6 +2311,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
+                    b.Property<int>("UnresolvedReferenceHandling")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ConnectorDefinitionId");
@@ -2378,6 +2457,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("DecimalValue")
+                        .HasColumnType("numeric");
+
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
 
@@ -2519,6 +2601,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("DecimalValue")
+                        .HasColumnType("numeric");
 
                     b.Property<Guid?>("GuidValue")
                         .HasColumnType("uuid");
@@ -3154,6 +3239,10 @@ namespace JIM.PostgresData.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ConnectedSystemId")
+                        .HasDatabaseName("IX_PendingExports_ConnectedSystemId_HasUnresolvedReferences")
+                        .HasFilter("\"HasUnresolvedReferences\"");
+
                     b.HasIndex("ConnectedSystemObjectId")
                         .IsUnique()
                         .HasDatabaseName("IX_PendingExports_ConnectedSystemObjectId_Unique")
@@ -3191,6 +3280,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("DateTimeValue")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("DecimalValue")
+                        .HasColumnType("numeric");
+
                     b.Property<int>("ExportAttemptCount")
                         .HasColumnType("integer");
 
@@ -3210,6 +3302,9 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<Guid?>("PendingExportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ResolvedReferenceCsoId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("Status")
@@ -3423,6 +3518,26 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystemObjectChange");
 
                     b.Navigation("ParentSyncOutcome");
+                });
+
+            modelBuilder.Entity("JIM.Models.Activities.ActivityStatCounter", b =>
+                {
+                    b.HasOne("JIM.Models.Activities.Activity", null)
+                        .WithMany()
+                        .HasForeignKey("ActivityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("JIM.Models.Core.MetaverseAttributeStandardMapping", b =>
+                {
+                    b.HasOne("JIM.Models.Core.MetaverseAttribute", "MetaverseAttribute")
+                        .WithMany("StandardMappings")
+                        .HasForeignKey("MetaverseAttributeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MetaverseAttribute");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>
@@ -3669,10 +3784,6 @@ namespace JIM.PostgresData.Migrations
                         .WithMany()
                         .HasForeignKey("ConnectedSystemAttributeId");
 
-                    b.HasOne("JIM.Models.Core.MetaverseAttribute", "MetaverseAttribute")
-                        .WithMany()
-                        .HasForeignKey("MetaverseAttributeId");
-
                     b.HasOne("JIM.Models.Logic.ObjectMatchingRule", "ObjectMatchingRule")
                         .WithMany("Sources")
                         .HasForeignKey("ObjectMatchingRuleId")
@@ -3680,8 +3791,6 @@ namespace JIM.PostgresData.Migrations
                         .IsRequired();
 
                     b.Navigation("ConnectedSystemAttribute");
-
-                    b.Navigation("MetaverseAttribute");
 
                     b.Navigation("ObjectMatchingRule");
                 });
@@ -4255,6 +4364,8 @@ namespace JIM.PostgresData.Migrations
             modelBuilder.Entity("JIM.Models.Core.MetaverseAttribute", b =>
                 {
                     b.Navigation("PredefinedSearchAttributes");
+
+                    b.Navigation("StandardMappings");
                 });
 
             modelBuilder.Entity("JIM.Models.Core.MetaverseObject", b =>

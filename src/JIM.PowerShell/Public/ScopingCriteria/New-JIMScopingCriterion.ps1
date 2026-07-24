@@ -43,6 +43,11 @@ function New-JIMScopingCriterion {
     .PARAMETER LongValue
         The 64-bit integer value to compare against (for long number attributes).
 
+    .PARAMETER DecimalValue
+        The decimal value to compare against (for decimal attributes). For high-precision values use
+        PowerShell's decimal literal suffix (for example 123.456789012345678d) or a quoted string,
+        because a bare numeric literal is parsed as a double first and can lose precision.
+
     .PARAMETER DateTimeValue
         The date/time value to compare against (for datetime attributes).
 
@@ -135,6 +140,9 @@ function New-JIMScopingCriterion {
 
         [Parameter()]
         [long]$LongValue,
+
+        [Parameter()]
+        [decimal]$DecimalValue,
 
         [Parameter()]
         [datetime]$DateTimeValue,
@@ -247,6 +255,9 @@ function New-JIMScopingCriterion {
         }
         if ($PSBoundParameters.ContainsKey('LongValue')) {
             $body.longValue = $LongValue
+        }
+        if ($PSBoundParameters.ContainsKey('DecimalValue')) {
+            $body.decimalValue = $DecimalValue
         }
         if ($PSBoundParameters.ContainsKey('DateTimeValue')) {
             $body.dateTimeValue = $DateTimeValue.ToString('o')

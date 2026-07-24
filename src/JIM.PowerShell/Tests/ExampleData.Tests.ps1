@@ -497,8 +497,15 @@ Describe 'Invoke-JIMExampleDataTemplate' {
             $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] -and $_.ValueFromPipelineByPropertyName } | Should -Not -BeNullOrEmpty
         }
 
-        It 'Should have Wait switch parameter' {
+        It 'Should have a Wait switch parameter' {
+            # -Wait became implementable once the execute endpoint started returning an Activity ID
+            # to poll (issue #1112 follow-up); it previously shipped as an unimplemented warning and
+            # was removed. The progress endpoint (issue #202) is what it polls.
             $command.Parameters['Wait'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Should have a Timeout parameter for use with Wait' {
+            $command.Parameters['Timeout'] | Should -Not -BeNullOrEmpty
         }
 
         It 'Should have PassThru switch parameter' {
@@ -522,6 +529,73 @@ Describe 'Invoke-JIMExampleDataTemplate' {
         }
     }
 
+    Context 'PassThru output' {
+
+        It 'Should surface the ActivityId and TaskId from the queue response' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    [PSCustomObject]@{
+                        activityId = '11111111-1111-1111-1111-111111111111'
+                        taskId = '22222222-2222-2222-2222-222222222222'
+                        message = "Data Generation Template 'Test Users' has been queued for execution."
+                    }
+                }
+
+                $result = Invoke-JIMExampleDataTemplate -Id 1 -PassThru -Confirm:$false
+
+                $result | Should -Not -BeNullOrEmpty
+                @($result.PSObject.Properties.Name | Sort-Object) | Should -Be @('ActivityId', 'Message', 'Status', 'TaskId', 'TemplateId')
+                $result.ActivityId | Should -Be '11111111-1111-1111-1111-111111111111'
+                $result.TaskId | Should -Be '22222222-2222-2222-2222-222222222222'
+                $result.Status | Should -Be 'Queued'
+                $result.TemplateId | Should -Be 1
+            }
+        }
+    }
+
+    Context 'Wait behaviour' {
+
+        It 'Polls the lightweight progress endpoint until the Activity completes' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:templateWaitPollCount = 0
+                Mock Invoke-JIMApi {
+                    if ($Endpoint -like '*/execute') {
+                        return [PSCustomObject]@{
+                            activityId = '11111111-1111-1111-1111-111111111111'
+                            taskId = '22222222-2222-2222-2222-222222222222'
+                            message = 'Queued'
+                        }
+                    }
+                    if ($Endpoint -like '*/progress') {
+                        $script:templateWaitPollCount++
+                        $status = if ($script:templateWaitPollCount -ge 2) { 'Complete' } else { 'InProgress' }
+                        return [PSCustomObject]@{
+                            status = $status
+                            objectsProcessed = 5000 * $script:templateWaitPollCount
+                            objectsToProcess = 10000
+                            percentComplete = 50 * $script:templateWaitPollCount
+                            estimatedSecondsRemaining = 8
+                            objectsPerSecond = 625
+                            message = 'Generating objects'
+                        }
+                    }
+                    return $null
+                }
+
+                # -Timeout bounds the red case: without the -Wait implementation the call would
+                # otherwise return immediately and the poll assertions below fail.
+                Invoke-JIMExampleDataTemplate -Id 1 -Wait -Timeout 30 -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 2 -Exactly -ParameterFilter { $Endpoint -like '*/progress' }
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter {
+                    $Endpoint -like '*/activities/*' -and $Endpoint -notlike '*/progress'
+                }
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {
@@ -538,6 +612,10 @@ Describe 'Invoke-JIMExampleDataTemplate' {
 
         It 'Should have related links' {
             $help.RelatedLinks | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should document the Wait parameter' {
+            $help.Parameters.Parameter.Name | Should -Contain 'Wait'
         }
     }
 }

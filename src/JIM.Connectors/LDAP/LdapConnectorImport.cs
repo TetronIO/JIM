@@ -855,7 +855,7 @@ internal class LdapConnectorImport
         {
             // Server returned a cookie on first page but doesn't actually support paging (e.g., Samba AD)
             // Retry without paging control - results should have already been returned on first page
-            _logger.Warning("GetFisoResults: Server rejected paging cookie, assuming all results were returned on first page. Error: {Message}", ex.Message);
+            _logger.Warning("GetFisoResults: Server rejected paging cookie, assuming all results were returned on first page. Error: {Message}", LogSanitiser.Sanitise(ex.Message));
             return;
         }
 
@@ -933,7 +933,7 @@ internal class LdapConnectorImport
         {
             // Server returned a cookie on first page but doesn't actually support paging (e.g., Samba AD)
             // Retry without paging control - results should have already been returned on first page
-            _logger.Warning("GetDeltaResultsUsingUsn: Server rejected paging cookie, assuming all results were returned on first page. Error: {Message}", ex.Message);
+            _logger.Warning("GetDeltaResultsUsingUsn: Server rejected paging cookie, assuming all results were returned on first page. Error: {Message}", LogSanitiser.Sanitise(ex.Message));
             return;
         }
 
@@ -1022,13 +1022,13 @@ internal class LdapConnectorImport
             // The Show Deleted Objects control may not be supported by all directories
             // (e.g., some Samba AD configurations). Log and continue without failing the import.
             _logger.Warning("GetDeletedObjectsUsingUsn: Failed to query Deleted Objects container. " +
-                "The directory may not support the Show Deleted Objects control. Error: {Message}", ex.Message);
+                "The directory may not support the Show Deleted Objects control. Error: {Message}", LogSanitiser.Sanitise(ex.Message));
             return;
         }
         catch (LdapException ex) when (ex.ErrorCode == 32) // NoSuchObject
         {
             // The Deleted Objects container may not exist in some configurations
-            _logger.Debug("GetDeletedObjectsUsingUsn: Deleted Objects container not found at {Dn}. Skipping deletion detection.", deletedObjectsDn);
+            _logger.Debug("GetDeletedObjectsUsingUsn: Deleted Objects container not found at {Dn}. Skipping deletion detection.", LogSanitiser.Sanitise(deletedObjectsDn));
             return;
         }
 
@@ -1052,7 +1052,7 @@ internal class LdapConnectorImport
             var objectGuid = LdapConnectorUtilities.GetEntryAttributeGuidValues(entry, "objectGUID")?.FirstOrDefault();
             if (objectGuid == null || objectGuid == Guid.Empty)
             {
-                _logger.Warning("GetDeletedObjectsUsingUsn: Deleted object has no objectGUID. DN: {Dn}", entry.DistinguishedName);
+                _logger.Warning("GetDeletedObjectsUsingUsn: Deleted object has no objectGUID. DN: {Dn}", LogSanitiser.Sanitise(entry.DistinguishedName));
                 continue;
             }
 
@@ -1061,7 +1061,7 @@ internal class LdapConnectorImport
             var objectClasses = LdapConnectorUtilities.GetEntryAttributeStringValues(entry, "objectClass");
             if (objectClasses == null || objectClasses.Count == 0)
             {
-                _logger.Warning("GetDeletedObjectsUsingUsn: Deleted object has no objectClass. DN: {Dn}", entry.DistinguishedName);
+                _logger.Warning("GetDeletedObjectsUsingUsn: Deleted object has no objectClass. DN: {Dn}", LogSanitiser.Sanitise(entry.DistinguishedName));
                 continue;
             }
 
@@ -1375,7 +1375,7 @@ internal class LdapConnectorImport
                     {
                         _logger.Warning("GetDeltaResultsUsingAccesslog: GetObjectByDn returned null for DN '{ReqDn}' " +
                             "(change type: {ChangeType}). The object may have been deleted or moved since the accesslog " +
-                            "entry was recorded. Entry skipped.", reqDn, objectChangeType);
+                            "entry was recorded. Entry skipped.", LogSanitiser.Sanitise(reqDn), objectChangeType);
                     }
                 }
             }
@@ -1449,7 +1449,7 @@ internal class LdapConnectorImport
         {
             var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqDN");
             _logger.Warning("BuildDeleteImportObjectFromAccesslog: Could not determine object type for deleted object. " +
-                "DN: {Dn}. The accesslog entry may not contain reqOld attributes.", reqDn);
+                "DN: {Dn}. The accesslog entry may not contain reqOld attributes.", LogSanitiser.Sanitise(reqDn));
             return null;
         }
 
@@ -1457,7 +1457,7 @@ internal class LdapConnectorImport
         {
             var reqDn = LdapConnectorUtilities.GetEntryAttributeStringValue(accesslogEntry, "reqDN");
             _logger.Warning("BuildDeleteImportObjectFromAccesslog: Could not determine entryUUID for deleted object. " +
-                "DN: {Dn}. The accesslog entry may not contain reqEntryUUID or reqOld entryUUID.", reqDn);
+                "DN: {Dn}. The accesslog entry may not contain reqEntryUUID or reqOld entryUUID.", LogSanitiser.Sanitise(reqDn));
             return null;
         }
 
@@ -1493,7 +1493,7 @@ internal class LdapConnectorImport
         }
 
         _logger.Debug("BuildDeleteImportObjectFromAccesslog: Built delete import for {ObjectType} with entryUUID {Uuid}, DN: {Dn}",
-            objectClassName, entryUuid, reqDnValue);
+            objectClassName, LogSanitiser.Sanitise(entryUuid), LogSanitiser.Sanitise(reqDnValue));
         return importObject;
     }
 
@@ -1517,7 +1517,7 @@ internal class LdapConnectorImport
 
             if (searchResponse.Entries.Count == 0)
             {
-                _logger.Verbose("GetObjectByDn: Object not found at DN {Dn}", dn);
+                _logger.Verbose("GetObjectByDn: Object not found at DN {Dn}", LogSanitiser.Sanitise(dn));
                 return null;
             }
 
@@ -1526,7 +1526,7 @@ internal class LdapConnectorImport
         }
         catch (Exception ex)
         {
-            _logger.Warning(ex, "GetObjectByDn: Error fetching object at DN {Dn}", dn);
+            _logger.Warning(ex, "GetObjectByDn: Error fetching object at DN {Dn}", LogSanitiser.Sanitise(dn));
             return null;
         }
     }
@@ -1664,7 +1664,7 @@ internal class LdapConnectorImport
                                 importObjectAttribute.ReferenceValues.AddRange(filteredValues);
                             else if (referenceValues.Count > filteredValues.Count)
                                 _logger.Debug("LdapConnectorImport: Filtered placeholder member '{Placeholder}' from attribute '{Attr}' on '{Dn}'",
-                                    _placeholderMemberDn, attributeName, searchResult.DistinguishedName);
+                                    LogSanitiser.Sanitise(_placeholderMemberDn), attributeName, LogSanitiser.Sanitise(searchResult.DistinguishedName));
                         }
                         break;
                     case AttributeDataType.NotSet:

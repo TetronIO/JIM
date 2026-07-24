@@ -189,6 +189,30 @@ public class MetaverseRepository : IMetaverseRepository
         return await Repository.Database.MetaverseAttributes.OrderBy(x => x.Name).ToListAsync();
     }
 
+    public async Task<List<MetaverseAttribute>> GetMetaverseAttributesForSchemaSyncAsync()
+    {
+        // AsTracking is required: the built-in schema synchronisation pass mutates these entities (Standard
+        // Mapping additions/removals) and persists them via SaveBuiltInSchemaChangesAsync; the DbContext
+        // defaults to NoTracking.
+        return await Repository.Database.MetaverseAttributes
+            .AsTracking()
+            .Include(a => a.StandardMappings)
+            .OrderBy(a => a.Name)
+            .ToListAsync();
+    }
+
+    public async Task<List<MetaverseObjectType>> GetBuiltInMetaverseObjectTypesForSchemaSyncAsync()
+    {
+        // AsTracking is required: the built-in schema synchronisation pass adds attribute bindings to these
+        // entities and persists them via SaveBuiltInSchemaChangesAsync; the DbContext defaults to NoTracking.
+        return await Repository.Database.MetaverseObjectTypes
+            .AsTracking()
+            .Include(t => t.Attributes)
+            .Where(t => t.BuiltIn)
+            .OrderBy(t => t.Name)
+            .ToListAsync();
+    }
+
     public async Task<IList<MetaverseAttributeHeader>?> GetMetaverseAttributeHeadersAsync()
     {
         return await Repository.Database.MetaverseAttributes.OrderBy(a => a.Name).Select(a => new MetaverseAttributeHeader
@@ -293,6 +317,7 @@ public class MetaverseRepository : IMetaverseRepository
     {
         var query = Repository.Database.MetaverseAttributes
             .Include(a => a.MetaverseObjectTypes)
+            .Include(a => a.StandardMappings)
             .AsQueryable();
 
         if (withChangeTracking)
@@ -387,13 +412,16 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <summary>
-    /// Identifies the export Synchronisation Rule mappings and Object Matching Rules that would be left with no
-    /// sources at all once every source reading the attribute is removed. Such parents are invalid configuration and
-    /// must be removed as a knock-on. Excludes parents already removed wholesale for targeting the attribute. When
-    /// <paramref name="objectTypeId"/> is supplied, only parents whose owning Synchronisation Rule targets that
+    /// Identifies the export Synchronisation Rule mappings that would be left with no sources at all once every
+    /// source reading the attribute is removed. Such mappings are invalid configuration and must be removed as a
+    /// knock-on. Excludes mappings already removed wholesale for targeting the attribute. When
+    /// <paramref name="objectTypeId"/> is supplied, only mappings whose owning Synchronisation Rule targets that
     /// Metaverse Object Type are considered (the type-scoped unassign path); null considers all (the whole-delete path).
+    /// Object Matching Rules are not considered here: their sources can only carry a Connected System attribute or
+    /// an expression, never a Metaverse attribute, so removing a Metaverse attribute never leaves a matching rule
+    /// source-less.
     /// </summary>
-    private async Task<(HashSet<int> SourcelessExportMappingIds, HashSet<int> SourcelessMatchingRuleIds)> GetSourcelessParentsAsync(int attributeId, int? objectTypeId = null)
+    private async Task<HashSet<int>> GetSourcelessParentsAsync(int attributeId, int? objectTypeId = null)
     {
         // Export mappings (not import mappings targeting the attribute) that have at least one source reading it, where
         // every remaining source reads it (so removing those sources empties the mapping).
@@ -407,22 +435,7 @@ public class MetaverseRepository : IMetaverseRepository
         var exportMappingCounts = await exportMappingQuery
             .Select(m => new { m.Id, Total = m.Sources.Count, Removing = m.Sources.Count(s => s.MetaverseAttributeId == attributeId) })
             .ToListAsync();
-        var sourcelessExportMappingIds = exportMappingCounts.Where(x => x.Total == x.Removing).Select(x => x.Id).ToHashSet();
-
-        // Object Matching Rules (not those already removed for targeting the attribute) left with no sources.
-        var matchingRuleQuery = Repository.Database.ObjectMatchingRules
-            .Where(r => r.TargetMetaverseAttributeId != attributeId && r.Sources.Any(s => s.MetaverseAttributeId == attributeId));
-        if (objectTypeId.HasValue)
-        {
-            var typeId = objectTypeId.Value;
-            matchingRuleQuery = matchingRuleQuery.Where(r => r.SyncRule != null && r.SyncRule.MetaverseObjectTypeId == typeId);
-        }
-        var matchingRuleCounts = await matchingRuleQuery
-            .Select(r => new { r.Id, Total = r.Sources.Count, Removing = r.Sources.Count(s => s.MetaverseAttributeId == attributeId) })
-            .ToListAsync();
-        var sourcelessMatchingRuleIds = matchingRuleCounts.Where(x => x.Total == x.Removing).Select(x => x.Id).ToHashSet();
-
-        return (sourcelessExportMappingIds, sourcelessMatchingRuleIds);
+        return exportMappingCounts.Where(x => x.Total == x.Removing).Select(x => x.Id).ToHashSet();
     }
 
     public async Task<List<AttributeReference>> GetAttributeReferencesAsync(int attributeId)
@@ -447,7 +460,7 @@ public class MetaverseRepository : IMetaverseRepository
     {
         var db = Repository.Database;
         var references = new List<AttributeReference>();
-        var (sourcelessExportMappingIds, sourcelessMatchingRuleIds) = await GetSourcelessParentsAsync(attributeId, objectTypeId);
+        var sourcelessExportMappingIds = await GetSourcelessParentsAsync(attributeId, objectTypeId);
 
         // 1. Object Type bindings. Scoped: only the target type's binding. Global: every bound type.
         var bindingQuery = db.MetaverseObjectTypes.Where(t => t.Attributes.Any(a => a.Id == attributeId));
@@ -582,43 +595,7 @@ public class MetaverseRepository : IMetaverseRepository
             Description = $"Object Matching Rule {r.Id}"
         }));
 
-        // 7. Object Matching Rule sources reading this attribute whose parent rule survives, scoped to the type.
-        var matchingRuleSourceQuery = db.ObjectMatchingRuleSources
-            .Where(s => s.MetaverseAttributeId == attributeId && s.ObjectMatchingRule.TargetMetaverseAttributeId != attributeId);
-        if (objectTypeId.HasValue)
-        {
-            var typeId = objectTypeId.Value;
-            matchingRuleSourceQuery = matchingRuleSourceQuery.Where(s => s.ObjectMatchingRule.SyncRule != null && s.ObjectMatchingRule.SyncRule.MetaverseObjectTypeId == typeId);
-        }
-        var matchingRuleSources = await matchingRuleSourceQuery
-            .Select(s => new { s.Id, s.ObjectMatchingRuleId, s.ObjectMatchingRule.SyncRuleId, SyncRuleName = s.ObjectMatchingRule.SyncRule != null ? s.ObjectMatchingRule.SyncRule.Name : null })
-            .ToListAsync();
-        references.AddRange(matchingRuleSources
-            .Where(s => !sourcelessMatchingRuleIds.Contains(s.ObjectMatchingRuleId))
-            .Select(s => new AttributeReference
-            {
-                Kind = AttributeReferenceKind.ObjectMatchingRuleSource,
-                Id = s.Id,
-                SyncRuleId = s.SyncRuleId,
-                SyncRuleName = s.SyncRuleName,
-                Description = $"Object Matching Rule source {s.Id} (rule {s.ObjectMatchingRuleId})"
-            }));
-
-        // 8. Object Matching Rules removed as a knock-on because they would be left source-less (already type-scoped).
-        var sourcelessMatchingRules = await db.ObjectMatchingRules
-            .Where(r => sourcelessMatchingRuleIds.Contains(r.Id))
-            .Select(r => new { r.Id, r.SyncRuleId, SyncRuleName = r.SyncRule != null ? r.SyncRule.Name : null })
-            .ToListAsync();
-        references.AddRange(sourcelessMatchingRules.Select(r => new AttributeReference
-        {
-            Kind = AttributeReferenceKind.SourcelessObjectMatchingRule,
-            Id = r.Id,
-            SyncRuleId = r.SyncRuleId,
-            SyncRuleName = r.SyncRuleName,
-            Description = $"Object Matching Rule {r.Id} (removed: it would be left with no sources)"
-        }));
-
-        // 9. Predefined Search display columns showing this attribute, scoped to searches belonging to the type.
+        // 8. Predefined Search display columns showing this attribute, scoped to searches belonging to the type.
         var predefinedSearchAttributeQuery = db.PredefinedSearchAttributes.Where(x => x.MetaverseAttribute.Id == attributeId);
         if (objectTypeId.HasValue)
         {
@@ -635,7 +612,7 @@ public class MetaverseRepository : IMetaverseRepository
             Description = $"Predefined Search column in '{x.SearchName}'"
         }));
 
-        // 10. Predefined Search criteria filtering on this attribute, scoped to searches belonging to the type via the
+        // 9. Predefined Search criteria filtering on this attribute, scoped to searches belonging to the type via the
         //     search's criteria-group graph (one level of nesting, as elsewhere).
         List<int> predefinedSearchCriterionIds;
         if (objectTypeId.HasValue)
@@ -668,7 +645,7 @@ public class MetaverseRepository : IMetaverseRepository
             Description = $"Predefined Search criterion {id}"
         }));
 
-        // 11. Example Data template attributes generating values for this attribute, scoped to templates for the type.
+        // 10. Example Data template attributes generating values for this attribute, scoped to templates for the type.
         List<int> exampleDataTemplateAttributeIds;
         if (objectTypeId.HasValue)
         {
@@ -693,7 +670,7 @@ public class MetaverseRepository : IMetaverseRepository
             Description = $"Example Data template attribute {id}"
         }));
 
-        // 12. Example Data template attribute dependencies. These reference the attribute globally (no per-type owning
+        // 11. Example Data template attribute dependencies. These reference the attribute globally (no per-type owning
         //     path), so they cascade only on whole-attribute delete, never on a type-scoped unassign.
         if (!objectTypeId.HasValue)
         {
@@ -708,7 +685,7 @@ public class MetaverseRepository : IMetaverseRepository
                 Description = $"Example Data template attribute dependency {id}"
             }));
 
-            // 13. Service Settings SSO unique-identifier mapping. Global only: an unassign from one type must not clear
+            // 12. Service Settings SSO unique-identifier mapping. Global only: an unassign from one type must not clear
             //     a mapping that identifies users across the whole Metaverse.
             var ssoSettings = await db.ServiceSettings
                 .Where(x => x.SSOUniqueIdentifierMetaverseAttribute != null && x.SSOUniqueIdentifierMetaverseAttribute.Id == attributeId)
@@ -728,12 +705,11 @@ public class MetaverseRepository : IMetaverseRepository
     public async Task CascadeDeleteMetaverseAttributeAsync(int attributeId)
     {
         var db = Repository.Database;
-        var (sourcelessExportMappingIds, sourcelessMatchingRuleIds) = await GetSourcelessParentsAsync(attributeId);
+        var sourcelessExportMappingIds = await GetSourcelessParentsAsync(attributeId);
 
-        // Leaf sources first: Object Matching Rule sources and export mapping sources that read the attribute.
-        var omrSources = await db.ObjectMatchingRuleSources.Where(s => s.MetaverseAttributeId == attributeId).ToListAsync();
-        db.ObjectMatchingRuleSources.RemoveRange(omrSources);
-
+        // Leaf sources first: export mapping sources that read the attribute. Object Matching Rule sources can
+        // never reference a Metaverse attribute directly (they only carry a Connected System attribute or an
+        // expression), so there is no equivalent leaf-source removal for them here.
         var exportMappingSources = await db.SyncRuleMappingSources.Where(s => s.MetaverseAttributeId == attributeId).ToListAsync();
         db.SyncRuleMappingSources.RemoveRange(exportMappingSources);
 
@@ -770,16 +746,6 @@ public class MetaverseRepository : IMetaverseRepository
         foreach (var rule in matchingRules)
             db.ObjectMatchingRuleSources.RemoveRange(rule.Sources);
         db.ObjectMatchingRules.RemoveRange(matchingRules);
-
-        // Object Matching Rules left source-less by removing their attribute-reading source: remove the rule (and its
-        // remaining sources) so no invalid, source-less rule survives.
-        var sourcelessMatchingRules = await db.ObjectMatchingRules
-            .Include(r => r.Sources)
-            .Where(r => sourcelessMatchingRuleIds.Contains(r.Id))
-            .ToListAsync();
-        foreach (var rule in sourcelessMatchingRules)
-            db.ObjectMatchingRuleSources.RemoveRange(rule.Sources);
-        db.ObjectMatchingRules.RemoveRange(sourcelessMatchingRules);
 
         // Predefined Search display columns and criteria, and Example Data template attributes and dependencies. These
         // would be removed by database cascade anyway, but we remove them explicitly so nothing changes unaudited.
@@ -820,14 +786,12 @@ public class MetaverseRepository : IMetaverseRepository
         var idsByKind = references.GroupBy(r => r.Kind).ToDictionary(g => g.Key, g => g.Select(r => r.Id).ToList());
         List<int> IdsOf(AttributeReferenceKind kind) => idsByKind.TryGetValue(kind, out var ids) ? ids : [];
 
-        // Leaf sources first.
+        // Leaf sources first. Object Matching Rule sources can never reference a Metaverse attribute directly
+        // (they only carry a Connected System attribute or an expression), so there is no equivalent leaf-source
+        // removal for them here.
         var exportSourceIds = IdsOf(AttributeReferenceKind.ExportAttributeFlowSource);
         if (exportSourceIds.Count > 0)
             db.SyncRuleMappingSources.RemoveRange(await db.SyncRuleMappingSources.Where(s => exportSourceIds.Contains(s.Id)).ToListAsync());
-
-        var omrSourceIds = IdsOf(AttributeReferenceKind.ObjectMatchingRuleSource);
-        if (omrSourceIds.Count > 0)
-            db.ObjectMatchingRuleSources.RemoveRange(await db.ObjectMatchingRuleSources.Where(s => omrSourceIds.Contains(s.Id)).ToListAsync());
 
         var scopingCriterionIds = IdsOf(AttributeReferenceKind.ScopingCriterion);
         if (scopingCriterionIds.Count > 0)
@@ -843,8 +807,8 @@ public class MetaverseRepository : IMetaverseRepository
             db.SyncRuleMappings.RemoveRange(mappings);
         }
 
-        // Whole Object Matching Rules (targets and source-less rules): remove with their sources.
-        var ruleIds = IdsOf(AttributeReferenceKind.ObjectMatchingRuleTarget).Concat(IdsOf(AttributeReferenceKind.SourcelessObjectMatchingRule)).ToList();
+        // Whole Object Matching Rules targeting the attribute: remove with their sources.
+        var ruleIds = IdsOf(AttributeReferenceKind.ObjectMatchingRuleTarget);
         if (ruleIds.Count > 0)
         {
             var rules = await db.ObjectMatchingRules.Include(r => r.Sources).Where(r => ruleIds.Contains(r.Id)).ToListAsync();
@@ -1054,7 +1018,7 @@ public class MetaverseRepository : IMetaverseRepository
         await using (var command = connection.CreateCommand())
         {
             command.CommandText =
-                @"SELECT ""MetaverseObjectId"", ""Id"", ""AttributeId"", ""StringValue"", ""IntValue"", ""LongValue"",
+                @"SELECT ""MetaverseObjectId"", ""Id"", ""AttributeId"", ""StringValue"", ""IntValue"", ""LongValue"", ""DecimalValue"",
                          ""DateTimeValue"", ""BoolValue"", ""GuidValue"", ""NullValue""
                   FROM ""MetaverseObjectAttributeValues""
                   WHERE ""MetaverseObjectId"" = ANY(@ids) AND ""AttributeId"" = ANY(@attributeIds)";
@@ -1080,10 +1044,11 @@ public class MetaverseRepository : IMetaverseRepository
                     StringValue = reader.IsDBNull(3) ? null : reader.GetString(3),
                     IntValue = reader.IsDBNull(4) ? null : reader.GetInt32(4),
                     LongValue = reader.IsDBNull(5) ? null : reader.GetInt64(5),
-                    DateTimeValue = reader.IsDBNull(6) ? null : reader.GetDateTime(6),
-                    BoolValue = reader.IsDBNull(7) ? null : reader.GetBoolean(7),
-                    GuidValue = reader.IsDBNull(8) ? null : reader.GetGuid(8),
-                    NullValue = reader.GetBoolean(9)
+                    DecimalValue = reader.IsDBNull(6) ? null : reader.GetDecimal(6),
+                    DateTimeValue = reader.IsDBNull(7) ? null : reader.GetDateTime(7),
+                    BoolValue = reader.IsDBNull(8) ? null : reader.GetBoolean(8),
+                    GuidValue = reader.IsDBNull(9) ? null : reader.GetGuid(9),
+                    NullValue = reader.GetBoolean(10)
                 });
             }
         }
@@ -1423,6 +1388,8 @@ public class MetaverseRepository : IMetaverseRepository
                                 StringValue = vc.StringValue,
                                 DateTimeValue = vc.DateTimeValue,
                                 IntValue = vc.IntValue,
+                                LongValue = vc.LongValue,
+                                DecimalValue = vc.DecimalValue,
                                 ByteValueLength = vc.ByteValueLength,
                                 GuidValue = vc.GuidValue,
                                 BoolValue = vc.BoolValue,
@@ -1656,7 +1623,7 @@ public class MetaverseRepository : IMetaverseRepository
     /// <summary>
     /// Builds a parameterised EXISTS / NOT EXISTS SQL fragment for a single predefined-search criterion.
     /// The attribute-value column is selected to match the attribute's data type (Text, Number, LongNumber,
-    /// DateTime, Boolean, Guid) so the per-column indexes on MetaverseObjectAttributeValues stay usable, and
+    /// Decimal, DateTime, Boolean, Guid) so the per-column indexes on MetaverseObjectAttributeValues stay usable, and
     /// the requested comparison operator is validated against that data type. Adds the attribute-id and value
     /// parameters to <paramref name="parameters"/>. Throws <see cref="NotSupportedException"/> for an operator
     /// that does not apply to the attribute's data type (callers validate at the API boundary before reaching here).
@@ -1723,6 +1690,10 @@ public class MetaverseRepository : IMetaverseRepository
             case AttributeDataType.LongNumber:
                 parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Bigint) { Value = (object?)criteria.LongValue ?? DBNull.Value });
                 return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"LongValue\"", valParam, Exists, Unsupported);
+            case AttributeDataType.Decimal:
+                // PostgreSQL numeric comparison is scale-insensitive (5.0 = 5.00 is true), matching .NET decimal equality.
+                parameters.Add(new NpgsqlParameter(valParamName, NpgsqlDbType.Numeric) { Value = (object?)criteria.DecimalValue ?? DBNull.Value });
+                return BuildOrderedComparisonSql(criteria.ComparisonType, "cav.\"DecimalValue\"", valParam, Exists, Unsupported);
             case AttributeDataType.DateTime:
                 // Resolve a relative criterion to a literal boundary before binding, so the SQL sees a constant
                 // and the DateTimeValue index stays usable. Absolute criteria use their stored value.
@@ -1753,7 +1724,7 @@ public class MetaverseRepository : IMetaverseRepository
     }
 
     /// <summary>
-    /// Builds the SQL predicate for an ordered (Number / LongNumber / DateTime) comparison, supporting
+    /// Builds the SQL predicate for an ordered (Number / LongNumber / Decimal / DateTime) comparison, supporting
     /// equality and the four ordering operators. Throws for any operator that does not apply.
     /// </summary>
     private static string BuildOrderedComparisonSql(SearchComparisonType comparisonType, string column, string valParam, Func<string, string> exists, Func<NotSupportedException> unsupported)
@@ -1993,7 +1964,7 @@ public class MetaverseRepository : IMetaverseRepository
         attrCmd.CommandText = """
             SELECT av."Id", av."MetaverseObjectId", av."AttributeId",
                    ma."Id" AS "AttrId", ma."Name" AS "AttrName", ma."Type" AS "AttrType", ma."AttributePlurality" AS "AttrPlurality",
-                   av."StringValue", av."DateTimeValue", av."IntValue", av."LongValue", av."BoolValue", av."GuidValue"
+                   av."StringValue", av."DateTimeValue", av."IntValue", av."LongValue", av."DecimalValue", av."BoolValue", av."GuidValue"
             FROM "MetaverseObjectAttributeValues" av
             INNER JOIN "MetaverseAttributes" ma ON av."AttributeId" = ma."Id"
             WHERE av."MetaverseObjectId" = ANY(@objectIds) AND av."AttributeId" = ANY(@attrIds)
@@ -2024,8 +1995,9 @@ public class MetaverseRepository : IMetaverseRepository
                     DateTimeValue = reader.IsDBNull(8) ? null : reader.GetDateTime(8),
                     IntValue = reader.IsDBNull(9) ? null : reader.GetInt32(9),
                     LongValue = reader.IsDBNull(10) ? null : reader.GetInt64(10),
-                    BoolValue = reader.IsDBNull(11) ? null : reader.GetBoolean(11),
-                    GuidValue = reader.IsDBNull(12) ? null : reader.GetGuid(12)
+                    DecimalValue = reader.IsDBNull(11) ? null : reader.GetDecimal(11),
+                    BoolValue = reader.IsDBNull(12) ? null : reader.GetBoolean(12),
+                    GuidValue = reader.IsDBNull(13) ? null : reader.GetGuid(13)
                 });
             }
         }
@@ -2209,6 +2181,31 @@ public class MetaverseRepository : IMetaverseRepository
         if (source.ConnectedSystemAttribute == null)
             throw new InvalidDataException("objectMatchingRule.Sources[0].ConnectedSystemAttribute is null");
 
+        // validate the matching attribute type up front. Unsupported types must fail loudly and
+        // immediately; deferring this to the per-value filter switch would let the null-value
+        // pre-check below silently skip every value first, converting a misconfigured Object
+        // Matching Rule into a quiet no-match (the Synchronisation Integrity rules forbid that).
+        switch (source.ConnectedSystemAttribute.Type)
+        {
+            case AttributeDataType.Text:
+            case AttributeDataType.Number:
+            case AttributeDataType.LongNumber:
+            case AttributeDataType.Decimal:
+            case AttributeDataType.Guid:
+                break;
+            case AttributeDataType.DateTime:
+                throw new NotSupportedException("DateTime attributes are not supported in Object Matching Rules.");
+            case AttributeDataType.Binary:
+                throw new NotSupportedException("Binary attributes are not supported in Object Matching Rules.");
+            case AttributeDataType.Reference:
+                throw new NotSupportedException("Reference attributes are not supported in Object Matching Rules.");
+            case AttributeDataType.Boolean:
+                throw new NotSupportedException("Boolean attributes are not supported in Object Matching Rules.");
+            case AttributeDataType.NotSet:
+            default:
+                throw new InvalidDataException("Unexpected Connected System Attribute Type");
+        }
+
         // get the source attribute value(s)
         var csoAttributeValues = connectedSystemObject.AttributeValues.Where(q => q.AttributeId == source.ConnectedSystemAttribute.Id);
 
@@ -2221,8 +2218,10 @@ public class MetaverseRepository : IMetaverseRepository
             {
                 AttributeDataType.Text => !string.IsNullOrEmpty(csoAttributeValue.StringValue),
                 AttributeDataType.Number => csoAttributeValue.IntValue.HasValue,
+                AttributeDataType.LongNumber => csoAttributeValue.LongValue.HasValue,
+                AttributeDataType.Decimal => csoAttributeValue.DecimalValue.HasValue,
                 AttributeDataType.Guid => csoAttributeValue.GuidValue.HasValue,
-                _ => false
+                _ => false // unreachable: unsupported types are rejected before the loop
             };
 
             if (!hasValue)
@@ -2269,12 +2268,22 @@ public class MetaverseRepository : IMetaverseRepository
                             av.IntValue != null &&
                             av.IntValue == csoAttributeValue.IntValue));
                     break;
-                case AttributeDataType.DateTime:
-                    throw new NotSupportedException("DateTime attributes are not supported in Object Matching Rules.");
-                case AttributeDataType.Binary:
-                    throw new NotSupportedException("Binary attributes are not supported in Object Matching Rules.");
-                case AttributeDataType.Reference:
-                    throw new NotSupportedException("Reference attributes are not supported in Object Matching Rules.");
+                case AttributeDataType.LongNumber:
+                    matchQuery = matchQuery.Where(mvo =>
+                        mvo.AttributeValues.Any(av =>
+                            objectMatchingRule.TargetMetaverseAttribute != null &&
+                            av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
+                            av.LongValue != null &&
+                            av.LongValue == csoAttributeValue.LongValue));
+                    break;
+                case AttributeDataType.Decimal:
+                    matchQuery = matchQuery.Where(mvo =>
+                        mvo.AttributeValues.Any(av =>
+                            objectMatchingRule.TargetMetaverseAttribute != null &&
+                            av.Attribute.Id == objectMatchingRule.TargetMetaverseAttribute.Id &&
+                            av.DecimalValue != null &&
+                            av.DecimalValue == csoAttributeValue.DecimalValue));
+                    break;
                 case AttributeDataType.Guid:
                     matchQuery = matchQuery.Where(mvo =>
                         mvo.AttributeValues.Any(av =>
@@ -2283,10 +2292,9 @@ public class MetaverseRepository : IMetaverseRepository
                             av.GuidValue != null &&
                             av.GuidValue == csoAttributeValue.GuidValue));
                     break;
-                case AttributeDataType.Boolean:
-                    throw new NotSupportedException("Boolean attributes are not supported in Object Matching Rules.");
-                case AttributeDataType.NotSet:
                 default:
+                    // unsupported types were rejected with NotSupportedException before the loop;
+                    // reaching here means the up-front validation and this dispatch have diverged
                     throw new InvalidDataException("Unexpected Connected System Attribute Type");
             }
 
@@ -2612,18 +2620,33 @@ public class MetaverseRepository : IMetaverseRepository
         var changeId = Guid.NewGuid();
         change.Id = changeId;
 
+        // The interpolated fragments are compile-time constant column lists, never user data.
+        var insertChangeSql =
+            $@"INSERT INTO ""MetaverseObjectChanges"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChanges)})
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}}, {{12}}, {{13}})";
+        var insertAttributeSql =
+            $@"INSERT INTO ""MetaverseObjectChangeAttributes"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributes)})
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}})";
+        var insertValueSql =
+            $@"INSERT INTO ""MetaverseObjectChangeAttributeValues"" ({BulkSqlHelpers.ToQuotedList(MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues)})
+              VALUES ({{0}}, {{1}}, {{2}}, {{3}}, {{4}}, {{5}}, {{6}}, {{7}}, {{8}}, {{9}}, {{10}}, {{11}})";
+
+        // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChanges exactly.
         await Repository.Database.Database.ExecuteSqlRawAsync(
-            @"INSERT INTO ""MetaverseObjectChanges"" (""Id"", ""ChangeType"", ""ChangeTime"", ""InitiatedByType"", ""InitiatedById"", ""InitiatedByName"", ""ChangeInitiatorType"", ""DeletedMetaverseObjectId"", ""DeletedObjectTypeId"", ""DeletedObjectDisplayName"")
-              VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
+            insertChangeSql,
             changeId,
-            (int)change.ChangeType,
+            BulkSqlHelpers.NullableParam(change.MetaverseObject?.Id, NpgsqlTypes.NpgsqlDbType.Uuid),
+            BulkSqlHelpers.NullableParam(change.ActivityRunProfileExecutionItem?.Id ?? change.ActivityRunProfileExecutionItemId, NpgsqlTypes.NpgsqlDbType.Uuid),
             change.ChangeTime,
+            (int)change.ChangeType,
+            (int)change.ChangeInitiatorType,
             (int)change.InitiatedByType,
             BulkSqlHelpers.NullableParam(change.InitiatedById, NpgsqlTypes.NpgsqlDbType.Uuid),
             BulkSqlHelpers.NullableParam(change.InitiatedByName, NpgsqlTypes.NpgsqlDbType.Text),
-            (int)change.ChangeInitiatorType,
+            BulkSqlHelpers.NullableParam(change.SyncRule?.Id ?? change.SyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer),
+            BulkSqlHelpers.NullableParam(change.SyncRuleName, NpgsqlTypes.NpgsqlDbType.Text),
+            BulkSqlHelpers.NullableParam(change.DeletedObjectType?.Id ?? change.DeletedObjectTypeId, NpgsqlTypes.NpgsqlDbType.Integer),
             BulkSqlHelpers.NullableParam(change.DeletedMetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid),
-            BulkSqlHelpers.NullableParam(change.DeletedObjectTypeId, NpgsqlTypes.NpgsqlDbType.Integer),
             BulkSqlHelpers.NullableParam(change.DeletedObjectDisplayName, NpgsqlTypes.NpgsqlDbType.Text));
 
         // Insert attribute changes and their values
@@ -2632,9 +2655,9 @@ public class MetaverseRepository : IMetaverseRepository
             var attrChangeId = Guid.NewGuid();
             attrChange.Id = attrChangeId;
 
+            // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChangeAttributes exactly.
             await Repository.Database.Database.ExecuteSqlRawAsync(
-                @"INSERT INTO ""MetaverseObjectChangeAttributes"" (""Id"", ""MetaverseObjectChangeId"", ""AttributeId"", ""AttributeName"", ""AttributeType"")
-                  VALUES ({0}, {1}, {2}, {3}, {4})",
+                insertAttributeSql,
                 attrChangeId, changeId, attrChange.Attribute!.Id, attrChange.AttributeName, (int)attrChange.AttributeType);
 
             foreach (var valueChange in attrChange.ValueChanges)
@@ -2642,19 +2665,23 @@ public class MetaverseRepository : IMetaverseRepository
                 var valueChangeId = Guid.NewGuid();
                 valueChange.Id = valueChangeId;
 
+                // Parameters are ordered to match MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues
+                // exactly. The reference FK prefers the scalar (set when the referenced MVO is not in the
+                // change tracker, the normal shape during MVO deletion) over the navigation.
                 await Repository.Database.Database.ExecuteSqlRawAsync(
-                    @"INSERT INTO ""MetaverseObjectChangeAttributeValues"" (""Id"", ""MetaverseObjectChangeAttributeId"", ""ValueChangeType"", ""StringValue"", ""IntValue"", ""GuidValue"", ""BoolValue"", ""DateTimeValue"", ""ByteValueLength"", ""ReferenceValueId"")
-                      VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9})",
+                    insertValueSql,
                     valueChangeId,
                     attrChangeId,
                     (int)valueChange.ValueChangeType,
                     BulkSqlHelpers.NullableParam(valueChange.StringValue, NpgsqlTypes.NpgsqlDbType.Text),
+                    BulkSqlHelpers.NullableParam(valueChange.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz),
                     BulkSqlHelpers.NullableParam(valueChange.IntValue, NpgsqlTypes.NpgsqlDbType.Integer),
+                    BulkSqlHelpers.NullableParam(valueChange.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint),
+                    BulkSqlHelpers.NullableParam(valueChange.DecimalValue, NpgsqlTypes.NpgsqlDbType.Numeric),
+                    BulkSqlHelpers.NullableParam(valueChange.ByteValueLength, NpgsqlTypes.NpgsqlDbType.Integer),
                     BulkSqlHelpers.NullableParam(valueChange.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid),
                     BulkSqlHelpers.NullableParam(valueChange.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean),
-                    BulkSqlHelpers.NullableParam(valueChange.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz),
-                    BulkSqlHelpers.NullableParam(valueChange.ByteValueLength, NpgsqlTypes.NpgsqlDbType.Integer),
-                    BulkSqlHelpers.NullableParam(valueChange.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid));
+                    BulkSqlHelpers.NullableParam(valueChange.ReferenceValueId ?? valueChange.ReferenceValue?.Id, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
         }
     }

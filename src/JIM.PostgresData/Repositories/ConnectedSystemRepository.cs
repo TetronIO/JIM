@@ -238,16 +238,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         // Object Matching Rules, loaded in a single keyed query and wired onto their owning object
         // types in memory.
         //
-        // Why not Include them as part of the query above? Before #494 we used four repeated
+        // Why not Include them as part of the query above? Before #494 we used repeated
         // .Include(ot => ot.ObjectMatchingRules).ThenInclude(...) branches inside AsSplitQuery —
-        // one per path into the rule graph (Sources.ConnectedSystemAttribute, Sources.MetaverseAttribute,
-        // TargetMetaverseAttribute, MetaverseObjectType). EF Core does not support chaining multiple
+        // one per path into the rule graph (Sources.ConnectedSystemAttribute, TargetMetaverseAttribute,
+        // MetaverseObjectType). EF Core does not support chaining multiple
         // ThenIncludes off the same collection navigation in one expression, so each branch has to be
         // re-rooted on the collection, and under AsSplitQuery each branch is emitted as a separate
-        // SQL query (four round-trips for a single graph walk).
+        // SQL query (multiple round-trips for a single graph walk).
         //
         // Loading the rules directly from DbSet<ObjectMatchingRule> with one combined Include chain
-        // reduces the fan-out from four queries to one. We then bind rules back onto their owning
+        // reduces the fan-out to one. We then bind rules back onto their owning
         // object types via ConnectedSystemObjectTypeId in memory.
         var typesById = types.ToDictionary(t => t.Id);
         if (types.Count > 0)
@@ -256,8 +256,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             IQueryable<ObjectMatchingRule> omrQuery = Repository.Database.ObjectMatchingRules
                 .Include(omr => omr.Sources)
                     .ThenInclude(s => s.ConnectedSystemAttribute)
-                .Include(omr => omr.Sources)
-                    .ThenInclude(s => s.MetaverseAttribute)
                 .Include(omr => omr.TargetMetaverseAttribute)
                 .Include(omr => omr.MetaverseObjectType)
                 .Where(omr => omr.ConnectedSystemObjectTypeId != null
@@ -690,8 +688,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .AsSplitQuery()
             .Include(omr => omr.Sources)
                 .ThenInclude(s => s.ConnectedSystemAttribute)
-            .Include(omr => omr.Sources)
-                .ThenInclude(s => s.MetaverseAttribute)
             .Include(omr => omr.TargetMetaverseAttribute)
             .Include(omr => omr.ConnectedSystemObjectType)
             .Include(omr => omr.MetaverseObjectType)
@@ -1027,7 +1023,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         int page,
         int pageSize,
         int? knownTotalCount = null,
-        DateTime? lastSyncTimestamp = null)
+        DateTime? lastSyncTimestamp = null,
+        Guid? afterId = null)
     {
         if (pageSize < 1)
             throw new ArgumentOutOfRangeException(nameof(pageSize), "pageSize must be a positive number");
@@ -1045,6 +1042,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             ?? await Repository.Database.ConnectedSystemObjects.CountAsync(q => q.ConnectedSystemId == connectedSystemId);
         var offset = (page - 1) * pageSize;
 
+        // Keyset pagination for sequential callers (full sync): filtering on Id > cursor keeps
+        // every page O(pageSize), where OFFSET re-scans and discards all prior rows so per-page
+        // cost grows with page number (measured at Scale500k25kGroups: 977s across 1,050 page
+        // loads, ~200ms early pages degrading to ~1.5s late ones). The cursor must be the last
+        // row of the previous page exactly as the database returned it: PostgreSQL orders uuids
+        // bytewise, which differs from .NET's Guid.CompareTo, so a client-side "max" would skip
+        // rows. Guid.CompareTo below translates to the native uuid comparison in SQL; the
+        // in-memory provider orders and compares with the same .NET semantics, so each engine
+        // is self-consistent.
+        var afterIdValue = afterId ?? Guid.Empty;
+
         List<ConnectedSystemObject> results;
 
         if (lastSyncTimestamp.HasValue)
@@ -1055,11 +1063,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             var watermark = lastSyncTimestamp.Value;
 
             // Step 1: Load all CSOs for this page WITHOUT attribute values (scalars + Type only)
-            var allCsos = await Repository.Database.ConnectedSystemObjects
+            var csoScalarQuery = Repository.Database.ConnectedSystemObjects
                 .Include(cso => cso.Type)
                 .Where(q => q.ConnectedSystemId == connectedSystemId)
                 .OrderBy(cso => cso.Id)
-                .Skip(offset)
+                .AsQueryable();
+            csoScalarQuery = afterId.HasValue
+                ? csoScalarQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0)
+                : csoScalarQuery.Skip(offset);
+            var allCsos = await csoScalarQuery
                 .Take(pageSize)
                 .ToListAsync();
 
@@ -1121,10 +1133,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 .Include(cso => cso.AttributeValues)
                     .ThenInclude(av => av.Attribute)
                 .Where(q => q.ConnectedSystemId == connectedSystemId)
-                .OrderBy(cso => cso.Id);
+                .OrderBy(cso => cso.Id)
+                .AsQueryable();
 
-            var pagedCsoQuery = csoQuery.Skip(offset).Take(pageSize);
-            results = await pagedCsoQuery.ToListAsync();
+            csoQuery = afterId.HasValue
+                ? csoQuery.Where(cso => cso.Id.CompareTo(afterIdValue) > 0)
+                : csoQuery.Skip(offset);
+            results = await csoQuery.Take(pageSize).ToListAsync();
 
             // Populate ReferenceValue navigations via direct SQL — bypasses EF Include materialisation.
             await PopulateReferenceValuesAsync(results);
@@ -1469,6 +1484,53 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             if (row.ExternalId != null)
                 result.TryAdd(row.ReferenceValueId, row.ExternalId);
         }
+        return result;
+    }
+
+    /// <summary>
+    /// DTO for the batched reference external ID lookup SQL query.
+    /// </summary>
+    private record ReferenceExternalIdBatchRow(Guid ConnectedSystemObjectId, Guid ReferenceValueId, string? ExternalId);
+
+    /// <inheritdoc/>
+    public async Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds)
+    {
+        var result = new Dictionary<Guid, Dictionary<Guid, string>>();
+        if (csoIds.Count == 0)
+            return result;
+
+        // Same query shape as GetReferenceExternalIdsAsync, widened to a page of owning CSOs via
+        // = ANY so import processing pays one round trip per hydration page instead of one per CSO
+        // (535K single-CSO round trips measured at Scale500k25kGroups, 2026-07-20).
+        var rows = await Repository.Database.Database
+            .SqlQueryRaw<ReferenceExternalIdBatchRow>(
+                """
+                SELECT av."ConnectedSystemObjectId",
+                       av."ReferenceValueId",
+                       COALESCE(sec_av."StringValue", pri_av."StringValue") AS "ExternalId"
+                FROM "ConnectedSystemObjectAttributeValues" av
+                JOIN "ConnectedSystemObjects" ref_cso ON av."ReferenceValueId" = ref_cso."Id"
+                LEFT JOIN "ConnectedSystemObjectAttributeValues" sec_av
+                    ON sec_av."ConnectedSystemObjectId" = ref_cso."Id"
+                   AND sec_av."AttributeId" = ref_cso."SecondaryExternalIdAttributeId"
+                LEFT JOIN "ConnectedSystemObjectAttributeValues" pri_av
+                    ON pri_av."ConnectedSystemObjectId" = ref_cso."Id"
+                   AND pri_av."AttributeId" = ref_cso."ExternalIdAttributeId"
+                WHERE av."ConnectedSystemObjectId" = ANY({0})
+                  AND av."ReferenceValueId" IS NOT NULL
+                """,
+                csoIds.ToArray())
+            .ToListAsync();
+
+        // Every requested ID gets an entry (empty when the CSO has no resolved references) so
+        // callers never need a per-CSO fallback query to distinguish "no references" from
+        // "not fetched".
+        foreach (var csoId in csoIds)
+            result.TryAdd(csoId, new Dictionary<Guid, string>());
+
+        foreach (var row in rows.Where(r => r.ExternalId != null))
+            result[row.ConnectedSystemObjectId].TryAdd(row.ReferenceValueId, row.ExternalId!);
+
         return result;
     }
 
@@ -2308,6 +2370,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    /// <inheritdoc />
+    public async Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined)
+    {
+        // A single conditional UPDATE guards the join-before-provision race (#1051): two Metaverse
+        // Objects can both pass the point-in-time eligibility check in
+        // FindConnectedSystemObjectUsingMatchingRuleAsync before either writes, so the claim itself
+        // must re-check MetaverseObjectId IS NULL at write time. Raw SQL bypasses the change tracker;
+        // the caller owns fixing up any tracked instance on success.
+        var affectedRows = await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects""
+              SET ""MetaverseObjectId"" = {0}, ""JoinType"" = {1}, ""DateJoined"" = {2}, ""Status"" = {3}
+              WHERE ""Id"" = {4} AND ""MetaverseObjectId"" IS NULL",
+            metaverseObjectId, (int)ConnectedSystemObjectJoinType.Joined, dateJoined, (int)ConnectedSystemObjectStatus.Normal, connectedSystemObjectId);
+
+        return affectedRows == 1;
+    }
+
     public async Task UpdateConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
@@ -2508,7 +2587,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(q => q.Attributes)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.MetaverseObjectType)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.ConnectedSystemAttribute)
-            .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.Sources).ThenInclude(s => s.MetaverseAttribute)
             .Include(q => q.ObjectMatchingRules).ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Where(x => x.ConnectedSystemId == connectedSystemId).OrderBy(x => x.Name)
             .ToListAsync();
@@ -2819,6 +2897,34 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
             .Where(pe => pe.ConnectedSystemId == connectedSystemId).ToListAsync();
+    }
+
+    /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
+    /// reference resolution: Pending status with unresolved reference attribute values.
+    /// The predicate is evaluated in SQL (backed by a partial index on
+    /// HasUnresolvedReferences) so the common zero-deferred case costs a single
+    /// index probe rather than hydrating every Pending Export for the system (#1102).
+    /// </summary>
+    public async Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
+    {
+        // AttributeValueChanges and their Attribute definitions are needed by
+        // TryResolveReferencesFromLookup (UnresolvedReferenceValue, StringValue,
+        // ResolvedReferenceCsoId stamping) and its logging (Attribute.Name).
+        // The CSO graph is deliberately NOT included: the deferred pass reads only the
+        // ConnectedSystemObjectId scalar, and the referenced CSOs are bulk-fetched
+        // separately via GetConnectedSystemObjectsByMetaverseObjectIdsAsync.
+        // AsNoTracking: mutations are persisted via UpdatePendingExportsAsync (raw bulk
+        // SQL + tracker detach), not EF change tracking.
+        return await Repository.Database.PendingExports
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.HasUnresolvedReferences
+                      && pe.Status == PendingExportStatus.Pending)
+            .ToListAsync();
     }
 
     /// <summary>
@@ -3650,15 +3756,87 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
 
-    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId)
+    /// <summary>
+    /// Pending Exports loaded per statement by <see cref="GetPendingExportsLightweightByConnectedSystemIdAsync"/>
+    /// when the caller does not specify a chunk size. Sized so each statement completes comfortably
+    /// inside the database's statement timeout: the Scale500k25kGroups confirming import (2026-07-19)
+    /// showed a single statement loading 525K Pending Exports joined to 9.8M attribute value changes
+    /// exceeds the 5 minute server-side statement_timeout.
+    /// </summary>
+    private const int PendingExportPreloadChunkSize = 50_000;
+
+    public async Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null)
     {
-        // Single bulk query: load ALL Pending Exports for this Connected System in one round-trip.
-        // Far more efficient than per-page WHERE IN queries for large-scale reconciliation (100K+ CSOs).
-        var pendingExports = await Repository.Database.PendingExports
-            .Include(pe => pe.AttributeValueChanges)
-                .ThenInclude(avc => avc.Attribute)
-            .Where(pe => pe.ConnectedSystemId == connectedSystemId && pe.ConnectedSystemObjectId != null)
-            .ToListAsync();
+        // Loads ALL Pending Exports for this Connected System for whole-system reconciliation, in
+        // bounded keyset-paginated chunks rather than one statement: a single collection-Include
+        // query at Scale500k25kGroups joins 525K Pending Exports to 9.8M attribute value changes
+        // and is killed by the server-side statement_timeout. Each chunk issues small statements:
+        // a page of Pending Export headers (no Includes), then their value changes by
+        // PendingExportId, with Attribute navigations stitched from a shared lookup rather than a
+        // per-row Include (which under AsNoTracking would materialise a duplicate attribute
+        // instance per value change).
+        //
+        // AsNoTracking throughout: callers only read the results (the reconciliation pre-load runs
+        // on a background context that is disposed immediately, which already detached these
+        // entities), and the duplicate self-heal below deletes via raw SQL, not SaveChanges.
+        var effectiveChunkSize = chunkSize ?? PendingExportPreloadChunkSize;
+        if (effectiveChunkSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(chunkSize), chunkSize, "Chunk size must be positive.");
+
+        var pendingExports = new List<PendingExport>();
+        var attributesById = new Dictionary<int, ConnectedSystemObjectTypeAttribute>();
+        var lastPendingExportId = Guid.Empty;
+
+        while (true)
+        {
+            var page = await Repository.Database.PendingExports
+                .AsNoTracking()
+                .Where(pe => pe.ConnectedSystemId == connectedSystemId && pe.ConnectedSystemObjectId != null &&
+                             pe.Id.CompareTo(lastPendingExportId) > 0)
+                .OrderBy(pe => pe.Id)
+                .Take(effectiveChunkSize)
+                .ToListAsync();
+
+            if (page.Count == 0)
+                break;
+            lastPendingExportId = page[^1].Id;
+
+            var pageIds = page.Select(pe => (Guid?)pe.Id).ToArray();
+            var valueChanges = await Repository.Database.PendingExportAttributeValueChanges
+                .AsNoTracking()
+                .Where(avc => pageIds.Contains(avc.PendingExportId))
+                .ToListAsync();
+
+            // Stitch Attribute navigations from a shared lookup, fetching only attributes not seen
+            // in earlier chunks (the same few attributes repeat across millions of value changes).
+            var missingAttributeIds = valueChanges
+                .Select(avc => avc.AttributeId)
+                .Distinct()
+                .Where(id => !attributesById.ContainsKey(id))
+                .ToList();
+            if (missingAttributeIds.Count > 0)
+            {
+                var fetchedAttributes = await Repository.Database.ConnectedSystemAttributes
+                    .AsNoTracking()
+                    .Where(a => missingAttributeIds.Contains(a.Id))
+                    .ToListAsync();
+                foreach (var attribute in fetchedAttributes)
+                    attributesById[attribute.Id] = attribute;
+            }
+
+            foreach (var valueChange in valueChanges.Where(avc => attributesById.ContainsKey(avc.AttributeId)))
+                valueChange.Attribute = attributesById[valueChange.AttributeId];
+
+            var valueChangesByPendingExportId = valueChanges
+                .Where(avc => avc.PendingExportId.HasValue)
+                .GroupBy(avc => avc.PendingExportId!.Value)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            foreach (var pe in page.Where(pe => valueChangesByPendingExportId.ContainsKey(pe.Id)))
+                pe.AttributeValueChanges = valueChangesByPendingExportId[pe.Id];
+
+            pendingExports.AddRange(page);
+        }
 
         // Build dictionary mapping CSO ID to Pending Export, with duplicate self-healing.
         var result = new Dictionary<Guid, PendingExport>();
@@ -3869,61 +4047,63 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         var source = objectMatchingRule.Sources[0];
 
-        // For export matching, the source should reference an MVO attribute
-        if (source.MetaverseAttribute == null)
+        // The connector-space side of the comparison always comes from the source's Connected System
+        // attribute; without one there is nothing to compare CSOs on.
+        if (source.ConnectedSystemAttribute == null)
         {
-            Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: Source does not have a MetaverseAttribute, skipping rule {RuleId}", objectMatchingRule.Id);
+            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Rule {RuleId} has no Connected System attribute on its source; export matching cannot query the connector space.",
+                objectMatchingRule.Id);
+            return null;
+        }
+
+        // The MVO side of the comparison: the standard rule shape (source = Connected System attribute,
+        // target = Metaverse attribute, which is what the UI, API and PowerShell configure) serves both
+        // import and export matching, so read the rule's Target Metaverse Attribute directly.
+        var metaverseAttribute = objectMatchingRule.TargetMetaverseAttribute;
+        if (metaverseAttribute == null)
+        {
+            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Rule {RuleId} has no Target Metaverse Attribute; cannot determine the MVO-side value for export matching.",
+                objectMatchingRule.Id);
             return null;
         }
 
         // Get the source attribute value from the MVO
         var mvoAttributeValue = metaverseObject.AttributeValues
-            .FirstOrDefault(av => av.AttributeId == source.MetaverseAttribute.Id || av.Attribute?.Id == source.MetaverseAttribute.Id);
+            .FirstOrDefault(av => av.AttributeId == metaverseAttribute.Id || av.Attribute?.Id == metaverseAttribute.Id);
 
         if (mvoAttributeValue == null)
         {
             Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: MVO {MvoId} does not have a value for attribute {AttrId}",
-                metaverseObject.Id, source.MetaverseAttribute.Id);
+                metaverseObject.Id, metaverseAttribute.Id);
             return null;
         }
 
-        // Skip null values - null is always a non-match
-        var hasValue = source.MetaverseAttribute.Type switch
-        {
-            AttributeDataType.Text => !string.IsNullOrEmpty(mvoAttributeValue.StringValue),
-            AttributeDataType.Number => mvoAttributeValue.IntValue.HasValue,
-            AttributeDataType.Guid => mvoAttributeValue.GuidValue.HasValue,
-            _ => false
-        };
+        var connectedSystemAttributeName = source.ConnectedSystemAttribute.Name;
 
-        if (!hasValue)
-        {
-            Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: Skipping null/empty attribute value for {AttributeName}",
-                source.MetaverseAttribute.Name);
-            return null;
-        }
-
-        // The target is a CS attribute (what we're looking for on the CSO)
-        var targetCsAttribute = objectMatchingRule.TargetMetaverseAttribute;
-        if (targetCsAttribute == null)
-        {
-            // For export matching, we need to find the corresponding CS attribute
-            // Since the matching rule's target is the MV attribute during import,
-            // for export we look at what CS attribute maps to that value
-            // This is typically the external ID attribute of the object type
-            Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: No target attribute configured on rule {RuleId}", objectMatchingRule.Id);
-            return null;
-        }
-
-        // Query CSOs that match the value
+        // Query CSOs that match the value. Only unjoined, Normal-status objects are eligible: matching
+        // must never steal a CSO already joined to another Metaverse Object, and an Obsolete or
+        // PendingProvisioning CSO does not (yet, or any longer) represent a live object in the target system.
         var query = Repository.Database.ConnectedSystemObjects
             .Include(cso => cso.AttributeValues)
             .ThenInclude(av => av.Attribute)
-            .Where(cso => cso.ConnectedSystemId == connectedSystem.Id && cso.TypeId == connectedSystemObjectType.Id);
+            .Where(cso => cso.ConnectedSystemId == connectedSystem.Id &&
+                          cso.TypeId == connectedSystemObjectType.Id &&
+                          cso.MetaverseObjectId == null &&
+                          cso.Status == ConnectedSystemObjectStatus.Normal);
 
-        // Match based on attribute type
-        switch (source.MetaverseAttribute.Type)
+        // Match based on attribute type. Null/empty MVO-side values are always a non-match (Debug, not a
+        // misconfiguration); genuinely unsupported attribute types are a misconfiguration and must be
+        // visible at Warning level per the Synchronisation Integrity rules, not silently no-op.
+        switch (metaverseAttribute.Type)
         {
+            case AttributeDataType.Text when string.IsNullOrEmpty(mvoAttributeValue.StringValue):
+            case AttributeDataType.Number when !mvoAttributeValue.IntValue.HasValue:
+            case AttributeDataType.LongNumber when !mvoAttributeValue.LongValue.HasValue:
+            case AttributeDataType.Decimal when !mvoAttributeValue.DecimalValue.HasValue:
+            case AttributeDataType.Guid when !mvoAttributeValue.GuidValue.HasValue:
+                Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: Skipping null/empty attribute value for {AttributeName}",
+                    metaverseAttribute.Name);
+                return null;
             case AttributeDataType.Text:
                 // Check case sensitivity setting on the matching rule
                 if (objectMatchingRule.CaseSensitive)
@@ -3931,7 +4111,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     // Case-sensitive comparison (default) - null check already done above
                     query = query.Where(cso => cso.AttributeValues.Any(av =>
                         av.Attribute != null &&
-                        av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                        av.Attribute.Name == connectedSystemAttributeName &&
                         av.StringValue != null &&
                         av.StringValue == mvoAttributeValue.StringValue));
                 }
@@ -3940,7 +4120,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     // Case-insensitive comparison using PostgreSQL ILike
                     query = query.Where(cso => cso.AttributeValues.Any(av =>
                         av.Attribute != null &&
-                        av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                        av.Attribute.Name == connectedSystemAttributeName &&
                         av.StringValue != null &&
                         EF.Functions.ILike(av.StringValue, mvoAttributeValue.StringValue!)));
                 }
@@ -3949,20 +4129,39 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 // Null check already done above
                 query = query.Where(cso => cso.AttributeValues.Any(av =>
                     av.Attribute != null &&
-                    av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                    av.Attribute.Name == connectedSystemAttributeName &&
                     av.IntValue != null &&
                     av.IntValue == mvoAttributeValue.IntValue));
+                break;
+            case AttributeDataType.LongNumber:
+                // Null check already done above
+                query = query.Where(cso => cso.AttributeValues.Any(av =>
+                    av.Attribute != null &&
+                    av.Attribute.Name == connectedSystemAttributeName &&
+                    av.LongValue != null &&
+                    av.LongValue == mvoAttributeValue.LongValue));
+                break;
+            case AttributeDataType.Decimal:
+                // Null check already done above. EF translates this to PostgreSQL numeric equality,
+                // which is scale-insensitive (5.0 = 5.00 is true), matching .NET decimal equality.
+                query = query.Where(cso => cso.AttributeValues.Any(av =>
+                    av.Attribute != null &&
+                    av.Attribute.Name == connectedSystemAttributeName &&
+                    av.DecimalValue != null &&
+                    av.DecimalValue == mvoAttributeValue.DecimalValue));
                 break;
             case AttributeDataType.Guid:
                 // Null check already done above
                 query = query.Where(cso => cso.AttributeValues.Any(av =>
                     av.Attribute != null &&
-                    av.Attribute.Name == source.ConnectedSystemAttribute!.Name &&
+                    av.Attribute.Name == connectedSystemAttributeName &&
                     av.GuidValue != null &&
                     av.GuidValue == mvoAttributeValue.GuidValue));
                 break;
             default:
-                throw new NotSupportedException($"Attribute type {source.MetaverseAttribute.Type} is not supported for export matching.");
+                Log.Warning("FindConnectedSystemObjectUsingMatchingRuleAsync: Attribute type {AttributeType} on Metaverse attribute {AttributeName} is not supported for export matching; Object Matching Rule {RuleId} cannot match on it.",
+                    metaverseAttribute.Type, metaverseAttribute.Name, objectMatchingRule.Id);
+                return null;
         }
 
         var matches = await query.OrderBy(cso => cso.Id).Take(2).ToListAsync();
@@ -4001,10 +4200,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(s => s.ConnectedSystemAttribute)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.ObjectMatchingRules)
-            .ThenInclude(omr => omr.Sources)
-            .ThenInclude(s => s.MetaverseAttribute)
-            .Include(sr => sr.ConnectedSystemObjectType)
-            .ThenInclude(csot => csot.ObjectMatchingRules)
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.ObjectMatchingRules)
@@ -4014,9 +4209,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))
             .ThenInclude(omr => omr.Sources)
             .ThenInclude(s => s.ConnectedSystemAttribute)
-            .Include(sr => sr.ObjectMatchingRules)
-            .ThenInclude(omr => omr.Sources)
-            .ThenInclude(s => s.MetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
@@ -4086,21 +4278,40 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await query.ToListAsync();
     }
 
-    public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync()
+    public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync(int? metaverseObjectTypeId = null, SyncRuleDirection? direction = null)
     {
-        return await Repository.Database.SyncRules.OrderBy(a => a.Name).Select(sr => new SyncRuleHeader
+        var query = Repository.Database.SyncRules.AsQueryable();
+
+        if (metaverseObjectTypeId.HasValue)
+        {
+            var metaverseObjectTypeIdValue = metaverseObjectTypeId.Value;
+            query = query.Where(sr => sr.MetaverseObjectTypeId == metaverseObjectTypeIdValue);
+        }
+
+        if (direction.HasValue)
+        {
+            var directionValue = direction.Value;
+            query = query.Where(sr => sr.Direction == directionValue);
+        }
+
+        return await query.OrderBy(a => a.Name).Select(sr => new SyncRuleHeader
         {
             Id = sr.Id,
             Name = sr.Name,
             Description = sr.Description,
+            ConnectedSystemId = sr.ConnectedSystemId,
             ConnectedSystemName = sr.ConnectedSystem.Name,
+            ConnectedSystemObjectTypeId = sr.ConnectedSystemObjectTypeId,
             ConnectedSystemObjectTypeName = sr.ConnectedSystemObjectType.Name,
             Created = sr.Created,
             Direction = sr.Direction,
+            MetaverseObjectTypeId = sr.MetaverseObjectTypeId,
             MetaverseObjectTypeName = sr.MetaverseObjectType.Name,
             ProjectToMetaverse = sr.ProjectToMetaverse,
             ProvisionToConnectedSystem = sr.ProvisionToConnectedSystem,
-            Enabled = sr.Enabled
+            Enabled = sr.Enabled,
+            EnforceState = sr.EnforceState,
+            OutboundDeprovisionAction = sr.OutboundDeprovisionAction
         }).ToListAsync();
     }
 
@@ -4159,6 +4370,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                                 DateTimeValue = vc.DateTimeValue,
                                 IntValue = vc.IntValue,
                                 LongValue = vc.LongValue,
+                                DecimalValue = vc.DecimalValue,
                                 ByteValueLength = vc.ByteValueLength,
                                 GuidValue = vc.GuidValue,
                                 BoolValue = vc.BoolValue,
@@ -4352,9 +4564,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(sr => sr.ObjectMatchingRules.OrderBy(q => q.Order))
             .ThenInclude(omr => omr.Sources)
             .ThenInclude(s => s.ConnectedSystemAttribute)
-            .Include(sr => sr.ObjectMatchingRules)
-            .ThenInclude(omr => omr.Sources)
-            .ThenInclude(s => s.MetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
             .ThenInclude(omr => omr.TargetMetaverseAttribute)
             .Include(sr => sr.ObjectMatchingRules)
@@ -4902,21 +5111,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private async Task BulkInsertConnectedSystemObjectsRawAsync(List<ConnectedSystemObject> objects, Func<int, Task>? onBatchPersisted = null)
     {
-        const int columnsPerRow = 11;
+        // Parameter order below MUST match CsoBulkColumns.ConnectedSystemObjects exactly.
+        var columnsPerRow = CsoBulkColumns.ConnectedSystemObjects.Length;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
         var totalPersisted = 0;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""ConnectedSystemObjects"" (""Id"", ""ConnectedSystemId"", ""Created"", ""LastUpdated"", ""TypeId"", ""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"", ""Status"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"") VALUES ");
+            sql.Append($@"INSERT INTO ""ConnectedSystemObjects"" ({BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjects)}) VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}})");
+                sql.Append('(').Append(string.Join(", ", Enumerable.Range(offset, columnsPerRow).Select(p => $"{{{p}}}"))).Append(')');
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
@@ -4930,6 +5140,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add((int)cso.JoinType);
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.PartitionId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(cso.ScopeReviewPending);
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.LastScopeEvaluatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -4967,12 +5180,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
+        // Writer order below MUST match CsoBulkColumns.ConnectedSystemObjectAttributeValues exactly.
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
-            """
+            $"""
             COPY "ConnectedSystemObjectAttributeValues" (
-                "Id", "ConnectedSystemObjectId", "AttributeId", "StringValue", "DateTimeValue",
-                "IntValue", "LongValue", "ByteValue", "GuidValue", "BoolValue",
-                "ReferenceValueId", "UnresolvedReferenceValue"
+                {BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectAttributeValues)}
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -4996,6 +5208,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 await writer.WriteNullAsync();
             if (av.LongValue.HasValue)
                 await writer.WriteAsync(av.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
+            else
+                await writer.WriteNullAsync();
+            if (av.DecimalValue.HasValue)
+                await writer.WriteAsync(av.DecimalValue.Value, NpgsqlTypes.NpgsqlDbType.Numeric);
             else
                 await writer.WriteNullAsync();
             if (av.ByteValue is not null)
@@ -5029,25 +5245,31 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Batch updates ConnectedSystemObject rows using UPDATE ... FROM (VALUES ...) pattern.
-    /// Only updates mutable columns: LastUpdated, Status, MetaverseObjectId, JoinType, DateJoined,
-    /// ExternalIdAttributeId, SecondaryExternalIdAttributeId.
+    /// Only the mutable columns in <see cref="CsoBulkColumns.ConnectedSystemObjectsUpdate"/> are
+    /// written; the SET and alias lists are generated from that list, so a column added to it
+    /// without extending the cast/parameter writers below fails loudly at runtime (column count
+    /// mismatch) instead of being silently dropped.
     /// </summary>
     private async Task BulkUpdateConnectedSystemObjectsRawAsync(List<ConnectedSystemObject> objects)
     {
-        const int columnsPerRow = 8; // Id + 7 mutable columns
+        // Id plus the mutable columns; cast/parameter order below MUST match
+        // CsoBulkColumns.ConnectedSystemObjectsUpdate exactly.
+        var columnsPerRow = 1 + CsoBulkColumns.ConnectedSystemObjectsUpdate.Length;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ""LastUpdated"" = v.""LastUpdated"", ""Status"" = v.""Status"", ""MetaverseObjectId"" = v.""MetaverseObjectId"", ""JoinType"" = v.""JoinType"", ""DateJoined"" = v.""DateJoined"", ""ExternalIdAttributeId"" = v.""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"" = v.""SecondaryExternalIdAttributeId"" FROM (VALUES ");
+            sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ");
+            sql.Append(string.Join(", ", CsoBulkColumns.ConnectedSystemObjectsUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
+            sql.Append(" FROM (VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::timestamp with time zone, {{{offset + 2}}}::integer, {{{offset + 3}}}::uuid, {{{offset + 4}}}::integer, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::integer, {{{offset + 7}}}::integer)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::timestamp with time zone, {{{offset + 2}}}::integer, {{{offset + 3}}}::uuid, {{{offset + 4}}}::integer, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::integer, {{{offset + 7}}}::integer, {{{offset + 8}}}::integer)");
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
@@ -5058,9 +5280,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(cso.ExternalIdAttributeId);
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.SecondaryExternalIdAttributeId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.PartitionId, NpgsqlTypes.NpgsqlDbType.Integer));
             }
 
-            sql.Append(@") AS v(""Id"", ""LastUpdated"", ""Status"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"", ""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@") AS v(""Id"", ");
+            sql.Append(BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectsUpdate));
+            sql.Append(@") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
@@ -5114,7 +5339,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         foreach (var chunk in BulkSqlHelpers.ChunkList(exports, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"UPDATE ""PendingExports"" AS t SET ""Status"" = v.""Status"", ""ErrorCount"" = v.""ErrorCount"", ""MaxRetries"" = v.""MaxRetries"", ""LastAttemptedAt"" = v.""LastAttemptedAt"", ""NextRetryAt"" = v.""NextRetryAt"", ""LastErrorMessage"" = v.""LastErrorMessage"", ""LastErrorStackTrace"" = v.""LastErrorStackTrace"", ""HasUnresolvedReferences"" = v.""HasUnresolvedReferences"", ""ConnectedSystemObjectId"" = v.""ConnectedSystemObjectId"" FROM (VALUES ");
+            // Cast/parameter order below MUST match PendingExportBulkColumns.PendingExportsExportResultUpdate exactly.
+            sql.Append(@"UPDATE ""PendingExports"" AS t SET ");
+            sql.Append(string.Join(", ", PendingExportBulkColumns.PendingExportsExportResultUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
+            sql.Append(" FROM (VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
@@ -5136,7 +5364,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(pe.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
-            sql.Append(@") AS v(""Id"", ""Status"", ""ErrorCount"", ""MaxRetries"", ""LastAttemptedAt"", ""NextRetryAt"", ""LastErrorMessage"", ""LastErrorStackTrace"", ""HasUnresolvedReferences"", ""ConnectedSystemObjectId"") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@") AS v(""Id"", ");
+            sql.Append(BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportsExportResultUpdate));
+            sql.Append(@") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
@@ -5149,7 +5379,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Bulk updates PendingExportAttributeValueChange confirmation tracking columns via raw SQL.
-    /// Called after export to persist the ExportedPendingConfirmation status set by UpdateAttributeChangeStatusesAfterExport.
+    /// Called after export to persist the ExportedPendingConfirmation status set by UpdateAttributeChangeStatusesAfterExport,
+    /// and to persist reference resolution (StringValue, UnresolvedReferenceValue, ResolvedReferenceCsoId
+    /// - issue #1079) stamped by ExportExecutionServer.TryResolveReferencesFromLookup.
     /// </summary>
     private async Task BulkUpdatePendingExportAttributeValueChangesRawAsync(List<PendingExport> exports)
     {
@@ -5160,20 +5392,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (allChanges.Count == 0)
             return;
 
-        const int columnsPerRow = 7; // Id + 6 mutable columns
+        const int columnsPerRow = 8; // Id + 7 mutable columns
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(allChanges, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"UPDATE ""PendingExportAttributeValueChanges"" AS t SET ""Status"" = v.""Status"", ""ExportAttemptCount"" = v.""ExportAttemptCount"", ""LastExportedAt"" = v.""LastExportedAt"", ""StringValue"" = v.""StringValue"", ""UnresolvedReferenceValue"" = v.""UnresolvedReferenceValue"", ""LastImportedValue"" = v.""LastImportedValue"" FROM (VALUES ");
+            // Cast/parameter order below MUST match PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate exactly.
+            sql.Append(@"UPDATE ""PendingExportAttributeValueChanges"" AS t SET ");
+            sql.Append(string.Join(", ", PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
+            sql.Append(" FROM (VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::text, {{{offset + 5}}}::text, {{{offset + 6}}}::text)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::text, {{{offset + 5}}}::text, {{{offset + 6}}}::text, {{{offset + 7}}}::uuid)");
 
                 var avc = chunk[i];
                 parameters.Add(avc.Id);
@@ -5183,9 +5418,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.ResolvedReferenceCsoId, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
-            sql.Append(@") AS v(""Id"", ""Status"", ""ExportAttemptCount"", ""LastExportedAt"", ""StringValue"", ""UnresolvedReferenceValue"", ""LastImportedValue"") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@") AS v(""Id"", ");
+            sql.Append(BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate));
+            sql.Append(@") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }

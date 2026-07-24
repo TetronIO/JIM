@@ -100,6 +100,9 @@ public class ReconcilerReferenceExportTests
         var mvGroupType = MetaverseObjectTypesData.Single(t => t.Name == "Group");
         var memberMvAttr = mvGroupType.Attributes.Single(a => a.Id == (int)MockMetaverseAttributeName.Member);
         var targetManagerAttr = GetTargetAttribute(MockTargetSystemAttributeNames.Manager);
+        // A multi-valued member source must map to a multi-valued target; otherwise the MVA->SVA guard (#435)
+        // rightly refuses to export more than one value. This test exercises FK-scalar reference export.
+        targetManagerAttr.AttributePlurality = AttributePlurality.MultiValued;
         var exportRule = CreateExportRuleWithDirectMapping(memberMvAttr, targetManagerAttr);
 
         var memberId1 = Guid.NewGuid();

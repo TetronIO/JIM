@@ -73,6 +73,15 @@ public class ConnectedSystem : IAuditable
     public ObjectMatchingRuleMode ObjectMatchingRuleMode { get; set; } = ObjectMatchingRuleMode.ConnectedSystem;
 
     /// <summary>
+    /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object is
+    /// treated for this Connected System. Error (default) marks the affected object's Run Profile Execution Item as
+    /// errored; Warn downgrades to an Activity-level warning summarising the unresolved count; Ignore suppresses
+    /// both, logging the unresolved references only. In all three modes the unresolved value remains stored on the
+    /// Connected System Object.
+    /// </summary>
+    public UnresolvedReferenceHandling UnresolvedReferenceHandling { get; set; } = UnresolvedReferenceHandling.Error;
+
+    /// <summary>
     /// Timestamp of when the last synchronisation (full or delta) completed successfully.
     /// Used by delta sync to determine which CSOs have been modified since the last run,
     /// and by full sync to identify unchanged CSOs that can skip attribute processing.

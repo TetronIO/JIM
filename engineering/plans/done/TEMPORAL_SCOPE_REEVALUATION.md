@@ -3,7 +3,7 @@
 - **Status:** Done
 - **Note:** Scale coverage for reconciler-driven transitions on reference-heavy objects (leaver-cohort entitlement fan-out) is follow-up [#908](https://github.com/TetronIO/JIM/issues/908); the change-history read path for Schedules is a #898 follow-up.
 - **Issue:** [#892](https://github.com/TetronIO/JIM/issues/892) (sub-task of [#85](https://github.com/TetronIO/JIM/issues/85))
-- **PRD:** [`engineering/prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md`](../../prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md) (#85)
+- **PRD:** [`engineering/prd/done/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md`](../../prd/done/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md) (#85)
 - **Builds on:** [`RELATIVE_DATE_SEARCH_CRITERIA.md`](RELATIVE_DATE_SEARCH_CRITERIA.md) (the relative-date criteria, evaluator, API, UI)
 - **Related:** [#891](https://github.com/TetronIO/JIM/issues/891) (Full Synchronisation watermark-skip review; independent, see Interaction below)
 

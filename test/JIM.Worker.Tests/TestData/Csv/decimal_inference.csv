@@ -1,0 +1,3 @@
+WholeColumn,LargeWholeColumn,FractionalColumn,ExponentColumn,NegativeFractionColumn
+42,5000000000,1.5,1.5E3,-0.25
+7,6000000000,2.75,2E2,-1.5

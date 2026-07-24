@@ -7,6 +7,7 @@ using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 using System.Globalization;
 namespace JIM.Connectors.File;
@@ -290,7 +291,7 @@ internal class FileConnectorExport
                 if (existingRows.ContainsKey(externalId))
                 {
                     _logger.Warning("FileConnectorExport.ProcessPendingExport: Create export for '{ExternalId}' but row already exists. Treating as update.",
-                        externalId);
+                        LogSanitiser.Sanitise(externalId));
                 }
 
                 // Build the row from attribute changes
@@ -316,7 +317,7 @@ internal class FileConnectorExport
                 if (!existingRows.TryGetValue(externalId, out var existingRow))
                 {
                     _logger.Warning("FileConnectorExport.ProcessPendingExport: Update for '{ExternalId}' but no existing row found. Creating new row.",
-                        externalId);
+                        LogSanitiser.Sanitise(externalId));
                     existingRow = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     existingRows[externalId] = existingRow;
                 }
@@ -339,12 +340,12 @@ internal class FileConnectorExport
 
                 if (existingRows.Remove(externalId))
                 {
-                    _logger.Debug("FileConnectorExport.ProcessPendingExport: Removed row for '{ExternalId}'", externalId);
+                    _logger.Debug("FileConnectorExport.ProcessPendingExport: Removed row for '{ExternalId}'", LogSanitiser.Sanitise(externalId));
                 }
                 else
                 {
                     _logger.Debug("FileConnectorExport.ProcessPendingExport: Delete for '{ExternalId}' but row not found in file (already removed or never exported)",
-                        externalId);
+                        LogSanitiser.Sanitise(externalId));
                 }
 
                 return ConnectedSystemExportResult.Succeeded(externalId);
@@ -478,6 +479,11 @@ internal class FileConnectorExport
         if (attrChange.LongValue.HasValue)
             return attrChange.LongValue.Value.ToString();
 
+        if (attrChange.DecimalValue.HasValue)
+            // Canonical invariant form: plain notation, no trailing zeros, never exponent.
+            // A bare ToString() would be culture-sensitive (comma decimal separators would corrupt the CSV).
+            return DecimalAttributeValue.ToCanonicalString(attrChange.DecimalValue.Value);
+
         if (attrChange.DateTimeValue.HasValue)
             return attrChange.DateTimeValue.Value.ToString("O"); // ISO 8601 format
 
@@ -486,6 +492,10 @@ internal class FileConnectorExport
 
         if (attrChange.BoolValue.HasValue)
             return attrChange.BoolValue.Value.ToString().ToLower();
+
+        if (attrChange.ByteValue != null)
+            // A CSV cell cannot carry raw bytes; base64 is the lossless text representation.
+            return Convert.ToBase64String(attrChange.ByteValue);
 
         if (!string.IsNullOrEmpty(attrChange.UnresolvedReferenceValue))
             return attrChange.UnresolvedReferenceValue;
@@ -504,6 +514,11 @@ internal class FileConnectorExport
         if (attrValue.LongValue.HasValue)
             return attrValue.LongValue.Value.ToString();
 
+        if (attrValue.DecimalValue.HasValue)
+            // Canonical invariant form: plain notation, no trailing zeros, never exponent.
+            // A bare ToString() would be culture-sensitive (comma decimal separators would corrupt the CSV).
+            return DecimalAttributeValue.ToCanonicalString(attrValue.DecimalValue.Value);
+
         if (attrValue.DateTimeValue.HasValue)
             return attrValue.DateTimeValue.Value.ToString("O");
 
@@ -512,6 +527,10 @@ internal class FileConnectorExport
 
         if (attrValue.BoolValue.HasValue)
             return attrValue.BoolValue.Value.ToString().ToLower();
+
+        if (attrValue.ByteValue != null)
+            // A CSV cell cannot carry raw bytes; base64 is the lossless text representation.
+            return Convert.ToBase64String(attrValue.ByteValue);
 
         if (!string.IsNullOrEmpty(attrValue.UnresolvedReferenceValue))
             return attrValue.UnresolvedReferenceValue;

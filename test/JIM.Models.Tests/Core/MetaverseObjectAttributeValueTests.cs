@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System;
+using System.Globalization;
 using JIM.Models.Core;
 using JIM.Models.Staging;
 using NUnit.Framework;
@@ -80,6 +81,15 @@ public class MetaverseObjectAttributeValueTests
     }
 
     [Test]
+    public void IsValuelessReferenceRow_WithDecimalValue_ReturnsFalse()
+    {
+        var row = CreateBareRow();
+        row.DecimalValue = 1.5m;
+
+        Assert.That(row.IsValuelessReferenceRow(), Is.False);
+    }
+
+    [Test]
     public void IsValuelessReferenceRow_WithByteValue_ReturnsFalse()
     {
         var row = CreateBareRow();
@@ -133,5 +143,45 @@ public class MetaverseObjectAttributeValueTests
         row.NullValue = true;
 
         Assert.That(row.IsValuelessReferenceRow(), Is.False);
+    }
+
+    [Test]
+    public void ToString_WithDecimalValue_RendersInvariantCulture()
+    {
+        // A comma-decimal culture must not leak into the rendered value ("1234,56").
+        var originalCulture = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+            var row = CreateBareRow();
+            row.DecimalValue = 1234.56m;
+
+            Assert.That(row.ToString(), Is.EqualTo("1234.56"));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
+    }
+
+    [Test]
+    public void ToString_WithDecimalValue_PreservesStoredScale()
+    {
+        // Display paths intentionally preserve the stored scale (unlike canonical keys, which use G29).
+        var row = CreateBareRow();
+        row.DecimalValue = 5.00m;
+
+        Assert.That(row.ToString(), Is.EqualTo("5.00"));
+    }
+
+    [Test]
+    public void ToString_WithLongAndDecimalValues_RendersLongValueFirst()
+    {
+        // The DecimalValue branch sits immediately after the LongValue branch.
+        var row = CreateBareRow();
+        row.LongValue = 42L;
+        row.DecimalValue = 1.5m;
+
+        Assert.That(row.ToString(), Is.EqualTo("42"));
     }
 }

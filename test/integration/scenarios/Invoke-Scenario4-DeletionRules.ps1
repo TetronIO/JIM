@@ -53,6 +53,8 @@
         - Assert: MVO exists but is marked for deletion (grace period not elapsed)
         - Wait for housekeeping to process (grace period expires)
         - Assert: MVO is deleted after grace period elapses
+        - Assert: housekeeping deletion cascade honours the export rule's Delete action
+          (delete Pending Export staged, directory account removed)
 
     Test 5: Manual + Recall (Training source, end-to-end)
         - Same as Test 1 but with Manual deletion rule
@@ -70,6 +72,27 @@
     Test 7: Internal MVO Protection
         - Internal MVOs (Origin=Internal) must NEVER be auto-deleted regardless of deletion rule
         - Deferred: requires Internal MVO management feature (see GitHub issue)
+
+    Tests 8-11: Deprovisioning Action permutations (issue #655)
+        When an MVO is deleted, downstream deprovisioning is driven by each export
+        Synchronisation Rule's OutboundDeprovisionAction, regardless of how the CSO was
+        joined. These tests cover the full CSO origin x action matrix using
+        WhenAuthoritativeSourceDisconnected + GracePeriod=0 as the deletion trigger.
+        A Joined CSO is arranged by provisioning via JIM, deleting the MVO under a
+        Disconnect action (directory account and CSO survive unjoined), then re-adding
+        the HR user so export matching rejoins the surviving CSO (JoinType=Joined).
+
+    Test 8: Provisioned CSO + Delete action
+        - Assert: delete Pending Export staged, directory account removed
+    Test 9: Provisioned CSO + Disconnect action
+        - Assert: no delete Pending Export, CSO disconnected (JoinType=NotJoined),
+          directory account left in place
+    Test 10: Joined CSO + Delete action (the issue #655 headline case)
+        - Assert: delete Pending Export staged, directory account removed
+    Test 11: Joined CSO + Disconnect action
+        - Assert: no delete Pending Export, CSO disconnected, directory account left in place
+
+    The DeprovisionActions step runs Tests 8-11 together.
 
 .PARAMETER Step
     Which test step to execute
@@ -103,6 +126,11 @@ param(
         "ManualRecall",
         "ManualNoRecall",
         "InternalProtection",
+        "DeprovisionProvisionedDelete",
+        "DeprovisionProvisionedDisconnect",
+        "DeprovisionJoinedDelete",
+        "DeprovisionJoinedDisconnect",
+        "DeprovisionActions",
         "All"
     )]
     [string]$Step = "All",
@@ -557,6 +585,281 @@ function Set-DeletionRuleConfig {
     }
 }
 
+# -----------------------------------------------------------------------------------------------------------------
+# Helper: Resolve the LDAP export Synchronisation Rule header
+# -----------------------------------------------------------------------------------------------------------------
+function Get-LdapExportSyncRule {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config
+    )
+
+    $rule = @(Get-JIMSyncRule) | Where-Object {
+        $_.connectedSystemId -eq $Config.LDAPSystemId -and "$($_.direction)" -eq 'Export'
+    } | Select-Object -First 1
+
+    if (-not $rule) {
+        throw "Could not find the export Synchronisation Rule for Connected System $($Config.LDAPSystemId)"
+    }
+    return $rule
+}
+
+# -----------------------------------------------------------------------------------------------------------------
+# Helper: Set the LDAP export Synchronisation Rule's Deprovisioning Action (issue #655)
+# -----------------------------------------------------------------------------------------------------------------
+function Set-ExportRuleDeprovisionAction {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config,
+
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('Disconnect', 'Delete')]
+        [string]$Action
+    )
+
+    $rule = Get-LdapExportSyncRule -Config $Config
+    Set-JIMSyncRule -Id $rule.id -OutboundDeprovisionAction $Action `
+        -ChangeReason "Scenario 4 deprovisioning action test" | Out-Null
+    Write-Host "  Configured export Synchronisation Rule '$($rule.name)': OutboundDeprovisionAction=$Action" -ForegroundColor Green
+}
+
+# -----------------------------------------------------------------------------------------------------------------
+# Helper: Find the LDAP CSO header for a user by display name (includes joinType)
+# -----------------------------------------------------------------------------------------------------------------
+function Get-LdapCsoHeader {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config,
+
+        [Parameter(Mandatory=$true)]
+        [string]$DisplayName
+    )
+
+    return @(Get-JIMConnectedSystemObject -ConnectedSystemId $Config.LDAPSystemId -Search $DisplayName -PageSize 10) |
+        Where-Object { $_.displayName -eq $DisplayName } | Select-Object -First 1
+}
+
+# -----------------------------------------------------------------------------------------------------------------
+# Helper: Count delete-type Pending Exports on the LDAP system
+# -----------------------------------------------------------------------------------------------------------------
+function Get-DeletePendingExportCount {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config
+    )
+
+    return [int](Get-JIMPendingExport -ConnectedSystemId $Config.LDAPSystemId -Count -ChangeType Delete)
+}
+
+# -----------------------------------------------------------------------------------------------------------------
+# Helper: Arrange a JOINED (not Provisioned) LDAP CSO for a test user (issue #655)
+# Provisions via JIM, deletes the MVO under a Disconnect action (directory account and CSO survive
+# unjoined), then re-adds the HR user so export matching rejoins the surviving CSO with JoinType=Joined.
+# Requires the deletion rule to already be WhenAuthoritativeSourceDisconnected + GracePeriod=0.
+# -----------------------------------------------------------------------------------------------------------------
+function Invoke-ProvisionJoinedUser {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config,
+
+        [Parameter(Mandatory=$true)]
+        [string]$EmployeeId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$SamAccountName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$DisplayName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$TestName
+    )
+
+    # Phase 1: provision via JIM as normal; Employee ID is exported to the directory for matching
+    Write-Host "  Join arrange phase 1: provisioning $SamAccountName via JIM..." -ForegroundColor Gray
+    Invoke-ProvisionUser -Config $Config -EmployeeId $EmployeeId -SamAccountName $SamAccountName `
+        -DisplayName $DisplayName -TestName "$TestName join arrange (provision)" | Out-Null
+
+    # Phase 2: delete the MVO under a Disconnect action; the directory account and CSO survive unjoined
+    Write-Host "  Join arrange phase 2: deleting MVO under Disconnect action..." -ForegroundColor Gray
+    Set-ExportRuleDeprovisionAction -Config $Config -Action Disconnect
+    Invoke-RemoveUserFromSource -Config $Config -SamAccountName $SamAccountName `
+        -TestName "$TestName join arrange (disconnect)"
+    Start-Sleep -Seconds 3
+
+    if (Test-MvoExists -DisplayName $DisplayName -ObjectTypeName "User") {
+        throw "$TestName join arrange failed: MVO still exists after authoritative source disconnect"
+    }
+    if (-not (Test-LDAPUserExists -UserIdentifier $SamAccountName -DirectoryConfig $DirectoryConfig)) {
+        throw "$TestName join arrange failed: directory account was removed despite Disconnect action"
+    }
+
+    # Phase 3: re-add the HR user; export matching finds the surviving CSO and joins instead of provisioning
+    Write-Host "  Join arrange phase 3: re-adding HR user so export matching rejoins the CSO..." -ForegroundColor Gray
+    $mvo = Invoke-ProvisionUser -Config $Config -EmployeeId $EmployeeId -SamAccountName $SamAccountName `
+        -DisplayName $DisplayName -TestName "$TestName join arrange (rejoin)"
+
+    $cso = Get-LdapCsoHeader -Config $Config -DisplayName $DisplayName
+    if (-not $cso) {
+        throw "$TestName join arrange failed: LDAP CSO not found for $DisplayName after rejoin"
+    }
+    if ("$($cso.joinType)" -ne 'Joined') {
+        throw "$TestName join arrange failed: expected LDAP CSO JoinType=Joined but found '$($cso.joinType)'"
+    }
+    Write-Host "  LDAP CSO rejoined via export matching (JoinType=Joined)" -ForegroundColor Green
+    return $mvo
+}
+
+# -----------------------------------------------------------------------------------------------------------------
+# Helper: Run one Deprovisioning Action permutation test (issue #655)
+# Arranges a CSO of the requested origin, sets the export rule's action, deletes the MVO via
+# authoritative source disconnect (grace period 0), then asserts the action was honoured.
+# -----------------------------------------------------------------------------------------------------------------
+function Invoke-DeprovisionActionTest {
+    param(
+        [Parameter(Mandatory=$true)]
+        [hashtable]$Config,
+
+        [Parameter(Mandatory=$true)]
+        [string]$UserObjectTypeId,
+
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('Provisioned', 'Joined')]
+        [string]$CsoOrigin,
+
+        [Parameter(Mandatory=$true)]
+        [ValidateSet('Disconnect', 'Delete')]
+        [string]$DeprovisionAction,
+
+        [Parameter(Mandatory=$true)]
+        [string]$EmployeeId,
+
+        [Parameter(Mandatory=$true)]
+        [string]$SamAccountName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$DisplayName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$TestName,
+
+        [Parameter(Mandatory=$true)]
+        [string]$StepName
+    )
+
+    Invoke-DrainPendingExports -Config $Config
+
+    # Immediate MVO deletion on authoritative (HR CSV) disconnect; recall is irrelevant to deletion
+    Set-DeletionRuleConfig -Config $Config -ObjectTypeId $UserObjectTypeId `
+        -DeletionRule "WhenAuthoritativeSourceDisconnected" `
+        -GracePeriod ([TimeSpan]::Zero) `
+        -DeletionTriggerConnectedSystemIds "$($Config.CSVSystemId)" `
+        -RemoveContributedAttributesOnObsoletion $false
+
+    # Arrange the CSO with the required origin
+    if ($CsoOrigin -eq 'Joined') {
+        Invoke-ProvisionJoinedUser -Config $Config -EmployeeId $EmployeeId -SamAccountName $SamAccountName `
+            -DisplayName $DisplayName -TestName $TestName | Out-Null
+    }
+    else {
+        Invoke-ProvisionUser -Config $Config -EmployeeId $EmployeeId -SamAccountName $SamAccountName `
+            -DisplayName $DisplayName -TestName $TestName | Out-Null
+    }
+
+    # Assert arrange: the CSO origin is what this permutation requires
+    $cso = Get-LdapCsoHeader -Config $Config -DisplayName $DisplayName
+    if (-not $cso) {
+        $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "LDAP CSO not found after arrange" }
+        throw "$TestName arrange failed: LDAP CSO not found for $DisplayName"
+    }
+    if ("$($cso.joinType)" -ne $CsoOrigin) {
+        $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "Expected CSO JoinType=$CsoOrigin, found $($cso.joinType)" }
+        throw "$TestName arrange failed: expected LDAP CSO JoinType=$CsoOrigin but found '$($cso.joinType)'"
+    }
+    Write-Host "  Arranged LDAP CSO with JoinType=$CsoOrigin" -ForegroundColor Green
+
+    # Set the Deprovisioning Action under test
+    Set-ExportRuleDeprovisionAction -Config $Config -Action $DeprovisionAction
+
+    # Baseline the delete Pending Export count before the act
+    Invoke-DrainPendingExports -Config $Config
+    $deletePesBefore = Get-DeletePendingExportCount -Config $Config
+    Write-Host "  Delete Pending Exports before MVO deletion: $deletePesBefore" -ForegroundColor Gray
+
+    # Act: remove the user from HR; the MVO is deleted immediately during CSV sync
+    Invoke-RemoveUserFromSource -Config $Config -SamAccountName $SamAccountName -TestName $TestName
+    Start-Sleep -Seconds 3
+
+    # Assert 1: MVO deleted
+    if (Test-MvoExists -DisplayName $DisplayName -ObjectTypeName "User") {
+        $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "MVO not deleted on authoritative source disconnect" }
+        throw "$TestName Assert 1 failed: MVO still exists after authoritative source disconnect"
+    }
+    Write-Host "  PASSED: MVO deleted when authoritative source disconnected" -ForegroundColor Green
+
+    $deletePesAfter = Get-DeletePendingExportCount -Config $Config
+    Write-Host "  Delete Pending Exports after MVO deletion: $deletePesAfter" -ForegroundColor Gray
+
+    if ($DeprovisionAction -eq 'Delete') {
+        # Assert 2: a delete Pending Export was staged for the CSO
+        if ($deletePesAfter -le $deletePesBefore) {
+            $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "No delete Pending Export staged despite Delete action" }
+            throw "$TestName Assert 2 failed: expected a delete Pending Export for the $CsoOrigin CSO (Delete action)"
+        }
+        Write-Host "  PASSED: Delete Pending Export staged for the $CsoOrigin CSO" -ForegroundColor Green
+
+        # Assert 3: LDAP export removes the account from the directory
+        Write-Host "  Running LDAP export to apply the delete..." -ForegroundColor Gray
+        $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
+        Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "LDAP Export ($TestName deprovision)"
+        Start-Sleep -Seconds 3
+
+        # Confirming import reconciles the Exported delete Pending Export (prevents stale PE accumulation)
+        $confirmImport = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPFullImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $confirmImport.activityId -Name "LDAP Import ($TestName confirm deprovision)"
+        Start-Sleep -Seconds 2
+
+        if (Test-LDAPUserExists -UserIdentifier $SamAccountName -DirectoryConfig $DirectoryConfig) {
+            $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "Directory account still exists after Delete action export" }
+            throw "$TestName Assert 3 failed: directory account $SamAccountName still exists after Delete action export"
+        }
+        Write-Host "  PASSED: Directory account deleted (Delete action honoured for $CsoOrigin CSO)" -ForegroundColor Green
+    }
+    else {
+        # Assert 2: no delete Pending Export was staged
+        if ($deletePesAfter -gt $deletePesBefore) {
+            $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "Delete Pending Export staged despite Disconnect action" }
+            throw "$TestName Assert 2 failed: a delete Pending Export was staged for the $CsoOrigin CSO (Disconnect action)"
+        }
+        Write-Host "  PASSED: No delete Pending Export staged (Disconnect action)" -ForegroundColor Green
+
+        # Assert 3: the CSO was disconnected (join broken, object left in place)
+        $csoAfter = Get-LdapCsoHeader -Config $Config -DisplayName $DisplayName
+        if (-not $csoAfter) {
+            $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "LDAP CSO missing after Disconnect action" }
+            throw "$TestName Assert 3 failed: LDAP CSO not found after Disconnect action (it should remain, disconnected)"
+        }
+        if ("$($csoAfter.joinType)" -ne 'NotJoined') {
+            $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "CSO JoinType=$($csoAfter.joinType) after Disconnect action (expected NotJoined)" }
+            throw "$TestName Assert 3 failed: expected CSO JoinType=NotJoined after disconnect but found '$($csoAfter.joinType)'"
+        }
+        Write-Host "  PASSED: LDAP CSO disconnected (JoinType=NotJoined)" -ForegroundColor Green
+
+        # Assert 4: an export cycle leaves the directory account in place
+        $exportResult = Start-JIMRunProfile -ConnectedSystemId $Config.LDAPSystemId -RunProfileId $Config.LDAPExportProfileId -Wait -PassThru
+        Assert-ExportSuccess -ActivityId $exportResult.activityId -Name "LDAP Export ($TestName no-op)"
+        Start-Sleep -Seconds 2
+
+        if (-not (Test-LDAPUserExists -UserIdentifier $SamAccountName -DirectoryConfig $DirectoryConfig)) {
+            $testResults.Steps += @{ Name = $StepName; Success = $false; Error = "Directory account deleted despite Disconnect action" }
+            throw "$TestName Assert 4 failed: directory account $SamAccountName was removed despite Disconnect action"
+        }
+        Write-Host "  PASSED: Directory account left in place (Disconnect action honoured for $CsoOrigin CSO)" -ForegroundColor Green
+    }
+
+    $testResults.Steps += @{ Name = $StepName; Success = $true }
+}
+
 try {
     # -----------------------------------------------------------------------------------------------------------------
     # Step 0: Setup JIM Configuration
@@ -602,6 +905,8 @@ try {
         "test.wlcd.recall", "test.wlcd.norecall",
         "test.auth.immediate", "test.auth.grace",
         "test.manual.recall", "test.manual.norecall",
+        "test.deprov.provdelete", "test.deprov.provdisc",
+        "test.deprov.joindelete", "test.deprov.joindisc",
         "baseline.user1"
     )
     $deletedCount = 0
@@ -931,6 +1236,10 @@ try {
             -DeletionTriggerConnectedSystemIds "$($config.CSVSystemId)" `
             -RemoveContributedAttributesOnObsoletion $false
 
+        # This test asserts directory deprovisioning, so pin the export rule's action to Delete
+        # (a prior run of the Deprovisioning Action permutation tests may have left it as Disconnect)
+        Set-ExportRuleDeprovisionAction -Config $config -Action Delete
+
         # Provision a test user (creates both CSV CSO and LDAP CSO via export)
         $test3Mvo = Invoke-ProvisionUser -Config $config `
             -EmployeeId "AUTH001" `
@@ -1026,6 +1335,10 @@ try {
             -DeletionTriggerConnectedSystemIds "$($config.CSVSystemId)" `
             -RemoveContributedAttributesOnObsoletion $false
 
+        # This test asserts the housekeeping deletion cascade deprovisions the directory,
+        # so pin the export rule's action to Delete
+        Set-ExportRuleDeprovisionAction -Config $config -Action Delete
+
         # Provision a test user
         $test4Mvo = Invoke-ProvisionUser -Config $config `
             -EmployeeId "AUTH002" `
@@ -1102,6 +1415,25 @@ try {
                 Write-Host "  PASSED: Deleted MVO found in Deleted Objects view" -ForegroundColor Green
             }
         }
+
+        # Assert 3: the housekeeping deletion cascade honours the export rule's Delete action:
+        # the deferred deletion must stage a delete Pending Export and remove the directory account,
+        # exactly as the sync-path deletion in Test 3 does (issue #655)
+        Write-Host "  Running LDAP export to deprovision directory account (housekeeping cascade)..." -ForegroundColor Gray
+        $graceExport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPExportProfileId -Wait -PassThru
+        Assert-ExportSuccess -ActivityId $graceExport.activityId -Name "LDAP Export (Test4 deprovisioning)"
+        Start-Sleep -Seconds 3
+
+        # Confirming import reconciles the Exported delete Pending Export
+        $test4ConfirmImport = Start-JIMRunProfile -ConnectedSystemId $config.LDAPSystemId -RunProfileId $config.LDAPFullImportProfileId -Wait -PassThru
+        Assert-ActivitySuccess -ActivityId $test4ConfirmImport.activityId -Name "LDAP Import (Test4 confirm deprovisioning)"
+        Start-Sleep -Seconds 2
+
+        if (Test-LDAPUserExists -UserIdentifier 'test.auth.grace' -DirectoryConfig $DirectoryConfig) {
+            $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $false; Error = "Directory account still exists after housekeeping deletion cascade export" }
+            throw "Test 4 Assert 3 failed: directory account test.auth.grace still exists after housekeeping deletion cascade export"
+        }
+        Write-Host "  PASSED: Directory account deprovisioned via housekeeping deletion cascade (Delete action)" -ForegroundColor Green
 
         $testResults.Steps += @{ Name = "AuthoritativeGracePeriod"; Success = $true }
     }
@@ -1372,6 +1704,68 @@ try {
     }
 
     # =============================================================================================================
+    # Tests 8-11: Deprovisioning Action permutations (issue #655)
+    # =============================================================================================================
+    # When an MVO is deleted, downstream deprovisioning is driven by each export Synchronisation Rule's
+    # OutboundDeprovisionAction, regardless of how the CSO was joined (Provisioned or Joined):
+    #   - Delete:     stage a delete Pending Export; the directory account is removed
+    #   - Disconnect: break the join only; the directory account is left in place
+    # All four tests use WhenAuthoritativeSourceDisconnected + GracePeriod=0 as the deletion trigger
+    # so the cascade runs in the sync path (Test 4 covers the housekeeping path).
+    # =============================================================================================================
+    if ($Step -in @("DeprovisionProvisionedDelete", "DeprovisionActions", "All")) {
+        Write-TestSection "Test 8: Deprovisioning Action - Provisioned CSO + Delete"
+        Write-Host "CSO origin: Provisioned, OutboundDeprovisionAction: Delete" -ForegroundColor Gray
+        Write-Host "Expected: delete Pending Export staged, directory account removed" -ForegroundColor Gray
+        Write-Host ""
+
+        Invoke-DeprovisionActionTest -Config $config -UserObjectTypeId $userObjectType.id `
+            -CsoOrigin Provisioned -DeprovisionAction Delete `
+            -EmployeeId "DEPROV001" -SamAccountName "test.deprov.provdelete" `
+            -DisplayName "Test Deprov ProvDelete" -TestName "Test8" `
+            -StepName "DeprovisionProvisionedDelete"
+    }
+
+    if ($Step -in @("DeprovisionProvisionedDisconnect", "DeprovisionActions", "All")) {
+        Write-TestSection "Test 9: Deprovisioning Action - Provisioned CSO + Disconnect"
+        Write-Host "CSO origin: Provisioned, OutboundDeprovisionAction: Disconnect" -ForegroundColor Gray
+        Write-Host "Expected: no delete Pending Export, CSO disconnected, directory account left in place" -ForegroundColor Gray
+        Write-Host ""
+
+        Invoke-DeprovisionActionTest -Config $config -UserObjectTypeId $userObjectType.id `
+            -CsoOrigin Provisioned -DeprovisionAction Disconnect `
+            -EmployeeId "DEPROV002" -SamAccountName "test.deprov.provdisc" `
+            -DisplayName "Test Deprov ProvDisc" -TestName "Test9" `
+            -StepName "DeprovisionProvisionedDisconnect"
+    }
+
+    if ($Step -in @("DeprovisionJoinedDelete", "DeprovisionActions", "All")) {
+        Write-TestSection "Test 10: Deprovisioning Action - Joined CSO + Delete (issue #655 headline)"
+        Write-Host "CSO origin: Joined (via export matching), OutboundDeprovisionAction: Delete" -ForegroundColor Gray
+        Write-Host "Expected: delete Pending Export staged, directory account removed" -ForegroundColor Gray
+        Write-Host ""
+
+        Invoke-DeprovisionActionTest -Config $config -UserObjectTypeId $userObjectType.id `
+            -CsoOrigin Joined -DeprovisionAction Delete `
+            -EmployeeId "DEPROV003" -SamAccountName "test.deprov.joindelete" `
+            -DisplayName "Test Deprov JoinDelete" -TestName "Test10" `
+            -StepName "DeprovisionJoinedDelete"
+    }
+
+    if ($Step -in @("DeprovisionJoinedDisconnect", "DeprovisionActions", "All")) {
+        Write-TestSection "Test 11: Deprovisioning Action - Joined CSO + Disconnect"
+        Write-Host "CSO origin: Joined (via export matching), OutboundDeprovisionAction: Disconnect" -ForegroundColor Gray
+        Write-Host "Expected: no delete Pending Export, CSO disconnected, directory account left in place" -ForegroundColor Gray
+        Write-Host ""
+
+        Invoke-DeprovisionActionTest -Config $config -UserObjectTypeId $userObjectType.id `
+            -CsoOrigin Joined -DeprovisionAction Disconnect `
+            -EmployeeId "DEPROV004" -SamAccountName "test.deprov.joindisc" `
+            -DisplayName "Test Deprov JoinDisc" -TestName "Test11" `
+            -StepName "DeprovisionJoinedDisconnect"
+    }
+
+    # =============================================================================================================
     # Reset deletion rules to sensible default before finishing
     # =============================================================================================================
     Write-TestSection "Cleanup: Reset Deletion Rules"
@@ -1394,6 +1788,10 @@ try {
             Set-JIMConnectedSystemObjectType -ConnectedSystemId $config.TrainingSystemId -ObjectTypeId $trainingRecordType.id `
                 -RemoveContributedAttributesOnObsoletion $true
         }
+
+        # Reset the export rule's Deprovisioning Action to Delete (the Setup-Scenario1 baseline);
+        # the permutation tests may have left it as Disconnect
+        Set-ExportRuleDeprovisionAction -Config $config -Action Delete
 
         Write-Host "  Reset to: DeletionRule=WhenLastConnectorDisconnected, GracePeriod=7 days" -ForegroundColor Green
         Write-Host "  Reset to: RemoveContributedAttributesOnObsoletion=true (CSV + Training)" -ForegroundColor Green

@@ -164,6 +164,10 @@ public static class ExportChangeHistoryBuilder
                 attributeChange.ValueChanges.Add(
                     new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.LongValue.Value));
                 break;
+            case AttributeDataType.Decimal when peChange.DecimalValue != null:
+                attributeChange.ValueChanges.Add(
+                    new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.DecimalValue.Value));
+                break;
             case AttributeDataType.Guid when peChange.GuidValue != null:
                 attributeChange.ValueChanges.Add(
                     new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, peChange.GuidValue.Value));
@@ -219,6 +223,7 @@ public static class ExportChangeHistoryBuilder
             case AttributeDataType.Text when peChange.StringValue == null:
             case AttributeDataType.Number when peChange.IntValue == null:
             case AttributeDataType.LongNumber when peChange.LongValue == null:
+            case AttributeDataType.Decimal when peChange.DecimalValue == null:
             case AttributeDataType.Guid when peChange.GuidValue == null:
             case AttributeDataType.Boolean when peChange.BoolValue == null:
             case AttributeDataType.DateTime when !peChange.DateTimeValue.HasValue:

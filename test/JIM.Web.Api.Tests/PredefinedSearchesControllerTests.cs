@@ -343,6 +343,58 @@ public class PredefinedSearchesControllerTests
     }
 
     [Test]
+    public async Task CreateCriterionAsync_WithDecimalGreaterThan_ReturnsCreatedAndPersistsExactValueAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(24, "AnnualSalary", AttributeDataType.Decimal);
+        PredefinedSearchCriteria? captured = null;
+        _mockSearchRepo.Setup(r => r.CreatePredefinedSearchCriterionAsync(GroupId, It.IsAny<PredefinedSearchCriteria>()))
+            .ReturnsAsync((int _, PredefinedSearchCriteria c) => { c.Id = 9; captured = c; return c; });
+
+        // A high-precision value that a double cannot represent exactly, proving the value
+        // is never routed through double/float on the way to persistence.
+        const decimal highPrecisionValue = 12345678901234567.89m;
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 24, ComparisonType = "GreaterThan", DecimalValue = highPrecisionValue };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        Assert.That(captured, Is.Not.Null);
+        Assert.That(captured!.DecimalValue, Is.EqualTo(highPrecisionValue));
+        var dto = (PredefinedSearchCriteriaDto)((CreatedAtRouteResult)result).Value!;
+        Assert.That(dto.DecimalValue, Is.EqualTo(highPrecisionValue));
+        Assert.That(dto.AttributeDataType, Is.EqualTo("Decimal"));
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithDecimalMissingValueCarrier_ReturnsBadRequestAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(24, "AnnualSalary", AttributeDataType.Decimal);
+
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 24, ComparisonType = "GreaterThan" };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var error = (ApiErrorResponse)((BadRequestObjectResult)result).Value!;
+        Assert.That(error.Message, Is.EqualTo("DecimalValue is required for a Decimal criterion."));
+        _mockSearchRepo.Verify(r => r.CreatePredefinedSearchCriterionAsync(It.IsAny<int>(), It.IsAny<PredefinedSearchCriteria>()), Times.Never);
+    }
+
+    [Test]
+    public async Task CreateCriterionAsync_WithTextOperatorOnDecimalAttribute_ReturnsBadRequestAsync()
+    {
+        _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());
+        SetUpAttribute(24, "AnnualSalary", AttributeDataType.Decimal);
+
+        // Contains is a text-only operator; invalid for a Decimal attribute.
+        var request = new PredefinedSearchCriterionRequest { MetaverseAttributeId = 24, ComparisonType = "Contains", DecimalValue = 1.5m };
+        var result = await _controller.CreateCriterionAsync(SearchId, GroupId, request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _mockSearchRepo.Verify(r => r.CreatePredefinedSearchCriterionAsync(It.IsAny<int>(), It.IsAny<PredefinedSearchCriteria>()), Times.Never);
+    }
+
+    [Test]
     public async Task CreateCriterionAsync_WithDateTimeLessThan_NormalisesToUtcAsync()
     {
         _mockSearchRepo.Setup(r => r.GetPredefinedSearchAsync(SearchId)).ReturnsAsync(BuildSearchWithGroup());

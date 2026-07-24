@@ -166,6 +166,14 @@ public class Worker : BackgroundService
                 {
                     Log.Error(ex, "ExecuteAsync: Error during heartbeat update or cancellation check. Will retry on next cycle.");
                 }
+
+                // Pace the busy loop. Without this delay the loop spins as fast as the two round
+                // trips above allow (~200 iterations/s measured at Scale500k25kGroups: 6.7M
+                // heartbeat UPDATEs, 6.7M cancellation SELECTs and 16.4M connection-pool resets
+                // over one run), hammering the database throughout every long-running task.
+                // 2s matches the idle branch; stale-task recovery tolerates far coarser
+                // heartbeats, and cancellation latency of up to 2s is acceptable.
+                await Task.Delay(2000, stoppingToken);
             }
             else
             {
@@ -340,7 +348,8 @@ public class Worker : BackgroundService
                                                                                             // export exhausted the pool with one pinned connection per batch).
                                                                                             var parallelJim = _jimFactory.Create();
                                                                                             return new SyncRepositoryScope(parallelJim.SyncRepository, parallelJim);
-                                                                                        });
+                                                                                        },
+                                                                                        connectorFactory: _connectorFactory);
                                                             await syncExportTaskProcessor.PerformExportAsync();
                                                             break;
                                                         }
@@ -705,16 +714,22 @@ public class Worker : BackgroundService
                 mvosToDelete.Select(m => m.Id).ToList());
             var deletedMvoIds = new List<Guid>();
 
+            // One export evaluation cache for the batch, so per-MVO deletion evaluation (issue #655)
+            // and reference recall staging do not re-load Synchronisation Rules for every object.
+            // Source system 0: deletions must consider export rules to every system.
+            var exportEvaluationCache = await jim.ExportEvaluation.BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0);
+
             foreach (var mvo in mvosToDelete)
             {
                 try
                 {
-                    Log.Information("PerformMetaverseObjectHousekeepingAsync: Deleting MVO {MvoId} ({DisplayName}) - disconnected at {DisconnectedDate}, rule: {DeletionRule}",
-                        mvo.Id, mvo.DisplayName ?? "No display name", mvo.LastConnectorDisconnectedDate, mvo.Type?.DeletionRule);
+                    Log.Information("PerformMetaverseObjectHousekeepingAsync: Deleting MVO {MvoId} - disconnected at {DisconnectedDate}, rule: {DeletionRule}",
+                        mvo.Id, mvo.LastConnectorDisconnectedDate, mvo.Type?.DeletionRule);
 
-                    // Evaluate export rules for the MVO deletion (create delete Pending Exports for provisioned CSOs)
-                    // WhenAuthoritativeSourceDisconnected MVOs may still have target CSOs that need delete exports
-                    await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo);
+                    // Evaluate export rules for the MVO deletion: delete Pending Exports are created for
+                    // CSOs whose export Synchronisation Rule's OutboundDeprovisionAction is Delete (issue #655).
+                    // WhenAuthoritativeSourceDisconnected MVOs may still have target CSOs that need delete exports.
+                    await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache);
 
                     // Delete the MVO using the initiator info captured when it was marked for deletion
                     // This preserves the audit trail - the original initiator is recorded, not housekeeping
@@ -764,7 +779,7 @@ public class Worker : BackgroundService
             // referenced the deleted MVOs, so targets without referential integrity converge too.
             if (deletedMvoIds.Count > 0)
             {
-                var recallResult = await jim.ExportEvaluation.StageReferenceRecallExportsAsync(recallContext, deletedMvoIds);
+                var recallResult = await jim.ExportEvaluation.StageReferenceRecallExportsAsync(recallContext, deletedMvoIds, exportEvaluationCache);
                 Log.Information(
                     "PerformMetaverseObjectHousekeepingAsync: Reference recall for {DeletedCount} deleted MVO(s): " +
                     "{ReferencingCount} referencing MVO(s) evaluated, {PeCount} Pending Export(s) staged with " +

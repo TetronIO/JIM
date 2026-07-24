@@ -123,6 +123,14 @@
             </MudText>
         </div>
     }
+    @* The Metaverse Object no longer exists for MVO Deleted outcomes, so link to the durable
+       deletion record browser instead of the (deleted) Identity's detail page *@
+    @if (Outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted)
+    {
+        <div style="margin-left: 40px;">
+            <MudLink Href="/admin/deleted-objects" Typo="Typo.body1">View deletion record</MudLink>
+        </div>
+    }
 
     @* Expandable attribute change detail for CsoAdded, CsoUpdated, and AttributeFlow nodes *@
     @if (_expanded && IsAttributeFlowWithChanges)

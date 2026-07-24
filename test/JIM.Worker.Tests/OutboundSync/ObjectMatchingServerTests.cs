@@ -89,221 +89,6 @@ public class ObjectMatchingServerTests
         Jim = new JimApplication(new PostgresDataRepository(MockJimDbContext.Object), syncRepository: SyncRepo);
     }
 
-    #region GetMatchingRulesForImport Tests
-
-    [Test]
-    public void ComputeMatchingValueFromMvo_WithStringAttribute_ReturnsStringValue()
-    {
-        // Arrange
-        var mvo = MetaverseObjectsData[0];
-        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
-        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
-
-        // Ensure MVO has the EmployeeId attribute value
-        mvo.AttributeValues.Clear();
-        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
-        {
-            Id = Guid.NewGuid(),
-            Attribute = employeeIdAttr,
-            AttributeId = employeeIdAttr.Id,
-            StringValue = "E12345"
-        });
-
-        var objectType = ConnectedSystemObjectTypesData[0];
-        var matchingRule = new ObjectMatchingRule
-        {
-            Id = 1,
-            Order = 1,
-            ConnectedSystemObjectTypeId = objectType.Id,
-            ConnectedSystemObjectType = objectType,
-            TargetMetaverseAttribute = employeeIdAttr,
-            TargetMetaverseAttributeId = employeeIdAttr.Id,
-            Sources = new List<ObjectMatchingRuleSource>
-            {
-                new()
-                {
-                    Id = 1,
-                    Order = 1,
-                    MetaverseAttribute = employeeIdAttr,
-                    MetaverseAttributeId = employeeIdAttr.Id
-                }
-            }
-        };
-
-        // Act
-        var result = Jim.ObjectMatching.ComputeMatchingValueFromMvo(mvo, matchingRule);
-
-        // Assert
-        Assert.That(result, Is.EqualTo("E12345"));
-    }
-
-    [Test]
-    public void ComputeMatchingValueFromMvo_WithGuidAttribute_ReturnsGuidValue()
-    {
-        // Arrange
-        var mvo = MetaverseObjectsData[0];
-
-        // Create a GUID attribute for testing
-        var guidAttr = new MetaverseAttribute
-        {
-            Id = 999,
-            Name = "UniqueId",
-            Type = AttributeDataType.Guid
-        };
-
-        var expectedGuid = Guid.NewGuid();
-        mvo.AttributeValues.Clear();
-        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
-        {
-            Id = Guid.NewGuid(),
-            Attribute = guidAttr,
-            AttributeId = guidAttr.Id,
-            GuidValue = expectedGuid
-        });
-
-        var objectType = ConnectedSystemObjectTypesData[0];
-        var matchingRule = new ObjectMatchingRule
-        {
-            Id = 1,
-            Order = 1,
-            ConnectedSystemObjectTypeId = objectType.Id,
-            ConnectedSystemObjectType = objectType,
-            TargetMetaverseAttribute = guidAttr,
-            TargetMetaverseAttributeId = guidAttr.Id,
-            Sources = new List<ObjectMatchingRuleSource>
-            {
-                new()
-                {
-                    Id = 1,
-                    Order = 1,
-                    MetaverseAttribute = guidAttr,
-                    MetaverseAttributeId = guidAttr.Id
-                }
-            }
-        };
-
-        // Act
-        var result = Jim.ObjectMatching.ComputeMatchingValueFromMvo(mvo, matchingRule);
-
-        // Assert
-        Assert.That(result, Is.EqualTo(expectedGuid));
-    }
-
-    [Test]
-    public void ComputeMatchingValueFromMvo_WithIntAttribute_ReturnsIntValue()
-    {
-        // Arrange
-        var mvo = MetaverseObjectsData[0];
-
-        var intAttr = new MetaverseAttribute
-        {
-            Id = 998,
-            Name = "NumericId",
-            Type = AttributeDataType.Number
-        };
-
-        mvo.AttributeValues.Clear();
-        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
-        {
-            Id = Guid.NewGuid(),
-            Attribute = intAttr,
-            AttributeId = intAttr.Id,
-            IntValue = 42
-        });
-
-        var objectType = ConnectedSystemObjectTypesData[0];
-        var matchingRule = new ObjectMatchingRule
-        {
-            Id = 1,
-            Order = 1,
-            ConnectedSystemObjectTypeId = objectType.Id,
-            ConnectedSystemObjectType = objectType,
-            TargetMetaverseAttribute = intAttr,
-            TargetMetaverseAttributeId = intAttr.Id,
-            Sources = new List<ObjectMatchingRuleSource>
-            {
-                new()
-                {
-                    Id = 1,
-                    Order = 1,
-                    MetaverseAttribute = intAttr,
-                    MetaverseAttributeId = intAttr.Id
-                }
-            }
-        };
-
-        // Act
-        var result = Jim.ObjectMatching.ComputeMatchingValueFromMvo(mvo, matchingRule);
-
-        // Assert
-        Assert.That(result, Is.EqualTo(42));
-    }
-
-    [Test]
-    public void ComputeMatchingValueFromMvo_WithMissingAttribute_ReturnsNull()
-    {
-        // Arrange
-        var mvo = MetaverseObjectsData[0];
-        mvo.AttributeValues.Clear(); // No attributes
-
-        var missingAttr = new MetaverseAttribute
-        {
-            Id = 997,
-            Name = "MissingAttr",
-            Type = AttributeDataType.Text
-        };
-
-        var objectType = ConnectedSystemObjectTypesData[0];
-        var matchingRule = new ObjectMatchingRule
-        {
-            Id = 1,
-            Order = 1,
-            ConnectedSystemObjectTypeId = objectType.Id,
-            ConnectedSystemObjectType = objectType,
-            TargetMetaverseAttribute = missingAttr,
-            TargetMetaverseAttributeId = missingAttr.Id,
-            Sources = new List<ObjectMatchingRuleSource>
-            {
-                new()
-                {
-                    Id = 1,
-                    Order = 1,
-                    MetaverseAttribute = missingAttr,
-                    MetaverseAttributeId = missingAttr.Id
-                }
-            }
-        };
-
-        // Act
-        var result = Jim.ObjectMatching.ComputeMatchingValueFromMvo(mvo, matchingRule);
-
-        // Assert
-        Assert.That(result, Is.Null);
-    }
-
-    [Test]
-    public void ComputeMatchingValueFromMvo_WithInvalidRule_ReturnsNull()
-    {
-        // Arrange
-        var mvo = MetaverseObjectsData[0];
-
-        // Invalid rule - no sources
-        var matchingRule = new ObjectMatchingRule
-        {
-            Id = 1,
-            Order = 1,
-            Sources = new List<ObjectMatchingRuleSource>()
-        };
-
-        // Act
-        var result = Jim.ObjectMatching.ComputeMatchingValueFromMvo(mvo, matchingRule);
-
-        // Assert
-        Assert.That(result, Is.Null);
-    }
-
-    #endregion
-
     #region ObjectMatchingRule Validation Tests
 
     [Test]
@@ -741,252 +526,6 @@ public class ObjectMatchingServerTests
         Assert.That(isValid, Is.True, "CaseSensitive=false should not affect rule validity");
     }
 
-    /// <summary>
-    /// Note: Full integration testing of case-insensitive matching at the database level
-    /// is covered by the integration tests (Scenario 5 - MatchingRules).
-    /// Unit testing the EF Core ILike function requires a real database connection.
-    /// </summary>
-    [Test]
-    public void ComputeMatchingValueFromMvo_CaseSensitiveFalse_StillReturnsOriginalValue()
-    {
-        // Arrange - verify ComputeMatchingValueFromMvo doesn't transform values
-        // (case sensitivity is applied at query time, not at value computation time)
-        var mvo = MetaverseObjectsData[0];
-        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
-        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
-
-        mvo.AttributeValues.Clear();
-        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
-        {
-            Id = Guid.NewGuid(),
-            Attribute = employeeIdAttr,
-            AttributeId = employeeIdAttr.Id,
-            StringValue = "E12345" // Mixed case
-        });
-
-        var objectType = ConnectedSystemObjectTypesData[0];
-        var matchingRule = new ObjectMatchingRule
-        {
-            Id = 1,
-            Order = 1,
-            ConnectedSystemObjectTypeId = objectType.Id,
-            ConnectedSystemObjectType = objectType,
-            TargetMetaverseAttribute = employeeIdAttr,
-            TargetMetaverseAttributeId = employeeIdAttr.Id,
-            CaseSensitive = false, // Case-insensitive matching
-            Sources = new List<ObjectMatchingRuleSource>
-            {
-                new()
-                {
-                    Id = 1,
-                    Order = 1,
-                    MetaverseAttribute = employeeIdAttr,
-                    MetaverseAttributeId = employeeIdAttr.Id
-                }
-            }
-        };
-
-        // Act
-        var result = Jim.ObjectMatching.ComputeMatchingValueFromMvo(mvo, matchingRule);
-
-        // Assert - value should be returned as-is (not lowercased)
-        Assert.That(result, Is.EqualTo("E12345"), "ComputeMatchingValueFromMvo should return original value regardless of CaseSensitive setting");
-    }
-
-    #endregion
-
-    #region Null Value Handling Tests (8.11)
-
-    [Test]
-    public void ComputeMatchingValueFromMvo_WithNullStringAttribute_ReturnsNull()
-    {
-        // Arrange - MVO has attribute with null string value
-        var mvo = MetaverseObjectsData[0];
-        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
-        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
-
-        mvo.AttributeValues.Clear();
-        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
-        {
-            Id = Guid.NewGuid(),
-            Attribute = employeeIdAttr,
-            AttributeId = employeeIdAttr.Id,
-            StringValue = null // Explicitly null
-        });
-
-        var objectType = ConnectedSystemObjectTypesData[0];
-        var matchingRule = new ObjectMatchingRule
-        {
-            Id = 1,
-            Order = 1,
-            ConnectedSystemObjectTypeId = objectType.Id,
-            ConnectedSystemObjectType = objectType,
-            TargetMetaverseAttribute = employeeIdAttr,
-            TargetMetaverseAttributeId = employeeIdAttr.Id,
-            Sources = new List<ObjectMatchingRuleSource>
-            {
-                new()
-                {
-                    Id = 1,
-                    Order = 1,
-                    MetaverseAttribute = employeeIdAttr,
-                    MetaverseAttributeId = employeeIdAttr.Id
-                }
-            }
-        };
-
-        // Act
-        var result = Jim.ObjectMatching.ComputeMatchingValueFromMvo(mvo, matchingRule);
-
-        // Assert
-        Assert.That(result, Is.Null, "ComputeMatchingValueFromMvo should return null for null string value");
-    }
-
-    [Test]
-    public void ComputeMatchingValueFromMvo_WithNullIntAttribute_ReturnsNull()
-    {
-        // Arrange - MVO has attribute with null int value
-        var mvo = MetaverseObjectsData[0];
-
-        var intAttr = new MetaverseAttribute
-        {
-            Id = 998,
-            Name = "NumericId",
-            Type = AttributeDataType.Number
-        };
-
-        mvo.AttributeValues.Clear();
-        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
-        {
-            Id = Guid.NewGuid(),
-            Attribute = intAttr,
-            AttributeId = intAttr.Id,
-            IntValue = null // Explicitly null
-        });
-
-        var objectType = ConnectedSystemObjectTypesData[0];
-        var matchingRule = new ObjectMatchingRule
-        {
-            Id = 1,
-            Order = 1,
-            ConnectedSystemObjectTypeId = objectType.Id,
-            ConnectedSystemObjectType = objectType,
-            TargetMetaverseAttribute = intAttr,
-            TargetMetaverseAttributeId = intAttr.Id,
-            Sources = new List<ObjectMatchingRuleSource>
-            {
-                new()
-                {
-                    Id = 1,
-                    Order = 1,
-                    MetaverseAttribute = intAttr,
-                    MetaverseAttributeId = intAttr.Id
-                }
-            }
-        };
-
-        // Act
-        var result = Jim.ObjectMatching.ComputeMatchingValueFromMvo(mvo, matchingRule);
-
-        // Assert
-        Assert.That(result, Is.Null, "ComputeMatchingValueFromMvo should return null for null int value");
-    }
-
-    [Test]
-    public void ComputeMatchingValueFromMvo_WithNullGuidAttribute_ReturnsNull()
-    {
-        // Arrange - MVO has attribute with null GUID value
-        var mvo = MetaverseObjectsData[0];
-
-        var guidAttr = new MetaverseAttribute
-        {
-            Id = 999,
-            Name = "UniqueId",
-            Type = AttributeDataType.Guid
-        };
-
-        mvo.AttributeValues.Clear();
-        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
-        {
-            Id = Guid.NewGuid(),
-            Attribute = guidAttr,
-            AttributeId = guidAttr.Id,
-            GuidValue = null // Explicitly null
-        });
-
-        var objectType = ConnectedSystemObjectTypesData[0];
-        var matchingRule = new ObjectMatchingRule
-        {
-            Id = 1,
-            Order = 1,
-            ConnectedSystemObjectTypeId = objectType.Id,
-            ConnectedSystemObjectType = objectType,
-            TargetMetaverseAttribute = guidAttr,
-            TargetMetaverseAttributeId = guidAttr.Id,
-            Sources = new List<ObjectMatchingRuleSource>
-            {
-                new()
-                {
-                    Id = 1,
-                    Order = 1,
-                    MetaverseAttribute = guidAttr,
-                    MetaverseAttributeId = guidAttr.Id
-                }
-            }
-        };
-
-        // Act
-        var result = Jim.ObjectMatching.ComputeMatchingValueFromMvo(mvo, matchingRule);
-
-        // Assert
-        Assert.That(result, Is.Null, "ComputeMatchingValueFromMvo should return null for null GUID value");
-    }
-
-    [Test]
-    public void ComputeMatchingValueFromMvo_WithEmptyStringAttribute_ReturnsNull()
-    {
-        // Arrange - MVO has attribute with empty string value
-        var mvo = MetaverseObjectsData[0];
-        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
-        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
-
-        mvo.AttributeValues.Clear();
-        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
-        {
-            Id = Guid.NewGuid(),
-            Attribute = employeeIdAttr,
-            AttributeId = employeeIdAttr.Id,
-            StringValue = "" // Empty string
-        });
-
-        var objectType = ConnectedSystemObjectTypesData[0];
-        var matchingRule = new ObjectMatchingRule
-        {
-            Id = 1,
-            Order = 1,
-            ConnectedSystemObjectTypeId = objectType.Id,
-            ConnectedSystemObjectType = objectType,
-            TargetMetaverseAttribute = employeeIdAttr,
-            TargetMetaverseAttributeId = employeeIdAttr.Id,
-            Sources = new List<ObjectMatchingRuleSource>
-            {
-                new()
-                {
-                    Id = 1,
-                    Order = 1,
-                    MetaverseAttribute = employeeIdAttr,
-                    MetaverseAttributeId = employeeIdAttr.Id
-                }
-            }
-        };
-
-        // Act
-        var result = Jim.ObjectMatching.ComputeMatchingValueFromMvo(mvo, matchingRule);
-
-        // Assert
-        Assert.That(result, Is.Null, "ComputeMatchingValueFromMvo should return null for empty string value");
-    }
-
     #endregion
 
     #region Ambiguous Match Tests (8.12)
@@ -1150,6 +689,448 @@ public class ObjectMatchingServerTests
 
     #endregion
 
+    #region FindMatchingConnectedSystemObjectAsync (export matching) Tests
+
+    /// <summary>
+    /// Builds a standard inbound-shaped Object Matching Rule targeting the Dummy Target System's
+    /// TARGET_USER type: the source only sets ConnectedSystemAttribute (no MetaverseAttribute),
+    /// mirroring what the UI/PowerShell/API produce today. TargetMetaverseAttribute carries the
+    /// MVO-side attribute. This is the shape the export matching bug affects.
+    /// </summary>
+    private static ObjectMatchingRule BuildInboundShapedMatchingRule(
+        ConnectedSystemObjectType targetUserType,
+        ConnectedSystemObjectTypeAttribute csEmployeeIdAttr,
+        MetaverseAttribute targetMetaverseAttribute,
+        bool caseSensitive = false)
+    {
+        return new ObjectMatchingRule
+        {
+            Id = 1,
+            Order = 1,
+            ConnectedSystemObjectTypeId = targetUserType.Id,
+            ConnectedSystemObjectType = targetUserType,
+            TargetMetaverseAttribute = targetMetaverseAttribute,
+            TargetMetaverseAttributeId = targetMetaverseAttribute.Id,
+            CaseSensitive = caseSensitive,
+            Sources = new List<ObjectMatchingRuleSource>
+            {
+                new()
+                {
+                    Id = 1,
+                    Order = 1,
+                    ConnectedSystemAttribute = csEmployeeIdAttr,
+                    ConnectedSystemAttributeId = csEmployeeIdAttr.Id
+                }
+            }
+        };
+    }
+
+    /// <summary>
+    /// Creates an unjoined, Normal-status CSO in the Dummy Target System's TARGET_USER type with
+    /// a single string attribute value, and seeds it into SyncRepo.
+    /// </summary>
+    private ConnectedSystemObject SeedTargetCso(
+        ConnectedSystem targetSystem,
+        ConnectedSystemObjectType targetUserType,
+        ConnectedSystemObjectTypeAttribute csEmployeeIdAttr,
+        string attributeValue,
+        Guid? metaverseObjectId = null,
+        ConnectedSystemObjectStatus status = ConnectedSystemObjectStatus.Normal)
+    {
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObjectId = metaverseObjectId,
+            Status = status,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Attribute = csEmployeeIdAttr,
+                    AttributeId = csEmployeeIdAttr.Id,
+                    StringValue = attributeValue
+                }
+            }
+        };
+
+        SyncRepo.SeedConnectedSystemObject(cso);
+        return cso;
+    }
+
+    [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_InboundShapedRuleWithMatchingUnjoinedCso_ReturnsCsoAsync()
+    {
+        // Arrange - a standard inbound-shaped rule (source = CS attribute only, target = MV attribute),
+        // the shape produced by the UI/PowerShell/API today.
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        var cso = SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule });
+
+        // Assert
+        Assert.That(result, Is.Not.Null, "An inbound-shaped rule should still resolve the MVO-side value via TargetMetaverseAttribute");
+        Assert.That(result!.Id, Is.EqualTo(cso.Id));
+    }
+
+    [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_CsoJoinedToAnotherMvo_ReturnsNullAsync()
+    {
+        // Arrange - the only candidate CSO is already joined to a different MVO, so it must never be returned.
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP001", metaverseObjectId: Guid.NewGuid());
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule });
+
+        // Assert
+        Assert.That(result, Is.Null, "A CSO already joined to another MVO must never be returned as an export match");
+    }
+
+    [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_ObsoleteCso_ReturnsNullAsync()
+    {
+        // Arrange - the only candidate CSO is Obsolete (not returned in the latest full import), so it must be excluded.
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP001", status: ConnectedSystemObjectStatus.Obsolete);
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule });
+
+        // Assert
+        Assert.That(result, Is.Null, "An Obsolete CSO must never be returned as an export match");
+    }
+
+    [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_PendingProvisioningCso_ReturnsNullAsync()
+    {
+        // Arrange - the only candidate CSO is PendingProvisioning (an in-flight provision that does not yet
+        // represent a live object in the target system), so it must be excluded.
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP001", status: ConnectedSystemObjectStatus.PendingProvisioning);
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule });
+
+        // Assert
+        Assert.That(result, Is.Null, "A PendingProvisioning CSO must never be returned as an export match");
+    }
+
+    [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_ValueMismatch_ReturnsNullAsync()
+    {
+        // Arrange - the candidate CSO's value doesn't match the MVO's value.
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "EMP001"
+        });
+
+        SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP999");
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule });
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_CaseInsensitiveRule_MatchesDifferentCaseAsync()
+    {
+        // Arrange - rule.CaseSensitive = false, MVO and CSO values differ only by case.
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "emp001"
+        });
+
+        var cso = SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr, caseSensitive: false);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule });
+
+        // Assert
+        Assert.That(result, Is.Not.Null, "CaseSensitive=false should match regardless of casing");
+        Assert.That(result!.Id, Is.EqualTo(cso.Id));
+    }
+
+    [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_CaseSensitiveRule_DoesNotMatchDifferentCaseAsync()
+    {
+        // Arrange - rule.CaseSensitive = true, MVO and CSO values differ only by case.
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = employeeIdAttr,
+            AttributeId = employeeIdAttr.Id,
+            StringValue = "emp001"
+        });
+
+        SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr, caseSensitive: true);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule });
+
+        // Assert
+        Assert.That(result, Is.Null, "CaseSensitive=true must not match values that differ only by case");
+    }
+
+    [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_MvoMissingAttributeValue_ReturnsNullAsync()
+    {
+        // Arrange - the MVO has no value for the resolved attribute at all.
+        var mvUserType = MetaverseObjectTypesData.Single(t => t.Name == "User");
+        var employeeIdAttr = mvUserType.Attributes.First(a => a.Name == Constants.BuiltInAttributes.EmployeeId);
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csEmployeeIdAttr = targetUserType.Attributes.Single(a => a.Name == "EmployeeId");
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.Type = mvUserType;
+        mvo.AttributeValues.Clear(); // No attribute values at all
+
+        SeedTargetCso(targetSystem, targetUserType, csEmployeeIdAttr, "EMP001");
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csEmployeeIdAttr, employeeIdAttr);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule });
+
+        // Assert
+        Assert.That(result, Is.Null);
+    }
+
+    /// <summary>
+    /// Creates an unjoined, Normal-status CSO in the Dummy Target System's TARGET_USER type with
+    /// a single LongNumber attribute value, and seeds it into SyncRepo. Mirrors <see cref="SeedTargetCso"/>
+    /// but for the LongNumber-typed "accountExpires" attribute rather than a Text attribute.
+    /// </summary>
+    private ConnectedSystemObject SeedTargetCsoLongNumber(
+        ConnectedSystem targetSystem,
+        ConnectedSystemObjectType targetUserType,
+        ConnectedSystemObjectTypeAttribute csAccountExpiresAttr,
+        long attributeValue,
+        Guid? metaverseObjectId = null,
+        ConnectedSystemObjectStatus status = ConnectedSystemObjectStatus.Normal)
+    {
+        var cso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = targetSystem.Id,
+            Type = targetUserType,
+            TypeId = targetUserType.Id,
+            MetaverseObjectId = metaverseObjectId,
+            Status = status,
+            AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Attribute = csAccountExpiresAttr,
+                    AttributeId = csAccountExpiresAttr.Id,
+                    LongValue = attributeValue
+                }
+            }
+        };
+
+        SyncRepo.SeedConnectedSystemObject(cso);
+        return cso;
+    }
+
+    [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_LongNumberMatchingAttribute_ReturnsCsoAsync()
+    {
+        // Arrange - a LongNumber-typed matching attribute (AD's "accountExpires" is a legitimate real-world
+        // example) on both the Metaverse Object and Connected System Object sides.
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csAccountExpiresAttr = targetUserType.Attributes.Single(a => a.Name == "accountExpires");
+
+        var accountExpiresMvAttr = new MetaverseAttribute
+        {
+            Id = 9001,
+            Name = "Account Expires",
+            Type = AttributeDataType.LongNumber,
+            AttributePlurality = AttributePlurality.SingleValued,
+            BuiltIn = false
+        };
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = accountExpiresMvAttr,
+            AttributeId = accountExpiresMvAttr.Id,
+            LongValue = 9000000001
+        });
+
+        var cso = SeedTargetCsoLongNumber(targetSystem, targetUserType, csAccountExpiresAttr, 9000000001);
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csAccountExpiresAttr, accountExpiresMvAttr);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule });
+
+        // Assert
+        Assert.That(result, Is.Not.Null, "A LongNumber matching attribute should resolve an export match");
+        Assert.That(result!.Id, Is.EqualTo(cso.Id));
+    }
+
+    [Test]
+    public async Task FindMatchingConnectedSystemObjectAsync_LongNumberValueMismatch_ReturnsNullAsync()
+    {
+        // Arrange - same LongNumber matching shape as above, but the candidate CSO's LongValue differs.
+        var targetSystem = ConnectedSystemsData.Single(s => s.Name == "Dummy Target System");
+        var targetUserType = ConnectedSystemObjectTypesData.Single(t => t.Name == "TARGET_USER");
+        var csAccountExpiresAttr = targetUserType.Attributes.Single(a => a.Name == "accountExpires");
+
+        var accountExpiresMvAttr = new MetaverseAttribute
+        {
+            Id = 9001,
+            Name = "Account Expires",
+            Type = AttributeDataType.LongNumber,
+            AttributePlurality = AttributePlurality.SingleValued,
+            BuiltIn = false
+        };
+
+        var mvo = MetaverseObjectsData[0];
+        mvo.AttributeValues.Clear();
+        mvo.AttributeValues.Add(new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = accountExpiresMvAttr,
+            AttributeId = accountExpiresMvAttr.Id,
+            LongValue = 9000000001
+        });
+
+        SeedTargetCsoLongNumber(targetSystem, targetUserType, csAccountExpiresAttr, 8000000002);
+        var rule = BuildInboundShapedMatchingRule(targetUserType, csAccountExpiresAttr, accountExpiresMvAttr);
+
+        // Act
+        var result = await Jim.ObjectMatching.FindMatchingConnectedSystemObjectAsync(
+            mvo, targetSystem, targetUserType, new List<ObjectMatchingRule> { rule });
+
+        // Assert
+        Assert.That(result, Is.Null, "A LongNumber value mismatch must never be returned as an export match");
+    }
+
+    #endregion
+
     #region GetSourceType Tests
 
     [Test]
@@ -1181,30 +1162,6 @@ public class ObjectMatchingServerTests
                 {
                     ConnectedSystemAttribute = csAttr,
                     ConnectedSystemAttributeId = csAttr.Id
-                }
-            }
-        };
-
-        // Act
-        var sourceType = rule.GetSourceType();
-
-        // Assert
-        Assert.That(sourceType, Is.EqualTo(SyncRuleMappingSourcesType.AttributeMapping));
-    }
-
-    [Test]
-    public void ObjectMatchingRule_GetSourceType_WithMvAttribute_ReturnsAttributeMapping()
-    {
-        // Arrange
-        var mvAttr = new MetaverseAttribute { Id = 1, Name = "EmployeeId" };
-        var rule = new ObjectMatchingRule
-        {
-            Sources = new List<ObjectMatchingRuleSource>
-            {
-                new()
-                {
-                    MetaverseAttribute = mvAttr,
-                    MetaverseAttributeId = mvAttr.Id
                 }
             }
         };

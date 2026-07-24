@@ -23,6 +23,11 @@ function Get-JIMActivityChildren {
 
     .PARAMETER All
         Automatically paginate through all child Activities and return every one. Cannot be used with -Page.
+        Fetches at most 1000 pages before stopping with a warning; use -Force to fetch beyond the cap.
+
+    .PARAMETER Force
+        Override the -All page ceiling (1000 pages) and fetch every page regardless of how many child
+        Activities there are. Only valid with -All.
 
     .PARAMETER Page
         Page number for the child Activity list. Defaults to 1. Cannot be used with -All.
@@ -44,6 +49,11 @@ function Get-JIMActivityChildren {
         Returns every child activity for the specified parent activity, paginating automatically.
 
     .EXAMPLE
+        Get-JIMActivityChildren -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" -All -Force
+
+        Returns every child activity, overriding the 1000-page safety cap for a very large parent Activity.
+
+    .EXAMPLE
         Get-JIMActivity -Id "a1b2c3d4-e5f6-7890-abcd-ef1234567890" |
             Get-JIMActivityChildren
 
@@ -61,6 +71,9 @@ function Get-JIMActivityChildren {
 
         [Parameter(Mandatory, ParameterSetName = 'All')]
         [switch]$All,
+
+        [Parameter(ParameterSetName = 'All')]
+        [switch]$Force,
 
         [Parameter(ParameterSetName = 'Page')]
         [ValidateRange(1, [int]::MaxValue)]
@@ -80,21 +93,25 @@ function Get-JIMActivityChildren {
         }
 
         try {
-            $currentPage = if ($All) { 1 } else { $Page }
-            do {
-                Write-Verbose "Getting child activities for Activity: $Id (Page: $currentPage, PageSize: $PageSize)"
-                $response = Invoke-JIMApi -Endpoint "/api/v1/activities/$Id/children?page=$currentPage&pageSize=$PageSize"
+            # The shared helper owns the -All loop, the page cap and the warnings (issue #487); a single
+            # page is fetched directly. Both paths unwrap the paginated response envelope so callers keep
+            # receiving one object per child Activity.
+            $pageRequest = {
+                param($p)
+                Write-Verbose "Getting child activities for Activity: $Id (Page: $p, PageSize: $PageSize)"
+                Invoke-JIMApi -Endpoint "/api/v1/activities/$Id/children?page=$p&pageSize=$PageSize"
+            }
 
-                # Unwrap the paginated response envelope so callers keep receiving one object per child activity.
+            if ($All) {
+                Invoke-JIMPagedFetch -PageRequest $pageRequest -CmdletName 'Get-JIMActivityChildren' -PageSize $PageSize -Force:$Force `
+                    -ItemNoun 'child activities'
+            }
+            else {
+                $response = & $pageRequest $Page
                 foreach ($item in $response.items) {
                     $item
                 }
-
-                $hasMore = $All -and $response.hasNextPage -eq $true
-                if ($hasMore) {
-                    $currentPage++
-                }
-            } while ($hasMore)
+            }
         }
         catch {
             Write-Error "Failed to get child activities: $_"

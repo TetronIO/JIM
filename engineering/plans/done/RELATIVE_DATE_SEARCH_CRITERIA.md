@@ -2,7 +2,7 @@
 
 - **Status:** Done
 - **Issue:** [#85](https://github.com/TetronIO/JIM/issues/85) (sub-tasks [#849](https://github.com/TetronIO/JIM/issues/849), [#850](https://github.com/TetronIO/JIM/issues/850))
-- **PRD:** [`engineering/prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md`](../../prd/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md)
+- **PRD:** [`engineering/prd/done/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md`](../../prd/done/PRD_RELATIVE_DATE_SEARCH_CRITERIA.md)
 - **Continued by:** [`TEMPORAL_SCOPE_REEVALUATION.md`](TEMPORAL_SCOPE_REEVALUATION.md) (#892: the scheduled reconciler that keeps relative-date scopes live for static objects)
 
 ## Overview

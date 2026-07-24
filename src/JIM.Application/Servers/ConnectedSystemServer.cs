@@ -3,8 +3,7 @@
 
 using System.Data.Common;
 using System.Text.Json;
-using JIM.Connectors.File;
-using JIM.Connectors.LDAP;
+using JIM.Connectors;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
@@ -31,9 +30,21 @@ public class ConnectedSystemServer
 {
     private JimApplication Application { get; }
 
+    private readonly IConnectorFactory _connectorFactory = new ConnectorFactory();
+
     internal ConnectedSystemServer(JimApplication application)
     {
         Application = application;
+    }
+
+    /// <summary>
+    /// Resolves the Connector implementation for a Connected System's Connector Definition, configuring it with
+    /// credential protection and certificate validation when it supports them.
+    /// </summary>
+    /// <exception cref="NotSupportedException">Thrown when the Connector Definition is not recognised.</exception>
+    private IConnector CreateConnector(ConnectedSystem connectedSystem)
+    {
+        return _connectorFactory.Create(connectedSystem.ConnectorDefinition.Name, Application.CredentialProtection, Application.Certificates);
     }
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -799,7 +810,6 @@ public class ConnectedSystemServer
                     {
                         Order = s.Order,
                         ConnectedSystemAttributeId = s.ConnectedSystemAttributeId,
-                        MetaverseAttributeId = s.MetaverseAttributeId,
                         Expression = s.Expression
                     }).ToList()
                 };
@@ -886,7 +896,6 @@ public class ConnectedSystemServer
                             {
                                 Order = s.Order,
                                 ConnectedSystemAttributeId = s.ConnectedSystemAttributeId,
-                                MetaverseAttributeId = s.MetaverseAttributeId,
                                 Expression = s.Expression
                             }).ToList()
                         };
@@ -933,7 +942,7 @@ public class ConnectedSystemServer
             {
                 var sourceSignatures = r.Sources
                     .OrderBy(s => s.Order)
-                    .Select(s => $"{s.ConnectedSystemAttributeId}:{s.MetaverseAttributeId}:{s.Expression}")
+                    .Select(s => $"{s.ConnectedSystemAttributeId}:{s.Expression}")
                     .ToList();
 
                 return $"{r.TargetMetaverseAttributeId}|{r.CaseSensitive}|{string.Join(",", sourceSignatures)}";
@@ -1295,16 +1304,11 @@ public class ConnectedSystemServer
         // constraints declared in setting metadata
         var results = ConnectorSettingValidator.Validate(connectedSystem.SettingValues);
 
-        // work out what connector we need to instantiate, so that we can use its internal validation method
-        // 100% expecting this to be something we need to centralise/improve later as we develop the connector definition system
-        // especially when we need to support uploaded connectors, not just built-in ones
-
-        if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
-            results.AddRange(CreateConfiguredLdapConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
-        else if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
-            results.AddRange(new FileConnector().ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
-        else
-            throw new NotImplementedException("Support for that connector definition has not been implemented yet."); // todo (#875): centralise connector dispatch / support additional connector definitions.
+        // resolve the connector so its own, connector-specific validation can run too. connectors that don't
+        // implement IConnectorSettings have no such validation to add; the generic results above stand alone.
+        var connector = CreateConnector(connectedSystem);
+        if (connector is IConnectorSettings settingsConnector)
+            results.AddRange(settingsConnector.ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
 
         return results;
     }
@@ -1321,22 +1325,6 @@ public class ConnectedSystemServer
             throw new ArgumentException("The supplied ConnectedSystem doesn't have any valid SettingValues.", nameof(connectedSystem));
     }
 
-    /// <summary>
-    /// Creates and configures an LDAP connector with credential protection and certificate provider.
-    /// </summary>
-    private LdapConnector CreateConfiguredLdapConnector()
-    {
-        var connector = new LdapConnector();
-
-        // Set up credential protection for decrypting passwords
-        if (Application.CredentialProtection != null)
-            connector.SetCredentialProtection(Application.CredentialProtection);
-
-        // Set up certificate provider for SSL/TLS validation
-        connector.SetCertificateProvider(Application.Certificates);
-
-        return connector;
-    }
     #endregion
 
     #region Connected System Schema
@@ -1352,6 +1340,12 @@ public class ConnectedSystemServer
 
         var result = new SchemaRefreshResult { Success = true };
 
+        // resolve the connector, and confirm it supports schema import, before creating the activity: an
+        // unsupported connector must never leave an in-flight activity behind.
+        var connector = CreateConnector(connectedSystem);
+        if (connector is not IConnectorSchema schemaConnector)
+            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support schema import.");
+
         // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
         var activity = new Activity
         {
@@ -1362,17 +1356,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
-        // work out what connector we need to instantiate, so that we can use its internal validation method
-        // 100% expecting this to be something we need to centralise/improve later as we develop the connector definition system
-        // especially when we need to support uploaded connectors, not just built-in ones
-
-        ConnectorSchema schema;
-        if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
-            schema = await CreateConfiguredLdapConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
-        else if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
-            schema = await new FileConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
-        else
-            throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
+        var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
 
         // Merge the new schema with the existing one, preserving IDs for attributes that are referenced by Synchronisation Rules
         // This prevents FK constraint violations when attributes are used in Synchronisation Rule mappings
@@ -1537,6 +1521,12 @@ public class ConnectedSystemServer
 
         var result = new SchemaRefreshResult { Success = true };
 
+        // resolve the connector, and confirm it supports schema import, before creating the activity: an
+        // unsupported connector must never leave an in-flight activity behind.
+        var connector = CreateConnector(connectedSystem);
+        if (connector is not IConnectorSchema schemaConnector)
+            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support schema import.");
+
         var activity = new Activity
         {
             TargetName = connectedSystem.Name,
@@ -1546,13 +1536,7 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
-        ConnectorSchema schema;
-        if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
-            schema = await CreateConfiguredLdapConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
-        else if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.FileConnectorName)
-            schema = await new FileConnector().GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
-        else
-            throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
+        var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
 
         schema.ObjectTypes = schema.ObjectTypes.OrderBy(q => q.Name).ToList();
 
@@ -1696,9 +1680,11 @@ public class ConnectedSystemServer
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
-        // work out what connector we need to instantiate, so that we can use its internal validation method
-        // 100% expecting this to be something we need to centralise/improve later as we develop the connector definition system
-        // especially when we need to support uploaded connectors, not just built-in ones
+        // resolve the connector, and confirm it supports hierarchy import, before creating the activity: an
+        // unsupported connector must never leave an in-flight activity behind.
+        var connector = CreateConnector(connectedSystem);
+        if (connector is not IConnectorPartitions partitionsConnector)
+            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support hierarchy import.");
 
         // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
         var activity = new Activity
@@ -1710,21 +1696,13 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
-        List<ConnectorPartition> partitions;
-        if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
+        var partitions = await partitionsConnector.GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
+        if (partitions.Count == 0)
         {
-            partitions = await CreateConfiguredLdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
-            if (partitions.Count == 0)
-            {
-                // Zero partitions almost always means the connector could not enumerate them (connection,
-                // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
-                // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
-                activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
-            }
-        }
-        else
-        {
-            throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
+            // Zero partitions almost always means the connector could not enumerate them (connection,
+            // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
+            // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
+            activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
         }
 
         // Merge discovered partitions with existing ones, preserving user selections
@@ -1768,6 +1746,12 @@ public class ConnectedSystemServer
         ValidateConnectedSystemParameter(connectedSystem);
         ArgumentNullException.ThrowIfNull(initiatedByApiKey);
 
+        // resolve the connector, and confirm it supports hierarchy import, before creating the activity: an
+        // unsupported connector must never leave an in-flight activity behind.
+        var connector = CreateConnector(connectedSystem);
+        if (connector is not IConnectorPartitions partitionsConnector)
+            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support hierarchy import.");
+
         // every operation that results, either directly or indirectly in a data change requires tracking with an activity...
         var activity = new Activity
         {
@@ -1778,21 +1762,13 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
-        List<ConnectorPartition> partitions;
-        if (connectedSystem.ConnectorDefinition.Name == Connectors.ConnectorConstants.LdapConnectorName)
+        var partitions = await partitionsConnector.GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
+        if (partitions.Count == 0)
         {
-            partitions = await CreateConfiguredLdapConnector().GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
-            if (partitions.Count == 0)
-            {
-                // Zero partitions almost always means the connector could not enumerate them (connection,
-                // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
-                // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
-                activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
-            }
-        }
-        else
-        {
-            throw new NotImplementedException("Support for that connector definition has not been implemented yet.");
+            // Zero partitions almost always means the connector could not enumerate them (connection,
+            // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
+            // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
+            activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
         }
 
         // Merge discovered partitions with existing ones, preserving user selections
@@ -3861,6 +3837,9 @@ public class ConnectedSystemServer
             case AttributeDataType.LongNumber when connectedSystemObjectAttributeValue.LongValue != null:
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (long)connectedSystemObjectAttributeValue.LongValue));
                 break;
+            case AttributeDataType.Decimal when connectedSystemObjectAttributeValue.DecimalValue != null:
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.DecimalValue.Value));
+                break;
             case AttributeDataType.Guid when connectedSystemObjectAttributeValue.GuidValue != null:
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (Guid)connectedSystemObjectAttributeValue.GuidValue));
                 break;
@@ -4224,8 +4203,9 @@ public class ConnectedSystemServer
                 throw new ArgumentException(
                     $"Type mismatch: source attribute '{sourceAttrName}' ({sourceType}) is not compatible with target attribute '{targetAttrName}' ({targetType}). Source and target attributes must have the same type.");
 
-            // Multi-valued to single-valued is permitted (#435). The runtime selects
-            // the first value and generates a MultiValuedAttributeTruncated RPEI warning.
+            // Multi-valued to single-valued is permitted at configuration time (#435). At runtime, if a
+            // source holds more than one value for a single-valued target, the attribute is skipped and a
+            // MultiValuedToSingleValued RPEI error is raised (a single value flows normally).
         }
     }
 
@@ -5012,11 +4992,6 @@ public class ConnectedSystemServer
                     source.ConnectedSystemAttributeId = source.ConnectedSystemAttribute.Id;
                     source.ConnectedSystemAttribute = null;
                 }
-                if (source.MetaverseAttribute != null)
-                {
-                    source.MetaverseAttributeId = source.MetaverseAttribute.Id;
-                    source.MetaverseAttribute = null;
-                }
             }
         }
 
@@ -5431,9 +5406,15 @@ public class ConnectedSystemServer
         return await Application.Repository.ConnectedSystems.GetSyncRulesAsync(connectedSystemId, includeDisabledSyncRules);
     }
 
-    public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync()
+    /// <summary>
+    /// Retrieves lightweight Synchronisation Rule headers for list views, optionally filtered
+    /// by Metaverse Object Type and/or direction.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">When supplied, only rules targeting this Metaverse Object Type are returned.</param>
+    /// <param name="direction">When supplied, only rules with this direction are returned.</param>
+    public async Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync(int? metaverseObjectTypeId = null, SyncRuleDirection? direction = null)
     {
-        return await Application.Repository.ConnectedSystems.GetSyncRuleHeadersAsync();
+        return await Application.Repository.ConnectedSystems.GetSyncRuleHeadersAsync(metaverseObjectTypeId, direction);
     }
 
     public async Task<SyncRule?> GetSyncRuleAsync(int id)

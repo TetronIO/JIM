@@ -57,6 +57,19 @@ public class SearchComparisonOperatorsTests
 
         Assert.That(SearchComparisonOperators.ValidOperatorsFor(AttributeDataType.Number), Is.EqualTo(expected));
         Assert.That(SearchComparisonOperators.ValidOperatorsFor(AttributeDataType.LongNumber), Is.EqualTo(expected));
+        Assert.That(SearchComparisonOperators.ValidOperatorsFor(AttributeDataType.Decimal), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void IsValid_OrderedOperatorOnDecimal_IsTrue()
+    {
+        Assert.That(SearchComparisonOperators.IsValid(SearchComparisonType.GreaterThanOrEquals, AttributeDataType.Decimal), Is.True);
+    }
+
+    [Test]
+    public void IsValid_TextOperatorOnDecimal_IsFalse()
+    {
+        Assert.That(SearchComparisonOperators.IsValid(SearchComparisonType.Contains, AttributeDataType.Decimal), Is.False);
     }
 
     [Test]

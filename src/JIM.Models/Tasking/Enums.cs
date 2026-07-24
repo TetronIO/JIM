@@ -18,11 +18,22 @@ public enum WorkerTaskStatus
 }
 
 /// <summary>
-/// Determines whether a task must be executed on its own, i.e. sequentially, 
+/// Determines whether a task must be executed on its own, i.e. sequentially,
 /// or if it can be run in parallel with other tasks.
 /// </summary>
 public enum WorkerTaskExecutionMode
 {
 	Sequential = 0,
 	Parallel = 1
+}
+
+/// <summary>
+/// The database operation that raised a real-time Worker Task change notification (issue #307).
+/// Values map to the PostgreSQL trigger operation (TG_OP) that fired.
+/// </summary>
+public enum WorkerTaskChangeOperation
+{
+	Insert = 0,
+	Update = 1,
+	Delete = 2
 }

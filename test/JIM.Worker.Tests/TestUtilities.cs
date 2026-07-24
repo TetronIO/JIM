@@ -74,6 +74,14 @@ public static class TestUtilities
                 foreach (var csioIntValue in csioAttribute.IntValues)
                     Assert.That(csoAttributeValues.Any(q => q.IntValue == csioIntValue));
                 break;
+            case AttributeDataType.Decimal:
+                // checking that the counts are the same, and that the cso values exist in the csio value, and visa verse (i.e. are the two collections the same)
+                Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute.DecimalValues.Count));
+                foreach (var csoDecimalValue in csoAttributeValues)
+                    Assert.That(csioAttribute.DecimalValues.Any(q => q == csoDecimalValue.DecimalValue));
+                foreach (var csioDecimalValue in csioAttribute.DecimalValues)
+                    Assert.That(csoAttributeValues.Any(q => q.DecimalValue == csioDecimalValue));
+                break;
             case AttributeDataType.Text:
                 // checking that the counts are the same, and that the cso values exist in the Connected System Import Object value, and visa verse (i.e. are the two collections the same).
                 Assert.That(csoAttributeValues, Has.Count.EqualTo(csioAttribute.StringValues.Count));
@@ -710,6 +718,23 @@ public static class TestUtilities
                         Type = AttributeDataType.Binary,
                         AttributePlurality = AttributePlurality.MultiValued,
                         Selected = true
+                    },
+                    new()
+                    {
+                        // Decimal attribute for exact fractional values (#1046)
+                        Id = (int)MockSourceSystemAttributeNames.SALARY,
+                        Name = MockSourceSystemAttributeNames.SALARY.ToString(),
+                        Type = AttributeDataType.Decimal,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        // Multi-valued Decimal attribute for exercising set-diff and dedupe paths (#1046)
+                        Id = (int)MockSourceSystemAttributeNames.COURSE_FEES,
+                        Name = MockSourceSystemAttributeNames.COURSE_FEES.ToString(),
+                        Type = AttributeDataType.Decimal,
+                        AttributePlurality = AttributePlurality.MultiValued,
+                        Selected = true
                     }
                 }
             },
@@ -842,6 +867,14 @@ public static class TestUtilities
                         Id = (int)MockTargetSystemAttributeNames.AccountExpires,
                         Name = "accountExpires",
                         Type = AttributeDataType.LongNumber,
+                        Selected = true
+                    },
+                    new()
+                    {
+                        // Decimal attribute for exact fractional values, e.g. remuneration (#1046)
+                        Id = (int)MockTargetSystemAttributeNames.Salary,
+                        Name = "salary",
+                        Type = AttributeDataType.Decimal,
                         Selected = true
                     }
                 }

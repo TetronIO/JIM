@@ -65,6 +65,12 @@ var host = Host.CreateDefaultBuilder(args)
         // Factory
         services.AddSingleton<IJimApplicationFactory, JimApplicationFactory>();
 
+        // Database notification listener — a single long-lived LISTEN connection (outside the pool)
+        // that wakes the Scheduler the moment a Worker Task changes, rather than waiting for the
+        // next polling cycle (issue #307)
+        services.AddSingleton<IDatabaseNotificationListener>(_ =>
+            new PostgresNotificationListener(JimDbContext.BuildListenerConnectionString()));
+
         // Scheduler hosted service
         services.AddHostedService<Scheduler>();
     })

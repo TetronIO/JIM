@@ -140,7 +140,7 @@ JIM has completed **pre-release stabilisation** and moved well beyond its initia
 - **Export** changes to target systems with Pending Export management
 - **Schedule** automated synchronisation using cron or interval-based triggers
 
-The platform has been hardened for production, with bounded-memory pipelines proven at 100K+ object scale, an OWASP Top 10:2025 assessment, supply chain hardening, and comprehensive integration test coverage across all synchronisation scenarios. See the [Product Roadmap](reference/roadmap.md) for what is coming as JIM progresses towards its first stable release.
+The platform has been hardened for production, with bounded-memory pipelines validated at 500,000-user scale (synchronised cross-domain across two directories, with groups of up to 495,000 members), an OWASP Top 10:2025 assessment, supply chain hardening, and comprehensive integration test coverage across all synchronisation scenarios. See the [Product Roadmap](reference/roadmap.md) for what is coming as JIM progresses towards its first stable release.
 
 ## 💬 Community & Support
 

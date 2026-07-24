@@ -142,4 +142,31 @@ public class SynchronisationControllerCreateSyncRuleTests
         _mockConnectedSystemRepo.Verify(r => r.CreateSyncRuleAsync(
             It.Is<SyncRule>(sr => sr.Description == null)), Times.Once);
     }
+
+    [Test]
+    public async Task CreateSyncRuleAsync_WithOutboundDeprovisionActionDelete_PersistsValue()
+    {
+        var request = BuildCreateRequest();
+        request.Direction = SyncRuleDirection.Export;
+        request.OutboundDeprovisionAction = OutboundDeprovisionAction.Delete;
+
+        var result = await _controller.CreateSyncRuleAsync(request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        _mockConnectedSystemRepo.Verify(r => r.CreateSyncRuleAsync(
+            It.Is<SyncRule>(sr => sr.OutboundDeprovisionAction == OutboundDeprovisionAction.Delete)), Times.Once);
+    }
+
+    [Test]
+    public async Task CreateSyncRuleAsync_WithoutOutboundDeprovisionAction_DefaultsToDisconnect()
+    {
+        var request = BuildCreateRequest();
+        request.Direction = SyncRuleDirection.Export;
+
+        var result = await _controller.CreateSyncRuleAsync(request);
+
+        Assert.That(result, Is.InstanceOf<CreatedAtRouteResult>());
+        _mockConnectedSystemRepo.Verify(r => r.CreateSyncRuleAsync(
+            It.Is<SyncRule>(sr => sr.OutboundDeprovisionAction == OutboundDeprovisionAction.Disconnect)), Times.Once);
+    }
 }

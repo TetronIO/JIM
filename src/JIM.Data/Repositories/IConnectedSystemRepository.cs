@@ -142,6 +142,16 @@ public interface IConnectedSystemRepository
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
 
     /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
+    /// reference resolution: Pending status with unresolved reference attribute values.
+    /// The predicate is evaluated in SQL (backed by a partial index on
+    /// HasUnresolvedReferences) so the common zero-deferred case costs a single
+    /// index probe rather than hydrating every Pending Export for the system (#1102).
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
+    public Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId);
+
+    /// <summary>
     /// Retrieves Pending Exports that are ready for execution, filtering at the database level.
     /// Excludes exports that have exceeded max retries or are not yet due for retry.
     /// Results are ordered by CreatedAt (oldest first).
@@ -409,10 +419,14 @@ public interface IConnectedSystemRepository
     public Task<HashSet<Guid>> GetCsoIdsWithPendingExportsByConnectedSystemAsync(int connectedSystemId);
 
     /// <summary>
-    /// Loads all Pending Exports for a Connected System in a single bulk query, keyed by CSO ID.
-    /// More efficient than per-page loading for large-scale reconciliation.
+    /// Loads all Pending Exports for a Connected System, keyed by CSO ID. More efficient than
+    /// per-page loading for large-scale reconciliation. Loads in bounded keyset-paginated chunks
+    /// so each statement stays inside the database's statement timeout regardless of backlog size
+    /// (a Scale500k25kGroups run holds 525K Pending Exports with 9.8M attribute value changes).
     /// </summary>
-    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId);
+    /// <param name="connectedSystemId">The Connected System whose Pending Exports to load.</param>
+    /// <param name="chunkSize">Pending Exports loaded per statement; null uses the implementation default.</param>
+    public Task<Dictionary<Guid, PendingExport>> GetPendingExportsLightweightByConnectedSystemIdAsync(int connectedSystemId, int? chunkSize = null);
 
     /// <summary>
     /// Gets all Connected System Objects that are joined to a specific Metaverse Object.
@@ -547,7 +561,12 @@ public interface IConnectedSystemRepository
     /// <param name="includeDisabledSyncRules">Controls whether to return Synchronisation Rules that are disabled</param>
     public Task<List<SyncRule>> GetSyncRulesAsync(int connectedSystemId, bool includeDisabledSyncRules, bool withChangeTracking = false);
 
-    public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync();
+    /// <summary>
+    /// Retrieves lightweight Synchronisation Rule headers for list views, optionally filtered.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">When supplied, only rules targeting this Metaverse Object Type are returned.</param>
+    /// <param name="direction">When supplied, only rules with this direction are returned.</param>
+    public Task<IList<SyncRuleHeader>> GetSyncRuleHeadersAsync(int? metaverseObjectTypeId = null, SyncRuleDirection? direction = null);
 
     /// <summary>
     /// Gets the change history for a Connected System Object.
@@ -670,7 +689,7 @@ public interface IConnectedSystemRepository
         IEnumerable<ConnectedSystemObjectStatus>? statusFilter = null,
         IEnumerable<int>? objectTypeFilter = null,
         IEnumerable<ConnectedSystemObjectJoinType>? joinTypeFilter = null);
-    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null);
+    public Task<PagedResultSet<ConnectedSystemObject>> GetConnectedSystemObjectsAsync(int connectedSystemId, int page, int pageSize, int? knownTotalCount = null, DateTime? lastSyncTimestamp = null, Guid? afterId = null);
 
     /// <summary>
     /// Batch loads Connected System Objects by their IDs with the full Include chain needed for
@@ -689,6 +708,16 @@ public interface IConnectedSystemRepository
     /// <param name="csoId">The CSO whose reference attribute values should be looked up.</param>
     /// <returns>Dictionary mapping referenced CSO GUIDs to their external ID strings.</returns>
     public Task<Dictionary<Guid, string>> GetReferenceExternalIdsAsync(Guid csoId);
+
+    /// <summary>
+    /// Batched form of <see cref="GetReferenceExternalIdsAsync"/>: returns the reference external ID
+    /// lookups for a whole page of CSOs in one query, keyed by owning CSO ID. Every requested ID is
+    /// present in the result; owners with no resolved reference values map to an empty dictionary,
+    /// so callers can distinguish "no references" from "not fetched" without a fallback query.
+    /// </summary>
+    /// <param name="csoIds">The CSOs whose reference attribute values should be looked up.</param>
+    /// <returns>Dictionary keyed by owning CSO ID; each value maps referenced CSO GUIDs to their external ID strings.</returns>
+    public Task<Dictionary<Guid, Dictionary<Guid, string>>> GetReferenceExternalIdsForCsosAsync(IReadOnlyCollection<Guid> csoIds);
 
     /// <summary>
     /// Returns all the CSOs for a Connected System that are marked as Obsolete.
@@ -806,6 +835,17 @@ public interface IConnectedSystemRepository
         List<ConnectedSystemObject> connectedSystemObjects,
         List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
         List<Guid>? pendingRemovalIds = null);
+
+    /// <summary>
+    /// Atomically claims an unjoined Connected System Object for a Metaverse Object during export
+    /// matching (join-before-provision); the claim succeeds only if the object is still unclaimed
+    /// at write time, guarding against two Metaverse Objects racing to join the same object;
+    /// returns true if the claim was written, false if another Metaverse Object claimed it first.
+    /// On success the row's MetaverseObjectId, JoinType (Joined), DateJoined and Status (Normal)
+    /// are set; the caller owns fixing up any tracked instance to match (raw SQL bypasses the
+    /// change tracker).
+    /// </summary>
+    public Task<bool> TryClaimConnectedSystemObjectForJoinAsync(Guid connectedSystemObjectId, Guid metaverseObjectId, DateTime dateJoined);
 
     /// <summary>
     /// Batch updates only the join-related columns (JoinType, DateJoined, MetaverseObjectId) on

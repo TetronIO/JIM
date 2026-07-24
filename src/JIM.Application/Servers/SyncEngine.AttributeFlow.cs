@@ -10,6 +10,7 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Sync;
 using JIM.Models.Utility;
+using JIM.Utilities;
 using Serilog;
 using System.Globalization;
 using System.Text.RegularExpressions;
@@ -34,13 +35,13 @@ public partial class SyncEngine
         bool onlyReferenceAttributes = false,
         bool isFinalReferencePass = false,
         int? contributingSystemId = null,
-        List<AttributeFlowWarning>? warnings = null,
+        List<AttributeFlowError>? errors = null,
         int mvoObjectTypeId = 0,
         AttributePriorityContext? priorityContext = null)
     {
         if (cso.MetaverseObject == null)
         {
-            Log.Error("ProcessMapping: CSO ({Cso}) is not joined to an MVO!", cso);
+            Log.Error("ProcessMapping: CSO ({CsoId}) is not joined to an MVO!", cso.Id);
             return;
         }
 
@@ -88,54 +89,47 @@ public partial class SyncEngine
                         if (onlyReferenceAttributes && csotAttribute.Type != AttributeDataType.Reference)
                             continue;
 
-                        // MVA -> SVA truncation: when multiple source values target a single-valued
-                        // MV attribute, take only the first value and record a warning (#435)
-                        var isMvaToSva = csoAttributeValues.Count > 1 &&
-                            syncRuleMapping.TargetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued;
+                        // For text, apply the mapping's inbound value processing (#843) up front: the processed,
+                        // de-duplicated set is both what flows and what the MVA->SVA guard below counts, so two
+                        // whitespace/case variants that collapse to the same value count as one value.
+                        List<string>? effectiveTextValues = null;
+                        if (csotAttribute.Type == AttributeDataType.Text)
+                            effectiveTextValues = ProcessInboundTextValues(csoAttributeValues.Select(av => av.StringValue), syncRuleMapping);
 
-                        if (isMvaToSva)
+                        // MVA -> SVA guard (#435): flowing more than one value to a single-valued target attribute
+                        // is an error. A single-valued attribute can hold only one value, and JIM will not pick one
+                        // arbitrarily; the attribute is skipped and an error is recorded (surfaced as an RPEI by the
+                        // worker), while the object's other attributes still synchronise. Reference attributes are
+                        // inherently multi-valued and resolved in a later pass, so they are out of scope here.
+                        if (syncRuleMapping.TargetMetaverseAttribute.AttributePlurality == AttributePlurality.SingleValued &&
+                            csotAttribute.Type != AttributeDataType.Reference)
                         {
-                            var firstValue = csoAttributeValues.First();
-                            var selectedValueDescription = csotAttribute.Type switch
+                            var effectiveValueCount = effectiveTextValues?.Count ?? csoAttributeValues.Count;
+                            if (effectiveValueCount > 1)
                             {
-                                AttributeDataType.Text => firstValue.StringValue ?? "(null)",
-                                AttributeDataType.Number => firstValue.IntValue?.ToString() ?? "(null)",
-                                AttributeDataType.LongNumber => firstValue.LongValue?.ToString() ?? "(null)",
-                                AttributeDataType.DateTime => firstValue.DateTimeValue?.ToString("O") ?? "(null)",
-                                AttributeDataType.Boolean => firstValue.BoolValue?.ToString() ?? "(null)",
-                                AttributeDataType.Guid => firstValue.GuidValue?.ToString() ?? "(null)",
-                                AttributeDataType.Binary => firstValue.ByteValue != null
-                                    ? $"[{firstValue.ByteValue.Length} bytes]" : "(null)",
-                                _ => "(unknown)"
-                            };
+                                Log.Error(
+                                    "ProcessMapping: Multi-valued source attribute '{SourceAttr}' has {ValueCount} values but target " +
+                                    "attribute '{TargetAttr}' is single-valued. No value flowed for this attribute. CSO {CsoId}",
+                                    csotAttribute.Name, effectiveValueCount, syncRuleMapping.TargetMetaverseAttribute.Name, cso.Id);
 
-                            Log.Warning(
-                                "ProcessMapping: Multi-valued source attribute '{SourceAttr}' has {ValueCount} values but target " +
-                                "attribute '{TargetAttr}' is single-valued. Using first value: '{SelectedValue}'. CSO {CsoId}",
-                                csotAttribute.Name, csoAttributeValues.Count,
-                                syncRuleMapping.TargetMetaverseAttribute.Name, selectedValueDescription, cso.Id);
+                                errors?.Add(new AttributeFlowError
+                                {
+                                    SourceAttributeName = csotAttribute.Name,
+                                    TargetAttributeName = syncRuleMapping.TargetMetaverseAttribute.Name,
+                                    ValueCount = effectiveValueCount
+                                });
 
-                            warnings?.Add(new AttributeFlowWarning
-                            {
-                                SourceAttributeName = csotAttribute.Name,
-                                TargetAttributeName = syncRuleMapping.TargetMetaverseAttribute.Name,
-                                ValueCount = csoAttributeValues.Count,
-                                SelectedValue = selectedValueDescription
-                            });
-
-                            // Truncate to the first value only
-                            csoAttributeValues = new List<ConnectedSystemObjectAttributeValue> { firstValue };
+                                continue;
+                            }
                         }
 
                         switch (csotAttribute.Type)
                         {
                             case AttributeDataType.Text:
                             {
-                                // Apply the mapping's inbound value processing (#843) to the source text values,
-                                // dropping any that collapse to no value, before diffing against the MVO. An empty
-                                // processed set is the ConnectedNoValue state, resolved by priority (#91).
-                                var effectiveTextValues = ProcessInboundTextValues(csoAttributeValues.Select(av => av.StringValue), syncRuleMapping);
-                                if (effectiveTextValues.Count == 0)
+                                // effectiveTextValues was computed above; an empty processed set is the
+                                // ConnectedNoValue state, resolved by priority (#91).
+                                if (effectiveTextValues!.Count == 0)
                                     ApplyNoValueOutcome(mvo, syncRuleMapping, contributingSystemId, contributingSyncRuleId, mvoObjectTypeId, priorityContext);
                                 else
                                     ProcessTextAttribute(mvo, syncRuleMapping, effectiveTextValues, contributingSystemId, contributingSyncRuleId);
@@ -143,6 +137,12 @@ public partial class SyncEngine
                             }
                             case AttributeDataType.Number:
                                 ProcessNumberAttribute(mvo, syncRuleMapping, sourceAttributeId, cso, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
+                                break;
+                            case AttributeDataType.LongNumber:
+                                ProcessLongNumberAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
+                                break;
+                            case AttributeDataType.Decimal:
+                                ProcessDecimalAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
                                 break;
                             case AttributeDataType.DateTime:
                                 ProcessDateTimeAttribute(mvo, syncRuleMapping, csoAttributeValues, contributingSystemId, contributingSyncRuleId);
@@ -404,7 +404,7 @@ public partial class SyncEngine
                 {
                     mvo.PendingAttributeValueAdditions.Add(newMvoValue);
                     Log.Debug("ProcessExpressionMapping: Expression-based mapping set {AttributeName} to '{Value}' on MVO {MvoId}",
-                        syncRuleMapping.TargetMetaverseAttribute!.Name, resultString, mvo.Id);
+                        syncRuleMapping.TargetMetaverseAttribute!.Name, LogSanitiser.Sanitise(resultString), mvo.Id);
                 }
             }
         }
@@ -527,8 +527,8 @@ public partial class SyncEngine
             !csoAttributeValues.Any(csoav => csoav.IntValue != null && csoav.IntValue.Equals(mvoav.IntValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        // Use the (possibly truncated) csoAttributeValues list rather than cso.AttributeValues
-        // to respect MVA->SVA first-value selection (#435)
+        // csoAttributeValues holds all source values for this attribute; for a single-valued target the
+        // MVA->SVA guard in ProcessMapping has already errored and skipped when more than one is present.
         var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
             !currentValues.Any(mvoav => mvoav.IntValue != null && mvoav.IntValue.Equals(csoav.IntValue)));
 
@@ -540,6 +540,70 @@ public partial class SyncEngine
                 Attribute = syncRuleMapping.TargetMetaverseAttribute!,
                 AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
                 IntValue = newCsoNewAttributeValue.IntValue,
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId
+            });
+        }
+    }
+
+    private static void ProcessLongNumberAttribute(
+        MetaverseObject mvo,
+        SyncRuleMapping syncRuleMapping,
+        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
+    {
+        var currentValues = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).ToList();
+        var mvoObsoleteAttributeValues = currentValues.Where(mvoav =>
+            !csoAttributeValues.Any(csoav => csoav.LongValue != null && csoav.LongValue.Equals(mvoav.LongValue)));
+        mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
+
+        // csoAttributeValues holds all source values for this attribute; for a single-valued target the
+        // MVA->SVA guard in ProcessMapping has already errored and skipped when more than one is present.
+        var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
+            !currentValues.Any(mvoav => mvoav.LongValue != null && mvoav.LongValue.Equals(csoav.LongValue)));
+
+        foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
+        {
+            mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
+            {
+                MetaverseObject = mvo,
+                Attribute = syncRuleMapping.TargetMetaverseAttribute!,
+                AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
+                LongValue = newCsoNewAttributeValue.LongValue,
+                ContributedBySystemId = contributingSystemId,
+                ContributedBySyncRuleId = contributingSyncRuleId
+            });
+        }
+    }
+
+    private static void ProcessDecimalAttribute(
+        MetaverseObject mvo,
+        SyncRuleMapping syncRuleMapping,
+        List<ConnectedSystemObjectAttributeValue> csoAttributeValues,
+        int? contributingSystemId,
+        int? contributingSyncRuleId)
+    {
+        // Decimal comparison is numeric and scale-insensitive (5.0m equals 5.00m), so a scale-only
+        // difference between the CSO and MVO values never stages a removal and re-addition.
+        var currentValues = GetEffectiveAttributeValues(mvo, syncRuleMapping.TargetMetaverseAttribute!.Id).ToList();
+        var mvoObsoleteAttributeValues = currentValues.Where(mvoav =>
+            !csoAttributeValues.Any(csoav => csoav.DecimalValue != null && csoav.DecimalValue.Equals(mvoav.DecimalValue)));
+        mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
+
+        // csoAttributeValues holds all source values for this attribute; for a single-valued target the
+        // MVA->SVA guard in ProcessMapping has already errored and skipped when more than one is present.
+        var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
+            !currentValues.Any(mvoav => mvoav.DecimalValue != null && mvoav.DecimalValue.Equals(csoav.DecimalValue)));
+
+        foreach (var newCsoNewAttributeValue in csoNewAttributeValues)
+        {
+            mvo.PendingAttributeValueAdditions.Add(new MetaverseObjectAttributeValue
+            {
+                MetaverseObject = mvo,
+                Attribute = syncRuleMapping.TargetMetaverseAttribute!,
+                AttributeId = syncRuleMapping.TargetMetaverseAttribute!.Id,
+                DecimalValue = newCsoNewAttributeValue.DecimalValue,
                 ContributedBySystemId = contributingSystemId,
                 ContributedBySyncRuleId = contributingSyncRuleId
             });
@@ -602,8 +666,8 @@ public partial class SyncEngine
                 csoav.ByteValue != null && JIM.Utilities.Utilities.AreByteArraysTheSame(csoav.ByteValue, mvoav.ByteValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        // Use the (possibly truncated) csoAttributeValues list rather than cso.AttributeValues
-        // to respect MVA->SVA first-value selection (#435)
+        // csoAttributeValues holds all source values for this attribute; for a single-valued target the
+        // MVA->SVA guard in ProcessMapping has already errored and skipped when more than one is present.
         var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
             !currentValues.Any(mvoav => JIM.Utilities.Utilities.AreByteArraysTheSame(mvoav.ByteValue, csoav.ByteValue)));
 
@@ -753,8 +817,8 @@ public partial class SyncEngine
             !csoAttributeValues.Any(csoav => csoav.GuidValue.HasValue && csoav.GuidValue.Equals(mvoav.GuidValue)));
         mvo.PendingAttributeValueRemovals.AddRange(mvoObsoleteAttributeValues);
 
-        // Use the (possibly truncated) csoAttributeValues list rather than cso.AttributeValues
-        // to respect MVA->SVA first-value selection (#435)
+        // csoAttributeValues holds all source values for this attribute; for a single-valued target the
+        // MVA->SVA guard in ProcessMapping has already errored and skipped when more than one is present.
         var csoNewAttributeValues = csoAttributeValues.Where(csoav =>
             !currentValues.Any(mvoav => mvoav.GuidValue.HasValue && mvoav.GuidValue.Equals(csoav.GuidValue)));
 
@@ -836,6 +900,7 @@ public partial class SyncEngine
                 AttributeDataType.Text => attributeValue.StringValue,
                 AttributeDataType.Number => attributeValue.IntValue,
                 AttributeDataType.LongNumber => attributeValue.LongValue,
+                AttributeDataType.Decimal => attributeValue.DecimalValue,
                 AttributeDataType.DateTime => attributeValue.DateTimeValue,
                 AttributeDataType.Boolean => attributeValue.BoolValue,
                 AttributeDataType.Guid => attributeValue.GuidValue,
@@ -942,15 +1007,52 @@ public partial class SyncEngine
                 newMvoValue.StringValue = result?.ToString();
                 break;
             case AttributeDataType.Number:
+                // A long result only converts when it fits in an int; silently narrowing would corrupt
+                // the value (the #871 lossy-cast class), so an out-of-range long is rejected like any
+                // other unconvertible result.
                 if (result is int intVal)
                     newMvoValue.IntValue = intVal;
-                else if (result is long longVal)
+                else if (result is long longVal && longVal is >= int.MinValue and <= int.MaxValue)
                     newMvoValue.IntValue = (int)longVal;
-                else if (int.TryParse(result?.ToString(), out var parsedInt))
+                else if (result is not long && int.TryParse(result?.ToString(), out var parsedInt))
                     newMvoValue.IntValue = parsedInt;
                 else
                 {
-                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Number", result);
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Number", LogSanitiser.Sanitise(result?.ToString()));
+                    return null;
+                }
+                break;
+            case AttributeDataType.LongNumber:
+                // int widens to long exactly. String results parse with invariant culture.
+                if (result is long longNumberVal)
+                    newMvoValue.LongValue = longNumberVal;
+                else if (result is int longNumberIntVal)
+                    newMvoValue.LongValue = longNumberIntVal;
+                else if (long.TryParse(result?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedLong))
+                    newMvoValue.LongValue = parsedLong;
+                else
+                {
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to LongNumber", LogSanitiser.Sanitise(result?.ToString()));
+                    return null;
+                }
+                break;
+            case AttributeDataType.Decimal:
+                // int and long widen to decimal exactly. double/float results are deliberately rejected:
+                // binary floating point cannot represent most decimal fractions exactly, so converting
+                // would silently corrupt the value. String results parse with invariant culture and
+                // accept exponent notation (e.g. "1.5E3" becomes 1500).
+                if (result is decimal decimalVal)
+                    newMvoValue.DecimalValue = decimalVal;
+                else if (result is int decimalIntVal)
+                    newMvoValue.DecimalValue = decimalIntVal;
+                else if (result is long decimalLongVal)
+                    newMvoValue.DecimalValue = decimalLongVal;
+                else if (result is not double && result is not float &&
+                         DecimalAttributeValue.TryParse(result?.ToString(), out var parsedDecimal))
+                    newMvoValue.DecimalValue = parsedDecimal;
+                else
+                {
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Decimal", LogSanitiser.Sanitise(result?.ToString()));
                     return null;
                 }
                 break;
@@ -961,7 +1063,7 @@ public partial class SyncEngine
                     newMvoValue.DateTimeValue = parsedDt;
                 else
                 {
-                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to DateTime", result);
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to DateTime", LogSanitiser.Sanitise(result?.ToString()));
                     return null;
                 }
                 break;
@@ -972,7 +1074,7 @@ public partial class SyncEngine
                     newMvoValue.BoolValue = parsedBool;
                 else
                 {
-                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Boolean", result);
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Boolean", LogSanitiser.Sanitise(result?.ToString()));
                     return null;
                 }
                 break;
@@ -983,7 +1085,7 @@ public partial class SyncEngine
                     newMvoValue.GuidValue = parsedGuid;
                 else
                 {
-                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Guid", result);
+                    Log.Warning("CreateMvoAttributeValueFromExpressionResult: Could not convert expression result '{Result}' to Guid", LogSanitiser.Sanitise(result?.ToString()));
                     return null;
                 }
                 break;

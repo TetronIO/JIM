@@ -85,7 +85,7 @@ internal static class LdapConnectorUtilities
             var duplicateCount = guidValues.Count - uniqueValues.Count;
             Log.Warning("GetEntryAttributeGuidValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
                 "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                duplicateCount, attributeName, entry.DistinguishedName, guidValues.Count, uniqueValues.Count);
+                duplicateCount, attributeName, LogSanitiser.Sanitise(entry.DistinguishedName), guidValues.Count, uniqueValues.Count);
         }
 
         return uniqueValues;
@@ -267,7 +267,7 @@ internal static class LdapConnectorUtilities
             var duplicateCount = values.Count - uniqueValues.Count;
             Log.Warning("GetEntryAttributeStringValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
                 "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                duplicateCount, attributeName, entry.DistinguishedName, values.Count, uniqueValues.Count);
+                duplicateCount, attributeName, LogSanitiser.Sanitise(entry.DistinguishedName), values.Count, uniqueValues.Count);
         }
 
         return uniqueValues;
@@ -293,7 +293,7 @@ internal static class LdapConnectorUtilities
             var duplicateCount = binaryValues.Count - uniqueValues.Count;
             Log.Warning("GetEntryAttributeBinaryValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
                 "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                duplicateCount, attributeName, entry.DistinguishedName, binaryValues.Count, uniqueValues.Count);
+                duplicateCount, attributeName, LogSanitiser.Sanitise(entry.DistinguishedName), binaryValues.Count, uniqueValues.Count);
         }
 
         return uniqueValues;
@@ -351,7 +351,7 @@ internal static class LdapConnectorUtilities
             var duplicateCount = result.Count - uniqueValues.Count;
             Log.Warning("GetEntryAttributeIntValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
                 "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                duplicateCount, attributeName, entry.DistinguishedName, result.Count, uniqueValues.Count);
+                duplicateCount, attributeName, LogSanitiser.Sanitise(entry.DistinguishedName), result.Count, uniqueValues.Count);
         }
 
         return uniqueValues;
@@ -383,7 +383,7 @@ internal static class LdapConnectorUtilities
             var duplicateCount = result.Count - uniqueValues.Count;
             Log.Warning("GetEntryAttributeLongValues: Detected and removed {DuplicateCount} duplicate value(s) from attribute '{AttributeName}' on entry '{EntryDn}'. " +
                 "Original count: {OriginalCount}, Unique count: {UniqueCount}",
-                duplicateCount, attributeName, entry.DistinguishedName, result.Count, uniqueValues.Count);
+                duplicateCount, attributeName, LogSanitiser.Sanitise(entry.DistinguishedName), result.Count, uniqueValues.Count);
         }
 
         return uniqueValues;

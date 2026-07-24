@@ -3,6 +3,7 @@
 
 using JIM.Models.Core;
 using JIM.Models.Staging;
+using JIM.Utilities;
 using Serilog;
 using System.Diagnostics;
 namespace JIM.Connectors.File;
@@ -172,6 +173,36 @@ internal class FileConnectorImport
                             }
                         }
                     }
+                    else if (attribute.Type == AttributeDataType.Decimal)
+                    {
+                        // Parse the raw string via DecimalAttributeValue.TryParse rather than CsvHelper's
+                        // GetField<decimal>: CsvHelper's converter rejects exponent notation (e.g. "1.5E3"),
+                        // which JIM accepts for Decimal attributes. TryParse also returns false on values
+                        // outside the range of decimal, so overflow surfaces as this row's import error
+                        // rather than being silently truncated or rounded.
+                        var fieldValue = _reader.CsvReader.GetField(attribute.Name);
+                        if (!string.IsNullOrEmpty(fieldValue))
+                        {
+                            if (isMultiValued)
+                            {
+                                var values = fieldValue.Split(_multiValueDelimiter, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                                foreach (var value in values)
+                                {
+                                    if (DecimalAttributeValue.TryParse(value, out var decimalValue))
+                                        importObjectAttribute.DecimalValues.Add(decimalValue);
+                                    else
+                                        throw new FormatException($"Cannot parse '{value}' as decimal");
+                                }
+                            }
+                            else
+                            {
+                                if (DecimalAttributeValue.TryParse(fieldValue, out var decimalValue))
+                                    importObjectAttribute.DecimalValues.Add(decimalValue);
+                                else
+                                    throw new FormatException($"Cannot parse '{fieldValue}' as decimal");
+                            }
+                        }
+                    }
                     else if (attribute.Type == AttributeDataType.DateTime)
                     {
                         var fieldValue = _reader.CsvReader.GetField(attribute.Name);
@@ -234,7 +265,7 @@ internal class FileConnectorImport
                     var rowNumber = _reader.CsvReader.Context.Parser?.Row ?? 0;
                     var rawValue = _reader.CsvReader.GetField(attribute.Name);
                     _logger.Warning(ex, "Failed to parse attribute '{AttributeName}' as {AttributeType} at row {Row}. Raw value: '{RawValue}'",
-                        attribute.Name, attribute.Type, rowNumber, rawValue);
+                        attribute.Name, attribute.Type, rowNumber, LogSanitiser.Sanitise(rawValue));
 
                     importObject.ErrorType = ConnectedSystemImportObjectError.AttributeValueError;
                     importObject.ErrorMessage = $"Failed to parse '{attribute.Name}' as {attribute.Type}: {ex.Message}";

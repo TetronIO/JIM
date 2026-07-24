@@ -1,6 +1,7 @@
 # Plan: Slick Quick Start for Admin Deployment
 
-**Status:** Done; implemented in `537d29ac`
+- **Status:** Done
+- **Note:** Implemented in `537d29ac`.
 
 ## Context
 

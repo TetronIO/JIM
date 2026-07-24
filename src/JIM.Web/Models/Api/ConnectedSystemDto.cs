@@ -25,6 +25,13 @@ public class ConnectedSystemDetailDto
     public int? MaxExportParallelism { get; set; }
 
     /// <summary>
+    /// Controls how an import-time reference attribute value that cannot be resolved to a Connected System Object
+    /// is treated. Default is Error (current behaviour); Warn downgrades to an Activity warning; Ignore suppresses
+    /// both the per-object error and the Activity warning while still logging the occurrence.
+    /// </summary>
+    public UnresolvedReferenceHandling UnresolvedReferenceHandling { get; set; }
+
+    /// <summary>
     /// Creates a detailed DTO from a ConnectedSystem entity.
     /// </summary>
     /// <param name="entity">The Connected System entity.</param>
@@ -48,6 +55,7 @@ public class ConnectedSystemDetailDto
             Status = entity.Status,
             SettingValuesValid = entity.SettingValuesValid,
             MaxExportParallelism = entity.MaxExportParallelism,
+            UnresolvedReferenceHandling = entity.UnresolvedReferenceHandling,
             Connector = new ConnectorReferenceDto
             {
                 Id = entity.ConnectorDefinition?.Id ?? 0,
@@ -246,6 +254,15 @@ public class ConnectedSystemObjectAttributeValueDto
     public string? StringValue { get; set; }
     public DateTime? DateTimeValue { get; set; }
     public int? IntValue { get; set; }
+    public long? LongValue { get; set; }
+    public decimal? DecimalValue { get; set; }
+
+    /// <summary>
+    /// The value for Binary attributes. Serialised to JSON as a base64-encoded string
+    /// (System.Text.Json's representation for byte arrays).
+    /// </summary>
+    public byte[]? ByteValue { get; set; }
+
     public Guid? GuidValue { get; set; }
     public bool? BoolValue { get; set; }
     public Guid? ReferenceValueId { get; set; }
@@ -260,6 +277,9 @@ public class ConnectedSystemObjectAttributeValueDto
             StringValue = entity.StringValue,
             DateTimeValue = entity.DateTimeValue,
             IntValue = entity.IntValue,
+            LongValue = entity.LongValue,
+            DecimalValue = entity.DecimalValue,
+            ByteValue = entity.ByteValue,
             GuidValue = entity.GuidValue,
             BoolValue = entity.BoolValue,
             ReferenceValueId = entity.ReferenceValue?.Id

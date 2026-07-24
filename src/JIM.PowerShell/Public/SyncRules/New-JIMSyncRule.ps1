@@ -42,6 +42,12 @@ function New-JIMSyncRule {
     .PARAMETER Enabled
         Whether the Synchronisation Rule is enabled. Defaults to $true.
 
+    .PARAMETER OutboundDeprovisionAction
+        For Export rules: action to take when an MVO falls out of this rule's scope or is deleted.
+        Valid values: Disconnect (break the join, leave the CSO untouched in the target system),
+        Delete (queue a delete PendingExport so the CSO is removed from the target system).
+        Defaults to Disconnect when not specified.
+
     .PARAMETER ChangeReason
         An optional reason for the change, recorded against this Synchronisation Rule's change history.
 
@@ -70,6 +76,11 @@ function New-JIMSyncRule {
         New-JIMSyncRule -Name "Import Users" -ConnectedSystemId 1 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Import -Description "Imports user accounts from the HR system"
 
         Creates an import Synchronisation Rule with a description of what the rule does.
+
+    .EXAMPLE
+        New-JIMSyncRule -Name "Export Users to AD" -ConnectedSystemId 2 -ConnectedSystemObjectTypeId 1 -MetaverseObjectTypeId 1 -Direction Export -ProvisionToConnectedSystem -OutboundDeprovisionAction Delete
+
+        Creates an export Synchronisation Rule that provisions users and deletes the corresponding objects from the Connected System when their Metaverse Objects are deleted or fall out of scope.
 
     .LINK
         Get-JIMSyncRule
@@ -109,6 +120,10 @@ function New-JIMSyncRule {
         [bool]$Enabled = $true,
 
         [Parameter()]
+        [ValidateSet('Disconnect', 'Delete')]
+        [string]$OutboundDeprovisionAction,
+
+        [Parameter()]
         [ValidateNotNullOrEmpty()]
         [string]$ChangeReason,
 
@@ -131,18 +146,15 @@ function New-JIMSyncRule {
         if ($PSCmdlet.ShouldProcess($Name, "Create Synchronisation Rule")) {
             Write-Verbose "Creating Synchronisation Rule: $Name"
 
-            # Map direction string to API enum value
-            $directionValue = switch ($Direction) {
-                'Import' { 1 }
-                'Export' { 2 }
-            }
-
             $body = @{
                 name = $Name
                 connectedSystemId = $ConnectedSystemId
                 connectedSystemObjectTypeId = $ConnectedSystemObjectTypeId
                 metaverseObjectTypeId = $MetaverseObjectTypeId
-                direction = $directionValue
+                # Send the enum as its string name; -Direction is ValidateSet-constrained
+                # to the exact SyncRuleDirection member names. The API rejects numeric
+                # ordinals (JsonStringEnumConverter allowIntegerValues:false, PR #1060).
+                direction = $Direction
                 enabled = $Enabled
             }
 
@@ -156,6 +168,10 @@ function New-JIMSyncRule {
 
             if ($ProvisionToConnectedSystem) {
                 $body.provisionToConnectedSystem = $true
+            }
+
+            if ($PSBoundParameters.ContainsKey('OutboundDeprovisionAction')) {
+                $body.outboundDeprovisionAction = $OutboundDeprovisionAction
             }
 
             if ($PSBoundParameters.ContainsKey('ChangeReason')) {

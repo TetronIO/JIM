@@ -113,7 +113,7 @@ Reverts a service setting to its default value by clearing the administrator ove
 ### Syntax
 
 ```powershell
-Reset-JIMServiceSetting [-Key] <string> [-PassThru] [-WhatIf] [-Confirm]
+Reset-JIMServiceSetting [-Key] <string> [-ChangeReason <string>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -121,6 +121,7 @@ Reset-JIMServiceSetting [-Key] <string> [-PassThru] [-WhatIf] [-Confirm]
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
 | `Key` | `string` | Yes (Position 0) | | Dot-notation setting key to reset. Accepts pipeline input by property name. |
+| `ChangeReason` | `string` | No | | Optional reason for the revert, recorded against the setting's configuration change history. |
 | `PassThru` | `switch` | No | `$false` | Returns the setting object after the reset |
 
 ### Output

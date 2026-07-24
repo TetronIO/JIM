@@ -94,6 +94,70 @@ Describe 'New-JIMScopingCriterion -ConnectedSystemAttributeName' {
     }
 }
 
+Describe 'New-JIMScopingCriterion -DecimalValue' {
+
+    It 'Sends decimalValue as a decimal in the create body when -DecimalValue is bound' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 999 } }
+
+            New-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -MetaverseAttributeId 15 -ComparisonType GreaterThanOrEquals -DecimalValue 12345.678d -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'POST' -and
+                $Endpoint -eq '/api/v1/synchronisation/sync-rules/1/scoping-criteria/5/criteria' -and
+                $Body.decimalValue -is [decimal] -and
+                $Body.decimalValue -eq 12345.678d
+            }
+        }
+    }
+
+    It 'Omits decimalValue from the create body when -DecimalValue is not bound' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 999 } }
+
+            New-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -MetaverseAttributeId 15 -ComparisonType Equals -StringValue 'x' -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'POST' -and -not $Body.ContainsKey('decimalValue')
+            }
+        }
+    }
+}
+
+Describe 'Set-JIMScopingCriterion -DecimalValue' {
+
+    It 'Sends decimalValue as a decimal in the update body when -DecimalValue is bound' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 3 } }
+
+            Set-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -CriterionId 3 -MetaverseAttributeId 15 -ComparisonType LessThan -DecimalValue 0.01d -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'PUT' -and
+                $Endpoint -eq '/api/v1/synchronisation/sync-rules/1/scoping-criteria/5/criteria/3' -and
+                $Body.decimalValue -is [decimal] -and
+                $Body.decimalValue -eq 0.01d
+            }
+        }
+    }
+
+    It 'Omits decimalValue from the update body when -DecimalValue is not bound' {
+        InModuleScope JIM {
+            $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+            Mock Invoke-JIMApi { [PSCustomObject]@{ id = 3 } }
+
+            Set-JIMScopingCriterion -SyncRuleId 1 -GroupId 5 -CriterionId 3 -MetaverseAttributeId 15 -ComparisonType Equals -StringValue 'x' -Confirm:$false | Out-Null
+
+            Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                $Method -eq 'PUT' -and -not $Body.ContainsKey('decimalValue')
+            }
+        }
+    }
+}
+
 Describe 'Set-JIMScopingCriterion -ConnectedSystemAttributeName' {
 
     It 'Resolves the attribute name to its id via the object-types list endpoint and sends it in the update body' {

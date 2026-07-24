@@ -54,7 +54,7 @@ internal static class MvoBulkInsertColumns
     internal static readonly string[] MetaverseObjectAttributeValues =
     [
         "Id", "MetaverseObjectId", "AttributeId", "StringValue",
-        "DateTimeValue", "IntValue", "LongValue", "ByteValue",
+        "DateTimeValue", "IntValue", "LongValue", "DecimalValue", "ByteValue",
         "GuidValue", "BoolValue", "ReferenceValueId",
         "UnresolvedReferenceValueId", "ContributedBySystemId",
         "ContributedBySyncRuleId", "NullValue"

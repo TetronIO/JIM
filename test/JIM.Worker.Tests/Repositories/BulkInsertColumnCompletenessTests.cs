@@ -76,6 +76,165 @@ public class BulkInsertColumnCompletenessTests
         });
     }
 
+    [Test]
+    public void MetaverseObjectChangeBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(MetaverseObjectChange), "MetaverseObjectChanges", MvoChangeBulkColumns.MetaverseObjectChanges);
+    }
+
+    [Test]
+    public void MetaverseObjectChangeAttributeBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(MetaverseObjectChangeAttribute), "MetaverseObjectChangeAttributes", MvoChangeBulkColumns.MetaverseObjectChangeAttributes);
+    }
+
+    [Test]
+    public void MetaverseObjectChangeAttributeValueBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(MetaverseObjectChangeAttributeValue), "MetaverseObjectChangeAttributeValues", MvoChangeBulkColumns.MetaverseObjectChangeAttributeValues);
+    }
+
+    [Test]
+    public void ConnectedSystemObjectBulkInsertColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Staging.ConnectedSystemObject), "ConnectedSystemObjects", CsoBulkColumns.ConnectedSystemObjects);
+    }
+
+    [Test]
+    public void ConnectedSystemObjectAttributeValueBulkInsertColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Staging.ConnectedSystemObjectAttributeValue), "ConnectedSystemObjectAttributeValues", CsoBulkColumns.ConnectedSystemObjectAttributeValues);
+    }
+
+    /// <summary>
+    /// The CSO bulk update writes the mutable subset of the insert columns. The exclusions are an
+    /// explicit list (immutable identity/creation columns, plus the scope-evaluation columns that
+    /// have their own dedicated persistence path; see CsoBulkColumns for the rationale), so a
+    /// migration that adds a mutable Connected System Object column must consciously place it in
+    /// either the update list or the exclusion list; silence fails this test.
+    /// </summary>
+    [Test]
+    public void ConnectedSystemObjectBulkUpdateColumns_AreTheMutableSubsetOfInsertColumns()
+    {
+        var expected = CsoBulkColumns.ConnectedSystemObjects
+            .Except(CsoBulkColumns.ConnectedSystemObjectsUpdateExclusions)
+            .ToHashSet();
+        var actual = CsoBulkColumns.ConnectedSystemObjectsUpdate.ToHashSet();
+
+        var missing = expected.Except(actual).OrderBy(c => c).ToList();
+        var unknown = actual.Except(expected).OrderBy(c => c).ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(missing, Is.Empty,
+                "Mutable column(s) in the insert list are in neither ConnectedSystemObjectsUpdate nor the " +
+                "documented exclusion list; the raw bulk update would silently never persist them. Add each to " +
+                "one of the two lists (and the cast/parameter writers in BulkUpdateConnectedSystemObjectsRawAsync " +
+                "if updatable): " + string.Join(", ", missing));
+            Assert.That(unknown, Is.Empty,
+                "ConnectedSystemObjectsUpdate contains column(s) not in the insert list (or listed as excluded): " +
+                string.Join(", ", unknown));
+        });
+    }
+
+    [Test]
+    public void ConnectedSystemObjectChangeBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Staging.ConnectedSystemObjectChange), "ConnectedSystemObjectChanges", CsoChangeBulkColumns.ConnectedSystemObjectChanges);
+    }
+
+    [Test]
+    public void ConnectedSystemObjectChangeAttributeBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Staging.ConnectedSystemObjectChangeAttribute), "ConnectedSystemObjectChangeAttributes", CsoChangeBulkColumns.ConnectedSystemObjectChangeAttributes);
+    }
+
+    [Test]
+    public void ConnectedSystemObjectChangeAttributeValueBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Staging.ConnectedSystemObjectChangeAttributeValue), "ConnectedSystemObjectChangeAttributeValues", CsoChangeBulkColumns.ConnectedSystemObjectChangeAttributeValues);
+    }
+
+    [Test]
+    public void ActivityRunProfileExecutionItemBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Activities.ActivityRunProfileExecutionItem), "ActivityRunProfileExecutionItems", RpeiBulkColumns.ActivityRunProfileExecutionItems);
+    }
+
+    [Test]
+    public void ActivityRunProfileExecutionItemSyncOutcomeBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Activities.ActivityRunProfileExecutionItemSyncOutcome), "ActivityRunProfileExecutionItemSyncOutcomes", RpeiBulkColumns.ActivityRunProfileExecutionItemSyncOutcomes);
+    }
+
+    [Test]
+    public void ActivityRunProfileExecutionItemUpdateColumns_HaveAConsciousHomeForEveryColumn()
+    {
+        AssertUpdateListsCoverInsertList(
+            "ActivityRunProfileExecutionItems",
+            RpeiBulkColumns.ActivityRunProfileExecutionItems,
+            [RpeiBulkColumns.ActivityRunProfileExecutionItemsUpdate],
+            RpeiBulkColumns.ActivityRunProfileExecutionItemsUpdateExclusions);
+    }
+
+    [Test]
+    public void PendingExportBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Transactional.PendingExport), "PendingExports", PendingExportBulkColumns.PendingExports);
+    }
+
+    [Test]
+    public void PendingExportAttributeValueChangeBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Transactional.PendingExportAttributeValueChange), "PendingExportAttributeValueChanges", PendingExportBulkColumns.PendingExportAttributeValueChanges);
+    }
+
+    [Test]
+    public void PendingExportUpdateColumns_HaveAConsciousHomeForEveryColumn()
+    {
+        AssertUpdateListsCoverInsertList(
+            "PendingExports",
+            PendingExportBulkColumns.PendingExports,
+            [PendingExportBulkColumns.PendingExportsRetryUpdate, PendingExportBulkColumns.PendingExportsExportResultUpdate],
+            PendingExportBulkColumns.PendingExportsUpdateExclusions);
+    }
+
+    [Test]
+    public void PendingExportAttributeValueChangeUpdateColumns_HaveAConsciousHomeForEveryColumn()
+    {
+        AssertUpdateListsCoverInsertList(
+            "PendingExportAttributeValueChanges",
+            PendingExportBulkColumns.PendingExportAttributeValueChanges,
+            [PendingExportBulkColumns.PendingExportAttributeValueChangesConfirmationUpdate, PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate],
+            PendingExportBulkColumns.PendingExportAttributeValueChangesUpdateExclusions);
+    }
+
+    /// <summary>
+    /// Asserts every insert column appears in at least one update list or the documented exclusion
+    /// list, and that no update/exclusion column is unknown to the insert list. A table can have
+    /// more than one legitimate update shape (for example retry reconciliation vs export result);
+    /// this keeps every column consciously placed whichever shape a migration extends.
+    /// </summary>
+    private static void AssertUpdateListsCoverInsertList(string tableName, string[] insertColumns, string[][] updateLists, string[] exclusions)
+    {
+        var insert = insertColumns.ToHashSet();
+        var covered = updateLists.SelectMany(l => l).Concat(exclusions).ToHashSet();
+
+        var missing = insert.Except(covered).OrderBy(c => c).ToList();
+        var unknown = covered.Except(insert).OrderBy(c => c).ToList();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(missing, Is.Empty,
+                $"{tableName}: column(s) are in neither an update list nor the documented exclusion list; a raw " +
+                "update would silently never persist them. Place each consciously (and extend the matching " +
+                "statement's writers if updatable): " + string.Join(", ", missing));
+            Assert.That(unknown, Is.Empty,
+                $"{tableName}: update/exclusion list(s) contain column(s) not in the insert list: " +
+                string.Join(", ", unknown));
+        });
+    }
+
     private void AssertColumnListMatchesModel(Type entityClrType, string tableName, string[] bulkInsertColumns)
     {
         var entityType = _model.FindEntityType(entityClrType);

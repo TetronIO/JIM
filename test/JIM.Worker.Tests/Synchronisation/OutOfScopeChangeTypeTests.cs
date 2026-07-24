@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Enums;
+using JIM.Models.Logic;
 using JIM.Worker.Models;
 using NUnit.Framework;
 
@@ -63,6 +64,48 @@ public class OutOfScopeChangeTypeTests
         // Assert
         Assert.That(result.HasChanges, Is.True,
             "OutOfScopeRetainJoin should have HasChanges=true to ensure RPEI creation for audit trail");
+    }
+
+    [Test]
+    public void DisconnectedOutOfScope_WithScopingSyncRule_CarriesSyncRuleAttribution()
+    {
+        // Arrange
+        var scopingSyncRule = new SyncRule { Id = 42, Name = "HR Import" };
+
+        // Act
+        var result = MetaverseObjectChangeResult.DisconnectedOutOfScope(scopingSyncRule: scopingSyncRule);
+
+        // Assert
+        Assert.That(result.SyncRuleId, Is.EqualTo(42),
+            "The result should carry the scoping Synchronisation Rule's id for outcome attribution");
+        Assert.That(result.SyncRuleName, Is.EqualTo("HR Import"),
+            "The result should carry a snapshot of the scoping Synchronisation Rule's name");
+    }
+
+    [Test]
+    public void DisconnectedOutOfScope_WithoutScopingSyncRule_SyncRuleAttributionIsNull()
+    {
+        // Act
+        var result = MetaverseObjectChangeResult.DisconnectedOutOfScope();
+
+        // Assert
+        Assert.That(result.SyncRuleId, Is.Null,
+            "The null case (no scoping Synchronisation Rule determinable) must remain valid");
+        Assert.That(result.SyncRuleName, Is.Null);
+    }
+
+    [Test]
+    public void Projected_WithProjectionSyncRule_CarriesSyncRuleAttribution()
+    {
+        // Arrange
+        var projectionSyncRule = new SyncRule { Id = 7, Name = "HR Import" };
+
+        // Act
+        var result = MetaverseObjectChangeResult.Projected(3, projectionSyncRule);
+
+        // Assert
+        Assert.That(result.SyncRuleId, Is.EqualTo(7));
+        Assert.That(result.SyncRuleName, Is.EqualTo("HR Import"));
     }
 
     #endregion

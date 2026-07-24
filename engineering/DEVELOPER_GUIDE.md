@@ -36,6 +36,18 @@ The metaverse is the authoritative identity repository:
 
 **Rule**: Extend through interfaces, not modification. Keep connectors independent.
 
+### 3a. Real-Time Notifications (#307)
+
+Services coordinate through the database, and the database also signals change: triggers on `WorkerTasks` (insert, status change, delete) and `Activities` (progress/status columns) publish PostgreSQL `NOTIFY` events on commit. Key components:
+
+- **Channels**: names in `Constants.NotificationChannels` (`JIM.Models`); Worker Task payloads parse via `WorkerTaskChangeNotification.TryParse`, Activity progress payloads are the Activity id.
+- **Listener**: `IDatabaseNotificationListener` (`JIM.Data`) implemented by `PostgresNotificationListener` (`JIM.PostgresData`); one dedicated non-pooled connection per service (`JimDbContext.BuildListenerConnectionString()`), exponential backoff reconnection, `IsConnected`/`ConnectionStateChanged` for fallback gating.
+- **Scheduler**: listens for terminal Worker Tasks belonging to a Schedule Execution and wakes its polling loop (via `AsyncWakeSignal` in `JIM.Utilities`) within ~500ms; the 30-second cycle remains the fallback.
+- **JIM.Web**: `NotificationListenerService` (hosted service) fans events out to the in-process `IUiNotificationService` relay (consumed by Blazor components; Activity progress debounced 200ms) and the `JimNotificationHub` SignalR hub at `/hubs/notifications` for non-Blazor consumers.
+- **Run Profile progress (#202)**: the lightweight progress read path is `IActivityRepository.GetActivityProgressAsync` (scalar projection plus the `ActivityStatCounter` operation breakdown from #1078; never materialises RPEIs), surfaced as `GET /api/v1/activities/{id}/progress` and consumed by the Activity detail page (push-driven via the relay, with adaptive fallback polling) and PowerShell (`Get-JIMActivity -Follow`, `Start-JIMRunProfile -Wait`). Throughput and ETA come from `IActivityEtaTracker` (JIM.Web singleton): a windowed rate over successive progress samples with counter-reset detection, shared by the endpoint and the page so all surfaces agree.
+
+**Rules**: notifications are fire-and-forget hints carrying identifiers only; consumers re-query the database for state and MUST retain a polling fallback (degraded latency, never degraded correctness). Publish new channels via database triggers (delivered on commit, cover every writer), never ad-hoc application-side `pg_notify` calls.
+
 ### 4. Architecture Diagrams
 
 JIM's architecture is documented with C4 model diagrams (System Context, Container, Component levels) on the [architecture docs page](../docs/developer/architecture.md).
@@ -532,11 +544,10 @@ The `main` branch is protected by the **"Protect Main"** repository ruleset, whi
 | `Analyze (actions)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of GitHub Actions workflows |
 | `Analyze (csharp)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of C# code |
 | `Analyze (javascript-typescript)` | CodeQL workflow (`.github/workflows/codeql.yml`) | Static analysis of JavaScript/TypeScript code |
-| `claude-review` | Claude Code Review workflow | Automated code review on every PR |
 
 **Why `scan-base-images-summary` exists:** the `scan-base-images` job uses a dynamic matrix whose leg names embed image digests (e.g. `scan-base-images (src/JIM.Web/Dockerfile, 10, mcr.microsoft.com/dotnet/aspnet:10.0-noble@sha256:...)`). These names change with every base image update, making them unsuitable as required status checks. The summary job aggregates all matrix legs into a single stable check name.
 
-**Human review:** the required approving review count is currently set to zero; the automated `claude-review` check provides a consistent independent review baseline across all PRs. As the team grows, human reviewer requirements will be layered onto the ruleset without restructuring.
+**Human review:** the required approving review count is currently set to zero. The machine-enforced quality gates (CodeQL static analysis with review comments via the github-code-quality bot, build and test, base image scanning, changelog lint) provide the consistent baseline across all PRs; an AI-assisted review can be requested on demand by commenting `@claude review this PR` (the `.github/workflows/claude.yml` workflow). As the team grows, human reviewer requirements will be layered onto the ruleset without restructuring.
 
 **Signed commits (planned):** server-side enforcement of signed commits via `required_signatures` is deferred until all contributor environments are reliably producing signed commits. See section 6 above for the current local enforcement via pre-commit hook.
 
@@ -879,7 +890,7 @@ JIM works with any OIDC-compliant Identity Provider (Entra ID, Okta, Auth0, Keyc
 
 **Development**: The devcontainer ships a bundled Keycloak instance, pre-configured with a `jim` realm and client. SSO works out of the box; sign in with `admin` / `admin`. The Keycloak admin console is available at `http://localhost:8181`. Use `jim-keycloak`, `jim-keycloak-stop`, and `jim-keycloak-logs` to manage it independently of the full stack.
 
-**Production**: Override the `JIM_SSO_*` variables with your provider's settings. See the [SSO Setup Guide](SSO_SETUP_GUIDE.md).
+**Production**: Override the `JIM_SSO_*` variables with your provider's settings. See the [SSO Setup Guide](../docs/administration/sso-setup.md).
 
 - `JIM_SSO_AUTHORITY`: OIDC authority URL (e.g., `https://login.microsoftonline.com/{tenant-id}/v2.0`)
 - `JIM_SSO_PUBLIC_AUTHORITY`: Optional client-facing authority URL. Only set when the backend and clients reach the identity provider on different URLs (dev devcontainer, split-horizon reverse proxies). Returned to interactive clients via `/api/v1/auth/config`. Backend token validation always uses `JIM_SSO_AUTHORITY`.
@@ -1141,9 +1152,11 @@ This protects against tag-rewrite attacks: the `v4` tag is mutable and can be si
 **Ongoing updates** are handled by Dependabot, which natively understands SHA-pinned actions. When a new version tag moves the underlying commit, Dependabot opens a PR that updates both the SHA and the version comment. Before merging, review the action's changelog for any changes to inputs, outputs, or behaviour.
 
 ### Migrations
-Apply migrations on first run:
+There is no manual step: `jim.worker` applies any pending migrations when it starts, and `jim.web` and `jim.scheduler` wait for it before serving. To pick up a new migration, rebuild and restart the worker (`jim-build-worker`).
+
+To add a migration, run EF on the host against the project, not inside a container; the service images are built on the ASP.NET runtime base and carry no .NET SDK or `dotnet-ef` tool:
 ```bash
-docker compose exec jim.web dotnet ef database update
+dotnet ef migrations add MigrationName --project src/JIM.PostgresData
 ```
 
 ## File Connector Setup
@@ -1209,7 +1222,7 @@ For bind-mounted host paths, ensure the host files are readable/writable by UID 
 
 The JIM PowerShell module (`src/JIM.PowerShell/`) provides cmdlets for scripting and automation. It's designed to work with the JIM API.
 
-> **For production installation** (PowerShell Gallery or air-gapped), see the [Deployment Guide - PowerShell Module](DEPLOYMENT_GUIDE.md#powershell-module). This section covers development and contribution workflows only.
+> **For production installation** (PowerShell Gallery or air-gapped), see the [Deployment Guide - PowerShell Module](../docs/administration/deployment.md#powershell-module). This section covers development and contribution workflows only.
 
 ### Module Structure
 

@@ -72,6 +72,13 @@ public class CreateSyncRuleRequest
     public bool EnforceState { get; set; } = true;
 
     /// <summary>
+    /// For Export rules: Action to take when an MVO falls out of this rule's scope or is deleted
+    /// (Disconnect, the default, breaks the join and leaves the CSO untouched in the target system;
+    /// Delete queues a delete PendingExport). Only applicable when Direction = Export.
+    /// </summary>
+    public OutboundDeprovisionAction? OutboundDeprovisionAction { get; set; }
+
+    /// <summary>
     /// An optional reason for the change, recorded against this Synchronisation Rule's change history.
     /// </summary>
     [StringLength(2000)]
@@ -130,7 +137,7 @@ public class UpdateSyncRuleRequest
     public InboundOutOfScopeAction? InboundOutOfScopeAction { get; set; }
 
     /// <summary>
-    /// For Export rules: Action to take when an MVO falls out of this rule's scope
+    /// For Export rules: Action to take when an MVO falls out of this rule's scope or is deleted
     /// (Disconnect breaks the join and leaves the CSO untouched in the target system;
     /// Delete queues a delete PendingExport). Only applicable when Direction = Export.
     /// </summary>
