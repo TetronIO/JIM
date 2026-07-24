@@ -1045,7 +1045,11 @@ public abstract class SyncTaskProcessorBase
     /// </returns>
     protected async Task<MvoDeletionDecision> ProcessMvoDeletionRuleAsync(MetaverseObject mvo, int disconnectingSystemId, int remainingCsoCount)
     {
-        var decision = _syncEngine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId, remainingCsoCount);
+        // Resolve the disconnecting system's name so the deletion reason names it rather than showing
+        // a bare id. The disconnecting CSO always belongs to the system this task is processing, so its
+        // name is to hand; leave null (id fallback) if that invariant ever fails to hold.
+        var disconnectingSystemName = disconnectingSystemId == _connectedSystem.Id ? _connectedSystem.Name : null;
+        var decision = _syncEngine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId, remainingCsoCount, disconnectingSystemName);
         var appliedFate = await ApplyMvoDeletionDecisionAsync(mvo, decision);
 
         // The applied fate should always match the engine's decision (both derive from the same grace

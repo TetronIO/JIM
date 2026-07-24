@@ -86,11 +86,16 @@ public interface ISyncEngine
     /// <param name="mvo">The MVO to evaluate.</param>
     /// <param name="disconnectingSystemId">The ID of the Connected System whose CSO was disconnected.</param>
     /// <param name="remainingCsoCount">The count of CSOs still joined to the MVO after disconnection.</param>
+    /// <param name="disconnectingSystemName">
+    /// The name of the disconnecting Connected System, used to make the human-readable deletion
+    /// reason name the system rather than a bare id. When null, the reason falls back to the id.
+    /// </param>
     /// <returns>A decision indicating whether/how to delete the MVO.</returns>
     MvoDeletionDecision EvaluateMvoDeletionRule(
         MetaverseObject mvo,
         int disconnectingSystemId,
-        int remainingCsoCount);
+        int remainingCsoCount,
+        string? disconnectingSystemName = null);
 
     /// <summary>
     /// Applies pending attribute value changes to a Metaverse Object.

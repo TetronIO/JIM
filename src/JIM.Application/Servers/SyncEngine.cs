@@ -153,8 +153,15 @@ public partial class SyncEngine : ISyncEngine
     public MvoDeletionDecision EvaluateMvoDeletionRule(
         MetaverseObject mvo,
         int disconnectingSystemId,
-        int remainingCsoCount)
+        int remainingCsoCount,
+        string? disconnectingSystemName = null)
     {
+        // Prefer the system name in human-readable reasons; fall back to the id when the caller did
+        // not resolve a name (keeps the reason meaningful without a database lookup here).
+        var systemLabel = string.IsNullOrWhiteSpace(disconnectingSystemName)
+            ? $"system ID {disconnectingSystemId}"
+            : $"'{disconnectingSystemName}'";
+
         if (mvo.Type == null)
         {
             Log.Warning("EvaluateMvoDeletionRule: MVO {MvoId} has no Type set. Cannot determine deletion rule.", mvo.Id);
@@ -199,13 +206,13 @@ public partial class SyncEngine : ISyncEngine
                     Log.Information("EvaluateMvoDeletionRule: Authoritative source (system ID {SystemId}) disconnected from MVO {MvoId}. " +
                         "Triggering deletion even though {Count} connector(s) remain.",
                         disconnectingSystemId, mvo.Id, remainingCsoCount);
-                    return EvaluateGracePeriod(mvo, $"authoritative source (system ID {disconnectingSystemId}) disconnected");
+                    return EvaluateGracePeriod(mvo, $"authoritative source {systemLabel} disconnected");
                 }
 
                 Log.Verbose("EvaluateMvoDeletionRule: System ID {SystemId} disconnected from MVO {MvoId} but is not an authoritative source. " +
                     "Authoritative sources: [{AuthSources}]. Not marking for deletion.",
                     disconnectingSystemId, mvo.Id, string.Join(", ", triggerIds));
-                return MvoDeletionDecision.NotDeleted($"System {disconnectingSystemId} is not an authoritative source");
+                return MvoDeletionDecision.NotDeleted($"System {systemLabel} is not an authoritative source");
 
             default:
                 Log.Warning("EvaluateMvoDeletionRule: Unknown DeletionRule {Rule} for MVO {MvoId}.", mvo.Type.DeletionRule, mvo.Id);
