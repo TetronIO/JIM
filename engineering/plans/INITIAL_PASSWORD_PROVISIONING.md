@@ -113,8 +113,18 @@ Provisioning (Create export succeeds, external id known)
 2. UI: Initial Password section on the Synchronisation Rule, gated off `ProvisionToConnectedSystem`, pre-populated from the Connected System's discovered policy, overridable.
 3. Delivery: after a `Create` export succeeds and the external id is known (`ExportExecutionServer` create-result path), generate and set the password through the connector capability, then apply enable and change-at-next-sign-in.
 4. Record an Activity per attempt with its outcome, carrying no password value.
+5. Administrator set-password dialog: generate on demand, **masked by default**, with reveal and copy.
 
-**Tests:** delivery invoked only for Create and only when enabled; correct ordering (create → set → enable); no password value reaches any persisted field; disabled configuration is a no-op.
+**Reveal and copy behaviour.** The value is masked on generation. **Copy must work while masked**, so transferring a password to the user never requires putting it on screen; reveal is the secondary affordance, for reading it aloud or checking a transcription, and re-conceals automatically after 30 seconds. A copy raises a confirmation snackbar. Neither action is separately audited: the administrator performing the reset already knows the value, so a reveal event would record nothing that the password-set Activity does not already cover.
+
+Clipboard access is JS interop (`navigator.clipboard.writeText`) from a Blazor Server circuit, which brings two constraints that must be handled rather than assumed away:
+
+- **Secure context required.** `navigator.clipboard` is unavailable over plain HTTP, so a non-TLS deployment must surface a clear failure instead of a silently dead button. Detect and disable with an explanatory tooltip rather than letting the click no-op.
+- **Operating-system clipboard history cannot be suppressed from a browser.** JIM should clear the clipboard on dialog close on a best-effort basis (it can fail without transient user activation), but the password may persist in the platform's clipboard history regardless. Document this honestly rather than implying the copy is transient.
+
+Credential *delivery* (emailing the password to the user or their manager) is out of scope here and belongs with notifications (#618); this dialog hands the value to the administrator to convey through whatever channel their policy allows.
+
+**Tests:** delivery invoked only for Create and only when enabled; correct ordering (create → set → enable); no password value reaches any persisted field; disabled configuration is a no-op; the dialog starts masked, copy succeeds while masked, and reveal re-conceals on the timer.
 
 ### Phase 5: Rejection handling and administrator feedback loop
 
