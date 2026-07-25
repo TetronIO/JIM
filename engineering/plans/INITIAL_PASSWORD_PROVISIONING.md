@@ -190,6 +190,28 @@ Mockups for all seven screens are linked in the header. In build order:
 | Needs-attention columns on both list views | 5 | `/admin/sync-rules`, `/admin/connected-systems` |
 | Run Profile execution summary rejection statistic | 5 | `/activities/{id}` |
 
+### Testing the password channel before relying on it
+
+There is no dry run. No LDAP control, extended operation, or Active Directory mechanism validates a password set without performing it; Windows' `NetValidatePasswordPolicy` comes closest but is an RPC call, not LDAP, and is unreachable from JIM's Linux containers. Anything that answers "will this password be accepted" has to really set one.
+
+Most failures never reach that question, though, and those are checkable without writing anything. Two tiers are in scope:
+
+**Tier 1: preflight (Phase 2).** No writes, no risk, and it covers the common misconfigurations:
+
+- The bind succeeds (the existing connectivity test).
+- Whether the connection is encrypted, what the directory is, and whether it advertises RFC 3062 where that is the mechanism JIM would use.
+- **Whether the service account actually holds password-reset rights.** Active Directory exposes `allowedAttributesEffective` (OID 1.2.840.113556.1.4.914) on every object: a constructed, read-only list of the attributes the *calling* account may modify on that object. Reading it for a sample object and looking for `unicodePwd` answers the single most common failure with zero writes, and it is Microsoft's own documented way to ask the question. Directories that are not Active Directory expose no portable equivalent, so the check reports "could not determine" there rather than a false pass.
+- Whether the domain password policy could be read (Phase 2 does this anyway).
+
+**Tier 2: generate and evaluate locally (Phase 4).** Produce a password from the configured generator and check the character classes and length it actually yields against the discovered policy. This is what catches the passphrase trap, where `brown-chicken-ladder` offers two character categories against Active Directory's three-of-five.
+
+**A live test set is deliberately out of scope, and not only because it is awkward.** Setting a real password somewhere is the only way to prove the whole chain, and every route to it is unsafe:
+
+- *A canary object JIM creates and deletes* assumes create rights the service account may not have, and assumes JIM can pick a container: either a Distinguished Name calculated from the Synchronisation Rule's Attribute Flow, or one of the Connected System's selected containers. Each of those can be absent or wrong. Creating a user in a production directory also triggers whatever watches for new users (other synchronisation engines, mailbox provisioning, licence assignment, alerting), and a failed delete leaves litter behind.
+- *An administrator-supplied Distinguished Name* is a password reset against an arbitrary directory object, exposed through JIM's portal. The service account holds broad reset rights across the directory precisely because that is what makes password management work, so this would re-expose that directory privilege through JIM's own, coarser, permission model: anyone able to configure a Connected System could reset any account the service account can reach, including Domain Admins, break-glass accounts, and the service account itself (which would also brick the Connected System). Denylisting privileged accounts does not close it, because "privileged" is not reliably enumerable across custom admin groups, delegated rights, and tiered administration models.
+
+If a live test is ever revisited, the one route that carries its own authorisation is offering to set a password on **the signed-in administrator's own account**, since they are self-evidently entitled to change it. That has its own gap: an administrator using a dedicated admin account outside JIM's lifecycle management may have no Connected System Object to target.
+
 ### Phase 6: REST API and PowerShell parity
 
 Endpoints and cmdlets for generator configuration, the on-demand generate affordance, discovered-policy read, and parked-item read plus manual release. ID-based routes for writes per the API identifier rules; Pester tests for the cmdlets.
