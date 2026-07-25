@@ -185,12 +185,14 @@ Password data raises requirements that JIM's existing synchronisation machinery 
 - Write-only handling of encrypted secret fields (#951) shares the "never round-trip the ciphertext to the browser" requirement and should be resolved consistently.
 - Schedule-based trim aligns with moving Activity cleanup to a Schedule (#1118); if that lands first, this feature should follow its pattern rather than inventing a second one.
 
-## Open Questions
+## Resolved Decisions
 
-1. Should the fan-out scope be every Connected System with Password Synchronisation enabled that the identity has a Connected System Object in, or should it additionally honour a scoping filter? Starting position: all linked, enabled systems, with scoping deferred until asked for.
-2. Should a password change also be deliverable to a system where the identity has no Connected System Object yet (queue until provisioned), or fail immediately? Starting position: queue until the object exists, bounded by the event time-to-live.
-3. Should the initial-password generator be an expression, a policy object, or both? Starting position: reuse the existing expression engine.
-4. What is the default event time-to-live? Starting position: 7 days, configurable per Connected System.
+These were open during drafting and have since been decided; they are settled inputs to the implementation plan, not still-open questions.
+
+1. **Fan-out scope: all enabled systems, no scoping filter.** A password change fans out to every Connected System that has Password Synchronisation enabled and in which the identity has a Connected System Object. There is deliberately no per-system scoping expression in v1; keep it simple. (Scoping can be added later if a real need appears.)
+2. **Unprovisioned target: queue it.** A password change for an identity that has no Connected System Object in an enabled target yet is queued rather than failed, bounded by the event time-to-live, so the provisioning-then-password race resolves itself when the account appears.
+3. **Initial-password generation: expression engine for v1, with a first-class generator to follow.** v1 reuses the existing expression engine. This is explicitly an interim answer. The longer-term aim is a built-in password-generation mapping function with real-world options (length, character-class rules, pronounceable or passphrase styles, per-target policy alignment, exclusion of ambiguous characters, and so on), designed from a blank slate around the configuration expectations and pain points administrators hit with traditional ILM systems, so defining a sensible default password is a first-class, low-friction action rather than a hand-written expression. Out of scope for this PRD; worth its own design once v1 ships. The v1 model should not paint that in: keep initial-password sourcing behind a seam that a later generator can plug into without reworking the queue or delivery path.
+4. **Default event time-to-live: 7 days, configurable per Connected System.** Long enough to ride out a realistic outage, short enough not to resurrect a stale password indefinitely.
 
 ## Acceptance Criteria
 
