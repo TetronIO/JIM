@@ -141,24 +141,15 @@ If your directory server uses a certificate issued by an internal certificate au
 !!! warning "Skip Validation"
     The "Skip Validation" certificate option is provided for testing and initial setup only. It disables certificate chain verification, which exposes the connection to man-in-the-middle attacks. Never use this setting in production.
 
-### Credential Attributes Are Never Managed
+### Setting Passwords
 
-JIM refuses to import, manage, or flow attributes that hold credential material. The following attributes are excluded from the discovered schema, cannot be selected on the Schema tab, and cannot be chosen as the source or target of an Attribute Flow:
+Credential attributes such as `unicodePwd` and `userPassword` are never imported and can never be used in an Attribute Flow; see [Credential attributes are never managed](../configuration/connected-systems.md#credential-attributes-are-never-managed) for the full list and the reasoning. The LDAP Connector writes passwords itself, on a separate channel, with two rules specific to directories.
 
-`unicodePwd`, `userPassword`, `dBCSPwd`, `ntPwdHistory`, `lmPwdHistory`, `supplementalCredentials`, `unixUserPassword`, `msDS-ManagedPassword`
+**LDAPS is required.** The password channel refuses to open on an unencrypted connection, whatever the directory. A password set puts the password on the wire, so an unencrypted connection would expose it to anyone on the network path. Active Directory enforces this itself; other directories do not, so JIM enforces it on their behalf. Enable "Use Secure Connection (LDAPS)?" before configuring anything that sets passwords.
 
-There are two reasons. Most of these attributes cannot be read back meaningfully: a directory returns nothing at all for `unicodePwd` and opaque blobs for the history attributes, so every synchronisation would see a change that is not really there. The rest hold live credential material, and anything that enters the Metaverse is replicated to every other Connected System in scope, written into change history, and shown in the portal.
+**Directories other than Active Directory use the standard extended operation.** JIM sets passwords through the LDAP Password Modify extended operation (RFC 3062) and never writes the `userPassword` attribute directly. Directories apply their configured password hashing to the extended operation, but store a directly written `userPassword` value exactly as supplied, which would leave the password readable in the directory. If a directory does not advertise support for the extended operation, JIM reports a configuration fault rather than falling back to an unsafe write.
 
-Passwords are handled by a separate, write-only channel that pushes a password to the directory without ever reading it back. Where a Connected System already had one of these attributes selected before this restriction existed, a schema refresh deselects and locks it rather than deleting it, so existing configuration is not silently broken; remove any Attribute Flow that references it.
-
-!!! note "Attributes that only look like credentials"
-    Attributes such as `pwdLastSet`, `badPwdCount` and `pwdProperties` are ordinary, readable attributes and remain fully available. Only the attributes listed above are blocked.
-
-### Setting Passwords Requires LDAPS
-
-The password channel refuses to open on an unencrypted connection, whatever the directory. A password set puts the password on the wire, so an unencrypted connection would expose it to anyone on the network path. Active Directory enforces this itself; other directories do not, so JIM enforces it on their behalf. Enable "Use Secure Connection (LDAPS)?" on the Connected System before configuring anything that sets passwords.
-
-For directories other than Active Directory, JIM sets passwords using the LDAP Password Modify extended operation (RFC 3062) and never writes the `userPassword` attribute directly. Directories apply their configured password hashing to the extended operation, but store a directly written `userPassword` value exactly as supplied, which would leave the password readable in the directory. If a directory does not advertise support for the extended operation, JIM reports a configuration fault rather than falling back to an unsafe write.
+Active Directory and Samba AD use `unicodePwd`, which the Connector encodes correctly on your behalf.
 
 ### Service Account Permissions
 
