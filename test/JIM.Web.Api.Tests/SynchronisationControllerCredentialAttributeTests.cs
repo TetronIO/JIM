@@ -192,7 +192,7 @@ public class SynchronisationControllerCredentialAttributeTests
         var response = okResult!.Value as BulkUpdateConnectedSystemAttributesResponse;
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.Errors, Is.Not.Null);
-        Assert.That(response.Errors!.Any(e => e.AttributeId == CredentialAttributeId), Is.True);
+        Assert.That(response!.Errors!.Any(e => e.AttributeId == CredentialAttributeId), Is.True);
         Assert.That(credentialAttribute.Selected, Is.False);
         Assert.That(ordinaryAttribute.Selected, Is.True, "The rest of the batch must still apply.");
     }

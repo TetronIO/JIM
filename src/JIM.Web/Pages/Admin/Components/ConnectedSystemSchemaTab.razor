@@ -1030,24 +1030,21 @@
         _schemaSearchString = string.Empty;
         ((HashSet<string>)AttributeClassFilterSelectedValues).Clear();
 
-        // convert the csv to a list and trim the entries
-        // go through each attribute on the object type and select it.
-        // credential attributes are skipped: this path bypasses the table's disabled switch, so it needs its own guard.
-        var skippedCredentialAttributes = new List<string>();
-        foreach (var attributeName in _attributeSelectionCsv.Split(','))
-        {
-            var attribute = _selectedObjectType.Attributes.SingleOrDefault(a => a.Name.Equals(attributeName.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (attribute == null)
-                continue;
+        // convert the csv to a list, trim the entries, and resolve each to an attribute on the object type
+        var matchedAttributes = _attributeSelectionCsv.Split(',')
+            .Select(name => _selectedObjectType.Attributes.SingleOrDefault(a => a.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .Where(a => a != null)
+            .Select(a => a!)
+            .ToList();
 
-            if (CredentialAttributes.IsCredentialAttribute(attribute.Name))
-            {
-                skippedCredentialAttributes.Add(attribute.Name);
-                continue;
-            }
+        // credential attributes are skipped: this path bypasses the table's disabled switch, so it needs its own guard
+        var skippedCredentialAttributes = matchedAttributes
+            .Where(a => CredentialAttributes.IsCredentialAttribute(a.Name))
+            .Select(a => a.Name)
+            .ToList();
 
+        foreach (var attribute in matchedAttributes.Where(a => !CredentialAttributes.IsCredentialAttribute(a.Name)))
             attribute.Selected = true;
-        }
 
         // filter by selected
         _attributeSelectedFilter = true;
