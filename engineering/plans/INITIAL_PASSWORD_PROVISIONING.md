@@ -87,11 +87,25 @@ Provisioning (Create export succeeds, external id known)
 
 ### Phase 3: Password generator
 
-1. `PasswordGenerationPolicy` in `JIM.Models/` (length or range, per-class minimums, symbol allow/deny set, ambiguous-character exclusion, generation style).
-2. `IPasswordGeneratorService` / `PasswordGeneratorService` in `JIM.Application/Services/`, using `RandomNumberGenerator` exclusively, **compliant by construction** (satisfy each class minimum, then fill and shuffle) rather than generate-and-test.
+1. `PasswordGenerationPolicy` in `JIM.Models/` (style, plus the per-style options below, ambiguous-character exclusion).
+2. `IPasswordGeneratorService` / `PasswordGeneratorService` in `JIM.Application/Services/`, using `RandomNumberGenerator` exclusively, **compliant by construction** (satisfy each requirement, then fill and shuffle) rather than generate-and-test.
 3. Derivation of a default `PasswordGenerationPolicy` from a discovered `ConnectedSystemPasswordPolicy`.
 
-**Tests:** every generated value satisfies its policy across many iterations; ambiguous characters absent when excluded; no `System.Random` anywhere on the path; unbiased selection (no modulo bias); passphrase style.
+**Three generation styles.** Initial passwords are transcribed by humans far more often than permanent ones (read out by a service desk, typed from an onboarding sheet, entered on a phone keyboard), so transcribability is a first-class concern rather than a nicety:
+
+| Style | Example | Options |
+|-------|---------|---------|
+| Random characters | `t7Rm#qK4vHx2Ndbf` | Length, per-class minimums (upper, lower, digit, symbol), permitted symbol set |
+| Words | `Brown-Chicken-Ladder-47` | Word count, separator, capitalisation, append digits, append symbol |
+| Pronounceable | `tovanic-hupelo-92` | Length, append digits, append symbol |
+
+**Separator and capitalisation are orthogonal axes, not a preset list.** Separator (none, hyphen, full stop, underscore, digit, random symbol) and capitalisation (lowercase, each word, uppercase, first word only, random word) combine to cover every convention with two controls: `None` + `each word` yields `BrownChickenLadder`, `hyphen` + `lowercase` yields `brown-chicken-ladder`. A single combined enum would need a dozen entries to express the same set.
+
+**Composed-style policy validation is required, not optional.** `brown-chicken-ladder` is lowercase plus a symbol: two character categories, where Active Directory complexity requires three of five. The generator must compose the configured style, evaluate the categories and length it will actually produce, and validate that against the discovered policy, blocking Save (or auto-satisfying via appended digits) when it falls short. Without this, the most natural-looking passphrase configuration is silently rejected by the target on every account.
+
+**Word list.** JIM already ships `src/JIM.Application/Resources/Words.en.txt` (6,771 English words, Diceware-scale at ~12.7 bits per word), currently used only for example data generation via `SeedingServer`. Reuse is attractive but the list needs vetting before it generates credentials handed to real people, and three specific issues are already visible: it opens with initialisms (`Atm`, `Cd`, `Suv`, `Tv`) that make poor passphrase words, it carries a UTF-8 BOM, and it has never been screened for words that would be inappropriate in a password given to a new employee. Decide at implementation time between a curated subset filtered for length and suitability, or a separate purpose-built list; either way the entropy readout must be computed from the list actually shipped, so it cannot drift if the list changes. Coupling credential generation to the example-data resource without that filtering step is not acceptable.
+
+**Tests:** every generated value satisfies its policy across many iterations; composed passphrase styles meet category requirements; ambiguous characters absent when excluded; no `System.Random` anywhere on the path; unbiased selection (no modulo bias in the index draw); entropy calculation matches the shipped list size; word list contains no entry failing the suitability filter.
 
 ### Phase 4: Synchronisation Rule configuration and delivery
 
@@ -121,7 +135,8 @@ Mockups for all seven screens are linked in the header. In build order:
 |--------|-------|-------|
 | Discovered Password Policy panel, with the Fine-Grained warning | 2 | `/admin/connected-systems/{id}` (Schema) |
 | Initial Password section inheriting the discovered policy | 4 | `/admin/sync-rules/{id}` (Details) |
-| Custom generator settings | 4 | `/admin/sync-rules/{id}` (Details) |
+| Custom generator settings, random-character style | 4 | `/admin/sync-rules/{id}` (Details) |
+| Word-based style, with live entropy and policy check | 4 | `/admin/sync-rules/{id}` (Details) |
 | Administrator set-password dialog with Generate | 4 | `/metaverse/objects/{id}` |
 | Parked-rejection alert with Save-and-retry | 5 | `/admin/sync-rules/{id}` (Details) |
 | Needs-attention columns on both list views | 5 | `/admin/sync-rules`, `/admin/connected-systems` |
@@ -150,6 +165,8 @@ Tracked by the acceptance criteria on #1121. In summary: a provisioned account h
 | Parked items become invisible with no notification system | Phase 5's six pull-based surfaces; the notification category is proposed on #618 for when it exists |
 | Discovery gives false confidence where custom filters exist | Discovery is documented as a floor; the rejection path is a required feature, not a fallback |
 | Scope creep into Fine-Grained Policy enumeration | Explicitly out of scope on #1121; the design is additive so it can be added later without rework |
+| A passphrase style that cannot meet the target's complexity rule ships looking configured | Compose the style and validate its actual character categories and length against the discovered policy before Save; unit-test the composed-category calculation per separator and capitalisation combination |
+| The example-data word list generates an inappropriate password for a real new starter | Filter and vet the list before use, or ship a purpose-built one; assert the suitability filter in tests |
 
 ## Dependencies
 
