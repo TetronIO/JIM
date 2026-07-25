@@ -1,6 +1,6 @@
 # Worker Task Lifecycle
 
-> Last updated: 2026-07-10, JIM v0.13.0
+> Last updated: 2026-07-25, JIM v0.14.0
 
 This diagram shows how the JIM Worker service picks up, executes, and completes tasks. It covers the main polling loop, task dispatch, heartbeat management, cancellation handling, and housekeeping.
 
@@ -26,8 +26,9 @@ flowchart TD
     Heartbeat --> CheckCancel[Check database for<br/>cancellation requests<br/>matching active task IDs]
     CheckCancel --> AnyCancel{Tasks to<br/>cancel?}
     AnyCancel -->|Yes| DoCancel[For each: trigger CancellationToken<br/>CancelWorkerTaskAsync<br/>Remove from CurrentTasks]
-    AnyCancel -->|No| MainLoop
-    DoCancel --> MainLoop
+    AnyCancel -->|No| BusySleep
+    DoCancel --> BusySleep[Sleep 2 seconds<br/>paces the busy branch, #1005]
+    BusySleep --> MainLoop
 
     %% --- No active tasks: poll for new work ---
     HasTasks -->|No| PollQueue[GetNextWorkerTasksToProcessAsync<br/>Returns batch of parallel or single sequential task]
@@ -173,6 +174,8 @@ flowchart LR
 - **Per-task DI scope (#394)**<br /> Each spawned task gets its own `JimApplication` (via `IJimApplicationFactory.Create()`), `JimDbContext`, `ISyncRepository`, `ISyncServer`, and `ISyncEngine`, fully isolated from the main loop and other tasks. This avoids EF Core connection sharing issues and ensures each task can be disposed independently. The main loop has its own instance for polling and heartbeats.
 
 - **Heartbeat-based liveness (two levels)**<br /> Task-level: Active tasks have their database heartbeats updated every polling cycle (2 seconds). The scheduler uses heartbeat timestamps to detect crashed workers and recover stale tasks. Container-level (#185): The main loop writes a UTC timestamp to `/tmp/healthcheck` each iteration. Docker's `HEALTHCHECK` instruction compares file age against a staleness threshold (60 s for Worker, 120 s for Scheduler) to detect stalled service loops and trigger container restarts.
+
+- **Both loop branches are paced (#1005)**<br /> The active-task branch sleeps for 2 seconds after its heartbeat update and cancellation check, matching the idle branch. It previously looped straight back, so for the whole duration of any long-running task the loop spun as fast as its two round trips allowed (measured at 500k scale: ~200 iterations/s, 6.7M heartbeat updates and 16.4M connection-pool resets over one run). Stale-task recovery tolerates far coarser heartbeats, and up to 2 seconds of cancellation latency is acceptable.
 
 - **Startup recovery**<br /> On startup, ALL `Processing` tasks are immediately recovered (re-queued) since the worker just started and nothing can genuinely be processing.
 

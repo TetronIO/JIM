@@ -1,6 +1,6 @@
 # Export Execution Flow
 
-> Last updated: 2026-04-22, JIM v0.10.0
+> Last updated: 2026-07-25, JIM v0.14.0
 
 This diagram shows how Pending Exports are executed against Connected Systems via connectors. The export processor (`SyncExportTaskProcessor`) uses `ISyncServer` to delegate to `ExportExecutionServer` for the core execution logic, and `ISyncRepository` for bulk data access. Supports batching, parallelism, deferred reference resolution, and retry with backoff.
 
@@ -37,7 +37,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     Start([ExecuteExportsAsync]) --> Reconcile[Pre-export CREATE to DELETE<br/>reconciliation: cancel contradictory<br/>pairs persisted across sync runs<br/>CREATE+DELETE cancels both<br/>UPDATE+DELETE cancels UPDATE]
-    Reconcile --> GetExecutable[Get executable Pending Exports<br/>Database filter: Status, NextRetryAt, ErrorCount<br/>In-memory filter: has exportable attribute changes<br/>Delete exports already exported are skipped]
+    Reconcile --> GetExecutable[Establish whether there is executable work<br/>Database filter: Status, NextRetryAt, ErrorCount<br/>In-memory filter: has exportable attribute changes<br/>Delete exports already exported are skipped<br/>The same filters drive the batch sweep below]
     GetExecutable --> HasExports{Exports<br/>found?}
     HasExports -->|No| EmptyResult([Return empty result])
 
@@ -49,34 +49,44 @@ flowchart TD
 
     ConnectorType -->|IConnectorExportUsingCalls| PrepareConnector[Inject CertificateProvider<br/>and CredentialProtection]
     PrepareConnector --> OpenExport[OpenExportConnection<br/>with system settings]
-    OpenExport --> SplitExports[Split into:<br/>- Immediate exports: no unresolved references<br/>- Deferred exports: have unresolved references]
+
+    %% --- Batch collection: single forward keyset sweep ---
+    OpenExport --> Collect[Collect next page of Pending Exports<br/>keyset cursor on CreatedAt, Id, #985<br/>never rescans from the start]
+    Collect --> Empty{Page<br/>empty?}
+    Empty -->|Yes| CaptureContainers
+    Empty -->|No| SplitExports[Split the page into:<br/>- Immediate exports: no unresolved references<br/>- Deferred exports: have unresolved references]
 
     %% --- Immediate exports ---
     SplitExports --> HasImmediate{Immediate<br/>exports?}
-    HasImmediate -->|Yes| BatchImmediate[Create batches<br/>of configurable size]
-    BatchImmediate --> ParallelCheck{MaxParallelism > 1<br/>and factories provided?}
-    ParallelCheck -->|Yes| ParallelBatch[Process batches in parallel<br/>Each batch gets own:<br/>- DbContext<br/>- Connector instance<br/>Progress serialised via SemaphoreSlim<br/>LDAP concurrency auto-tuned:<br/>AD/OpenLDAP default 16,<br/>Samba/unknown default 4]
+    HasImmediate -->|Yes| ParallelCheck{MaxParallelism > 1<br/>and factories provided?}
+    ParallelCheck -->|Yes| ParallelBatch[Process batches in parallel<br/>Each batch gets own:<br/>- DbContext<br/>- Connector instance<br/>both disposed as the batch completes, #1006<br/>Progress serialised via SemaphoreSlim<br/>LDAP concurrency auto-tuned:<br/>AD/OpenLDAP default 16,<br/>Samba/unknown default 4]
     ParallelCheck -->|No| SequentialBatch[Process batches sequentially<br/>Using existing connector + DbContext]
 
-    ParallelBatch --> HasDeferred
-    SequentialBatch --> HasDeferred
+    ParallelBatch --> ClearTracker[ClearChangeTracker<br/>after each batch]
+    SequentialBatch --> ClearTracker
+    ClearTracker --> Collect
 
-    HasImmediate -->|No| HasDeferred{Deferred<br/>exports?}
+    %% --- All-deferred fast path ---
+    HasImmediate -->|No, whole page deferred| Probe{Any executable<br/>non-deferred exports<br/>beyond the cursor?}
+    Probe -->|Yes| Collect
+    Probe -->|No| CollectRest[Fast path #985c:<br/>collect ALL remaining deferred<br/>exports in one query and<br/>stop the sweep]
+    CollectRest --> CaptureContainers
 
     %% --- Deferred exports ---
+    CaptureContainers[Capture created container<br/>external IDs from connector] --> HasDeferred{Deferred<br/>exports collected?}
     HasDeferred -->|Yes| BulkFetchRefs[Bulk pre-fetch all<br/>referenced CSOs by MVO IDs<br/>in single query]
     BulkFetchRefs --> ResolveRefs[For each deferred export:<br/>Try to resolve MVO references<br/>to target system CSO external IDs]
     ResolveRefs --> Resolved{References<br/>resolved?}
-    Resolved -->|Yes| ExportResolved[Batch export resolved<br/>exports same as immediate]
+    Resolved -->|Yes| PersistRefs[Persist the resolutions BEFORE<br/>dispatching parallel batches, #994<br/>each batch loads its own copy and<br/>would otherwise export raw MVO IDs]
+    PersistRefs --> ExportResolved[Batch export resolved<br/>exports same as immediate]
     Resolved -->|No| MarkDeferred[Mark as deferred<br/>Will be retried next run]
 
-    HasDeferred -->|No| CaptureContainers
-    ExportResolved --> CaptureContainers
-    MarkDeferred --> CaptureContainers
+    HasDeferred -->|No| CloseExport
+    ExportResolved --> CloseExport
+    MarkDeferred --> CloseExport
 
-    CaptureContainers[Capture created container<br/>external IDs from connector]
-    CaptureContainers --> CloseExport[CloseExportConnection]
-    CloseExport --> SecondPass[Second pass: retry deferred<br/>references that may now<br/>be resolvable]
+    CloseExport[CloseExportConnection]
+    CloseExport --> SecondPass[Second pass: retry references deferred<br/>by a PREVIOUS export run<br/>single indexed query on the<br/>unresolved-references partial index, #1102]
     SecondPass --> Done
 
     ConnectorType -->|IConnectorExportUsingFiles| FileExport[File-based export<br/>with batching]
@@ -109,8 +119,9 @@ flowchart TD
     SetRetry --> Persist
 
     Persist[Batch persist via ParallelBatchWriter<br/>CSO updates, RPEIs, Pending Export status<br/>split across N concurrent PostgreSQL connections]
-    Persist --> CaptureItems[Capture ProcessedExportItems<br/>for RPEI creation by caller]
-    CaptureItems --> Done([Batch complete])
+    Persist --> Optimistic[Optimistic export apply #1079:<br/>write the exported values onto the CSO now<br/>rather than waiting for the confirming import<br/>Delete change types skipped;<br/>failures self-heal on the next import]
+    Optimistic --> CaptureItems[Capture ProcessedExportItems<br/>for RPEI creation by caller]
+    CaptureItems --> Done([Batch complete<br/>DbContext and connector disposed])
 ```
 
 ## LDAP Export Consolidation and Chunking
@@ -126,14 +137,14 @@ flowchart TD
 
     Merged --> CheckSize{Values ><br/>batch size?}
     CheckSize -->|No| SingleRequest[Single ModifyRequest<br/>with all values]
-    CheckSize -->|Yes| Chunk[ChunkModifyRequests:<br/>Split into batches<br/>of configurable size<br/>Default: 100]
-    Chunk --> MultiRequest[Multiple ModifyRequests<br/>sent sequentially<br/>e.g., 2 requests of 100 values]
+    CheckSize -->|Yes| Chunk[ChunkModifyRequests:<br/>Split into batches<br/>of configurable size<br/>Default: 1000]
+    Chunk --> MultiRequest[Multiple ModifyRequests<br/>sent sequentially<br/>e.g., 2 requests of 1000 values]
 
     SingleRequest --> Send([Send to LDAP server])
     MultiRequest --> Send
 ```
 
-**Batch size** is configurable via the "Modify Batch Size" connector setting (default: 100, range: 10-5000).
+**Batch size** is configurable via the "Modify Batch Size" connector setting (default: 1000, clamped to 10-5000, recommended 100-2000). The default was raised from 100 because several directory servers' per-modification cost grows with the group's current membership size, so fewer, larger requests cut total export time by an order of magnitude for groups with tens of thousands of members. Newly created Connected Systems pick up the new default; existing ones keep their stored value, since connector settings are captured per system at creation.
 
 ## Parallel Batch Architecture
 
@@ -167,6 +178,18 @@ flowchart TD
 
 - **Two-pass export**<br /> Exports without unresolved references are executed first (immediate). Exports with unresolved MVO references are deferred, with references bulk-resolved in a single query, then executed in a second pass.
 
+- **Keyset batch collection (#985)**<br /> Batches are collected in a single forward sweep with a keyset cursor on `(CreatedAt, Id)`. Executed exports drop out of the query mid-run and deferred ones stay `Pending` while being accumulated in memory, so a strictly-increasing cursor never re-reads a row. The previous OFFSET implementation restarted its scan from zero for every batch and degraded to O(n²) page loads once thousands of deferred exports accumulated; at 200,000 objects with 10,000 reference-bearing groups it spent hours re-reading collected rows before the first group reached the target system. Known trade-off: an export whose `NextRetryAt` backoff elapses mid-run at a position already behind the cursor waits for the next export run.
+
+- **All-deferred fast path (#985c)**<br /> When an entire collected page turns out to be deferred, `AnyExecutableNonDeferredExportsAfterAsync` probes for executable exports beyond the cursor; if there are none, `GetRemainingDeferredExportsAsync` collects the rest in one set-based query and the sweep stops. The probe is mandatory: deferred and executable exports interleave in `(CreatedAt, Id)` order, so a full deferred page does not prove the remainder of the queue is deferred, and breaking out without it would silently skip executable exports created after a contiguous deferred run.
+
+- **SQL-filtered second pass (#1102)**<br /> `ExecuteDeferredReferencesAsync` retries references deferred by a *previous* export run. It filters in SQL against a partial index on unresolved references. It previously loaded and hydrated the Connected System's entire Pending Export set, including every attribute value change, then filtered client-side for the usually-zero unresolved rows; at 525,000 Pending Exports that cost around 11 minutes per run even when there was nothing to resolve.
+
+- **Reference resolutions persisted before parallel dispatch (#994)**<br /> Deferred references are resolved in the caller's context, but each parallel batch re-loads its exports from its own `DbContext`. The resolutions are therefore persisted before the batches are dispatched; without that, batches saw the pre-resolution values and sent raw internal identifiers to the target system (an LDAP directory rejects these as "invalid per syntax").
+
+- **Optimistic export apply (#1079)**<br /> After a successful call-based export, the exported values are written straight onto the CSO instead of waiting for the confirming import to re-materialise them from the target system. This collapses the confirming import's write volume (measured: 524,997 exported CSOs previously re-materialised 9.8 million attribute values) and re-arms Full Synchronisation's unchanged-object fast path a run sooner. Delete change types are skipped (the CSO is being removed), and any apply failure is safe: the next confirming import self-heals it. File-based connector exports are unaffected. Applied counts are logged as a summary at the end of every export run.
+
+- **Per-batch resource release (#1006)**<br /> Each parallel batch's `DbContext` and connector are disposed as that batch completes. They were previously held for the remainder of the run, so a large reference-heavy export drained the connection pool after around 29 batches and failed with "the connection pool has been exhausted".
+
 - **Retry with backoff**<br /> Failed exports are retried with exponential backoff via `NextRetryAt`. After `MaxRetries` attempts, the export is marked as permanently `Failed`.
 
 - **No-net-change detection**<br /> Before exports are created during sync, the system checks if the target CSO already has the expected values. This happens upstream in `EvaluateExportRulesWithNoNetChangeDetectionAsync`, not during export execution.
@@ -181,6 +204,8 @@ flowchart TD
 
 - **LDAP consolidation**<br /> Multiple changes to the same attribute with the same operation type (e.g., 200 individual "member Add" operations) are consolidated into a single `DirectoryAttributeModification` before sending to the directory server. This is the correct RFC 4511 pattern and dramatically reduces the number of LDAP modify requests.
 
-- **LDAP chunking**<br /> Consolidated modifications that exceed the configurable batch size (default: 100) are split into multiple `ModifyRequest` objects sent sequentially. This prevents LDAP server rejection of oversized requests, which is important for large group membership changes.
+- **LDAP chunking**<br /> Consolidated modifications that exceed the configurable batch size (default: 1000) are split into multiple `ModifyRequest` objects sent sequentially. This prevents LDAP server rejection of oversized requests, which is important for large group membership changes.
+
+- **Connector-recommended export parallelism**<br /> When a Connected System has no explicit Max Export Parallelism, the degree of parallelism now comes from the connector's recommendation rather than defaulting to sequential. The LDAP Connector recommends two parallel batch pipelines for directories tuned to a high Export Concurrency and stays sequential otherwise. An explicitly configured value always wins.
 
 - **LDAP export concurrency auto-tuning**<br /> Export concurrency defaults are automatically tuned based on the detected directory server type. AD and OpenLDAP directories default to 16 concurrent export operations, while Samba and unknown directory types default to 4. This balances throughput against server stability; Samba's LDAP implementation is less tolerant of high concurrency.
