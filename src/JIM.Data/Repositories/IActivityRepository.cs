@@ -85,6 +85,14 @@ public interface IActivityRepository
     public Task<ActivityRunProfileExecutionStats> GetActivityRunProfileExecutionStatsAsync(Guid activityId);
 
     /// <summary>
+    /// Gets a lightweight progress snapshot for an Activity (#202): a scalar projection of the
+    /// progress fields plus an operation-type breakdown from the Activity's stat counter rows.
+    /// Cheap enough to serve at a high read frequency while a run is executing; never
+    /// materialises Run Profile Execution Items. Returns null when the Activity does not exist.
+    /// </summary>
+    public Task<ActivityProgress?> GetActivityProgressAsync(Guid activityId);
+
+    /// <summary>
     /// Finalises the Activity's Run Profile execution stat counters: recomputes the stats exactly
     /// from the persisted Run Profile Execution Items and Sync Outcomes, replaces the incremental
     /// counter rows with the exact values, and sets

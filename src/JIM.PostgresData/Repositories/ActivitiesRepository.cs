@@ -1139,12 +1139,56 @@ public class ActivityRepository : IActivityRepository
         activity.RunProfileExecutionStatsFinalised = true;
     }
 
-    private static bool IsTerminalActivityStatus(ActivityStatus status) => status is
-        ActivityStatus.Complete
-        or ActivityStatus.CompleteWithWarning
-        or ActivityStatus.CompleteWithError
-        or ActivityStatus.FailedWithError
-        or ActivityStatus.Cancelled;
+    /// <inheritdoc />
+    public async Task<ActivityProgress?> GetActivityProgressAsync(Guid activityId)
+    {
+        // Scalar projection only: the progress read is served at a high frequency while a run is
+        // executing, so it must never materialise the Activity's execution item graph.
+        var progress = await Repository.Database.Activities
+            .AsNoTracking()
+            .Where(a => a.Id == activityId)
+            .Select(a => new ActivityProgress
+            {
+                ActivityId = a.Id,
+                Status = a.Status,
+                Message = a.Message,
+                ObjectsProcessed = a.ObjectsProcessed,
+                ObjectsToProcess = a.ObjectsToProcess,
+                Created = a.Created,
+                Executed = a.Executed == default ? null : a.Executed,
+                TargetType = a.TargetType,
+                RunType = a.ConnectedSystemRunType
+            })
+            .SingleOrDefaultAsync();
+
+        if (progress == null)
+            return null;
+
+        // Operation breakdown from the stat counter rows (#1078): advisory incremental values
+        // while the run is in flight, exact values once finalised. O(counter rows) either way.
+        var counters = await Repository.Database.ActivityStatCounters
+            .AsNoTracking()
+            .Where(c => c.ActivityId == activityId &&
+                        (c.Dimension == ActivityStatDimension.ObjectChangeType || c.Dimension == ActivityStatDimension.ErrorType))
+            .ToListAsync();
+
+        foreach (var counter in counters)
+        {
+            switch (counter.Dimension)
+            {
+                case ActivityStatDimension.ObjectChangeType when int.TryParse(counter.Key, out var changeType):
+                    progress.OperationCounts[((ObjectChangeType)changeType).ToString()] = counter.Count;
+                    break;
+                case ActivityStatDimension.ErrorType:
+                    progress.TotalErrors += counter.Count;
+                    break;
+            }
+        }
+
+        return progress;
+    }
+
+    private static bool IsTerminalActivityStatus(ActivityStatus status) => status.IsTerminal();
 
     /// <summary>
     /// Builds the stat aggregation from the persisted <see cref="ActivityStatCounter"/> rows.

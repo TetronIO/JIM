@@ -206,7 +206,7 @@ Get-JIMExampleDataTemplate -Page 1 -PageSize 10
 
 ## Invoke-JIMExampleDataTemplate
 
-Executes a data generation template to create identity objects in the metaverse. Execution is asynchronous: the cmdlet returns as soon as the server has accepted the request, before data generation has finished. Monitor progress and completion via Activities ([`Get-JIMActivity`](activities.md)).
+Executes a data generation template to create identity objects in the metaverse. Execution is queued to the JIM worker service and tracked by an Activity: the cmdlet returns as soon as the server has queued the request. Monitor progress and completion via Activities ([`Get-JIMActivity`](activities.md)), or use `-Wait` to block until generation completes with a live progress display.
 
 Supports `ShouldProcess`, so you can use `-WhatIf` or `-Confirm` to preview or confirm execution before it begins.
 
@@ -214,10 +214,10 @@ Supports `ShouldProcess`, so you can use `-WhatIf` or `-Confirm` to preview or c
 
 ```powershell
 # ById (default)
-Invoke-JIMExampleDataTemplate -Id <int> [-PassThru] [-WhatIf] [-Confirm]
+Invoke-JIMExampleDataTemplate -Id <int> [-Wait] [-Timeout <int>] [-PassThru] [-WhatIf] [-Confirm]
 
 # ByName
-Invoke-JIMExampleDataTemplate -Name <string> [-PassThru] [-WhatIf] [-Confirm]
+Invoke-JIMExampleDataTemplate -Name <string> [-Wait] [-Timeout <int>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -226,13 +226,15 @@ Invoke-JIMExampleDataTemplate -Name <string> [-PassThru] [-WhatIf] [-Confirm]
 |------|------|----------|---------|-------------|
 | `Id` | `int` | Yes (ById set) | | The ID of the template to execute. Accepts pipeline input. |
 | `Name` | `string` | Yes (ByName set) | | The name of the template to execute. |
+| `Wait` | `switch` | No | `false` | Wait for generation to complete, showing live progress (object counts, throughput and estimated time remaining). |
+| `Timeout` | `int` | No | | Maximum seconds to wait when using `-Wait`; throws if exceeded. Waits indefinitely when omitted. |
 | `PassThru` | `switch` | No | `false` | Return execution information to the pipeline. |
 | `WhatIf` | `switch` | No | | Preview the operation without executing it. |
 | `Confirm` | `switch` | No | | Prompt for confirmation before executing. |
 
 ### Output
 
-By default, this cmdlet produces no output. When `-PassThru` is specified, returns a `PSCustomObject` with `TemplateId`, `Status` and `Message` properties confirming the request was accepted; it does not report completion, since the operation is still running asynchronously on the server at that point.
+By default, this cmdlet produces no output. When `-PassThru` is specified, returns a `PSCustomObject` with `TemplateId`, `ActivityId`, `TaskId`, `Status` and `Message` properties confirming the request was queued. `ActivityId` identifies the Activity tracking the generation; pass it to [`Get-JIMActivity`](activities.md) to check progress and completion (or combine with `-Wait`, in which case the object is returned after completion).
 
 ### Examples
 
@@ -258,9 +260,17 @@ Get-JIMExampleDataTemplate -Name "UK Organisation" |
 Invoke-JIMExampleDataTemplate -Id 3 -WhatIf
 ```
 
-```powershell title="Execute, then monitor progress via Activities"
-Invoke-JIMExampleDataTemplate -Id 3
-Get-JIMActivity -Page 1 -PageSize 10
+```powershell title="Execute and wait for completion with live progress"
+Invoke-JIMExampleDataTemplate -Id 3 -Wait
+```
+
+```powershell title="Execute and wait up to 10 minutes"
+Invoke-JIMExampleDataTemplate -Id 3 -Wait -Timeout 600
+```
+
+```powershell title="Execute, then follow the Activity"
+$result = Invoke-JIMExampleDataTemplate -Id 3 -PassThru
+Get-JIMActivity -Id $result.ActivityId
 ```
 
 ---

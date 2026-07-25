@@ -561,6 +561,11 @@ try
         new PostgresNotificationListener(JimDbContext.BuildListenerConnectionString()));
     builder.Services.AddHostedService<NotificationListenerService>();
 
+    // Live run-profile progress (issue #202): one shared ETA tracker so the progress API endpoint
+    // and the Activity detail page derive their throughput estimates from the same sample history.
+    builder.Services.AddSingleton(TimeProvider.System);
+    builder.Services.AddSingleton<IActivityEtaTracker, ActivityEtaTracker>();
+
     var app = builder.Build();
 
     // Configure the HTTP request pipeline.

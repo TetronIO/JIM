@@ -137,7 +137,7 @@ public class OptimisticExportApplyDatabaseTests
             StringValue = "new@example.com"
         };
 
-        await repository.Sync.ApplyExportedAttributeValuesAsync([newValue], [existing.Id]);
+        await repository.Sync.ApplyExportedAttributeValuesAsync([newValue], [existing.Id], [csoId]);
 
         await using var verify = NewContext();
         var storedValues = await verify.ConnectedSystemObjectAttributeValues
@@ -172,7 +172,7 @@ public class OptimisticExportApplyDatabaseTests
             .SingleAsync(c => c.Id == csoId);
         var trackedValue = trackedCso.AttributeValues.Single();
 
-        await repository.Sync.ApplyExportedAttributeValuesAsync([], [trackedValue.Id]);
+        await repository.Sync.ApplyExportedAttributeValuesAsync([], [trackedValue.Id], [csoId]);
 
         Assert.That(ctx.ChangeTracker.Entries<ConnectedSystemObjectAttributeValue>().Any(e => e.Entity.Id == trackedValue.Id), Is.False,
             "the raw delete must detach the tracked instance");
@@ -210,7 +210,7 @@ public class OptimisticExportApplyDatabaseTests
             StringValue = "idempotent@example.com"
         };
 
-        await repository.Sync.ApplyExportedAttributeValuesAsync([addedValue], []);
+        await repository.Sync.ApplyExportedAttributeValuesAsync([addedValue], [], [csoId]);
 
         // Reload fresh from the database, as the next batch/run would, and re-run the calculator
         // against the SAME Pending Export attribute change.
@@ -241,6 +241,48 @@ public class OptimisticExportApplyDatabaseTests
 
         Assert.That(delta.Additions, Is.Empty, "the persisted round-trip must satisfy the calculator's existence check");
         Assert.That(delta.RemovalValueIds, Is.Empty);
+    }
+
+    /// <summary>
+    /// SPEC-1082 D9, test plan item 8: a CSO stamped with an import content hash whose values are
+    /// then mutated by optimistic export apply must have both stamp columns nulled by the SAME
+    /// call, so a subsequent Full Import never trusts a hash describing content that has since
+    /// changed. LastUpdated must remain untouched (D2/#891), exactly as before this feature.
+    /// </summary>
+    [Test]
+    public async Task ApplyExportedAttributeValuesAsync_StampedCso_NullsImportStateHashAndFingerprintAsync()
+    {
+        var (attr, csoId) = await SeedCsoAsync("old@example.com");
+
+        // Simulate a prior Full Import stamp.
+        await using (var stampCtx = NewContext())
+        {
+            var stampRepository = new PostgresDataRepository(stampCtx);
+            await stampRepository.Sync.StampImportStateAsync([(csoId, Guid.NewGuid(), Guid.NewGuid())]);
+        }
+
+        await using var ctx = NewContext();
+        var repository = new PostgresDataRepository(ctx);
+
+        var existing = await ctx.ConnectedSystemObjectAttributeValues.AsNoTracking()
+            .SingleAsync(av => av.ConnectedSystemObject.Id == csoId);
+        var cso = await ctx.ConnectedSystemObjects.AsNoTracking().SingleAsync(c => c.Id == csoId);
+
+        var newValue = new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = cso,
+            AttributeId = attr.Id,
+            StringValue = "new@example.com"
+        };
+
+        await repository.Sync.ApplyExportedAttributeValuesAsync([newValue], [existing.Id], [csoId]);
+
+        await using var verify = NewContext();
+        var storedCso = await verify.ConnectedSystemObjects.SingleAsync(c => c.Id == csoId);
+        Assert.That(storedCso.ImportStateHash, Is.Null, "optimistic apply must null the stored import content hash (D9)");
+        Assert.That(storedCso.ImportStateFingerprint, Is.Null, "optimistic apply must null the stored schema fingerprint (D9)");
+        Assert.That(storedCso.LastUpdated, Is.Null, "optimistic apply must never stamp LastUpdated (D2)");
     }
 
     /// <summary>

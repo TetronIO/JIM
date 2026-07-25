@@ -2336,6 +2336,22 @@ public class ExportEvaluationServer
         cso.AttributeValues ??= new List<ConnectedSystemObjectAttributeValue>();
         cso.AttributeValues.Add(attributeValue);
 
+        // SPEC-1082 D9: this writes an attribute value outside the Full Import stamp path (D6/D7).
+        // Null both columns in-memory (for the !deferSave EF-tracked SaveChanges path below) AND via
+        // an explicit StampImportStateAsync(null, null) call, which persists regardless of
+        // deferSave/persistence mechanism - the deferred batch flush path does not read these
+        // in-memory properties, so relying on the in-memory assignment alone would leave a stale
+        // hash in the database when deferSave is true. Guarded on the loaded values: this method
+        // runs once per provisioned object, and freshly provisioned PendingProvisioning CSOs are
+        // born with NULL import state (D6 creates NULL-write both columns), so an unguarded call
+        // would add one no-op UPDATE round trip per object at bulk provisioning scale.
+        if (cso.ImportStateHash != null || cso.ImportStateFingerprint != null)
+        {
+            cso.ImportStateHash = null;
+            cso.ImportStateFingerprint = null;
+            await SyncRepo.StampImportStateAsync([(cso.Id, (Guid?)null, (Guid?)null)]);
+        }
+
         // Persist immediately unless caller requested deferred saving for batch operations
         if (!deferSave)
         {

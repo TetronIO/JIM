@@ -2384,6 +2384,12 @@ namespace JIM.PostgresData.Migrations
                     b.Property<int>("ExternalIdAttributeId")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("ImportStateFingerprint")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ImportStateHash")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("JoinType")
                         .HasColumnType("integer");
 
@@ -2797,6 +2803,11 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<int>("RunType")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("VerifyImportContentHashes")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.HasKey("Id");
 
@@ -3238,6 +3249,10 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemId")
+                        .HasDatabaseName("IX_PendingExports_ConnectedSystemId_HasUnresolvedReferences")
+                        .HasFilter("\"HasUnresolvedReferences\"");
 
                     b.HasIndex("ConnectedSystemObjectId")
                         .IsUnique()

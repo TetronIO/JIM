@@ -1,0 +1,50 @@
+@using JIM.Models.Tasking
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Renders the live progress affordance for a Worker Task (a determinate or indeterminate progress bar plus
+   caption, or a short waiting label), driven by its status and the progress fields carried on its Activity.
+   Shared by the Operations queue and any page that initiates a task and wants to show progress in place. *@
+
+@if (Status == WorkerTaskStatus.Processing)
+{
+    if (ObjectsToProcess.HasValue && ObjectsToProcess.Value > 0 && ObjectsProcessed.HasValue)
+    {
+        var processed = ObjectsProcessed.Value;
+        var total = ObjectsToProcess.Value;
+        var percentage = (double)processed / total * 100;
+        <MudProgressLinear Value="@percentage" Color="Color.Info" Rounded="true" />
+        <MudText Typo="Typo.caption" Class="mt-3">@processed.ToString("N0") / @total.ToString("N0")@(!string.IsNullOrEmpty(ProgressMessage) ? $" - {ProgressMessage}" : "")</MudText>
+    }
+    else
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Info" Rounded="true" />
+        if (!string.IsNullOrEmpty(ProgressMessage))
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">@ProgressMessage</MudText>
+        }
+    }
+}
+else if (Status == WorkerTaskStatus.Queued)
+{
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">Waiting...</MudText>
+}
+else if (Status == WorkerTaskStatus.WaitingForPreviousStep)
+{
+    <MudText Typo="Typo.caption" Class="mud-text-secondary">Waiting for previous step...</MudText>
+}
+
+@code {
+    [Parameter]
+    public WorkerTaskStatus Status { get; set; }
+
+    [Parameter]
+    public int? ObjectsToProcess { get; set; }
+
+    [Parameter]
+    public int? ObjectsProcessed { get; set; }
+
+    [Parameter]
+    public string? ProgressMessage { get; set; }
+}

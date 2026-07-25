@@ -86,7 +86,7 @@ For detailed air-gapped deployment guidance, see the [Deployment Guide](../admin
 
 ### Accessing JIM
 
-Once running, access JIM at [http://localhost:5200](http://localhost:5200). Log in with your identity provider, then use the **Example Data** feature to populate JIM with sample users and groups for testing.
+Once running, access JIM at [http://localhost:5200](http://localhost:5200). Log in with your identity provider, then use the **Example Data** feature to populate JIM with sample users and groups for testing. When you execute a template, a live progress bar appears on the template page so you can watch generation and persistence progress without leaving it; the same task is also visible on the Operations page.
 
 For production hardening (TLS, reverse proxy, upgrades, monitoring), see the [Deployment Guide](../administration/deployment.md).
 

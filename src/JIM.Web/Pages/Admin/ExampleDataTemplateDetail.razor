@@ -4,6 +4,7 @@
 @using JIM.Models.ExampleData
 @using JIM.Models.Core
 @using JIM.Models.Tasking
+@using JIM.Models.Tasking.DTOs
 @using JIM.Web.Pages.Admin.Components
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
@@ -193,6 +194,41 @@
         }
     </MudButton>
     </MudAlert>
+
+    @if (_workerTask != null)
+    {
+        <MudPaper Outlined="true" Class="pa-4 mt-4">
+            <MudText Typo="Typo.h6" Class="mb-2">Data generation progress</MudText>
+            <WorkerTaskProgress Status="@_workerTask.Status" ObjectsToProcess="@_workerTask.ObjectsToProcess" ObjectsProcessed="@_workerTask.ObjectsProcessed" ProgressMessage="@_workerTask.ProgressMessage" />
+        </MudPaper>
+    }
+    else if (_completedActivity != null)
+    {
+        var completed = _completedActivity;
+        <MudPaper Outlined="true" Class="pa-4 mt-4">
+            <MudText Typo="Typo.h6" Class="mb-2">Data generation progress</MudText>
+            @if (completed.Status is ActivityStatus.Complete or ActivityStatus.CompleteWithWarning)
+            {
+                <MudProgressLinear Value="100" Color="Color.Success" Rounded="true" />
+                <div class="d-flex align-center mt-3">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" Class="mr-2" />
+                    <MudText Typo="Typo.body2">Generation complete: @completed.TotalCreated.ToString("N0") objects created.</MudText>
+                </div>
+                @if (completed.Status == ActivityStatus.CompleteWithWarning && !string.IsNullOrEmpty(completed.Message))
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">@completed.Message</MudText>
+                }
+            }
+            else if (completed.Status == ActivityStatus.Cancelled)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-1">Generation was cancelled. <MudLink Href="@($"/activity/{completed.Id}")">View details</MudLink></MudAlert>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mt-1">Generation failed@(string.IsNullOrEmpty(completed.Message) ? "." : $": {completed.Message}") <MudLink Href="@($"/activity/{completed.Id}")">View details</MudLink></MudAlert>
+            }
+        </MudPaper>
+    }
         </MudTabPanel>
 
         <MudTabPanel Text="Changes" BadgeData="@(_changeCount > 0 ? _changeCount.ToString("N0") : null)" BadgeColor="Color.Primary">
@@ -209,7 +245,13 @@
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
     private ExampleDataTemplate? _template;
     private ExampleDataTemplateWorkerTask? _task;
+    private WorkerTaskHeader? _workerTask;
     private WorkerTaskStatus? _status;
+    // The Activity id of the task while it is running, captured so its outcome can be shown once it completes.
+    private Guid? _activeActivityId;
+    // The completed Activity, left in place after the task finishes so the progress panel shows the result
+    // rather than disappearing. Only set for a run observed to complete during this page session.
+    private Activity? _completedActivity;
     private bool _isExecuting;
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private int _changeCount;
@@ -239,10 +281,12 @@
 
         // Has this template already been scheduled, or is it already being processed on the service queue?
         // Event-driven refresh (issue #307): a Worker Task change notification triggers an immediate
-        // status refresh; the timer is the polling fallback, re-armed each cycle at 2 seconds while
-        // real-time notifications are unavailable or 30 seconds (a reconciliation safety net) while they
-        // are flowing.
+        // status refresh, and an Activity progress notification refreshes the live progress bar as objects
+        // are generated and persisted; the timer is the polling fallback, re-armed each cycle at 2 seconds
+        // while real-time notifications are unavailable or 30 seconds (a reconciliation safety net) while
+        // they are flowing.
         UiNotifications.WorkerTaskChanged += OnWorkerTaskChanged;
+        UiNotifications.ActivityProgressChanged += OnActivityProgressChanged;
         UiNotifications.RealTimeAvailabilityChanged += OnRealTimeAvailabilityChanged;
         await RefreshWorkerTaskStatusAsync();
         _statusPollTimer = new Timer(async _ => await OnStatusPollTimerElapsedAsync(), null, GetPollingInterval(), Timeout.InfiniteTimeSpan);
@@ -251,6 +295,7 @@
     public void Dispose()
     {
         UiNotifications.WorkerTaskChanged -= OnWorkerTaskChanged;
+        UiNotifications.ActivityProgressChanged -= OnActivityProgressChanged;
         UiNotifications.RealTimeAvailabilityChanged -= OnRealTimeAvailabilityChanged;
         _statusPollTimer?.Dispose();
         _statusPollTimer = null;
@@ -287,6 +332,9 @@
 
     private void OnWorkerTaskChanged(WorkerTaskChangeNotification notification) => TriggerNotificationRefresh();
 
+    // An Activity progress update (objects generated/persisted, message changed) moves the live progress bar.
+    private void OnActivityProgressChanged(Guid activityId) => TriggerNotificationRefresh();
+
     // On reconnection, refresh immediately to reconcile anything missed while real-time was unavailable.
     private void OnRealTimeAvailabilityChanged(bool available) => TriggerNotificationRefresh();
 
@@ -310,9 +358,9 @@
     }
 
     /// <summary>
-    /// Fetches the current Worker Task status for this template and re-renders only when it changed.
-    /// Serves both the timer fallback and event-driven refreshes; overlapping invocations are skipped
-    /// via a non-blocking semaphore.
+    /// Fetches the current Worker Task header (status plus live progress) for this template and re-renders
+    /// only when the status or any progress field changed. Serves both the timer fallback and event-driven
+    /// refreshes; overlapping invocations are skipped via a non-blocking semaphore.
     /// </summary>
     private async Task RefreshWorkerTaskStatusAsync()
     {
@@ -325,12 +373,27 @@
         try
         {
             using var refreshJim = JimFactory.Create();
-            var newStatus = await refreshJim.Tasking.GetFirstExampleDataTemplateWorkerTaskStatus(_template.Id);
-            var stateHasChanged = newStatus != _status;
-            _status = newStatus;
+            var newWorkerTask = await refreshJim.Tasking.GetFirstExampleDataTemplateWorkerTaskHeaderAsync(_template.Id);
+            var stateHasChanged = HasWorkerTaskChanged(_workerTask, newWorkerTask);
 
-            // Reset the executing flag when the task completes (status becomes null)
-            if (newStatus == null && _isExecuting)
+            // Capture the Activity id while the task is processing, so we can show its outcome once it completes.
+            if (newWorkerTask?.ActivityId != null)
+                _activeActivityId = newWorkerTask.ActivityId;
+
+            // Task just finished (was active, now gone): fetch its completed Activity and leave the result in the
+            // panel rather than letting it vanish. Only do this for a task we observed running (ActivityId captured).
+            if (newWorkerTask == null && _workerTask != null && _activeActivityId != null)
+            {
+                _completedActivity = await refreshJim.Activities.GetActivityAsync(_activeActivityId.Value);
+                _activeActivityId = null;
+                stateHasChanged = true;
+            }
+
+            _workerTask = newWorkerTask;
+            _status = newWorkerTask?.Status;
+
+            // Reset the executing flag when the task completes (no active task remains)
+            if (newWorkerTask == null && _isExecuting)
             {
                 _isExecuting = false;
                 stateHasChanged = true;
@@ -345,6 +408,19 @@
         }
     }
 
+    private static bool HasWorkerTaskChanged(WorkerTaskHeader? existing, WorkerTaskHeader? updated)
+    {
+        if (existing == null && updated == null)
+            return false;
+        if (existing == null || updated == null)
+            return true;
+
+        return existing.Status != updated.Status ||
+               existing.ObjectsProcessed != updated.ObjectsProcessed ||
+               existing.ObjectsToProcess != updated.ObjectsToProcess ||
+               existing.ProgressMessage != updated.ProgressMessage;
+    }
+
     private async Task ExecuteTemplateAsync()
     {
         if (_template == null || _isExecuting)
@@ -352,6 +428,10 @@
 
         // Immediately disable the button to prevent double-clicks
         _isExecuting = true;
+
+        // Clear any previous run's result so the panel shows this run's progress, not the last outcome.
+        _completedActivity = null;
+        _activeActivityId = null;
 
         // attribute the execution to the user
         using var jim = JimFactory.Create();
@@ -366,7 +446,9 @@
             return;
         }
 
-        // Set status to queued immediately so UI reflects the state
+        // Reflect the queued state immediately so the button and the progress panel update without waiting for
+        // the first refresh; the next refresh replaces this with the real header carrying Activity progress.
         _status = WorkerTaskStatus.Queued;
+        _workerTask = new WorkerTaskHeader { Status = WorkerTaskStatus.Queued, Name = _template.Name, Type = "Example Data Template" };
     }
 }

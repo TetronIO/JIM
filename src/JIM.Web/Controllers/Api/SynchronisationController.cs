@@ -1468,6 +1468,10 @@ public class SynchronisationController(
         if (system == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
+        // SPEC-1082 D10: Verification Mode only applies to Full Import runs.
+        if (request.VerifyImportContentHashes && request.RunType != ConnectedSystemRunType.FullImport)
+            return BadRequest(ApiErrorResponse.BadRequest("VerifyImportContentHashes can only be enabled on a Full Import Run Profile."));
+
         // Create the Run Profile
         var runProfile = new ConnectedSystemRunProfile
         {
@@ -1475,7 +1479,8 @@ public class SynchronisationController(
             ConnectedSystemId = connectedSystemId,
             RunType = request.RunType,
             PageSize = request.PageSize,
-            FilePath = request.FilePath
+            FilePath = request.FilePath,
+            VerifyImportContentHashes = request.VerifyImportContentHashes
         };
 
         // Set partition if provided
@@ -1555,6 +1560,16 @@ public class SynchronisationController(
 
         if (request.FilePath != null)
             runProfile.FilePath = request.FilePath;
+
+        // SPEC-1082 D10: Verification Mode only applies to Full Import runs. RunType itself is
+        // immutable after create, so validate against the Run Profile's existing RunType.
+        if (request.VerifyImportContentHashes.HasValue)
+        {
+            if (request.VerifyImportContentHashes.Value && runProfile.RunType != ConnectedSystemRunType.FullImport)
+                return BadRequest(ApiErrorResponse.BadRequest("VerifyImportContentHashes can only be enabled on a Full Import Run Profile."));
+
+            runProfile.VerifyImportContentHashes = request.VerifyImportContentHashes.Value;
+        }
 
         // Update partition if provided
         if (request.PartitionId.HasValue)

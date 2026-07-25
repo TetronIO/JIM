@@ -478,9 +478,9 @@ namespace JIM.Application.Servers
             return await Application.Repository.Tasking.GetFirstExampleDataWorkerTaskAsync(templateId);
         }
 
-        public async Task<WorkerTaskStatus?> GetFirstExampleDataTemplateWorkerTaskStatus(int templateId)
+        public async Task<WorkerTaskHeader?> GetFirstExampleDataTemplateWorkerTaskHeaderAsync(int templateId)
         {
-            return await Application.Repository.Tasking.GetFirstExampleDataTemplateWorkerTaskStatus(templateId);
+            return await Application.Repository.Tasking.GetFirstExampleDataTemplateWorkerTaskHeaderAsync(templateId);
         }
         #endregion
 

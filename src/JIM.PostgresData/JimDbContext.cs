@@ -375,6 +375,12 @@ public class JimDbContext : DbContext
             .Property(srm => srm.InitialExportOnly)
             .HasDefaultValue(false);
 
+        // SPEC-1082 D10: Run Profile Verification Mode defaults to false (no behavioural change for
+        // existing Run Profiles); the store-level default backfills existing rows on migration.
+        modelBuilder.Entity<ConnectedSystemRunProfile>()
+            .Property(rp => rp.VerifyImportContentHashes)
+            .HasDefaultValue(false);
+
         // ObjectMatchingRule can belong to either SyncRule or ConnectedSystemObjectType (mutually exclusive)
         modelBuilder.Entity<SyncRule>()
             .HasMany(sr => sr.ObjectMatchingRules)
@@ -461,6 +467,14 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<PendingExport>()
             .HasIndex(pe => new { pe.ConnectedSystemId, pe.Status })
             .HasDatabaseName("IX_PendingExports_ConnectedSystemId_Status");
+
+        // PendingExport: partial index for the deferred-reference second pass (#1102).
+        // Rows with unresolved references are rare (usually zero), so the partial index
+        // keeps the common no-deferred-exports probe near-free at any scale.
+        modelBuilder.Entity<PendingExport>()
+            .HasIndex(pe => pe.ConnectedSystemId)
+            .HasDatabaseName("IX_PendingExports_ConnectedSystemId_HasUnresolvedReferences")
+            .HasFilter("\"HasUnresolvedReferences\"");
 
         // PendingExport: composite index supporting keyset pagination in export batch collection
         // (ORDER BY CreatedAt, Id with a (CreatedAt, Id) > (cursor) predicate; issue #985).

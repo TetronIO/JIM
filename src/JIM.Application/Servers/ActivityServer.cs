@@ -519,6 +519,15 @@ public class ActivityServer
     }
 
     /// <summary>
+    /// Gets a lightweight progress snapshot for an Activity (#202), or null when the Activity
+    /// does not exist. See <see cref="ActivityProgress"/> for the shape.
+    /// </summary>
+    public async Task<ActivityProgress?> GetActivityProgressAsync(Guid activityId)
+    {
+        return await Application.Repository.Activity.GetActivityProgressAsync(activityId);
+    }
+
+    /// <summary>
     /// Queries the database for RPEI error counts for an activity. Returns the total number of
     /// RPEIs with errors, the total number of RPEIs, and the number of UnhandledError RPEIs,
     /// enabling precise activity completion status determination without loading RPEIs into memory.
