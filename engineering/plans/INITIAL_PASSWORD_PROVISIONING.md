@@ -69,11 +69,23 @@ Provisioning (Create export succeeds, external id known)
 2. `PasswordSetResult` and `PasswordSetFailureReason` in `JIM.Models/Staging/`, classifying transient / configuration-fault / policy-rejection outcomes. Classification drives everything downstream, so it belongs in the connector contract rather than being inferred from an error string.
 3. `SupportsPasswordSet` on `IConnectorCapabilities`, mirrored on `ConnectorDefinition`; migration.
 4. `ConnectorFactory` wiring, following the existing `SetCredentialProtection` / `SetCertificateProvider` pattern.
-5. LDAP implementation: Active Directory mode (`unicodePwd`, quoted UTF-16LE, refuse unless LDAPS) and generic mode (`userPassword`), selected by a per-system setting; plus change-at-next-sign-in and the create-disabled/set/enable ordering.
+5. LDAP implementation: Active Directory mode (`unicodePwd`, quoted UTF-16LE, refuse unless LDAPS) and generic mode (`userPassword`), selected by a per-system setting; plus the expiry states below and the create-disabled/set/enable ordering.
+
+**Password expiry is one tri-state choice, not two switches.** Active Directory treats "must change at next sign-in" (`pwdLastSet = 0`) and "never expires" (the `DONT_EXPIRE_PASSWORD` flag in `userAccountControl`) as mutually exclusive; the native tooling greys one out when the other is set. Modelling them as independent toggles would let an administrator save a contradiction the target cannot honour, so the configuration carries a single enum:
+
+| State | Active Directory effect |
+|-------|------------------------|
+| Require a change at next sign-in (default) | `pwdLastSet = 0` |
+| Expires according to the target's policy | `pwdLastSet` set normally, `DONT_EXPIRE_PASSWORD` clear |
+| Never expires | `DONT_EXPIRE_PASSWORD` set |
+
+**Not every target supports every state**, so the connector declares which it can honour and the UI offers only those, in the same spirit as the existing capability flags. Generic LDAP has no per-entry never-expires equivalent (expiry is governed by the applicable password policy), so that state is unavailable there and the UI says so rather than silently ignoring it. Where a multi-target operation includes a system that cannot honour the selected state, say which system and what it will do instead; never fail the whole operation over it.
+
+**"Never expires" warrants a warning, not a block.** It is legitimate for service and system accounts and inappropriate for people, and it is the kind of setting a compliance reviewer will ask about, so the UI labels its intended use and `engineering/COMPLIANCE_MAPPING.md` should note where it can be set.
 6. Credential-attribute denylist (`unicodePwd`, `userPassword`, `dBCSPwd`, `ntPwdHistory`, `lmPwdHistory`, `supplementalCredentials`, `unixUserPassword`, `msDS-ManagedPassword`): excluded from importable schema and from Attribute Flow target selection, with a configuration warning for credential-like names outside the list.
 7. Mock connector support so the pipeline is testable without a directory.
 
-**Tests:** capability declaration; LDAPS refusal; `unicodePwd` encoding (byte-level assertion); denylist exclusion from schema and Attribute Flow; result classification.
+**Tests:** capability declaration; LDAPS refusal; `unicodePwd` encoding (byte-level assertion); denylist exclusion from schema and Attribute Flow; result classification; each expiry state produces the correct `pwdLastSet` and `userAccountControl` bits, and an unsupported state is reported rather than silently dropped.
 
 ### Phase 2: Password policy discovery
 
