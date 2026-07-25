@@ -93,7 +93,7 @@ Some attributes hold credential material, or a hash of it. JIM will never import
 
 There are two reasons. Most of these cannot be read back meaningfully (a directory returns nothing at all for `unicodePwd`, and opaque blobs for the history attributes), so anything imported would be empty or meaningless and every subsequent synchronisation would see a spurious change. The rest hold live credential material, and anything that reaches the Metaverse is replicated onward to every other Connected System in scope, written into change history, and rendered in the portal.
 
-Passwords are synchronised through JIM's dedicated password channel instead. That channel writes a password to a Connected System and never reads it back, so it is never held in the Metaverse. For LDAP and Active Directory the LDAP Connector writes `unicodePwd` itself, with the correct encoding, and only over LDAPS.
+Passwords are synchronised through JIM's dedicated password channel instead. That channel writes a password to a Connected System and never reads it back, so it is never held in the Metaverse. For LDAP and Active Directory the LDAP Connector writes `unicodePwd` itself, with the correct encoding; see [Setting Passwords](../connectors/jim-ldap-connector.md#setting-passwords) for the connection requirements.
 
 What you will see:
 

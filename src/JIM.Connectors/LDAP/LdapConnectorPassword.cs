@@ -13,8 +13,7 @@ namespace JIM.Connectors.LDAP;
 /// <para>
 /// Two mechanisms, chosen by directory type. Active Directory has no support for the standard password
 /// mechanism and requires its own proprietary attribute; everything else uses the RFC 3062 Password Modify
-/// extended operation. Neither one writes a password attribute directly, and both require an encrypted
-/// connection. See <see cref="SetPasswordAsync"/> for why.
+/// extended operation. Neither one writes a password attribute directly.
 /// </para>
 /// <para>
 /// No method on this class ever logs, returns, or persists the password value.
@@ -26,17 +25,20 @@ internal class LdapConnectorPassword
     private readonly ILogger _logger;
     private readonly LdapDirectoryType _directoryType;
     private readonly bool _supportsPasswordModifyExtension;
+    private readonly bool _isConnectionEncrypted;
 
     internal LdapConnectorPassword(
         ILdapOperationExecutor executor,
         ILogger logger,
         LdapDirectoryType directoryType,
-        bool supportsPasswordModifyExtension)
+        bool supportsPasswordModifyExtension,
+        bool isConnectionEncrypted)
     {
         _executor = executor;
         _logger = logger;
         _directoryType = directoryType;
         _supportsPasswordModifyExtension = supportsPasswordModifyExtension;
+        _isConnectionEncrypted = isConnectionEncrypted;
     }
 
     /// <summary>
@@ -400,7 +402,32 @@ internal class LdapConnectorPassword
         _logger.Warning("LdapConnectorPassword: Could not {Operation}. Result code {ResultCode}, classified as {Reason}. {Detail}",
             LogSanitiser.Sanitise(operationDescription), resultCode, reason, LogSanitiser.Sanitise(detail));
 
-        return PasswordSetResult.Failed(reason, $"JIM could not {operationDescription}: {detail}");
+        var message = $"JIM could not {operationDescription}: {detail}";
+        if (IsLikelyCausedByAnUnencryptedConnection(resultCode))
+            message += " This Connected System is not using an encrypted connection, and directories commonly refuse " +
+                       "password operations over one. Enabling LDAPS on the Connected System is the most likely fix.";
+
+        return PasswordSetResult.Failed(reason, message);
+    }
+
+    /// <summary>
+    /// Whether a refusal is one that an unencrypted connection would explain.
+    /// <para>
+    /// Active Directory rejects a password write unless the connection is encrypted or the bind is signed and
+    /// sealed, and it reports that as a fairly opaque result code. Naming the likely cause turns a puzzling
+    /// failure into an actionable one, but only where the code actually fits: appending it to a policy rejection
+    /// would send an administrator off to fix the wrong thing.
+    /// </para>
+    /// </summary>
+    private bool IsLikelyCausedByAnUnencryptedConnection(ResultCode resultCode)
+    {
+        if (_isConnectionEncrypted)
+            return false;
+
+        return resultCode is ResultCode.ConfidentialityRequired
+            or ResultCode.StrongAuthRequired
+            or ResultCode.InappropriateAuthentication
+            or ResultCode.UnwillingToPerform;
     }
 
     /// <summary>

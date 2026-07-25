@@ -572,23 +572,88 @@ public class LdapConnectorPasswordTests
     }
 
     /// <summary>
-    /// A password set puts the password on the wire, so an unencrypted connection would expose every password in
-    /// the run. This fails at the point the channel is opened rather than per object, so nothing is ever sent.
+    /// An unencrypted connection is a bad idea, not a refusal. Some deployments genuinely cannot offer TLS on
+    /// their directory, and locking those sites out of password management entirely helps nobody; JIM warns
+    /// instead and lets the administrator decide. This asserts the channel does not reject the configuration out
+    /// of hand: it gets as far as trying to reach the directory, which is a different failure entirely.
     /// </summary>
     [Test]
-    public void OpenPasswordConnection_WithoutSecureConnectionEnabled_RefusesToOpen()
+    public void OpenPasswordConnection_WithoutSecureConnectionEnabled_DoesNotRefuseTheConfiguration()
     {
         var connector = new LdapConnector();
         var settings = new List<ConnectedSystemSettingValue>
         {
             new() { Setting = new ConnectorDefinitionSetting { Name = "Use Secure Connection (LDAPS)?" }, CheckboxValue = false },
-            new() { Setting = new ConnectorDefinitionSetting { Name = "Host" }, StringValue = "dc.testdomain.local" },
-            new() { Setting = new ConnectorDefinitionSetting { Name = "Port" }, IntValue = 389 }
+            new() { Setting = new ConnectorDefinitionSetting { Name = "Host" }, StringValue = "directory.invalid" },
+            new() { Setting = new ConnectorDefinitionSetting { Name = "Port" }, IntValue = 389 },
+            new() { Setting = new ConnectorDefinitionSetting { Name = "Connection Timeout" }, IntValue = 1 },
+            new() { Setting = new ConnectorDefinitionSetting { Name = "Username" }, StringValue = "svc-jim" },
+            new() { Setting = new ConnectorDefinitionSetting { Name = "Password" }, StringEncryptedValue = "not-a-real-password" },
+            new() { Setting = new ConnectorDefinitionSetting { Name = "Authentication Type" }, StringValue = "Simple" },
+            new() { Setting = new ConnectorDefinitionSetting { Name = "Maximum Retries" }, IntValue = 1 },
+            new() { Setting = new ConnectorDefinitionSetting { Name = "Retry Delay (ms)" }, IntValue = 1 }
         };
 
-        var exception = Assert.Throws<InvalidSettingValuesException>(() => connector.OpenPasswordConnection(settings));
+        var exception = Assert.Catch(() => connector.OpenPasswordConnection(settings));
 
-        Assert.That(exception!.Message, Does.Contain("encrypted connection"));
+        Assert.That(exception, Is.Not.Null, "Reaching a directory that does not exist should still fail.");
+        Assert.That(exception, Is.Not.InstanceOf<InvalidSettingValuesException>(),
+            "The settings themselves are complete and valid; only the connection attempt should fail.");
+        Assert.That(exception!.Message, Does.Not.Contain("encrypted"),
+            "The absence of LDAPS must not be what stops the channel opening.");
+    }
+
+    /// <summary>
+    /// Active Directory refuses a password write unless the connection is encrypted or the bind is signed and
+    /// sealed, and reports it with a result code that gives an administrator very little to go on. Naming the
+    /// likely cause is the difference between an actionable failure and a puzzling one.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_RefusedOnAnUnencryptedConnection_NamesEncryptionAsTheLikelyFixAsync()
+    {
+        _executor.Setup(e => e.SendRequestAsync(It.IsAny<DirectoryRequest>()))
+            .ReturnsAsync(CreateResponse<ModifyResponse>(ResultCode.ConfidentialityRequired, "00002028: LdapErr: DSID-0C090F5F"));
+
+        var result = await CreateChannel(LdapDirectoryType.ActiveDirectory, isConnectionEncrypted: false)
+            .SetPasswordAsync(TestDn, TestPassword, new PasswordSetOptions(), CancellationToken.None);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.ConfigurationFault));
+        Assert.That(result.ErrorMessage, Does.Contain("LDAPS"));
+    }
+
+    /// <summary>
+    /// The same refusal on an already-encrypted connection has some other cause, so pointing at encryption would
+    /// send the administrator to fix something that is not broken.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_RefusedOnAnEncryptedConnection_DoesNotBlameEncryptionAsync()
+    {
+        _executor.Setup(e => e.SendRequestAsync(It.IsAny<DirectoryRequest>()))
+            .ReturnsAsync(CreateResponse<ModifyResponse>(ResultCode.ConfidentialityRequired, "00002028: LdapErr: DSID-0C090F5F"));
+
+        var result = await CreateChannel(LdapDirectoryType.ActiveDirectory, isConnectionEncrypted: true)
+            .SetPasswordAsync(TestDn, TestPassword, new PasswordSetOptions(), CancellationToken.None);
+
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.ErrorMessage, Does.Not.Contain("LDAPS"));
+    }
+
+    /// <summary>
+    /// A policy rejection on an unencrypted connection is still a policy rejection. Appending an encryption note
+    /// to it would point at the wrong problem.
+    /// </summary>
+    [Test]
+    public async Task SetPasswordAsync_PolicyRejectionOnAnUnencryptedConnection_DoesNotBlameEncryptionAsync()
+    {
+        _executor.Setup(e => e.SendRequestAsync(It.IsAny<DirectoryRequest>()))
+            .ReturnsAsync(CreateResponse<ModifyResponse>(ResultCode.ConstraintViolation, "Password fails quality checking policy"));
+
+        var result = await CreateChannel(LdapDirectoryType.ActiveDirectory, isConnectionEncrypted: false)
+            .SetPasswordAsync(TestDn, TestPassword, new PasswordSetOptions(), CancellationToken.None);
+
+        Assert.That(result.FailureReason, Is.EqualTo(PasswordSetFailureReason.PolicyRejection));
+        Assert.That(result.ErrorMessage, Does.Not.Contain("LDAPS"));
     }
 
     [Test]
@@ -604,8 +669,8 @@ public class LdapConnectorPasswordTests
 
     #region helpers
 
-    private LdapConnectorPassword CreateChannel(LdapDirectoryType directoryType, bool supportsPasswordModifyExtension = false) =>
-        new(_executor.Object, Log.Logger, directoryType, supportsPasswordModifyExtension);
+    private LdapConnectorPassword CreateChannel(LdapDirectoryType directoryType, bool supportsPasswordModifyExtension = false, bool isConnectionEncrypted = true) =>
+        new(_executor.Object, Log.Logger, directoryType, supportsPasswordModifyExtension, isConnectionEncrypted);
 
     /// <summary>
     /// Sets up an Active Directory that accepts every modification and reports the given userAccountControl when

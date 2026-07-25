@@ -503,9 +503,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     /// <summary>
     /// The password channel binds its own connection rather than sharing the import and export one.
     /// <para>
-    /// Two reasons. It has stricter requirements (LDAPS is mandatory here and optional there), and delivering an
-    /// initial password happens partway through an export session, so borrowing that session's connection would
-    /// leave the export using a connection it did not open.
+    /// Delivering an initial password happens partway through an export session, so borrowing that session's
+    /// connection would leave the export using a connection it did not open.
     /// </para>
     /// </summary>
     private LdapConnection? _passwordConnection;
@@ -524,23 +523,32 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     ];
 
     /// <summary>
-    /// Opens the password channel, which always requires LDAPS.
+    /// Opens the password channel.
     /// <para>
-    /// A password set puts the password on the wire in the clear at the LDAP layer, so an unencrypted connection
-    /// would expose it to anyone on the network path. Active Directory refuses the write outright; other
-    /// directories will happily accept it, which is precisely why JIM refuses on their behalf. This is a hard
-    /// failure rather than a per-object one: proceeding would send every password in the run over an
-    /// unencrypted connection before the first failure was noticed.
+    /// LDAPS is strongly recommended and not required. A password set puts the password on the wire in the clear
+    /// at the LDAP layer, so an unencrypted connection exposes it to anyone on the network path, and JIM warns
+    /// prominently when the channel opens that way. It is not refused outright because some deployments genuinely
+    /// cannot offer TLS on the directory (an isolated or air-gapped network with a directory that does not serve
+    /// it), and locking those sites out of password management entirely helps nobody. The choice belongs to the
+    /// administrator, who is told plainly what it costs.
+    /// </para>
+    /// <para>
+    /// Active Directory makes its own decision regardless: it refuses a password write unless the connection is
+    /// encrypted or the bind is signed and sealed. That refusal surfaces as a classified failure naming
+    /// encryption as the fix, rather than being pre-empted here, because a signed and sealed bind is a legitimate
+    /// alternative that JIM cannot detect from the settings alone.
     /// </para>
     /// </summary>
     public void OpenPasswordConnection(IList<ConnectedSystemSettingValue> settings)
     {
         var useSecureConnection = settings.SingleOrDefault(q => q.Setting.Name == _settingUseSecureConnection);
-        if (useSecureConnection?.CheckboxValue != true)
-            throw new InvalidSettingValuesException(
-                $"Passwords can only be set over an encrypted connection. Enable the '{_settingUseSecureConnection}' " +
-                $"setting on this Connected System (and set the '{_settingDirectoryServerPort}' setting to " +
-                $"{LdapConnectorConstants.DEFAULT_LDAPS_PORT} unless the directory listens elsewhere), then try again.");
+        var isConnectionEncrypted = useSecureConnection?.CheckboxValue == true;
+
+        if (!isConnectionEncrypted)
+            Log.Warning("OpenPasswordConnection: Passwords will be sent to this Connected System over an UNENCRYPTED connection, " +
+                        "where anyone on the network path can read them. Enable the '{Setting}' setting on the Connected System " +
+                        "(and set '{PortSetting}' to {LdapsPort} unless the directory listens elsewhere) to protect them.",
+                _settingUseSecureConnection, _settingDirectoryServerPort, LdapConnectorConstants.DEFAULT_LDAPS_PORT);
 
         var plan = BuildConnectionPlan(settings.ToList(), Log.Logger);
         LdapConnection? connection = null;
@@ -555,10 +563,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var directoryType = rootDse.DirectoryType;
         var supportsPasswordModifyExtension = DirectorySupportsPasswordModifyExtension(connection);
 
-        _passwordChannel = new LdapConnectorPassword(new LdapOperationExecutor(connection), Log.Logger, directoryType, supportsPasswordModifyExtension);
+        _passwordChannel = new LdapConnectorPassword(new LdapOperationExecutor(connection), Log.Logger, directoryType, supportsPasswordModifyExtension, isConnectionEncrypted);
 
-        Log.Debug("OpenPasswordConnection: Password channel open. DirectoryType={DirectoryType}, PasswordModifyExtensionSupported={Supported}",
-            directoryType, supportsPasswordModifyExtension);
+        Log.Debug("OpenPasswordConnection: Password channel open. DirectoryType={DirectoryType}, PasswordModifyExtensionSupported={Supported}, Encrypted={Encrypted}",
+            directoryType, supportsPasswordModifyExtension, isConnectionEncrypted);
     }
 
     public Task<PasswordSetResult> SetPasswordAsync(ConnectedSystemObject target, string password, PasswordSetOptions options, CancellationToken cancellationToken)
