@@ -95,4 +95,13 @@ public interface IConnectorCapabilities
     /// and the reverse is possible too.
     /// </summary>
     public bool SupportsPasswordSet { get; }
+
+    /// <summary>
+    /// Can the Connector read the password policy the Connected System enforces? When true, the Connector must
+    /// also implement IConnectorPasswordPolicyDiscovery, and JIM reads the policy during schema import so that
+    /// initial password settings can be pre-filled from the target rather than typed out by an administrator.
+    /// This lets the portal tell "this Connector cannot discover policies" apart from "nothing discovered yet",
+    /// which lead an administrator to quite different conclusions.
+    /// </summary>
+    public bool SupportsPasswordPolicyDiscovery { get; }
 }

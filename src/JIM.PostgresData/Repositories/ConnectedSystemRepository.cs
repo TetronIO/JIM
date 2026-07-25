@@ -199,6 +199,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
         IQueryable<ConnectedSystem> csQuery = Repository.Database.ConnectedSystems
             .Include(cs => cs.ConnectorDefinition)
+            .Include(cs => cs.PasswordPolicy)
             .Include(cs => cs.SettingValues)
                 .ThenInclude(sv => sv.Setting);
 
@@ -462,6 +463,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 Repository.UpdateDetachedSafe(settingValue);
             }
+        }
+
+        // Same again for a discovered password policy. UpdateDetachedSafe does not traverse the graph, so without
+        // this a policy read during schema import is silently discarded on save.
+        if (connectedSystem.PasswordPolicy != null)
+        {
+            if (connectedSystem.PasswordPolicy.Id == 0)
+                Repository.Database.ConnectedSystemPasswordPolicies.Add(connectedSystem.PasswordPolicy);
+            else
+                Repository.UpdateDetachedSafe(connectedSystem.PasswordPolicy);
         }
 
         // Use detach-safe update to avoid graph traversal on detached ConnectedSystem entities.
@@ -5112,7 +5123,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             @"DELETE FROM ""ConnectedSystemSettingValues"" WHERE ""ConnectedSystemId"" = {0}",
             connectedSystemId);
 
-        // 15. Finally, delete the Connected System itself
+        // 15. Delete the discovered Password Policy. The EF model cascades this, but deletion here is raw SQL
+        // against the parent row, which bypasses the cascade and would hit a foreign key violation instead.
+        await Repository.Database.Database.ExecuteSqlRawAsync(
+            @"DELETE FROM ""ConnectedSystemPasswordPolicies"" WHERE ""ConnectedSystemId"" = {0}",
+            connectedSystemId);
+
+        // 16. Finally, delete the Connected System itself
         await Repository.Database.Database.ExecuteSqlRawAsync(
             @"DELETE FROM ""ConnectedSystems"" WHERE ""Id"" = {0}",
             connectedSystemId);

@@ -144,5 +144,11 @@ public class ConnectorDefinition : IAuditable, IConnectorCapabilities
     /// travel on their own write-only channel rather than through Attribute Flow.
     /// </summary>
     public bool SupportsPasswordSet { get; set; }
+
+    /// <summary>
+    /// Can the Connector read the password policy the Connected System enforces? When true, the Connector also
+    /// implements IConnectorPasswordPolicyDiscovery and JIM reads the policy during schema import.
+    /// </summary>
+    public bool SupportsPasswordPolicyDiscovery { get; set; }
     #endregion
 }

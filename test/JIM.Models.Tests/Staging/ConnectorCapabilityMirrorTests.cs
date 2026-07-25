@@ -171,5 +171,7 @@ public class ConnectorCapabilityMirrorTests
         public bool SupportsFilePaths => Get(nameof(SupportsFilePaths));
 
         public bool SupportsPasswordSet => Get(nameof(SupportsPasswordSet));
+
+        public bool SupportsPasswordPolicyDiscovery => Get(nameof(SupportsPasswordPolicyDiscovery));
     }
 }

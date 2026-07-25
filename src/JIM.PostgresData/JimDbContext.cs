@@ -32,6 +32,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ConnectedSystemObjectType> ConnectedSystemObjectTypes { get; set; } = null!;
     public virtual DbSet<ConnectedSystemObjectTypeAttribute> ConnectedSystemAttributes { get; set; } = null!;
     public virtual DbSet<ConnectedSystemPartition> ConnectedSystemPartitions { get; set; } = null!;
+    public virtual DbSet<ConnectedSystemPasswordPolicy> ConnectedSystemPasswordPolicies { get; set; } = null!;
     public virtual DbSet<ConnectedSystemRunProfile> ConnectedSystemRunProfiles { get; set; } = null!;
     public virtual DbSet<ConnectedSystemSettingValue> ConnectedSystemSettingValues { get; set; } = null!;
     public virtual DbSet<ConnectorContainer> ConnectorContainers { get; set; } = null!;
@@ -280,6 +281,15 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<ConnectedSystemObjectType>()
             .HasMany(csot => csot.Attributes)
             .WithOne(csa => csa.ConnectedSystemObjectType);
+
+        // A Connected System has at most one discovered password policy. Every other child of a Connected System
+        // is a collection, so this one-to-one has to be declared explicitly: EF cannot infer which end is the
+        // dependent. Cascade, because a discovered policy has no meaning without the system it was read from.
+        modelBuilder.Entity<ConnectedSystem>()
+            .HasOne(cs => cs.PasswordPolicy)
+            .WithOne(pp => pp.ConnectedSystem)
+            .HasForeignKey<ConnectedSystemPasswordPolicy>(pp => pp.ConnectedSystemId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<MetaverseObject>()
             .HasMany(mo => mo.Roles)

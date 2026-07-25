@@ -36,6 +36,8 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
 
     public bool SupportsPasswordSet => true;
 
+    public bool SupportsPasswordPolicyDiscovery => true;
+
     private bool _supportsSecondaryExternalId = true;
     private readonly Queue<ConnectedSystemImportResult> _importResultQueue = new();
     private readonly List<PendingExport> _exportedItems = new();

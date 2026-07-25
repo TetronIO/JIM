@@ -38,6 +38,8 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsFilePaths => true;
 
     public bool SupportsPasswordSet => false;
+
+    public bool SupportsPasswordPolicyDiscovery => false;
     #endregion
 
     #region IConnectorSettings members

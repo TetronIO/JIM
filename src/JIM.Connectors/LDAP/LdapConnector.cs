@@ -45,6 +45,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsFilePaths => false;
 
     public bool SupportsPasswordSet => true;
+
+    public bool SupportsPasswordPolicyDiscovery => true;
     #endregion
 
     #region IConnectorSettings members
