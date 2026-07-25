@@ -1437,6 +1437,18 @@ html[lang] .jim-schema-change-table td {
     color: var(--mud-palette-text-primary);
 }
 
+/* Multi-Valued to Single-Valued indicator (attribute flow rules): present but low-lighted,
+   brightening on hover so it reads as an advisory rather than an error. */
+.jim-mva-sva-indicator {
+    color: var(--mud-palette-warning);
+    opacity: 0.5;
+    transition: opacity 150ms ease-in-out;
+}
+
+.jim-mva-sva-indicator:hover {
+    opacity: 0.9;
+}
+
 /* Expression syntax highlighting (attribute flow rules) */
 .jim-expr-chip {
     max-width: 500px;
