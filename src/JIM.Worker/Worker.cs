@@ -15,6 +15,7 @@ using JIM.Models.Enums;
 using Microsoft.EntityFrameworkCore;
 using JIM.Models.Staging;
 using JIM.Models.Tasking;
+using JIM.Models.Transactional;
 using JIM.Worker.Processors;
 using Serilog;
 using Serilog.Formatting.Compact;
@@ -729,7 +730,7 @@ public class Worker : BackgroundService
                     // Evaluate export rules for the MVO deletion: delete Pending Exports are created for
                     // CSOs whose export Synchronisation Rule's OutboundDeprovisionAction is Delete (issue #655).
                     // WhenAuthoritativeSourceDisconnected MVOs may still have target CSOs that need delete exports.
-                    await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache);
+                    var deletePendingExports = await jim.ExportEvaluation.EvaluateMvoDeletionAsync(mvo, exportEvaluationCache);
 
                     // Delete the MVO using the initiator info captured when it was marked for deletion
                     // This preserves the audit trail - the original initiator is recorded, not housekeeping
@@ -755,6 +756,15 @@ public class Worker : BackgroundService
                             targetEntityDescription: mvo.DisplayName);
                     }
                     executionItems.Add(deletionItem);
+
+                    // Deletion cascade (#1044): fold the delete Pending Exports this deletion staged into the
+                    // Activity, one execution item each, mirroring the recall folding below. Deprovisioning a
+                    // real account is the most consequential thing housekeeping stages, so it must be visible
+                    // and countable on the Activity, not just in the service log.
+                    executionItems.AddRange(deletePendingExports
+                        .Where(pe => pe.ConnectedSystemObjectId.HasValue)
+                        .Select(pe => BuildPendingExportExecutionItem(pe, mvo.DisplayName, mvo.Type?.Name,
+                            activity, outcomeTrackingLevel, csoChangeTrackingEnabled)));
 
                     Log.Information("PerformMetaverseObjectHousekeepingAsync: Successfully deleted MVO {MvoId}", mvo.Id);
                 }
@@ -789,42 +799,12 @@ public class Worker : BackgroundService
 
                 // Fold the staged recall exports into Activity reporting: one execution item per staged
                 // Pending Export with a PendingExportCreated outcome, mirroring the sync-run recall reporting.
-                foreach (var stagedPendingExport in recallResult.StagedPendingExports)
-                {
-                    var recallItem = new ActivityRunProfileExecutionItem
-                    {
-                        Id = Guid.NewGuid(),
-                        ObjectChangeType = ObjectChangeType.PendingExport,
-                        ConnectedSystemObjectId = stagedPendingExport.ConnectedSystemObjectId,
-                        PendingExportId = stagedPendingExport.Id,
-                        DisplayNameSnapshot = stagedPendingExport.SourceMetaverseObjectId.HasValue
-                            ? recallResult.ReferencingObjectDisplayNames
-                                .GetValueOrDefault(stagedPendingExport.SourceMetaverseObjectId.Value)
-                            : null
-                    };
-
-                    if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-                    {
-                        var recallOutcome = SyncOutcomeBuilder.AddRootOutcome(recallItem,
-                            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
-                            targetEntityId: stagedPendingExport.Id,
-                            targetEntityDescription: recallItem.DisplayNameSnapshot,
-                            detailCount: stagedPendingExport.AttributeValueChanges.Count,
-                            detailMessage: stagedPendingExport.ConnectedSystemId.ToString());
-
-                        // Snapshot the Pending Export's attribute changes so the Causality Tree can render
-                        // attribute detail even after the Pending Export is deleted during export confirmation.
-                        if (csoChangeTrackingEnabled && stagedPendingExport.AttributeValueChanges.Count > 0)
-                        {
-                            var change = ExportChangeHistoryBuilder.BuildFromPendingExport(
-                                stagedPendingExport, activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName);
-                            change.ConnectedSystemObjectId ??= stagedPendingExport.ConnectedSystemObjectId;
-                            recallOutcome.ConnectedSystemObjectChange = change;
-                        }
-                    }
-
-                    executionItems.Add(recallItem);
-                }
+                executionItems.AddRange(recallResult.StagedPendingExports
+                    .Select(pe => BuildPendingExportExecutionItem(
+                        pe,
+                        ResolveReferencingObjectDisplayName(pe, recallResult),
+                        objectTypeSnapshot: null,
+                        activity, outcomeTrackingLevel, csoChangeTrackingEnabled)));
             }
 
             if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
@@ -846,6 +826,74 @@ public class Worker : BackgroundService
             Log.Error(ex, "PerformMetaverseObjectHousekeepingAsync: Error during Metaverse Object housekeeping batch");
             await jim.Activities.FailActivityWithErrorAsync(activity, ex);
         }
+    }
+
+    /// <summary>
+    /// Resolves the display name of the Metaverse Object a reference-recall Pending Export was staged for,
+    /// so the execution item can name the group whose membership is being corrected.
+    /// </summary>
+    private static string? ResolveReferencingObjectDisplayName(PendingExport pendingExport, ReferenceRecallResult recallResult)
+    {
+        if (!pendingExport.SourceMetaverseObjectId.HasValue)
+            return null;
+
+        var referencingMvoId = pendingExport.SourceMetaverseObjectId.Value;
+        return recallResult.ReferencingObjectDisplayNames.GetValueOrDefault(referencingMvoId);
+    }
+
+    /// <summary>
+    /// Builds the Run Profile Execution Item that reports a Pending Export staged by a Metaverse Object
+    /// Housekeeping batch: either a reference-recall membership removal (#1020) or a deletion-cascade
+    /// account delete (#1044). Both carry the Pending Export id, the target Connected System Object, and a
+    /// PendingExportCreated outcome whose detail message names the target Connected System, so the staged
+    /// work is countable and filterable on the Activity.
+    /// </summary>
+    /// <param name="pendingExport">The staged Pending Export to report.</param>
+    /// <param name="displayNameSnapshot">The display name to label the item with: the referencing object for a
+    /// recall export, the deleted identity for a deletion cascade. Snapshotted because neither may survive.</param>
+    /// <param name="objectTypeSnapshot">The object type to label the item with, when known.</param>
+    /// <param name="activity">The housekeeping Activity, for initiator attribution on the change snapshot.</param>
+    /// <param name="outcomeTrackingLevel">The configured sync outcome tracking level.</param>
+    /// <param name="csoChangeTrackingEnabled">Whether Connected System Object change tracking is enabled.</param>
+    private static ActivityRunProfileExecutionItem BuildPendingExportExecutionItem(
+        PendingExport pendingExport,
+        string? displayNameSnapshot,
+        string? objectTypeSnapshot,
+        Activity activity,
+        ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel outcomeTrackingLevel,
+        bool csoChangeTrackingEnabled)
+    {
+        var executionItem = new ActivityRunProfileExecutionItem
+        {
+            Id = Guid.NewGuid(),
+            ObjectChangeType = ObjectChangeType.PendingExport,
+            ConnectedSystemObjectId = pendingExport.ConnectedSystemObjectId,
+            PendingExportId = pendingExport.Id,
+            DisplayNameSnapshot = displayNameSnapshot,
+            ObjectTypeSnapshot = objectTypeSnapshot
+        };
+
+        if (outcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            return executionItem;
+
+        var outcome = SyncOutcomeBuilder.AddRootOutcome(executionItem,
+            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+            targetEntityId: pendingExport.Id,
+            targetEntityDescription: displayNameSnapshot,
+            detailCount: pendingExport.AttributeValueChanges.Count,
+            detailMessage: pendingExport.ConnectedSystemId.ToString());
+
+        // Snapshot the Pending Export's attribute changes so the Causality Tree can render
+        // attribute detail even after the Pending Export is deleted during export confirmation.
+        if (csoChangeTrackingEnabled && pendingExport.AttributeValueChanges.Count > 0)
+        {
+            var change = ExportChangeHistoryBuilder.BuildFromPendingExport(
+                pendingExport, activity.InitiatedByType, activity.InitiatedById, activity.InitiatedByName);
+            change.ConnectedSystemObjectId ??= pendingExport.ConnectedSystemObjectId;
+            outcome.ConnectedSystemObjectChange = change;
+        }
+
+        return executionItem;
     }
 
     /// <summary>

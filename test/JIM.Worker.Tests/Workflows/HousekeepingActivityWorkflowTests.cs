@@ -11,6 +11,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -33,6 +34,7 @@ public class HousekeepingActivityWorkflowTests
     private const int MvGroupTypeId = 50;
     private const int MvMemberAttributeId = 60;
     private const int CsGroupTypeId = 70;
+    private const int CsUserTypeId = 71;
     private const int CsMemberAttributeId = 80;
     private const int CsDnAttributeId = 81;
 
@@ -185,6 +187,47 @@ public class HousekeepingActivityWorkflowTests
             "TotalPendingExports must reflect the staged recall Pending Export");
         Assert.That(activity.TotalDeleted, Is.EqualTo(1),
             "TotalDeleted must count MvoDeleted outcomes so list views show what the batch deleted");
+    }
+
+    /// <summary>
+    /// Deletion cascade (#1044): a grace-period-expired Metaverse Object whose target Connected System Object is
+    /// matched by an export Synchronisation Rule with a Delete deprovisioning action stages a delete Pending Export.
+    /// That export deprovisions a real account, so it must be reported as its own Pending Export execution item on
+    /// the housekeeping Activity, not left visible only in the service log.
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_EligibleMvoWithDeleteDeprovisionRule_ReportsDeleteExportItemAsync()
+    {
+        // Arrange
+        var (personMvo, personTargetCso) = SeedEligiblePersonWithDeprovisionableTargetCso("Dan Deprovisioned");
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([personMvo]);
+
+        // Act
+        await WorkerInstance.PerformHousekeepingAsync(Jim);
+
+        // Assert: the delete Pending Export was staged for the target Connected System Object.
+        var deletePendingExport = SyncRepo.PendingExports.Values
+            .Single(pe => pe.ChangeType == PendingExportChangeType.Delete);
+        Assert.That(deletePendingExport.ConnectedSystemObjectId, Is.EqualTo(personTargetCso.Id));
+
+        // Assert: and that it is reported on the Activity, carrying the Pending Export id and the identity's name.
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var rpeis = _persistedRpeis.Where(r => r.ActivityId == activity.Id).ToList();
+        var pendingExportRpeis = rpeis.Where(r => r.ObjectChangeType == ObjectChangeType.PendingExport).ToList();
+        Assert.That(pendingExportRpeis, Has.Count.EqualTo(1),
+            "The deletion-cascade delete Pending Export must be recorded as a Pending Export execution item");
+        Assert.That(pendingExportRpeis[0].PendingExportId, Is.EqualTo(deletePendingExport.Id));
+        Assert.That(pendingExportRpeis[0].ConnectedSystemObjectId, Is.EqualTo(personTargetCso.Id));
+        Assert.That(pendingExportRpeis[0].DisplayNameSnapshot, Is.EqualTo("Dan Deprovisioned"));
+
+        var outcome = pendingExportRpeis[0].SyncOutcomes.SingleOrDefault();
+        Assert.That(outcome, Is.Not.Null, "Detailed outcome tracking must record a PendingExportCreated outcome");
+        Assert.That(outcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated));
+        Assert.That(outcome.TargetEntityId, Is.EqualTo(deletePendingExport.Id));
+        Assert.That(activity.TotalPendingExports, Is.EqualTo(1),
+            "TotalPendingExports must count the staged deprovisioning export");
     }
 
     /// <summary>
@@ -378,6 +421,51 @@ public class HousekeepingActivityWorkflowTests
         SyncRepo.SeedConnectedSystemObject(targetCso);
 
         return (memberMvo, dn);
+    }
+
+    /// <summary>
+    /// Seeds an eligible Person Metaverse Object joined to a provisioned target Connected System Object of a user
+    /// type that an export Synchronisation Rule deprovisions by deleting (issue #655), so the deletion cascades
+    /// into a delete Pending Export.
+    /// </summary>
+    private (MetaverseObject Mvo, ConnectedSystemObject TargetCso) SeedEligiblePersonWithDeprovisionableTargetCso(string displayName)
+    {
+        SyncRepo.SeedSyncRule(new SyncRule
+        {
+            Id = 910,
+            Name = "Target Export Users",
+            Enabled = true,
+            Direction = SyncRuleDirection.Export,
+            ConnectedSystemId = TargetSystemId,
+            ConnectedSystemObjectTypeId = CsUserTypeId,
+            MetaverseObjectTypeId = MvPersonTypeId,
+            OutboundDeprovisionAction = OutboundDeprovisionAction.Delete
+        });
+
+        var personMvo = CreateEligiblePersonMvo(displayName);
+        SyncRepo.SeedMetaverseObject(personMvo);
+
+        var targetCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystemId,
+            TypeId = CsUserTypeId,
+            Status = ConnectedSystemObjectStatus.Normal,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            MetaverseObjectId = personMvo.Id,
+            SecondaryExternalIdAttributeId = CsDnAttributeId
+        };
+        targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = targetCso,
+            Attribute = CsDnAttribute,
+            AttributeId = CsDnAttributeId,
+            StringValue = "uid=dan.deprovisioned,ou=People,dc=glitterband,dc=local"
+        });
+        SyncRepo.SeedConnectedSystemObject(targetCso);
+
+        return (personMvo, targetCso);
     }
 
     /// <summary>
