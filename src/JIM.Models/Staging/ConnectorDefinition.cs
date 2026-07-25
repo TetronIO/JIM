@@ -137,5 +137,12 @@ public class ConnectorDefinition : IAuditable, IConnectorCapabilities
     /// the File Path setting is shown on import and export Run Profiles.
     /// </summary>
     public bool SupportsFilePaths { get; set; }
+
+    /// <summary>
+    /// Does the Connector support setting a password on an object in the Connected System? When true, the
+    /// Connector also implements IConnectorPasswordManagement. Independent of SupportsExport, because passwords
+    /// travel on their own write-only channel rather than through Attribute Flow.
+    /// </summary>
+    public bool SupportsPasswordSet { get; set; }
     #endregion
 }

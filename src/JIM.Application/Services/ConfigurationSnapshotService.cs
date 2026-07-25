@@ -932,6 +932,7 @@ public class ConfigurationSnapshotService
         Add(children, "supportsParallelExport", Render(definition.SupportsParallelExport), "Parallel export");
         Add(children, "supportsPaging", Render(definition.SupportsPaging), "Paging");
         Add(children, "supportsFilePaths", Render(definition.SupportsFilePaths), "File paths");
+        Add(children, "supportsPasswordSet", Render(definition.SupportsPasswordSet), "Password set");
         return ConfigurationSnapshotNode.ObjectNode("capabilities", children, "Capabilities");
     }
 

@@ -36,6 +36,8 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsParallelExport => false;
     public bool SupportsPaging => false;
     public bool SupportsFilePaths => true;
+
+    public bool SupportsPasswordSet => false;
     #endregion
 
     #region IConnectorSettings members

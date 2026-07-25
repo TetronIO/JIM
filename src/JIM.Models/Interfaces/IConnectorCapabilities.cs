@@ -86,4 +86,13 @@ public interface IConnectorCapabilities
     /// (e.g. CSV) should return true; connectors that use API calls should return false.
     /// </summary>
     public bool SupportsFilePaths { get; }
+
+    /// <summary>
+    /// Does the Connector support setting a password on an object in the Connected System? When true, the
+    /// Connector must also implement IConnectorPasswordManagement.
+    /// Passwords travel on their own write-only channel rather than through Attribute Flow, so this capability
+    /// is independent of SupportsExport: a Connector can export attributes without being able to set a password,
+    /// and the reverse is possible too.
+    /// </summary>
+    public bool SupportsPasswordSet { get; }
 }

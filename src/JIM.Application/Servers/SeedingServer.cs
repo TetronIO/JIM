@@ -12,6 +12,7 @@ using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Application.Utilities;
+using JIM.Utilities;
 using Serilog;
 using System.Diagnostics;
 
@@ -1446,34 +1447,15 @@ internal class SeedingServer
             Log.Information($"SyncConnectorDefinitionAsync: Removed duplicate setting '{duplicate.Name}' from '{connector.Name}'");
         }
 
-        // Update capability flags
-        if (existingDefinition.SupportsFullImport != connectorCapabilities.SupportsFullImport ||
-            existingDefinition.SupportsDeltaImport != connectorCapabilities.SupportsDeltaImport ||
-            existingDefinition.SupportsExport != connectorCapabilities.SupportsExport ||
-            existingDefinition.SupportsPartitions != connectorCapabilities.SupportsPartitions ||
-            existingDefinition.SupportsPartitionContainers != connectorCapabilities.SupportsPartitionContainers ||
-            existingDefinition.SupportsSecondaryExternalId != connectorCapabilities.SupportsSecondaryExternalId ||
-            existingDefinition.SupportsUserSelectedExternalId != connectorCapabilities.SupportsUserSelectedExternalId ||
-            existingDefinition.SupportsUserSelectedAttributeTypes != connectorCapabilities.SupportsUserSelectedAttributeTypes ||
-            existingDefinition.SupportsAutoConfirmExport != connectorCapabilities.SupportsAutoConfirmExport ||
-            existingDefinition.SupportsParallelExport != connectorCapabilities.SupportsParallelExport ||
-            existingDefinition.SupportsPaging != connectorCapabilities.SupportsPaging ||
-            existingDefinition.SupportsFilePaths != connectorCapabilities.SupportsFilePaths)
+        // Update capability flags. Driven off IConnectorCapabilities itself, so a newly declared capability is
+        // mirrored without this method needing to know about it.
+        var changedCapabilities = ConnectorCapabilityMirror.GetDifferences(connectorCapabilities, existingDefinition);
+        if (changedCapabilities.Count > 0)
         {
-            existingDefinition.SupportsFullImport = connectorCapabilities.SupportsFullImport;
-            existingDefinition.SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport;
-            existingDefinition.SupportsExport = connectorCapabilities.SupportsExport;
-            existingDefinition.SupportsPartitions = connectorCapabilities.SupportsPartitions;
-            existingDefinition.SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers;
-            existingDefinition.SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId;
-            existingDefinition.SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId;
-            existingDefinition.SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes;
-            existingDefinition.SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport;
-            existingDefinition.SupportsParallelExport = connectorCapabilities.SupportsParallelExport;
-            existingDefinition.SupportsPaging = connectorCapabilities.SupportsPaging;
-            existingDefinition.SupportsFilePaths = connectorCapabilities.SupportsFilePaths;
+            ConnectorCapabilityMirror.CopyTo(connectorCapabilities, existingDefinition);
             hasChanges = true;
-            Log.Information($"SyncConnectorDefinitionAsync: Updated capability flags for '{connector.Name}'");
+            Log.Information("SyncConnectorDefinitionAsync: Updated capability flags for '{ConnectorName}': {ChangedCapabilities}",
+                LogSanitiser.Sanitise(connector.Name), string.Join(", ", changedCapabilities));
         }
 
         // Sync settings - update existing and add new ones
@@ -1697,21 +1679,10 @@ internal class SeedingServer
             Name = connector.Name,
             Description = connector.Description,
             Url = connector.Url,
-            BuiltIn = true,
-            SupportsFullImport = connectorCapabilities.SupportsFullImport,
-            SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport,
-            SupportsExport = connectorCapabilities.SupportsExport,
-            SupportsPartitions = connectorCapabilities.SupportsPartitions,
-            SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers,
-            SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId,
-            SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId,
-            SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes,
-            SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport,
-            SupportsParallelExport = connectorCapabilities.SupportsParallelExport,
-            SupportsPaging = connectorCapabilities.SupportsPaging,
-            SupportsFilePaths = connectorCapabilities.SupportsFilePaths
+            BuiltIn = true
         };
 
+        ConnectorCapabilityMirror.CopyTo(connectorCapabilities, connectorDefinition);
         Application.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connectorSettings, connectorDefinition);
         return connectorDefinition;
     }

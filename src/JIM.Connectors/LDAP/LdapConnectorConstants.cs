@@ -39,6 +39,15 @@ internal static class LdapConnectorConstants
     internal const int UAC_ACCOUNTDISABLE = 0x2;
 
     /// <summary>
+    /// Active Directory userAccountControl flag for passwords that never expire.
+    /// When this bit is set (0x10000), the account's password is exempt from the password age policy.
+    /// It is mutually exclusive with pwdLastSet = 0 ("must change at next sign-in"): an account cannot both be
+    /// required to change its password and be exempt from expiry, which is why JIM models the two as one
+    /// tri-state choice rather than two independent switches.
+    /// </summary>
+    internal const int UAC_DONT_EXPIRE_PASSWORD = 0x10000;
+
+    /// <summary>
     /// Active Directory systemFlags bit indicating a constructed (computed) attribute.
     /// Constructed attributes are calculated by the directory server on the fly and cannot be written to.
     /// Examples: canonicalName, tokenGroups, primaryGroupToken, allowedAttributes.

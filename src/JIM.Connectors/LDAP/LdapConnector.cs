@@ -11,7 +11,7 @@ using System.Net;
 using System.Security.Cryptography.X509Certificates;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -43,6 +43,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsParallelExport => true;
     public bool SupportsPaging => true;
     public bool SupportsFilePaths => false;
+
+    public bool SupportsPasswordSet => true;
     #endregion
 
     #region IConnectorSettings members
@@ -473,6 +475,101 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         _exportSettings = null;
         _currentExport = null;
         CloseImportConnection();
+    }
+    #endregion
+
+    #region IConnectorPasswordManagement members
+    private LdapConnectorPassword? _passwordChannel;
+
+    /// <summary>
+    /// All three states are declared because the LDAP Connector serves Active Directory as well as directories
+    /// that have no per-entry expiry control. Which of them a given Connected System can actually honour is not
+    /// knowable without connecting to it, so a target that cannot honour the chosen state reports a downgrade on
+    /// the result rather than the state being withheld here.
+    /// </summary>
+    public IReadOnlyCollection<PasswordExpiryBehaviour> SupportedExpiryBehaviours { get; } =
+    [
+        PasswordExpiryBehaviour.RequireChangeAtNextSignIn,
+        PasswordExpiryBehaviour.ExpiresAccordingToTargetPolicy,
+        PasswordExpiryBehaviour.NeverExpires
+    ];
+
+    /// <summary>
+    /// Opens the password channel, which always requires LDAPS.
+    /// <para>
+    /// A password set puts the password on the wire in the clear at the LDAP layer, so an unencrypted connection
+    /// would expose it to anyone on the network path. Active Directory refuses the write outright; other
+    /// directories will happily accept it, which is precisely why JIM refuses on their behalf. This is a hard
+    /// failure rather than a per-object one: proceeding would send every password in the run over an
+    /// unencrypted connection before the first failure was noticed.
+    /// </para>
+    /// </summary>
+    public void OpenPasswordConnection(IList<ConnectedSystemSettingValue> settings)
+    {
+        var useSecureConnection = settings.SingleOrDefault(q => q.Setting.Name == _settingUseSecureConnection);
+        if (useSecureConnection?.CheckboxValue != true)
+            throw new InvalidSettingValuesException(
+                $"Passwords can only be set over an encrypted connection. Enable the '{_settingUseSecureConnection}' " +
+                $"setting on this Connected System (and set the '{_settingDirectoryServerPort}' setting to " +
+                $"{LdapConnectorConstants.DEFAULT_LDAPS_PORT} unless the directory listens elsewhere), then try again.");
+
+        OpenImportConnection(settings.ToList(), Log.Logger);
+
+        if (_connection == null)
+            throw new InvalidOperationException("The password connection could not be opened.");
+
+        var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, Log.Logger);
+        _directoryType = rootDse.DirectoryType;
+
+        var supportsPasswordModifyExtension = DirectorySupportsPasswordModifyExtension(_connection);
+        _passwordChannel = new LdapConnectorPassword(new LdapOperationExecutor(_connection), Log.Logger, _directoryType, supportsPasswordModifyExtension);
+
+        Log.Debug("OpenPasswordConnection: Password channel open. DirectoryType={DirectoryType}, PasswordModifyExtensionSupported={Supported}",
+            _directoryType, supportsPasswordModifyExtension);
+    }
+
+    public Task<PasswordSetResult> SetPasswordAsync(ConnectedSystemObject target, string password, PasswordSetOptions options, CancellationToken cancellationToken)
+    {
+        if (_passwordChannel == null)
+            throw new InvalidOperationException("Must call OpenPasswordConnection() before SetPasswordAsync()!");
+
+        ArgumentNullException.ThrowIfNull(target);
+
+        // LDAP addresses an entry by its Distinguished Name, which JIM holds as the secondary external id.
+        var distinguishedName = target.SecondaryExternalIdAttributeValue?.ToStringNoName();
+        if (string.IsNullOrEmpty(distinguishedName))
+            return Task.FromResult(PasswordSetResult.Failed(PasswordSetFailureReason.TargetObjectNotFound,
+                "The Connected System Object has no Distinguished Name, so JIM cannot locate it in the directory to set a password on it."));
+
+        return _passwordChannel.SetPasswordAsync(distinguishedName, password, options, cancellationToken);
+    }
+
+    public void ClosePasswordConnection()
+    {
+        _passwordChannel = null;
+        CloseImportConnection();
+    }
+
+    /// <summary>
+    /// Whether the directory advertises the RFC 3062 Password Modify extended operation on its rootDSE.
+    /// Active Directory never does; it uses its own unicodePwd attribute instead.
+    /// </summary>
+    private static bool DirectorySupportsPasswordModifyExtension(LdapConnection connection)
+    {
+        var request = new SearchRequest { Scope = SearchScope.Base };
+        request.Attributes.Add("supportedExtension");
+
+        var response = (SearchResponse)connection.SendRequest(request);
+        if (response.Entries.Count == 0)
+            return false;
+
+        var supportedExtensions = response.Entries[0].Attributes["supportedExtension"];
+        if (supportedExtensions == null)
+            return false;
+
+        return supportedExtensions.GetValues(typeof(string))
+            .OfType<string>()
+            .Any(oid => oid == LdapConnectorPassword.PasswordModifyExtensionOid);
     }
     #endregion
 
