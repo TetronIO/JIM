@@ -11,7 +11,7 @@ using System.Net;
 using System.Security.Cryptography.X509Certificates;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorPasswordManagement, IConnectorPasswordPolicyDiscovery, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -496,6 +496,50 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         _exportSettings = null;
         _currentExport = null;
         CloseImportConnection();
+    }
+    #endregion
+
+    #region IConnectorPasswordPolicyDiscovery members
+    /// <summary>
+    /// Reads the directory's password policy. Called during schema import, so it opens and closes its own
+    /// connection the same way schema discovery does.
+    /// </summary>
+    public async Task<ConnectedSystemPasswordPolicy?> GetPasswordPolicyAsync(List<ConnectedSystemSettingValue> settings, ILogger logger)
+    {
+        OpenImportConnection(settings, logger);
+        if (_connection == null)
+            throw new InvalidOperationException("No connection available to read the password policy with.");
+
+        try
+        {
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+            var domainRootDn = GetDefaultNamingContext(_connection);
+
+            var policyReader = new LdapConnectorPasswordPolicy(new LdapOperationExecutor(_connection), logger, rootDse.DirectoryType);
+            return await policyReader.GetPasswordPolicyAsync(domainRootDn ?? string.Empty);
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
+    }
+
+    /// <summary>
+    /// Reads defaultNamingContext from the rootDSE, which is where Active Directory holds its domain-wide
+    /// password policy. Directories that are not Active Directory do not publish this, and do not need to: their
+    /// policy is not discoverable anyway.
+    /// </summary>
+    private static string? GetDefaultNamingContext(LdapConnection connection)
+    {
+        var request = new SearchRequest { Scope = SearchScope.Base };
+        request.Attributes.Add("defaultNamingContext");
+
+        var response = (SearchResponse)connection.SendRequest(request);
+        if (response.Entries.Count == 0)
+            return null;
+
+        var attribute = response.Entries[0].Attributes["defaultNamingContext"];
+        return attribute == null || attribute.Count == 0 ? null : attribute[0]?.ToString();
     }
     #endregion
 

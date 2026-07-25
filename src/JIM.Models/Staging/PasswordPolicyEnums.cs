@@ -46,7 +46,13 @@ public enum PasswordCharacterClasses
 public enum FineGrainedPolicySignal
 {
     /// <summary>
-    /// JIM looked and found none, so the discovered policy is expected to apply to every account.
+    /// JIM established that none can exist, so the discovered policy applies to every account.
+    /// <para>
+    /// Note this is a stronger claim than "the search came back empty", and is reported only when the target
+    /// proves it. Directories commonly apply access control to searches as a silent filter, returning a
+    /// successful but empty result to a caller with no rights over where these policies live, so an empty result
+    /// means <see cref="CouldNotDetermine"/> rather than this.
+    /// </para>
     /// </summary>
     Absent = 0,
 

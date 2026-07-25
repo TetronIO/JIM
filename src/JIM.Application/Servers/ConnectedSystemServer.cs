@@ -1366,6 +1366,10 @@ public class ConnectedSystemServer
         // Credential attributes must never enter JIM's schema as new, manageable attributes.
         FilterCredentialAttributesFromSchema(connectedSystem, schema, result);
 
+        // Read the target's password policy while connected, so initial password settings can be pre-filled from
+        // the system rather than retyped by an administrator.
+        await DiscoverPasswordPolicyAsync(connector, connectedSystem, result);
+
         // Merge the new schema with the existing one, preserving IDs for attributes that are referenced by Synchronisation Rules
         // This prevents FK constraint violations when attributes are used in Synchronisation Rule mappings
         schema.ObjectTypes = schema.ObjectTypes.OrderBy(q => q.Name).ToList();
@@ -1553,6 +1557,10 @@ public class ConnectedSystemServer
         // Credential attributes must never enter JIM's schema as new, manageable attributes. See the
         // user-initiated overload above; both routes share this enforcement so they cannot drift.
         FilterCredentialAttributesFromSchema(connectedSystem, schema, result);
+
+        // Read the target's password policy while connected, so initial password settings can be pre-filled from
+        // the system rather than retyped by an administrator.
+        await DiscoverPasswordPolicyAsync(connector, connectedSystem, result);
 
         schema.ObjectTypes = schema.ObjectTypes.OrderBy(q => q.Name).ToList();
 
@@ -1777,6 +1785,63 @@ public class ConnectedSystemServer
                         LogSanitiser.Sanitise(attribute.Name), LogSanitiser.Sanitise(objectType.Name), LogSanitiser.Sanitise(connectedSystem.Name));
             }
         }
+    }
+
+    /// <summary>
+    /// Reads the Connected System's password policy, where the Connector can, and records it against the system.
+    /// <para>
+    /// Enrichment, not a prerequisite: a schema import must never fail because a policy could not be read. Any
+    /// Connector fault is logged and discovery is skipped, leaving whatever was previously discovered in place
+    /// rather than discarding it on the strength of one bad read.
+    /// </para>
+    /// </summary>
+    private static async Task DiscoverPasswordPolicyAsync(IConnector connector, ConnectedSystem connectedSystem, SchemaRefreshResult result)
+    {
+        if (connector is not IConnectorPasswordPolicyDiscovery policyConnector)
+            return;
+
+        ConnectedSystemPasswordPolicy? discovered;
+        try
+        {
+            discovered = await policyConnector.GetPasswordPolicyAsync(connectedSystem.SettingValues, Log.Logger);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Deliberately broad, with the cancellation exclusion the fallback-dispatcher rule requires: this is
+            // optional enrichment degrading to "no policy discovered", and no Connector fault justifies failing an
+            // otherwise successful schema import. A cancelled run must still propagate.
+            Log.Warning(ex, "DiscoverPasswordPolicyAsync: Could not read the password policy for Connected System {ConnectedSystemId}. The schema import continues without it.",
+                connectedSystem.Id);
+            return;
+        }
+
+        if (discovered == null)
+        {
+            Log.Debug("DiscoverPasswordPolicyAsync: Connected System {ConnectedSystemId} exposed no password policy.", connectedSystem.Id);
+            return;
+        }
+
+        result.PasswordPolicyDiscovered = true;
+
+        // Update the existing row in place where there is one. Replacing the navigation with a fresh object would
+        // leave it with no id, which the persistence path reads as an insert, and the one-to-one unique index then
+        // rejects the save.
+        if (connectedSystem.PasswordPolicy == null)
+        {
+            connectedSystem.PasswordPolicy = discovered;
+            return;
+        }
+
+        var existing = connectedSystem.PasswordPolicy;
+        existing.Discovered = discovered.Discovered;
+        existing.MinimumLength = discovered.MinimumLength;
+        existing.ComplexityRequired = discovered.ComplexityRequired;
+        existing.RequiredCharacterClassCount = discovered.RequiredCharacterClassCount;
+        existing.RecognisedCharacterClasses = discovered.RecognisedCharacterClasses;
+        existing.PasswordHistoryLength = discovered.PasswordHistoryLength;
+        existing.MaximumPasswordAge = discovered.MaximumPasswordAge;
+        existing.MinimumPasswordAge = discovered.MinimumPasswordAge;
+        existing.FineGrainedPolicySignal = discovered.FineGrainedPolicySignal;
     }
     #endregion
 

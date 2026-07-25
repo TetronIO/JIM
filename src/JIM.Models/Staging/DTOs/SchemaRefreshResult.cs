@@ -72,6 +72,13 @@ public class SchemaRefreshResult
     /// <summary>
     /// The total number of credential attributes blocked across all object types.
     /// </summary>
+    /// <summary>
+    /// Whether a password policy was read from the Connected System during this refresh. False when the Connector
+    /// cannot discover policies, when the system exposes none, or when the read failed; a failed read never fails
+    /// the schema import, so this is how the outcome stays visible rather than silent.
+    /// </summary>
+    public bool PasswordPolicyDiscovered { get; set; }
+
     public int BlockedCredentialAttributeCount => BlockedCredentialAttributes.Values.Sum(v => v.Count);
 
     /// <summary>
