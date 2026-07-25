@@ -264,6 +264,18 @@ public class SynchronisationController(
             return NotFound(ApiErrorResponse.NotFound($"Attribute with ID {attributeId} not found in object type {objectTypeId} of Connected System {connectedSystemId}."));
         }
 
+        // Validate: a credential attribute can never be managed by JIM. It either cannot be read back meaningfully
+        // or holds credential material that must never enter the Metaverse; passwords are handled by JIM's
+        // dedicated write-only password channel instead of Attribute Flow. Deselecting one stays allowed.
+        if (CredentialAttributes.IsCredentialAttribute(attribute.Name) &&
+            (request.Selected == true || request.IsExternalId == true || request.IsSecondaryExternalId == true))
+        {
+            _logger.LogWarning("Attempted to select credential attribute {AttributeId} ({Name})", attributeId, LogSanitiser.Sanitise(attribute.Name));
+            return BadRequest(ApiErrorResponse.BadRequest(
+                $"Attribute '{attribute.Name}' holds credential material and cannot be managed by JIM. " +
+                "Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow."));
+        }
+
         // Validate: Cannot unselect an External ID or Secondary External ID attribute
         if (request.Selected.HasValue && !request.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
         {
@@ -2208,6 +2220,9 @@ public class SynchronisationController(
             if (csAttr.ConnectedSystemObjectType.Id != syncRule.ConnectedSystemObjectTypeId)
                 return BadRequest(ApiErrorResponse.BadRequest($"Attribute {csAttr.Name} does not belong to the Synchronisation Rule's object type."));
 
+            if (CredentialAttributes.IsCredentialAttribute(csAttr.Name))
+                return BadRequest(ApiErrorResponse.BadRequest(CredentialAttributeFlowRejection(csAttr.Name)));
+
             mapping.TargetConnectedSystemAttributeId = csAttr.Id;
             mapping.TargetConnectedSystemAttribute = csAttr;
 
@@ -2248,6 +2263,9 @@ public class SynchronisationController(
                 // Verify attribute belongs to the Synchronisation Rule's object type
                 if (csAttr.ConnectedSystemObjectType.Id != syncRule.ConnectedSystemObjectTypeId)
                     return BadRequest(ApiErrorResponse.BadRequest($"Attribute {csAttr.Name} does not belong to the Synchronisation Rule's object type."));
+
+                if (CredentialAttributes.IsCredentialAttribute(csAttr.Name))
+                    return BadRequest(ApiErrorResponse.BadRequest(CredentialAttributeFlowRejection(csAttr.Name)));
 
                 source.ConnectedSystemAttributeId = csAttr.Id;
                 source.ConnectedSystemAttribute = csAttr;
@@ -2293,6 +2311,15 @@ public class SynchronisationController(
             _logger.LogWarning(ex, "Failed to create Synchronisation Rule mapping: {Message}", ex.Message);
             return BadRequest(ApiErrorResponse.BadRequest(ex.Message));
         }
+    }
+
+    /// <summary>
+    /// The rejection message used whenever an Attribute Flow names a credential attribute as its source or target.
+    /// </summary>
+    private static string CredentialAttributeFlowRejection(string attributeName)
+    {
+        return $"Attribute '{attributeName}' holds credential material and cannot be used in an Attribute Flow. " +
+               "Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse.";
     }
 
     /// <summary>

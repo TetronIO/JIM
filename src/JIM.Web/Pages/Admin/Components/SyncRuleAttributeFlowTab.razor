@@ -371,7 +371,9 @@
                                 @bind-Value="_attributeFlowMappingSource.ConnectedSystemAttribute" Label="Connected System Attribute"
                                 Placeholder="Please select the source Connected System attribute" Required="true" Class="mt-5"
                                 Variant="Variant.Outlined">
-                                @foreach (var connectedSystemAttribute in SyncRule.ConnectedSystemObjectType!.Attributes)
+                                @* Credential attributes are excluded entirely: they are handled by JIM's password channel, never by Attribute Flow *@
+                                @foreach (var connectedSystemAttribute in SyncRule.ConnectedSystemObjectType!.Attributes.Where(q =>
+                                            !CredentialAttributes.IsCredentialAttribute(q.Name)))
                                 {
                                     <MudSelectItem Value="@connectedSystemAttribute">@connectedSystemAttribute.Name <span
                                             style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type :
@@ -463,7 +465,9 @@
                         @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute" Label="Connected System Attribute"
                         Placeholder="Please select the target Connected System attribute" Required="true" Class="mt-5"
                         Variant="Variant.Outlined">
+                        @* Credential attributes are excluded entirely: they are handled by JIM's password channel, never by Attribute Flow *@
                         @foreach (var connectedSystemAttribute in SyncRule.ConnectedSystemObjectType!.Attributes.Where(q =>
+                                    !CredentialAttributes.IsCredentialAttribute(q.Name) &&
                                     !SyncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping &&
                                     afr.TargetConnectedSystemAttribute != null &&
                                     afr.TargetConnectedSystemAttribute.Id == q.Id)))

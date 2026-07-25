@@ -575,6 +575,11 @@ public class ConnectedSystemServer
 
         Log.Verbose($"UpdateConnectedSystemSchemaAsync() called for {connectedSystem}");
 
+        // Whole-graph save: the caller supplies the object types and attributes wholesale, so this is the last gate
+        // before persistence. Credential attributes are forced back into a safe state here regardless of what the
+        // caller sent, which closes any route that sets Selected outside the validated per-attribute endpoints.
+        QuarantineCredentialAttributes(connectedSystem);
+
         var validationResults = ValidateConnectedSystemSettings(connectedSystem);
         connectedSystem.SettingValuesValid = validationResults.All(q => q.IsValid);
 
@@ -1358,6 +1363,9 @@ public class ConnectedSystemServer
 
         var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
 
+        // Credential attributes must never enter JIM's schema as new, manageable attributes.
+        FilterCredentialAttributesFromSchema(connectedSystem, schema, result);
+
         // Merge the new schema with the existing one, preserving IDs for attributes that are referenced by Synchronisation Rules
         // This prevents FK constraint violations when attributes are used in Synchronisation Rule mappings
         schema.ObjectTypes = schema.ObjectTypes.OrderBy(q => q.Name).ToList();
@@ -1490,6 +1498,10 @@ public class ConnectedSystemServer
             connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
         }
 
+        // Any credential attribute that survived the merge is one that was already persisted; force it into a
+        // state where JIM neither manages it nor lets an administrator turn it back on.
+        QuarantineCredentialAttributes(connectedSystem);
+
         // Set totals
         result.TotalObjectTypes = connectedSystem.ObjectTypes.Count;
         result.TotalAttributes = connectedSystem.ObjectTypes.Sum(ot => ot.Attributes?.Count ?? 0);
@@ -1537,6 +1549,10 @@ public class ConnectedSystemServer
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
         var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
+
+        // Credential attributes must never enter JIM's schema as new, manageable attributes. See the
+        // user-initiated overload above; both routes share this enforcement so they cannot drift.
+        FilterCredentialAttributesFromSchema(connectedSystem, schema, result);
 
         schema.ObjectTypes = schema.ObjectTypes.OrderBy(q => q.Name).ToList();
 
@@ -1655,6 +1671,9 @@ public class ConnectedSystemServer
             connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
         }
 
+        // See the user-initiated overload above.
+        QuarantineCredentialAttributes(connectedSystem);
+
         result.TotalObjectTypes = connectedSystem.ObjectTypes.Count;
         result.TotalAttributes = connectedSystem.ObjectTypes.Sum(ot => ot.Attributes?.Count ?? 0);
 
@@ -1666,6 +1685,98 @@ public class ConnectedSystemServer
         await Application.Activities.CompleteActivityAsync(activity);
 
         return result;
+    }
+
+    /// <summary>
+    /// Strips credential attributes out of an incoming Connected System schema so they can never be added to JIM
+    /// as new, manageable attributes, and discards any Connector recommendation that would make one an External Id
+    /// or Secondary External Id (the merge force-selects and locks whatever is recommended). Blocked names are
+    /// recorded on the result so the outcome is reported to the administrator rather than being silent.
+    /// </summary>
+    /// <remarks>
+    /// A credential attribute that is <b>already persisted</b> is deliberately left in the incoming schema. The
+    /// merge that follows derives removed attributes from <c>existing.Except(incoming)</c> and rebuilds each object
+    /// type's attribute collection, so filtering a persisted attribute out would orphan its row: EF turns that into
+    /// a DELETE, which is a foreign-key violation at save time when a Synchronisation Rule Mapping references the
+    /// attribute, and it would report a bogus "attribute removed" to the administrator when the Connected System
+    /// still has it. Preserved attributes are instead forced into a safe state by
+    /// <see cref="QuarantineCredentialAttributes"/> once the merge has run.
+    /// </remarks>
+    /// <param name="connectedSystem">The Connected System being refreshed, whose persisted object types decide what must be preserved.</param>
+    /// <param name="schema">The schema just retrieved from the Connected System. Modified in place.</param>
+    /// <param name="result">The schema refresh result to record blocked attributes on.</param>
+    internal static void FilterCredentialAttributesFromSchema(ConnectedSystem connectedSystem, ConnectorSchema schema, SchemaRefreshResult result)
+    {
+        foreach (var schemaObjectType in schema.ObjectTypes)
+        {
+            var recommendedExternalId = schemaObjectType.RecommendedExternalIdAttribute;
+            if (recommendedExternalId != null && CredentialAttributes.IsCredentialAttribute(recommendedExternalId.Name))
+            {
+                Log.Warning("Connected System {ConnectedSystem} recommended credential attribute {Attribute} as the External Id for object type {ObjectType}. The recommendation has been discarded; a credential attribute can never be an anchor.",
+                    LogSanitiser.Sanitise(connectedSystem.Name), LogSanitiser.Sanitise(recommendedExternalId.Name), LogSanitiser.Sanitise(schemaObjectType.Name));
+                schemaObjectType.RecommendedExternalIdAttribute = null!;
+            }
+
+            var recommendedSecondaryExternalId = schemaObjectType.RecommendedSecondaryExternalIdAttribute;
+            if (recommendedSecondaryExternalId != null && CredentialAttributes.IsCredentialAttribute(recommendedSecondaryExternalId.Name))
+            {
+                Log.Warning("Connected System {ConnectedSystem} recommended credential attribute {Attribute} as the Secondary External Id for object type {ObjectType}. The recommendation has been discarded; a credential attribute can never be an anchor.",
+                    LogSanitiser.Sanitise(connectedSystem.Name), LogSanitiser.Sanitise(recommendedSecondaryExternalId.Name), LogSanitiser.Sanitise(schemaObjectType.Name));
+                schemaObjectType.RecommendedSecondaryExternalIdAttribute = null;
+            }
+
+            var deniedAttributes = schemaObjectType.Attributes.Where(a => CredentialAttributes.IsCredentialAttribute(a.Name)).ToList();
+            if (deniedAttributes.Count == 0)
+                continue;
+
+            // Persisted attributes stay in the incoming schema so the merge matches and preserves them; everything
+            // else is dropped before it can be added.
+            var persistedAttributeNames = connectedSystem.ObjectTypes?
+                .FirstOrDefault(ot => ot.Name == schemaObjectType.Name)?
+                .Attributes.Select(a => a.Name)
+                .ToHashSet() ?? [];
+
+            foreach (var deniedAttribute in deniedAttributes.Where(a => !persistedAttributeNames.Contains(a.Name)))
+                schemaObjectType.Attributes.Remove(deniedAttribute);
+
+            result.BlockedCredentialAttributes[schemaObjectType.Name] = deniedAttributes
+                .Select(a => a.Name)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        if (result.BlockedCredentialAttributeCount > 0)
+            Log.Information("Blocked {Count} credential attribute(s) while importing the schema for Connected System {ConnectedSystem}. Passwords are handled by JIM's dedicated password channel, not Attribute Flow.",
+                result.BlockedCredentialAttributeCount, LogSanitiser.Sanitise(connectedSystem.Name));
+    }
+
+    /// <summary>
+    /// Forces every credential attribute still present on a Connected System into a state JIM will not act on:
+    /// deselected, selection locked, and not an anchor. Runs after the schema merge, so it covers attributes that
+    /// were persisted before credential attributes were denied.
+    /// </summary>
+    /// <param name="connectedSystem">The Connected System whose merged schema should be quarantined.</param>
+    internal static void QuarantineCredentialAttributes(ConnectedSystem connectedSystem)
+    {
+        if (connectedSystem.ObjectTypes == null)
+            return;
+
+        foreach (var objectType in connectedSystem.ObjectTypes)
+        {
+            foreach (var attribute in objectType.Attributes.Where(a => CredentialAttributes.IsCredentialAttribute(a.Name)))
+            {
+                var wasManaged = attribute.Selected || attribute.IsExternalId || attribute.IsSecondaryExternalId;
+
+                attribute.Selected = false;
+                attribute.SelectionLocked = true;
+                attribute.IsExternalId = false;
+                attribute.IsSecondaryExternalId = false;
+
+                if (wasManaged)
+                    Log.Warning("Credential attribute {Attribute} on object type {ObjectType} in Connected System {ConnectedSystem} was managed by JIM. It has been deselected and locked. Remove any Attribute Flow that references it; passwords are handled by JIM's dedicated password channel instead.",
+                        LogSanitiser.Sanitise(attribute.Name), LogSanitiser.Sanitise(objectType.Name), LogSanitiser.Sanitise(connectedSystem.Name));
+            }
+        }
     }
     #endregion
 
@@ -2637,6 +2748,14 @@ public class ConnectedSystemServer
                 continue;
             }
 
+            // Validate: a credential attribute can never be managed by JIM. Deselecting one stays allowed.
+            if (CredentialAttributes.IsCredentialAttribute(attribute.Name) &&
+                (updates.Selected == true || updates.IsExternalId == true || updates.IsSecondaryExternalId == true))
+            {
+                errors.Add((attributeId, $"Attribute '{attribute.Name}' holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow."));
+                continue;
+            }
+
             // Validate: Cannot unselect an External ID or Secondary External ID attribute
             if (updates.Selected.HasValue && !updates.Selected.Value && (attribute.IsExternalId || attribute.IsSecondaryExternalId))
             {
@@ -2731,6 +2850,14 @@ public class ConnectedSystemServer
             if (attribute == null)
             {
                 errors.Add((attributeId, $"Attribute {attributeId} not found on object type {objectType.Name}"));
+                continue;
+            }
+
+            // Validate: a credential attribute can never be managed by JIM. Deselecting one stays allowed.
+            if (CredentialAttributes.IsCredentialAttribute(attribute.Name) &&
+                (updates.Selected == true || updates.IsExternalId == true || updates.IsSecondaryExternalId == true))
+            {
+                errors.Add((attributeId, $"Attribute '{attribute.Name}' holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow."));
                 continue;
             }
 

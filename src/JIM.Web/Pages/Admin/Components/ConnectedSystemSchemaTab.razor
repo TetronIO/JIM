@@ -81,6 +81,15 @@
                 Found <strong>@result.TotalObjectTypes.ToString("N0")</strong> object type(s) with <strong>@result.TotalAttributes.ToString("N0")</strong> attribute(s).
             </MudText>
 
+            @if (result.BlockedCredentialAttributeCount > 0)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-2">
+                    <strong>@result.BlockedCredentialAttributeCount credential attribute(s) blocked:</strong>
+                    @(string.Join(", ", result.BlockedCredentialAttributes.SelectMany(kvp => kvp.Value).Distinct())).
+                    These hold credential material and are never managed by JIM. Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse.
+                </MudAlert>
+            }
+
             @if (!result.HasChanges)
             {
                 <MudText Color="Color.Success">No changes detected. The schema is up to date.</MudText>
@@ -510,7 +519,13 @@
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Selected">
-                    @if (context.IsExternalId || context.IsSecondaryExternalId)
+                    @if (CredentialAttributes.IsCredentialAttribute(context.Name))
+                    {
+                        <MudTooltip Text="This attribute holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse; they never flow through an Attribute Flow." Arrow="true" Placement="Placement.Top">
+                            <MudSwitch Value="false" Color="@Color.Primary" Disabled="true" />
+                        </MudTooltip>
+                    }
+                    else if (context.IsExternalId || context.IsSecondaryExternalId)
                     {
                         <MudTooltip Text="This attribute cannot be unselected because it is the External ID or Secondary External ID. These attributes must remain selected for sync operations to function correctly." Arrow="true" Placement="Placement.Top">
                             <MudSwitch Value="@context.Selected" Color="@Color.Primary" Disabled="true" />
@@ -1016,12 +1031,20 @@
         ((HashSet<string>)AttributeClassFilterSelectedValues).Clear();
 
         // convert the csv to a list and trim the entries
-        // go through each attribute on the object type and select it
+        // go through each attribute on the object type and select it.
+        // credential attributes are skipped: this path bypasses the table's disabled switch, so it needs its own guard.
+        var skippedCredentialAttributes = new List<string>();
         foreach (var attributeName in _attributeSelectionCsv.Split(','))
         {
             var attribute = _selectedObjectType.Attributes.SingleOrDefault(a => a.Name.Equals(attributeName.Trim(), StringComparison.OrdinalIgnoreCase));
             if (attribute == null)
                 continue;
+
+            if (CredentialAttributes.IsCredentialAttribute(attribute.Name))
+            {
+                skippedCredentialAttributes.Add(attribute.Name);
+                continue;
+            }
 
             attribute.Selected = true;
         }
@@ -1034,6 +1057,9 @@
 
         // all done, let the user know
         Snackbar.Add("Attributes selected.", Severity.Success);
+
+        if (skippedCredentialAttributes.Count > 0)
+            Snackbar.Add($"Skipped {string.Join(", ", skippedCredentialAttributes)}: credential attributes cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow.", Severity.Warning);
     }
 
     private bool DisableSelectedSchemaObjectType(ConnectedSystemObjectType connectedSystemObjectType)
