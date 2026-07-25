@@ -36,6 +36,14 @@ function New-JIMRunProfile {
     .PARAMETER FilePath
         Optional file path for file-based connectors.
 
+    .PARAMETER VerifyImportContentHashes
+        Enables Verification Mode. Only valid when -RunType is FullImport; the API rejects it
+        otherwise. When enabled, the Full Import performs no content-hash skips and instead
+        compares each object's stored import content hash against the freshly computed incoming
+        hash, raising a diagnostic error for any disagreement the skip optimisation would
+        otherwise have missed. Use temporarily to validate the skip optimisation; leave off for
+        normal, faster Full Imports.
+
     .PARAMETER PassThru
         If specified, returns the created Run Profile object.
 
@@ -98,6 +106,9 @@ function New-JIMRunProfile {
         [Parameter()]
         [string]$FilePath,
 
+        [Parameter()]
+        [switch]$VerifyImportContentHashes,
+
         [switch]$PassThru
     )
 
@@ -132,6 +143,10 @@ function New-JIMRunProfile {
 
             if ($FilePath) {
                 $body.filePath = $FilePath
+            }
+
+            if ($VerifyImportContentHashes) {
+                $body.verifyImportContentHashes = $true
             }
 
             try {

@@ -58,7 +58,15 @@
         </HeaderContent>
         <RowTemplate>
             <MudTd DataLabel="Name">@context.Name</MudTd>
-            <MudTd DataLabel="Run Type">@context.RunType.ToString().SplitOnCapitalLetters()</MudTd>
+            <MudTd DataLabel="Run Type">
+                @context.RunType.ToString().SplitOnCapitalLetters()
+                @if (context.VerifyImportContentHashes)
+                {
+                    <MudTooltip Text="Verification Mode is enabled: this Full Import performs no content-hash skips and diffs every object." Arrow="true" Placement="Placement.Top">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ms-2">Verification Mode</MudChip>
+                    </MudTooltip>
+                }
+            </MudTd>
             @if (ConnectedSystem.ConnectorDefinition.SupportsPartitions)
             {
                 <MudTd DataLabel="Partition">
@@ -176,6 +184,17 @@
                                      Class="mt-3" Min="0" Step="100" Required="true" Immediate="true"
                                      RequiredError="How many items to process in one go when importing" />
                 }
+
+                @if (_newRunProfile.RunType == ConnectedSystemRunType.FullImport)
+                {
+                    <div class="d-flex align-center mt-3">
+                        <MudCheckBox T="bool" @bind-Value="_newRunProfile.VerifyImportContentHashes" Label="Verification Mode" />
+                        <MudTooltip Text="Runs the honest attribute diff on every object instead of skipping unchanged objects by content hash, and reports any disagreement between the stored hash and the diff as an error. Use temporarily to validate the content-hash skip optimisation; leave off for normal, faster Full Imports."
+                                    Arrow="true" Placement="Placement.Top">
+                            <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="ms-1 mud-text-secondary" />
+                        </MudTooltip>
+                    </div>
+                }
             </MudForm>
         </DialogContent>
         <DialogActions>
@@ -230,6 +249,17 @@
                     <MudNumericField @bind-Value="_editRunProfile.PageSize" Label="Page Size" Variant="Variant.Outlined"
                                      Class="mt-3" Min="0" Step="100" Required="true" Immediate="true"
                                      RequiredError="How many items to process in one go when importing" />
+                }
+
+                @if (_editRunProfile.RunType == ConnectedSystemRunType.FullImport)
+                {
+                    <div class="d-flex align-center mt-3">
+                        <MudCheckBox T="bool" @bind-Value="_editRunProfile.VerifyImportContentHashes" Label="Verification Mode" />
+                        <MudTooltip Text="Runs the honest attribute diff on every object instead of skipping unchanged objects by content hash, and reports any disagreement between the stored hash and the diff as an error. Use temporarily to validate the content-hash skip optimisation; leave off for normal, faster Full Imports."
+                                    Arrow="true" Placement="Placement.Top">
+                            <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" Class="ms-1 mud-text-secondary" />
+                        </MudTooltip>
+                    </div>
                 }
             </MudForm>
         </DialogContent>
@@ -297,7 +327,8 @@
             RunType = _newRunProfile.RunType,
             Partition = selectedPartition,
             PageSize = _newRunProfile.PageSize,
-            FilePath = _newRunProfile.FilePath
+            FilePath = _newRunProfile.FilePath,
+            VerifyImportContentHashes = _newRunProfile.RunType == ConnectedSystemRunType.FullImport && _newRunProfile.VerifyImportContentHashes
         };
 
         try
@@ -331,7 +362,8 @@
             RunType = runProfile.RunType,
             PageSize = runProfile.PageSize,
             FilePath = runProfile.FilePath,
-            Partition = runProfile.Partition
+            Partition = runProfile.Partition,
+            VerifyImportContentHashes = runProfile.VerifyImportContentHashes
         };
         _editRunProfileDialogVisible = true;
         return Task.CompletedTask;
@@ -348,6 +380,7 @@
         _editRunProfileOriginal.PageSize = _editRunProfile.PageSize;
         _editRunProfileOriginal.FilePath = _editRunProfile.FilePath;
         _editRunProfileOriginal.Partition = selectedPartition;
+        _editRunProfileOriginal.VerifyImportContentHashes = _editRunProfileOriginal.RunType == ConnectedSystemRunType.FullImport && _editRunProfile.VerifyImportContentHashes;
 
         try
         {

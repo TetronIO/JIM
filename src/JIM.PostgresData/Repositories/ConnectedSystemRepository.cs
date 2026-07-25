@@ -1914,9 +1914,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
     /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.
     /// Handles all external ID data types (string, int, long, Guid).
-    /// Uses AsNoTracking for efficiency — results are read-only index data.
+    /// Delegates to <see cref="GetAllCsoImportStateLookupAsync"/> (SPEC-1082 D8) so there is a
+    /// single query implementation; ConnectedSystemServer.cs:3208 still consumes this Guid-only shape.
     /// </summary>
     public async Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
+    {
+        var lookup = await GetAllCsoImportStateLookupAsync(connectedSystemId);
+        return lookup.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.CsoId, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// SPEC-1082 D8: bulk-loads all CSO import state for a Connected System into a lightweight
+    /// dictionary, keyed by the same composite cache key as the external-id-only mapping above.
+    /// Widens that query's projection with the stored content hash, schema fingerprint, status,
+    /// and partition, so a Full Import can evaluate the skip predicate for every matched object
+    /// without any additional database round trip. Uses AsNoTracking; results are read-only index data.
+    /// </summary>
+    public async Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
     {
         // Load all CSOs for this Connected System with their external ID attribute values.
         // Each CSO gets ONE cache entry, keyed by whichever external ID is available:
@@ -1931,6 +1945,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 cso.Id,
                 cso.ExternalIdAttributeId,
                 cso.SecondaryExternalIdAttributeId,
+                cso.ImportStateHash,
+                cso.ImportStateFingerprint,
+                cso.Status,
+                cso.PartitionId,
                 // Load attribute values for both primary and secondary external ID attributes
                 AttributeValues = cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId ||
@@ -1947,9 +1965,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             })
             .ToListAsync();
 
-        var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, CsoImportStateLookupEntry>(StringComparer.OrdinalIgnoreCase);
         foreach (var cso in csos)
         {
+            var entry = new CsoImportStateLookupEntry(cso.Id, cso.ImportStateHash, cso.ImportStateFingerprint, cso.Status, cso.PartitionId);
+
             // Try primary external ID first
             var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
             var primaryValue = GetExternalIdValueString(primaryAv?.StringValue, primaryAv?.IntValue, primaryAv?.LongValue, primaryAv?.GuidValue);
@@ -1957,7 +1977,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             if (primaryValue != null)
             {
                 var cacheKey = $"cso:{connectedSystemId}:{cso.ExternalIdAttributeId}:{primaryValue}";
-                result.TryAdd(cacheKey, cso.Id);
+                result.TryAdd(cacheKey, entry);
                 continue; // Primary found — no need for secondary
             }
 
@@ -1970,12 +1990,55 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 if (secondaryValue != null)
                 {
                     var cacheKey = $"cso:{connectedSystemId}:{cso.SecondaryExternalIdAttributeId.Value}:{secondaryValue}";
-                    result.TryAdd(cacheKey, cso.Id);
+                    result.TryAdd(cacheKey, entry);
                 }
             }
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// SPEC-1082 D6: the only code path permitted to write <see cref="ConnectedSystemObject.ImportStateHash"/>
+    /// and <see cref="ConnectedSystemObject.ImportStateFingerprint"/>. Callers MUST invoke this
+    /// strictly after the batch's attribute-value writes for the given CSOs have committed.
+    /// Single set-based UPDATE ... FROM (VALUES ...) statement per batch (chunked to stay within
+    /// the parameter limit), mirroring <c>BulkUpdateConnectedSystemObjectsRawAsync</c>'s pattern.
+    /// Deliberately does NOT touch LastUpdated (the #891 Full Synchronisation watermark) - stamping
+    /// must be invisible to that watermark.
+    /// </summary>
+    public async Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps)
+    {
+        if (stamps.Count == 0)
+            return;
+
+        const int columnsPerRow = 3; // Id, Hash, Fingerprint
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+
+        var sql = new System.Text.StringBuilder();
+        var parameters = new List<object>();
+        foreach (var chunk in BulkSqlHelpers.ChunkList(stamps.ToList(), chunkSize))
+        {
+            sql.Clear();
+            parameters.Clear();
+            sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ""ImportStateHash"" = v.""ImportStateHash"", ""ImportStateFingerprint"" = v.""ImportStateFingerprint"" FROM (VALUES ");
+
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                var offset = i * columnsPerRow;
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::uuid, {{{offset + 2}}}::uuid)");
+
+                var (csoId, hash, fingerprint) = chunk[i];
+                parameters.Add(csoId);
+                parameters.Add(BulkSqlHelpers.NullableParam(hash, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam(fingerprint, NpgsqlTypes.NpgsqlDbType.Uuid));
+            }
+
+            sql.Append(@") AS v(""Id"", ""ImportStateHash"", ""ImportStateFingerprint"") WHERE t.""Id"" = v.""Id""");
+
+            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
     }
 
     /// <summary>
@@ -2467,6 +2530,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 avEntry.State = EntityState.Added;
         }
 
+        // SPEC-1082 D9: this writes attribute values outside the Full Import stamp path (D6/D7),
+        // e.g. backfilling a secondary external ID during PendingProvisioning confirmation. Null the
+        // stored hash/fingerprint in the SAME SaveChanges so a subsequent Full Import never trusts a
+        // hash describing content that has since changed.
+        connectedSystemObject.ImportStateHash = null;
+        connectedSystemObject.ImportStateFingerprint = null;
+
         // Use Entry().State instead of DbSet.Update() to avoid graph traversal.
         Repository.UpdateDetachedSafe(connectedSystemObject);  // Already has NullReferenceException fallback
         await Repository.Database.SaveChangesAsync();
@@ -2507,6 +2577,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (allNewValues.Count > 0)
         {
             await BulkInsertCsoAttributeValuesRawAsync(allNewValues);
+
+            // SPEC-1082 D9: same rationale as the singular overload above - this writes attribute
+            // values outside the Full Import stamp path, so null the stored hash/fingerprint for
+            // every affected CSO, set-based, in the same operation.
+            var affectedCsoIds = updates.Where(u => u.newAttributeValues.Count > 0).Select(u => u.cso.Id).Distinct().ToArray();
+            if (affectedCsoIds.Length > 0)
+            {
+                await Repository.Database.Database.ExecuteSqlRawAsync(
+                    @"UPDATE ""ConnectedSystemObjects"" SET ""ImportStateHash"" = NULL, ""ImportStateFingerprint"" = NULL WHERE ""Id"" = ANY({0})",
+                    affectedCsoIds);
+            }
         }
 
         Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Inserted {AttrCount} new attribute values for {CsoCount} CSOs via raw SQL",
@@ -2842,6 +2923,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         tracked.PageSize = runProfile.PageSize;
         tracked.FilePath = runProfile.FilePath;
         tracked.Partition = runProfile.Partition;
+        tracked.VerifyImportContentHashes = runProfile.VerifyImportContentHashes;
         tracked.LastUpdated = runProfile.LastUpdated;
         tracked.LastUpdatedByType = runProfile.LastUpdatedByType;
         tracked.LastUpdatedById = runProfile.LastUpdatedById;
@@ -5143,6 +5225,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.PartitionId, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(cso.ScopeReviewPending);
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.LastScopeEvaluatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                // SPEC-1082 D6: create writers ALWAYS write NULL for ImportStateHash/ImportStateFingerprint.
+                // Two-phase create commits parent CSO rows before attribute values; a non-null hash
+                // here could survive a subsequent value-write failure as a permanently believable lie.
+                // The only legitimate stamp is StampImportStateAsync, run after values commit.
+                parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());

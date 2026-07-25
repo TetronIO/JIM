@@ -34,6 +34,13 @@ function Set-JIMRunProfile {
     .PARAMETER FilePath
         The file path to set (for file-based connectors).
 
+    .PARAMETER VerifyImportContentHashes
+        When specified, sets whether Verification Mode is enabled. Pass $true to enable, $false to
+        disable. Omit to leave the current state unchanged. Only valid on a Full Import Run
+        Profile; the API rejects $true otherwise. When enabled, the Full Import performs no
+        content-hash skips and instead compares each object's stored import content hash against
+        the freshly computed incoming hash, raising a diagnostic error for any disagreement.
+
     .PARAMETER PassThru
         If specified, returns the updated Run Profile object.
 
@@ -59,6 +66,16 @@ function Set-JIMRunProfile {
         Get-JIMRunProfile -ConnectedSystemId 1 | Where-Object { $_.name -eq "Full Import" } | Set-JIMRunProfile -PageSize 1000
 
         Updates a Run Profile found by pipeline.
+
+    .EXAMPLE
+        Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -VerifyImportContentHashes $true
+
+        Enables Verification Mode on a Full Import Run Profile.
+
+    .EXAMPLE
+        Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -VerifyImportContentHashes $false
+
+        Disables Verification Mode, returning the Run Profile to normal content-hash-skip behaviour.
 
     .LINK
         Get-JIMRunProfile
@@ -95,6 +112,9 @@ function Set-JIMRunProfile {
 
         [Parameter()]
         [string]$FilePath,
+
+        [Parameter()]
+        [bool]$VerifyImportContentHashes,
 
         [switch]$PassThru
     )
@@ -137,6 +157,13 @@ function Set-JIMRunProfile {
 
         if ($PSBoundParameters.ContainsKey('FilePath')) {
             $body.filePath = $FilePath
+        }
+
+        # Checking $PSBoundParameters distinguishes "-VerifyImportContentHashes $false" (intentional)
+        # from "-VerifyImportContentHashes not provided" (leave unchanged); [bool] alone cannot
+        # express this (mirrors Set-JIMPredefinedSearch -IsEnabled).
+        if ($PSBoundParameters.ContainsKey('VerifyImportContentHashes')) {
+            $body.verifyImportContentHashes = $VerifyImportContentHashes
         }
 
         if ($body.Count -eq 0) {
