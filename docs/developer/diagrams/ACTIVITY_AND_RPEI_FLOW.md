@@ -1,6 +1,6 @@
 # Activity and RPEI Flow
 
-> Last updated: 2026-07-10, JIM v0.13.0
+> Last updated: 2026-07-25, JIM v0.14.0
 
 This diagram shows how Activities are created, how Run Profile Execution Items (RPEIs) are accumulated during operations, and how the final activity status is determined. Activities are the immutable audit record for every operation in JIM.
 
@@ -189,5 +189,7 @@ flowchart TD
 - **Initiator triad audit**<br /> Every activity records who initiated it (`InitiatedByType`, `InitiatedById`, `InitiatedByName`). For scheduled tasks, this preserves the schedule context. For deferred MVO deletions, the original initiator is captured at mark time and replayed during housekeeping.
 
 - **Synchronous configuration-change Activities (#14)**<br /> Configuration changes do not go through a Worker Task. The owning config server creates the Activity, mutates the entity, captures a configuration snapshot, and completes the Activity all in the same synchronous call. `ActivityTargetType` now spans the full configuration surface, including `SynchronisationRule`, `Schedule`, `ServiceSetting`, `TrustedCertificate`, `ApiKey`, `Role`, `PredefinedSearch`, `ConnectorDefinition`, `MetaverseObjectType`, `MetaverseAttribute`, `ObjectMatchingRule` and `ExampleDataSet`, in addition to the operational target types created by Worker Tasks.
+
+- **Incremental stat counters (#1078)**<br /> `GetActivityRunProfileExecutionStatsAsync` no longer aggregates over the RPEI and outcome tables on every read. The persistence paths maintain advisory per-Activity counter rows as the run executes, so an in-progress Activity's stats (served repeatedly while an administrator watches a run) are an O(counter rows) lookup. On completion, `FinaliseActivityRunProfileExecutionStatsAsync` replaces the counters with an exact aggregation and sets `Activity.RunProfileExecutionStatsFinalised`. Activities that completed before the counter table existed keep the legacy aggregation path and are finalised lazily the first time their stats are read. Non-relational providers (the EF in-memory test provider) always use the aggregation path, since counter maintenance is raw SQL.
 
 - **Scope-exit and no-contributor sync outcomes (Attribute Priority, #91)**<br /> Beyond the `ObjectChangeType` recorded on each RPEI, sync builds a finer-grained outcome tree. A CSO leaving scope (rather than being deleted at source) records a `DisconnectedOutOfScope` outcome, and when a recalled attribute has no surviving contributor and is genuinely cleared (not re-elected to a survivor, not frozen under a deletion grace period), a `NoContributor` child outcome is surfaced so an administrator can see the blank was an event, not merely an uncontributed attribute.
