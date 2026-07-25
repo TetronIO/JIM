@@ -232,6 +232,28 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
         logger.Verbose("OpenImportConnection() called");
+        var plan = BuildConnectionPlan(settingValues, logger);
+        _connectionFactory = plan.Factory;
+
+        // Execute connection with retry logic
+        ExecuteWithRetry(() =>
+        {
+            _connection = _connectionFactory();
+        }, plan.MaxRetries, plan.RetryDelayMs, logger);
+    }
+
+    /// <summary>
+    /// How to open a bound connection to the directory, derived from the Connected System's settings.
+    /// <para>
+    /// Separated from opening one so that a caller needing its own connection (the password channel, which is
+    /// bound separately because it has stricter requirements than import and export do) can build one without
+    /// replacing the connection an import or export session is already using.
+    /// </para>
+    /// </summary>
+    private sealed record ConnectionPlan(Func<LdapConnection> Factory, int MaxRetries, int RetryDelayMs);
+
+    private ConnectionPlan BuildConnectionPlan(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
+    {
         var directoryServer = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServer);
         var directoryServerPort = settingValues.SingleOrDefault(q => q.Setting.Name == _settingDirectoryServerPort);
         var timeoutSeconds = settingValues.SingleOrDefault(q => q.Setting.Name == _settingConnectionTimeout);
@@ -256,7 +278,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var maxRetries = maxRetriesSetting?.IntValue ?? LdapConnectorConstants.DEFAULT_MAX_RETRIES;
         var retryDelayMs = retryDelaySetting?.IntValue ?? LdapConnectorConstants.DEFAULT_RETRY_DELAY_MS;
 
-        logger.Debug("OpenImportConnection() Trying to connect to '{Server}' on port '{Port}' with username '{Username}' via auth type {AuthType}. SSL: {UseSsl}, SkipCertValidation: {SkipCertValidation}",
+        logger.Debug("BuildConnectionPlan() Preparing to connect to '{Server}' on port '{Port}' with username '{Username}' via auth type {AuthType}. SSL: {UseSsl}, SkipCertValidation: {SkipCertValidation}",
             directoryServer.StringValue, directoryServerPort.IntValue, username.StringValue, authTypeSettingValue.StringValue, useSsl, skipCertValidation);
 
         // Load JIM certificates for full validation (supplements system CA store)
@@ -285,14 +307,11 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         // Build a reusable connection factory so LdapConnectorImport can create additional
         // connections for parallel imports (one connection per container+objectType combo).
         // Captured values are immutable for the duration of the import session.
-        _connectionFactory = () => CreateConnection(identifier, credential, authTypeEnumValue,
-            TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value), useSsl, skipCertValidation, logger);
-
-        // Execute connection with retry logic
-        ExecuteWithRetry(() =>
-        {
-            _connection = _connectionFactory();
-        }, maxRetries, retryDelayMs, logger);
+        return new ConnectionPlan(
+            () => CreateConnection(identifier, credential, authTypeEnumValue,
+                TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value), useSsl, skipCertValidation, logger),
+            maxRetries,
+            retryDelayMs);
     }
 
     /// <summary>
@@ -482,6 +501,16 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private LdapConnectorPassword? _passwordChannel;
 
     /// <summary>
+    /// The password channel binds its own connection rather than sharing the import and export one.
+    /// <para>
+    /// Two reasons. It has stricter requirements (LDAPS is mandatory here and optional there), and delivering an
+    /// initial password happens partway through an export session, so borrowing that session's connection would
+    /// leave the export using a connection it did not open.
+    /// </para>
+    /// </summary>
+    private LdapConnection? _passwordConnection;
+
+    /// <summary>
     /// All three states are declared because the LDAP Connector serves Active Directory as well as directories
     /// that have no per-entry expiry control. Which of them a given Connected System can actually honour is not
     /// knowable without connecting to it, so a target that cannot honour the chosen state reports a downgrade on
@@ -513,19 +542,23 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 $"setting on this Connected System (and set the '{_settingDirectoryServerPort}' setting to " +
                 $"{LdapConnectorConstants.DEFAULT_LDAPS_PORT} unless the directory listens elsewhere), then try again.");
 
-        OpenImportConnection(settings.ToList(), Log.Logger);
+        var plan = BuildConnectionPlan(settings.ToList(), Log.Logger);
+        LdapConnection? connection = null;
+        ExecuteWithRetry(() => connection = plan.Factory(), plan.MaxRetries, plan.RetryDelayMs, Log.Logger);
 
-        if (_connection == null)
+        if (connection == null)
             throw new InvalidOperationException("The password connection could not be opened.");
 
-        var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, Log.Logger);
-        _directoryType = rootDse.DirectoryType;
+        _passwordConnection = connection;
 
-        var supportsPasswordModifyExtension = DirectorySupportsPasswordModifyExtension(_connection);
-        _passwordChannel = new LdapConnectorPassword(new LdapOperationExecutor(_connection), Log.Logger, _directoryType, supportsPasswordModifyExtension);
+        var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(connection, Log.Logger);
+        var directoryType = rootDse.DirectoryType;
+        var supportsPasswordModifyExtension = DirectorySupportsPasswordModifyExtension(connection);
+
+        _passwordChannel = new LdapConnectorPassword(new LdapOperationExecutor(connection), Log.Logger, directoryType, supportsPasswordModifyExtension);
 
         Log.Debug("OpenPasswordConnection: Password channel open. DirectoryType={DirectoryType}, PasswordModifyExtensionSupported={Supported}",
-            _directoryType, supportsPasswordModifyExtension);
+            directoryType, supportsPasswordModifyExtension);
     }
 
     public Task<PasswordSetResult> SetPasswordAsync(ConnectedSystemObject target, string password, PasswordSetOptions options, CancellationToken cancellationToken)
@@ -547,7 +580,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public void ClosePasswordConnection()
     {
         _passwordChannel = null;
-        CloseImportConnection();
+        _passwordConnection?.Dispose();
+        _passwordConnection = null;
     }
 
     /// <summary>
@@ -820,6 +854,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         {
             _connection?.Dispose();
             _connection = null;
+
+            _passwordConnection?.Dispose();
+            _passwordConnection = null;
+            _passwordChannel = null;
         }
 
         _disposed = true;
