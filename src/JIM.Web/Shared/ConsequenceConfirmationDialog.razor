@@ -51,6 +51,13 @@
                 }
                 else
                 {
+                    @if (!string.IsNullOrEmpty(IrreversibleWarning))
+                    {
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                            @IrreversibleWarning
+                        </MudAlert>
+                    }
+
                     @if (!string.IsNullOrEmpty(SafeMessage))
                     {
                         <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
@@ -169,6 +176,13 @@
     /// </summary>
     [Parameter]
     public IReadOnlyList<ConsequenceBlocker> Blockers { get; set; } = [];
+
+    /// <summary>
+    /// Stated prominently above everything else when the change cannot be undone. Suppressed whilst
+    /// blocked, where nothing irreversible can happen yet.
+    /// </summary>
+    [Parameter]
+    public string? IrreversibleWarning { get; set; }
 
     /// <summary>
     /// Reassurance shown when nothing blocks the change, for example that no object data is at risk.

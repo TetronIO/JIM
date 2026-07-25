@@ -342,6 +342,31 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
     }
 
     [Test]
+    public void ConsequenceConfirmationDialog_WithIrreversibleWarning_RendersItWhenNotBlocked()
+    {
+        var provider = ShowDialog(new DialogParameters<ConsequenceConfirmationDialog>
+        {
+            { x => x.IrreversibleWarning, "This action is permanent and cannot be undone." }
+        });
+
+        Assert.That(provider.Markup, Does.Contain("This action is permanent and cannot be undone."));
+    }
+
+    [Test]
+    public void ConsequenceConfirmationDialog_WithIrreversibleWarning_SuppressesItWhenBlocked()
+    {
+        // Nothing irreversible can happen whilst the change is blocked, so warning about it would
+        // misrepresent the situation.
+        var provider = ShowDialog(new DialogParameters<ConsequenceConfirmationDialog>
+        {
+            { x => x.IrreversibleWarning, "This action is permanent and cannot be undone." },
+            { x => x.Blockers, [new ConsequenceBlocker { Headline = "Blocked" }] }
+        });
+
+        Assert.That(provider.Markup, Does.Not.Contain("This action is permanent and cannot be undone."));
+    }
+
+    [Test]
     public void ConsequenceConfirmationDialog_WithConsequences_RendersHeadlineAndItems()
     {
         var provider = ShowDialog(new DialogParameters<ConsequenceConfirmationDialog>
