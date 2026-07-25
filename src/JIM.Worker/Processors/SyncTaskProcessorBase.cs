@@ -2968,6 +2968,23 @@ public abstract class SyncTaskProcessorBase
                 deletionsToProcess.Select(d => d.Mvo.Id).ToList());
         }
 
+        // Deletion cascade (#1044): the delete Pending Exports staged for the deleted objects' remaining
+        // Connected System Objects, captured so each can be reported on the Activity below. Keyed by Pending
+        // Export id because the bulk path and the per-object fallback can both contribute: the fallback
+        // re-evaluates objects the failed bulk attempt already evaluated, and reuses the very same Delete
+        // Pending Export rows, so keying by id reports each exactly once. The map from target CSO to its
+        // owning Metaverse Object is built BEFORE deletion, while the join is still intact, so each execution
+        // item can name the identity being deprovisioned.
+        var deletePendingExports = new Dictionary<Guid, PendingExport>();
+        var deletionCandidatesByCsoId = new Dictionary<Guid, MetaverseObject>();
+        var deletionCandidatesByMvoId = new Dictionary<Guid, MetaverseObject>();
+        foreach (var (mvo, _) in deletionsToProcess)
+        {
+            deletionCandidatesByMvoId[mvo.Id] = mvo;
+            foreach (var cso in mvo.ConnectedSystemObjects)
+                deletionCandidatesByCsoId[cso.Id] = mvo;
+        }
+
         var deletedMvoIds = new List<Guid>();
         try
         {
@@ -2986,6 +3003,9 @@ public abstract class SyncTaskProcessorBase
                         deletionsToProcess.Select(d => d.Mvo).ToList(), _recallExportEvaluationCache);
                     if (deleteExports.Count > 0)
                     {
+                        foreach (var deleteExport in deleteExports)
+                            deletePendingExports[deleteExport.Id] = deleteExport;
+
                         Log.Information(
                             "FlushPendingMvoDeletionsAsync: Ensured {Count} delete Pending Exports across {MvoCount} MVOs",
                             deleteExports.Count, deletionsToProcess.Count);
@@ -3018,8 +3038,20 @@ public abstract class SyncTaskProcessorBase
             Log.Warning(ex,
                 "FlushPendingMvoDeletionsAsync: Bulk deletion of {Count} MVO(s) failed; falling back to per-MVO deletion for error isolation",
                 deletionsToProcess.Count);
-            deletedMvoIds.AddRange(await ProcessMvoDeletionsIndividuallyAsync(deletionsToProcess));
+
+            // The bulk attempt's staged Pending Exports are kept, not discarded: when the bulk evaluation
+            // succeeded and only the delete failed, its CSO disconnects are already persisted, so the
+            // fallback's re-evaluation finds no joined CSOs and returns nothing. Anything the fallback does
+            // stage is merged over the top, deduplicated by Pending Export id.
+            deletedMvoIds.AddRange(await ProcessMvoDeletionsIndividuallyAsync(deletionsToProcess, deletePendingExports));
         }
+
+        // Deletion cascade (#1044): fold the staged delete Pending Exports into Activity reporting, so the
+        // accounts a run is about to deprovision are countable and filterable on the Activity rather than
+        // visible only in the service log. Emitted per flush (not deferred like the recall RPEIs): a target
+        // Connected System Object belongs to exactly one Metaverse Object, which is deleted exactly once, so
+        // the same Pending Export cannot be re-staged on a later page.
+        await ReportDeletionCascadeExportsAsync(deletePendingExports, deletionCandidatesByCsoId, deletionCandidatesByMvoId);
 
         // Reference recall (#908): stage membership-removal Pending Exports for Metaverse Objects
         // that referenced the deleted objects. Without this, referencing groups' target CSOs never
@@ -3061,6 +3093,135 @@ public abstract class SyncTaskProcessorBase
 
         _pendingMvoDeletions.Clear();
         _preRecallAttributeSnapshots.Clear();
+        span.SetSuccess();
+    }
+
+    /// <summary>
+    /// Reports the deletion-cascade delete Pending Exports staged by <see cref="FlushPendingMvoDeletionsAsync"/>
+    /// on the run's Activity (#1044), as consequences of the deletion that caused them: each staged (or reused)
+    /// delete Pending Export becomes a PendingExportCreated child of the MvoDeleted outcome on the Run Profile
+    /// Execution Item of the Connected System Object whose disconnection triggered the deletion. The Causality
+    /// Tree then reads as the whole story of a leaver: Disconnected, CSO Deleted, MVO Deleted, and one Pending
+    /// Export per downstream account being deprovisioned. Deprovisioning is the most consequential thing a run
+    /// stages, so it must never be visible only in the service log (Synchronisation Integrity: all outcomes
+    /// reported via RPEIs/Activities); an export with no MvoDeleted outcome to hang off (outcome tracking off,
+    /// or a deletion path that recorded none) falls back to a standalone Pending Export item rather than going
+    /// unreported.
+    /// </summary>
+    /// <param name="deletePendingExports">The delete Pending Exports ensured for the deleted objects' Connected
+    /// System Objects.</param>
+    /// <param name="deletionCandidatesByCsoId">Target Connected System Object id to the Metaverse Object it was
+    /// joined to, captured before deletion broke the join.</param>
+    /// <param name="deletionCandidatesByMvoId">Deleted Metaverse Objects by id, the fallback lookup for a Pending
+    /// Export whose target Connected System Object was not in the in-memory join collection.</param>
+    private async Task ReportDeletionCascadeExportsAsync(
+        Dictionary<Guid, PendingExport> deletePendingExports,
+        Dictionary<Guid, MetaverseObject> deletionCandidatesByCsoId,
+        Dictionary<Guid, MetaverseObject> deletionCandidatesByMvoId)
+    {
+        // Pair each reportable Pending Export with its target Connected System Object id up front, so the
+        // nullable id is dereferenced exactly once (null-state does not flow through Where).
+        var reportableExports = deletePendingExports.Values
+            .Where(pe => pe.ConnectedSystemObjectId.HasValue)
+            .Select(pe => (PendingExport: pe, ConnectedSystemObjectId: pe.ConnectedSystemObjectId!.Value))
+            .ToList();
+        if (reportableExports.Count == 0)
+            return;
+
+        using var span = Diagnostics.Sync.StartSpan("MvoDeletionReportCascadeExports");
+        span.SetTag("deleteExportCount", reportableExports.Count);
+
+        // The MvoDeleted outcome nodes recorded for this page's deletions, keyed by the Metaverse Object each
+        // one deleted. Both deletion-triggering paths (obsoletion and out-of-scope disconnection) record one,
+        // and this page's items have not been flushed yet, so the nodes are still in memory to parent onto.
+        var mvoDeletedNodes = new Dictionary<Guid, (ActivityRunProfileExecutionItem Rpei, ActivityRunProfileExecutionItemSyncOutcome Outcome)>();
+        foreach (var rpei in _activity.RunProfileExecutionItems)
+        {
+            foreach (var outcome in rpei.SyncOutcomes.Where(o =>
+                o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted && o.TargetEntityId.HasValue))
+            {
+                mvoDeletedNodes[outcome.TargetEntityId!.Value] = (rpei, outcome);
+            }
+        }
+
+        // Connected System id to name, so each outcome names the system the account is being deleted from
+        // (the convention for every PendingExportCreated outcome; the identity is named by the parent node).
+        // Built from the recall cache, whose export rules span every target system.
+        var csNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .Where(sr => sr.ConnectedSystem != null)
+            .GroupBy(sr => sr.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name)
+            ?? new Dictionary<int, string>();
+
+        // Only needed for the standalone fallback items, which must stay self-describing once the target
+        // Connected System Object is obsoleted and cleaned up. One Summary-tier lookup covers them all.
+        Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>? csoSnapshots = null;
+        var nestedCount = 0;
+        var standaloneCount = 0;
+
+        foreach (var (pendingExport, csoId) in reportableExports)
+        {
+            // The Pending Export's own SourceMetaverseObjectId is not a reliable attribution here: a reused
+            // Delete Pending Export from an earlier run carries the id it was created with, which the SET NULL
+            // delete cascade already cleared. Resolve through the target Connected System Object first.
+            if (!deletionCandidatesByCsoId.TryGetValue(csoId, out var deletedMvo)
+                && pendingExport.SourceMetaverseObjectId.HasValue)
+            {
+                deletionCandidatesByMvoId.TryGetValue(pendingExport.SourceMetaverseObjectId.Value, out deletedMvo);
+            }
+
+            csNameLookup.TryGetValue(pendingExport.ConnectedSystemId, out var targetCsName);
+
+            if (deletedMvo != null && mvoDeletedNodes.TryGetValue(deletedMvo.Id, out var mvoDeletedNode))
+            {
+                var nestedOutcome = SyncOutcomeBuilder.AddChildOutcome(mvoDeletedNode.Rpei, mvoDeletedNode.Outcome,
+                    ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                    targetEntityId: pendingExport.Id,
+                    targetEntityDescription: targetCsName,
+                    detailCount: pendingExport.AttributeValueChanges.Count,
+                    detailMessage: pendingExport.ConnectedSystemId.ToString());
+                await SnapshotPendingExportChangesAsync(nestedOutcome, pendingExport);
+                nestedCount++;
+                continue;
+            }
+
+            csoSnapshots ??= await _syncRepo.GetConnectedSystemObjectDisplaySnapshotsAsync(
+                reportableExports.Select(e => e.ConnectedSystemObjectId).ToList());
+            csoSnapshots.TryGetValue(csoId, out var snapshot);
+
+            var cascadeRpei = new ActivityRunProfileExecutionItem
+            {
+                Id = Guid.NewGuid(),
+                ObjectChangeType = ObjectChangeType.PendingExport,
+                ConnectedSystemObjectId = csoId,
+                PendingExportId = pendingExport.Id,
+                DisplayNameSnapshot = deletedMvo?.DisplayName,
+                ExternalIdSnapshot = snapshot?.ExternalId,
+                ObjectTypeSnapshot = snapshot?.TypeName
+            };
+
+            if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            {
+                var cascadeOutcome = SyncOutcomeBuilder.AddRootOutcome(cascadeRpei,
+                    ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                    targetEntityId: pendingExport.Id,
+                    targetEntityDescription: targetCsName,
+                    detailCount: pendingExport.AttributeValueChanges.Count,
+                    detailMessage: pendingExport.ConnectedSystemId.ToString());
+                await SnapshotPendingExportChangesAsync(cascadeOutcome, pendingExport);
+            }
+
+            _activity.RunProfileExecutionItems.Add(cascadeRpei);
+            standaloneCount++;
+        }
+
+        Log.Information(
+            "FlushPendingMvoDeletionsAsync: Reported {Count} deletion-cascade delete Pending Export(s) on the Activity " +
+            "across {SystemCount} Connected System(s): {NestedCount} nested under their MVO deletion, " +
+            "{StandaloneCount} as standalone execution items",
+            reportableExports.Count, reportableExports.Select(e => e.PendingExport.ConnectedSystemId).Distinct().Count(),
+            nestedCount, standaloneCount);
         span.SetSuccess();
     }
 
@@ -3139,8 +3300,14 @@ public abstract class SyncTaskProcessorBase
     /// pre-#993 behaviour. A failed object is marked with <c>LastConnectorDisconnectedDate</c> so
     /// housekeeping retries it. Returns the IDs of the MVOs that were actually deleted.
     /// </summary>
+    /// <param name="deletionsToProcess">The deletion candidates and their pre-recall attribute value snapshots.</param>
+    /// <param name="deletePendingExports">Collects the delete Pending Exports this path ensures, keyed by Pending
+    /// Export id, so the caller can report them on the Activity (#1044). A Pending Export ensured for an object
+    /// whose deletion then failed is still collected: the export is staged and pending, so an administrator must
+    /// see it.</param>
     private async Task<List<Guid>> ProcessMvoDeletionsIndividuallyAsync(
-        List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletionsToProcess)
+        List<(MetaverseObject Mvo, List<MetaverseObjectAttributeValue> FinalAttributeValues)> deletionsToProcess,
+        Dictionary<Guid, PendingExport> deletePendingExports)
     {
         var deletedMvoIds = new List<Guid>();
         foreach (var (mvo, finalAttributeValues) in deletionsToProcess)
@@ -3153,6 +3320,9 @@ public abstract class SyncTaskProcessorBase
                 var deleteExports = await _syncServer.EvaluateMvoDeletionAsync(mvo, _recallExportEvaluationCache);
                 if (deleteExports.Count > 0)
                 {
+                    foreach (var deleteExport in deleteExports)
+                        deletePendingExports[deleteExport.Id] = deleteExport;
+
                     Log.Information(
                         "ProcessMvoDeletionsIndividuallyAsync: Created {Count} delete Pending Exports for MVO {MvoId}",
                         deleteExports.Count, mvo.Id);
@@ -3583,6 +3753,12 @@ public abstract class SyncTaskProcessorBase
             _activity.InitiatedById,
             _activity.InitiatedByName,
             resolvedReferences);
+
+        // Deletion-cascade and reference-recall Pending Exports are created with the Connected System
+        // Object FK only (never the navigation property), so the builder cannot infer the object the
+        // change belongs to. Carry the FK across, matching the housekeeping Activity's folding, or the
+        // Causality Tree's attribute detail would be orphaned from its object.
+        change.ConnectedSystemObjectId ??= pendingExport.ConnectedSystemObjectId;
 
         outcome.ConnectedSystemObjectChange = change;
     }
