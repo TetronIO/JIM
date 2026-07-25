@@ -221,9 +221,11 @@ Password data raises requirements that JIM's existing synchronisation machinery 
 - *Ingress API.* A documented, API-key-authenticated endpoint that an external capture agent posts password change events to, with payload envelope encryption so that a TLS-terminating proxy cannot recover the password, a versioned wire contract, replay protection, and per-agent check-in reporting so an administrator can see which capture agents are healthy.
 - *Inbound password mapping on import.* A per-Connected-System setting nominating a source attribute as a password. The value is diverted at the import boundary straight into the password channel and is **never** persisted as a Connected System Object or Metaverse Object attribute value, never written to change history, and never available to an Attribute Flow. This is the supported answer to "my authoritative source supplies initial passwords", it works with any connector including the File connector, and it is strictly safer than the file-ingest idea considered below because the value never lands in the Metaverse. It is also the supported alternative to the do-it-yourself route described under "Why credential attributes are denylisted".
 
-**Phase 3 and beyond (not committed):** the native Domain Controller capture agent; a SCIM inbound password channel; self-service password reset; defensive password filtering (see below).
+**Phase 3 and beyond (not committed):** the native Domain Controller capture agent; a SCIM inbound password channel; self-service password reset; defensive password filtering ([#1120](https://github.com/TetronIO/JIM/issues/1120), see below).
 
 ### Future follow-on: defensive password filtering (not v1)
+
+> Tracked as [#1120](https://github.com/TetronIO/JIM/issues/1120), dependent on this feature.
 
 Once the capture path exists, the same event stream can be evaluated for password strength, so JIM can decline to propagate a weak or breached password and record why. This is a natural extension, not part of Phase 1, and it comes in two distinct forms that must not be conflated because they live in different places and give different guarantees:
 
