@@ -33,7 +33,8 @@ Password data raises requirements that JIM's existing synchronisation machinery 
 - **Self-service password reset (SSPR).** An end-user-facing reset portal is a separate feature with its own authentication and verification requirements. This PRD covers administrator-initiated and externally-captured password changes only.
 - **Keycloak as a provisioning target.** Keycloak remains JIM's authentication provider, not a Connected System.
 - **The Domain Controller capture agent itself.** Phase 2 delivers the inbound ingress API that such an agent would call. The native Windows agent is a separate deliverable with its own toolchain, signing, and release cycle; see "Phase 2 prerequisites" below.
-- **File-based (CSV) password ingest.** Deliberately deferred; see "Rejected and deferred inbound channels".
+- **File-based (CSV) password ingest.** Deliberately deferred; the supported way to bring a password in from a source is Phase 2 inbound password mapping on import, which never lands the value in the Metaverse. See "Rejected and deferred inbound channels".
+- **Adopting a third-party password filter as a dependency.** Existing open-source filters are design references, not components we ship; see "Prior art".
 
 ## User Stories
 
@@ -67,35 +68,40 @@ Password data raises requirements that JIM's existing synchronisation machinery 
 12. Failures are classified so that an administrator can distinguish a transient condition (system unavailable, timeout) from a configuration fault (bad credentials, insufficient rights, insecure transport refused) from a target rejection (password policy violation).
 13. A password change that targets zero enabled systems is still recorded as an Activity, with an outcome that makes the no-op explicit.
 
+**Preventing cleartext passwords leaking into the Metaverse**
+
+14. Well-known credential attributes are denylisted in connector schema handling: they cannot be selected for import, cannot be targeted by an Attribute Flow, and are reachable only through the password channel. The initial list for LDAP is `unicodePwd`, `userPassword`, `dBCSPwd`, `ntPwdHistory`, `lmPwdHistory`, `supplementalCredentials`, `unixUserPassword`, and `msDS-ManagedPassword`. This is distinct from, and additional to, the existing protected-attribute defaults list, which concerns clearing attributes rather than credentials.
+15. Where an Attribute Flow targets an attribute whose name matches a credential-like pattern outside that list, configuration validation raises a warning explaining that the password channel exists and that flowing a password as an attribute persists it in Metaverse Object attribute values, change history, Pending Exports, export previews, search results, and database backups.
+
 **Connector capability**
 
-14. A new capability interface, provisionally `IConnectorPasswordManagement`, exposes a set-password operation against a Connected System Object, plus open and close semantics consistent with the existing export capability interfaces.
-15. A corresponding capability flag is added to the connector capability contract and mirrored on the persisted Connector Definition.
-16. The LDAP connector implements the capability: Active Directory mode writes `unicodePwd` using the required quoted UTF-16LE encoding and **must refuse to transmit unless the connection is LDAPS**; generic LDAP mode writes `userPassword`. The mode is selected by a per-system setting.
-17. The connector supports an initial-password-on-create flow and an optional "user must change password at next sign-in" behaviour where the target system has such a concept.
+16. A new capability interface, provisionally `IConnectorPasswordManagement`, exposes a set-password operation against a Connected System Object, plus open and close semantics consistent with the existing export capability interfaces.
+17. A corresponding capability flag is added to the connector capability contract and mirrored on the persisted Connector Definition.
+18. The LDAP connector implements the capability: Active Directory mode writes `unicodePwd` using the required quoted UTF-16LE encoding and **must refuse to transmit unless the connection is LDAPS**; generic LDAP mode writes `userPassword`. The mode is selected by a per-system setting.
+19. The connector supports an initial-password-on-create flow and an optional "user must change password at next sign-in" behaviour where the target system has such a concept.
 
 **Reporting and audit**
 
-18. A Password Synchronisation queue page lists queued, failed, and expired events with target Connected System, target object, status, error detail, attempt count, and next retry time. It never displays, and its backing DTO never carries, the password value.
-19. The queue page supports manual retry of a single event and of a filtered selection, and supports cancelling or deleting an event.
-20. Every password change event produces an Activity: a parent Activity for the change and a child outcome per target Connected System recording success or failure.
-21. A new Activity target type is added for Password Synchronisation, mapped to a **new Activity target category** so the existing Activities list quick-filter isolates password events with no new filter controls. Per-Connected-System filtering comes for free from the existing filter options provided the Activity sets its target context to the Connected System name.
-22. The Metaverse Object detail page gains a Password Synchronisation panel showing that identity's recent password events and their per-system outcomes. The panel is visible to administrators only.
-23. The Connected System list view indicates Password Synchronisation state per row, and supports filtering and sorting on it.
-24. Queue rows and their Activities are reconciled: a queue row links to the Activity that created it, and the Activity records the terminal outcome. The queue holds operational state only; the Activity is the durable audit record and outlives the queue row.
+20. A Password Synchronisation queue page lists queued, failed, and expired events with target Connected System, target object, status, error detail, attempt count, and next retry time. It never displays, and its backing DTO never carries, the password value.
+21. The queue page supports manual retry of a single event and of a filtered selection, and supports cancelling or deleting an event.
+22. Every password change event produces an Activity: a parent Activity for the change and a child outcome per target Connected System recording success or failure.
+23. A new Activity target type is added for Password Synchronisation, mapped to a **new Activity target category** so the existing Activities list quick-filter isolates password events with no new filter controls. Per-Connected-System filtering comes for free from the existing filter options provided the Activity sets its target context to the Connected System name.
+24. The Metaverse Object detail page gains a Password Synchronisation panel showing that identity's recent password events and their per-system outcomes. The panel is visible to administrators only.
+25. The Connected System list view indicates Password Synchronisation state per row, and supports filtering and sorting on it.
+26. Queue rows and their Activities are reconciled: a queue row links to the Activity that created it, and the Activity records the terminal outcome. The queue holds operational state only; the Activity is the durable audit record and outlives the queue row.
 
 **Retention**
 
-25. The Pending Password Change queue is trimmed automatically by a Schedule, not by worker housekeeping, consistent with the direction of #1118. Terminal-state rows older than a retention period are removed; live rows are never trimmed.
-26. Password event Activities are retained under their own retention class and Service Setting, alongside the existing general, configuration-change, and security-event retention periods.
-27. Trim operations are batched using the existing cleanup batch-size setting and report summary statistics.
+27. The Pending Password Change queue is trimmed automatically by a Schedule, not by worker housekeeping, consistent with the direction of #1118. Terminal-state rows older than a retention period are removed; live rows are never trimmed.
+28. Password event Activities are retained under their own retention class and Service Setting, alongside the existing general, configuration-change, and security-event retention periods.
+29. Trim operations are batched using the existing cleanup batch-size setting and report summary statistics.
 
 **Surfaces**
 
-28. Setting a password is available on all three surfaces: a portal dialog, a REST endpoint, and a PowerShell cmdlet.
-29. Password Synchronisation configuration (create, read, update, enable, disable) is available on all three surfaces.
-30. Queue read and manual retry are available on all three surfaces.
-31. REST endpoints that accept a password are administrator-only, are excluded from request logging, and reject the request unless the transport is secure.
+30. Setting a password is available on all three surfaces: a portal dialog, a REST endpoint, and a PowerShell cmdlet.
+31. Password Synchronisation configuration (create, read, update, enable, disable) is available on all three surfaces.
+32. Queue read and manual retry are available on all three surfaces.
+33. REST endpoints that accept a password are administrator-only, are excluded from request logging, and reject the request unless the transport is secure.
 
 ### Non-Functional Requirements
 
@@ -153,7 +159,7 @@ Password data raises requirements that JIM's existing synchronisation machinery 
 |------|--------|
 | Database | New Pending Password Change table with indexes for queue polling and coalescing; new Connected System Password Synchronisation configuration; new Service Settings for retention; migration |
 | Models | New capability interface and flag; new queue entity and enums; new Activity target type and category; new retention constants |
-| Connectors | New password capability implemented by the LDAP connector (AD `unicodePwd` and generic `userPassword` modes, LDAPS enforcement); Connector Factory wiring; Mock connector support for testing |
+| Connectors | New password capability implemented by the LDAP connector (AD `unicodePwd` and generic `userPassword` modes, LDAPS enforcement); credential-attribute denylist in schema handling; Connector Factory wiring; Mock connector support for testing |
 | Application | New server for password change orchestration, fan-out, queue management, and retry; credential protection under a new purpose; Activity recording; retention trim |
 | Worker | Queue processing and retry execution; Schedule-driven trim step |
 | Scheduler | New built-in Schedule for queue and password-event trim, seeded idempotently and restored by factory reset |
@@ -199,6 +205,7 @@ Password data raises requirements that JIM's existing synchronisation machinery 
 - [ ] The Metaverse Object detail page shows password events for that identity to administrators only.
 - [ ] The Connected System list indicates, filters, and sorts on Password Synchronisation state.
 - [ ] A Schedule trims terminal queue rows and expired password Activities under their own retention setting.
+- [ ] Well-known credential attributes cannot be selected for import or targeted by an Attribute Flow, and a credential-like attribute name outside the denylist raises a configuration warning.
 - [ ] No password value appears in any log, Activity, change record, preview, DTO, or API response; verified by test and by security review.
 - [ ] Unit tests cover fan-out, coalescing, expiry, retry, enable-drain, and the never-log invariant; integration tests cover end-to-end delivery to a directory.
 - [ ] Public documentation ships in the same pull request.
@@ -209,9 +216,22 @@ Password data raises requirements that JIM's existing synchronisation machinery 
 
 **Phase 1: JIM as password origin.** Everything in this document: configuration, queue, connector capability, delivery, reporting, audit, retention, and the three surfaces. Password changes originate from an administrator in the portal, from the REST API, from PowerShell, or from provisioning.
 
-**Phase 2: inbound capture ingress.** A documented, API-key-authenticated endpoint that an external capture agent posts password change events to, with payload envelope encryption so that a TLS-terminating proxy cannot recover the password, a versioned wire contract, replay protection, and per-agent check-in reporting so an administrator can see which capture agents are healthy.
+**Phase 2: inbound capture.** Two channels sharing one entry point into the password channel:
+
+- *Ingress API.* A documented, API-key-authenticated endpoint that an external capture agent posts password change events to, with payload envelope encryption so that a TLS-terminating proxy cannot recover the password, a versioned wire contract, replay protection, and per-agent check-in reporting so an administrator can see which capture agents are healthy.
+- *Inbound password mapping on import.* A per-Connected-System setting nominating a source attribute as a password. The value is diverted at the import boundary straight into the password channel and is **never** persisted as a Connected System Object or Metaverse Object attribute value, never written to change history, and never available to an Attribute Flow. This is the supported answer to "my authoritative source supplies initial passwords", it works with any connector including the File connector, and it is strictly safer than the file-ingest idea considered below because the value never lands in the Metaverse. It is also the supported alternative to the do-it-yourself route described under "Why credential attributes are denylisted".
 
 **Phase 3 and beyond (not committed):** the native Domain Controller capture agent; a SCIM inbound password channel; self-service password reset.
+
+### Prior art: can we adopt an existing password filter?
+
+**No existing component can be adopted wholesale, but the hardest architectural problem is well-solved in public and should be used as reference rather than re-derived.** A Windows password filter is a documented OS extension point (the `Notification Packages` mechanism), so the DLL skeleton, the LSASS registration, and the `PasswordChangeNotify` callback are the same in every implementation; the differentiator is what happens after the callback fires. Public projects fall into three groups:
+
+- **Defensive filters (e.g. OpenPasswordFilter and its forks).** Mature and widely deployed, but they do the opposite job: they *reject* weak or breached passwords at change time, they do not forward them. Their value to us is purely architectural: they demonstrate the mandatory split (a minimal native DLL in LSASS talking to a userspace service over local IPC) working in production. They are typically GPL-family licensed, which is incompatible with shipping a binary agent under the Tetron Commercial Licence, so code reuse (as opposed to design reference) is off the table under the dependency governance rules.
+- **Managed-forwarding filters (e.g. `ManagedPasswordFilter`).** The closest architectural analogue: a thin native DLL that hands the account name and new password to a managed (.NET) worker process, which is exactly the shape our agent needs. Useful as a reference for the native-to-managed marshalling boundary. It does not solve delivery, durability, encryption, signing, or packaging, which is where the actual cost of our agent lies.
+- **Offensive/exfiltration filters (e.g. GoSecure's `DLLPasswordFilterImplant`).** These *do* capture and forward the cleartext password, so they prove the exact capture-and-send mechanism we need, but they are built as red-team implants: no durability, no operational security, no signing, and adopting attacker tooling into a product shipped to healthcare and government is a non-starter on both trust and licence grounds. Reference only, and even then chiefly to understand what a customer's blue team will look for when they audit our agent.
+
+**Conclusion: build our own, using these as design references, not dependencies.** The reusable insight, the LSASS split and the `PasswordChangeNotify` marshalling, is the easy 20%; the 80% that determines whether the agent is fit for JIM's sectors (signing under LSA Protection, durable encrypted local queueing, delivery, packaging, coverage monitoring, and an independent security assessment) is exactly the part no public project provides. There is no shortcut here that survives contact with the prerequisites below.
 
 ### Phase 2 prerequisites: the Domain Controller capture agent
 
@@ -228,6 +248,16 @@ The agent is not a JIM feature so much as a separate product with its own supply
 - **Licensing and redistribution terms** for a distributed binary agent, distinct from the server licence.
 
 Two mitigations worth weighing against that cost. First, the agent is only needed where the directory is the password master; customers whose password master is the identity provider, or who adopt a future self-service reset feature, need only Phase 1 and Phase 2. Second, the Windows notification-package registration accepts multiple filters, so JIM's agent can be installed alongside an incumbent product's during a parallel-run migration, which materially de-risks a migration cutover. Note that an incumbent capture agent cannot simply be repointed at JIM: those agents speak a proprietary protocol to their own synchronisation service, so a migration necessarily involves deploying ours.
+
+### Why credential attributes are denylisted
+
+Nothing in JIM today stops an administrator importing a cleartext password into a plain text attribute and mapping it, via an Attribute Flow, to export as `unicodePwd` or `userPassword`. The LDAP connector already carries `byte[]` attribute values end to end, and the only existing attribute guard (the protected-attribute defaults list) is about *clearing* attributes in AD, not credentials. So the do-it-yourself route works, and some administrators will reach for it the moment they see JIM can export to a directory. We should treat that as a hazard to close off, not a feature to rely on, for three reasons:
+
+- **It persists the secret in the clear throughout the Metaverse.** A password mapped as an attribute is stored as a Connected System Object attribute value and a Metaverse Object attribute value, written into CSO and MVO change history, materialised as a Pending Export, shown in export previews, returned by search and the API, and captured in every database backup. It is exactly the exposure this whole feature exists to avoid, reintroduced by the back door.
+- **The `unicodePwd` write will usually fail anyway.** AD only accepts `unicodePwd` as a quoted UTF-16LE value over LDAPS with modify semantics that the generic export path does not produce, so the DIY mapping tends to *look* configured while silently never setting a password, which is worse than an honest refusal.
+- **It has no queue, no retry, no audit-without-the-value, and no coalescing.** It bypasses everything Phase 1 provides.
+
+Hence requirements 14 and 15: well-known credential attributes are denylisted from import and from Attribute Flow selection, and a credential-like attribute name outside that list raises a configuration warning pointing the administrator at the password channel (or, in Phase 2, at inbound password mapping on import, which is the supported way to bring a password *in* from a source without it ever touching the Metaverse). The denylist is not a security boundary against a determined administrator (they own the schema and could rename an attribute), it is a guardrail that makes the safe path the obvious one and the dangerous path deliberate.
 
 ### Rejected and deferred inbound channels
 
