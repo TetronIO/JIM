@@ -23,14 +23,15 @@ namespace JIM.Worker.Tests.OutboundSync;
 /// Metaverse Objects (0-grace-period deletion rules) are reported on the run's Activity (#1044), not
 /// only in the service log. Deprovisioning is the most consequential thing a run can stage, and the
 /// Synchronisation Integrity rules require every outcome to surface via Run Profile Execution Items,
-/// so each staged (or reused) delete Pending Export must produce one Pending Export execution item
-/// carrying a PendingExportCreated outcome, exactly like the reference-recall exports beside it.
+/// so each staged (or reused) delete Pending Export must appear on the Causality Tree as a consequence
+/// of the deletion that caused it: a PendingExportCreated outcome nested beneath the MvoDeleted outcome.
 /// </summary>
 [TestFixture]
 public class DeletionCascadeExportReportingTests
 {
     private const int SourceSystemId = 1;
     private const int TargetSystemId = 5;
+    private const string TargetSystemName = "Target LDAP";
     private const int MvPersonTypeId = 40;
     private const int CsUserTypeId = 70;
     private const int CsExternalIdAttributeId = 80;
@@ -80,70 +81,68 @@ public class DeletionCascadeExportReportingTests
     /// <summary>
     /// The set-based fast path: a Metaverse Object deleted inline by the run, whose target Connected
     /// System Object is matched by an export Synchronisation Rule with a Delete deprovisioning action,
-    /// must report the staged delete Pending Export as its own execution item, carrying the Pending
-    /// Export id, the target Connected System Object, its external-ID and object type snapshots, and a
-    /// PendingExportCreated outcome naming the target Connected System.
+    /// must record the staged delete Pending Export as a consequence of the deletion: a
+    /// PendingExportCreated outcome nested beneath the MvoDeleted outcome on the disconnecting object's
+    /// execution item, naming the Connected System the account is being deleted from.
     /// </summary>
     [Test]
-    public async Task FlushPendingMvoDeletions_DeleteExportStaged_ReportsPendingExportRpeiAsync()
+    public async Task FlushPendingMvoDeletions_DeleteExportStaged_NestsPendingExportUnderMvoDeletedAsync()
     {
         SeedExportSyncRule(OutboundDeprovisionAction.Delete);
-        var (mvo, targetCso) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
-        var processor = CreateProcessor(out var activity);
+        var (mvo, _) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
+        Activity activity = null!;
+        var processor = await CreateProcessorAsync(a => activity = a);
+        var (deletionRpei, mvoDeletedOutcome) = processor.RecordSourceDisconnection(mvo);
         processor.QueueMvoDeletion(mvo);
 
         await processor.CallFlushPendingMvoDeletionsAsync();
 
         var deletePendingExport = SyncRepo.PendingExports.Values
             .Single(pe => pe.ChangeType == PendingExportChangeType.Delete);
-        var pendingExportRpeis = activity.RunProfileExecutionItems
-            .Where(r => r.ObjectChangeType == ObjectChangeType.PendingExport)
-            .ToList();
 
-        Assert.That(pendingExportRpeis, Has.Count.EqualTo(1),
-            "Each staged deletion-cascade delete Pending Export must be reported as an execution item");
+        Assert.That(activity.RunProfileExecutionItems.Any(r => r.ObjectChangeType == ObjectChangeType.PendingExport),
+            Is.False, "The staged export belongs on the deletion's causality tree, not on an execution item of its own");
 
-        var rpei = pendingExportRpeis[0];
-        Assert.That(rpei.PendingExportId, Is.EqualTo(deletePendingExport.Id));
-        Assert.That(rpei.ConnectedSystemObjectId, Is.EqualTo(targetCso.Id));
-        Assert.That(rpei.DisplayNameSnapshot, Is.EqualTo("Lena Leaver"),
-            "The execution item must name the deprovisioned identity, which no longer exists to be looked up");
-        Assert.That(rpei.ExternalIdSnapshot, Is.EqualTo("lena-leaver-guid"),
-            "The execution item must snapshot the target object's external ID so it stays identifiable after deletion");
-        Assert.That(rpei.ObjectTypeSnapshot, Is.EqualTo("user"));
-
-        var outcome = rpei.SyncOutcomes.SingleOrDefault();
-        Assert.That(outcome, Is.Not.Null, "Detailed outcome tracking must record a PendingExportCreated outcome");
-        Assert.That(outcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated));
-        Assert.That(outcome.TargetEntityId, Is.EqualTo(deletePendingExport.Id));
-        Assert.That(outcome.DetailMessage, Is.EqualTo(TargetSystemId.ToString()),
+        var cascadeOutcome = mvoDeletedOutcome.Children.SingleOrDefault();
+        Assert.That(cascadeOutcome, Is.Not.Null,
+            "The staged delete Pending Export must be recorded as a consequence of the Metaverse Object deletion");
+        Assert.That(cascadeOutcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated));
+        Assert.That(cascadeOutcome.ParentSyncOutcome, Is.SameAs(mvoDeletedOutcome));
+        Assert.That(cascadeOutcome.TargetEntityId, Is.EqualTo(deletePendingExport.Id));
+        Assert.That(cascadeOutcome.TargetEntityDescription, Is.EqualTo(TargetSystemName),
+            "The outcome must name the Connected System the account is being deleted from; the identity is named by the parent node");
+        Assert.That(cascadeOutcome.DetailMessage, Is.EqualTo(TargetSystemId.ToString()),
             "The outcome must carry the target Connected System id so the Activity can name the system being deprovisioned");
+        Assert.That(deletionRpei.SyncOutcomes, Does.Contain(cascadeOutcome),
+            "The outcome must be attached to the disconnecting object's execution item so it persists with it");
     }
 
     /// <summary>
-    /// Multiple deleted Metaverse Objects each cascading to their own target object must report one
-    /// execution item each; reporting is per staged Pending Export, not per batch.
+    /// Each deleted Metaverse Object's cascade lands on its own deletion, not pooled onto the first:
+    /// the graph must attribute every downstream deprovisioning to the identity that caused it.
     /// </summary>
     [Test]
-    public async Task FlushPendingMvoDeletions_MultipleDeletions_ReportsOneRpeiPerDeleteExportAsync()
+    public async Task FlushPendingMvoDeletions_MultipleDeletions_NestsEachExportUnderItsOwnDeletionAsync()
     {
         SeedExportSyncRule(OutboundDeprovisionAction.Delete);
         var (mvoOne, targetCsoOne) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
         var (mvoTwo, targetCsoTwo) = SeedDeletionCandidate("Larry Leaver", "uid=larry.leaver,ou=People,dc=corp");
-        var processor = CreateProcessor(out var activity);
+        var processor = await CreateProcessorAsync();
+        var (_, mvoOneDeletedOutcome) = processor.RecordSourceDisconnection(mvoOne);
+        var (_, mvoTwoDeletedOutcome) = processor.RecordSourceDisconnection(mvoTwo);
         processor.QueueMvoDeletion(mvoOne);
         processor.QueueMvoDeletion(mvoTwo);
 
         await processor.CallFlushPendingMvoDeletionsAsync();
 
-        var pendingExportRpeis = activity.RunProfileExecutionItems
-            .Where(r => r.ObjectChangeType == ObjectChangeType.PendingExport)
-            .ToList();
-        Assert.That(pendingExportRpeis, Has.Count.EqualTo(2));
-        Assert.That(pendingExportRpeis.Select(r => r.ConnectedSystemObjectId),
-            Is.EquivalentTo(new[] { (Guid?)targetCsoOne.Id, targetCsoTwo.Id }));
-        Assert.That(pendingExportRpeis.Select(r => r.DisplayNameSnapshot),
-            Is.EquivalentTo(new[] { "Lena Leaver", "Larry Leaver" }));
+        var pendingExportsByCsoId = SyncRepo.PendingExports.Values
+            .Where(pe => pe.ChangeType == PendingExportChangeType.Delete)
+            .ToDictionary(pe => pe.ConnectedSystemObjectId!.Value, pe => pe.Id);
+
+        Assert.That(mvoOneDeletedOutcome.Children.Select(c => c.TargetEntityId),
+            Is.EquivalentTo(new[] { (Guid?)pendingExportsByCsoId[targetCsoOne.Id] }));
+        Assert.That(mvoTwoDeletedOutcome.Children.Select(c => c.TargetEntityId),
+            Is.EquivalentTo(new[] { (Guid?)pendingExportsByCsoId[targetCsoTwo.Id] }));
     }
 
     /// <summary>
@@ -159,36 +158,73 @@ public class DeletionCascadeExportReportingTests
         Jim = BuildJimApplication(SyncRepo);
 
         SeedExportSyncRule(OutboundDeprovisionAction.Delete);
-        var (mvo, targetCso) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
-        var processor = CreateProcessor(out var activity);
+        var (mvo, _) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
+        var processor = await CreateProcessorAsync();
+        var (_, mvoDeletedOutcome) = processor.RecordSourceDisconnection(mvo);
         processor.QueueMvoDeletion(mvo);
 
         await processor.CallFlushPendingMvoDeletionsAsync();
 
+        var deletePendingExport = SyncRepo.PendingExports.Values
+            .Single(pe => pe.ChangeType == PendingExportChangeType.Delete);
+        Assert.That(mvoDeletedOutcome.Children, Has.Count.EqualTo(1),
+            "The per-object fallback must report its delete Pending Export exactly once, not once per attempt");
+        Assert.That(mvoDeletedOutcome.Children[0].TargetEntityId, Is.EqualTo(deletePendingExport.Id));
+    }
+
+    /// <summary>
+    /// Synchronisation Integrity backstop: with no MvoDeleted outcome to hang the export off (outcome
+    /// tracking disabled, or a deletion path that recorded none), the staged deprovisioning must still be
+    /// reported as a standalone execution item rather than going unreported.
+    /// </summary>
+    [Test]
+    public async Task FlushPendingMvoDeletions_NoDeletionOutcomeToNestUnder_ReportsStandaloneItemAsync()
+    {
+        SeedExportSyncRule(OutboundDeprovisionAction.Delete);
+        var (mvo, targetCso) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
+        Activity activity = null!;
+        var processor = await CreateProcessorAsync(a => activity = a);
+        processor.SetOutcomeTracking(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None);
+        processor.QueueMvoDeletion(mvo);
+
+        await processor.CallFlushPendingMvoDeletionsAsync();
+
+        var deletePendingExport = SyncRepo.PendingExports.Values
+            .Single(pe => pe.ChangeType == PendingExportChangeType.Delete);
         var pendingExportRpeis = activity.RunProfileExecutionItems
             .Where(r => r.ObjectChangeType == ObjectChangeType.PendingExport)
             .ToList();
+
         Assert.That(pendingExportRpeis, Has.Count.EqualTo(1),
-            "The per-object fallback must report its delete Pending Export exactly once, not once per attempt");
+            "A staged deprovisioning export must never go unreported, even with nothing to nest it under");
+        Assert.That(pendingExportRpeis[0].PendingExportId, Is.EqualTo(deletePendingExport.Id));
         Assert.That(pendingExportRpeis[0].ConnectedSystemObjectId, Is.EqualTo(targetCso.Id));
+        Assert.That(pendingExportRpeis[0].DisplayNameSnapshot, Is.EqualTo("Lena Leaver"));
+        Assert.That(pendingExportRpeis[0].ExternalIdSnapshot, Is.EqualTo("lena-leaver-guid"),
+            "The standalone item must snapshot the target object's external ID so it stays identifiable after deletion");
+        Assert.That(pendingExportRpeis[0].ObjectTypeSnapshot, Is.EqualTo("user"));
     }
 
     /// <summary>
     /// A Disconnect deprovisioning action stages no delete Pending Export, so there is nothing to report:
-    /// the flush must not manufacture empty Pending Export execution items.
+    /// the flush must not manufacture empty outcomes or execution items.
     /// </summary>
     [Test]
-    public async Task FlushPendingMvoDeletions_DisconnectActionOnly_ReportsNoPendingExportRpeisAsync()
+    public async Task FlushPendingMvoDeletions_DisconnectActionOnly_ReportsNothingAsync()
     {
         SeedExportSyncRule(OutboundDeprovisionAction.Disconnect);
         var (mvo, _) = SeedDeletionCandidate("Lena Leaver", "uid=lena.leaver,ou=People,dc=corp");
-        var processor = CreateProcessor(out var activity);
+        Activity activity = null!;
+        var processor = await CreateProcessorAsync(a => activity = a);
+        var (_, mvoDeletedOutcome) = processor.RecordSourceDisconnection(mvo);
         processor.QueueMvoDeletion(mvo);
 
         await processor.CallFlushPendingMvoDeletionsAsync();
 
+        Assert.That(mvoDeletedOutcome.Children, Is.Empty,
+            "A disconnect-only deprovisioning action stages no delete Pending Export to report");
         Assert.That(activity.RunProfileExecutionItems.Any(r => r.ObjectChangeType == ObjectChangeType.PendingExport),
-            Is.False, "A disconnect-only deprovisioning action stages no delete Pending Export to report");
+            Is.False);
     }
 
     #region helpers
@@ -225,6 +261,7 @@ public class DeletionCascadeExportReportingTests
             Enabled = true,
             Direction = SyncRuleDirection.Export,
             ConnectedSystemId = TargetSystemId,
+            ConnectedSystem = new ConnectedSystem { Id = TargetSystemId, Name = TargetSystemName },
             ConnectedSystemObjectTypeId = CsUserTypeId,
             MetaverseObjectTypeId = MvPersonTypeId,
             OutboundDeprovisionAction = outboundDeprovisionAction
@@ -281,11 +318,12 @@ public class DeletionCascadeExportReportingTests
         return (mvo, targetCso);
     }
 
-    private DeletionCascadeTestProcessor CreateProcessor(out Activity activity)
+    private async Task<DeletionCascadeTestProcessor> CreateProcessorAsync(Action<Activity>? captureActivity = null)
     {
         var connectedSystem = new ConnectedSystem { Id = SourceSystemId, Name = "Source HR" };
         var runProfile = new ConnectedSystemRunProfile { Id = 1, Name = "Full Sync", RunType = ConnectedSystemRunType.FullSynchronisation };
-        activity = new Activity { Id = Guid.NewGuid() };
+        var activity = new Activity { Id = Guid.NewGuid() };
+        captureActivity?.Invoke(activity);
         var processor = new DeletionCascadeTestProcessor(
             new SyncEngine(),
             new SyncServer(Jim),
@@ -296,6 +334,7 @@ public class DeletionCascadeExportReportingTests
             new CancellationTokenSource());
         processor.SetOutcomeTracking(ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.Detailed);
         processor.SetCsoChangeTrackingEnabled(false);
+        await processor.PrepareRecallExportEvaluationCacheAsync();
         return processor;
     }
 
@@ -322,6 +361,38 @@ public class DeletionCascadeExportReportingTests
         public void SetCsoChangeTrackingEnabled(bool enabled) => _csoChangeTrackingEnabled = enabled;
 
         public void QueueMvoDeletion(MetaverseObject mvo) => _pendingMvoDeletions.Add((mvo, mvo.AttributeValues.ToList()));
+
+        /// <summary>
+        /// Builds the run-scoped recall export evaluation cache the deletion flush uses, exactly as both
+        /// concrete processors do at run start (source system 0: deletions consider every target system).
+        /// </summary>
+        public async Task PrepareRecallExportEvaluationCacheAsync() =>
+            _recallExportEvaluationCache = await _syncServer.BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0);
+
+        /// <summary>
+        /// Records what Pass 1 or Pass 2 records when a disconnection triggers an immediate deletion: an
+        /// execution item for the disconnecting Connected System Object carrying a Disconnected root outcome
+        /// with an MvoDeleted child, which the deletion flush then hangs its cascade exports off.
+        /// </summary>
+        public (ActivityRunProfileExecutionItem Rpei, ActivityRunProfileExecutionItemSyncOutcome MvoDeletedOutcome) RecordSourceDisconnection(MetaverseObject mvo)
+        {
+            var rpei = new ActivityRunProfileExecutionItem
+            {
+                Id = Guid.NewGuid(),
+                ObjectChangeType = ObjectChangeType.Disconnected,
+                DisplayNameSnapshot = mvo.DisplayName
+            };
+            var disconnectedOutcome = SyncOutcomeBuilder.AddRootOutcome(rpei,
+                ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected,
+                targetEntityId: mvo.Id,
+                targetEntityDescription: mvo.DisplayName);
+            var mvoDeletedOutcome = SyncOutcomeBuilder.AddChildOutcome(rpei, disconnectedOutcome,
+                ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
+                targetEntityId: mvo.Id,
+                targetEntityDescription: mvo.DisplayName);
+            _activity.RunProfileExecutionItems.Add(rpei);
+            return (rpei, mvoDeletedOutcome);
+        }
 
         public Task CallFlushPendingMvoDeletionsAsync() => FlushPendingMvoDeletionsAsync();
     }

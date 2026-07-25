@@ -720,6 +720,14 @@ public class Worker : BackgroundService
             // Source system 0: deletions must consider export rules to every system.
             var exportEvaluationCache = await jim.ExportEvaluation.BuildExportEvaluationCacheAsync(sourceConnectedSystemId: 0);
 
+            // Connected System id to name, so each staged export names the system it targets (the convention for
+            // every PendingExportCreated outcome; the object concerned is named by the execution item beside it).
+            var csNameLookup = exportEvaluationCache.ExportRulesByMvoTypeId.Values
+                .SelectMany(rules => rules)
+                .Where(sr => sr.ConnectedSystem != null)
+                .GroupBy(sr => sr.ConnectedSystemId)
+                .ToDictionary(g => g.Key, g => g.First().ConnectedSystem!.Name);
+
             foreach (var mvo in mvosToDelete)
             {
                 try
@@ -748,23 +756,37 @@ public class Worker : BackgroundService
                         DisplayNameSnapshot = mvo.DisplayName,
                         ObjectTypeSnapshot = mvo.Type?.Name
                     };
+                    var reportableDeleteExports = deletePendingExports.Where(pe => pe.ConnectedSystemObjectId.HasValue).ToList();
                     if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
                     {
-                        SyncOutcomeBuilder.AddRootOutcome(deletionItem,
+                        var mvoDeletedOutcome = SyncOutcomeBuilder.AddRootOutcome(deletionItem,
                             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
                             targetEntityId: mvo.Id,
                             targetEntityDescription: mvo.DisplayName);
-                    }
-                    executionItems.Add(deletionItem);
 
-                    // Deletion cascade (#1044): fold the delete Pending Exports this deletion staged into the
-                    // Activity, one execution item each, mirroring the recall folding below. Deprovisioning a
-                    // real account is the most consequential thing housekeeping stages, so it must be visible
-                    // and countable on the Activity, not just in the service log.
-                    executionItems.AddRange(deletePendingExports
-                        .Where(pe => pe.ConnectedSystemObjectId.HasValue)
-                        .Select(pe => BuildPendingExportExecutionItem(pe, mvo.DisplayName, mvo.Type?.Name,
-                            activity, outcomeTrackingLevel, csoChangeTrackingEnabled)));
+                        // Deletion cascade (#1044): record each delete Pending Exports this deletion staged as a
+                        // consequence of it, so the item reads as action and consequences: MVO Deleted, then one
+                        // Pending Export per downstream account being deprovisioned. Deprovisioning a real account
+                        // is the most consequential thing housekeeping stages, so it must be visible and countable
+                        // on the Activity, not just in the service log.
+                        foreach (var deletePendingExport in reportableDeleteExports)
+                        {
+                            AddPendingExportOutcome(deletionItem, mvoDeletedOutcome, deletePendingExport,
+                                csNameLookup.GetValueOrDefault(deletePendingExport.ConnectedSystemId),
+                                activity, csoChangeTrackingEnabled);
+                        }
+                    }
+                    else
+                    {
+                        // Outcome tracking is off, so there is no deletion outcome to hang the exports off. They
+                        // are still staged work an administrator must see: record one execution item each.
+                        executionItems.AddRange(reportableDeleteExports
+                            .Select(pe => BuildPendingExportExecutionItem(pe, mvo.DisplayName, mvo.Type?.Name,
+                                csNameLookup.GetValueOrDefault(pe.ConnectedSystemId),
+                                activity, outcomeTrackingLevel, csoChangeTrackingEnabled)));
+                    }
+
+                    executionItems.Add(deletionItem);
 
                     Log.Information("PerformMetaverseObjectHousekeepingAsync: Successfully deleted MVO {MvoId}", mvo.Id);
                 }
@@ -804,6 +826,7 @@ public class Worker : BackgroundService
                         pe,
                         ResolveReferencingObjectDisplayName(pe, recallResult),
                         objectTypeSnapshot: null,
+                        csNameLookup.GetValueOrDefault(pe.ConnectedSystemId),
                         activity, outcomeTrackingLevel, csoChangeTrackingEnabled)));
             }
 
@@ -852,6 +875,7 @@ public class Worker : BackgroundService
     /// <param name="displayNameSnapshot">The display name to label the item with: the referencing object for a
     /// recall export, the deleted identity for a deletion cascade. Snapshotted because neither may survive.</param>
     /// <param name="objectTypeSnapshot">The object type to label the item with, when known.</param>
+    /// <param name="targetConnectedSystemName">The Connected System the export targets, named on the outcome.</param>
     /// <param name="activity">The housekeeping Activity, for initiator attribution on the change snapshot.</param>
     /// <param name="outcomeTrackingLevel">The configured sync outcome tracking level.</param>
     /// <param name="csoChangeTrackingEnabled">Whether Connected System Object change tracking is enabled.</param>
@@ -859,6 +883,7 @@ public class Worker : BackgroundService
         PendingExport pendingExport,
         string? displayNameSnapshot,
         string? objectTypeSnapshot,
+        string? targetConnectedSystemName,
         Activity activity,
         ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel outcomeTrackingLevel,
         bool csoChangeTrackingEnabled)
@@ -873,18 +898,41 @@ public class Worker : BackgroundService
             ObjectTypeSnapshot = objectTypeSnapshot
         };
 
-        if (outcomeTrackingLevel == ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
-            return executionItem;
+        if (outcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
+            AddPendingExportOutcome(executionItem, parent: null, pendingExport, targetConnectedSystemName, activity, csoChangeTrackingEnabled);
 
-        var outcome = SyncOutcomeBuilder.AddRootOutcome(executionItem,
-            ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
-            targetEntityId: pendingExport.Id,
-            targetEntityDescription: displayNameSnapshot,
-            detailCount: pendingExport.AttributeValueChanges.Count,
-            detailMessage: pendingExport.ConnectedSystemId.ToString());
+        return executionItem;
+    }
 
-        // Snapshot the Pending Export's attribute changes so the Causality Tree can render
-        // attribute detail even after the Pending Export is deleted during export confirmation.
+    /// <summary>
+    /// Records a PendingExportCreated outcome for a staged Pending Export, either as the root outcome of its own
+    /// execution item or, when <paramref name="parent"/> is supplied, as a consequence nested beneath it (a
+    /// deprovisioning delete under the MvoDeleted outcome that caused it, #1044). Also snapshots the Pending
+    /// Export's attribute changes so the Causality Tree can render attribute detail even after the Pending Export
+    /// is deleted during export confirmation.
+    /// </summary>
+    private static void AddPendingExportOutcome(
+        ActivityRunProfileExecutionItem executionItem,
+        ActivityRunProfileExecutionItemSyncOutcome? parent,
+        PendingExport pendingExport,
+        string? displayNameSnapshot,
+        Activity activity,
+        bool csoChangeTrackingEnabled)
+    {
+        var outcome = parent == null
+            ? SyncOutcomeBuilder.AddRootOutcome(executionItem,
+                ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                targetEntityId: pendingExport.Id,
+                targetEntityDescription: displayNameSnapshot,
+                detailCount: pendingExport.AttributeValueChanges.Count,
+                detailMessage: pendingExport.ConnectedSystemId.ToString())
+            : SyncOutcomeBuilder.AddChildOutcome(executionItem, parent,
+                ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
+                targetEntityId: pendingExport.Id,
+                targetEntityDescription: displayNameSnapshot,
+                detailCount: pendingExport.AttributeValueChanges.Count,
+                detailMessage: pendingExport.ConnectedSystemId.ToString());
+
         if (csoChangeTrackingEnabled && pendingExport.AttributeValueChanges.Count > 0)
         {
             var change = ExportChangeHistoryBuilder.BuildFromPendingExport(
@@ -892,8 +940,6 @@ public class Worker : BackgroundService
             change.ConnectedSystemObjectId ??= pendingExport.ConnectedSystemObjectId;
             outcome.ConnectedSystemObjectChange = change;
         }
-
-        return executionItem;
     }
 
     /// <summary>

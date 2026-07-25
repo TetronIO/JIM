@@ -135,7 +135,7 @@ Configure the action in the export section of the Synchronisation Rule editor. T
 
 ### Seeing what a run has deprovisioned
 
-Every delete queued by a Deprovisioning Action is reported on the Activity of the run that staged it, so you can see exactly which accounts are about to be removed before the next export runs. Each queued delete appears as its own **Pending Export** execution item, named after the identity being deprovisioned, linked to the target Connected System Object and to the Pending Export itself, and counted in the Activity's Pending Exports total. Filter an Activity's execution items by the Pending Export change type to list them.
+Every delete queued by a Deprovisioning Action is reported on the Activity of the run that staged it, so you can see exactly which accounts are about to be removed before the next export runs. Each queued delete appears on the deleted identity's execution item as a **Pending Export** outcome nested beneath the **MVO Deleted** outcome that caused it, naming the Connected System the account is being removed from, and is counted in the Activity's Pending Exports total. A leaver's execution item therefore reads as the whole chain: disconnected, Connected System Object deleted, identity deleted, then one Pending Export per downstream account being deprovisioned. Open the outcome to see the Pending Export's detail.
 
 This applies wherever the deletion happens: during a Synchronisation Run Profile (when the Metaverse Object Type's [deletion rule](../concepts/jml-lifecycle.md#deletion-rules) has no grace period, so the identity is deleted inline), and in the background [Metaverse Object Housekeeping](activities.md#metaverse-object-housekeeping) batch that deletes identities once their grace period expires.
 

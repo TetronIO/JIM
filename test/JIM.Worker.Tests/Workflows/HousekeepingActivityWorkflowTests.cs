@@ -30,6 +30,7 @@ namespace JIM.Worker.Tests.Workflows;
 public class HousekeepingActivityWorkflowTests
 {
     private const int TargetSystemId = 5;
+    private const string TargetSystemName = "Target LDAP";
     private const int MvPersonTypeId = 40;
     private const int MvGroupTypeId = 50;
     private const int MvMemberAttributeId = 60;
@@ -192,11 +193,12 @@ public class HousekeepingActivityWorkflowTests
     /// <summary>
     /// Deletion cascade (#1044): a grace-period-expired Metaverse Object whose target Connected System Object is
     /// matched by an export Synchronisation Rule with a Delete deprovisioning action stages a delete Pending Export.
-    /// That export deprovisions a real account, so it must be reported as its own Pending Export execution item on
-    /// the housekeeping Activity, not left visible only in the service log.
+    /// That export deprovisions a real account, so it must be recorded on the housekeeping Activity as a consequence
+    /// of the deletion: a PendingExportCreated outcome nested beneath the deleted object's MvoDeleted outcome, not
+    /// left visible only in the service log.
     /// </summary>
     [Test]
-    public async Task PerformHousekeeping_EligibleMvoWithDeleteDeprovisionRule_ReportsDeleteExportItemAsync()
+    public async Task PerformHousekeeping_EligibleMvoWithDeleteDeprovisionRule_NestsDeleteExportUnderMvoDeletedAsync()
     {
         // Arrange
         var (personMvo, personTargetCso) = SeedEligiblePersonWithDeprovisionableTargetCso("Dan Deprovisioned");
@@ -212,20 +214,22 @@ public class HousekeepingActivityWorkflowTests
             .Single(pe => pe.ChangeType == PendingExportChangeType.Delete);
         Assert.That(deletePendingExport.ConnectedSystemObjectId, Is.EqualTo(personTargetCso.Id));
 
-        // Assert: and that it is reported on the Activity, carrying the Pending Export id and the identity's name.
+        // Assert: and that it is recorded as a consequence of the deletion on the deleted object's item.
         var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
         var rpeis = _persistedRpeis.Where(r => r.ActivityId == activity.Id).ToList();
-        var pendingExportRpeis = rpeis.Where(r => r.ObjectChangeType == ObjectChangeType.PendingExport).ToList();
-        Assert.That(pendingExportRpeis, Has.Count.EqualTo(1),
-            "The deletion-cascade delete Pending Export must be recorded as a Pending Export execution item");
-        Assert.That(pendingExportRpeis[0].PendingExportId, Is.EqualTo(deletePendingExport.Id));
-        Assert.That(pendingExportRpeis[0].ConnectedSystemObjectId, Is.EqualTo(personTargetCso.Id));
-        Assert.That(pendingExportRpeis[0].DisplayNameSnapshot, Is.EqualTo("Dan Deprovisioned"));
+        Assert.That(rpeis.Any(r => r.ObjectChangeType == ObjectChangeType.PendingExport), Is.False,
+            "The staged export belongs on the deletion's causality tree, not on an execution item of its own");
 
-        var outcome = pendingExportRpeis[0].SyncOutcomes.SingleOrDefault();
-        Assert.That(outcome, Is.Not.Null, "Detailed outcome tracking must record a PendingExportCreated outcome");
-        Assert.That(outcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated));
-        Assert.That(outcome.TargetEntityId, Is.EqualTo(deletePendingExport.Id));
+        var deletionRpei = rpeis.Single(r => r.ObjectChangeType == ObjectChangeType.Deleted);
+        var mvoDeletedOutcome = deletionRpei.SyncOutcomes
+            .Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        var cascadeOutcome = mvoDeletedOutcome.Children.SingleOrDefault();
+        Assert.That(cascadeOutcome, Is.Not.Null,
+            "The staged delete Pending Export must be recorded as a consequence of the Metaverse Object deletion");
+        Assert.That(cascadeOutcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated));
+        Assert.That(cascadeOutcome.TargetEntityId, Is.EqualTo(deletePendingExport.Id));
+        Assert.That(cascadeOutcome.TargetEntityDescription, Is.EqualTo(TargetSystemName),
+            "The outcome must name the Connected System the account is being deleted from; the identity is named by the item it hangs off");
         Assert.That(activity.TotalPendingExports, Is.EqualTo(1),
             "TotalPendingExports must count the staged deprovisioning export");
     }
@@ -437,6 +441,7 @@ public class HousekeepingActivityWorkflowTests
             Enabled = true,
             Direction = SyncRuleDirection.Export,
             ConnectedSystemId = TargetSystemId,
+            ConnectedSystem = new ConnectedSystem { Id = TargetSystemId, Name = TargetSystemName },
             ConnectedSystemObjectTypeId = CsUserTypeId,
             MetaverseObjectTypeId = MvPersonTypeId,
             OutboundDeprovisionAction = OutboundDeprovisionAction.Delete
