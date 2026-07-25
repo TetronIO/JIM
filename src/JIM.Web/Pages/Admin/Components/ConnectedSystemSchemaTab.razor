@@ -158,6 +158,13 @@
     </MudAlert>
 }
 
+@* Only meaningful where the Connector can set passwords at all; on one that cannot, there is no policy to read and
+   no channel to check. *@
+@if (ConnectedSystem.ConnectorDefinition.SupportsPasswordSet)
+{
+    <ConnectedSystemPasswordPolicyPanel ConnectedSystem="ConnectedSystem" />
+}
+
 <MudDialog @bind-Visible="_editSchemaAttributeDialogVisible" Options="_dialogOptions">
     <TitleContent>
         <MudText Typo="Typo.h6">

@@ -5,6 +5,7 @@ using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
 using System.Net;
@@ -637,6 +638,131 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         _passwordConnection?.Dispose();
         _passwordConnection = null;
     }
+
+    /// <summary>
+    /// Runs the non-destructive password channel checks, opening and closing its own connection.
+    /// <para>
+    /// Nothing here throws for a target that cannot be reached or refuses a read. An administrator running this is
+    /// asking what is wrong, so a failure to connect is the answer rather than an error to raise; the checks that
+    /// depend on a connection are reported as undetermined rather than quietly dropped, so it stays visible what
+    /// JIM would have looked at.
+    /// </para>
+    /// </summary>
+    public async Task<PasswordPreflightResult> RunPasswordPreflightAsync(List<ConnectedSystemSettingValue> settings, IReadOnlyList<string> containerExternalIds, ILogger logger, CancellationToken cancellationToken)
+    {
+        var useSecureConnection = settings.SingleOrDefault(q => q.Setting.Name == _settingUseSecureConnection);
+        var isConnectionEncrypted = useSecureConnection?.CheckboxValue == true;
+
+        LdapConnection? connection = null;
+        try
+        {
+            var plan = BuildConnectionPlan(settings, logger);
+            ExecuteWithRetry(() => connection = plan.Factory(), plan.MaxRetries, plan.RetryDelayMs, logger);
+        }
+        catch (InvalidSettingValuesException ex)
+        {
+            return CouldNotConnect("This Connected System is missing settings JIM needs in order to connect: " + ex.Message);
+        }
+        catch (LdapException ex)
+        {
+            logger.Warning("RunPasswordPreflightAsync: Could not connect to the Connected System: {Message}", LogSanitiser.Sanitise(ex.Message));
+            return CouldNotConnect($"JIM could not connect to this Connected System: {ex.Message}");
+        }
+        catch (DirectoryOperationException ex)
+        {
+            logger.Warning("RunPasswordPreflightAsync: The directory refused the connection: {Message}", LogSanitiser.Sanitise(ex.Message));
+            return CouldNotConnect($"The directory refused JIM's connection: {ex.Message}");
+        }
+
+        if (connection == null)
+            return CouldNotConnect("JIM could not open a connection to this Connected System.");
+
+        try
+        {
+            // A successful bind does not mean the directory will answer questions about itself. Reading the rootDSE
+            // can still be refused or fail, and when it does, every remaining check depends on what it would have
+            // said, so there is nothing left to establish. That is a finding to report, not an exception to raise:
+            // this method is called by an administrator asking what is wrong.
+            LdapConnectorRootDse rootDse;
+            bool supportsPasswordModifyExtension;
+            string? domainRootDn;
+            try
+            {
+                rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(connection, logger);
+                supportsPasswordModifyExtension = DirectorySupportsPasswordModifyExtension(connection);
+                domainRootDn = GetDefaultNamingContext(connection);
+            }
+            catch (DirectoryOperationException ex)
+            {
+                logger.Warning("RunPasswordPreflightAsync: The directory refused to describe itself: {Message}", LogSanitiser.Sanitise(ex.Message));
+                return CouldNotReadTheDirectory($"The directory refused to describe itself: {ex.Message}");
+            }
+            catch (LdapException ex)
+            {
+                logger.Warning("RunPasswordPreflightAsync: Could not read the directory's rootDSE: {Message}", LogSanitiser.Sanitise(ex.Message));
+                return CouldNotReadTheDirectory($"JIM connected, but could not read the directory's basic information: {ex.Message}");
+            }
+
+            var preflight = new LdapConnectorPreflight(new LdapOperationExecutor(connection), logger,
+                rootDse.DirectoryType, supportsPasswordModifyExtension, isConnectionEncrypted);
+
+            var checks = new List<PasswordPreflightCheckResult>
+            {
+                PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Connection,
+                    "JIM connected to this Connected System and authenticated successfully.")
+            };
+            checks.AddRange(await preflight.RunAsync(containerExternalIds, domainRootDn, cancellationToken));
+
+            return new PasswordPreflightResult
+            {
+                TargetDescription = DescribeDirectory(rootDse.DirectoryType),
+                Checks = checks
+            };
+        }
+        finally
+        {
+            connection.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Builds the result for a preflight that could not get far enough to check anything. The checks that were
+    /// never reached are reported as undetermined rather than omitted, so it stays visible what JIM would have
+    /// looked at, and so the outcome cannot read as a pass on the strength of an empty list.
+    /// </summary>
+    private static PasswordPreflightResult UnfinishedPreflight(PasswordPreflightCheckResult connectionCheck, string notCheckedReason) =>
+        new()
+        {
+            Checks =
+            [
+                connectionCheck,
+                PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.Encryption, notCheckedReason),
+                PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.PasswordMechanism, notCheckedReason),
+                PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.ResetRights, notCheckedReason),
+                PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.PolicyDiscovery, notCheckedReason)
+            ]
+        };
+
+    private static PasswordPreflightResult CouldNotConnect(string message) =>
+        UnfinishedPreflight(PasswordPreflightCheckResult.Failed(PasswordPreflightCheck.Connection, message),
+            "Not checked, because JIM could not connect to the Connected System.");
+
+    /// <summary>
+    /// The bind succeeded but the directory would not describe itself, so the connection check passes and
+    /// everything downstream of it is unknown.
+    /// </summary>
+    private static PasswordPreflightResult CouldNotReadTheDirectory(string message) =>
+        UnfinishedPreflight(PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Connection,
+                $"JIM connected and authenticated successfully. {message}"),
+            "Not checked, because JIM could not read the directory's basic information.");
+
+    private static string DescribeDirectory(LdapDirectoryType directoryType) => directoryType switch
+    {
+        LdapDirectoryType.ActiveDirectory => "Active Directory",
+        LdapDirectoryType.SambaAD => "Samba Active Directory",
+        LdapDirectoryType.OpenLDAP => "OpenLDAP",
+        _ => "an LDAP directory"
+    };
 
     /// <summary>
     /// Whether the directory advertises the RFC 3062 Password Modify extended operation on its rootDSE.

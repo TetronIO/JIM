@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Staging;
+using Serilog;
 namespace JIM.Models.Interfaces;
 
 /// <summary>
@@ -54,4 +55,29 @@ public interface IConnectorPasswordManagement
     /// Closes the connection used for password operations.
     /// </summary>
     public void ClosePasswordConnection();
+
+    /// <summary>
+    /// Checks whether the password channel is likely to work, without setting a password on anything.
+    /// <para>
+    /// There is no dry run for a password set: no directory offers a way to ask "would this be accepted" without
+    /// really accepting it. What can be established without writing is everything around the password itself, and
+    /// that accounts for most of what goes wrong: an unreachable target, an unencrypted channel, a mechanism the
+    /// target does not offer, a service account without reset rights, an unreadable policy. This answers those.
+    /// </para>
+    /// <para>
+    /// Implementations open and close their own connection, because this runs on demand from an administrator
+    /// rather than inside an export session. They must not throw for a target that is unreachable or refuses a
+    /// check: an unreachable target is a finding to report, not an exception to raise.
+    /// </para>
+    /// </summary>
+    /// <param name="settings">The Connected System's settings, as for opening any other connection.</param>
+    /// <param name="containerExternalIds">
+    /// The external ids of the containers the Connected System manages, so that rights can be checked where JIM
+    /// would actually be provisioning rather than somewhere it would not. Rights commonly vary between one part of
+    /// a target and another, so a check against the wrong place answers the wrong question. May be empty, in which
+    /// case the implementation falls back to whatever root the target exposes and says that it did so.
+    /// </param>
+    /// <param name="logger">Logger to write to.</param>
+    /// <param name="cancellationToken">Cancellation token to cancel the operation.</param>
+    public Task<PasswordPreflightResult> RunPasswordPreflightAsync(List<ConnectedSystemSettingValue> settings, IReadOnlyList<string> containerExternalIds, ILogger logger, CancellationToken cancellationToken);
 }

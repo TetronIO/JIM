@@ -367,5 +367,33 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         PasswordConnectionOpen = false;
     }
 
+    /// <summary>
+    /// The preflight result this mock returns. Settable so tests can simulate a target that is not ready.
+    /// Defaults to a target where everything JIM can check is in order.
+    /// </summary>
+    public PasswordPreflightResult PreflightResult { get; set; } = new()
+    {
+        TargetDescription = "a mock system",
+        Checks =
+        [
+            PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Connection, "Connected."),
+            PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.Encryption, "Encrypted."),
+            PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.PasswordMechanism, "Supported.")
+        ]
+    };
+
+    /// <summary>
+    /// The container external ids the last preflight was asked about, so tests can assert that rights are checked
+    /// where JIM would actually be provisioning.
+    /// </summary>
+    public IReadOnlyList<string> LastPreflightContainerExternalIds { get; private set; } = [];
+
+    public Task<PasswordPreflightResult> RunPasswordPreflightAsync(List<ConnectedSystemSettingValue> settings, IReadOnlyList<string> containerExternalIds, ILogger logger, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        LastPreflightContainerExternalIds = containerExternalIds;
+        return Task.FromResult(PreflightResult);
+    }
+
     #endregion
 }

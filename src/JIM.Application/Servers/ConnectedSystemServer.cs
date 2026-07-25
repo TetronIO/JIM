@@ -1845,6 +1845,70 @@ public class ConnectedSystemServer
     }
     #endregion
 
+    #region Connected System Password Channel
+    /// <summary>
+    /// Checks whether this Connected System's password channel is likely to work, without setting a password on
+    /// anything.
+    /// <para>
+    /// Deliberately not recorded as an Activity. Activities exist to account for changes, and this changes nothing
+    /// in JIM or in the Connected System; it reads. Recording every diagnostic read would bury the changes that
+    /// Activities are there to make findable.
+    /// </para>
+    /// <para>
+    /// The result is returned rather than stored, and is meant to be read now. A target's reachability, its
+    /// permissions and its policy all change without JIM being told, so a preflight kept on file would go on
+    /// reassuring an administrator long after it stopped being true.
+    /// </para>
+    /// </summary>
+    /// <exception cref="NotSupportedException">Thrown when the Connector cannot manage passwords at all.</exception>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<PasswordPreflightResult> RunPasswordPreflightAsync(ConnectedSystem connectedSystem, CancellationToken cancellationToken)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        var connector = CreateConnector(connectedSystem);
+        if (connector is not IConnectorPasswordManagement passwordConnector)
+            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support setting passwords, so there is no password channel to check.");
+
+        var containerExternalIds = GetSelectedContainerExternalIds(connectedSystem);
+        Log.Debug("RunPasswordPreflightAsync: Checking the password channel for Connected System {ConnectedSystemId} against {ContainerCount} selected container(s).",
+            connectedSystem.Id, containerExternalIds.Count);
+
+        return await passwordConnector.RunPasswordPreflightAsync(connectedSystem.SettingValues, containerExternalIds, Log.Logger, cancellationToken);
+    }
+
+    /// <summary>
+    /// Collects the external ids of every container the Connected System manages, walking the whole hierarchy.
+    /// <para>
+    /// These are where JIM would be provisioning, and so where rights actually need to hold. Permissions are
+    /// commonly granted on one part of a target and not another, so a rights check run anywhere else answers a
+    /// question nobody asked.
+    /// </para>
+    /// </summary>
+    private static List<string> GetSelectedContainerExternalIds(ConnectedSystem connectedSystem)
+    {
+        var selected = new List<string>();
+        if (connectedSystem.Partitions == null)
+            return selected;
+
+        foreach (var container in connectedSystem.Partitions
+                     .Where(p => p.Selected && p.Containers != null)
+                     .SelectMany(p => p.Containers!))
+            CollectSelectedContainers(container, selected);
+
+        return selected;
+    }
+
+    private static void CollectSelectedContainers(ConnectedSystemContainer container, List<string> selected)
+    {
+        if (container.Selected && !string.IsNullOrEmpty(container.ExternalId))
+            selected.Add(container.ExternalId);
+
+        foreach (var child in container.ChildContainers)
+            CollectSelectedContainers(child, selected);
+    }
+    #endregion
+
     #region Connected System Hierarchy
     /// <summary>
     /// Causes the associated Connector to be instantiated and the hierarchy (partitions and containers) to be imported from the Connected System.
