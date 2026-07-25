@@ -92,6 +92,15 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId);
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id, bool withChangeTracking = false);
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name, bool withChangeTracking = false);
+
+    /// <summary>
+    /// Gets the wire standard a Connected System's schema follows, as declared by its Connector. Returns
+    /// <see cref="AttributeStandard.NotSet"/> when the Connector declares none, and for a Connected System
+    /// that no longer exists. Advisory display data for the Attribute Flow editor's Standard Mapping hints
+    /// (#1122); never consulted by the synchronisation engine.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    public Task<AttributeStandard> GetConnectedSystemSchemaStandardAsync(int connectedSystemId);
     public Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
 
     /// <summary>

@@ -1,0 +1,47 @@
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Advisory Standard Mapping hints for one attribute (#1122): the counterpart name it carries in a standard's
+   vocabulary. Renders nothing when the attribute has no mapping for the applicable standard; an absent
+   correspondence is ordinary, not an error, so there is no empty-value affordance here. *@
+@if (Hints.Count > 0)
+{
+    <span class="jim-standard-hint@(Emphasised ? " jim-standard-hint-match" : "")">
+        @foreach (var hint in Hints)
+        {
+            @* A native title attribute rather than MudTooltip: these render inside a MudSelect's popover,
+               where an overlay tooltip would sit over the very option the user is trying to click. *@
+            <span class="jim-standard-hint-item" title="@hint.Notes">
+                @if (ShowStandard)
+                {
+                    <span class="jim-standard-hint-standard">@hint.StandardLabel</span>
+                }
+                <span class="jim-standard-hint-name">@hint.CounterpartName</span>
+            </span>
+        }
+    </span>
+}
+
+@code {
+    /// <summary>
+    /// The counterpart names to show. An empty list renders nothing at all.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<StandardMappingHint> Hints { get; set; } = [];
+
+    /// <summary>
+    /// Whether this attribute is the one the source attribute's name corresponds to, which the hint reflects
+    /// with a stronger treatment.
+    /// </summary>
+    [Parameter]
+    public bool Emphasised { get; set; }
+
+    /// <summary>
+    /// Whether to name the standard alongside the counterpart. Worth the space only where the hints span more
+    /// than one vocabulary; when they all come from the same one, the surrounding copy names it once instead.
+    /// </summary>
+    [Parameter]
+    public bool ShowStandard { get; set; } = true;
+}

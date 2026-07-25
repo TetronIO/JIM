@@ -4,7 +4,7 @@
 - **Issue:** [#1104](https://github.com/TetronIO/JIM/issues/1104)
 - **Related Issues:** [#545](https://github.com/TetronIO/JIM/issues/545) (SCIM 2.0 Client Connector), [#124](https://github.com/TetronIO/JIM/issues/124) (SCIM 2.0 Server Support), [#60](https://github.com/TetronIO/JIM/issues/60) (Attribute Set Templates; the complementary "packs" idea), [#1046](https://github.com/TetronIO/JIM/issues/1046) (Decimal attribute data type)
 - **Related Plans:** [`doing/SCIM_CLIENT_CONNECTOR_DESIGN.md`](doing/SCIM_CLIENT_CONNECTOR_DESIGN.md), [`SCIM_SERVER_DESIGN.md`](SCIM_SERVER_DESIGN.md)
-- **Last Updated:** 2026-07-23
+- **Last Updated:** 2026-07-25
 
 ## Overview
 
@@ -94,8 +94,8 @@ An attribute may carry several mappings ("First Name" maps to both standards; "P
 
 ### Phase 3: Consumption
 
-- Attribute Flow editor filter/hints.
-- SCIM connector wizard default-flow suggestions (client connector first, server when built).
+- Attribute Flow editor hints (#1122, delivered): counterpart names beside each Metaverse Attribute in the editor's pickers, and a stated correspondence with a one-click apply for the chosen source attribute. Annotation only, never filtering: filtering would hide valid targets and turn advisory metadata into policy. Which vocabulary applies is declared by the Connector (`IConnectorCapabilities.SchemaStandard`, reconciled on startup like the capability flags); where a Connector declares none, attribute names are matched against every standard and labelled with whichever answered.
+- SCIM connector wizard default-flow suggestions (client connector first, server when built). Belongs to #545 Phase 7, which owns the wizard.
 
 Phases 1 and 2 should land before or alongside the SCIM client connector's enablement phase (#545 Phase 7), so the connector ships with clean mapping targets and wizard hints.
 

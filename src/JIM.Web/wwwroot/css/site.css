@@ -1981,3 +1981,72 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-foot .mud-tab
 html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     background-color: transparent !important;
 }
+
+/* Advisory Standard Mapping hints in the Attribute Flow editor (#1122). Shown against a Metaverse Attribute
+   in a picker, they must read as annotation rather than as part of the attribute's own identity: secondary
+   colour, monospace counterpart name, and a bordered standard label. The matched attribute (the one the
+   source attribute's name corresponds to) gets the emphasised variant. Theme-aware via palette variables. */
+.jim-standard-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    white-space: nowrap;
+}
+
+.jim-standard-hint-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.jim-standard-hint-standard {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--mud-palette-text-secondary);
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 3px;
+    padding: 1px 5px;
+}
+
+.jim-standard-hint-name {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.85rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-standard-hint-match .jim-standard-hint-standard {
+    color: var(--mud-palette-primary);
+    border-color: var(--mud-palette-primary);
+}
+
+.jim-standard-hint-match .jim-standard-hint-name {
+    color: var(--mud-palette-text-primary);
+}
+
+/* Attribute Flow picker option row: name and shape on the left, Standard Mapping hint pushed to the right.
+   The hint never shrinks or wraps (a half-shown attribute name is worse than none), so the attribute's own
+   name and shape take the compression, keeping every row inside the picker's width. */
+.jim-flow-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+}
+
+.jim-flow-option > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.jim-flow-option-spacer {
+    flex: 1 1 auto;
+    min-width: 16px;
+}
+
+.jim-flow-option .jim-standard-hint {
+    flex: 0 0 auto;
+}

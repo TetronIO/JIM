@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -43,6 +44,10 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsParallelExport => true;
     public bool SupportsPaging => true;
     public bool SupportsFilePaths => false;
+
+    // Attribute names in an LDAP directory come from the LDAP/AD vocabulary, so the Attribute Flow editor
+    // can show the LDAP counterpart of each Metaverse Attribute. Advisory only; never read at sync time.
+    public AttributeStandard SchemaStandard => AttributeStandard.Ldap;
     #endregion
 
     #region IConnectorSettings members

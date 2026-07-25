@@ -396,6 +396,14 @@ public interface IMetaverseRepository
     public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name, bool withChangeTracking = false);
 
     /// <summary>
+    /// Gets the advisory Standard Mappings held by every Metaverse Attribute bound to a Metaverse Object Type.
+    /// Read-only display data for the Attribute Flow editor's hints (#1122); the returned mappings are not
+    /// change-tracked and carry no navigation properties.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The unique identifier of the Metaverse Object Type.</param>
+    public Task<List<MetaverseAttributeStandardMapping>> GetStandardMappingsForObjectTypeAsync(int metaverseObjectTypeId);
+
+    /// <summary>
     /// Creates a new Metaverse Attribute.
     /// </summary>
     /// <param name="attribute">The attribute to create.</param>
