@@ -1,6 +1,6 @@
 # Initial Password Generation and Delivery on Provisioning
 
-- **Status:** Planned
+- **Status:** Doing (Phase 1 complete; Phase 2 next)
 - **Issue:** [#1121](https://github.com/TetronIO/JIM/issues/1121)
 - **Related:** [#1119](https://github.com/TetronIO/JIM/issues/1119) Password Synchronisation, [#1120](https://github.com/TetronIO/JIM/issues/1120) Defensive password filtering, [#618](https://github.com/TetronIO/JIM/issues/618) Email Notifications
 - **UI mockups:** [Initial Password Provisioning: UI Mockups](https://claude.ai/code/artifact/77c228ff-4f9b-48d0-a9b6-1b7b25c833bc) (all seven screens, built against `engineering/DESIGN.md` tokens)
@@ -63,7 +63,7 @@ Provisioning (Create export succeeds, external id known)
 
 ## Implementation Phases
 
-### Phase 1: Connector set-password foundation (shared with #1119)
+### Phase 1: Connector set-password foundation (shared with #1119) ✅
 
 1. `IConnectorPasswordManagement` in `JIM.Models/Interfaces/`: open/close semantics matching the export capability interfaces, plus `SetPasswordAsync(ConnectedSystemObject target, string password, PasswordSetOptions options, CancellationToken)` returning a classified result.
 2. `PasswordSetResult` and `PasswordSetFailureReason` in `JIM.Models/Staging/`, classifying transient / configuration-fault / policy-rejection outcomes. Classification drives everything downstream, so it belongs in the connector contract rather than being inferred from an error string.
@@ -88,6 +88,28 @@ The default of "require a change at next sign-in" stands on different ground fro
 7. Mock connector support so the pipeline is testable without a directory.
 
 **Tests:** capability declaration; LDAPS refusal; `unicodePwd` encoding (byte-level assertion); denylist exclusion from schema and Attribute Flow; result classification; each expiry state produces the correct `pwdLastSet` and `userAccountControl` bits, and an unsupported state is reported rather than silently dropped.
+
+#### What Phase 1 changed against this plan
+
+Three decisions in the built code differ from the plan above, all made during implementation:
+
+- **Directories that are not Active Directory use the RFC 3062 Password Modify extended operation, not a `userPassword` write.** This item originally said "generic mode (`userPassword`)". A directory applies its configured password hashing to the extended operation but stores a directly written `userPassword` value verbatim, so the planned approach is how a cleartext password ends up sitting in a directory. A directory that does not advertise the extended operation is refused with a configuration fault explaining why, rather than written to unsafely.
+- **LDAPS is mandatory for the password channel on every directory, not only Active Directory.** Active Directory enforces this itself; other directories accept a password over an unencrypted connection quite happily, which is the reason to refuse on their behalf. The refusal happens when the channel is opened rather than per object, so no password is ever sent before the problem is noticed.
+- **The password channel binds its own connection.** It cannot share the import and export connection: its security requirements differ, and initial password delivery happens partway through an export session.
+
+Two things were found in passing and fixed here rather than left for a later phase:
+
+- **Capability mirroring is now driven off `IConnectorCapabilities` itself.** It was hand-written in two places in `SeedingServer`, so declaring a capability and missing one of them left the flag permanently false in the database with nothing failing. `ConnectorCapabilityMirror` plus reflection-based tests make a new capability covered the moment it is declared. `ConfigurationSnapshotService` still lists capabilities by hand for change-history rendering; that is a display concern and was left alone.
+- **A directory's own diagnostic is redacted before it reaches a result or a log.** A rejected value can be echoed back in the directory's error text, and JIM puts those messages into service logs, Activities, and the portal.
+
+#### Integration-testing gaps this phase exposed
+
+Neither blocks Phase 1, and both need resolving before the end-to-end assertions this plan's risk table calls for:
+
+- **The test OpenLDAP container serves no TLS.** `test/integration/docker/openldap/` configures no certificate and exposes no LDAPS port, so with LDAPS now mandatory the RFC 3062 path cannot be integration-tested until TLS is added there. Samba AD is unaffected: it generates a self-signed certificate and enables TLS during provisioning.
+- **The Samba AD image disables the password policy.** `post-provision.sh` sets `--complexity=off`, `--history-length=0`, `--min-pwd-age=0` and `--max-pwd-age=0` so the test credentials never expire. A password policy rejection therefore cannot be provoked naturally against it, which Phase 5's rejection handling needs. Either a Fine-Grained Password Policy applied to a test group, or a scenario that turns complexity on for the duration, will be required.
+
+`ConnectorFactory` needed no change. `IConnectorPasswordManagement` has nothing to inject, and the password channel reads the same Connected System settings as import and export, so the existing `SetCredentialProtection` / `SetCertificateProvider` wiring already covers it.
 
 ### Phase 2: Password policy discovery
 
