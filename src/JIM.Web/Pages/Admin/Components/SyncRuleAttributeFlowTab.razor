@@ -422,18 +422,33 @@
                 var suggestions = GetStandardMappingSuggestions();
                 @if (suggestions.Count > 0)
                 {
+                    var selectable = suggestions.Where(s => s.Status == StandardMappingSuggestionStatus.Available).ToList();
+                    var unavailable = suggestions.Where(s => s.Status != StandardMappingSuggestionStatus.Available).ToList();
+
                     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-5">
-                        @GetStandardMappingSuggestionText(suggestions)
+                        @if (selectable.Count > 0)
+                        {
+                            @GetStandardMappingSuggestionText(selectable)
+                        }
+                        @foreach (var blocked in unavailable)
+                        {
+                            <MudText Typo="Typo.body1" Class="@(selectable.Count > 0 ? "mt-2" : null)">
+                                @GetUnavailableCorrespondenceText(blocked, selectable.Count > 0)
+                            </MudText>
+                        }
                         <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">
                             Standard Mappings are guidance only; any attribute can be chosen, and they never affect what synchronisation flows.
                         </MudText>
-                        <div class="d-flex flex-wrap gap-2 mt-3">
-                            @foreach (var suggestion in suggestions)
-                            {
-                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
-                                    OnClick="@(() => ApplyStandardMappingSuggestion(suggestion))">Use @suggestion.TargetName</MudButton>
-                            }
-                        </div>
+                        @if (selectable.Count > 0)
+                        {
+                            <div class="d-flex flex-wrap gap-2 mt-3">
+                                @foreach (var suggestion in selectable)
+                                {
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                                        OnClick="@(() => ApplyStandardMappingSuggestion(suggestion))">Use @suggestion.TargetName</MudButton>
+                                }
+                            </div>
+                        }
                     </MudAlert>
                 }
 
@@ -693,9 +708,11 @@
 
     /// <summary>
     /// The targets the Standard Mappings say the chosen source attribute corresponds to (#1122). Empty for an
-    /// Expression source (there is no attribute name to match on), for a source attribute the standard says
-    /// nothing about, and whenever the corresponding target is not one the administrator could select anyway.
-    /// More than one target can correspond to a name, in which case all of them are offered and none is chosen.
+    /// Expression source (there is no attribute name to match on) and for a source attribute the standard says
+    /// nothing about. More than one target can correspond to a name, in which case all of them are offered and
+    /// none is chosen. A correspondence the editor cannot act on is returned too, carrying the reason: a
+    /// standard that describes a correspondence JIM then says nothing about is worse than no hint at all,
+    /// because the administrator is left looking for an attribute that is not in the list.
     /// </summary>
     private List<StandardMappingSuggestion> GetStandardMappingSuggestions()
     {
@@ -708,12 +725,14 @@
             if (matches.Count == 0)
                 return [];
 
-            var candidates = AvailableTargetMetaverseAttributes().ToList();
+            // Resolved against every attribute on the Object Type, not just the selectable ones, so a target
+            // that is missing from the picker can be explained rather than quietly disappearing.
             return matches
-                .Select(match => new { Match = match, Attribute = candidates.FirstOrDefault(a => a.Id == match.MetaverseAttributeId) })
-                .Where(x => x.Attribute != null && !IsAttributeFlowTargetDisabled(x.Attribute))
+                .Select(match => new { Match = match, Attribute = SyncRule.MetaverseObjectType!.Attributes.FirstOrDefault(a => a.Id == match.MetaverseAttributeId) })
+                .Where(x => x.Attribute != null)
                 .Select(x => new StandardMappingSuggestion
                 {
+                    Status = ClassifyTarget(x.Attribute!),
                     MetaverseAttribute = x.Attribute,
                     TargetName = x.Attribute!.Name,
                     StandardLabel = x.Match.StandardLabel,
@@ -728,15 +747,14 @@
             return [];
 
         // On export the correspondence runs the other way: the chosen Metaverse Attribute's counterpart names
-        // are the Connected System attribute names the standard says should receive it, so a suggestion only
-        // stands where the system's schema actually has an attribute of that name.
-        var connectedSystemCandidates = AvailableTargetConnectedSystemAttributes().ToList();
+        // are the Connected System attribute names the standard says should receive it, so a correspondence
+        // only stands where the system's schema actually has an attribute of that name.
         return _standardMappingHints.ForAttribute(sourceMetaverseAttribute.Id)
-            .SelectMany(hint => connectedSystemCandidates
-                .Where(candidate => string.Equals(candidate.Name, hint.CounterpartName, StringComparison.OrdinalIgnoreCase) &&
-                                    !IsAttributeFlowTargetDisabled(candidate))
+            .SelectMany(hint => SyncRule.ConnectedSystemObjectType!.Attributes
+                .Where(candidate => string.Equals(candidate.Name, hint.CounterpartName, StringComparison.OrdinalIgnoreCase))
                 .Select(candidate => new StandardMappingSuggestion
                 {
+                    Status = ClassifyTarget(candidate),
                     ConnectedSystemAttribute = candidate,
                     TargetName = candidate.Name,
                     StandardLabel = hint.StandardLabel,
@@ -744,6 +762,35 @@
                     Notes = hint.Notes
                 }))
             .ToList();
+    }
+
+    /// <summary>
+    /// Why a corresponding Metaverse Attribute is or is not selectable as this mapping's target. Defers to
+    /// <see cref="IsAttributeFlowTargetDisabled(MetaverseAttribute)"/> for the type rule rather than restating
+    /// it, so the explanation cannot drift from what the picker actually allows.
+    /// </summary>
+    private StandardMappingSuggestionStatus ClassifyTarget(MetaverseAttribute attribute)
+    {
+        if (SyncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping && afr.TargetMetaverseAttribute?.Id == attribute.Id))
+            return StandardMappingSuggestionStatus.AlreadyTargeted;
+
+        return IsAttributeFlowTargetDisabled(attribute) ? StandardMappingSuggestionStatus.TypeMismatch : StandardMappingSuggestionStatus.Available;
+    }
+
+    /// <summary>
+    /// The export-side sibling of <see cref="ClassifyTarget(MetaverseAttribute)"/>. Read-only is tested first:
+    /// it also disables the target, but "the system will not accept writes to this attribute" is a more useful
+    /// thing to be told than "the types differ".
+    /// </summary>
+    private StandardMappingSuggestionStatus ClassifyTarget(ConnectedSystemObjectTypeAttribute attribute)
+    {
+        if (attribute.Writability == AttributeWritability.ReadOnly)
+            return StandardMappingSuggestionStatus.ReadOnlyTarget;
+
+        if (SyncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping && afr.TargetConnectedSystemAttribute?.Id == attribute.Id))
+            return StandardMappingSuggestionStatus.AlreadyTargeted;
+
+        return IsAttributeFlowTargetDisabled(attribute) ? StandardMappingSuggestionStatus.TypeMismatch : StandardMappingSuggestionStatus.Available;
     }
 
     private static bool IsSuggested(List<StandardMappingSuggestion> suggestions, MetaverseAttribute attribute) =>
@@ -778,6 +825,39 @@
               $"{targets} in this Connected System.";
 
         return (MarkupString)(string.IsNullOrEmpty(notes) ? sentence : $"{sentence} {notes}");
+    }
+
+    /// <summary>
+    /// The sentence for a correspondence the editor cannot act on: what the standard says, then why this
+    /// mapping cannot express it, then the mapping's own note where it has one (which is usually where the
+    /// conversion an Expression source would need is described). Raw markup, encoded as above.
+    /// </summary>
+    private MarkupString GetUnavailableCorrespondenceText(StandardMappingSuggestion suggestion, bool continuesFromSuggestion)
+    {
+        static string Code(string? name) => $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(name)}</code>";
+
+        var standard = System.Net.WebUtility.HtmlEncode(suggestion.StandardLabel.Replace(" · ", " and ", StringComparison.Ordinal));
+        var sourceName = SyncRule.Direction == SyncRuleDirection.Import
+            ? _attributeFlowMappingSource?.ConnectedSystemAttribute?.Name
+            : _attributeFlowMappingSource?.MetaverseAttribute?.Name;
+
+        // Following a sentence that has already named the standard and the source, repeating both reads as boilerplate.
+        var correspondence = continuesFromSuggestion
+            ? $"It also corresponds to {Code(suggestion.TargetName)}, "
+            : $"In {standard}, {Code(sourceName)} corresponds to {Code(suggestion.TargetName)}, ";
+        var reason = suggestion.Status switch
+        {
+            StandardMappingSuggestionStatus.TypeMismatch =>
+                "which holds a different data type, so the value cannot flow to it directly. An Expression source can convert it.",
+            StandardMappingSuggestionStatus.AlreadyTargeted =>
+                "which another Attribute Flow on this Synchronisation Rule already targets.",
+            StandardMappingSuggestionStatus.ReadOnlyTarget =>
+                "which this Connected System reports as read-only, so no Attribute Flow can write to it.",
+            _ => "which is not available as a target."
+        };
+
+        var notes = string.IsNullOrWhiteSpace(suggestion.Notes) ? null : System.Net.WebUtility.HtmlEncode(suggestion.Notes.Trim());
+        return (MarkupString)(notes == null ? correspondence + reason : $"{correspondence}{reason} {notes}");
     }
 
     /// <summary>

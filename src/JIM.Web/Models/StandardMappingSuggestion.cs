@@ -7,13 +7,19 @@ using JIM.Models.Staging;
 namespace JIM.Web.Models;
 
 /// <summary>
-/// A target attribute the Attribute Flow editor offers as corresponding to the chosen source attribute,
-/// according to the advisory Standard Mappings (#1122). Exactly one of the two attribute properties is set,
-/// depending on the Synchronisation Rule's direction. Only targets the administrator could have selected
-/// anyway are offered, so accepting a suggestion never produces a mapping the editor would have refused.
+/// A target attribute the advisory Standard Mappings say corresponds to the chosen source attribute (#1122).
+/// Exactly one of the two attribute properties is set, depending on the Synchronisation Rule's direction.
+/// Only a suggestion whose <see cref="Status"/> is <see cref="StandardMappingSuggestionStatus.Available"/> is
+/// offered for selection, so accepting one never produces a mapping the editor would have refused; the rest
+/// are stated with the reason they cannot be selected rather than being dropped silently.
 /// </summary>
 public sealed class StandardMappingSuggestion
 {
+    /// <summary>
+    /// Whether this target can receive the chosen source attribute, and if not, why.
+    /// </summary>
+    public required StandardMappingSuggestionStatus Status { get; init; }
+
     /// <summary>
     /// The Metaverse Attribute to flow to, on an import Synchronisation Rule.
     /// </summary>
