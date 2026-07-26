@@ -1447,6 +1447,11 @@ html[lang] .jim-schema-change-table td {
        space below the baseline-aligned svg; centring that box leaves the icon sitting
        high. Blocking the svg makes the wrapper exactly icon-height so it centres true. */
     display: block;
+    /* Optical correction on top of that: the warning glyph is drawn from y=2 to y=21
+       inside its 24-unit box, so its ink sits above the box centre and still reads high
+       next to a chip once the box is geometrically centred. */
+    position: relative;
+    top: 1px;
 }
 
 .jim-mva-sva-indicator:hover {
