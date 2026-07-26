@@ -66,7 +66,7 @@ internal class LdapConnectorPreflight
         };
 
         cancellationToken.ThrowIfCancellationRequested();
-        checks.Add(CheckResetRights(containerExternalIds));
+        checks.Add(await CheckResetRightsAsync(containerExternalIds, cancellationToken));
 
         cancellationToken.ThrowIfCancellationRequested();
         checks.Add(await CheckPolicyDiscoveryAsync(domainRootDn));
@@ -132,52 +132,70 @@ internal class LdapConnectorPreflight
     /// <summary>
     /// Whether the account JIM connects as can reset a password on the objects it would provision.
     /// <para>
-    /// <b>JIM cannot currently establish this, and says so rather than guessing.</b> The obvious mechanism does not
-    /// work, and its failure mode is bad enough to be worth recording here so that nobody reaches for it again.
-    /// Active Directory publishes a constructed attribute, allowedAttributesEffective, listing the attributes the
-    /// calling account may write on an object. Reading it and looking for unicodePwd looks like exactly the right
-    /// question, and is wrong: [MS-ADTS] 3.1.1.4.5.7 computes that list purely from a RIGHT_DS_WRITE_PROPERTY
-    /// check, whereas [MS-ADTS] 3.1.1.3.1.5.1 grants a password reset through the "User-Force-Change-Password"
-    /// control access right instead. The two are disjoint, so an account delegated password resets in the normal,
-    /// least-privileged way has no write permission on unicodePwd and would be reported as having no rights, while
-    /// a Domain Admin, holding everything, would be reported as having them.
+    /// The obvious mechanism does not work, and its failure mode is bad enough to record here so nobody reaches
+    /// for it again. Active Directory publishes allowedAttributesEffective, listing the attributes the calling
+    /// account may write on an object; looking for unicodePwd in it seems like exactly the right question and is
+    /// wrong. [MS-ADTS] 3.1.1.4.5.7 computes that list purely from a RIGHT_DS_WRITE_PROPERTY check, whereas
+    /// [MS-ADTS] 3.1.1.3.1.5.1 grants a reset through the "User-Force-Change-Password" control access right. The
+    /// two are disjoint, so an account delegated resets in the normal, least-privileged way would be reported as
+    /// having no rights, while a Domain Admin would be reported as having them: it passes for the account someone
+    /// tests with and fails for the one they deploy.
     /// </para>
     /// <para>
-    /// That is worse than not checking: it passes for the over-privileged account someone tests with and fails for
-    /// the correctly configured one they deploy, which is precisely backwards. Answering the question properly
-    /// means reading the target's nTSecurityDescriptor and evaluating its access control list client-side against
-    /// the reset-password right, which is real work and not yet done. Until it is, this reports an unknown and
-    /// says where the rights need to hold so an administrator can check them directly.
+    /// JIM therefore reads the access control list of a sample object and evaluates it directly. Only Active
+    /// Directory exposes what that needs; other directories publish no portable equivalent, so the answer there
+    /// is an unknown rather than a guess.
     /// </para>
     /// </summary>
-    private PasswordPreflightCheckResult CheckResetRights(IReadOnlyList<string> containerExternalIds)
+    private async Task<PasswordPreflightCheckResult> CheckResetRightsAsync(IReadOnlyList<string> containerExternalIds, CancellationToken cancellationToken)
     {
-        var details = new List<string>();
+        if (!IsActiveDirectory)
+            return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.ResetRights,
+                "JIM cannot check whether the account it connects as is allowed to reset passwords on this directory.",
+                ["This directory publishes no way for a client to ask what it is allowed to do, so the account's rights have to be confirmed at the directory itself."]);
 
-        if (IsActiveDirectory)
-            details.Add("The account needs the 'Reset Password' permission on the objects JIM provisions. It does not need to be a Domain Admin, and should not be.");
-        else
-            details.Add("This directory publishes no way for a client to ask what it is allowed to do, so the account's rights have to be confirmed at the directory itself.");
+        if (containerExternalIds.Count == 0)
+            return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.ResetRights,
+                "JIM cannot check whether the account it connects as is allowed to reset passwords, because it does not yet know where it would be provisioning.",
+                ["Select the containers to manage on the Partitions and Containers tab, then check again."]);
 
-        // Naming where rights actually need to hold is the useful half of this check, and the half JIM can answer.
-        // Permissions are granted per part of a directory, so "the service account can reset passwords" is not a
-        // question with one answer.
-        if (containerExternalIds.Count > 0)
-        {
-            details.Add(containerExternalIds.Count == 1
-                ? "JIM would be provisioning into this container, so that is where the permission needs to be granted:"
-                : $"JIM would be provisioning into these {containerExternalIds.Count} containers, so that is where the permission needs to be granted:");
-            details.AddRange(containerExternalIds.Select(dn => $"    {dn}"));
-        }
-        else
-        {
-            details.Add("No containers are selected on this Connected System yet, so JIM cannot say where the permission will need to be granted.");
-        }
+        // Rights are read per container, and a Connected System can manage a great many. Checking every one of
+        // them turns a diagnostic into a long-running directory scan, so the number is bounded and the bound is
+        // reported rather than quietly applied.
+        var checkedContainers = containerExternalIds.Take(MaximumContainersToCheck).ToList();
+        var findings = await new LdapConnectorResetRights(_executor, _logger).CheckAsync(checkedContainers, cancellationToken);
 
-        return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.ResetRights,
-            "JIM cannot confirm whether the account it connects as is allowed to reset passwords. This is the most common reason a password set fails, so it is worth checking at the Connected System directly.",
-            details);
+        var details = findings
+            .Select(f => $"{DescribeOutcome(f.Outcome)} {f.ContainerDn}: {f.Detail}")
+            .ToList();
+
+        if (containerExternalIds.Count > checkedContainers.Count)
+            details.Add($"JIM checked the first {checkedContainers.Count} of this Connected System's {containerExternalIds.Count} managed containers.");
+
+        if (findings.Any(f => f.Outcome == ResetRightsOutcome.Denied))
+            return PasswordPreflightCheckResult.Failed(PasswordPreflightCheck.ResetRights,
+                "The account JIM connects as cannot reset passwords everywhere it would be provisioning.", details);
+
+        if (findings.Any(f => f.Outcome == ResetRightsOutcome.CouldNotDetermine))
+            return PasswordPreflightCheckResult.CouldNotDetermine(PasswordPreflightCheck.ResetRights,
+                "JIM could not confirm everywhere that the account it connects as is allowed to reset passwords.", details);
+
+        return PasswordPreflightCheckResult.Passed(PasswordPreflightCheck.ResetRights,
+            "The account JIM connects as can reset passwords everywhere it would be provisioning.", details);
     }
+
+    private static string DescribeOutcome(ResetRightsOutcome outcome) => outcome switch
+    {
+        ResetRightsOutcome.Granted => "Allowed in",
+        ResetRightsOutcome.Denied => "Not allowed in",
+        _ => "Could not tell for"
+    };
+
+    /// <summary>
+    /// How many managed containers a single check will read. A bound, not a sample: the containers checked are
+    /// named in the result so nothing is silently skipped.
+    /// </summary>
+    internal const int MaximumContainersToCheck = 10;
 
     /// <summary>
     /// Whether the target's password policy could be read, so that a generator can be pre-filled from it.

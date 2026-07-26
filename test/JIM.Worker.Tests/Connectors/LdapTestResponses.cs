@@ -44,6 +44,30 @@ internal static class LdapTestResponses
     }
 
     /// <summary>
+    /// Creates a successful SearchResponse holding one entry whose attributes carry binary values, as security
+    /// descriptors and security identifiers do.
+    /// </summary>
+    internal static SearchResponse SearchResponseWithBinary(string distinguishedName, params (string Name, byte[][] Values)[] attributes)
+    {
+        var attributeCollection = (SearchResultAttributeCollection)Activator.CreateInstance(typeof(SearchResultAttributeCollection), nonPublic: true)!;
+        var add = typeof(SearchResultAttributeCollection).GetMethod("Add", NonPublicInstance, [typeof(string), typeof(DirectoryAttribute)])!;
+
+        foreach (var (name, values) in attributes)
+        {
+            var attribute = new DirectoryAttribute { Name = name };
+            foreach (var value in values)
+                attribute.Add(value);
+
+            add.Invoke(attributeCollection, [name, attribute]);
+        }
+
+        var entry = (SearchResultEntry)Activator.CreateInstance(typeof(SearchResultEntry), NonPublicInstance, binder: null,
+            args: [distinguishedName, attributeCollection], culture: null)!;
+
+        return SearchResponseWithEntries(entry);
+    }
+
+    /// <summary>
     /// Creates a successful SearchResponse containing the given entries, or none.
     /// </summary>
     internal static SearchResponse SearchResponseWithEntries(params SearchResultEntry[] entries)

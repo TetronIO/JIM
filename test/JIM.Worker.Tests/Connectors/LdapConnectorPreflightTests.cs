@@ -152,36 +152,46 @@ public class LdapConnectorPreflightTests
     #region reset rights
 
     /// <summary>
-    /// The check must never claim the account lacks reset rights, whatever the target.
+    /// A denial is only ever claimed on evidence. The default executor here answers every read with an empty
+    /// result, which is exactly how a directory refuses one, so nothing has been established and the check must
+    /// say so.
     /// <para>
-    /// The tempting mechanism here is Active Directory's allowedAttributesEffective, which lists the attributes
-    /// the caller may write on an object; finding unicodePwd in it looks like the answer. It is not.
-    /// [MS-ADTS] 3.1.1.4.5.7 builds that list from a RIGHT_DS_WRITE_PROPERTY check alone, while
-    /// [MS-ADTS] 3.1.1.3.1.5.1 grants a reset through the "User-Force-Change-Password" control access right. An
-    /// account delegated resets the normal, least-privileged way therefore does not appear to hold the right,
-    /// while a Domain Admin does: the check would pass in a lab and fail in production, which is the worst
-    /// possible way for it to be wrong. This test exists to stop it being reintroduced.
+    /// This matters more than it looks. The first implementation of this check read Active Directory's
+    /// allowedAttributesEffective and looked for unicodePwd, which is computed from a write-permission check
+    /// ([MS-ADTS] 3.1.1.4.5.7) while a reset is granted by a control access right ([MS-ADTS] 3.1.1.3.1.5.1). It
+    /// therefore denied exactly the least-privileged delegations JIM recommends and passed for Domain Admins.
     /// </para>
     /// </summary>
     [Test]
-    public async Task RunAsync_WhateverTheTarget_NeverClaimsTheAccountLacksResetRightsAsync()
+    public async Task RunAsync_WhenTheDirectoryAnswersNothing_ReportsUndeterminedRatherThanDeniedAsync()
     {
         foreach (var directoryType in Enum.GetValues<LdapDirectoryType>())
         {
             var check = await RunAndGetAsync(PasswordPreflightCheck.ResetRights, directoryType: directoryType,
-                supportsPasswordModifyExtension: true);
+                supportsPasswordModifyExtension: true, containerExternalIds: ["OU=Staff,DC=testdomain,DC=local"]);
 
             Assert.That(check.State, Is.EqualTo(PasswordPreflightState.CouldNotDetermine),
-                $"Reset rights are not establishable over LDAP today, so {directoryType} must report an unknown rather than a verdict.");
+                $"Nothing was established for {directoryType}, so the check must report an unknown rather than a verdict.");
         }
     }
 
     /// <summary>
-    /// Rights are granted per part of a directory, so naming where they need to hold is the half of this question
-    /// JIM can actually answer, and is what makes an unknown actionable rather than just an unknown.
+    /// Only Active Directory publishes what this check needs. Elsewhere the answer is an unknown with a reason,
+    /// not a denial.
     /// </summary>
     [Test]
-    public async Task RunAsync_WithSelectedContainers_NamesWhereTheRightsNeedToHoldAsync()
+    public async Task RunAsync_AgainstADirectoryThatIsNotActiveDirectory_CannotCheckRightsAtAllAsync()
+    {
+        var check = await RunAndGetAsync(PasswordPreflightCheck.ResetRights,
+            directoryType: LdapDirectoryType.OpenLDAP, supportsPasswordModifyExtension: true,
+            containerExternalIds: ["OU=Staff,DC=testdomain,DC=local"]);
+
+        Assert.That(check.State, Is.EqualTo(PasswordPreflightState.CouldNotDetermine));
+        Assert.That(check.Details, Has.Some.Contains("no way for a client to ask"));
+    }
+
+    [Test]
+    public async Task RunAsync_WithSelectedContainers_ReportsEachOneByNameAsync()
     {
         string[] containers = ["OU=Staff,DC=testdomain,DC=local", "OU=Contractors,DC=testdomain,DC=local"];
 
@@ -191,26 +201,20 @@ public class LdapConnectorPreflightTests
         Assert.That(check.Details, Has.Some.Contains("OU=Contractors,DC=testdomain,DC=local"));
     }
 
+    /// <summary>
+    /// With nowhere to check, there is nothing to say. The remedy has to be part of the message, or an unknown is
+    /// just a shrug.
+    /// </summary>
     [Test]
-    public async Task RunAsync_WithNoSelectedContainers_SaysItCannotNameWhereTheRightsAreNeededAsync()
+    public async Task RunAsync_WithNoSelectedContainers_SaysItDoesNotKnowWhereToLookAsync()
     {
         var check = await RunAndGetAsync(PasswordPreflightCheck.ResetRights, containerExternalIds: []);
 
-        Assert.That(check.Details, Has.Some.Contains("No containers are selected"));
+        Assert.That(check.State, Is.EqualTo(PasswordPreflightState.CouldNotDetermine));
+        Assert.That(check.Details, Has.Some.Contains("Partitions and Containers"));
     }
 
-    /// <summary>
-    /// Least privilege is the point: an administrator reading this should not conclude that granting Domain Admin
-    /// is the fix.
-    /// </summary>
-    [Test]
-    public async Task RunAsync_AgainstActiveDirectory_DoesNotSuggestDomainAdminAsTheRemedyAsync()
-    {
-        var check = await RunAndGetAsync(PasswordPreflightCheck.ResetRights,
-            directoryType: LdapDirectoryType.ActiveDirectory);
 
-        Assert.That(check.Details, Has.Some.Contains("should not be"));
-    }
 
     #endregion
 
