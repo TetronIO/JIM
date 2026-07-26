@@ -1443,6 +1443,10 @@ html[lang] .jim-schema-change-table td {
     color: var(--mud-palette-warning);
     opacity: 0.5;
     transition: opacity 150ms ease-in-out;
+    /* The icon is wrapped by MudTooltip's inline root, whose line box adds descender
+       space below the baseline-aligned svg; centring that box leaves the icon sitting
+       high. Blocking the svg makes the wrapper exactly icon-height so it centres true. */
+    display: block;
 }
 
 .jim-mva-sva-indicator:hover {
