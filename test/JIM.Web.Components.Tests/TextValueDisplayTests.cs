@@ -20,11 +20,11 @@ public class TextValueDisplayTests : JimComponentTestContext
     {
         var cut = Render<TextValueDisplay>(p => p.Add(c => c.Value, null));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.HasComponent<EmptyValue>(), Is.True);
             Assert.That(cut.HasComponent<WhitespaceValue>(), Is.False);
-        });
+        }
     }
 
     [Test]
@@ -32,11 +32,11 @@ public class TextValueDisplayTests : JimComponentTestContext
     {
         var cut = Render<TextValueDisplay>(p => p.Add(c => c.Value, string.Empty));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.HasComponent<EmptyValue>(), Is.True);
             Assert.That(cut.HasComponent<WhitespaceValue>(), Is.False);
-        });
+        }
     }
 
     [Test]
@@ -44,11 +44,11 @@ public class TextValueDisplayTests : JimComponentTestContext
     {
         var cut = Render<TextValueDisplay>(p => p.Add(c => c.Value, "   "));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.HasComponent<WhitespaceValue>(), Is.True);
             Assert.That(cut.HasComponent<EmptyValue>(), Is.False);
-        });
+        }
     }
 
     [Test]
@@ -64,12 +64,12 @@ public class TextValueDisplayTests : JimComponentTestContext
     {
         var cut = Render<TextValueDisplay>(p => p.Add(c => c.Value, "Alice"));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Contain("Alice"));
             Assert.That(cut.HasComponent<EmptyValue>(), Is.False);
             Assert.That(cut.HasComponent<WhitespaceValue>(), Is.False);
-        });
+        }
     }
 
     [Test]

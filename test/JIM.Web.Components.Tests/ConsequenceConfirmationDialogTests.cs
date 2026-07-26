@@ -272,11 +272,11 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
         var disabledWhilstRunning = ConfirmIsDisabled(provider);
         release.SetResult(true);
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(disabledWhilstRunning, Is.True);
             Assert.That(callCount, Is.EqualTo(1));
-        });
+        }
     }
 
     [Test]
@@ -384,12 +384,12 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
             }
         });
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.Markup, Does.Contain("These 2 reference(s) will also be removed"));
             Assert.That(provider.Markup, Does.Contain("Predefined Search: All Employees"));
             Assert.That(provider.Markup, Does.Contain("Attribute binding: User.Department"));
-        });
+        }
     }
 
     [Test]
@@ -400,11 +400,11 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
             { x => x.Counts, [new ImpactCount { Label = "Connected System Objects", Count = 12405 }] }
         });
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.Markup, Does.Contain("Connected System Objects"));
             Assert.That(provider.Markup, Does.Contain("12,405"));
-        });
+        }
     }
 
     [Test]
@@ -415,11 +415,11 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
             { x => x.Warnings, ["A synchronisation run is in progress.", "This system has unexported changes."] }
         });
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(provider.Markup, Does.Contain("A synchronisation run is in progress."));
             Assert.That(provider.Markup, Does.Contain("This system has unexported changes."));
-        });
+        }
     }
 
     #endregion
