@@ -236,6 +236,17 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Gets the wire standard a Connected System's schema follows, as declared by its Connector, so the portal
+    /// can show the right Standard Mapping hints in the Attribute Flow editor (#1122). Returns
+    /// <see cref="AttributeStandard.NotSet"/> when the Connector declares none, or the Connected System is gone.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    public async Task<AttributeStandard> GetConnectedSystemSchemaStandardAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemSchemaStandardAsync(connectedSystemId);
+    }
+
+    /// <summary>
     /// Creates a Connector Definition, recording a Create Activity and version-1 configuration snapshot. Attributed via
     /// the initiator triad, so seeding and any future upload UI/API share one audited path. No principal-carrying caller
     /// exists yet (built-in definitions are seeded); the triad lets that caller arrive without a signature change.

@@ -1413,6 +1413,49 @@ internal class SeedingServer
     }
 
     /// <summary>
+    /// Copies everything a Connector declares about itself (capability flags and the advisory schema standard)
+    /// onto its Connector Definition, and reports whether anything actually changed so the caller can decide
+    /// whether to persist and audit an update.
+    /// Shared by the create and startup-reconcile paths: a declaration added to <see cref="IConnectorCapabilities"/>
+    /// is applied to fresh installs and existing deployments alike, from one place.
+    /// </summary>
+    internal static bool ApplyConnectorDeclarations(IConnectorCapabilities connectorCapabilities, ConnectorDefinition definition)
+    {
+        var changed =
+            definition.SupportsFullImport != connectorCapabilities.SupportsFullImport ||
+            definition.SupportsDeltaImport != connectorCapabilities.SupportsDeltaImport ||
+            definition.SupportsExport != connectorCapabilities.SupportsExport ||
+            definition.SupportsPartitions != connectorCapabilities.SupportsPartitions ||
+            definition.SupportsPartitionContainers != connectorCapabilities.SupportsPartitionContainers ||
+            definition.SupportsSecondaryExternalId != connectorCapabilities.SupportsSecondaryExternalId ||
+            definition.SupportsUserSelectedExternalId != connectorCapabilities.SupportsUserSelectedExternalId ||
+            definition.SupportsUserSelectedAttributeTypes != connectorCapabilities.SupportsUserSelectedAttributeTypes ||
+            definition.SupportsAutoConfirmExport != connectorCapabilities.SupportsAutoConfirmExport ||
+            definition.SupportsParallelExport != connectorCapabilities.SupportsParallelExport ||
+            definition.SupportsPaging != connectorCapabilities.SupportsPaging ||
+            definition.SupportsFilePaths != connectorCapabilities.SupportsFilePaths ||
+            definition.SchemaStandard != connectorCapabilities.SchemaStandard;
+
+        if (!changed)
+            return false;
+
+        definition.SupportsFullImport = connectorCapabilities.SupportsFullImport;
+        definition.SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport;
+        definition.SupportsExport = connectorCapabilities.SupportsExport;
+        definition.SupportsPartitions = connectorCapabilities.SupportsPartitions;
+        definition.SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers;
+        definition.SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId;
+        definition.SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId;
+        definition.SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes;
+        definition.SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport;
+        definition.SupportsParallelExport = connectorCapabilities.SupportsParallelExport;
+        definition.SupportsPaging = connectorCapabilities.SupportsPaging;
+        definition.SupportsFilePaths = connectorCapabilities.SupportsFilePaths;
+        definition.SchemaStandard = connectorCapabilities.SchemaStandard;
+        return true;
+    }
+
+    /// <summary>
     /// Synchronises a single connector definition with the latest settings from the connector code.
     /// Updates settings if they have changed (e.g., category, description, default values).
     /// </summary>
@@ -1446,34 +1489,11 @@ internal class SeedingServer
             Log.Information($"SyncConnectorDefinitionAsync: Removed duplicate setting '{duplicate.Name}' from '{connector.Name}'");
         }
 
-        // Update capability flags
-        if (existingDefinition.SupportsFullImport != connectorCapabilities.SupportsFullImport ||
-            existingDefinition.SupportsDeltaImport != connectorCapabilities.SupportsDeltaImport ||
-            existingDefinition.SupportsExport != connectorCapabilities.SupportsExport ||
-            existingDefinition.SupportsPartitions != connectorCapabilities.SupportsPartitions ||
-            existingDefinition.SupportsPartitionContainers != connectorCapabilities.SupportsPartitionContainers ||
-            existingDefinition.SupportsSecondaryExternalId != connectorCapabilities.SupportsSecondaryExternalId ||
-            existingDefinition.SupportsUserSelectedExternalId != connectorCapabilities.SupportsUserSelectedExternalId ||
-            existingDefinition.SupportsUserSelectedAttributeTypes != connectorCapabilities.SupportsUserSelectedAttributeTypes ||
-            existingDefinition.SupportsAutoConfirmExport != connectorCapabilities.SupportsAutoConfirmExport ||
-            existingDefinition.SupportsParallelExport != connectorCapabilities.SupportsParallelExport ||
-            existingDefinition.SupportsPaging != connectorCapabilities.SupportsPaging ||
-            existingDefinition.SupportsFilePaths != connectorCapabilities.SupportsFilePaths)
+        // Update the Connector's own declarations (capability flags and schema standard)
+        if (ApplyConnectorDeclarations(connectorCapabilities, existingDefinition))
         {
-            existingDefinition.SupportsFullImport = connectorCapabilities.SupportsFullImport;
-            existingDefinition.SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport;
-            existingDefinition.SupportsExport = connectorCapabilities.SupportsExport;
-            existingDefinition.SupportsPartitions = connectorCapabilities.SupportsPartitions;
-            existingDefinition.SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers;
-            existingDefinition.SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId;
-            existingDefinition.SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId;
-            existingDefinition.SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes;
-            existingDefinition.SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport;
-            existingDefinition.SupportsParallelExport = connectorCapabilities.SupportsParallelExport;
-            existingDefinition.SupportsPaging = connectorCapabilities.SupportsPaging;
-            existingDefinition.SupportsFilePaths = connectorCapabilities.SupportsFilePaths;
             hasChanges = true;
-            Log.Information($"SyncConnectorDefinitionAsync: Updated capability flags for '{connector.Name}'");
+            Log.Information($"SyncConnectorDefinitionAsync: Updated declarations for '{connector.Name}'");
         }
 
         // Sync settings - update existing and add new ones
@@ -1697,20 +1717,12 @@ internal class SeedingServer
             Name = connector.Name,
             Description = connector.Description,
             Url = connector.Url,
-            BuiltIn = true,
-            SupportsFullImport = connectorCapabilities.SupportsFullImport,
-            SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport,
-            SupportsExport = connectorCapabilities.SupportsExport,
-            SupportsPartitions = connectorCapabilities.SupportsPartitions,
-            SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers,
-            SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId,
-            SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId,
-            SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes,
-            SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport,
-            SupportsParallelExport = connectorCapabilities.SupportsParallelExport,
-            SupportsPaging = connectorCapabilities.SupportsPaging,
-            SupportsFilePaths = connectorCapabilities.SupportsFilePaths
+            BuiltIn = true
         };
+
+        // Same method the startup reconcile uses, so a declaration added to a Connector cannot reach fresh
+        // installs while being forgotten on upgrades, or the other way round.
+        ApplyConnectorDeclarations(connectorCapabilities, connectorDefinition);
 
         Application.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connectorSettings, connectorDefinition);
         return connectorDefinition;

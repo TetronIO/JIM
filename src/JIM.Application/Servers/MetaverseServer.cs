@@ -280,6 +280,17 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Gets the advisory Standard Mappings held by every Metaverse Attribute bound to a Metaverse Object Type,
+    /// for the Attribute Flow editor's hints (#1122). Advisory metadata: it documents how attributes correspond
+    /// to SCIM 2.0 and LDAP/AD vocabularies and must never influence what synchronisation flows.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The unique identifier of the Metaverse Object Type.</param>
+    public async Task<List<MetaverseAttributeStandardMapping>> GetStandardMappingsForObjectTypeAsync(int metaverseObjectTypeId)
+    {
+        return await Application.Repository.Metaverse.GetStandardMappingsForObjectTypeAsync(metaverseObjectTypeId);
+    }
+
+    /// <summary>
     /// Creates a new Metaverse Attribute.
     /// </summary>
     /// <param name="attribute">The attribute to create.</param>
