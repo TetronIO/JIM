@@ -65,6 +65,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await query.SingleOrDefaultAsync(cd => cd.Id == id);
     }
 
+    public async Task<AttributeStandard> GetConnectedSystemSchemaStandardAsync(int connectedSystemId)
+    {
+        // A scalar projection: the caller wants one enum for a display hint, not a Connected System graph.
+        return await Repository.Database.ConnectedSystems
+            .Where(cs => cs.Id == connectedSystemId)
+            .Select(cs => cs.ConnectorDefinition.SchemaStandard)
+            .SingleOrDefaultAsync();
+    }
+
     public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name, bool withChangeTracking = false)
     {
         IQueryable<ConnectorDefinition> query = Repository.Database.ConnectorDefinitions

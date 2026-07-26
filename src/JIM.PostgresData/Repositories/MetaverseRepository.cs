@@ -340,6 +340,20 @@ public class MetaverseRepository : IMetaverseRepository
         return await query.SingleOrDefaultAsync(x => x.Name.ToLower() == lowered);
     }
 
+    public async Task<List<MetaverseAttributeStandardMapping>> GetStandardMappingsForObjectTypeAsync(int metaverseObjectTypeId)
+    {
+        // Deliberately not loaded as part of the Synchronisation Rule's graph: that graph is tracked and is the
+        // editor's write path, whereas these are read-only hints. Queried from the mapping side so only the
+        // mapping rows materialise (no attributes, no join rows), and left untracked (the DbContext default) so
+        // nothing here can be mistaken for an edit at save time.
+        return await Repository.Database.MetaverseAttributeStandardMappings
+            .Where(m => m.MetaverseAttribute!.MetaverseObjectTypes.Any(t => t.Id == metaverseObjectTypeId))
+            .OrderBy(m => m.MetaverseAttributeId)
+            .ThenBy(m => m.Standard)
+            .ThenBy(m => m.CounterpartName)
+            .ToListAsync();
+    }
+
     public async Task CreateMetaverseAttributeAsync(MetaverseAttribute attribute)
     {
         // Attach existing MetaverseObjectTypes so EF recognises them as existing entities
