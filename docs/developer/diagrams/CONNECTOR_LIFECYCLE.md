@@ -1,6 +1,6 @@
 # Connector Lifecycle
 
-> Last updated: 2026-04-22, JIM v0.10.0
+> Last updated: 2026-07-25, JIM v0.14.0
 
 This diagram shows how connectors are resolved, configured, opened, used, and closed across import and export operations. Connectors implement capability interfaces that determine their lifecycle shape.
 
@@ -29,7 +29,8 @@ flowchart LR
 ```mermaid
 flowchart TD
     TaskStart([Worker receives<br/>SynchronisationWorkerTask]) --> GetCS[Get ConnectedSystem<br/>with ConnectorDefinition]
-    GetCS --> MatchName{ConnectorDefinition<br/>Name?}
+    GetCS --> Factory[IConnectorFactory.Create<br/>single dispatch point, #875<br/>Worker passes no providers here;<br/>the processors inject them]
+    Factory --> MatchName{ConnectorDefinition<br/>Name?}
 
     MatchName -->|LdapConnectorName| CreateLdap[new LdapConnector]
     MatchName -->|FileConnectorName| CreateFile[new FileConnector]
@@ -140,4 +141,4 @@ flowchart TD
 
 - **CloseExportConnection in finally**<br /> The export connection is always closed, even if an exception occurs during export. This prevents connection leaks in long-running worker processes.
 
-- **Hard-coded resolution**<br /> Connectors are currently resolved by name matching against `ConnectorDefinition.Name`. This will be extended to support user-supplied connector lookup in the future.
+- **Single dispatch point (#875)**<br /> Every connector instance comes from `IConnectorFactory.Create`, used by both the application layer and the Worker; previously each call site ran its own `new LdapConnector()`-style name switch. The factory matches `ConnectorDefinition.Name` against the built-in connectors and throws `NotSupportedException` for an unknown name. `Create` optionally takes a credential-protection and a certificate provider and applies them when the connector implements the matching capability interface: `ConnectedSystemServer` uses that overload, while the Worker creates a bare connector and its import/export processors inject the providers themselves immediately before opening the connection. User-supplied connector lookup will extend this factory rather than adding another switch.
