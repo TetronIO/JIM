@@ -1200,14 +1200,30 @@ public class ExportExecutionServer
             // replaced is gone).
             var delta = OptimisticExportApplyCalculator.CalculateDelta(successfulNonDeleteExports);
 
+            // SPEC-1082 D9: any CSO whose attribute values this optimistic apply is about to mutate
+            // outside the Full Import stamp path (D6/D7) must have its stored ImportStateHash and
+            // ImportStateFingerprint nulled in the SAME persistence call, so a subsequent Full
+            // Import never trusts a hash describing values that no longer match. Computed precisely
+            // from the removal value IDs (matched against each export's CSO's current in-memory
+            // AttributeValues, before removal) plus every addition's owning CSO.
+            var removalIdSet = new HashSet<Guid>(delta.RemovalValueIds);
+            var affectedCsoIds = new HashSet<Guid>(delta.Additions.Select(a => a.ConnectedSystemObject.Id));
+            if (removalIdSet.Count > 0)
+            {
+                affectedCsoIds.UnionWith(successfulNonDeleteExports
+                    .Select(pe => pe.ConnectedSystemObject)
+                    .Where(cso => cso != null && cso.AttributeValues.Any(av => removalIdSet.Contains(av.Id)))
+                    .Select(cso => cso!.Id)
+                    .Distinct());
+            }
+
             if (delta.Additions.Count > 0 || delta.RemovalValueIds.Count > 0)
-                await repository.ApplyExportedAttributeValuesAsync(delta.Additions, delta.RemovalValueIds);
+                await repository.ApplyExportedAttributeValuesAsync(delta.Additions, delta.RemovalValueIds, affectedCsoIds);
 
             // D10: keep the in-memory CSO graph consistent so later passes in the same run
             // (deferred references, a repeated batch touching the same CSO) compute idempotently.
             if (delta.RemovalValueIds.Count > 0)
             {
-                var removalIdSet = new HashSet<Guid>(delta.RemovalValueIds);
                 foreach (var cso in successfulNonDeleteExports
                     .Select(pe => pe.ConnectedSystemObject)
                     .Where(cso => cso != null)

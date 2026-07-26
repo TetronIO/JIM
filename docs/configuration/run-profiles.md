@@ -26,6 +26,12 @@ Controls how many objects are processed per batch during execution. Larger batch
 
 For connectors that expose multiple partitions (for example LDAP) or that operate on files (the file connector), the Run Profile pins the operation to a specific scope. A connector can have several Run Profiles of the same run type, each scoped to a different partition or file.
 
+## Verification Mode (Full Import)
+
+Full Import automatically skips loading and comparing objects whose content has not changed since the last import, using a stored content hash (see [how Full Import detects unchanged objects](../concepts/synchronisation-pipeline.md#how-full-import-detects-unchanged-objects)). This is transparent and needs no configuration.
+
+**Verification Mode** is an optional toggle on a Full Import Run Profile that temporarily disables this optimisation: every object is fully compared regardless of its stored hash, and JIM reports an error if a stored hash matched but the comparison still found a change. Use it to validate the optimisation after an upgrade, or to investigate a suspected discrepancy; leave it off for everyday imports, since it forgoes the performance benefit. The toggle only applies to Full Import Run Profiles; enabling it on any other run type is rejected.
+
 ## Asynchronous execution
 
 Triggering a Run Profile returns an activity ID. The actual work runs on the worker process and is monitored via [activities](activities.md). For long-running runs, polling the activity gives you live progress counters; the per-object execution items let you drill into individual failures after the fact.

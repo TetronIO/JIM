@@ -123,6 +123,26 @@ public interface ISyncRepository
     Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId);
 
     /// <summary>
+    /// SPEC-1082 D8: bulk-loads all CSO import state for a Connected System into a lightweight
+    /// dictionary, keyed by the same composite cache key as <see cref="GetAllCsoExternalIdMappingsAsync"/>.
+    /// Widens that method's projection with the stored content hash, schema fingerprint, status,
+    /// and partition, so a Full Import can evaluate the SPEC-1082 skip predicate for every matched
+    /// object without any additional database round trip.
+    /// </summary>
+    Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId);
+
+    /// <summary>
+    /// SPEC-1082 D6: the ONLY code path permitted to write <see cref="ConnectedSystemObject.ImportStateHash"/>
+    /// and <see cref="ConnectedSystemObject.ImportStateFingerprint"/>. Callers MUST invoke this
+    /// strictly after the batch's attribute-value writes for the given CSOs have committed
+    /// (stamp-ordering invariant): stamping before the values it describes have committed would let
+    /// a crash between the two leave a hash that lies about the CSO's content. Does NOT touch
+    /// <see cref="ConnectedSystemObject.LastUpdated"/> (the #891 Full Synchronisation watermark).
+    /// A no-op for an empty list.
+    /// </summary>
+    Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps);
+
+    /// <summary>
     /// Batch-loads full CSO entity graphs by their IDs in a single query.
     /// Returns CSOs with Type, Attributes, AttributeValues, and ReferenceValue navigations loaded —
     /// the same shape as GetConnectedSystemObjectByAttributeAsync but for multiple CSOs at once.
@@ -257,8 +277,15 @@ public interface ISyncRepository
     /// Synchronisation unchanged-object watermark for a no-op confirming import depends on
     /// LastUpdated staying untouched here. Callers are responsible for keeping the in-memory
     /// Connected System Object graph in sync with the persisted delta afterwards.
+    /// <para>
+    /// SPEC-1082 D9: also nulls <see cref="ConnectedSystemObject.ImportStateHash"/> and
+    /// <see cref="ConnectedSystemObject.ImportStateFingerprint"/> for every CSO in
+    /// <paramref name="affectedCsoIds"/>, set-based, in the SAME persistence call. This mutates
+    /// attribute values outside the Full Import stamp path (D6/D7), so any stored hash describing
+    /// the CSO's prior content is no longer trustworthy.
+    /// </para>
     /// </summary>
-    Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds);
+    Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds);
 
     /// <summary>
     /// Deletes CSOs and their attribute values without change tracking.

@@ -271,12 +271,14 @@
     /// Whether this outcome has an MVO link (Guid target entity ID that isn't empty).
     /// Excluded when the MVO no longer exists: MvoDeleted outcomes themselves, or parent
     /// outcomes (e.g. Disconnected) that have an MvoDeleted child in their causality tree.
-    /// Provisioned outcomes store the CSO ID in TargetEntityId, not an MVO ID.
+    /// Provisioned outcomes store the CSO ID in TargetEntityId, and PendingExportCreated outcomes
+    /// store the Pending Export ID, so neither is an Identity to link to.
     /// </summary>
     private bool HasMvoLink =>
         Outcome.TargetEntityId.HasValue && Outcome.TargetEntityId.Value != Guid.Empty
         && Outcome.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted
         && Outcome.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.Provisioned
+        && Outcome.OutcomeType != ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated
         && !Outcome.Children.Any(c => c.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
 
     /// <summary>

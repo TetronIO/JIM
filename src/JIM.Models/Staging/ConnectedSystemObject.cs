@@ -52,6 +52,56 @@ public class ConnectedSystemObject
 
     public List<ConnectedSystemObjectAttributeValue> AttributeValues { get; set; } = new();
 
+    /// <summary>
+    /// SPEC-1082: a content hash (not an identifier) of the import object that last brought this
+    /// CSO's attribute values up to date, truncated SHA-256 stored as a <see cref="Guid"/> for
+    /// storage efficiency. It is an admission ticket to SKIP hydration and diffing on a subsequent
+    /// Full Import when the incoming payload hashes identically, never an input to correctness: a
+    /// mismatch (including null, for CSOs never stamped) always falls through to the honest diff.
+    /// <para>
+    /// <b>Stamp-ordering invariant:</b> written by EXACTLY ONE code path,
+    /// <c>ISyncRepository.StampImportStateAsync</c>, and ONLY after the batch's attribute-value
+    /// writes for this CSO have committed. Any other writer of
+    /// <see cref="ConnectedSystemObjectAttributeValue"/> rows for this CSO MUST null this column in
+    /// the same operation (see SPEC-1082 D9); a stale non-null hash surviving a value mutation
+    /// would be a permanently believable lie about the object's content.
+    /// </para>
+    /// </summary>
+    public Guid? ImportStateHash { get; set; }
+
+    /// <summary>
+    /// SPEC-1082: a hash of this CSO's object type schema shape (attribute names, types,
+    /// plurality, selection) at the time <see cref="ImportStateHash"/> was stamped, plus the
+    /// content-hash algorithm version. Compared against the CURRENT type fingerprint at skip time;
+    /// a mismatch disqualifies the skip lazily (schema redefinition or algorithm bump) without any
+    /// mass-invalidation write. Follows the same stamp-ordering invariant as
+    /// <see cref="ImportStateHash"/>.
+    /// </summary>
+    public Guid? ImportStateFingerprint { get; set; }
+
+    /// <summary>
+    /// Transient (SPEC-1082 D7): the import processor sets this when it wants
+    /// <see cref="ImportStateHash"/> stamped after this CSO's batch write commits. Never persisted
+    /// directly; consumed by the save phase to build the batch's <c>StampImportStateAsync</c> call.
+    /// </summary>
+    [NotMapped]
+    public Guid? PendingImportStateHash { get; set; }
+
+    /// <summary>
+    /// Transient (SPEC-1082 D7): the fingerprint to stamp alongside <see cref="PendingImportStateHash"/>.
+    /// </summary>
+    [NotMapped]
+    public Guid? PendingImportStateFingerprint { get; set; }
+
+    /// <summary>
+    /// Transient (SPEC-1082 D7): true when the import processor wants a stamp written for this CSO,
+    /// even when both pending values above are null (Delta Import conservative nulling). Distinct
+    /// from "both pending values are null" so that "no stamp requested" and "stamp requested with
+    /// null values" are unambiguous.
+    /// </summary>
+    [NotMapped]
+    public bool PendingImportStateStampRequested { get; set; }
+
     public ConnectedSystemObjectStatus Status { get; set; } = ConnectedSystemObjectStatus.Normal;
 
     /// <summary>

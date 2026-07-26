@@ -5,6 +5,7 @@ using System.Diagnostics;
 using JIM.Application;
 using JIM.Application.Diagnostics;
 using JIM.Application.Interfaces;
+using JIM.Application.Servers;
 using JIM.Application.Services;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
@@ -61,13 +62,35 @@ public class SyncImportTaskProcessor
     private bool _csIsEmpty;
 
     /// <summary>
-    /// Pre-fetched external ID → CSO GUID lookup dictionary. Loaded once at import start (when the CS
-    /// is not empty) to replace N per-object DB queries with O(1) dictionary lookups.
+    /// Pre-fetched external ID → CSO import state lookup dictionary. Loaded once at import start
+    /// (when the CS is not empty) to replace N per-object DB queries with O(1) dictionary lookups.
     /// Key format: "cso:{connectedSystemId}:{attributeId}:{lowerExternalIdValue}"
-    /// Updated when new CSOs are created mid-import to maintain consistency within the batch.
-    /// This is the "lookup" phase of the Lookup/Hydrate seam (#440).
+    /// This is the "lookup" phase of the Lookup/Hydrate seam (#440); SPEC-1082 D8 widened its
+    /// projection to also carry each CSO's stored import content hash/fingerprint/status/partition,
+    /// so the Full Import skip predicate can be evaluated with zero extra database round trips.
+    /// Never mutated mid-import (read-only for the lifetime of the run).
     /// </summary>
-    private Dictionary<string, Guid>? _csoExternalIdLookup;
+    private Dictionary<string, CsoImportStateLookupEntry>? _csoExternalIdLookup;
+
+    /// <summary>
+    /// SPEC-1082 D5: object type schema fingerprints, computed once per object type per run and
+    /// cached here since <see cref="ImportContentHashCalculator.CalculateTypeFingerprint"/> is
+    /// deterministic for a given <see cref="ConnectedSystemObjectType"/> shape.
+    /// </summary>
+    private readonly Dictionary<int, Guid> _typeFingerprintCache = new();
+
+    /// <summary>
+    /// SPEC-1082 D12: count of objects skipped (hydration and diff) via the content-hash admission
+    /// ticket during this Full Import. Logged in the end-of-import summary.
+    /// </summary>
+    private int _hashSkippedCount;
+
+    /// <summary>
+    /// SPEC-1082 D10: Verification Mode counters. Populated only when
+    /// <see cref="ConnectedSystemRunProfile.VerifyImportContentHashes"/> is true.
+    /// </summary>
+    private int _verificationDangerousDisagreementCount;
+    private int _verificationBenignMismatchCount;
 
     /// <summary>
     /// Controls how much detail is recorded for sync outcome graphs on each RPEI.
@@ -151,7 +174,7 @@ public class SyncImportTaskProcessor
             // See #440 for scaling analysis.
             using (Diagnostics.Sync.StartSpan("PreFetchCsoExternalIdLookup").SetTag("csoCount", csoCountAtStart))
             {
-                _csoExternalIdLookup = await _syncRepo.GetAllCsoExternalIdMappingsAsync(_connectedSystem.Id);
+                _csoExternalIdLookup = await _syncRepo.GetAllCsoImportStateLookupAsync(_connectedSystem.Id);
             }
             Log.Information("PerformImportAsync: Pre-fetched {Count} CSO external ID mappings for Connected System {ConnectedSystemId}.",
                 _csoExternalIdLookup.Count, _connectedSystem.Id);
@@ -534,6 +557,10 @@ public class SyncImportTaskProcessor
                         rpei.ConnectedSystemObjectId = rpei.ConnectedSystemObject.Id;
                 }
 
+                // SPEC-1082 D7: stamp this create batch's requested hashes now that its attribute
+                // value writes (inside CreateConnectedSystemObjectsAsync) have committed.
+                await StampBatchImportStateAsync(csoBatch, batchRpeis);
+
                 // Add newly created CSOs to the lookup cache
                 foreach (var newCso in csoBatch)
                 {
@@ -636,6 +663,10 @@ public class SyncImportTaskProcessor
                     .ToList();
 
                 await _syncServer.UpdateConnectedSystemObjectsAsync(csoBatch, batchRpeis);
+
+                // SPEC-1082 D7: stamp this update batch's requested hashes now that its attribute
+                // value writes have committed, and BEFORE ReleaseHydratedAttributeValues below.
+                await StampBatchImportStateAsync(csoBatch, batchRpeis);
 
                 // Populate the reconciliation RPEI lookup before flushing.
                 // Only update-phase RPEIs are needed — created CSOs can't have Pending Exports.
@@ -792,9 +823,24 @@ public class SyncImportTaskProcessor
 
         await _syncRepo.UpdateActivityAsync(_activity);
 
+        // SPEC-1082 D12: end-of-import summary, alongside the phase timings above.
+        Log.Information("PerformImportAsync: Content hash summary: Total objects: {TotalObjects}, Skipped by hash: {SkippedByHash}, Created: {Created}, Updated (hydrated and diffed): {Updated}",
+            totalObjectsImported, _hashSkippedCount, createdCount, connectedSystemObjectsToBeUpdated.Count);
+        if (_connectedSystemRunProfile.VerifyImportContentHashes)
+        {
+            Log.Information("PerformImportAsync: Verification Mode summary: Dangerous disagreements: {DangerousDisagreements}, Benign mismatches: {BenignMismatches}",
+                _verificationDangerousDisagreementCount, _verificationBenignMismatchCount);
+        }
+
         importSpan.SetTag("totalObjectsImported", totalObjectsImported);
         importSpan.SetTag("objectsCreated", createdCount);
         importSpan.SetTag("objectsUpdated", connectedSystemObjectsToBeUpdated.Count);
+        importSpan.SetTag("objectsSkippedByHash", _hashSkippedCount);
+        if (_connectedSystemRunProfile.VerifyImportContentHashes)
+        {
+            importSpan.SetTag("verificationDangerousDisagreements", _verificationDangerousDisagreementCount);
+            importSpan.SetTag("verificationBenignMismatches", _verificationBenignMismatchCount);
+        }
         importSpan.SetSuccess();
     }
 
@@ -1099,22 +1145,63 @@ public class SyncImportTaskProcessor
     private const int CsoHydrationChunkSize = 1000;
 
     /// <summary>
+    /// SPEC-1082 D8: page-scoped, transient carrier for the hydration pre-fetch's results. Released
+    /// with the page (D13); never retained beyond <see cref="ProcessImportObjectsAsync"/>. Keyed by
+    /// import object reference (default reference equality; <see cref="ConnectedSystemImportObject"/>
+    /// does not override Equals/GetHashCode) since import objects have no stable identity of their own
+    /// until matched to a CSO.
+    /// </summary>
+    private sealed class CsoHydrationPageResult
+    {
+        public Dictionary<Guid, ConnectedSystemObject> HydratedCsos { get; } = new();
+        public Dictionary<ConnectedSystemImportObject, Guid> IncomingHashes { get; } = new();
+        public Dictionary<ConnectedSystemImportObject, CsoImportStateLookupEntry> MatchedImportState { get; } = new();
+        public HashSet<ConnectedSystemImportObject> SkipEligible { get; } = new();
+    }
+
+    /// <summary>
+    /// SPEC-1082 D5: returns the schema fingerprint for an object type, computing and caching it on
+    /// first use per run. Deterministic for a given schema shape, so caching across the whole run
+    /// (not just a page) is safe and avoids recomputing it per object.
+    /// </summary>
+    private Guid GetTypeFingerprint(ConnectedSystemObjectType objectType)
+    {
+        if (_typeFingerprintCache.TryGetValue(objectType.Id, out var fingerprint))
+            return fingerprint;
+
+        fingerprint = ImportContentHashCalculator.CalculateTypeFingerprint(objectType);
+        _typeFingerprintCache[objectType.Id] = fingerprint;
+        return fingerprint;
+    }
+
+    /// <summary>
     /// Pre-fetch phase (#988): resolves every import object in this page to a candidate CSO ID via the
     /// existing <see cref="LookupCsoByExternalId"/> dictionary lookup, then hydrates all distinct matched
     /// IDs with a small, bounded number of batch queries (chunked at <see cref="CsoHydrationChunkSize"/>)
     /// instead of one query per object. This eliminates the N+1 that remained after #440's lookup-only fix.
+    /// <para>
+    /// SPEC-1082 D8: for Full Import only, and never in Verification Mode, also computes each
+    /// candidate's incoming content hash (D3) and evaluates the skip predicate BEFORE deciding to
+    /// hydrate. Skip-eligible objects are excluded from the batch hydration query entirely - the
+    /// hydration this method exists to batch is exactly the cost a skip avoids.
+    /// </para>
     /// </summary>
-    /// <returns>A dictionary of hydrated CSOs, keyed by ID, for use by the per-object processing loop.</returns>
-    private async Task<Dictionary<Guid, ConnectedSystemObject>> HydrateCsoPageAsync(ConnectedSystemImportResult connectedSystemImportResult)
+    /// <returns>The page's hydrated CSOs plus the SPEC-1082 skip-predicate results, for use by the per-object processing loop.</returns>
+    private async Task<CsoHydrationPageResult> HydrateCsoPageAsync(ConnectedSystemImportResult connectedSystemImportResult)
     {
-        var hydratedCsoPage = new Dictionary<Guid, ConnectedSystemObject>();
+        var result = new CsoHydrationPageResult();
 
         // Nothing to pre-fetch on a first-ever import (_csIsEmpty) - every object is new by definition.
         if (_csIsEmpty || _connectedSystem.ObjectTypes == null)
-            return hydratedCsoPage;
+            return result;
 
         var pageObjectCount = connectedSystemImportResult.ImportObjects.Count;
         using var span = Diagnostics.Sync.StartSpan("HydrateCsoPage").SetTag("pageObjectCount", pageObjectCount);
+
+        // The skip predicate is only ever evaluated for a Full Import that is not running in
+        // Verification Mode (D10: verification hydrates and diffs everything on purpose).
+        var skipEligibleForRun = _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport
+            && !_connectedSystemRunProfile.VerifyImportContentHashes;
 
         // Only import objects with a resolvable object type that carries an External Id attribute
         // are candidates for hydration; project the resolved type alongside so the loop below does
@@ -1131,10 +1218,10 @@ public class SyncImportTaskProcessor
             // Malformed import objects (missing/multi-valued/empty External Id attribute) are swallowed
             // here and left for the per-object loop to raise properly via its own RPEI error handling;
             // this pre-fetch pass only cares about collecting candidate IDs to hydrate in bulk.
-            Guid? csoId;
+            CsoImportStateLookupEntry? entry;
             try
             {
-                csoId = LookupCsoByExternalId(importObject, csObjectType!);
+                entry = LookupCsoImportStateByExternalId(importObject, csObjectType!);
             }
             catch (MissingExternalIdAttributeException)
             {
@@ -1153,8 +1240,36 @@ public class SyncImportTaskProcessor
                 continue;
             }
 
-            if (csoId.HasValue)
-                csoIdsToHydrate.Add(csoId.Value);
+            if (!entry.HasValue)
+                continue;
+
+            var matchedEntry = entry.Value;
+            result.MatchedImportState[importObject] = matchedEntry;
+
+            // Compute the incoming hash for every matched candidate on a Full Import (needed both
+            // for the skip decision here and, in Verification Mode, for the post-diff comparison in
+            // ProcessImportObjectsAsync). Cache-miss or Delta Import candidates never need it: D7
+            // never trusts a Delta Import payload's hash (conservative v1), so computing it here
+            // would be wasted work.
+            if (_connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
+                result.IncomingHashes[importObject] = ImportContentHashCalculator.CalculateContentHash(importObject, csObjectType!);
+
+            var skipEligible = skipEligibleForRun
+                && result.IncomingHashes.TryGetValue(importObject, out var incomingHash)
+                && matchedEntry.ImportStateHash.HasValue && matchedEntry.ImportStateHash.Value == incomingHash
+                && matchedEntry.ImportStateFingerprint.HasValue && matchedEntry.ImportStateFingerprint.Value == GetTypeFingerprint(csObjectType!)
+                && matchedEntry.Status == ConnectedSystemObjectStatus.Normal
+                && importObject.ChangeType != ObjectChangeType.Deleted
+                && (matchedEntry.PartitionId != null || _connectedSystemRunProfile.Partition == null);
+
+            if (skipEligible)
+            {
+                result.SkipEligible.Add(importObject);
+                // Deliberately NOT added to csoIdsToHydrate: this is exactly the hydration cost D8 exists to avoid.
+                continue;
+            }
+
+            csoIdsToHydrate.Add(matchedEntry.CsoId);
         }
 
         if (csoIdsToHydrate.Count > 0)
@@ -1163,12 +1278,13 @@ public class SyncImportTaskProcessor
             {
                 var csos = await _syncRepo.GetConnectedSystemObjectsByIdsAsync(_connectedSystem.Id, chunk);
                 foreach (var cso in csos)
-                    hydratedCsoPage[cso.Id] = cso;
+                    result.HydratedCsos[cso.Id] = cso;
             }
         }
 
-        span.SetTag("hydratedCsoCount", hydratedCsoPage.Count);
-        return hydratedCsoPage;
+        span.SetTag("hydratedCsoCount", result.HydratedCsos.Count);
+        span.SetTag("skippedCount", result.SkipEligible.Count);
+        return result;
     }
 
     private async Task ProcessImportObjectsAsync(ConnectedSystemImportResult connectedSystemImportResult, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeCreated, ICollection<ConnectedSystemObject> connectedSystemObjectsToBeUpdated, HashSet<string>? crossPageSeenExternalIds = null)
@@ -1177,8 +1293,10 @@ public class SyncImportTaskProcessor
             throw new InvalidDataException("ProcessImportObjectsAsync: _connectedSystem.ObjectTypes was null. Cannot continue.");
 
         // Batch-hydrate this page's matched CSOs in one pass (#988), instead of relying on
-        // per-object hydration inside the loop below.
-        var hydratedCsoPage = await HydrateCsoPageAsync(connectedSystemImportResult);
+        // per-object hydration inside the loop below. SPEC-1082 D8: also computes incoming hashes
+        // and skip-eligibility for this page's candidates.
+        var hydrationResult = await HydrateCsoPageAsync(connectedSystemImportResult);
+        var hydratedCsoPage = hydrationResult.HydratedCsos;
 
         // Batch-fetch the reference external ID lookups for the whole hydrated page in one query.
         // The per-object loop below previously issued GetReferenceExternalIdsAsync once per
@@ -1366,6 +1484,23 @@ public class SyncImportTaskProcessor
                     }
                 }
 
+                // SPEC-1082 D8: skip check, INSTEAD of TryAndFindMatchingConnectedSystemObjectAsync,
+                // for objects the pre-fetch already proved unchanged (hash+fingerprint match, Normal
+                // status, not a delete, no pending partition backfill). Mirrors the existing no-op
+                // path immediately below (RPEI removal, including its known same-batch-duplicate
+                // quirk of marking an already-removed RPEI - mirrored deliberately, not fixed here);
+                // skipped objects are NOT added to the update list. Their external ID was already
+                // collected for deletion detection at page level before processing (AddExternalIdsToCollection),
+                // so a genuinely missing object still obsoletes; see ImportContentHashSkipTests.
+                if (hydrationResult.SkipEligible.Contains(importObject))
+                {
+                    _hashSkippedCount++;
+                    _activityRunProfileExecutionItems.Remove(activityRunProfileExecutionItem);
+                    Log.Debug("ProcessImportObjectsAsync: Skipping hydration and diff for import object with external ID '{ExternalId}' - content hash unchanged since last stamp.",
+                        LogSanitiser.Sanitise(activityRunProfileExecutionItem.ExternalIdSnapshot));
+                    continue;
+                }
+
                 // see if we already have a matching Connected System Object for this imported object within JIM
                 ConnectedSystemObject? connectedSystemObject;
                 using (Diagnostics.Sync.StartSpan("FindMatchingCso"))
@@ -1438,6 +1573,18 @@ public class SyncImportTaskProcessor
                         activityRunProfileExecutionItem.ConnectedSystemObject = connectedSystemObject;
                         activityRunProfileExecutionItem.SnapshotCsoDisplayFields(connectedSystemObject);
                         connectedSystemObjectsToBeCreated.Add(connectedSystemObject);
+
+                        // SPEC-1082 D7: Full Import created objects request a stamp with the incoming
+                        // hash + current type fingerprint, written after this create batch commits
+                        // (D6 stamp-ordering invariant). Delta Import creates are not stamped (D7):
+                        // a delta payload is not trusted to be full-state, so the object is left
+                        // unstamped for the next Full Import to honestly diff and stamp.
+                        if (_connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
+                        {
+                            connectedSystemObject.PendingImportStateHash = ImportContentHashCalculator.CalculateContentHash(importObject, csObjectType);
+                            connectedSystemObject.PendingImportStateFingerprint = GetTypeFingerprint(csObjectType);
+                            connectedSystemObject.PendingImportStateStampRequested = true;
+                        }
 
                         // Build sync outcome for new CSO
                         if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
@@ -1529,6 +1676,64 @@ public class SyncImportTaskProcessor
                     // Check if there are any actual attribute changes
                     var hasAttributeChanges = connectedSystemObject.PendingAttributeValueAdditions.Count > 0 ||
                                               connectedSystemObject.PendingAttributeValueRemovals.Count > 0;
+
+                    // SPEC-1082 D7: request a stamp for this matched object, written by the save
+                    // phase after this batch's attribute-value writes commit (D6 stamp-ordering
+                    // invariant). Full Import stamps changed and unchanged objects alike with the
+                    // real incoming hash, since the honest diff just ran and made the stored values
+                    // match it exactly. Delta Import only nulls the hash for objects it actually
+                    // changed (conservative v1: a delta payload is not trusted to be full-state);
+                    // Delta no-ops leave the stored hash untouched, since it still accurately
+                    // describes the object's unchanged content.
+                    if (_connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport)
+                    {
+                        if (hydrationResult.IncomingHashes.TryGetValue(importObject, out var incomingHashForStamp))
+                        {
+                            connectedSystemObject.PendingImportStateHash = incomingHashForStamp;
+                            connectedSystemObject.PendingImportStateFingerprint = GetTypeFingerprint(csObjectType);
+                            connectedSystemObject.PendingImportStateStampRequested = true;
+                        }
+                        // else: matched via a fallback path outside the pre-fetch (e.g. secondary
+                        // external ID for a PendingProvisioning CSO); no incoming hash was computed
+                        // for it here, so it is left unstamped - the next Full Import re-diffs it
+                        // honestly (via the primary external ID, now that it exists) and stamps it then.
+                    }
+                    else if (_connectedSystemRunProfile.RunType == ConnectedSystemRunType.DeltaImport && hasAttributeChanges)
+                    {
+                        connectedSystemObject.PendingImportStateHash = null;
+                        connectedSystemObject.PendingImportStateFingerprint = null;
+                        connectedSystemObject.PendingImportStateStampRequested = true;
+                    }
+
+                    // SPEC-1082 D10: Verification Mode never skips (enforced in HydrateCsoPageAsync),
+                    // so every matched object reaches this honest diff. Compare the stored hash and
+                    // fingerprint against the freshly computed incoming hash and the diff's own findings.
+                    if (_connectedSystemRunProfile.VerifyImportContentHashes
+                        && _connectedSystemRunProfile.RunType == ConnectedSystemRunType.FullImport
+                        && hydrationResult.MatchedImportState.TryGetValue(importObject, out var storedImportState)
+                        && hydrationResult.IncomingHashes.TryGetValue(importObject, out var incomingHashForVerification)
+                        && storedImportState.ImportStateHash.HasValue
+                        && storedImportState.ImportStateFingerprint.HasValue
+                        && storedImportState.ImportStateFingerprint.Value == GetTypeFingerprint(csObjectType))
+                    {
+                        if (storedImportState.ImportStateHash.Value == incomingHashForVerification && hasAttributeChanges)
+                        {
+                            // Dangerous disagreement: a content-hash skip would have silently missed this change.
+                            _verificationDangerousDisagreementCount++;
+                            var changedAttrCount = connectedSystemObject.PendingAttributeValueAdditions.Count + connectedSystemObject.PendingAttributeValueRemovals.Count;
+                            activityRunProfileExecutionItem.ErrorType = ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed;
+                            activityRunProfileExecutionItem.ErrorMessage = $"Verification Mode: the stored import content hash for CSO {connectedSystemObject.Id} matched the incoming hash, but the honest diff found {changedAttrCount} changed attribute value(s). A content-hash skip would have missed this change.";
+                            Log.Error("ProcessImportObjectsAsync: Verification Mode DANGEROUS DISAGREEMENT for CSO {CsoId}: stored hash matched incoming hash but the diff found {ChangedAttrCount} changed attribute value(s).",
+                                connectedSystemObject.Id, changedAttrCount);
+                        }
+                        else if (storedImportState.ImportStateHash.Value != incomingHashForVerification && !hasAttributeChanges)
+                        {
+                            // Benign false-positive (D4): safe by construction, one wasted diff.
+                            _verificationBenignMismatchCount++;
+                            Log.Debug("ProcessImportObjectsAsync: Verification Mode benign mismatch for CSO {CsoId}: hash differed but the honest diff found no changes.",
+                                connectedSystemObject.Id);
+                        }
+                    }
 
                     // Always add to update list - needed for reference resolution even if no attribute changes
                     // The update list is used by ResolveReferencesAsync to resolve references between objects
@@ -1655,6 +1860,37 @@ public class SyncImportTaskProcessor
     }
 
     /// <summary>
+    /// SPEC-1082 D7/D6: collects this batch's requested stamps (<see cref="ConnectedSystemObject.PendingImportStateStampRequested"/>,
+    /// set during <see cref="ProcessImportObjectsAsync"/>) and writes them via
+    /// <see cref="ISyncRepository.StampImportStateAsync"/>. MUST be called only after this batch's
+    /// attribute-value writes have committed (D6 stamp-ordering invariant); the create- and
+    /// update-batch call sites in <see cref="PerformImportAsync"/> both satisfy this by construction.
+    /// Excludes any CSO whose RPEI carries an error, EXCEPT the Verification Mode diagnostic-only
+    /// <see cref="ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed"/> (D10:
+    /// verification still stamps truthfully, since the honest diff ran and the object was persisted
+    /// normally; only genuine processing failures - duplicate external IDs, unhandled exceptions -
+    /// leave an object unstamped).
+    /// </summary>
+    private async Task StampBatchImportStateAsync(IEnumerable<ConnectedSystemObject> csoBatch, List<ActivityRunProfileExecutionItem> batchRpeis)
+    {
+        var erroredCsoIds = batchRpeis
+            .Where(r => r.ConnectedSystemObjectId.HasValue
+                && r.ErrorType != null
+                && r.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet
+                && r.ErrorType != ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed)
+            .Select(r => r.ConnectedSystemObjectId!.Value)
+            .ToHashSet();
+
+        var stamps = csoBatch
+            .Where(cso => cso.PendingImportStateStampRequested && !erroredCsoIds.Contains(cso.Id))
+            .Select(cso => (CsoId: cso.Id, Hash: cso.PendingImportStateHash, Fingerprint: cso.PendingImportStateFingerprint))
+            .ToList();
+
+        if (stamps.Count > 0)
+            await _syncRepo.StampImportStateAsync(stamps);
+    }
+
+    /// <summary>
     /// It's possible the Connector has supplied some attributes with null values. These shouldn't be passed to JIM,
     /// so as a precaution let's ensure we have only populated attributes.
     /// </summary>
@@ -1696,6 +1932,14 @@ public class SyncImportTaskProcessor
     /// Returns null if no match found (new object) or if this is a first-ever import (_csIsEmpty).
     /// </summary>
     private Guid? LookupCsoByExternalId(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
+        => LookupCsoImportStateByExternalId(connectedSystemImportObject, connectedSystemObjectType)?.CsoId;
+
+    /// <summary>
+    /// SPEC-1082 D8: same lookup as <see cref="LookupCsoByExternalId"/> but returns the full
+    /// <see cref="CsoImportStateLookupEntry"/> (stored hash, fingerprint, status, partition) so
+    /// callers can evaluate the skip predicate without a second dictionary lookup.
+    /// </summary>
+    private CsoImportStateLookupEntry? LookupCsoImportStateByExternalId(ConnectedSystemImportObject connectedSystemImportObject, ConnectedSystemObjectType connectedSystemObjectType)
     {
         if (_csIsEmpty || _csoExternalIdLookup == null)
             return null;
@@ -1729,7 +1973,7 @@ public class SyncImportTaskProcessor
         };
 
         var cacheKey = $"cso:{_connectedSystem.Id}:{externalIdAttribute.Id}:{externalIdValue}";
-        return _csoExternalIdLookup.TryGetValue(cacheKey, out var csoId) ? csoId : null;
+        return _csoExternalIdLookup.TryGetValue(cacheKey, out var entry) ? entry : null;
     }
 
     /// <summary>

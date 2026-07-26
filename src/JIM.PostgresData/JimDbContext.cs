@@ -375,6 +375,12 @@ public class JimDbContext : DbContext
             .Property(srm => srm.InitialExportOnly)
             .HasDefaultValue(false);
 
+        // SPEC-1082 D10: Run Profile Verification Mode defaults to false (no behavioural change for
+        // existing Run Profiles); the store-level default backfills existing rows on migration.
+        modelBuilder.Entity<ConnectedSystemRunProfile>()
+            .Property(rp => rp.VerifyImportContentHashes)
+            .HasDefaultValue(false);
+
         // ObjectMatchingRule can belong to either SyncRule or ConnectedSystemObjectType (mutually exclusive)
         modelBuilder.Entity<SyncRule>()
             .HasMany(sr => sr.ObjectMatchingRules)

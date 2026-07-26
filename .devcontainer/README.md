@@ -219,6 +219,11 @@ jim-reset          # Full reset (containers, images, volumes)
 jim-wipe           # Wipe JIM data (reset CSOs/MVOs/config, keep schema)
 ```
 
+### Tooling
+```bash
+bat <file>         # Syntax-highlighting cat (Ubuntu packages it as batcat)
+```
+
 ### Help
 ```bash
 jim                # Show all available aliases

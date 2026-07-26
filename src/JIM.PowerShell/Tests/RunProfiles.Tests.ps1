@@ -232,6 +232,40 @@ Describe 'New-JIMRunProfile' {
             $help.Examples.Example.Count | Should -BeGreaterThan 0
         }
     }
+
+    Context 'VerifyImportContentHashes binding (SPEC-1082)' {
+
+        It 'Should have a VerifyImportContentHashes switch parameter' {
+            $command = Get-Command New-JIMRunProfile
+            $command.Parameters['VerifyImportContentHashes'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Sends verifyImportContentHashes=true in the request body when specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1; name = $Body.name } }
+
+                New-JIMRunProfile -ConnectedSystemId 1 -Name 'Verified Full Import' -RunType FullImport -VerifyImportContentHashes -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.verifyImportContentHashes -eq $true
+                }
+            }
+        }
+
+        It 'Omits verifyImportContentHashes from the request body when not specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1; name = $Body.name } }
+
+                New-JIMRunProfile -ConnectedSystemId 1 -Name 'Plain Full Import' -RunType FullImport -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('verifyImportContentHashes')
+                }
+            }
+        }
+    }
 }
 
 Describe 'Set-JIMRunProfile' {
@@ -298,6 +332,55 @@ Describe 'Set-JIMRunProfile' {
 
         It 'Should have examples' {
             $help.Examples.Example.Count | Should -BeGreaterThan 0
+        }
+    }
+
+    Context 'VerifyImportContentHashes binding (SPEC-1082)' {
+
+        It 'Should have a VerifyImportContentHashes bool parameter (not a switch, so $false is expressible)' {
+            $command = Get-Command Set-JIMRunProfile
+            $param = $command.Parameters['VerifyImportContentHashes']
+            $param | Should -Not -BeNullOrEmpty
+            $param.ParameterType.Name | Should -Be 'Boolean'
+        }
+
+        It 'Sends verifyImportContentHashes=$true in the request body when specified as $true' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -VerifyImportContentHashes $true -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.verifyImportContentHashes -eq $true
+                }
+            }
+        }
+
+        It 'Sends verifyImportContentHashes=$false in the request body when specified as $false (not omitted)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -VerifyImportContentHashes $false -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('verifyImportContentHashes') -and $Body.verifyImportContentHashes -eq $false
+                }
+            }
+        }
+
+        It 'Omits verifyImportContentHashes from the request body when not specified (leaves unchanged)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -Name 'Renamed' -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('verifyImportContentHashes')
+                }
+            }
         }
     }
 }
