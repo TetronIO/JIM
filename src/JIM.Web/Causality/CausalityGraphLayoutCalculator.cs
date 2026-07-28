@@ -187,7 +187,9 @@ public static class CausalityGraphLayoutCalculator
 
     /// <summary>
     /// The source root's sub line: the record's display name and external id (whichever are
-    /// available), falling back to the Connected System name for records without either.
+    /// available), falling back to the record's own Connected System name for records without either
+    /// (not the run's system: this label is about the record, and the two diverge for cross-system
+    /// cascades).
     /// </summary>
     private static string GetSourceLabel(CausalityPageContext context)
     {
@@ -200,7 +202,7 @@ public static class CausalityGraphLayoutCalculator
             return context.CsoDisplayName!;
         if (hasExternalId)
             return context.CsoExternalId!;
-        return context.ConnectedSystemName ?? string.Empty;
+        return context.CsoConnectedSystemName ?? string.Empty;
     }
 
     /// <summary>

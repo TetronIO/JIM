@@ -52,7 +52,10 @@
                     </div>
                     @{
                         var recordLabel = GetRecordLabel();
-                        var systemName = Model.Context.ConnectedSystemName;
+                        // The record's own Connected System (paired with the record chip below), not
+                        // the run's system named in the sentence above them; the two diverge for
+                        // cross-system cascades.
+                        var systemName = Model.Context.CsoConnectedSystemName;
                     }
                     @if (recordLabel != null || !string.IsNullOrWhiteSpace(systemName))
                     {
@@ -341,16 +344,22 @@
 
     private string? GetRecordHref()
     {
+        // The record's own Connected System, not the run's: a link built with the run's system id
+        // 404s when they diverge (ConnectedSystemObjectDetail looks the record up by both).
         var context = Model.Context;
-        return context.ConnectedSystemId.HasValue && context.CsoId.HasValue
-            ? Utilities.GetConnectedSystemObjectHref(context.ConnectedSystemId.Value, context.CsoId.Value)
+        return context.CsoConnectedSystemId.HasValue && context.CsoId.HasValue
+            ? Utilities.GetConnectedSystemObjectHref(context.CsoConnectedSystemId.Value, context.CsoId.Value)
             : null;
     }
 
+    /// <summary>
+    /// Href for the Connected System chip paired with the record chip in the Source column: the
+    /// record's own system (see <see cref="GetRecordHref"/>), not the run's.
+    /// </summary>
     private string? GetSystemHref()
     {
-        return Model.Context.ConnectedSystemId.HasValue
-            ? Utilities.GetConnectedSystemHref(Model.Context.ConnectedSystemId.Value)
+        return Model.Context.CsoConnectedSystemId.HasValue
+            ? Utilities.GetConnectedSystemHref(Model.Context.CsoConnectedSystemId.Value)
             : null;
     }
 

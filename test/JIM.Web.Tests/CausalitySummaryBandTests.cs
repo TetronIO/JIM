@@ -75,6 +75,8 @@ public class CausalitySummaryBandTests
             ConnectedSystemName: "Yellowstone APAC",
             RunProfileName: "Full Synchronisation",
             CsoId: CausalityTestData.CsoId,
+            CsoConnectedSystemId: 1,
+            CsoConnectedSystemName: "Yellowstone APAC",
             CsoDisplayName: "<script>alert('xss')</script>",
             CsoExternalId: "S8-1",
             CsoObjectTypeName: "person",

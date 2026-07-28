@@ -85,6 +85,8 @@ public class CausalitySummaryBuilderTests
             ConnectedSystemName: "Yellowstone APAC",
             RunProfileName: "Full Synchronisation",
             CsoId: CausalityTestData.CsoId,
+            CsoConnectedSystemId: 1,
+            CsoConnectedSystemName: "Yellowstone APAC",
             CsoDisplayName: "Erin Byrne",
             CsoExternalId: "S8-100",
             CsoObjectTypeName: "person",
@@ -226,6 +228,27 @@ public class CausalitySummaryBuilderTests
 
         Assert.That(sentence, Is.Not.Empty);
         Assert.That(sentence, Does.EndWith("."));
+    }
+
+    [Test]
+    public void Build_CrossSystemCascade_NamesRunSystemInSentenceButLinksRecordToItsOwnSystem()
+    {
+        // A cascade: the Run Profile executed against Yellowstone APAC (id 1), but this Run Profile
+        // Execution Item's own record lives on Glitterband EMEA (id 2), e.g. a Full Synchronisation
+        // provisioning or exporting to a Connected System Object on a different system.
+        var summary = BuildSummary(CausalityTestData.NewJoinerItem(), CausalityTestData.CascadeContext());
+        var entities = summary.Segments.OfType<SummarySegment.Entity>().ToList();
+
+        // The opening "on <system>" clause must name the system the run executed against
+        // (Yellowstone APAC), not the record's own system.
+        var runSystemEntity = entities.Single(e => e.Kind == CausalityEntityKind.ConnectedSystem && e.Label == "Yellowstone APAC");
+        Assert.That(runSystemEntity.Href, Is.EqualTo("/admin/connected-systems/1"));
+
+        // The record hyperlink must point at the record's OWN system (Glitterband EMEA, id 2), never
+        // the run's system (id 1): ConnectedSystemObjectDetail looks the record up by
+        // {connectedSystemId}+{id}, so a link built with the wrong system id resolves to nothing.
+        var recordEntity = entities.Single(e => e.Kind == CausalityEntityKind.Record);
+        Assert.That(recordEntity.Href, Is.EqualTo($"/admin/connected-systems/2/connector-space/{CausalityTestData.CsoId}"));
     }
 
     [Test]

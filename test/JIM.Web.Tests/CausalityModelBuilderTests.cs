@@ -210,11 +210,34 @@ public class CausalityModelBuilderTests
 
         Assert.That(exportFailed.Badge, Is.EqualTo("Needs attention"));
         Assert.That(exportFailed.DetailMessage, Is.EqualTo("LDAP error 50: insufficient access rights"));
-        Assert.That(exportFailed.SystemId, Is.EqualTo(2), "Export outcomes belong to the page's Connected System");
+        Assert.That(exportFailed.SystemId, Is.EqualTo(2), "Export outcomes belong to the record's own Connected System");
 
         var peLink = exportFailed.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.PendingExport);
         Assert.That(peLink, Is.Not.Null);
         Assert.That(peLink!.Href, Is.EqualTo("/admin/connected-systems/2/pending-exports"));
+    }
+
+    [Test]
+    public void Build_ExportFailedOutcome_CrossSystemCascade_BelongsToRecordSystemNotRunSystem()
+    {
+        // A cascade: the Run Profile executed against Yellowstone APAC (id 1), but this Run Profile
+        // Execution Item's own record (and its failed export) belongs to Glitterband EMEA (id 2).
+        var model = CausalityModelBuilder.Build(CausalityTestData.ExportFailureItem(), CausalityTestData.CascadeContext());
+        var exported = model.Roots[0];
+        var exportFailed = exported.Children[0];
+
+        // Both the export attempt and its failure describe the record's own export, so they must be
+        // attributed to the record's system, never the run's system this item happens to be filed
+        // under for a cross-system cascade.
+        Assert.That(exported.SystemId, Is.EqualTo(2), "Export outcomes belong to the record's own Connected System");
+        Assert.That(exported.SystemName, Is.EqualTo("Glitterband EMEA"));
+        Assert.That(exportFailed.SystemId, Is.EqualTo(2));
+        Assert.That(exportFailed.SystemName, Is.EqualTo("Glitterband EMEA"));
+
+        var peLink = exportFailed.Links.SingleOrDefault(l => l.Kind == CausalityEntityKind.PendingExport);
+        Assert.That(peLink, Is.Not.Null);
+        Assert.That(peLink!.Href, Is.EqualTo("/admin/connected-systems/2/pending-exports"),
+            "The failed export's Pending Exports link must point at the record's own system, where the queued change actually lives");
     }
 
     [Test]

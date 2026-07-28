@@ -27,6 +27,8 @@ public static class CausalityTestData
         ConnectedSystemName: "Yellowstone APAC",
         RunProfileName: "Full Synchronisation",
         CsoId: CsoId,
+        CsoConnectedSystemId: 1,
+        CsoConnectedSystemName: "Yellowstone APAC",
         CsoDisplayName: "Liam Allen",
         CsoExternalId: "S8-287551",
         CsoObjectTypeName: "person",
@@ -38,6 +40,30 @@ public static class CausalityTestData
         ConnectedSystemName: "Glitterband EMEA",
         RunProfileName: "Export",
         CsoId: CsoId,
+        CsoConnectedSystemId: 2,
+        CsoConnectedSystemName: "Glitterband EMEA",
+        CsoDisplayName: "Liam Allen",
+        CsoExternalId: "S8-287551",
+        CsoObjectTypeName: "person",
+        MvoTypeName: "Person",
+        MvoTypePluralName: "People");
+
+    /// <summary>
+    /// A cross-system cascade: the Run Profile executed against Yellowstone APAC, but this
+    /// particular Run Profile Execution Item's record lives on Glitterband EMEA (e.g. a Full
+    /// Synchronisation on Yellowstone APAC provisioned or exported to a Connected System Object on
+    /// Glitterband EMEA). <see cref="CausalityPageContext.ConnectedSystemId"/> and
+    /// <see cref="CausalityPageContext.CsoConnectedSystemId"/> are deliberately different systems, so
+    /// tests built on this context prove that run-scoped and record-scoped consumers each pick up
+    /// their own identity rather than sharing one.
+    /// </summary>
+    public static CausalityPageContext CascadeContext() => new(
+        ConnectedSystemId: 1,
+        ConnectedSystemName: "Yellowstone APAC",
+        RunProfileName: "Full Synchronisation",
+        CsoId: CsoId,
+        CsoConnectedSystemId: 2,
+        CsoConnectedSystemName: "Glitterband EMEA",
         CsoDisplayName: "Liam Allen",
         CsoExternalId: "S8-287551",
         CsoObjectTypeName: "person",
@@ -49,6 +75,8 @@ public static class CausalityTestData
         ConnectedSystemName: null,
         RunProfileName: null,
         CsoId: null,
+        CsoConnectedSystemId: null,
+        CsoConnectedSystemName: null,
         CsoDisplayName: null,
         CsoExternalId: null,
         CsoObjectTypeName: null,

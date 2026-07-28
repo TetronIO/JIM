@@ -146,12 +146,20 @@ public static class CausalityModelBuilder
         if (usesIdChannel)
         {
             // Provisioned/PendingExportCreated carry their target system id in DetailMessage and its
-            // name in TargetEntityDescription (which may be a different system to the page's)
+            // name in TargetEntityDescription; that target is a third system in the general case
+            // (neither the run's system nor the record's own), so TargetEntityDescription is always
+            // preferred. The name-only fallback below is for legacy rows that predate that field
+            // being captured: neither context identity is more correct than the other for an unknown
+            // third system, and no href is built from this name (the id already came from
+            // parsedDetail.ConnectedSystemId), so this is left as the run's name deliberately rather
+            // than guessed at.
             return (parsedDetail.ConnectedSystemId, outcome.TargetEntityDescription ?? context.ConnectedSystemName);
         }
 
-        // Source events and export execution events belong to the page's Connected System
-        return (context.ConnectedSystemId, context.ConnectedSystemName);
+        // Source events and export execution events belong to the record's own Connected System,
+        // not necessarily the system the run executed against (they diverge for cross-system
+        // cascades, e.g. a Full Sync on system A provisioning or exporting to a CSO on system B)
+        return (context.CsoConnectedSystemId, context.CsoConnectedSystemName);
     }
 
     private static List<CausalityEntityLink> BuildLinks(
@@ -222,12 +230,13 @@ public static class CausalityModelBuilder
                 break;
 
             case ActivityRunProfileExecutionItemSyncOutcomeType.ExportFailed:
-                // The failed changes remain queued on the page's Connected System
-                if (context.ConnectedSystemId.HasValue)
+                // The failed changes remain queued on the record's own Connected System, not
+                // necessarily the system the run executed against
+                if (context.CsoConnectedSystemId.HasValue)
                 {
                     links.Add(new CausalityEntityLink(
                         "Pending Exports",
-                        $"/admin/connected-systems/{context.ConnectedSystemId.Value}/pending-exports",
+                        $"/admin/connected-systems/{context.CsoConnectedSystemId.Value}/pending-exports",
                         CausalityEntityKind.PendingExport));
                 }
                 break;

@@ -36,15 +36,15 @@
         </MudText>
         <MudPaper Class="pa-4 mb-5" Outlined="true">
             <MudGrid Spacing="4">
-                @* Connected System *@
-                @if (_connectedSystemHeader != null)
+                @* Connected System - the system the Run Profile executed against *@
+                @if (_runConnectedSystemHeader != null)
                 {
                     <MudItem xs="12" sm="6" md="4">
                         <MudText Typo="Typo.button" Class="mud-text-secondary">Connected System</MudText>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudIcon Icon="@Icons.Material.Filled.Storage" Class="mud-text-secondary" />
-                            <MudLink Href="@Utilities.GetConnectedSystemHref(_connectedSystemHeader)">
-                                @_connectedSystemHeader.Name
+                            <MudLink Href="@Utilities.GetConnectedSystemHref(_runConnectedSystemHeader)">
+                                @_runConnectedSystemHeader.Name
                             </MudLink>
                         </MudStack>
                     </MudItem>
@@ -53,6 +53,8 @@
                 @* Run Profile *@
                 @if (_activity != null)
                 {
+                    var executedLocal = _activity.Executed.ToLocalTime();
+
                     <MudItem xs="12" sm="6" md="4">
                         <MudText Typo="Typo.button" Class="mud-text-secondary">@(IsHousekeepingContext() ? "Activity" : "Run Profile")</MudText>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
@@ -65,9 +67,7 @@
                         <MudText Typo="Typo.button" Class="mud-text-secondary">Executed</MudText>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                             <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mud-text-secondary" />
-                            <MudText title="@_activity.Executed.ToLocalTime().ToString("F")">
-                                @_activity.Executed.ToLocalTime().ToRelativeTime()
-                            </MudText>
+                            <MudText>@executedLocal.ToFriendlyDate() (@executedLocal.ToRelativeTime())</MudText>
                         </MudStack>
                     </MudItem>
                 }
@@ -505,62 +505,22 @@
         @* Deletion Impact Section - shown for CSO deletions and disconnections (source deletion triggers both) *@
         @if (_activityRunProfileExecutionItem.ObjectChangeType is ObjectChangeType.Deleted or ObjectChangeType.Disconnected)
         {
-            <MudText Typo="Typo.h6" Class="mb-3">Metaverse Impact</MudText>
+            <MudText Typo="Typo.h6" Class="mb-2">Metaverse Impact</MudText>
+            <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
+                How the Metaverse Object Deletion Rule for these objects applies to this change.
+            </MudText>
 
-            @* Show actual MVO fate from causality tree outcomes (when available) *@
+            @* The Metaverse Object's fate (deleted or scheduled) and its reason are shown by the
+               Causality view above; this section explains the Deletion Rule behind that outcome, and
+               covers the pre-sync and housekeeping contexts that produce no Causality outcomes. *@
             var mvoDeletedOutcome = _activityRunProfileExecutionItem.SyncOutcomes
                 .FirstOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
             var mvoDeletionScheduledOutcome = _activityRunProfileExecutionItem.SyncOutcomes
                 .FirstOrDefault(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeletionScheduled);
 
-            @if (mvoDeletedOutcome != null)
-            {
-                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.PersonRemove" />
-                        <MudText Typo="Typo.body1">
-                            <strong>The Metaverse Object was deleted.</strong>
-                            @if (!string.IsNullOrEmpty(mvoDeletedOutcome.TargetEntityDescription))
-                            {
-                                <text> The identity <strong>@mvoDeletedOutcome.TargetEntityDescription</strong> was removed from the metaverse immediately (no grace period).</text>
-                            }
-                        </MudText>
-                    </MudStack>
-                </MudAlert>
-            }
-            else if (mvoDeletionScheduledOutcome != null)
-            {
-                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-3">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                        <MudIcon Icon="@Icons.Material.Filled.HourglassBottom" />
-                        <MudText Typo="Typo.body1">
-                            <strong>The Metaverse Object is scheduled for deletion.</strong>
-                            @if (!string.IsNullOrEmpty(mvoDeletionScheduledOutcome.TargetEntityDescription))
-                            {
-                                <text> The identity </text>
-                                @if (mvoDeletionScheduledOutcome.TargetEntityId.HasValue)
-                                {
-                                    <MudLink Href="@GetMvoHref(mvoDeletionScheduledOutcome.TargetEntityId.Value)">
-                                        @mvoDeletionScheduledOutcome.TargetEntityDescription
-                                    </MudLink>
-                                }
-                                else
-                                {
-                                    <strong>@mvoDeletionScheduledOutcome.TargetEntityDescription</strong>
-                                }
-                                <text> will be deleted after the grace period expires</text>
-                                @if (!string.IsNullOrEmpty(mvoDeletionScheduledOutcome.DetailMessage))
-                                {
-                                    <text> (@mvoDeletionScheduledOutcome.DetailMessage.ToLowerInvariant())</text>
-                                }
-                                <text>, unless a new connector is established before then.</text>
-                            }
-                        </MudText>
-                    </MudStack>
-                </MudAlert>
-            }
-            else if (IsSyncContext() && _activityRunProfileExecutionItem.SyncOutcomes.Count > 0
-                     && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Disconnected)
+            @if (mvoDeletedOutcome == null && mvoDeletionScheduledOutcome == null
+                 && IsSyncContext() && _activityRunProfileExecutionItem.SyncOutcomes.Count > 0
+                 && _activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Disconnected)
             {
                 @* Sync context with outcomes but no MVO deletion — the MVO survived *@
                 <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Class="mb-3">
@@ -571,7 +531,7 @@
                             @switch (_metaverseObjectType?.DeletionRule)
                             {
                                 case MetaverseObjectDeletionRule.Manual:
-                                    <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects is set to <strong>manual deletion only</strong> — automatic deletion is disabled.</text>
+                                    <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects is set to <strong>manual deletion only</strong>; automatic deletion is disabled.</text>
                                     break;
                                 case MetaverseObjectDeletionRule.WhenLastConnectorDisconnected:
                                     <text>The deletion rule for <strong>@_metaverseObjectType.Name</strong> objects requires <strong>all connectors</strong> to be disconnected. Other Connected Systems still have active connectors to this Metaverse Object.</text>
@@ -619,7 +579,7 @@
                 }
 
                 @* Show concrete deletion rule based on object type configuration *@
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-5">
+                <MudPaper Outlined="true" Class="pa-4 mb-5">
                     <MudStack Spacing="2">
                         <MudText Typo="Typo.body2">
                             <strong>@_metaverseObjectType.Name</strong> objects are configured with the following deletion rule:
@@ -709,7 +669,7 @@
                                             break;
                                         }
                                     </MudStack>
-                                </MudAlert>
+                                </MudPaper>
                         }
 else
                         {
@@ -993,6 +953,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     private ActivityRunProfileExecutionItem? _activityRunProfileExecutionItem;
     private Activity? _activity;
     private ConnectedSystemHeader? _connectedSystemHeader;
+    private ConnectedSystemHeader? _runConnectedSystemHeader;
     private List<BreadcrumbItem> _breadcrumbs = null!;
     private bool _fromOperations;
     private ConnectedSystemObjectAttributeValue? _externalIdAttributeValue;
@@ -1006,12 +967,19 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
     /// <summary>
     /// Builds the causality panel's page context from the values this page has already loaded,
     /// falling back to the item's snapshot fields when the Connected System Object has been deleted.
+    /// ConnectedSystemId/Name carry the run's own Connected System (<see cref="_runConnectedSystemHeader"/>);
+    /// CsoConnectedSystemId/Name carry the record's own Connected System (<see cref="_connectedSystemHeader"/>).
+    /// The two normally coincide but diverge for cross-system cascades (e.g. a Full Sync on system A
+    /// provisioning or exporting to a CSO on system B); see <see cref="CausalityPageContext"/> for
+    /// which consumers need which identity.
     /// </summary>
     private CausalityPageContext BuildCausalityPageContext() => new(
-        ConnectedSystemId: _connectedSystemHeader?.Id,
-        ConnectedSystemName: _connectedSystemHeader?.Name,
+        ConnectedSystemId: _runConnectedSystemHeader?.Id,
+        ConnectedSystemName: _runConnectedSystemHeader?.Name,
         RunProfileName: _activity?.TargetName,
         CsoId: _activityRunProfileExecutionItem?.ConnectedSystemObjectId,
+        CsoConnectedSystemId: _connectedSystemHeader?.Id,
+        CsoConnectedSystemName: _connectedSystemHeader?.Name,
         CsoDisplayName: _activityRunProfileExecutionItem?.ConnectedSystemObject?.DisplayNameOrId
                         ?? _activityRunProfileExecutionItem?.DisplayNameSnapshot,
         CsoExternalId: _externalIdAttributeValue?.ToStringNoName()
@@ -1020,11 +988,6 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                            ?? _activityRunProfileExecutionItem?.ObjectTypeSnapshot,
         MvoTypeName: _metaverseObjectType?.Name,
         MvoTypePluralName: _metaverseObjectType?.PluralName);
-
-    private string GetMvoHref(Guid mvoId) =>
-        _metaverseObjectType != null
-            ? Utilities.GetMetaverseObjectHref(mvoId, _metaverseObjectType.PluralName)
-            : $"/identity/search/{mvoId}";
 
     private static string FormatGracePeriod(TimeSpan period)
     {
@@ -1108,6 +1071,19 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                                 ?? _activity?.ConnectedSystemId;
         if (connectedSystemId != null)
             _connectedSystemHeader = await jim.ConnectedSystems.GetConnectedSystemHeaderAsync(connectedSystemId.Value);
+
+        // The run's own Connected System (the system the Run Profile executed against), independent of
+        // which system the item's Connected System Object belongs to. These normally coincide, but
+        // diverge for cross-system cascades (e.g. a Full Sync on system A provisioning/exporting to a
+        // CSO in system B): the Causality panel and Execution Summary describe the run, not the object,
+        // so they use this rather than _connectedSystemHeader. Degrades to null, never throws.
+        var runConnectedSystemId = _activity?.ConnectedSystemId;
+        if (runConnectedSystemId != null)
+        {
+            _runConnectedSystemHeader = runConnectedSystemId == connectedSystemId
+                ? _connectedSystemHeader
+                : await jim.ConnectedSystems.GetConnectedSystemHeaderAsync(runConnectedSystemId.Value);
+        }
 
         // For projected items, get the MVO from the MetaverseObjectChange or fall back to CSO.MetaverseObject
         if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.Projected)
