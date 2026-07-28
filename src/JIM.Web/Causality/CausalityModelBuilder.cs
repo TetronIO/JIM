@@ -34,14 +34,19 @@ public static class CausalityModelBuilder
             .ToDictionary(g => g.Key, g => g.OrderBy(o => o.Ordinal).ToList());
 
         var attachedChildIds = childrenByParentId.Values.SelectMany(children => children).Select(o => o.Id).ToHashSet();
-        var itemAttributeRows = NormaliseAttributeRows(
-            item.ConnectedSystemObjectChange?.AttributeChanges,
-            item.MetaverseObjectChange?.AttributeChanges);
+
+        // The item-level changes are two distinct sets with two distinct owners: the record's own
+        // attribute changes (ConnectedSystemObjectChange) belong to record-side events, and the
+        // Identity's attribute changes (MetaverseObjectChange) belong to Attribute Flow. Keeping
+        // them separate stops an event's expander count disagreeing with its outcome's DetailCount
+        // when an item carries both sets (e.g. a leaver's record deletion plus attribute recall).
+        var recordAttributeRows = NormaliseAttributeRows(item.ConnectedSystemObjectChange?.AttributeChanges, null);
+        var identityAttributeRows = NormaliseAttributeRows(null, item.MetaverseObjectChange?.AttributeChanges);
 
         var roots = outcomes
             .Where(o => !attachedChildIds.Contains(o.Id))
             .OrderBy(o => o.Ordinal)
-            .Select(o => BuildEvent(o, childrenByParentId, context, itemAttributeRows))
+            .Select(o => BuildEvent(o, childrenByParentId, context, recordAttributeRows, identityAttributeRows))
             .ToList();
 
         return new CausalityModel { Context = context, Roots = roots };
@@ -51,7 +56,8 @@ public static class CausalityModelBuilder
         ActivityRunProfileExecutionItemSyncOutcome outcome,
         Dictionary<Guid, List<ActivityRunProfileExecutionItemSyncOutcome>> childrenByParentId,
         CausalityPageContext context,
-        IReadOnlyList<CausalityAttributeRow> itemAttributeRows)
+        IReadOnlyList<CausalityAttributeRow> recordAttributeRows,
+        IReadOnlyList<CausalityAttributeRow> identityAttributeRows)
     {
         var display = OutcomeDisplayMap.Get(outcome.OutcomeType);
         var parsedDetail = OutcomeDetailMessageParser.Parse(outcome.DetailMessage);
@@ -81,9 +87,9 @@ public static class CausalityModelBuilder
             SyncRuleId = outcome.SyncRuleId,
             SyncRuleName = outcome.SyncRuleName,
             Links = links,
-            AttributeRows = GetAttributeRows(outcome, itemAttributeRows),
+            AttributeRows = GetAttributeRows(outcome, recordAttributeRows, identityAttributeRows),
             Children = childOutcomes
-                .Select(c => BuildEvent(c, childrenByParentId, context, itemAttributeRows))
+                .Select(c => BuildEvent(c, childrenByParentId, context, recordAttributeRows, identityAttributeRows))
                 .ToList()
         };
     }
@@ -284,12 +290,16 @@ public static class CausalityModelBuilder
     }
 
     /// <summary>
-    /// Selects the attribute rows for an event: PendingExportCreated uses its persisted CSO change
-    /// snapshot; record and Attribute Flow events share the item-level change rows.
+    /// Selects the attribute rows for an event by the change set it owns: PendingExportCreated uses
+    /// its persisted CSO change snapshot, record-side events (import changes and export executions)
+    /// use the item's CSO change rows, and Attribute Flow uses the item's MVO change rows. Events
+    /// never share the combined item-level list, so each event's row count agrees with its own
+    /// outcome's DetailCount.
     /// </summary>
     private static IReadOnlyList<CausalityAttributeRow> GetAttributeRows(
         ActivityRunProfileExecutionItemSyncOutcome outcome,
-        IReadOnlyList<CausalityAttributeRow> itemAttributeRows)
+        IReadOnlyList<CausalityAttributeRow> recordAttributeRows,
+        IReadOnlyList<CausalityAttributeRow> identityAttributeRows)
     {
         if (outcome.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated)
             return NormaliseAttributeRows(outcome.ConnectedSystemObjectChange?.AttributeChanges, null);
@@ -297,11 +307,14 @@ public static class CausalityModelBuilder
         return outcome.OutcomeType switch
         {
             ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
-                or ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded
+                => identityAttributeRows,
+            ActivityRunProfileExecutionItemSyncOutcomeType.CsoAdded
                 or ActivityRunProfileExecutionItemSyncOutcomeType.CsoUpdated
+                or ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted
+                or ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Exported
                 or ActivityRunProfileExecutionItemSyncOutcomeType.Deprovisioned
-                => itemAttributeRows,
+                => recordAttributeRows,
             _ => []
         };
     }

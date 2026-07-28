@@ -7,6 +7,7 @@ using System.Linq;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Enums;
+using JIM.Models.Staging;
 using JIM.Web.Causality;
 using NUnit.Framework;
 
@@ -375,6 +376,90 @@ public class CausalityModelBuilderTests
         Assert.That(rows.Count(r => r.Operation == CausalityAttributeOperation.Add), Is.EqualTo(1));
         Assert.That(rows.Count(r => r.Operation == CausalityAttributeOperation.Remove), Is.EqualTo(1));
         Assert.That(rows.All(r => r.TypeAndPlurality == "Text · Multi-valued"), Is.True);
+    }
+
+    [Test]
+    public void Build_ItemWithBothCsoAndMvoChanges_AttributesRowsToTheirOwningEvents()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        var outOfScope = CausalityTestData.AddOutcome(item,
+            ActivityRunProfileExecutionItemSyncOutcomeType.DisconnectedOutOfScope,
+            parent: null, ordinal: 0, syncRuleId: 7, syncRuleName: "Yellowstone People - Inbound");
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
+            parent: outOfScope, ordinal: 0, detailCount: 1);
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted,
+            parent: outOfScope, ordinal: 1);
+
+        item.MetaverseObjectChange = BuildMvoChangeWithSingleRemove("Department", "Retail Ops");
+        item.ConnectedSystemObjectChange = BuildCsoChangeWithSingleRemove("departmentNumber", "Retail Ops");
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+        var attributeFlow = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow);
+        var csoDeleted = model.AllEvents().Single(e => e.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.CsoDeleted);
+
+        // The Identity-side event owns the Identity's changes and the record-side event owns the
+        // record's; neither shows the combined item-level list (the pill/expander count mismatch)
+        Assert.That(attributeFlow.AttributeRows.Select(r => r.Name), Is.EqualTo(new[] { "Department" }));
+        Assert.That(csoDeleted.AttributeRows.Select(r => r.Name), Is.EqualTo(new[] { "departmentNumber" }));
+    }
+
+    [Test]
+    public void Build_ExportedEventWithBothChangeSets_UsesRecordSideRowsOnly()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.Exported,
+            parent: null, ordinal: 0, detailCount: 1);
+
+        item.MetaverseObjectChange = BuildMvoChangeWithSingleRemove("Department", "Retail Ops");
+        item.ConnectedSystemObjectChange = BuildCsoChangeWithSingleRemove("departmentNumber", "Retail Ops");
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+
+        Assert.That(model.Roots[0].AttributeRows.Select(r => r.Name), Is.EqualTo(new[] { "departmentNumber" }));
+    }
+
+    [Test]
+    public void Build_DeletionDetectedWithCsoChange_CarriesTheRecordRows()
+    {
+        var item = new ActivityRunProfileExecutionItem { Id = Guid.NewGuid() };
+        CausalityTestData.AddOutcome(item, ActivityRunProfileExecutionItemSyncOutcomeType.DeletionDetected,
+            parent: null, ordinal: 0);
+
+        item.ConnectedSystemObjectChange = BuildCsoChangeWithSingleRemove("uid", "erin.byrne99");
+
+        var model = CausalityModelBuilder.Build(item, CausalityTestData.NewJoinerContext());
+
+        Assert.That(model.Roots[0].AttributeRows.Select(r => r.Name), Is.EqualTo(new[] { "uid" }));
+    }
+
+    private static MetaverseObjectChange BuildMvoChangeWithSingleRemove(string attributeName, string value)
+    {
+        var change = new MetaverseObjectChange { Id = Guid.NewGuid() };
+        var attribute = new MetaverseObjectChangeAttribute
+        {
+            Id = Guid.NewGuid(),
+            AttributeName = attributeName,
+            AttributeType = AttributeDataType.Text,
+            Attribute = new MetaverseAttribute { Name = attributeName, AttributePlurality = AttributePlurality.SingleValued }
+        };
+        attribute.ValueChanges.Add(new MetaverseObjectChangeAttributeValue { ValueChangeType = ValueChangeType.Remove, StringValue = value });
+        change.AttributeChanges.Add(attribute);
+        return change;
+    }
+
+    private static ConnectedSystemObjectChange BuildCsoChangeWithSingleRemove(string attributeName, string value)
+    {
+        var change = new ConnectedSystemObjectChange { Id = Guid.NewGuid() };
+        var attribute = new ConnectedSystemObjectChangeAttribute
+        {
+            Id = Guid.NewGuid(),
+            AttributeName = attributeName,
+            AttributeType = AttributeDataType.Text,
+            Attribute = new ConnectedSystemObjectTypeAttribute { Name = attributeName, AttributePlurality = AttributePlurality.SingleValued }
+        };
+        attribute.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue { ValueChangeType = ValueChangeType.Remove, StringValue = value });
+        change.AttributeChanges.Add(attribute);
+        return change;
     }
 
     [Test]
