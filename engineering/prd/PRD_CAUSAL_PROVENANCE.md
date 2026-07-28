@@ -54,12 +54,12 @@ JIM does not discover this relationship at export time. The removal is staged **
 
 | Phase | Status | Scope |
 |-------|--------|-------|
-| Phase 0 | In progress on this branch; out of scope for this PRD | Correctness fixes only, referenced here for continuity: the Causality panel naming the wrong Connected System for cross-system cascades, reference-recall outcomes storing the referencing object's name where the target Connected System's name belongs, and the Executed timestamp display. |
+| Phase 0 | Done; out of scope for this PRD | Correctness fixes only, referenced here for continuity: the Causality panel naming the wrong Connected System for cross-system cascades (resolved by splitting `CausalityPageContext`'s single Connected System identity into the run's and the record's, since the two diverge for cascades), reference-recall outcomes storing the referencing object's name where the target Connected System's name belongs, and the Executed timestamp display. |
 | Phase 1 | This PRD, primary scope | The causal edge model, plus worker capture at the reference-recall and deprovisioning seams first, surfaced as an upward "Caused by" chain on the RPEI Causality panel. |
 | Phase 2 | This PRD, secondary scope | Downward "Consequences", built on the edges plus the free `PendingExportId` and object-id joins; aggregation; an affordance on early RPEIs showing that later events exist for this record. |
 | Phase 3 | Directional sketch only; detailed design deferred | A cross-Activity causality explorer allowing full graph navigation from any event, once Phases 1 and 2 have proven the model. |
 
-Phase 0's correctness fixes matter to this PRD even though they are out of scope for it: an upward chain is only as trustworthy as the per-hop attribution it stitches together, so Phase 1 should land after Phase 0 (see Dependencies).
+Phase 0's correctness fixes matter to this PRD even though they are out of scope for it: an upward chain is only as trustworthy as the per-hop attribution it stitches together, so Phase 1 had to follow Phase 0 (see Dependencies). That prerequisite is now satisfied, so Phase 1 is unblocked.
 
 ## User Stories
 
@@ -172,7 +172,7 @@ Phase 0's correctness fixes matter to this PRD even though they are out of scope
 
 ## Dependencies
 
-- **Phase 0** (this branch, in progress): the Causality panel's Connected System naming and reference-recall attribution correctness fixes should land first. An upward chain is only as trustworthy as the per-hop attribution it stitches together; building Phase 1 on top of known-wrong naming would propagate the bug into every chain that passes through it.
+- **Phase 0** (done): the Causality panel's Connected System naming and reference-recall attribution correctness fixes have landed. An upward chain is only as trustworthy as the per-hop attribution it stitches together; building Phase 1 on top of known-wrong naming would have propagated the bug into every chain that passes through it. This dependency is satisfied and no longer blocks Phase 1.
 - **[Causality Visualisation Redesign](doing/PRD_CAUSALITY_VISUALISATION_REDESIGN.md) (#1087)**: Phase 1/2's UI affordances attach to that redesign's Causality panel. The edge-capture and data-model half of Phase 1 has no such dependency and can proceed in parallel; only the UI slice needs #1087's surface to be stable.
 - **[RPEI Outcome Graph](../plans/done/RPEI_OUTCOME_GRAPH.md) (#363, Done)**: the existing single-RPEI `ActivityRunProfileExecutionItemSyncOutcome` tree this PRD extends into a cross-RPEI graph. This PRD is the natural sequel to that one: same causal-chain philosophy, one RPEI wide there, arbitrarily many RPEIs wide here.
 - **[Synchronisation Rule Causality Tracking](../plans/SYNC_RULE_CAUSALITY_TRACKING.md) (#399, Planned)**: an adjacent but orthogonal axis, per-attribute Synchronisation Rule attribution within a single change, rather than cross-object causal chains. Not a blocking dependency.
