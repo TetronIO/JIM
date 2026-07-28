@@ -15,9 +15,13 @@ else if (string.IsNullOrWhiteSpace(Value))
 {
     <WhitespaceValue Value="@Value" />
 }
-else
+else if (string.IsNullOrEmpty(Class))
 {
     @Value
+}
+else
+{
+    <span class="@Class">@Value</span>
 }
 
 @code {
@@ -26,4 +30,10 @@ else
     /// </summary>
     [Parameter]
     public string? Value { get; set; }
+
+    /// <summary>
+    /// Optional CSS class applied to a real (non-empty, non-whitespace) value only.
+    /// </summary>
+    [Parameter]
+    public string? Class { get; set; }
 }

@@ -1590,6 +1590,13 @@ html[lang] .jim-schema-change-table td {
     margin: 0;
 }
 
+/* The nested MVA table sits directly inside the attribute table's value cell; its own
+   outlined border reads tighter than plain SVA text at the same cell padding, so give it
+   extra vertical margin to match the visual gap SVA values get above and below. */
+.jim-attr-value .jim-mva-dialog-table {
+    margin: 8px 0;
+}
+
 
 .jim-attr-name {
     background-color: var(--jim-attr-name-bg, var(--mud-palette-background-grey));

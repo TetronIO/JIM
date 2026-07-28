@@ -9,6 +9,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IUserPreferenceService PreferenceService
+@inject NavigationManager NavManager
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -651,6 +652,9 @@
     private string? _objectTypeAttributeBeingEditedText;
     private bool _objectTypeAttributeBeingEditedIsEditable;
 
+    private const string ObjectTypeQueryParameterName = "ot";
+    private bool _objectTypeDeepLinkApplied;
+
     protected override void OnParametersSet()
     {
         // The ConnectedSystem parameter is replaced wholesale on reload (e.g. after a schema refresh or save),
@@ -661,12 +665,64 @@
             _selectedObjectType = ConnectedSystem.ObjectTypes?.FirstOrDefault(ot => ot.Id == _selectedObjectType.Id);
         _selectedObjectType ??= ConnectedSystem.ObjectTypes?.FirstOrDefault(q => q.Selected);
 
+        // Deep-link support: "?t=schema&ot=jimPerson" selects that object type's sub-tab on first load. Applied
+        // once only, so it never overrides the admin's own subsequent tab clicks after a schema refresh or save
+        // reloads ConnectedSystem.
+        if (!_objectTypeDeepLinkApplied && ConnectedSystem.ObjectTypes != null)
+        {
+            ApplyObjectTypeDeepLink();
+            _objectTypeDeepLinkApplied = true;
+        }
+
         if (_selectedObjectType != null)
         {
             _selectedObjectTypeHasClasses = _selectedObjectType.Attributes.Any(q => q.ClassName != null);
             _selectedObjectTypeHasDescriptions = _selectedObjectType.Attributes.Any(q => q.Description != null);
             _selectedObjectTypeHasReadOnlyAttributes = _selectedObjectType.Attributes.Any(q => q.Writability == AttributeWritability.ReadOnly);
         }
+    }
+
+    /// <summary>
+    /// Selects the sub-tab for the object type named by the "ot" query string parameter (e.g.
+    /// "?t=schema&amp;ot=jimPerson"), matched case-insensitively against Connected System Object Type names. No-op
+    /// when the parameter is absent, or names a type that is not (yet) selected for JIM to manage.
+    /// </summary>
+    private void ApplyObjectTypeDeepLink()
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        var objectTypeName = query[ObjectTypeQueryParameterName];
+        if (string.IsNullOrEmpty(objectTypeName))
+            return;
+
+        var selected = GetSelectedObjectTypes();
+        var index = selected.FindIndex(ot => ot.Name.Equals(objectTypeName, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+            return;
+
+        _selectedObjectType = selected[index];
+        _activeSchemaTabIndex = index + 1;
+    }
+
+    /// <summary>
+    /// Keeps the "ot" query string parameter in sync with the active object type sub-tab, so the URL is always a
+    /// shareable deep link back to the currently viewed type. Mirrors NavigableMudTabs' own "t" parameter handling,
+    /// preserving every other query parameter (notably "t=schema", set by the parent tab strip).
+    /// </summary>
+    private void UpdateObjectTypeQueryString()
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var baseUri = uri.GetLeftPart(UriPartial.Path);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+
+        if (_selectedObjectType == null)
+            query.Remove(ObjectTypeQueryParameterName);
+        else
+            query[ObjectTypeQueryParameterName] = _selectedObjectType.Name;
+
+        var qs = query.ToString();
+        var newUrl = string.IsNullOrEmpty(qs) ? baseUri : $"{baseUri}?{qs}";
+        NavManager.NavigateTo(newUrl, new NavigationOptions { ReplaceHistoryEntry = false });
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -793,6 +849,7 @@
         var selected = GetSelectedObjectTypes();
         _selectedObjectType = index >= 1 && index - 1 < selected.Count ? selected[index - 1] : null;
         RecomputeSelectedObjectTypeFlags();
+        UpdateObjectTypeQueryString();
     }
 
     /// <summary>

@@ -137,6 +137,22 @@ public static class Utilities
         return $"/admin/connected-systems/{connectedSystemId}/connector-space";
     }
 
+    /// <summary>
+    /// Returns the deep link to a Connected System's Schema tab, where its Connected System Object Types are defined.
+    /// </summary>
+    public static string GetConnectedSystemSchemaHref(int connectedSystemId)
+    {
+        return $"/admin/connected-systems/{connectedSystemId}?t=schema";
+    }
+
+    /// <summary>
+    /// Returns the deep link to a specific Connected System Object Type's sub-tab within the Schema tab.
+    /// </summary>
+    public static string GetConnectedSystemSchemaHref(int connectedSystemId, string objectTypeName)
+    {
+        return $"/admin/connected-systems/{connectedSystemId}?t=schema&ot={Uri.EscapeDataString(objectTypeName)}";
+    }
+
     public static string GetConnectedSystemObjectHref(ConnectedSystemObject connectedSystemObject)
     {
         return GetConnectedSystemObjectHref(connectedSystemObject.ConnectedSystemId, connectedSystemObject.Id);
