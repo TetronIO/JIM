@@ -3104,6 +3104,18 @@ public abstract class SyncTaskProcessorBase
         // collections materialised, so it is cheap even for large-membership group CSOs).
         var csoSnapshots = await _syncRepo.GetConnectedSystemObjectDisplaySnapshotsAsync(_deferredRecallRpeisByCsoId.Keys.ToList());
 
+        // Build CS ID -> name lookup once for this flush (same in-memory pattern as the Detailed-mode
+        // Pending Export outcomes above): no database round trip, since _recallExportEvaluationCache's
+        // export rules are already loaded for the whole run and cover every target Connected System, not
+        // just the currently-syncing _connectedSystem (a recall Pending Export can target ANY system that
+        // has an export rule referencing the deleted object, not only the one this sync run is processing).
+        var csNameLookup = _recallExportEvaluationCache?.ExportRulesByMvoTypeId.Values
+            .SelectMany(rules => rules)
+            .Where(sr => sr.ConnectedSystem != null)
+            .GroupBy(sr => sr.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => g.First().ConnectedSystem.Name)
+            ?? new Dictionary<int, string>();
+
         foreach (var (csoId, (stagedPendingExport, displayName)) in _deferredRecallRpeisByCsoId)
         {
             csoSnapshots.TryGetValue(csoId, out var snapshot);
@@ -3120,10 +3132,15 @@ public abstract class SyncTaskProcessorBase
 
             if (_syncOutcomeTrackingLevel != ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel.None)
             {
+                // TargetEntityDescription on a PendingExportCreated outcome is contractually the TARGET
+                // Connected System's name (matching every other PendingExportCreated call site), not the
+                // referencing object's own display name (DisplayNameSnapshot is that; kept above for its
+                // own, unrelated purpose of identifying the referencing CSO after it is later deleted).
+                csNameLookup.TryGetValue(stagedPendingExport.ConnectedSystemId, out var targetSystemName);
                 var recallOutcome = SyncOutcomeBuilder.AddRootOutcome(recallRpei,
                     ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated,
                     targetEntityId: stagedPendingExport.Id,
-                    targetEntityDescription: recallRpei.DisplayNameSnapshot,
+                    targetEntityDescription: targetSystemName,
                     detailCount: stagedPendingExport.AttributeValueChanges.Count,
                     detailMessage: stagedPendingExport.ConnectedSystemId.ToString());
                 await SnapshotPendingExportChangesAsync(recallOutcome, stagedPendingExport);
