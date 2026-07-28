@@ -22,6 +22,15 @@
     --cz-error-soft: color-mix(in srgb, var(--mud-palette-error) 12%, transparent);
     --cz-secondary-soft: color-mix(in srgb, var(--mud-palette-secondary) 13%, transparent);
 
+    /* The palette primary is a saturated fill colour (intended behind white button text), so using it
+       raw as text on a *-soft pill fails WCAG AA: 2.88:1 in the default dark theme, below even the 3.0
+       large-text floor, and four of the six light themes fail too. Blending it toward the theme's text
+       colour keeps the hue but lifts it off the background, and adapts automatically per mode because
+       text-primary is near-white in dark themes and near-black in light ones. Every theme now passes AA
+       (dark >= 5.26, light >= 5.00). Use this for primary-toned TEXT; keep --cz-primary for fills,
+       borders and accent bars, where the contrast requirement is lower and the raw brand colour is right. */
+    --cz-primary-text: color-mix(in srgb, var(--mud-palette-primary) 60%, var(--mud-palette-text-primary));
+
     /* Text, lines and surfaces */
     --cz-text: var(--mud-palette-text-primary);
     --cz-text-dim: var(--mud-palette-text-secondary);
@@ -201,7 +210,7 @@
 }
 
 .causality-panel .summary-sentence .hl {
-    color: var(--cz-primary);
+    color: var(--cz-primary-text);
     background: var(--cz-primary-soft);
     font-weight: 650;
     padding: 1px 6px;
@@ -240,7 +249,7 @@
 }
 
 .causality-panel .mud-chip.oc-pill.primary {
-    color: var(--cz-primary);
+    color: var(--cz-primary-text);
     background: var(--cz-primary-soft);
 }
 
@@ -909,7 +918,7 @@
 
 .causality-panel .filter-chips button.on {
     background: var(--cz-primary-soft);
-    color: var(--cz-primary);
+    color: var(--cz-primary-text);
     border-color: transparent;
 }
 
