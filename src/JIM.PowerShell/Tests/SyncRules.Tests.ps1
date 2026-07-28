@@ -200,6 +200,68 @@ Describe 'Get-JIMSyncRule' {
         }
     }
 
+    Context 'Pipeline binding' {
+
+        It 'Binds a piped Connected System (which exposes Id, not ConnectedSystemId), as documented' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false; totalPages = 1 } }
+
+                # As returned by Get-JIMConnectedSystem: a PSCustomObject exposing Id.
+                $connectedSystem = [PSCustomObject]@{ Id = 4; Name = 'HR System' }
+                $connectedSystem | Get-JIMSyncRule | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'connectedSystemIds=4'
+                }
+            }
+        }
+
+        It 'Prefers an explicit ConnectedSystemId over the piped object' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false; totalPages = 1 } }
+
+                $connectedSystem = [PSCustomObject]@{ Id = 4; Name = 'HR System' }
+                $connectedSystem | Get-JIMSyncRule -ConnectedSystemId 9 | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'connectedSystemIds=9'
+                }
+            }
+        }
+
+        It 'Still binds an object exposing ConnectedSystemId by property name' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false; totalPages = 1 } }
+
+                $syncRule = [PSCustomObject]@{ Id = 1; ConnectedSystemId = 6 }
+                $syncRule | Get-JIMSyncRule | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'connectedSystemIds=6'
+                }
+            }
+        }
+
+        It 'Applies the facet filters to a piped Connected System' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false; totalPages = 1 } }
+
+                $connectedSystem = [PSCustomObject]@{ Id = 4; Name = 'HR System' }
+                $connectedSystem | Get-JIMSyncRule -Direction Export -Status Enabled | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'connectedSystemIds=4' -and
+                    $Endpoint -match 'directions=Export' -and
+                    $Endpoint -match 'statuses=Enabled'
+                }
+            }
+        }
+    }
+
     Context 'Requires Connection' {
 
         BeforeEach {

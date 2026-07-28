@@ -22,6 +22,10 @@ function Get-JIMSyncRule {
     .PARAMETER ConnectedSystemName
         Filter Synchronisation Rules by Connected System name. Must be an exact match.
 
+    .PARAMETER InputObject
+        A Connected System object from the pipeline (e.g., from Get-JIMConnectedSystem). Its Id is
+        used to filter Synchronisation Rules, equivalent to specifying -ConnectedSystemId directly.
+
     .PARAMETER Name
         Filter Synchronisation Rules by name. Supports wildcards (e.g., "Inbound*").
 
@@ -105,6 +109,16 @@ function Get-JIMSyncRule {
         [Parameter(ParameterSetName = 'ByConnectedSystemName')]
         [string]$ConnectedSystemName,
 
+        # A Connected System object (e.g. from Get-JIMConnectedSystem) exposes Id, not
+        # ConnectedSystemId, so it cannot bind to -ConnectedSystemId by property name. Binding the
+        # whole object here and reading its Id below is the fix: ConnectedSystemId cannot carry an
+        # [Alias('Id')] to cover this, because the -Id parameter above is itself literally named
+        # "Id" in this cmdlet and PowerShell rejects a parameter alias that collides with another
+        # parameter's own name, even across mutually exclusive parameter sets. Same shape and same
+        # reasoning as Get-JIMScheduleExecution.
+        [Parameter(ParameterSetName = 'List', ValueFromPipeline)]
+        [PSCustomObject]$InputObject,
+
         [Parameter(ParameterSetName = 'List')]
         [Parameter(ParameterSetName = 'ByConnectedSystemId')]
         [Parameter(ParameterSetName = 'ByConnectedSystemName')]
@@ -143,6 +157,14 @@ function Get-JIMSyncRule {
             $ConnectedSystemId = $connectedSystem.id
         }
 
+        # -ConnectedSystemId (direct or bound by property name) takes precedence; otherwise fall
+        # back to the piped Connected System object's Id (see -InputObject above).
+        $filterByConnectedSystem = $ConnectedSystemId -gt 0
+        if (-not $filterByConnectedSystem -and $InputObject -and $InputObject.PSObject.Properties['Id']) {
+            $ConnectedSystemId = [int]$InputObject.Id
+            $filterByConnectedSystem = $ConnectedSystemId -gt 0
+        }
+
         switch ($PSCmdlet.ParameterSetName) {
             'ById' {
                 Write-Verbose "Getting Synchronisation Rule with ID: $Id"
@@ -156,7 +178,7 @@ function Get-JIMSyncRule {
                 # same filters. -Name stays client-side because it supports PowerShell wildcards.
                 $baseQueryParams = @('pageSize=100')
 
-                if ($PSBoundParameters.ContainsKey('ConnectedSystemId') -or $PSBoundParameters.ContainsKey('ConnectedSystemName')) {
+                if ($filterByConnectedSystem) {
                     Write-Verbose "Filtering by Connected System ID: $ConnectedSystemId"
                     $baseQueryParams += "connectedSystemIds=$ConnectedSystemId"
                 }

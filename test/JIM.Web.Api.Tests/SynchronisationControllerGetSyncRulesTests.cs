@@ -234,6 +234,6 @@ public class SynchronisationControllerGetSyncRulesTests
         var response = ok!.Value as PaginatedResponse<SyncRuleHeader>;
         Assert.That(response, Is.Not.Null);
         Assert.That(response!.Items, Is.Empty);
-        Assert.That(response.TotalCount, Is.Zero);
+        Assert.That(response!.TotalCount, Is.Zero);
     }
 }

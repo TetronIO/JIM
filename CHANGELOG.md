@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 `Get-JIMSyncRule` now returns every Synchronisation Rule rather than only the first 25, paging through the full result set.
+- 🐛 Piping a Connected System into `Get-JIMSyncRule`, as its documentation has always shown, now works instead of failing to bind.
 
 ## [0.14.0] - 2026-07-25
 

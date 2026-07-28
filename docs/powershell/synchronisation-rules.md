@@ -23,9 +23,9 @@ The filters combine with AND, and each of `-Direction`, `-ActionType` and `-Stat
 ### Syntax
 
 ```powershell
-# List all Synchronisation Rules (default)
-Get-JIMSyncRule [-Name <string>] [-Direction <string[]>] [-ActionType <string[]>]
-    [-Status <string[]>]
+# List all Synchronisation Rules (default), optionally with a piped Connected System
+Get-JIMSyncRule [-InputObject <PSCustomObject>] [-Name <string>] [-Direction <string[]>]
+    [-ActionType <string[]>] [-Status <string[]>]
 
 # By Synchronisation Rule ID
 Get-JIMSyncRule -Id <int>
@@ -46,6 +46,7 @@ Get-JIMSyncRule -ConnectedSystemName <string> [-Name <string>] [-Direction <stri
 | `Id` | `int` | Yes (ById set) | | The ID of a specific Synchronisation Rule to retrieve |
 | `ConnectedSystemId` | `int` | No | | Filter Synchronisation Rules by Connected System ID. Accepts pipeline input. |
 | `ConnectedSystemName` | `string` | No | | Filter Synchronisation Rules by Connected System name. Must be an exact match. |
+| `InputObject` | `PSCustomObject` | No | | A Connected System object from the pipeline (for example from `Get-JIMConnectedSystem`). Its `Id` filters the rules, equivalent to `-ConnectedSystemId`. |
 | `Name` | `string` | No | | Filter Synchronisation Rules by name. Supports wildcards (e.g., `"Inbound*"`). |
 | `Direction` | `string[]` | No | | Filter by direction: `Import` (inbound) or `Export` (outbound). |
 | `ActionType` | `string[]` | No | | Filter by the action the rule performs: `Projects`, `Provisions`, or `FlowOnly`. |
@@ -90,6 +91,10 @@ Get-JIMSyncRule -ConnectedSystemName "Active Directory" -Direction Export -Statu
 ```powershell title="Pipeline from Connected System ID"
 $cs = Get-JIMConnectedSystem -Name "HR System"
 Get-JIMSyncRule -ConnectedSystemId $cs.Id
+```
+
+```powershell title="Pipe Connected Systems straight in, and filter them"
+Get-JIMConnectedSystem -Name "HR*" | Get-JIMSyncRule -Direction Import -Status Enabled
 ```
 
 ---
