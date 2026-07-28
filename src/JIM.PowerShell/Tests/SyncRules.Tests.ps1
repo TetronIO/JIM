@@ -54,6 +54,150 @@ Describe 'Get-JIMSyncRule' {
         It 'Should have ConnectedSystemName parameter' {
             $command.Parameters['ConnectedSystemName'] | Should -Not -BeNullOrEmpty
         }
+
+        It 'Should have a Direction parameter with ValidateSet' {
+            $param = $command.Parameters['Direction']
+            $param | Should -Not -BeNullOrEmpty
+            $validateSet = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $validateSet | Should -Not -BeNullOrEmpty
+            $validateSet.ValidValues | Should -Contain 'Import'
+            $validateSet.ValidValues | Should -Contain 'Export'
+        }
+
+        It 'Should have an ActionType parameter with ValidateSet' {
+            $param = $command.Parameters['ActionType']
+            $param | Should -Not -BeNullOrEmpty
+            $validateSet = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $validateSet | Should -Not -BeNullOrEmpty
+            $validateSet.ValidValues | Should -Contain 'Projects'
+            $validateSet.ValidValues | Should -Contain 'Provisions'
+            $validateSet.ValidValues | Should -Contain 'FlowOnly'
+        }
+
+        It 'Should have a Status parameter with ValidateSet' {
+            $param = $command.Parameters['Status']
+            $param | Should -Not -BeNullOrEmpty
+            $validateSet = $param.Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $validateSet | Should -Not -BeNullOrEmpty
+            $validateSet.ValidValues | Should -Contain 'Enabled'
+            $validateSet.ValidValues | Should -Contain 'Disabled'
+        }
+
+        It 'Should accept multiple values for Direction, ActionType and Status' {
+            $command.Parameters['Direction'].ParameterType | Should -Be ([string[]])
+            $command.Parameters['ActionType'].ParameterType | Should -Be ([string[]])
+            $command.Parameters['Status'].ParameterType | Should -Be ([string[]])
+        }
+    }
+
+    Context 'Filter composition' {
+
+        It 'Sends no filter facets in the query string when none are specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false; totalPages = 1 } }
+
+                Get-JIMSyncRule | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -notmatch 'directions=' -and
+                    $Endpoint -notmatch 'actionTypes=' -and
+                    $Endpoint -notmatch 'statuses=' -and
+                    $Endpoint -notmatch 'connectedSystemIds=' -and
+                    $Endpoint -notmatch 'search='
+                }
+            }
+        }
+
+        It 'Sends the Direction facet as a repeated query parameter' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false; totalPages = 1 } }
+
+                Get-JIMSyncRule -Direction Import, Export | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'directions=Import' -and $Endpoint -match 'directions=Export'
+                }
+            }
+        }
+
+        It 'Sends the ActionType facet in the query string' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false; totalPages = 1 } }
+
+                Get-JIMSyncRule -ActionType Provisions | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'actionTypes=Provisions'
+                }
+            }
+        }
+
+        It 'Sends the Status facet in the query string' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false; totalPages = 1 } }
+
+                Get-JIMSyncRule -Status Disabled | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'statuses=Disabled'
+                }
+            }
+        }
+
+        It 'Sends the Connected System facet in the query string rather than filtering client-side' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = @(); hasNextPage = $false; totalPages = 1 } }
+
+                Get-JIMSyncRule -ConnectedSystemId 7 | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'connectedSystemIds=7'
+                }
+            }
+        }
+
+        It 'Combines facets with the name filter, which stays client-side for wildcard support' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $rules = @(
+                    [PSCustomObject]@{ id = 1; name = 'HR Inbound'; connectedSystemId = 1 },
+                    [PSCustomObject]@{ id = 2; name = 'Payroll Inbound'; connectedSystemId = 1 }
+                )
+                Mock Invoke-JIMApi { [PSCustomObject]@{ items = $rules; hasNextPage = $false; totalPages = 1 } }
+
+                $result = @(Get-JIMSyncRule -Direction Import -Name 'HR*')
+
+                $result.Count | Should -Be 1
+                $result[0].name | Should -Be 'HR Inbound'
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -match 'directions=Import'
+                }
+            }
+        }
+
+        It 'Pages through every result so a filtered list is never silently truncated' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Endpoint -match 'page=1') {
+                        [PSCustomObject]@{ items = @([PSCustomObject]@{ id = 1; name = 'Rule 1' }); hasNextPage = $true; totalPages = 2 }
+                    }
+                    else {
+                        [PSCustomObject]@{ items = @([PSCustomObject]@{ id = 2; name = 'Rule 2' }); hasNextPage = $false; totalPages = 2 }
+                    }
+                }
+
+                $result = @(Get-JIMSyncRule)
+
+                $result.Count | Should -Be 2
+                Should -Invoke Invoke-JIMApi -Times 2 -Exactly
+            }
+        }
     }
 
     Context 'Requires Connection' {

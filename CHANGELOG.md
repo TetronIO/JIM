@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ✨ The Synchronisation Rules list can now be filtered by Connected System, Direction, Action (Projects, Provisions or Flow Only) and Status. The filters combine with the existing search box, which narrows whatever the filters left.
+- ✨ The same filters are available to automation: `Get-JIMSyncRule` gains `-Direction`, `-ActionType` and `-Status`, and the Synchronisation Rules REST endpoint gains matching query parameters.
+
+### Fixed
+
+- 🐛 `Get-JIMSyncRule` now returns every Synchronisation Rule rather than only the first 25, paging through the full result set.
+
 ## [0.14.0] - 2026-07-25
 
 ### Security
