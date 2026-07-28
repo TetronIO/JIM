@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
     - name: Setup .NET
       uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
       with:
@@ -92,7 +92,7 @@ jobs:
       JIM_TEST_RESET_DB: jim_test
 
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
     - name: Setup .NET
       uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9  # v4.3.1
       with:
@@ -116,7 +116,7 @@ jobs:
       matrix: ${{ steps.discover.outputs.matrix }}
 
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
     - name: Discover production base images and enforce digest-pinning
       id: discover
@@ -141,7 +141,7 @@ jobs:
       matrix: ${{ fromJSON(needs.discover-base-images.outputs.matrix) }}
 
     steps:
-    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
     # Pull the base image into the local Docker daemon so Trivy can read it via
     # --image-src docker. Without this step, network image acquisition was a
@@ -264,7 +264,7 @@ jobs:
 
     - name: Upload Trivy scan results to GitHub code scanning
       if: always() && hashFiles('trivy-results.sarif') != ''
-      uses: github/codeql-action/upload-sarif@b7351df727350dca84cb9d725d57dcf5bc82ba26  # v3.37.1
+      uses: github/codeql-action/upload-sarif@4187e74d05793876e9989daffde9c3e66b4acd07  # v3.37.3
       with:
         sarif_file: trivy-results.sarif
         # Category is keyed by image repository (stable), not Dockerfile line
