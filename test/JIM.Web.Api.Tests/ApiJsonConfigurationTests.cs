@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using JIM.Web;
+using JIM.Web.Models.Api;
 using NUnit.Framework;
 
 namespace JIM.Web.Api.Tests;
@@ -71,6 +72,54 @@ public class ApiJsonConfigurationTests
         var result = JsonSerializer.Deserialize<EnumProbe>(jsonWithStringEnum, options);
 
         Assert.That(result!.Mode, Is.EqualTo(ProbeEnum.Second));
+    }
+
+    [Test]
+    public void ConfiguredOptions_AcceptExponentNotationForDecimal_WhenDeserialising()
+    {
+        var options = new JsonSerializerOptions();
+        ApiJsonConfiguration.Configure(options);
+        // System.Text.Json accepts exponent notation for decimal-typed properties and
+        // canonicalises it; a client sending 1.5E3 binds as 1500.
+        const string jsonWithExponent = "{\"DecimalValue\":1.5E3}";
+
+        var result = JsonSerializer.Deserialize<PredefinedSearchCriterionRequest>(jsonWithExponent, options);
+
+        Assert.That(result!.DecimalValue, Is.EqualTo(1500m));
+    }
+
+    [Test]
+    public void ConfiguredOptions_SerialiseDecimalAsPlainJsonNumber_WhenSerialising()
+    {
+        var options = new JsonSerializerOptions();
+        ApiJsonConfiguration.Configure(options);
+        var request = new PredefinedSearchCriterionRequest
+        {
+            MetaverseAttributeId = 1,
+            ComparisonType = "GreaterThan",
+            DecimalValue = 0.1m
+        };
+
+        var json = JsonSerializer.Serialize(request, options);
+
+        // Decimal must serialise as a plain, unquoted JSON number with no exponent notation
+        // (System.Decimal.ToString never emits exponent form, unlike double).
+        using var document = JsonDocument.Parse(json);
+        var decimalProperty = document.RootElement.GetProperty("DecimalValue");
+        Assert.That(decimalProperty.ValueKind, Is.EqualTo(JsonValueKind.Number));
+        Assert.That(decimalProperty.GetRawText(), Is.EqualTo("0.1"));
+    }
+
+    [Test]
+    public void ConfiguredOptions_RejectDecimalRangeOverflow_WhenDeserialising()
+    {
+        var options = new JsonSerializerOptions();
+        ApiJsonConfiguration.Configure(options);
+        // 8E28 exceeds decimal.MaxValue (~7.92E28); deserialisation must fail rather than
+        // silently truncate or round the value.
+        const string jsonWithOverflow = "{\"DecimalValue\":8E28}";
+
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PredefinedSearchCriterionRequest>(jsonWithOverflow, options));
     }
 
     private sealed record DuplicateProbe(string Name);

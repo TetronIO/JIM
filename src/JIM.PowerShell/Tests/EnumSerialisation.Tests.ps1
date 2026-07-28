@@ -205,6 +205,19 @@ Describe 'Request enum serialisation (string names, not numeric ordinals)' {
                 }
             }
         }
+
+        It "Sends 'Decimal' as the exact enum member name (no alias normalisation)" {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1; name = 'Test' } }
+
+                New-JIMMetaverseAttribute -Name 'Test' -Type Decimal -AttributePlurality SingleValued -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.type -is [string] -and $Body.type -eq 'Decimal'
+                }
+            }
+        }
     }
 
     Context 'Set-JIMMetaverseAttribute' {

@@ -25,6 +25,12 @@ public class MetaverseAttributeDetailDto
     public List<ObjectTypeReferenceDto> ObjectTypes { get; set; } = new();
 
     /// <summary>
+    /// Advisory Standard Mappings documenting how the attribute corresponds to attributes in wire standard
+    /// vocabularies (SCIM 2.0, LDAP/AD). Never consulted by the synchronisation engine.
+    /// </summary>
+    public List<StandardMappingDto> StandardMappings { get; set; } = new();
+
+    /// <summary>
     /// Creates a detailed DTO from a MetaverseAttribute entity.
     /// </summary>
     public static MetaverseAttributeDetailDto FromEntity(MetaverseAttribute entity)
@@ -40,7 +46,11 @@ public class MetaverseAttributeDetailDto
             RenderingHint = entity.RenderingHint,
             ObjectTypes = entity.MetaverseObjectTypes?
                 .Select(ot => new ObjectTypeReferenceDto { Id = ot.Id, Name = ot.Name })
-                .ToList() ?? new()
+                .ToList() ?? new(),
+            StandardMappings = entity.StandardMappings
+                .OrderBy(m => m.Standard).ThenBy(m => m.CounterpartName, StringComparer.Ordinal)
+                .Select(m => new StandardMappingDto { Standard = m.Standard, CounterpartName = m.CounterpartName, Notes = m.Notes })
+                .ToList()
         };
     }
 }
@@ -52,4 +62,15 @@ public class ObjectTypeReferenceDto
 {
     public int Id { get; set; }
     public string Name { get; set; } = null!;
+}
+
+/// <summary>
+/// An advisory Standard Mapping on a Metaverse Attribute: the counterpart attribute name in a wire standard's
+/// vocabulary, with optional nuance notes.
+/// </summary>
+public class StandardMappingDto
+{
+    public AttributeStandard Standard { get; set; }
+    public string CounterpartName { get; set; } = null!;
+    public string? Notes { get; set; }
 }

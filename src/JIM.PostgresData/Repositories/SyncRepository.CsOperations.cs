@@ -166,12 +166,11 @@ public partial class SyncRepository
         NpgsqlTransaction transaction,
         IReadOnlyList<ConnectedSystemObject> objects)
     {
+        // Writer order below MUST match CsoBulkColumns.ConnectedSystemObjects exactly.
         await using var writer = await connection.BeginBinaryImportAsync(
-            """
+            $"""
             COPY "ConnectedSystemObjects" (
-                "Id", "ConnectedSystemId", "Created", "LastUpdated", "TypeId",
-                "ExternalIdAttributeId", "SecondaryExternalIdAttributeId",
-                "Status", "MetaverseObjectId", "JoinType", "DateJoined"
+                {BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjects)}
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -201,6 +200,22 @@ public partial class SyncRepository
                 await writer.WriteAsync(cso.DateJoined.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
             else
                 await writer.WriteNullAsync();
+            if (cso.PartitionId.HasValue)
+                await writer.WriteAsync(cso.PartitionId.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            await writer.WriteAsync(cso.ScopeReviewPending, NpgsqlTypes.NpgsqlDbType.Boolean);
+            if (cso.LastScopeEvaluatedAt.HasValue)
+                await writer.WriteAsync(cso.LastScopeEvaluatedAt.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            else
+                await writer.WriteNullAsync();
+            // SPEC-1082 D6: create writers ALWAYS write NULL for ImportStateHash/ImportStateFingerprint.
+            // This is a two-phase create: parent CSO rows commit here, in phase 1, before attribute
+            // values commit in phase 2. A non-null hash written at this point could survive a phase-2
+            // failure as a permanently believable lie about content that was never actually persisted.
+            // The only legitimate stamp is StampImportStateAsync, run after values commit (D7/D8).
+            await writer.WriteNullAsync();
+            await writer.WriteNullAsync();
         }
 
         await writer.CompleteAsync();
@@ -219,12 +234,11 @@ public partial class SyncRepository
         List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)> attributeValues,
         HashSet<Guid>? partitionCsoIds = null)
     {
+        // Writer order below MUST match CsoBulkColumns.ConnectedSystemObjectAttributeValues exactly.
         await using var writer = await connection.BeginBinaryImportAsync(
-            """
+            $"""
             COPY "ConnectedSystemObjectAttributeValues" (
-                "Id", "ConnectedSystemObjectId", "AttributeId", "StringValue",
-                "DateTimeValue", "IntValue", "LongValue", "ByteValue",
-                "GuidValue", "BoolValue", "ReferenceValueId", "UnresolvedReferenceValue"
+                {BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectAttributeValues)}
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -248,6 +262,10 @@ public partial class SyncRepository
                 await writer.WriteNullAsync();
             if (av.LongValue.HasValue)
                 await writer.WriteAsync(av.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
+            else
+                await writer.WriteNullAsync();
+            if (av.DecimalValue.HasValue)
+                await writer.WriteAsync(av.DecimalValue.Value, NpgsqlTypes.NpgsqlDbType.Numeric);
             else
                 await writer.WriteNullAsync();
             if (av.ByteValue is not null)
@@ -284,20 +302,21 @@ public partial class SyncRepository
     /// </summary>
     private async Task BulkInsertCsosViaEfAsync(List<ConnectedSystemObject> objects)
     {
-        const int columnsPerRow = 11;
+        // Parameter order below MUST match CsoBulkColumns.ConnectedSystemObjects exactly.
+        var columnsPerRow = CsoBulkColumns.ConnectedSystemObjects.Length;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
         {
             var sql = new StringBuilder();
-            sql.Append(@"INSERT INTO ""ConnectedSystemObjects"" (""Id"", ""ConnectedSystemId"", ""Created"", ""LastUpdated"", ""TypeId"", ""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"", ""Status"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"") VALUES ");
+            sql.Append($@"INSERT INTO ""ConnectedSystemObjects"" ({BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjects)}) VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}})");
+                sql.Append('(').Append(string.Join(", ", Enumerable.Range(offset, columnsPerRow).Select(p => $"{{{p}}}"))).Append(')');
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
@@ -311,6 +330,13 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add((int)cso.JoinType);
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.PartitionId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(cso.ScopeReviewPending);
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.LastScopeEvaluatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                // SPEC-1082 D6: create writers ALWAYS write NULL for ImportStateHash/ImportStateFingerprint.
+                // See BulkInsertCsosOnConnectionAsync above for the full stamp-ordering rationale.
+                parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -323,20 +349,21 @@ public partial class SyncRepository
     private async Task BulkInsertCsoAttributeValuesViaEfAsync(
         List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)> attributeValues)
     {
-        const int columnsPerRow = 12;
+        const int columnsPerRow = 13;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(attributeValues, chunkSize))
         {
             var sql = new StringBuilder();
-            sql.Append(@"INSERT INTO ""ConnectedSystemObjectAttributeValues"" (""Id"", ""ConnectedSystemObjectId"", ""AttributeId"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""ByteValue"", ""GuidValue"", ""BoolValue"", ""ReferenceValueId"", ""UnresolvedReferenceValue"") VALUES ");
+            // Parameter order below MUST match CsoBulkColumns.ConnectedSystemObjectAttributeValues exactly.
+            sql.Append($@"INSERT INTO ""ConnectedSystemObjectAttributeValues"" ({BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectAttributeValues)}) VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}})");
+                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}}, {{{offset + 12}}})");
 
                 var (csoId, av) = chunk[i];
                 parameters.Add(av.Id);
@@ -346,6 +373,7 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(av.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
+                parameters.Add(BulkSqlHelpers.NullableParam(av.DecimalValue, NpgsqlTypes.NpgsqlDbType.Numeric));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(BulkSqlHelpers.NullableParam(av.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
@@ -355,6 +383,144 @@ public partial class SyncRepository
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
+    }
+
+    #endregion
+
+    #region Optimistic Export Apply (issue #1079)
+
+    /// <summary>
+    /// Persists an optimistic export apply delta: bulk-inserts new attribute value rows via COPY
+    /// binary import and bulk-deletes superseded ones. Touches NO parent CSO row - see the remark
+    /// on <see cref="JIM.Data.Repositories.ISyncRepository.ApplyExportedAttributeValuesAsync"/> for
+    /// why <c>LastUpdated</c> must stay untouched here (it is what re-arms the Full Synchronisation
+    /// unchanged-object watermark for a no-op confirming import).
+    /// </summary>
+    public async Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds)
+    {
+        if (additions.Count == 0 && removalValueIds.Count == 0)
+            return;
+
+        if (removalValueIds.Count > 0)
+            await DeleteCsoAttributeValuesByIdAsync(removalValueIds);
+
+        if (additions.Count > 0)
+            await BulkInsertOptimisticApplyAttributeValuesRawAsync(additions);
+
+        // SPEC-1082 D9: null the import state hash/fingerprint for every mutated CSO, set-based,
+        // in the same call. Deliberately does NOT touch LastUpdated (see the class remarks above).
+        if (affectedCsoIds.Count > 0)
+            await NullImportStateForCsosAsync(affectedCsoIds);
+    }
+
+    /// <summary>
+    /// SPEC-1082 D9: sets ImportStateHash and ImportStateFingerprint to NULL for the given CSO IDs,
+    /// via a single set-based UPDATE. Never touches LastUpdated.
+    /// </summary>
+    private async Task NullImportStateForCsosAsync(IReadOnlyCollection<Guid> csoIds)
+    {
+        if (csoIds.Count == 0)
+            return;
+
+        await _context.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""ConnectedSystemObjects"" SET ""ImportStateHash"" = NULL, ""ImportStateFingerprint"" = NULL WHERE ""Id"" = ANY({0})",
+            csoIds.ToArray());
+    }
+
+    /// <summary>
+    /// Deletes <see cref="ConnectedSystemObjectAttributeValue"/> rows by Id. Detaches any tracked
+    /// instances first (belt-and-braces per the raw-SQL rule in <c>src/CLAUDE.md</c>): the export
+    /// batch loader is <c>AsNoTracking</c> + <c>ClearChangeTracker()</c> per batch today, but a
+    /// future caller on a tracking context must not be silently corrupted - see
+    /// <see cref="DetachTrackedEntities{T}"/>'s remarks for the <c>DbUpdateConcurrencyException</c>
+    /// failure mode this guards against.
+    /// </summary>
+    private async Task DeleteCsoAttributeValuesByIdAsync(List<Guid> removalValueIds)
+    {
+        DetachTrackedEntities<ConnectedSystemObjectAttributeValue>(av => removalValueIds.Contains(av.Id));
+
+        if (_context.Database.IsRelational())
+        {
+            await _context.ConnectedSystemObjectAttributeValues
+                .Where(av => removalValueIds.Contains(av.Id))
+                .ExecuteDeleteAsync();
+        }
+        else
+        {
+            var entities = await _context.ConnectedSystemObjectAttributeValues
+                .Where(av => removalValueIds.Contains(av.Id))
+                .ToListAsync();
+            _context.ConnectedSystemObjectAttributeValues.RemoveRange(entities);
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    /// <summary>
+    /// Bulk inserts <see cref="ConnectedSystemObjectAttributeValue"/> rows using Npgsql binary
+    /// COPY. Mirrors <c>ConnectedSystemRepository.BulkInsertCsoAttributeValuesRawAsync</c> exactly
+    /// (same columns, same per-column <see cref="NpgsqlTypes.NpgsqlDbType"/> mapping, same null
+    /// handling); duplicated rather than shared because that method is private to
+    /// <c>ConnectedSystemRepository</c> and this repository owns its own connection lifecycle.
+    /// </summary>
+    private async Task BulkInsertOptimisticApplyAttributeValuesRawAsync(List<ConnectedSystemObjectAttributeValue> additions)
+    {
+        var npgsqlConn = (NpgsqlConnection)_context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
+
+        await using var writer = await npgsqlConn.BeginBinaryImportAsync(
+            """
+            COPY "ConnectedSystemObjectAttributeValues" (
+                "Id", "ConnectedSystemObjectId", "AttributeId", "StringValue", "DateTimeValue",
+                "IntValue", "LongValue", "ByteValue", "GuidValue", "BoolValue",
+                "ReferenceValueId", "UnresolvedReferenceValue"
+            ) FROM STDIN (FORMAT binary)
+            """);
+
+        foreach (var av in additions)
+        {
+            await writer.StartRowAsync();
+            await writer.WriteAsync(av.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(av.ConnectedSystemObject.Id, NpgsqlTypes.NpgsqlDbType.Uuid);
+            await writer.WriteAsync(av.AttributeId, NpgsqlTypes.NpgsqlDbType.Integer);
+            if (av.StringValue is not null)
+                await writer.WriteAsync(av.StringValue, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+            if (av.DateTimeValue.HasValue)
+                await writer.WriteAsync(av.DateTimeValue.Value, NpgsqlTypes.NpgsqlDbType.TimestampTz);
+            else
+                await writer.WriteNullAsync();
+            if (av.IntValue.HasValue)
+                await writer.WriteAsync(av.IntValue.Value, NpgsqlTypes.NpgsqlDbType.Integer);
+            else
+                await writer.WriteNullAsync();
+            if (av.LongValue.HasValue)
+                await writer.WriteAsync(av.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
+            else
+                await writer.WriteNullAsync();
+            if (av.ByteValue is not null)
+                await writer.WriteAsync(av.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea);
+            else
+                await writer.WriteNullAsync();
+            if (av.GuidValue.HasValue)
+                await writer.WriteAsync(av.GuidValue.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (av.BoolValue.HasValue)
+                await writer.WriteAsync(av.BoolValue.Value, NpgsqlTypes.NpgsqlDbType.Boolean);
+            else
+                await writer.WriteNullAsync();
+            if (av.ReferenceValueId.HasValue)
+                await writer.WriteAsync(av.ReferenceValueId.Value, NpgsqlTypes.NpgsqlDbType.Uuid);
+            else
+                await writer.WriteNullAsync();
+            if (av.UnresolvedReferenceValue is not null)
+                await writer.WriteAsync(av.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text);
+            else
+                await writer.WriteNullAsync();
+        }
+
+        await writer.CompleteAsync();
     }
 
     #endregion
@@ -732,8 +898,9 @@ public partial class SyncRepository
             await createCmd.ExecuteNonQueryAsync();
         }
 
+        // Writer order below MUST match PendingExportBulkColumns.PendingExportsRetryUpdate exactly.
         await using (var writer = await npgsqlConn.BeginBinaryImportAsync(
-            """COPY _pe_bulk_update ("Id", "Status", "ChangeType", "ErrorCount", "MaxRetries", "LastAttemptedAt", "NextRetryAt", "LastErrorMessage", "LastErrorStackTrace", "HasUnresolvedReferences") FROM STDIN (FORMAT binary)"""))
+            $"""COPY _pe_bulk_update ("Id", {BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportsRetryUpdate)}) FROM STDIN (FORMAT binary)"""))
         {
             foreach (var pe in exportList)
             {
@@ -766,17 +933,9 @@ public partial class SyncRepository
 
         await using (var updateCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
         {
-            updateCmd.CommandText = """
+            updateCmd.CommandText = $"""
                 UPDATE "PendingExports" t
-                SET "Status" = v."Status",
-                    "ChangeType" = v."ChangeType",
-                    "ErrorCount" = v."ErrorCount",
-                    "MaxRetries" = v."MaxRetries",
-                    "LastAttemptedAt" = v."LastAttemptedAt",
-                    "NextRetryAt" = v."NextRetryAt",
-                    "LastErrorMessage" = v."LastErrorMessage",
-                    "LastErrorStackTrace" = v."LastErrorStackTrace",
-                    "HasUnresolvedReferences" = v."HasUnresolvedReferences"
+                SET {string.Join(", ", PendingExportBulkColumns.PendingExportsRetryUpdate.Select(c => $"\"{c}\" = v.\"{c}\""))}
                 FROM _pe_bulk_update v
                 WHERE t."Id" = v."Id"
                 """;
@@ -804,8 +963,9 @@ public partial class SyncRepository
                 await createCmd.ExecuteNonQueryAsync();
             }
 
+            // Writer order below MUST match PendingExportBulkColumns.PendingExportAttributeValueChangesConfirmationUpdate exactly.
             await using (var writer = await npgsqlConn.BeginBinaryImportAsync(
-                """COPY _peavc_bulk_update ("Id", "Status", "LastImportedValue", "ExportAttemptCount", "LastExportedAt") FROM STDIN (FORMAT binary)"""))
+                $"""COPY _peavc_bulk_update ("Id", {BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportAttributeValueChangesConfirmationUpdate)}) FROM STDIN (FORMAT binary)"""))
             {
                 foreach (var avc in allAttrChanges)
                 {
@@ -827,12 +987,9 @@ public partial class SyncRepository
 
             await using (var updateCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
             {
-                updateCmd.CommandText = """
+                updateCmd.CommandText = $"""
                     UPDATE "PendingExportAttributeValueChanges" t
-                    SET "Status" = v."Status",
-                        "LastImportedValue" = v."LastImportedValue",
-                        "ExportAttemptCount" = v."ExportAttemptCount",
-                        "LastExportedAt" = v."LastExportedAt"
+                    SET {string.Join(", ", PendingExportBulkColumns.PendingExportAttributeValueChangesConfirmationUpdate.Select(c => $"\"{c}\" = v.\"{c}\""))}
                     FROM _peavc_bulk_update v
                     WHERE t."Id" = v."Id"
                     """;
@@ -891,7 +1048,8 @@ public partial class SyncRepository
         foreach (var chunk in BulkSqlHelpers.ChunkList(exports, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""PendingExports"" (""Id"", ""ConnectedSystemId"", ""ConnectedSystemObjectId"", ""ChangeType"", ""Status"", ""ErrorCount"", ""MaxRetries"", ""LastAttemptedAt"", ""NextRetryAt"", ""LastErrorMessage"", ""LastErrorStackTrace"", ""SourceMetaverseObjectId"", ""HasUnresolvedReferences"", ""CreatedAt"") VALUES ");
+            // Parameter order below MUST match PendingExportBulkColumns.PendingExports exactly.
+            sql.Append($@"INSERT INTO ""PendingExports"" ({BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExports)}) VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
@@ -927,20 +1085,21 @@ public partial class SyncRepository
     /// </summary>
     private async Task BulkInsertPendingExportAttributeValueChangesRawAsync(List<(Guid PendingExportId, PendingExportAttributeValueChange Change)> changes)
     {
-        const int columnsPerRow = 16;
+        // Parameter order below MUST match PendingExportBulkColumns.PendingExportAttributeValueChanges exactly.
+        var columnsPerRow = PendingExportBulkColumns.PendingExportAttributeValueChanges.Length;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(changes, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""PendingExportAttributeValueChanges"" (""Id"", ""PendingExportId"", ""AttributeId"", ""StringValue"", ""DateTimeValue"", ""IntValue"", ""LongValue"", ""ByteValue"", ""GuidValue"", ""BoolValue"", ""UnresolvedReferenceValue"", ""ChangeType"", ""Status"", ""ExportAttemptCount"", ""LastExportedAt"", ""LastImportedValue"") VALUES ");
+            sql.Append($@"INSERT INTO ""PendingExportAttributeValueChanges"" ({BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportAttributeValueChanges)}) VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}}, {{{offset + 12}}}, {{{offset + 13}}}, {{{offset + 14}}}, {{{offset + 15}}})");
+                sql.Append('(').Append(string.Join(", ", Enumerable.Range(offset, columnsPerRow).Select(p => $"{{{p}}}"))).Append(')');
 
                 var (pendingExportId, avc) = chunk[i];
                 parameters.Add(avc.Id);
@@ -950,6 +1109,7 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.DateTimeValue, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.IntValue, NpgsqlTypes.NpgsqlDbType.Integer));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.LongValue, NpgsqlTypes.NpgsqlDbType.Bigint));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.DecimalValue, NpgsqlTypes.NpgsqlDbType.Numeric));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.ByteValue, NpgsqlTypes.NpgsqlDbType.Bytea));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.GuidValue, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.BoolValue, NpgsqlTypes.NpgsqlDbType.Boolean));
@@ -959,6 +1119,7 @@ public partial class SyncRepository
                 parameters.Add(avc.ExportAttemptCount);
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.LastExportedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.ResolvedReferenceCsoId, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());

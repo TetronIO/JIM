@@ -279,7 +279,8 @@
             !_newSyncRuleScopingCriteria.BoolValue.HasValue &&
             !_newSyncRuleScopingCriteria.DateTimeValue.HasValue &&
             !_newSyncRuleScopingCriteria.GuidValue.HasValue &&
-            !_newSyncRuleScopingCriteria.LongValue.HasValue)
+            !_newSyncRuleScopingCriteria.LongValue.HasValue &&
+            !_newSyncRuleScopingCriteria.DecimalValue.HasValue)
             return true;
 
         return false;

@@ -38,6 +38,14 @@ For example, the OpenLDAP connector supports delta imports via the accesslog ove
 
 Import does **not** modify the metaverse. The connector space acts as a staging area, isolating the metaverse from any issues during import.
 
+### How Full Import Detects Unchanged Objects
+
+At scale, most objects in a Full Import have not changed since the previous run. Comparing every attribute of every object against the connector space is unnecessary work when the underlying source data is identical. JIM speeds this up with a stored **content hash**: after a Full Import updates or creates a Connected System Object, it stamps a compact hash of the imported content onto that object.
+
+On the next Full Import, JIM computes the same hash for each incoming object *before* loading its existing attribute values. If the freshly computed hash matches the stored one (and the object's schema has not changed since it was last stamped), JIM skips loading and comparing that object's attributes entirely; only genuinely new or changed objects pay the full comparison cost. The hash is always computed from the incoming data, never from what is already stored, so any doubt falls back to the full comparison: a mismatch never causes a change to be missed, only an unnecessary (but harmless) re-comparison.
+
+This optimisation is transparent and requires no configuration. To validate it, or to investigate a suspected discrepancy, enable **Verification Mode** on a Full Import Run Profile (see [Run Profiles](../configuration/run-profiles.md)): with Verification Mode on, JIM performs the full comparison on every object regardless of the stored hash, and reports an error if a stored hash matched but the comparison still found a change. Verification Mode is slower (it forgoes the optimisation) and is intended for occasional validation, not everyday use.
+
 ## 🔀 Phase 2: Sync (Synchronisation)
 
 Sync is the core phase where JIM reconciles connector space data with the metaverse. It applies **Synchronisation Rules** to determine how CSOs relate to MetaverseObjects (MVOs) and how attributes flow between them.
@@ -92,6 +100,10 @@ For performance, exports can be processed in batches. Connectors that support pa
 ### Pre-Export Reconciliation
 
 JIM performs intelligent reconciliation before export. For example, if an object is created and then deleted before the export runs, the redundant Pending Exports are automatically cancelled -- avoiding unnecessary operations on the target system.
+
+### Applying Exported Changes Straight Away
+
+When an export to a Connected System succeeds, JIM applies the exported attribute values to its own record of that Connected System Object immediately, rather than waiting for the next import to bring them back. The confirming import still runs as usual, comparing what the Connected System reports against what JIM expects, but for a successfully exported object it typically finds nothing left to do. At large scale (hundreds of thousands of objects), this avoids re-processing millions of attribute values that JIM itself just wrote, and it keeps the confirming import fast.
 
 ## Putting It Together
 

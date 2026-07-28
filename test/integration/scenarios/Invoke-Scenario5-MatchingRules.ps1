@@ -75,6 +75,12 @@ if (-not $DirectoryConfig) {
 }
 $isOpenLDAP = $DirectoryConfig.UserObjectClass -eq "inetOrgPerson"
 
+# Admin account name for server-routed directory writes (Samba AD only), derived from the bind DN.
+# Test-created Samba objects are written THROUGH the running server (-H ldap://localhost with
+# credentials) rather than directly against the sam.ldb file; direct file writes on a live domain
+# controller are an unsupported access pattern.
+$sambaAdminUser = if (-not $isOpenLDAP) { ($DirectoryConfig.BindDN -split ',')[0] -replace '^CN=', '' } else { $null }
+
 Write-TestSection "Scenario 5: Object Matching Rules"
 Write-Host "Step:     $Step" -ForegroundColor Gray
 Write-Host "Template: $Template" -ForegroundColor Gray
@@ -195,11 +201,14 @@ try {
         Write-Host "Creating department OUs for test users..." -ForegroundColor Gray
         $testDepartments = @("Information Technology", "Operations", "Finance", "Sales", "Marketing")
         foreach ($dept in $testDepartments) {
-            $result = docker exec $DirectoryConfig.ContainerName samba-tool ou create "OU=$dept,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" 2>&1
+            $result = docker exec $DirectoryConfig.ContainerName samba-tool ou create "OU=$dept,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "  ✓ Created OU: $dept" -ForegroundColor Gray
             } elseif ($result -match "already exists") {
                 Write-Host "  - OU $dept already exists" -ForegroundColor DarkGray
+            } else {
+                # Fail loudly here rather than five tests later with a confusing missing-parent error.
+                throw "Failed to create department OU '$dept': $result"
             }
         }
         Write-Host "  ✓ Department OUs ready" -ForegroundColor Green
@@ -1195,8 +1204,11 @@ userPassword: Password123!
         else {
             # Samba AD: samba-tool user create does not accept an arbitrary DN or an employeeID value, and
             # its default CN would not match the DN the export attribute flow computes from Display Name.
-            # Use ldbadd against the local sam.ldb (the same mechanism Populate-SambaAD.ps1 uses for bulk
-            # user seeding) so the object lands at the exact target DN with employeeID set in one step.
+            # Use ldbadd routed through the RUNNING server (ldap://localhost with admin credentials), not
+            # against the raw sam.ldb file: direct file access on a live domain controller races with the
+            # server's own writes and index maintenance, and intermittently fails with a phantom
+            # "No such object: parent does not exist" even though the parent OU exists (observed 2026-07-23
+            # at the Nano template). Going through the server is the supported path and eliminates the race.
             $omjUserDN = "CN=$omjDisplayName,OU=$omjDepartment,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)"
             $omjLdif = @"
 dn: $omjUserDN
@@ -1217,20 +1229,45 @@ employeeID: $omjEmployeeId
 "@
             $omjLdifPath = [System.IO.Path]::GetTempFileName()
             try {
-                [System.IO.File]::WriteAllText($omjLdifPath, $omjLdif)
+                # Normalise to LF line endings: this script file is CRLF, so the here-string embeds
+                # \r\n, and samba's ldb LDIF parser (unlike OpenLDAP's) does NOT strip the \r. The
+                # DN then carries an invisible trailing \r, the parent resolves to "...DC=local\r",
+                # and the add fails with LDAP error 32 "parent does not exist" even though the
+                # parent OU is right there (root-caused 2026-07-23 after the \r visually truncated
+                # the captured error message, hiding its closing quote).
+                [System.IO.File]::WriteAllText($omjLdifPath, $omjLdif.Replace("`r`n", "`n"))
                 docker cp $omjLdifPath "$($DirectoryConfig.ContainerName):/tmp/omj-user.ldif" 2>&1 | Out-Null
-                $omjCreateResult = docker exec $DirectoryConfig.ContainerName ldbadd -H /usr/local/samba/private/sam.ldb /tmp/omj-user.ldif 2>&1
-                docker exec $DirectoryConfig.ContainerName rm -f /tmp/omj-user.ldif 2>&1 | Out-Null
-                $omjCreateText = if ($omjCreateResult -is [array]) { $omjCreateResult -join "`n" } else { "$omjCreateResult" }
 
-                if ($omjCreateText -match "Added 1 record" -or ($LASTEXITCODE -eq 0 -and [string]::IsNullOrWhiteSpace($omjCreateText))) {
-                    Write-Host "  ✓ Created out-of-band account $omjSamAccountName in Samba AD (DN: $omjUserDN)" -ForegroundColor Green
+                # Retry with backoff as cheap insurance against genuinely transient directory
+                # conditions, capturing the full ldb output plus a parent-OU probe per attempt so
+                # any persistent failure is diagnosable rather than a one-line mystery.
+                $omjMaxAttempts = 5
+                $omjCreated = $false
+                $omjCreateText = ""
+                for ($omjAttempt = 1; $omjAttempt -le $omjMaxAttempts; $omjAttempt++) {
+                    $omjCreateResult = docker exec $DirectoryConfig.ContainerName ldbadd -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" /tmp/omj-user.ldif 2>&1 | ForEach-Object { "$_" }
+                    $omjCreateText = $omjCreateResult -join "`n"
+
+                    if ($omjCreateText -match "Added 1 record" -or ($LASTEXITCODE -eq 0 -and [string]::IsNullOrWhiteSpace($omjCreateText))) {
+                        Write-Host "  ✓ Created out-of-band account $omjSamAccountName in Samba AD (DN: $omjUserDN)" -ForegroundColor Green
+                        $omjCreated = $true
+                        break
+                    }
+                    if ($omjCreateText -match "already exists") {
+                        Write-Host "  Out-of-band account $omjSamAccountName already exists" -ForegroundColor Yellow
+                        $omjCreated = $true
+                        break
+                    }
+
+                    $omjParentProbe = (docker exec $DirectoryConfig.ContainerName ldbsearch -H ldap://localhost -U "$sambaAdminUser%$($DirectoryConfig.BindPassword)" -b "OU=$omjDepartment,OU=Users,OU=Corp,$($DirectoryConfig.BaseDN)" -s base dn 2>&1 | ForEach-Object { "$_" }) -join "`n"
+                    Write-Host "  Attempt $omjAttempt/$omjMaxAttempts to create out-of-band account failed: $omjCreateText" -ForegroundColor Yellow
+                    Write-Host "  Parent OU probe: $omjParentProbe" -ForegroundColor Yellow
+                    if ($omjAttempt -lt $omjMaxAttempts) { Start-Sleep -Seconds 5 }
                 }
-                elseif ($omjCreateText -match "already exists") {
-                    Write-Host "  Out-of-band account $omjSamAccountName already exists" -ForegroundColor Yellow
-                }
-                else {
-                    throw "Failed to create out-of-band Samba AD account via ldbadd: $omjCreateText"
+                docker exec $DirectoryConfig.ContainerName rm -f /tmp/omj-user.ldif 2>&1 | Out-Null
+
+                if (-not $omjCreated) {
+                    throw "Failed to create out-of-band Samba AD account via ldbadd after $omjMaxAttempts attempts: $omjCreateText"
                 }
             }
             finally {

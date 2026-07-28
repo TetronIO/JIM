@@ -232,6 +232,40 @@ Describe 'New-JIMRunProfile' {
             $help.Examples.Example.Count | Should -BeGreaterThan 0
         }
     }
+
+    Context 'VerifyImportContentHashes binding (SPEC-1082)' {
+
+        It 'Should have a VerifyImportContentHashes switch parameter' {
+            $command = Get-Command New-JIMRunProfile
+            $command.Parameters['VerifyImportContentHashes'].SwitchParameter | Should -BeTrue
+        }
+
+        It 'Sends verifyImportContentHashes=true in the request body when specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1; name = $Body.name } }
+
+                New-JIMRunProfile -ConnectedSystemId 1 -Name 'Verified Full Import' -RunType FullImport -VerifyImportContentHashes -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.verifyImportContentHashes -eq $true
+                }
+            }
+        }
+
+        It 'Omits verifyImportContentHashes from the request body when not specified' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1; name = $Body.name } }
+
+                New-JIMRunProfile -ConnectedSystemId 1 -Name 'Plain Full Import' -RunType FullImport -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('verifyImportContentHashes')
+                }
+            }
+        }
+    }
 }
 
 Describe 'Set-JIMRunProfile' {
@@ -300,6 +334,55 @@ Describe 'Set-JIMRunProfile' {
             $help.Examples.Example.Count | Should -BeGreaterThan 0
         }
     }
+
+    Context 'VerifyImportContentHashes binding (SPEC-1082)' {
+
+        It 'Should have a VerifyImportContentHashes bool parameter (not a switch, so $false is expressible)' {
+            $command = Get-Command Set-JIMRunProfile
+            $param = $command.Parameters['VerifyImportContentHashes']
+            $param | Should -Not -BeNullOrEmpty
+            $param.ParameterType.Name | Should -Be 'Boolean'
+        }
+
+        It 'Sends verifyImportContentHashes=$true in the request body when specified as $true' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -VerifyImportContentHashes $true -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.verifyImportContentHashes -eq $true
+                }
+            }
+        }
+
+        It 'Sends verifyImportContentHashes=$false in the request body when specified as $false (not omitted)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -VerifyImportContentHashes $false -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Body.ContainsKey('verifyImportContentHashes') -and $Body.verifyImportContentHashes -eq $false
+                }
+            }
+        }
+
+        It 'Omits verifyImportContentHashes from the request body when not specified (leaves unchanged)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { return [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -Name 'Renamed' -Confirm:$false
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    -not $Body.ContainsKey('verifyImportContentHashes')
+                }
+            }
+        }
+    }
 }
 
 Describe 'Remove-JIMRunProfile' {
@@ -356,6 +439,50 @@ Describe 'Remove-JIMRunProfile' {
 
         It 'Should have examples' {
             $help.Examples.Example.Count | Should -BeGreaterThan 0
+        }
+    }
+}
+
+Describe 'Start-JIMRunProfile -Wait progress polling' {
+
+    Context 'Wait behaviour' {
+
+        It 'Polls the lightweight progress endpoint rather than the full Activity detail' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:waitPollCount = 0
+                Mock Invoke-JIMApi {
+                    if ($Endpoint -like '*/execute') {
+                        return [PSCustomObject]@{
+                            activityId = '11111111-1111-1111-1111-111111111111'
+                            taskId = '22222222-2222-2222-2222-222222222222'
+                        }
+                    }
+                    if ($Endpoint -like '*/progress') {
+                        $script:waitPollCount++
+                        $status = if ($script:waitPollCount -ge 2) { 'Complete' } else { 'InProgress' }
+                        return [PSCustomObject]@{
+                            status = $status
+                            objectsProcessed = 5 * $script:waitPollCount
+                            objectsToProcess = 10
+                            percentComplete = 50 * $script:waitPollCount
+                            estimatedSecondsRemaining = 4
+                            objectsPerSecond = 2.5
+                            message = 'Syncing'
+                        }
+                    }
+                    return $null
+                }
+
+                # -Timeout bounds the red case: without the progress-endpoint implementation the
+                # wait loop would otherwise poll forever against this mock.
+                Start-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 1 -Wait -Timeout 30
+
+                Should -Invoke Invoke-JIMApi -Times 2 -Exactly -ParameterFilter { $Endpoint -like '*/progress' }
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter {
+                    $Endpoint -like '*/activities/*' -and $Endpoint -notlike '*/progress'
+                }
+            }
         }
     }
 }

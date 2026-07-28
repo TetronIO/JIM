@@ -351,3 +351,106 @@ Describe 'Get-JIMActivityChildren' {
         }
     }
 }
+
+Describe 'Get-JIMActivity -Follow' {
+
+    Context 'Parameter set' {
+
+        BeforeAll {
+            $command = Get-Command Get-JIMActivity
+        }
+
+        It 'Should have a Follow parameter set' {
+            $command.ParameterSets.Name | Should -Contain 'Follow'
+        }
+
+        It 'Should require Id and Follow in the Follow parameter set' {
+            $followSet = $command.ParameterSets | Where-Object Name -eq 'Follow'
+            ($followSet.Parameters | Where-Object Name -eq 'Id').IsMandatory | Should -BeTrue
+            ($followSet.Parameters | Where-Object Name -eq 'Follow').IsMandatory | Should -BeTrue
+        }
+
+        It 'Should validate IntervalSeconds between 1 and 300' {
+            $attribute = $command.Parameters['IntervalSeconds'].Attributes |
+                Where-Object { $_ -is [System.Management.Automation.ValidateRangeAttribute] }
+            $attribute.MinRange | Should -Be 1
+            $attribute.MaxRange | Should -Be 300
+        }
+
+        It 'Should have a MaxPolls parameter for bounded following' {
+            $command.Parameters.Keys | Should -Contain 'MaxPolls'
+        }
+    }
+
+    Context 'Follow behaviour' {
+
+        It 'Polls the progress endpoint until the Activity completes, then emits the final Activity' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:followPollCount = 0
+                Mock Invoke-JIMApi {
+                    if ($Endpoint -like '*/progress') {
+                        $script:followPollCount++
+                        $status = if ($script:followPollCount -ge 3) { 'Complete' } else { 'InProgress' }
+                        return [PSCustomObject]@{
+                            status = $status
+                            objectsProcessed = 100 * $script:followPollCount
+                            objectsToProcess = 300
+                            percentComplete = [Math]::Min(100, 33 * $script:followPollCount)
+                            estimatedSecondsRemaining = 10
+                            objectsPerSecond = 50
+                            message = 'Importing objects from Connected System'
+                        }
+                    }
+                    return [PSCustomObject]@{ id = 'final'; status = 'Complete' }
+                }
+
+                $result = Get-JIMActivity -Id ([guid]::NewGuid()) -Follow -IntervalSeconds 1
+
+                Should -Invoke Invoke-JIMApi -Times 3 -Exactly -ParameterFilter { $Endpoint -like '*/progress' }
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Endpoint -like '*/activities/*' -and $Endpoint -notlike '*/progress'
+                }
+                $result.status | Should -Be 'Complete'
+            }
+        }
+
+        It 'Stops after MaxPolls when the Activity does not complete' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi {
+                    if ($Endpoint -like '*/progress') {
+                        return [PSCustomObject]@{ status = 'InProgress'; objectsProcessed = 1; objectsToProcess = 10 }
+                    }
+                    return [PSCustomObject]@{ id = 'final'; status = 'InProgress' }
+                }
+
+                Get-JIMActivity -Id ([guid]::NewGuid()) -Follow -IntervalSeconds 1 -MaxPolls 2 | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 2 -Exactly -ParameterFilter { $Endpoint -like '*/progress' }
+            }
+        }
+
+        It 'Keeps polling through transient errors rather than aborting' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:flakyPollCount = 0
+                Mock Invoke-JIMApi {
+                    if ($Endpoint -like '*/progress') {
+                        $script:flakyPollCount++
+                        if ($script:flakyPollCount -eq 1) {
+                            throw 'Transient failure'
+                        }
+                        return [PSCustomObject]@{ status = 'Complete'; objectsProcessed = 10; objectsToProcess = 10 }
+                    }
+                    return [PSCustomObject]@{ id = 'final'; status = 'Complete' }
+                }
+
+                { Get-JIMActivity -Id ([guid]::NewGuid()) -Follow -IntervalSeconds 1 -WarningAction SilentlyContinue | Out-Null } |
+                    Should -Not -Throw
+
+                Should -Invoke Invoke-JIMApi -Times 2 -Exactly -ParameterFilter { $Endpoint -like '*/progress' }
+            }
+        }
+    }
+}

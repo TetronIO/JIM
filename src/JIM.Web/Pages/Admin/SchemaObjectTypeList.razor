@@ -182,6 +182,12 @@
                                     <MudIconButton Icon="@Icons.Material.Outlined.Delete" OnClick="@(() => OpenDeleteAttributeDialogAsync(context))" />
                                 </MudTooltip>
                             }
+                            else
+                            {
+                                <MudTooltip Text="View attribute and Standard Mappings" Arrow="true" Placement="Placement.Top">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Visibility" OnClick="@(() => OpenViewAttributeDialogAsync(context))" />
+                                </MudTooltip>
+                            }
                             <MudTooltip Text="Change history" Arrow="true" Placement="Placement.Top">
                                 <MudIconButton Icon="@Icons.Material.Outlined.History" OnClick="@(() => ShowAttributeHistoryDialogAsync(context))" />
                             </MudTooltip>
@@ -311,6 +317,16 @@
         {
             await _attributeTable.ReloadServerData();
         }
+    }
+
+    private async Task OpenViewAttributeDialogAsync(MetaverseAttributeHeader header)
+    {
+        using var jim = JimFactory.Create();
+        var attribute = await jim.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(header.Id);
+        if (attribute == null)
+            return;
+
+        await MetaverseAttributeEditorDialog.ShowAsync(DialogService, attribute, readOnly: true);
     }
 
     private async Task OpenDeleteAttributeDialogAsync(MetaverseAttributeHeader header)

@@ -132,4 +132,52 @@ public class MetaverseObjectDtoTests
 
         Assert.That(dto.LongValue, Is.EqualTo(9_876_543_210L));
     }
+
+    [Test]
+    public void FromEntity_WithDecimalValue_MapsDecimalValue()
+    {
+        // A high-precision value that a double cannot represent exactly, proving the mapping
+        // never routes the value through double/float.
+        const decimal highPrecisionValue = 12345678901234567.89m;
+        var entity = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = new MetaverseAttribute
+            {
+                Id = 12,
+                Name = "Annual Salary",
+                Type = AttributeDataType.Decimal,
+                AttributePlurality = AttributePlurality.SingleValued
+            },
+            AttributeId = 12,
+            DecimalValue = highPrecisionValue
+        };
+
+        var dto = MetaverseObjectAttributeValueDto.FromEntity(entity);
+
+        Assert.That(dto.DecimalValue, Is.EqualTo(highPrecisionValue));
+    }
+
+    [Test]
+    public void FromEntity_WithByteValue_MapsByteValue()
+    {
+        var byteValue = new byte[] { 0x01, 0x02, 0x03, 0xFF };
+        var entity = new MetaverseObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            Attribute = new MetaverseAttribute
+            {
+                Id = 13,
+                Name = "Photo",
+                Type = AttributeDataType.Binary,
+                AttributePlurality = AttributePlurality.SingleValued
+            },
+            AttributeId = 13,
+            ByteValue = byteValue
+        };
+
+        var dto = MetaverseObjectAttributeValueDto.FromEntity(entity);
+
+        Assert.That(dto.ByteValue, Is.EqualTo(byteValue));
+    }
 }

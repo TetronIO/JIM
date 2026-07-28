@@ -28,7 +28,8 @@ function Start-JIMRunProfile {
 
     .PARAMETER Wait
         If specified, waits for the Run Profile execution to complete before returning.
-        Shows progress while waiting.
+        Shows live progress while waiting (phase, object counts, throughput and estimated
+        time remaining), polling the lightweight Activity progress endpoint every 2 seconds.
 
     .PARAMETER Timeout
         Maximum time in seconds to wait for completion when using -Wait.
@@ -173,45 +174,23 @@ function Start-JIMRunProfile {
                     }
 
                     try {
-                        $activity = Invoke-JIMApi -Endpoint "/api/v1/activities/$activityId"
+                        # Lightweight progress endpoint (issue #202): status, counts, phase
+                        # message, throughput and ETA without the cost of the full detail read.
+                        $activityProgress = Invoke-JIMApi -Endpoint "/api/v1/activities/$activityId/progress"
 
                         # Reset auth failure counter on successful call
                         $consecutiveAuthFailures = 0
 
                         # Update progress
                         $elapsed = [int]((Get-Date) - $startTime).TotalSeconds
-                        $status = $activity.status ?? 'Running'
+                        $status = $activityProgress.status ?? 'Running'
 
                         if ($status -ne $lastStatus) {
                             Write-Verbose "Status: $status"
                             $lastStatus = $status
                         }
 
-                        # Build progress display from activity's progress fields
-                        $objectsToProcess = $activity.objectsToProcess ?? 0
-                        $objectsProcessed = $activity.objectsProcessed ?? 0
-                        $message = $activity.message ?? ""
-
-                        $progressParams = @{
-                            Activity = "Executing Run Profile"
-                            Status = "$status - Elapsed: ${elapsed}s"
-                            PercentComplete = -1  # Indeterminate
-                        }
-
-                        # Use object counts for progress if available
-                        if ($objectsToProcess -gt 0) {
-                            $percent = [Math]::Max(0, [Math]::Min(100, [int](($objectsProcessed / $objectsToProcess) * 100)))
-                            $progressParams.Status = "$status - $objectsProcessed of $objectsToProcess objects"
-                            $progressParams.PercentComplete = $percent
-
-                            # Add message if available
-                            if ($message) {
-                                $progressParams.Status += " - $message"
-                            }
-                        } elseif ($message) {
-                            $progressParams.Status = "$status - $message"
-                        }
-
+                        $progressParams = Get-JIMActivityProgressDisplay -Progress $activityProgress -ActivityLabel "Executing Run Profile" -ElapsedSeconds $elapsed
                         Write-Progress @progressParams
 
                         # Check if completed (matches ActivityStatus enum names)

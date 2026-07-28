@@ -12,6 +12,8 @@ using JIM.Models.Logic;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using JIM.Models.Utility;
+using JIM.Utilities;
+using Serilog;
 
 namespace JIM.InMemoryData;
 
@@ -227,7 +229,11 @@ public class SyncRepository : ISyncRepository
         _csos.TryGetValue(csoId, out var cso);
         if (cso != null && cso.ConnectedSystemId != connectedSystemId)
             cso = null;
-        return Task.FromResult(cso);
+
+        // Cloned per #1079 Regression B - see CloneForHydration. Callers such as
+        // SyncImportTaskProcessor.ObsoleteConnectedSystemObjectAsync add the result to the
+        // update-path working set and later release its AttributeValues.
+        return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(
@@ -236,7 +242,7 @@ public class SyncRepository : ISyncRepository
         var cso = GetCsosForSystem(connectedSystemId)
             .FirstOrDefault(c => c.AttributeValues
                 .Any(av => av.AttributeId == attributeId && av.IntValue == attributeValue));
-        return Task.FromResult(cso);
+        return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(
@@ -245,7 +251,7 @@ public class SyncRepository : ISyncRepository
         var cso = GetCsosForSystem(connectedSystemId)
             .FirstOrDefault(c => c.AttributeValues
                 .Any(av => av.AttributeId == attributeId && av.StringValue == attributeValue));
-        return Task.FromResult(cso);
+        return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(
@@ -254,7 +260,7 @@ public class SyncRepository : ISyncRepository
         var cso = GetCsosForSystem(connectedSystemId)
             .FirstOrDefault(c => c.AttributeValues
                 .Any(av => av.AttributeId == attributeId && av.GuidValue == attributeValue));
-        return Task.FromResult(cso);
+        return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectByAttributeAsync(
@@ -263,7 +269,7 @@ public class SyncRepository : ISyncRepository
         var cso = GetCsosForSystem(connectedSystemId)
             .FirstOrDefault(c => c.AttributeValues
                 .Any(av => av.AttributeId == attributeId && av.LongValue == attributeValue));
-        return Task.FromResult(cso);
+        return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAsync(
@@ -275,7 +281,13 @@ public class SyncRepository : ISyncRepository
                 c.AttributeValues.Any(av =>
                     av.AttributeId == c.SecondaryExternalIdAttributeId.Value &&
                     av.StringValue == secondaryExternalIdValue));
-        return Task.FromResult(cso);
+
+        // Cloned for the same reason as GetConnectedSystemObjectsByIdsAsync (#1079 Regression B):
+        // this is the confirming import's PendingProvisioning fallback lookup path
+        // (SyncImportTaskProcessor.HydrateCsoAsync), whose result can end up in the update-path
+        // working set and later have its AttributeValues released. Without cloning, that release
+        // would empty the store's own copy too.
+        return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
     public Task<ConnectedSystemObject?> GetConnectedSystemObjectBySecondaryExternalIdAnyTypeAsync(
@@ -287,7 +299,7 @@ public class SyncRepository : ISyncRepository
                 c.AttributeValues.Any(av =>
                     av.AttributeId == c.SecondaryExternalIdAttributeId.Value &&
                     av.StringValue == secondaryExternalIdValue));
-        return Task.FromResult(cso);
+        return Task.FromResult(cso == null ? null : CloneForHydration(cso));
     }
 
     public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
@@ -322,14 +334,105 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
+    /// <summary>
+    /// SPEC-1082 D8: honest in-memory equivalent of the Postgres widened projection - reuses the
+    /// same external-id resolution as <see cref="GetAllCsoExternalIdMappingsAsync"/> but carries the
+    /// stored hash/fingerprint/status/partition alongside the CSO ID.
+    /// </summary>
+    public Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
+    {
+        var result = new Dictionary<string, CsoImportStateLookupEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cso in GetCsosForSystem(connectedSystemId))
+        {
+            var entry = new CsoImportStateLookupEntry(cso.Id, cso.ImportStateHash, cso.ImportStateFingerprint, cso.Status, cso.PartitionId);
+
+            // Try primary external ID first
+            var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
+            var primaryValue = GetExternalIdValueString(primaryAv);
+
+            if (primaryValue != null)
+            {
+                var cacheKey = $"cso:{connectedSystemId}:{cso.ExternalIdAttributeId}:{primaryValue}";
+                result.TryAdd(cacheKey, entry);
+                continue;
+            }
+
+            // Fall back to secondary external ID (PendingProvisioning CSOs)
+            if (cso.SecondaryExternalIdAttributeId.HasValue)
+            {
+                var secondaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.SecondaryExternalIdAttributeId);
+                var secondaryValue = GetExternalIdValueString(secondaryAv);
+
+                if (secondaryValue != null)
+                {
+                    var cacheKey = $"cso:{connectedSystemId}:{cso.SecondaryExternalIdAttributeId.Value}:{secondaryValue}";
+                    result.TryAdd(cacheKey, entry);
+                }
+            }
+        }
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// SPEC-1082 D6: honest in-memory equivalent of the Postgres stamp writer. Since <see cref="_csos"/>
+    /// IS the live graph, stamping is a direct property assignment; deliberately does not touch
+    /// <see cref="ConnectedSystemObject.LastUpdated"/>.
+    /// </summary>
+    public Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps)
+    {
+        var matches = stamps
+            .Select(s => (Stamp: s, Cso: _csos.TryGetValue(s.CsoId, out var cso) ? cso : null))
+            .Where(m => m.Cso != null);
+
+        foreach (var (stamp, cso) in matches)
+        {
+            cso!.ImportStateHash = stamp.Hash;
+            cso.ImportStateFingerprint = stamp.Fingerprint;
+        }
+        return Task.CompletedTask;
+    }
+
     public virtual Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
     {
         var idSet = new HashSet<Guid>(csoIds);
         var result = GetCsosForSystem(connectedSystemId)
             .Where(cso => idSet.Contains(cso.Id))
+            .Select(CloneForHydration)
             .ToList();
         return Task.FromResult(result);
     }
+
+    /// <summary>
+    /// Clones a stored CSO for hand-off to hydration callers, giving it its own AttributeValues
+    /// list (referencing the same attribute value instances, not the store's list). Real Postgres
+    /// hydration already hands out an independent, untracked graph per call; this fake must match
+    /// that so callers who release their working copy's AttributeValues afterwards (e.g.
+    /// SyncImportTaskProcessor bounding memory at import scale, #1079 Regression B) cannot
+    /// accidentally empty the store's own copy by mutating a shared list reference.
+    /// </summary>
+    private static ConnectedSystemObject CloneForHydration(ConnectedSystemObject cso) => new()
+    {
+        Id = cso.Id,
+        Created = cso.Created,
+        LastUpdated = cso.LastUpdated,
+        Type = cso.Type,
+        TypeId = cso.TypeId,
+        ConnectedSystem = cso.ConnectedSystem,
+        ConnectedSystemId = cso.ConnectedSystemId,
+        Partition = cso.Partition,
+        PartitionId = cso.PartitionId,
+        ExternalIdAttributeId = cso.ExternalIdAttributeId,
+        SecondaryExternalIdAttributeId = cso.SecondaryExternalIdAttributeId,
+        AttributeValues = new List<ConnectedSystemObjectAttributeValue>(cso.AttributeValues),
+        Status = cso.Status,
+        MetaverseObject = cso.MetaverseObject,
+        MetaverseObjectId = cso.MetaverseObjectId,
+        JoinType = cso.JoinType,
+        DateJoined = cso.DateJoined,
+        ScopeReviewPending = cso.ScopeReviewPending,
+        LastScopeEvaluatedAt = cso.LastScopeEvaluatedAt,
+        Changes = cso.Changes
+    };
 
     public Task<List<ConnectedSystemObject>> GetConnectedSystemObjectsByIdsNoTrackingAsync(int connectedSystemId, IEnumerable<Guid> csoIds)
         => GetConnectedSystemObjectsByIdsAsync(connectedSystemId, csoIds);
@@ -369,7 +472,7 @@ public class SyncRepository : ISyncRepository
         return Task.FromResult(result);
     }
 
-    public Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(
+    public virtual Task<Dictionary<string, ConnectedSystemObject>> GetConnectedSystemObjectsBySecondaryExternalIdAnyTypeValuesAsync(
         int connectedSystemId, IEnumerable<string> secondaryExternalIdValues)
     {
         var valueSet = new HashSet<string>(secondaryExternalIdValues);
@@ -517,20 +620,46 @@ public class SyncRepository : ISyncRepository
             await onBatchPersisted(connectedSystemObjects.Count);
     }
 
-    public Task UpdateConnectedSystemObjectsAsync(
+    public virtual Task UpdateConnectedSystemObjectsAsync(
         List<ConnectedSystemObject> connectedSystemObjects,
         List<(Guid CsoId, ConnectedSystemObjectAttributeValue Value)>? pendingAdditions = null,
         List<Guid>? pendingRemovalIds = null)
     {
         // In the InMemory provider, import processing already modified cso.AttributeValues
-        // in-memory (adds/removes). The pendingAdditions/RemovalIds snapshot is for the
-        // relational path where AsNoTracking prevents EF from detecting these changes.
-        // We just need to persist the CSOs to the in-memory store.
+        // in-memory (adds/removes, via ProcessConnectedSystemObjectAttributeValueChanges). The
+        // pendingAdditions/RemovalIds snapshot is for the relational path where AsNoTracking
+        // prevents EF from detecting these changes.
+        //
+        // When the incoming CSO is a DIFFERENT instance to the store's own (e.g. a hydrated clone
+        // from GetConnectedSystemObjectsByIdsAsync, per #1079 Regression B), apply its mutable
+        // fields onto the store's canonical instance by Id rather than replacing the dictionary
+        // slot with the caller's instance. Aliasing the slot to the caller's object would let a
+        // later release of the caller's own AttributeValues (a memory-bounding step some callers
+        // take after this call returns) silently empty the store's copy too, since they'd be the
+        // same object. Only genuinely new IDs adopt the incoming instance directly.
         foreach (var cso in connectedSystemObjects)
         {
-            FixupCsoNavigationProperties(cso);
-            _csos[cso.Id] = cso;
-            UpdateMvoIndex(cso);
+            if (_csos.TryGetValue(cso.Id, out var stored) && !ReferenceEquals(stored, cso))
+            {
+                stored.LastUpdated = cso.LastUpdated;
+                stored.PartitionId = cso.PartitionId;
+                stored.Status = cso.Status;
+                stored.MetaverseObjectId = cso.MetaverseObjectId;
+                stored.MetaverseObject = cso.MetaverseObject;
+                stored.JoinType = cso.JoinType;
+                stored.DateJoined = cso.DateJoined;
+                stored.ScopeReviewPending = cso.ScopeReviewPending;
+                stored.LastScopeEvaluatedAt = cso.LastScopeEvaluatedAt;
+                stored.AttributeValues = cso.AttributeValues;
+                FixupCsoNavigationProperties(stored);
+                UpdateMvoIndex(stored);
+            }
+            else
+            {
+                FixupCsoNavigationProperties(cso);
+                _csos[cso.Id] = cso;
+                UpdateMvoIndex(cso);
+            }
         }
         return Task.CompletedTask;
     }
@@ -616,7 +745,36 @@ public class SyncRepository : ISyncRepository
                     if (!stored.AttributeValues.Contains(av))
                         stored.AttributeValues.Add(av);
                 }
+
+                // SPEC-1082 D9: null the stored hash/fingerprint for any CSO that actually received
+                // new attribute values, mirroring the Postgres raw-SQL writer's null-on-mutate behaviour.
+                if (newAvs.Count > 0)
+                {
+                    stored.ImportStateHash = null;
+                    stored.ImportStateFingerprint = null;
+                }
             }
+        }
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Issue #1079 (optimistic export apply): the attribute-value delta itself is a no-op here.
+    /// Unlike the Postgres implementation, there is no separate persisted store to reconcile -
+    /// <see cref="_csos"/> IS the live graph, so <c>ExportExecutionServer</c> mutating
+    /// <see cref="ConnectedSystemObject.AttributeValues"/> directly (D10) is sufficient.
+    /// SPEC-1082 D9: still nulls <see cref="ConnectedSystemObject.ImportStateHash"/> and
+    /// <see cref="ConnectedSystemObject.ImportStateFingerprint"/> for the affected CSOs directly on
+    /// the live graph, so the in-memory fake honestly mirrors the Postgres implementation's
+    /// null-on-mutate behaviour. Virtual so tests can override it to simulate a persistence
+    /// failure (D7's failure-containment guarantee).
+    /// </summary>
+    public virtual Task ApplyExportedAttributeValuesAsync(List<ConnectedSystemObjectAttributeValue> additions, List<Guid> removalValueIds, IReadOnlyCollection<Guid> affectedCsoIds)
+    {
+        foreach (var cso in affectedCsoIds.Where(_csos.ContainsKey).Select(id => _csos[id]))
+        {
+            cso.ImportStateHash = null;
+            cso.ImportStateFingerprint = null;
         }
         return Task.CompletedTask;
     }
@@ -730,7 +888,8 @@ public class SyncRepository : ISyncRepository
                     var av = cso.AttributeValues
                         .FirstOrDefault(a => a.AttributeId == source.ConnectedSystemAttributeId.Value);
                     sourceValue = av?.StringValue ?? av?.IntValue?.ToString() ??
-                                  av?.GuidValue?.ToString() ?? av?.LongValue?.ToString();
+                                  av?.GuidValue?.ToString() ?? av?.LongValue?.ToString() ??
+                                  (av?.DecimalValue is { } sourceDecimal ? DecimalAttributeValue.ToCanonicalString(sourceDecimal) : null);
                     if (sourceValue != null) break;
                 }
             }
@@ -752,7 +911,8 @@ public class SyncRepository : ISyncRepository
                     return mvo.AttributeValues.Any(a =>
                         a.AttributeId == targetAttrId &&
                         string.Equals(
-                            a.StringValue ?? a.IntValue?.ToString() ?? a.GuidValue?.ToString() ?? a.LongValue?.ToString(),
+                            a.StringValue ?? a.IntValue?.ToString() ?? a.GuidValue?.ToString() ?? a.LongValue?.ToString() ??
+                                (a.DecimalValue is { } targetDecimal ? DecimalAttributeValue.ToCanonicalString(targetDecimal) : null),
                             sourceValue,
                             comparison));
                 })
@@ -788,7 +948,8 @@ public class SyncRepository : ISyncRepository
                 var av = connectedSystemObject.AttributeValues
                     .FirstOrDefault(a => a.AttributeId == attrId);
                 sourceValue = av?.StringValue ?? av?.IntValue?.ToString() ??
-                              av?.GuidValue?.ToString() ?? av?.LongValue?.ToString();
+                              av?.GuidValue?.ToString() ?? av?.LongValue?.ToString() ??
+                              (av?.DecimalValue is { } sourceDecimal ? DecimalAttributeValue.ToCanonicalString(sourceDecimal) : null);
                 if (sourceValue != null) break;
             }
         }
@@ -809,7 +970,8 @@ public class SyncRepository : ISyncRepository
                 return mvo.AttributeValues.Any(a =>
                     a.AttributeId == targetAttrId &&
                     string.Equals(
-                        a.StringValue ?? a.IntValue?.ToString() ?? a.GuidValue?.ToString() ?? a.LongValue?.ToString(),
+                        a.StringValue ?? a.IntValue?.ToString() ?? a.GuidValue?.ToString() ?? a.LongValue?.ToString() ??
+                            (a.DecimalValue is { } targetDecimal ? DecimalAttributeValue.ToCanonicalString(targetDecimal) : null),
                         sourceValue,
                         comparison));
             })
@@ -852,7 +1014,8 @@ public class SyncRepository : ISyncRepository
             return Task.FromResult<ConnectedSystemObject?>(null);
 
         // Empty string is treated as no value, matching the Postgres implementation's IsNullOrEmpty guard.
-        var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString() ?? mvoAttr.LongValue?.ToString();
+        var mvoVal = mvoAttr.StringValue ?? mvoAttr.GuidValue?.ToString() ?? mvoAttr.IntValue?.ToString() ?? mvoAttr.LongValue?.ToString() ??
+                     (mvoAttr.DecimalValue is { } mvoDecimal ? DecimalAttributeValue.ToCanonicalString(mvoDecimal) : null);
         if (string.IsNullOrEmpty(mvoVal))
             return Task.FromResult<ConnectedSystemObject?>(null);
 
@@ -863,7 +1026,8 @@ public class SyncRepository : ISyncRepository
             var csoAttr = cso.AttributeValues?.FirstOrDefault(av => av.AttributeId == csAttrId);
             if (csoAttr == null)
                 return false;
-            var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString() ?? csoAttr.LongValue?.ToString();
+            var csoVal = csoAttr.StringValue ?? csoAttr.GuidValue?.ToString() ?? csoAttr.IntValue?.ToString() ?? csoAttr.LongValue?.ToString() ??
+                         (csoAttr.DecimalValue is { } csoDecimal ? DecimalAttributeValue.ToCanonicalString(csoDecimal) : null);
             return string.Equals(mvoVal, csoVal, comparison);
         }
 
@@ -1127,9 +1291,21 @@ public class SyncRepository : ISyncRepository
 
     #region Pending Exports
 
-    public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
+    public virtual Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId)
     {
         var result = GetPendingExportsForSystem(connectedSystemId).ToList();
+        return Task.FromResult(result);
+    }
+
+    /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
+    /// reference resolution: Pending status with unresolved reference attribute values (#1102).
+    /// </summary>
+    public virtual Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
+    {
+        var result = GetPendingExportsForSystem(connectedSystemId)
+            .Where(pe => pe.HasUnresolvedReferences && pe.Status == PendingExportStatus.Pending)
+            .ToList();
         return Task.FromResult(result);
     }
 

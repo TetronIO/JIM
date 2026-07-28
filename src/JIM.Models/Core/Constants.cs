@@ -81,6 +81,7 @@ public static class Constants
         public static string ExtensionAttribute7 => "Extension Attribute 7";
         public static string ExtensionAttribute8 => "Extension Attribute 8";
         public static string ExtensionAttribute9 => "Extension Attribute 9";
+        public static string Emails => "Emails";
         public static string HideFromAddressLists => "Hide From Address Lists?";
         public static string MailNickname => "Mail Nickname";
         public static string ObjectGuid => "objectGUID";
@@ -89,6 +90,7 @@ public static class Constants
 
         // users
         // https://docs.microsoft.com/en-us/windows/win32/ad/user-object-attributes
+        public static string AccountEnabled => "Account Enabled";
         public static string AccountExpires => "Account Expires";
         public static string AltSecurityIdentities => "Alt Security Identities";
         public static string CommonName => "Common Name";
@@ -109,13 +111,18 @@ public static class Constants
         public static string HomeDirectory => "Home Directory";
         public static string HomeDrive => "Home Drive";
         public static string HomePhone => "Home Phone";
+        public static string HonorificPrefix => "Honorific Prefix";
+        public static string HonorificSuffix => "Honorific Suffix";
         public static string IdentityAssuranceLevel => "Identity Assurance Level (IAL)";
         public static string IpPhone => "IP Phone";
         public static string JobTitle => "Job Title";
         public static string LastName => "Last Name";
+        public static string Locale => "Locale";
         public static string Locality => "Locality";
         public static string Manager => "Manager";
+        public static string MiddleName => "Middle Name";
         public static string MobileNumber => "Mobile Number";
+        public static string Nickname => "Nickname";
         public static string ObjectIdentifier => "Object Identifier";
         public static string SubjectIdentifier => "Subject Identifier";
         public static string Office => "Office";
@@ -131,6 +138,7 @@ public static class Constants
         public static string PostalAddresses => "Postal Address";
         public static string PostalCode => "Postal Code";
         public static string PostOfficeBoxes => "Post Office Boxes";
+        public static string PreferredLanguage => "Preferred Language";
         public static string Pronouns => "Pronouns";
         public static string ScriptPath => "Script Path";
         public static string SidHistory => "sIDHistory";
@@ -139,6 +147,7 @@ public static class Constants
         public static string StreetAddress => "StreetAddress";
         public static string Team => "Team";
         public static string TelephoneNumber => "Telephone Number";
+        public static string TimeZone => "Time Zone";
         public static string Type => "Type";
         public static string Urls => "Urls";
         public static string UserAccountControl => "User Account Control";
@@ -378,5 +387,26 @@ public static class Constants
         public const bool Enabled = true;
         public const int AuthenticatedRequestsPerMinute = 300;
         public const int UnauthenticatedRequestsPerMinute = 30;
+    }
+
+    /// <summary>
+    /// PostgreSQL NOTIFY channel names used for real-time, event-driven updates between JIM services
+    /// (issue #307). Database triggers publish on these channels; services LISTEN on them via a dedicated
+    /// connection. Payloads carry identifiers only; the database remains the source of truth and every
+    /// consumer retains a polling fallback for missed notifications.
+    /// </summary>
+    public static class NotificationChannels
+    {
+        /// <summary>
+        /// Raised when a Worker Task is inserted, changes status, or is deleted (deletion signals terminal
+        /// completion or cancellation). Payload: JSON parseable by <c>WorkerTaskChangeNotification</c>.
+        /// </summary>
+        public const string WorkerTaskChange = "jim_worker_task_change";
+
+        /// <summary>
+        /// Raised when an Activity's progress or status changes (ObjectsProcessed, ObjectsToProcess,
+        /// Message or Status columns). Payload: the Activity id as text.
+        /// </summary>
+        public const string ActivityProgress = "jim_activity_progress";
     }
 }

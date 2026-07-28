@@ -357,6 +357,20 @@ public interface IMetaverseRepository
     #region attributes
     public Task<IList<MetaverseAttribute>?> GetMetaverseAttributesAsync();
 
+    /// <summary>
+    /// Retrieves all Metaverse Attributes with their Standard Mappings, change-tracked, for the built-in schema
+    /// synchronisation pass to mutate and persist via
+    /// <see cref="ISeedingRepository.SaveBuiltInSchemaChangesAsync"/>.
+    /// </summary>
+    public Task<List<MetaverseAttribute>> GetMetaverseAttributesForSchemaSyncAsync();
+
+    /// <summary>
+    /// Retrieves the built-in Metaverse Object Types with their attribute bindings, change-tracked, for the
+    /// built-in schema synchronisation pass to mutate and persist via
+    /// <see cref="ISeedingRepository.SaveBuiltInSchemaChangesAsync"/>.
+    /// </summary>
+    public Task<List<MetaverseObjectType>> GetBuiltInMetaverseObjectTypesForSchemaSyncAsync();
+
     public Task<IList<MetaverseAttributeHeader>?> GetMetaverseAttributeHeadersAsync();
 
     /// <summary>
@@ -372,14 +386,22 @@ public interface IMetaverseRepository
     public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(int id, bool withChangeTracking = false);
 
     /// <summary>
-    /// Gets a Metaverse Attribute by ID including its associated object types.
+    /// Gets a Metaverse Attribute by ID including its associated object types and Standard Mappings.
     /// </summary>
     /// <param name="id">The unique identifier of the attribute.</param>
     /// <param name="withChangeTracking">When true, enables EF Core change tracking for write operations.</param>
-    /// <returns>The attribute with its associated object types, or null if not found.</returns>
+    /// <returns>The attribute with its associations, or null if not found.</returns>
     public Task<MetaverseAttribute?> GetMetaverseAttributeWithObjectTypesAsync(int id, bool withChangeTracking = false);
 
     public Task<MetaverseAttribute?> GetMetaverseAttributeAsync(string name, bool withChangeTracking = false);
+
+    /// <summary>
+    /// Gets the advisory Standard Mappings held by every Metaverse Attribute bound to a Metaverse Object Type.
+    /// Read-only display data for the Attribute Flow editor's hints (#1122); the returned mappings are not
+    /// change-tracked and carry no navigation properties.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The unique identifier of the Metaverse Object Type.</param>
+    public Task<List<MetaverseAttributeStandardMapping>> GetStandardMappingsForObjectTypeAsync(int metaverseObjectTypeId);
 
     /// <summary>
     /// Creates a new Metaverse Attribute.

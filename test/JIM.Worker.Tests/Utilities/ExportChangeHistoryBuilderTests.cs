@@ -25,6 +25,7 @@ public class ExportChangeHistoryBuilderTests
     private ConnectedSystemObjectTypeAttribute _binaryAttribute = null!;
     private ConnectedSystemObjectTypeAttribute _referenceAttribute = null!;
     private ConnectedSystemObjectTypeAttribute _longNumberAttribute = null!;
+    private ConnectedSystemObjectTypeAttribute _decimalAttribute = null!;
 
     [SetUp]
     public void SetUp()
@@ -37,6 +38,7 @@ public class ExportChangeHistoryBuilderTests
         _binaryAttribute = new ConnectedSystemObjectTypeAttribute { Id = 6, Name = "photo", Type = AttributeDataType.Binary };
         _referenceAttribute = new ConnectedSystemObjectTypeAttribute { Id = 7, Name = "manager", Type = AttributeDataType.Reference };
         _longNumberAttribute = new ConnectedSystemObjectTypeAttribute { Id = 8, Name = "bigNumber", Type = AttributeDataType.LongNumber };
+        _decimalAttribute = new ConnectedSystemObjectTypeAttribute { Id = 9, Name = "salary", Type = AttributeDataType.Decimal };
     }
 
     #region BuildFromProcessedExportItem
@@ -304,6 +306,44 @@ public class ExportChangeHistoryBuilderTests
 
         // Assert
         Assert.That(change.AttributeChanges.First().ValueChanges.First().LongValue, Is.EqualTo(9999999999L));
+    }
+
+    [Test]
+    public void MapAttributeValueChanges_DecimalAttribute_MapsDecimalValue()
+    {
+        // Arrange
+        var change = new ConnectedSystemObjectChange();
+        var peChanges = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = _decimalAttribute, ChangeType = PendingExportAttributeChangeType.Add, DecimalValue = 51234.56m }
+        };
+
+        // Act
+        ExportChangeHistoryBuilder.MapAttributeValueChanges(change, peChanges);
+
+        // Assert
+        Assert.That(change.AttributeChanges.First().ValueChanges.First().DecimalValue, Is.EqualTo(51234.56m));
+    }
+
+    [Test]
+    public void MapAttributeValueChanges_DecimalRemoveAllWithNullValue_CreatesAttributeChangeWithNoValues()
+    {
+        // Arrange: a RemoveAll change for a Decimal attribute has no value; the attribute change is
+        // recorded without a value rather than hitting the default arm's unhandled-type warning.
+        var change = new ConnectedSystemObjectChange();
+        var peChanges = new List<PendingExportAttributeValueChange>
+        {
+            new() { Attribute = _decimalAttribute, ChangeType = PendingExportAttributeChangeType.RemoveAll, DecimalValue = null }
+        };
+
+        // Act
+        ExportChangeHistoryBuilder.MapAttributeValueChanges(change, peChanges);
+
+        // Assert
+        Assert.That(change.AttributeChanges, Has.Count.EqualTo(1));
+        Assert.That(change.AttributeChanges.First().ValueChanges, Has.Count.EqualTo(0));
+        Assert.That(change.AttributeChanges.First().AttributeName, Is.EqualTo("salary"));
+        Assert.That(change.AttributeChanges.First().AttributeType, Is.EqualTo(AttributeDataType.Decimal));
     }
 
     [Test]

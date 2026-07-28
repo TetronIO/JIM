@@ -1468,6 +1468,10 @@ public class SynchronisationController(
         if (system == null)
             return NotFound(ApiErrorResponse.NotFound($"Connected System with ID {connectedSystemId} not found."));
 
+        // SPEC-1082 D10: Verification Mode only applies to Full Import runs.
+        if (request.VerifyImportContentHashes && request.RunType != ConnectedSystemRunType.FullImport)
+            return BadRequest(ApiErrorResponse.BadRequest("VerifyImportContentHashes can only be enabled on a Full Import Run Profile."));
+
         // Create the Run Profile
         var runProfile = new ConnectedSystemRunProfile
         {
@@ -1475,7 +1479,8 @@ public class SynchronisationController(
             ConnectedSystemId = connectedSystemId,
             RunType = request.RunType,
             PageSize = request.PageSize,
-            FilePath = request.FilePath
+            FilePath = request.FilePath,
+            VerifyImportContentHashes = request.VerifyImportContentHashes
         };
 
         // Set partition if provided
@@ -1555,6 +1560,16 @@ public class SynchronisationController(
 
         if (request.FilePath != null)
             runProfile.FilePath = request.FilePath;
+
+        // SPEC-1082 D10: Verification Mode only applies to Full Import runs. RunType itself is
+        // immutable after create, so validate against the Run Profile's existing RunType.
+        if (request.VerifyImportContentHashes.HasValue)
+        {
+            if (request.VerifyImportContentHashes.Value && runProfile.RunType != ConnectedSystemRunType.FullImport)
+                return BadRequest(ApiErrorResponse.BadRequest("VerifyImportContentHashes can only be enabled on a Full Import Run Profile."));
+
+            runProfile.VerifyImportContentHashes = request.VerifyImportContentHashes.Value;
+        }
 
         // Update partition if provided
         if (request.PartitionId.HasValue)
@@ -1639,18 +1654,29 @@ public class SynchronisationController(
     /// <summary>
     /// List Synchronisation Rules
     /// </summary>
+    /// <remarks>
+    /// Narrow the list with the <c>connectedSystemIds</c>, <c>directions</c>, <c>actionTypes</c> and
+    /// <c>statuses</c> facets, each of which is repeatable. Facets combine with AND, values within a
+    /// facet combine with OR, and <c>search</c> narrows whatever the facets left.
+    /// </remarks>
     /// <param name="pagination">Pagination parameters (page, pageSize, sortBy, sortDirection, filter).</param>
+    /// <param name="filter">Connected System, Direction, Action type, Status and free-text filters.</param>
     /// <returns>A paginated list of Synchronisation Rule headers.</returns>
     [HttpGet("sync-rules", Name = "GetSyncRules")]
     [ProducesResponseType(typeof(PaginatedResponse<SyncRuleHeader>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> GetSyncRulesAsync([FromQuery] PaginationRequest pagination)
+    public async Task<IActionResult> GetSyncRulesAsync([FromQuery] PaginationRequest pagination, [FromQuery] SyncRuleFilterRequest filter)
     {
         _logger.LogTrace("Requested Synchronisation Rules (Page: {Page}, PageSize: {PageSize})", pagination.Page, pagination.PageSize);
-        var rules = await _application.ConnectedSystems.GetSyncRulesAsync();
-        var headers = rules.Select(SyncRuleHeader.FromEntity).AsQueryable();
 
-        var result = headers
+        // Header tier: a list endpoint has no use for each rule's Attribute Flows, Object Matching
+        // Rules and schema graph, and the Synchronisation Rule set is small enough to filter in
+        // memory through the shared SyncRuleFilter every JIM surface uses.
+        var headers = await _application.ConnectedSystems.GetSyncRuleHeadersAsync();
+        var syncRuleFilter = filter.ToFilter();
+        var filtered = (syncRuleFilter.IsEmpty ? headers : headers.Where(syncRuleFilter.Matches)).AsQueryable();
+
+        var result = filtered
             .ApplySortAndFilter(pagination)
             .ToPaginatedResponse(pagination);
 
@@ -2771,6 +2797,7 @@ public class SynchronisationController(
             criterion.StringValue = null;
             criterion.IntValue = null;
             criterion.LongValue = null;
+            criterion.DecimalValue = null;
             criterion.DateTimeValue = null;
             criterion.BoolValue = null;
             criterion.GuidValue = null;
@@ -2780,6 +2807,7 @@ public class SynchronisationController(
             criterion.StringValue = request.StringValue;
             criterion.IntValue = request.IntValue;
             criterion.LongValue = request.LongValue;
+            criterion.DecimalValue = request.DecimalValue;
             criterion.DateTimeValue = request.DateTimeValue;
             criterion.BoolValue = request.BoolValue;
             criterion.GuidValue = request.GuidValue;

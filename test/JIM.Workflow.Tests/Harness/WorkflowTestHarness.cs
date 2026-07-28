@@ -556,6 +556,11 @@ public class ObjectTypeBuilder
         return WithAttribute(name, AttributeDataType.LongNumber);
     }
 
+    public ObjectTypeBuilder WithDecimalAttribute(string name)
+    {
+        return WithAttribute(name, AttributeDataType.Decimal);
+    }
+
     public ObjectTypeBuilder WithBoolAttribute(string name)
     {
         return WithAttribute(name, AttributeDataType.Boolean);
@@ -639,6 +644,11 @@ public class MetaverseObjectTypeBuilder
     public MetaverseObjectTypeBuilder WithLongAttribute(string name)
     {
         return WithAttribute(name, AttributeDataType.LongNumber);
+    }
+
+    public MetaverseObjectTypeBuilder WithDecimalAttribute(string name)
+    {
+        return WithAttribute(name, AttributeDataType.Decimal);
     }
 
     public MetaverseObjectTypeBuilder WithGuidAttribute(string name)

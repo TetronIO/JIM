@@ -50,6 +50,7 @@ public class JimDbContext : DbContext
     public virtual DbSet<ExampleDataSetInstance> ExampleDataSetInstances { get; set; } = null!;
     public virtual DbSet<ExampleDataSetValue> ExampleDataSetValues { get; set; } = null!;
     public virtual DbSet<MetaverseAttribute> MetaverseAttributes { get; set; } = null!;
+    public virtual DbSet<MetaverseAttributeStandardMapping> MetaverseAttributeStandardMappings { get; set; } = null!;
     public virtual DbSet<MetaverseObject> MetaverseObjects { get; set; } = null!;
     public virtual DbSet<MetaverseObjectAttributeValue> MetaverseObjectAttributeValues { get; set; } = null!;
     public virtual DbSet<MetaverseObjectChange> MetaverseObjectChanges { get; set; } = null!;
@@ -129,6 +130,32 @@ public class JimDbContext : DbContext
             connectionString += ";Include Error Detail=True";
 
         return connectionString;
+    }
+
+    /// <summary>
+    /// Builds a connection string for a dedicated notification-listener connection (PostgreSQL LISTEN;
+    /// issue #307). LISTEN requires a long-lived connection outside the pool, so pooling is disabled and
+    /// TCP keepalives are enabled to detect dead connections promptly. At most one such connection exists
+    /// per service, so this does not pressure the PostgreSQL connection limit.
+    /// </summary>
+    public static string BuildListenerConnectionString()
+    {
+        var dbHostName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseHostname);
+        var dbName = Environment.GetEnvironmentVariable(Constants.Config.DatabaseName);
+        var dbUsername = Environment.GetEnvironmentVariable(Constants.Config.DatabaseUsername);
+        var dbPassword = Environment.GetEnvironmentVariable(Constants.Config.DatabasePassword);
+
+        if (string.IsNullOrEmpty(dbHostName))
+            throw new Exception($"{Constants.Config.DatabaseHostname} environment variable missing");
+        if (string.IsNullOrEmpty(dbName))
+            throw new Exception($"{Constants.Config.DatabaseName} environment variable missing");
+        if (string.IsNullOrEmpty(dbUsername))
+            throw new Exception($"{Constants.Config.DatabaseUsername} environment variable missing");
+        if (string.IsNullOrEmpty(dbPassword))
+            throw new Exception($"{Constants.Config.DatabasePassword} environment variable missing");
+
+        return $"Host={dbHostName};Database={dbName};Username={dbUsername};Password={dbPassword}" +
+               ";Pooling=false;Keepalive=30";
     }
 
     // Parameterless constructor for migrations and manual instantiation
@@ -305,6 +332,20 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<MetaverseObjectType>()
             .HasMany(mot => mot.Attributes);
 
+        // advisory Standard Mapping metadata (#1104). Mappings are owned by their attribute (cascade delete),
+        // and each (attribute, standard, counterpart name) combination exists at most once so the built-in
+        // schema synchronisation pass converges rather than duplicates.
+        modelBuilder.Entity<MetaverseAttribute>()
+            .HasMany(a => a.StandardMappings)
+            .WithOne(m => m.MetaverseAttribute)
+            .HasForeignKey(m => m.MetaverseAttributeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<MetaverseAttributeStandardMapping>()
+            .HasIndex(m => new { m.MetaverseAttributeId, m.Standard, m.CounterpartName })
+            .IsUnique()
+            .HasDatabaseName("IX_MetaverseAttributeStandardMappings_Attribute_Standard_Name");
+
         modelBuilder.Entity<SyncRule>()
             .HasMany(sr => sr.AttributeFlowRules)
             .WithOne(afr => afr.SyncRule);
@@ -332,6 +373,12 @@ public class JimDbContext : DbContext
         // default backfills existing rows on migration.
         modelBuilder.Entity<SyncRuleMapping>()
             .Property(srm => srm.InitialExportOnly)
+            .HasDefaultValue(false);
+
+        // SPEC-1082 D10: Run Profile Verification Mode defaults to false (no behavioural change for
+        // existing Run Profiles); the store-level default backfills existing rows on migration.
+        modelBuilder.Entity<ConnectedSystemRunProfile>()
+            .Property(rp => rp.VerifyImportContentHashes)
             .HasDefaultValue(false);
 
         // ObjectMatchingRule can belong to either SyncRule or ConnectedSystemObjectType (mutually exclusive)
@@ -420,6 +467,14 @@ public class JimDbContext : DbContext
         modelBuilder.Entity<PendingExport>()
             .HasIndex(pe => new { pe.ConnectedSystemId, pe.Status })
             .HasDatabaseName("IX_PendingExports_ConnectedSystemId_Status");
+
+        // PendingExport: partial index for the deferred-reference second pass (#1102).
+        // Rows with unresolved references are rare (usually zero), so the partial index
+        // keeps the common no-deferred-exports probe near-free at any scale.
+        modelBuilder.Entity<PendingExport>()
+            .HasIndex(pe => pe.ConnectedSystemId)
+            .HasDatabaseName("IX_PendingExports_ConnectedSystemId_HasUnresolvedReferences")
+            .HasFilter("\"HasUnresolvedReferences\"");
 
         // PendingExport: composite index supporting keyset pagination in export batch collection
         // (ORDER BY CreatedAt, Id with a (CreatedAt, Id) > (cursor) predicate; issue #985).

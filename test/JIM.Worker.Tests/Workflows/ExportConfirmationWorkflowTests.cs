@@ -131,8 +131,18 @@ public class ExportConfirmationWorkflowTests
         return pendingExport;
     }
 
-    private void AddCsoAttributeValue(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute, string stringValue)
+    /// <summary>
+    /// Sets a single-valued attribute on a CSO to simulate what a confirming import observed for
+    /// it, replacing any existing value(s) for that attribute first. Since issue #1079 (optimistic
+    /// export apply), a successful export already applies its value to the CSO's AttributeValues
+    /// before this helper runs, so a blind append would leave the previously-exported (correct)
+    /// value sitting alongside whatever this call is simulating - silently turning an intended
+    /// "import observed a different value" scenario into "import observed both", which
+    /// ValueExistsOnCso's Any() would then confirm against the still-present original.
+    /// </summary>
+    private void SetCsoAttributeValue(ConnectedSystemObject cso, ConnectedSystemObjectTypeAttribute attribute, string stringValue)
     {
+        cso.AttributeValues.RemoveAll(av => av.AttributeId == attribute.Id);
         cso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
         {
             Id = Guid.NewGuid(),
@@ -209,7 +219,7 @@ public class ExportConfirmationWorkflowTests
         Assert.That(pendingExport.Status, Is.EqualTo(PendingExportStatus.Exported));
 
         // Act Step 2: Import with matching value
-        AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
+        SetCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
         var result = await SimulateImportAndReconcileAsync(cso);
 
         // Assert Step 2: Attribute change should be confirmed and PendingExport deleted
@@ -258,8 +268,8 @@ public class ExportConfirmationWorkflowTests
         Assert.That(mailChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
 
         // Act Step 2: Import with matching values
-        AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
-        AddCsoAttributeValue(cso, MailAttr, "john@panoply.org");
+        SetCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
+        SetCsoAttributeValue(cso, MailAttr, "john@panoply.org");
         var result = await SimulateImportAndReconcileAsync(cso);
 
         // Assert Step 2: Both should be confirmed
@@ -297,7 +307,7 @@ public class ExportConfirmationWorkflowTests
         Assert.That(attrChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedPendingConfirmation));
 
         // Act Step 2: Import with wrong value
-        AddCsoAttributeValue(cso, DisplayNameAttr, "Wrong Name");
+        SetCsoAttributeValue(cso, DisplayNameAttr, "Wrong Name");
         var result1 = await SimulateImportAndReconcileAsync(cso);
 
         // Assert Step 2: Should be marked for retry
@@ -315,7 +325,7 @@ public class ExportConfirmationWorkflowTests
 
         // Act Step 4: Import with correct value this time
         cso.AttributeValues.Clear();
-        AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
+        SetCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
         var result2 = await SimulateImportAndReconcileAsync(cso);
 
         // Assert Step 4: Should now be confirmed
@@ -360,8 +370,8 @@ public class ExportConfirmationWorkflowTests
         await SimulateExportAsync(pendingExport);
 
         // Act Step 2: Import with one matching value
-        AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe"); // Matches
-        AddCsoAttributeValue(cso, MailAttr, "wrong@panoply.org"); // Doesn't match
+        SetCsoAttributeValue(cso, DisplayNameAttr, "John Doe"); // Matches
+        SetCsoAttributeValue(cso, MailAttr, "wrong@panoply.org"); // Doesn't match
         var result1 = await SimulateImportAndReconcileAsync(cso);
 
         // Assert Step 2: One confirmed, one retry
@@ -376,7 +386,7 @@ public class ExportConfirmationWorkflowTests
 
         // Act Step 4: Import with correct mail value
         cso.AttributeValues.RemoveAll(av => av.AttributeId == MailAttr.Id);
-        AddCsoAttributeValue(cso, MailAttr, "john@panoply.org");
+        SetCsoAttributeValue(cso, MailAttr, "john@panoply.org");
         var result2 = await SimulateImportAndReconcileAsync(cso);
 
         // Assert Step 4: Remaining change confirmed, PendingExport deleted
@@ -415,7 +425,7 @@ public class ExportConfirmationWorkflowTests
 
             // Import with wrong value each time
             cso.AttributeValues.Clear();
-            AddCsoAttributeValue(cso, DisplayNameAttr, $"Wrong Name {attempt}");
+            SetCsoAttributeValue(cso, DisplayNameAttr, $"Wrong Name {attempt}");
             var result = await SimulateImportAndReconcileAsync(cso);
 
             if (attempt < JIM.Application.Servers.SyncEngine.DefaultMaxRetries)
@@ -463,7 +473,7 @@ public class ExportConfirmationWorkflowTests
         await SimulateExportAsync(pendingExport);
 
         // Act Step 2: Import fails to confirm
-        AddCsoAttributeValue(cso, DisplayNameAttr, "Wrong Name");
+        SetCsoAttributeValue(cso, DisplayNameAttr, "Wrong Name");
         await SimulateImportAndReconcileAsync(cso);
         Assert.That(displayNameChange.Status, Is.EqualTo(PendingExportAttributeChangeStatus.ExportedNotConfirmed));
 
@@ -488,8 +498,8 @@ public class ExportConfirmationWorkflowTests
 
         // Act Step 5: Import confirms both
         cso.AttributeValues.Clear();
-        AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
-        AddCsoAttributeValue(cso, MailAttr, "john@panoply.org");
+        SetCsoAttributeValue(cso, DisplayNameAttr, "John Doe");
+        SetCsoAttributeValue(cso, MailAttr, "john@panoply.org");
         var finalResult = await SimulateImportAndReconcileAsync(cso);
 
         // Assert: Both confirmed
@@ -522,7 +532,7 @@ public class ExportConfirmationWorkflowTests
 
         // Export and fail first change
         await SimulateExportAsync(pendingExport);
-        AddCsoAttributeValue(cso, DisplayNameAttr, "Wrong Name");
+        SetCsoAttributeValue(cso, DisplayNameAttr, "Wrong Name");
         await SimulateImportAndReconcileAsync(cso);
 
         // Add a new change that will also fail
@@ -542,8 +552,8 @@ public class ExportConfirmationWorkflowTests
 
         // Import - first one confirms, second one fails
         cso.AttributeValues.Clear();
-        AddCsoAttributeValue(cso, DisplayNameAttr, "John Doe"); // Now correct
-        AddCsoAttributeValue(cso, MailAttr, "wrong@panoply.org"); // Still wrong
+        SetCsoAttributeValue(cso, DisplayNameAttr, "John Doe"); // Now correct
+        SetCsoAttributeValue(cso, MailAttr, "wrong@panoply.org"); // Still wrong
         var result = await SimulateImportAndReconcileAsync(cso);
 
         // Assert

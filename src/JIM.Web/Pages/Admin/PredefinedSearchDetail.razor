@@ -424,6 +424,7 @@
             StringValue = criteria.StringValue,
             IntValue = criteria.IntValue,
             LongValue = criteria.LongValue,
+            DecimalValue = criteria.DecimalValue,
             DateTimeValue = criteria.DateTimeValue,
             BoolValue = criteria.BoolValue,
             GuidValue = criteria.GuidValue,
@@ -448,6 +449,7 @@
             _newCriterion.StringValue = null;
             _newCriterion.IntValue = null;
             _newCriterion.LongValue = null;
+            _newCriterion.DecimalValue = null;
             _newCriterion.DateTimeValue = null;
             _newCriterion.BoolValue = null;
             _newCriterion.GuidValue = null;
@@ -510,6 +512,7 @@
             AttributeDataType.Guid => !_newCriterion.GuidValue.HasValue,
             AttributeDataType.Number => !_newCriterion.IntValue.HasValue,
             AttributeDataType.LongNumber => !_newCriterion.LongValue.HasValue,
+            AttributeDataType.Decimal => !_newCriterion.DecimalValue.HasValue,
             AttributeDataType.DateTime => _newCriterion.ValueMode == DateCriteriaValueMode.Relative
                 ? !(_newCriterion.RelativeCount.HasValue && _newCriterion.RelativeUnit.HasValue && _newCriterion.RelativeDirection.HasValue)
                 : !_newCriterion.DateTimeValue.HasValue,

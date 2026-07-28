@@ -46,6 +46,12 @@ public class RunProfileDto
     public string? FilePath { get; set; }
 
     /// <summary>
+    /// SPEC-1082 D10: whether Verification Mode is enabled. Only meaningful when <see cref="RunType"/>
+    /// is <c>FullImport</c>.
+    /// </summary>
+    public bool VerifyImportContentHashes { get; set; }
+
+    /// <summary>
     /// Creates a DTO from a ConnectedSystemRunProfile entity.
     /// </summary>
     public static RunProfileDto FromEntity(ConnectedSystemRunProfile runProfile)
@@ -58,7 +64,8 @@ public class RunProfileDto
             RunType = runProfile.RunType,
             PageSize = runProfile.PageSize,
             PartitionName = runProfile.Partition?.Name,
-            FilePath = runProfile.FilePath
+            FilePath = runProfile.FilePath,
+            VerifyImportContentHashes = runProfile.VerifyImportContentHashes
         };
     }
 }

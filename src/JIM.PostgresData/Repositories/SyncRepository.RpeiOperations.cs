@@ -472,11 +472,9 @@ public partial class SyncRepository
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
-            """
+            $"""
             COPY "ConnectedSystemObjectChanges" (
-                "Id", "ActivityRunProfileExecutionItemId", "ConnectedSystemId", "ConnectedSystemObjectId",
-                "ChangeTime", "ChangeType", "InitiatedByType", "InitiatedById", "InitiatedByName",
-                "DeletedObjectTypeId", "DeletedObjectExternalIdAttributeValueId", "DeletedObjectExternalId", "DeletedObjectDisplayName"
+                {BulkSqlHelpers.ToQuotedList(CsoChangeBulkColumns.ConnectedSystemObjectChanges)}
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -534,8 +532,8 @@ public partial class SyncRepository
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
-            """
-            COPY "ConnectedSystemObjectChangeAttributes" ("Id", "ConnectedSystemChangeId", "AttributeId", "AttributeName", "AttributeType")
+            $"""
+            COPY "ConnectedSystemObjectChangeAttributes" ({BulkSqlHelpers.ToQuotedList(CsoChangeBulkColumns.ConnectedSystemObjectChangeAttributes)})
             FROM STDIN (FORMAT binary)
             """);
 
@@ -561,12 +559,9 @@ public partial class SyncRepository
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
-            """
+            $"""
             COPY "ConnectedSystemObjectChangeAttributeValues" (
-                "Id", "ConnectedSystemObjectChangeAttributeId", "ValueChangeType",
-                "StringValue", "DateTimeValue", "IntValue", "LongValue",
-                "ByteValueLength", "GuidValue", "BoolValue", "ReferenceValueId",
-                "IsPendingExportStub"
+                {BulkSqlHelpers.ToQuotedList(CsoChangeBulkColumns.ConnectedSystemObjectChangeAttributeValues)}
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -590,6 +585,10 @@ public partial class SyncRepository
                 await writer.WriteNullAsync();
             if (v.LongValue.HasValue)
                 await writer.WriteAsync(v.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
+            else
+                await writer.WriteNullAsync();
+            if (v.DecimalValue.HasValue)
+                await writer.WriteAsync(v.DecimalValue.Value, NpgsqlTypes.NpgsqlDbType.Numeric);
             else
                 await writer.WriteNullAsync();
             if (v.ByteValueLength.HasValue)
@@ -646,6 +645,7 @@ public partial class SyncRepository
                         "OutcomeSummary" text,
                         "ErrorType" int,
                         "ErrorMessage" text,
+                        "ErrorStackTrace" text,
                         "AttributeFlowCount" int
                     ) ON COMMIT DROP
                     """;
@@ -660,8 +660,9 @@ public partial class SyncRepository
             }
 
             // COPY binary import — streams rows without SQL parsing or parameter limits
+            // Writer order below MUST match RpeiBulkColumns.ActivityRunProfileExecutionItemsUpdate exactly.
             await using (var writer = await npgsqlConn.BeginBinaryImportAsync(
-                @"COPY _rpei_bulk_update (""Id"", ""OutcomeSummary"", ""ErrorType"", ""ErrorMessage"", ""AttributeFlowCount"") FROM STDIN (FORMAT binary)"))
+                $@"COPY _rpei_bulk_update (""Id"", {BulkSqlHelpers.ToQuotedList(RpeiBulkColumns.ActivityRunProfileExecutionItemsUpdate)}) FROM STDIN (FORMAT binary)"))
             {
                 foreach (var rpei in chunk)
                 {
@@ -679,6 +680,12 @@ public partial class SyncRepository
                         await writer.WriteAsync(rpei.ErrorMessage, NpgsqlTypes.NpgsqlDbType.Text);
                     else
                         await writer.WriteNullAsync();
+                    // ErrorStackTrace is co-mutated with ErrorType/ErrorMessage at every worker error
+                    // site; the three must be written together as a unit.
+                    if (rpei.ErrorStackTrace is not null)
+                        await writer.WriteAsync(rpei.ErrorStackTrace, NpgsqlTypes.NpgsqlDbType.Text);
+                    else
+                        await writer.WriteNullAsync();
                     if (rpei.AttributeFlowCount.HasValue)
                         await writer.WriteAsync(rpei.AttributeFlowCount.Value, NpgsqlTypes.NpgsqlDbType.Integer);
                     else
@@ -690,12 +697,9 @@ public partial class SyncRepository
             // Single UPDATE join — PostgreSQL uses the primary key index on ActivityRunProfileExecutionItems
             await using (var updateCmd = new NpgsqlCommand { Connection = npgsqlConn, Transaction = npgsqlTx })
             {
-                updateCmd.CommandText = """
+                updateCmd.CommandText = $"""
                     UPDATE "ActivityRunProfileExecutionItems" t
-                    SET "OutcomeSummary" = v."OutcomeSummary",
-                        "ErrorType" = v."ErrorType",
-                        "ErrorMessage" = v."ErrorMessage",
-                        "AttributeFlowCount" = v."AttributeFlowCount"
+                    SET {string.Join(", ", RpeiBulkColumns.ActivityRunProfileExecutionItemsUpdate.Select(c => $"\"{c}\" = v.\"{c}\""))}
                     FROM _rpei_bulk_update v
                     WHERE t."Id" = v."Id"
                     """;
@@ -716,7 +720,8 @@ public partial class SyncRepository
         foreach (var chunk in BulkSqlHelpers.ChunkList(rpeis, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItems"" (""Id"", ""ActivityId"", ""ObjectChangeType"", ""NoChangeReason"", ""ConnectedSystemObjectId"", ""ExternalIdSnapshot"", ""DisplayNameSnapshot"", ""ObjectTypeSnapshot"", ""ErrorType"", ""ErrorMessage"", ""ErrorStackTrace"", ""AttributeFlowCount"", ""OutcomeSummary"", ""PendingExportId"") VALUES ");
+            // Parameter order below MUST match RpeiBulkColumns.ActivityRunProfileExecutionItems exactly.
+            sql.Append($@"INSERT INTO ""ActivityRunProfileExecutionItems"" ({BulkSqlHelpers.ToQuotedList(RpeiBulkColumns.ActivityRunProfileExecutionItems)}) VALUES ");
 
             var parameters = new List<NpgsqlParameter>();
             for (var i = 0; i < chunk.Count; i++)
@@ -758,7 +763,8 @@ public partial class SyncRepository
         foreach (var chunk in BulkSqlHelpers.ChunkList(outcomes, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""ActivityRunProfileExecutionItemSyncOutcomes"" (""Id"", ""ActivityRunProfileExecutionItemId"", ""ParentSyncOutcomeId"", ""OutcomeType"", ""TargetEntityId"", ""TargetEntityDescription"", ""DetailCount"", ""DetailMessage"", ""Ordinal"", ""ConnectedSystemObjectChangeId"", ""SyncRuleId"", ""SyncRuleName"") VALUES ");
+            // Parameter order below MUST match RpeiBulkColumns.ActivityRunProfileExecutionItemSyncOutcomes exactly.
+            sql.Append($@"INSERT INTO ""ActivityRunProfileExecutionItemSyncOutcomes"" ({BulkSqlHelpers.ToQuotedList(RpeiBulkColumns.ActivityRunProfileExecutionItemSyncOutcomes)}) VALUES ");
 
             var parameters = new List<NpgsqlParameter>();
             for (var i = 0; i < chunk.Count; i++)
@@ -795,12 +801,9 @@ public partial class SyncRepository
         List<ActivityRunProfileExecutionItem> rpeis)
     {
         await using var writer = await connection.BeginBinaryImportAsync(
-            """
+            $"""
             COPY "ActivityRunProfileExecutionItems" (
-                "Id", "ActivityId", "ObjectChangeType", "NoChangeReason",
-                "ConnectedSystemObjectId", "ExternalIdSnapshot", "DisplayNameSnapshot",
-                "ObjectTypeSnapshot", "ErrorType", "ErrorMessage", "ErrorStackTrace",
-                "AttributeFlowCount", "OutcomeSummary", "PendingExportId"
+                {BulkSqlHelpers.ToQuotedList(RpeiBulkColumns.ActivityRunProfileExecutionItems)}
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -868,12 +871,9 @@ public partial class SyncRepository
         List<ActivityRunProfileExecutionItemSyncOutcome> outcomes)
     {
         await using var writer = await connection.BeginBinaryImportAsync(
-            """
+            $"""
             COPY "ActivityRunProfileExecutionItemSyncOutcomes" (
-                "Id", "ActivityRunProfileExecutionItemId", "ParentSyncOutcomeId",
-                "OutcomeType", "TargetEntityId", "TargetEntityDescription",
-                "DetailCount", "DetailMessage", "Ordinal", "ConnectedSystemObjectChangeId",
-                "SyncRuleId", "SyncRuleName"
+                {BulkSqlHelpers.ToQuotedList(RpeiBulkColumns.ActivityRunProfileExecutionItemSyncOutcomes)}
             ) FROM STDIN (FORMAT binary)
             """);
 

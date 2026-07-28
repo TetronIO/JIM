@@ -793,31 +793,38 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                             </MudAlert>
                         }
 
-                        @* Error Section *@
-                        @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
+                        @* Error and Pending Export sections. The Pending Export panel is not error-only: an
+                           informational Pending Export item (a deprovisioning delete or a membership recall staged
+                           by a synchronisation run, or by housekeeping) has no error but is exactly the item whose
+                           staged export the administrator came here to see. *@
+                        @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet
+                             || _pendingExport != null)
                         {
-                            <MudText Typo="Typo.h6" Class="mb-3">
-                                Error Details
-                            </MudText>
-
-                            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3 jim-alert-error">
-                                <MudText Typo="Typo.body1" Style="font-weight: 500;">
-                                    @_activityRunProfileExecutionItem.ErrorType.ToString()!.SplitOnCapitalLetters()
-                                </MudText>
-                                @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorMessage))
-                                {
-                                    <MudText Typo="Typo.body1" Class="mt-2">@_activityRunProfileExecutionItem.ErrorMessage</MudText>
-                                }
-                            </MudAlert>
-
-                            @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorStackTrace))
+                            @if (_activityRunProfileExecutionItem.ErrorType != ActivityRunProfileExecutionItemErrorType.NotSet)
                             {
-                                <MudExpansionPanels Elevation="0" Class="mb-5 jim-expansion-panel">
-                                    <MudExpansionPanel Text="Stack Trace" MaxHeight="400">
-                                        <pre class="jim-text-code"
-                                             style="white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; font-size: 0.8rem; margin: 0;">@_activityRunProfileExecutionItem.ErrorStackTrace</pre>
-                                    </MudExpansionPanel>
-                                </MudExpansionPanels>
+                                <MudText Typo="Typo.h6" Class="mb-3">
+                                    Error Details
+                                </MudText>
+
+                                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-3 jim-alert-error">
+                                    <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                                        @_activityRunProfileExecutionItem.ErrorType.ToString()!.SplitOnCapitalLetters()
+                                    </MudText>
+                                    @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorMessage))
+                                    {
+                                        <MudText Typo="Typo.body1" Class="mt-2">@_activityRunProfileExecutionItem.ErrorMessage</MudText>
+                                    }
+                                </MudAlert>
+
+                                @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorStackTrace))
+                                {
+                                    <MudExpansionPanels Elevation="0" Class="mb-5 jim-expansion-panel">
+                                        <MudExpansionPanel Text="Stack Trace" MaxHeight="400">
+                                            <pre class="jim-text-code"
+                                                 style="white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; font-size: 0.8rem; margin: 0;">@_activityRunProfileExecutionItem.ErrorStackTrace</pre>
+                                        </MudExpansionPanel>
+                                    </MudExpansionPanels>
+                                }
                             }
 
                             @* Pending Export Details - shown for PendingExport items and export-related errors *@
@@ -825,7 +832,13 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                             {
                                 <MudText Typo="Typo.h6" Class="mb-3">Pending Export Details</MudText>
                                 <MudText Typo="Typo.body1" Class="mud-text-secondary mb-3">
-                                    @if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.PendingExport
+                                    @if (_pendingExport.ChangeType == PendingExportChangeType.Delete
+                                         && _activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
+                                    {
+                                        <text>This object is staged for deletion in the Connected System. Any attribute values below are carried on the
+                                            Pending Export so the delete can still be performed once the Connected System Object is gone.</text>
+                                    }
+                                    else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.PendingExport
                                          && _activityRunProfileExecutionItem.ErrorType == ActivityRunProfileExecutionItemErrorType.NotSet)
                                     {
                                         <text>The following attribute changes are staged and awaiting export to the Connected System.</text>
@@ -856,6 +869,13 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                                                             <text>-</text>
                                                         }
                                                     </MudText>
+                                                </MudItem>
+                                                <MudItem xs="12" sm="6" md="3">
+                                                    <MudText Typo="Typo.button" Class="mud-text-secondary">Change Type</MudText><br />
+                                                    <MudChip T="string" Variant="Variant.Text" Color="Helpers.GetPendingExportChangeTypeColor(_pendingExport.ChangeType)"
+                                                             Class="ml-0">
+                                                        @_pendingExport.ChangeType
+                                                    </MudChip>
                                                 </MudItem>
                                                 <MudItem xs="12" sm="6" md="3">
                                                     <MudText Typo="Typo.button" Class="mud-text-secondary">Status</MudText><br />

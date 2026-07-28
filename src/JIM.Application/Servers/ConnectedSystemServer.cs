@@ -236,6 +236,17 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Gets the wire standard a Connected System's schema follows, as declared by its Connector, so the portal
+    /// can show the right Standard Mapping hints in the Attribute Flow editor (#1122). Returns
+    /// <see cref="AttributeStandard.NotSet"/> when the Connector declares none, or the Connected System is gone.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    public async Task<AttributeStandard> GetConnectedSystemSchemaStandardAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemSchemaStandardAsync(connectedSystemId);
+    }
+
+    /// <summary>
     /// Creates a Connector Definition, recording a Create Activity and version-1 configuration snapshot. Attributed via
     /// the initiator triad, so seeding and any future upload UI/API share one audited path. No principal-carrying caller
     /// exists yet (built-in definitions are seeded); the triad lets that caller arrive without a signature change.
@@ -3837,6 +3848,9 @@ public class ConnectedSystemServer
             case AttributeDataType.LongNumber when connectedSystemObjectAttributeValue.LongValue != null:
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (long)connectedSystemObjectAttributeValue.LongValue));
                 break;
+            case AttributeDataType.Decimal when connectedSystemObjectAttributeValue.DecimalValue != null:
+                attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, connectedSystemObjectAttributeValue.DecimalValue.Value));
+                break;
             case AttributeDataType.Guid when connectedSystemObjectAttributeValue.GuidValue != null:
                 attributeChange.ValueChanges.Add(new ConnectedSystemObjectChangeAttributeValue(attributeChange, valueChangeType, (Guid)connectedSystemObjectAttributeValue.GuidValue));
                 break;
@@ -4885,6 +4899,10 @@ public class ConnectedSystemServer
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
 
+        // SPEC-1082 D10: Verification Mode only applies to Full Import.
+        if (connectedSystemRunProfile.VerifyImportContentHashes && connectedSystemRunProfile.RunType != ConnectedSystemRunType.FullImport)
+            throw new ArgumentException("VerifyImportContentHashes can only be enabled on a Full Import Run Profile.");
+
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
 
@@ -4912,6 +4930,10 @@ public class ConnectedSystemServer
     {
         if (connectedSystemRunProfile == null)
             throw new ArgumentNullException(nameof(connectedSystemRunProfile));
+
+        // SPEC-1082 D10: Verification Mode only applies to Full Import.
+        if (connectedSystemRunProfile.VerifyImportContentHashes && connectedSystemRunProfile.RunType != ConnectedSystemRunType.FullImport)
+            throw new ArgumentException("VerifyImportContentHashes can only be enabled on a Full Import Run Profile.");
 
         // Get Connected System name for activity context (Core: only .Name is read).
         var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemRunProfile.ConnectedSystemId);
@@ -5135,6 +5157,12 @@ public class ConnectedSystemServer
             return false;
 
         if (runProfile.RunType == ConnectedSystemRunType.Export && !connectedSystem.ConnectorDefinition.SupportsExport)
+            return false;
+
+        // SPEC-1082 D10: Verification Mode only applies to Full Import. Validated here (not just in
+        // the REST controller) so the portal, which calls this Application-layer method directly, is
+        // also protected.
+        if (runProfile.VerifyImportContentHashes && runProfile.RunType != ConnectedSystemRunType.FullImport)
             return false;
 
         return true;

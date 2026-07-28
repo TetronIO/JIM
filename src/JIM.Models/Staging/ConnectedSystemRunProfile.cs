@@ -80,7 +80,18 @@ public class ConnectedSystemRunProfile : IAuditable
     public string? FilePath { get; set; }
 
     /// <summary>
-    /// Back-link to dependent activity objects. 
+    /// SPEC-1082 D10: Verification Mode. Only honoured when <see cref="RunType"/> is
+    /// <see cref="ConnectedSystemRunType.FullImport"/>. When true, the Full Import performs NO
+    /// skips: it hydrates and diffs every matched object exactly as before the content-hash
+    /// feature, and additionally compares each object's stored import state hash against the
+    /// freshly computed incoming hash, recording an <c>ImportHashVerificationFailed</c> error when
+    /// the stored hash matches but the honest diff still found changes (the dangerous disagreement
+    /// a skip would have missed). Defaults to false.
+    /// </summary>
+    public bool VerifyImportContentHashes { get; set; }
+
+    /// <summary>
+    /// Back-link to dependent activity objects.
     /// Optional relationship.
     /// Used by EntityFramework.
     /// </summary>

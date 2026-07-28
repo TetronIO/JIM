@@ -112,5 +112,15 @@ public enum ActivityRunProfileExecutionItemErrorType
     /// succeeded, but was slower than expected. If this recurs, verify that the directory's
     /// change tracking mechanism (e.g., accesslog overlay) is accessible to the bind account.
     /// </summary>
-    DeltaImportFallbackToFullImport
+    DeltaImportFallbackToFullImport,
+
+    /// <summary>
+    /// SPEC-1082 D10, Run Profile Verification Mode only: the stored import content hash matched
+    /// the freshly computed incoming hash, but the honest diff (run in full because Verification
+    /// Mode never skips) still found attribute changes. This is the dangerous disagreement a
+    /// content-hash skip would have silently missed; it indicates either a bug in the content hash
+    /// calculator or an unexpected divergence between the hash's canonical form and the diff. The
+    /// object's changes were still applied normally; this error is purely diagnostic.
+    /// </summary>
+    ImportHashVerificationFailed
 }

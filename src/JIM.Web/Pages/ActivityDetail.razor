@@ -14,6 +14,8 @@
 @inject IJimApplicationFactory JimFactory
 @inject NavigationManager NavManager
 @inject IUserPreferenceService PreferenceService
+@inject IUiNotificationService UiNotifications
+@inject IActivityEtaTracker EtaTracker
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -217,6 +219,19 @@
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
                         @_activity.ObjectsProcessed.ToString("N0") of @_activity.ObjectsToProcess.ToString("N0") objects
                         (@progress.ToString("F1")%)
+                    </MudText>
+                }
+                @* Throughput and ETA (issue #202), derived from successive progress samples. *@
+                @if (_etaEstimate.ObjectsPerSecond.HasValue)
+                {
+                    var objectsPerSecond = _etaEstimate.ObjectsPerSecond.Value;
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        @if (_etaEstimate.EstimatedSecondsRemaining.HasValue)
+                        {
+                            var remaining = TimeSpan.FromSeconds(Math.Round(_etaEstimate.EstimatedSecondsRemaining.Value));
+                            <span>About @remaining.ToAbbreviatedString() remaining; </span>
+                        }
+                        <span>@FormatRate(objectsPerSecond) objects/second</span>
                     </MudText>
                 }
             </MudStack>
@@ -917,6 +932,9 @@
     private bool _loading;
     private int _rowsPerPage = 10;
     private CancellationTokenSource? _pollCts;
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private ActivityEtaEstimate _etaEstimate;
+    private DateTime _lastRefreshUtc = DateTime.MinValue;
     private bool _preferencesLoaded;
     private bool _initialisationComplete;
     private bool _dense;
@@ -952,6 +970,14 @@
 
     private bool IsHousekeepingActivity => _activity?.TargetType == ActivityTargetType.MetaverseObjectHousekeeping;
 
+    protected override void OnInitialized()
+    {
+        // Event-driven refresh (issue #202): Activity progress notifications trigger an immediate
+        // refresh, so the page reacts in real time rather than waiting for the next polling cycle.
+        UiNotifications.ActivityProgressChanged += OnActivityProgressChanged;
+        UiNotifications.RealTimeAvailabilityChanged += OnRealTimeAvailabilityChanged;
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedId == Id)
@@ -978,6 +1004,9 @@
             NavManager.NavigateTo("../");
             return;
         }
+
+        // Seed the ETA sample window so the estimate appears as soon as a second sample lands.
+        UpdateEtaEstimate(_activity);
 
         // Determine navigation context from query parameter
         var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
@@ -1454,34 +1483,21 @@
         _pollCts = new CancellationTokenSource();
         var token = _pollCts.Token;
 
+        // Polling fallback (issue #202): push notifications drive refreshes in real time, so while
+        // they are flowing this loop is only a slow reconciliation net; when they are unavailable
+        // it polls at the pre-push cadence so progress keeps updating, just with higher latency.
         _ = Task.Run(async () =>
         {
             while (!token.IsCancellationRequested)
             {
                 try
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(3), token);
-
-                    using var jim = JimFactory.Create();
-                    var updated = await jim.Activities.GetActivityAsync(Id);
-                    if (updated == null)
-                        break;
-
-                    _activity = updated;
-
-                    // Refresh child activities and stats while in progress
-                    _childActivityCount = (await jim.Activities.GetChildActivityCountsAsync([_activity.Id])).GetValueOrDefault(_activity.Id);
-                    if (ShowsExecutionItems)
-                        _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(_activity.Id);
-
-                    await InvokeAsync(StateHasChanged);
-
-                    // The Child Activities table is server-paged; ask it to re-fetch its current page.
-                    if (_childActivitiesTable != null)
-                        await InvokeAsync(() => _childActivitiesTable.ReloadServerData());
+                    var delay = UiNotifications.IsRealTimeAvailable ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(3);
+                    await Task.Delay(delay, token);
+                    await RefreshActivityAsync();
 
                     // Stop polling once the activity has completed
-                    if (updated.Status != ActivityStatus.InProgress)
+                    if (_activity?.Status != ActivityStatus.InProgress)
                         break;
                 }
                 catch (OperationCanceledException)
@@ -1489,17 +1505,118 @@
                     // Polling was cancelled (navigation away or page dispose); exit quietly.
                     break;
                 }
-                catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException or ObjectDisposedException)
-                {
-                    // Transient failure reading the activity: a database error, an EF Core operation in a bad state,
-                    // or the application scope disposed mid-poll during navigation. Skip this tick and keep polling.
-                }
             }
         }, token);
     }
 
+    /// <summary>
+    /// Reloads the Activity and its dependent live data (ETA estimate, child count, stats).
+    /// Guarded so overlapping triggers (push notifications and the reconciliation poll) skip
+    /// rather than queue.
+    /// </summary>
+    private async Task RefreshActivityAsync()
+    {
+        if (!await _refreshLock.WaitAsync(0))
+            return;
+
+        try
+        {
+            using var jim = JimFactory.Create();
+            var updated = await jim.Activities.GetActivityAsync(Id);
+            if (updated == null)
+                return;
+
+            _activity = updated;
+            _lastRefreshUtc = DateTime.UtcNow;
+            UpdateEtaEstimate(updated);
+
+            // Refresh child activities and stats alongside the activity itself
+            _childActivityCount = (await jim.Activities.GetChildActivityCountsAsync([updated.Id])).GetValueOrDefault(updated.Id);
+            if (ShowsExecutionItems)
+                _activityRunProfileExecutionStats = await jim.Activities.GetActivityRunProfileExecutionStatsAsync(updated.Id);
+
+            await InvokeAsync(StateHasChanged);
+
+            // The Child Activities table is server-paged; ask it to re-fetch its current page.
+            if (_childActivitiesTable != null)
+                await InvokeAsync(() => _childActivitiesTable.ReloadServerData());
+        }
+        catch (Exception ex) when (ex is System.Data.Common.DbException or InvalidOperationException or ObjectDisposedException)
+        {
+            // Transient failure reading the activity: a database error, an EF Core operation in a bad state,
+            // or the application scope disposed mid-refresh during navigation. Skip this refresh.
+        }
+        finally
+        {
+            _refreshLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Feeds the shared ETA tracker while the Activity is in progress and releases its state once
+    /// the run has finished, mirroring the progress API endpoint's behaviour so both surfaces
+    /// derive the estimate from the same sample history.
+    /// </summary>
+    private void UpdateEtaEstimate(Activity activity)
+    {
+        if (activity.Status == ActivityStatus.InProgress)
+        {
+            _etaEstimate = EtaTracker.RecordSample(activity.Id, activity.ObjectsProcessed, activity.ObjectsToProcess);
+            return;
+        }
+
+        if (activity.Status.IsTerminal())
+            EtaTracker.Remove(activity.Id);
+        _etaEstimate = default;
+    }
+
+    private static string FormatRate(double objectsPerSecond) =>
+        objectsPerSecond >= 10 ? objectsPerSecond.ToString("N0") : objectsPerSecond.ToString("N1");
+
+    private void OnActivityProgressChanged(Guid activityId)
+    {
+        if (_activity == null)
+            return;
+
+        // Always refresh for this Activity's own updates. Other Activities' updates matter here
+        // only when this Activity has children whose progress is rendered on this page; those
+        // refreshes are rate-limited so a busy system does not hammer the page with unrelated work.
+        var isSelf = activityId == Id;
+        var mayBeChildUpdate = _childActivityCount > 0
+            && _activity.Status == ActivityStatus.InProgress
+            && DateTime.UtcNow - _lastRefreshUtc >= TimeSpan.FromSeconds(2);
+        if (!isSelf && !mayBeChildUpdate)
+            return;
+
+        TriggerNotificationRefresh();
+    }
+
+    private void OnRealTimeAvailabilityChanged(bool available)
+    {
+        // On loss or recovery of real-time notifications, refresh immediately: on loss the last
+        // notification may have been missed; on recovery the state may be stale.
+        TriggerNotificationRefresh();
+    }
+
+    private void TriggerNotificationRefresh()
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await RefreshActivityAsync();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Notification-triggered refreshes are best-effort; the reconciliation poll covers gaps.
+            }
+        });
+    }
+
     public void Dispose()
     {
+        UiNotifications.ActivityProgressChanged -= OnActivityProgressChanged;
+        UiNotifications.RealTimeAvailabilityChanged -= OnRealTimeAvailabilityChanged;
         _pollCts?.Cancel();
         _pollCts?.Dispose();
     }

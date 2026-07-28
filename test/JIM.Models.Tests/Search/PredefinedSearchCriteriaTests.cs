@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using System;
+using System.Globalization;
 using JIM.Models.Core;
 using JIM.Models.Search;
 using NUnit.Framework;
@@ -59,6 +60,31 @@ public class PredefinedSearchCriteriaTests
         var criterion = CriterionFor(AttributeDataType.LongNumber);
         criterion.LongValue = 9000000000;
         Assert.That(criterion.ToString(), Is.EqualTo("LongNumber: 9000000000"));
+    }
+
+    [Test]
+    public void ToString_ForDecimal_RendersDecimalValue()
+    {
+        var criterion = CriterionFor(AttributeDataType.Decimal);
+        criterion.DecimalValue = 12345.678m;
+        Assert.That(criterion.ToString(), Is.EqualTo("Decimal: 12345.678"));
+    }
+
+    [Test]
+    public void ToString_ForDecimal_UnderCommaDecimalCulture_RendersInvariant()
+    {
+        var originalCulture = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+            var criterion = CriterionFor(AttributeDataType.Decimal);
+            criterion.DecimalValue = 12345.678m;
+            Assert.That(criterion.ToString(), Is.EqualTo("Decimal: 12345.678"));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
     }
 
     [Test]

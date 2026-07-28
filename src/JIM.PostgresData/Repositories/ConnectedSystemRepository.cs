@@ -65,6 +65,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await query.SingleOrDefaultAsync(cd => cd.Id == id);
     }
 
+    public async Task<AttributeStandard> GetConnectedSystemSchemaStandardAsync(int connectedSystemId)
+    {
+        // A scalar projection: the caller wants one enum for a display hint, not a Connected System graph.
+        return await Repository.Database.ConnectedSystems
+            .Where(cs => cs.Id == connectedSystemId)
+            .Select(cs => cs.ConnectorDefinition.SchemaStandard)
+            .SingleOrDefaultAsync();
+    }
+
     public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name, bool withChangeTracking = false)
     {
         IQueryable<ConnectorDefinition> query = Repository.Database.ConnectorDefinitions
@@ -1914,9 +1923,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// Returns a dictionary mapping cache keys to CSO GUIDs for populating the lookup index.
     /// Each entry maps "connectedSystemId:attributeId:lowerExternalIdValue" to the CSO GUID.
     /// Handles all external ID data types (string, int, long, Guid).
-    /// Uses AsNoTracking for efficiency — results are read-only index data.
+    /// Delegates to <see cref="GetAllCsoImportStateLookupAsync"/> (SPEC-1082 D8) so there is a
+    /// single query implementation; ConnectedSystemServer.cs:3208 still consumes this Guid-only shape.
     /// </summary>
     public async Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId)
+    {
+        var lookup = await GetAllCsoImportStateLookupAsync(connectedSystemId);
+        return lookup.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.CsoId, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// SPEC-1082 D8: bulk-loads all CSO import state for a Connected System into a lightweight
+    /// dictionary, keyed by the same composite cache key as the external-id-only mapping above.
+    /// Widens that query's projection with the stored content hash, schema fingerprint, status,
+    /// and partition, so a Full Import can evaluate the skip predicate for every matched object
+    /// without any additional database round trip. Uses AsNoTracking; results are read-only index data.
+    /// </summary>
+    public async Task<Dictionary<string, CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId)
     {
         // Load all CSOs for this Connected System with their external ID attribute values.
         // Each CSO gets ONE cache entry, keyed by whichever external ID is available:
@@ -1931,6 +1954,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 cso.Id,
                 cso.ExternalIdAttributeId,
                 cso.SecondaryExternalIdAttributeId,
+                cso.ImportStateHash,
+                cso.ImportStateFingerprint,
+                cso.Status,
+                cso.PartitionId,
                 // Load attribute values for both primary and secondary external ID attributes
                 AttributeValues = cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId ||
@@ -1947,9 +1974,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             })
             .ToListAsync();
 
-        var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, CsoImportStateLookupEntry>(StringComparer.OrdinalIgnoreCase);
         foreach (var cso in csos)
         {
+            var entry = new CsoImportStateLookupEntry(cso.Id, cso.ImportStateHash, cso.ImportStateFingerprint, cso.Status, cso.PartitionId);
+
             // Try primary external ID first
             var primaryAv = cso.AttributeValues.FirstOrDefault(av => av.AttributeId == cso.ExternalIdAttributeId);
             var primaryValue = GetExternalIdValueString(primaryAv?.StringValue, primaryAv?.IntValue, primaryAv?.LongValue, primaryAv?.GuidValue);
@@ -1957,7 +1986,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             if (primaryValue != null)
             {
                 var cacheKey = $"cso:{connectedSystemId}:{cso.ExternalIdAttributeId}:{primaryValue}";
-                result.TryAdd(cacheKey, cso.Id);
+                result.TryAdd(cacheKey, entry);
                 continue; // Primary found — no need for secondary
             }
 
@@ -1970,12 +1999,55 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 if (secondaryValue != null)
                 {
                     var cacheKey = $"cso:{connectedSystemId}:{cso.SecondaryExternalIdAttributeId.Value}:{secondaryValue}";
-                    result.TryAdd(cacheKey, cso.Id);
+                    result.TryAdd(cacheKey, entry);
                 }
             }
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// SPEC-1082 D6: the only code path permitted to write <see cref="ConnectedSystemObject.ImportStateHash"/>
+    /// and <see cref="ConnectedSystemObject.ImportStateFingerprint"/>. Callers MUST invoke this
+    /// strictly after the batch's attribute-value writes for the given CSOs have committed.
+    /// Single set-based UPDATE ... FROM (VALUES ...) statement per batch (chunked to stay within
+    /// the parameter limit), mirroring <c>BulkUpdateConnectedSystemObjectsRawAsync</c>'s pattern.
+    /// Deliberately does NOT touch LastUpdated (the #891 Full Synchronisation watermark) - stamping
+    /// must be invisible to that watermark.
+    /// </summary>
+    public async Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps)
+    {
+        if (stamps.Count == 0)
+            return;
+
+        const int columnsPerRow = 3; // Id, Hash, Fingerprint
+        var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
+
+        var sql = new System.Text.StringBuilder();
+        var parameters = new List<object>();
+        foreach (var chunk in BulkSqlHelpers.ChunkList(stamps.ToList(), chunkSize))
+        {
+            sql.Clear();
+            parameters.Clear();
+            sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ""ImportStateHash"" = v.""ImportStateHash"", ""ImportStateFingerprint"" = v.""ImportStateFingerprint"" FROM (VALUES ");
+
+            for (var i = 0; i < chunk.Count; i++)
+            {
+                if (i > 0) sql.Append(", ");
+                var offset = i * columnsPerRow;
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::uuid, {{{offset + 2}}}::uuid)");
+
+                var (csoId, hash, fingerprint) = chunk[i];
+                parameters.Add(csoId);
+                parameters.Add(BulkSqlHelpers.NullableParam(hash, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam(fingerprint, NpgsqlTypes.NpgsqlDbType.Uuid));
+            }
+
+            sql.Append(@") AS v(""Id"", ""ImportStateHash"", ""ImportStateFingerprint"") WHERE t.""Id"" = v.""Id""");
+
+            await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
+        }
     }
 
     /// <summary>
@@ -2467,6 +2539,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 avEntry.State = EntityState.Added;
         }
 
+        // SPEC-1082 D9: this writes attribute values outside the Full Import stamp path (D6/D7),
+        // e.g. backfilling a secondary external ID during PendingProvisioning confirmation. Null the
+        // stored hash/fingerprint in the SAME SaveChanges so a subsequent Full Import never trusts a
+        // hash describing content that has since changed.
+        connectedSystemObject.ImportStateHash = null;
+        connectedSystemObject.ImportStateFingerprint = null;
+
         // Use Entry().State instead of DbSet.Update() to avoid graph traversal.
         Repository.UpdateDetachedSafe(connectedSystemObject);  // Already has NullReferenceException fallback
         await Repository.Database.SaveChangesAsync();
@@ -2507,6 +2586,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (allNewValues.Count > 0)
         {
             await BulkInsertCsoAttributeValuesRawAsync(allNewValues);
+
+            // SPEC-1082 D9: same rationale as the singular overload above - this writes attribute
+            // values outside the Full Import stamp path, so null the stored hash/fingerprint for
+            // every affected CSO, set-based, in the same operation.
+            var affectedCsoIds = updates.Where(u => u.newAttributeValues.Count > 0).Select(u => u.cso.Id).Distinct().ToArray();
+            if (affectedCsoIds.Length > 0)
+            {
+                await Repository.Database.Database.ExecuteSqlRawAsync(
+                    @"UPDATE ""ConnectedSystemObjects"" SET ""ImportStateHash"" = NULL, ""ImportStateFingerprint"" = NULL WHERE ""Id"" = ANY({0})",
+                    affectedCsoIds);
+            }
         }
 
         Log.Verbose("UpdateConnectedSystemObjectsWithNewAttributeValuesAsync: Inserted {AttrCount} new attribute values for {CsoCount} CSOs via raw SQL",
@@ -2842,6 +2932,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         tracked.PageSize = runProfile.PageSize;
         tracked.FilePath = runProfile.FilePath;
         tracked.Partition = runProfile.Partition;
+        tracked.VerifyImportContentHashes = runProfile.VerifyImportContentHashes;
         tracked.LastUpdated = runProfile.LastUpdated;
         tracked.LastUpdatedByType = runProfile.LastUpdatedByType;
         tracked.LastUpdatedById = runProfile.LastUpdatedById;
@@ -2897,6 +2988,34 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .Include(pe => pe.ConnectedSystemObject)
                 .ThenInclude(cso => cso!.AttributeValues)
             .Where(pe => pe.ConnectedSystemId == connectedSystemId).ToListAsync();
+    }
+
+    /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
+    /// reference resolution: Pending status with unresolved reference attribute values.
+    /// The predicate is evaluated in SQL (backed by a partial index on
+    /// HasUnresolvedReferences) so the common zero-deferred case costs a single
+    /// index probe rather than hydrating every Pending Export for the system (#1102).
+    /// </summary>
+    public async Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId)
+    {
+        // AttributeValueChanges and their Attribute definitions are needed by
+        // TryResolveReferencesFromLookup (UnresolvedReferenceValue, StringValue,
+        // ResolvedReferenceCsoId stamping) and its logging (Attribute.Name).
+        // The CSO graph is deliberately NOT included: the deferred pass reads only the
+        // ConnectedSystemObjectId scalar, and the referenced CSOs are bulk-fetched
+        // separately via GetConnectedSystemObjectsByMetaverseObjectIdsAsync.
+        // AsNoTracking: mutations are persisted via UpdatePendingExportsAsync (raw bulk
+        // SQL + tracker detach), not EF change tracking.
+        return await Repository.Database.PendingExports
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(pe => pe.AttributeValueChanges)
+                .ThenInclude(avc => avc.Attribute)
+            .Where(pe => pe.ConnectedSystemId == connectedSystemId
+                      && pe.HasUnresolvedReferences
+                      && pe.Status == PendingExportStatus.Pending)
+            .ToListAsync();
     }
 
     /// <summary>
@@ -4071,6 +4190,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             case AttributeDataType.Text when string.IsNullOrEmpty(mvoAttributeValue.StringValue):
             case AttributeDataType.Number when !mvoAttributeValue.IntValue.HasValue:
             case AttributeDataType.LongNumber when !mvoAttributeValue.LongValue.HasValue:
+            case AttributeDataType.Decimal when !mvoAttributeValue.DecimalValue.HasValue:
             case AttributeDataType.Guid when !mvoAttributeValue.GuidValue.HasValue:
                 Log.Debug("FindConnectedSystemObjectUsingMatchingRuleAsync: Skipping null/empty attribute value for {AttributeName}",
                     metaverseAttribute.Name);
@@ -4111,6 +4231,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     av.Attribute.Name == connectedSystemAttributeName &&
                     av.LongValue != null &&
                     av.LongValue == mvoAttributeValue.LongValue));
+                break;
+            case AttributeDataType.Decimal:
+                // Null check already done above. EF translates this to PostgreSQL numeric equality,
+                // which is scale-insensitive (5.0 = 5.00 is true), matching .NET decimal equality.
+                query = query.Where(cso => cso.AttributeValues.Any(av =>
+                    av.Attribute != null &&
+                    av.Attribute.Name == connectedSystemAttributeName &&
+                    av.DecimalValue != null &&
+                    av.DecimalValue == mvoAttributeValue.DecimalValue));
                 break;
             case AttributeDataType.Guid:
                 // Null check already done above
@@ -4332,6 +4461,7 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                                 DateTimeValue = vc.DateTimeValue,
                                 IntValue = vc.IntValue,
                                 LongValue = vc.LongValue,
+                                DecimalValue = vc.DecimalValue,
                                 ByteValueLength = vc.ByteValueLength,
                                 GuidValue = vc.GuidValue,
                                 BoolValue = vc.BoolValue,
@@ -5072,21 +5202,22 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private async Task BulkInsertConnectedSystemObjectsRawAsync(List<ConnectedSystemObject> objects, Func<int, Task>? onBatchPersisted = null)
     {
-        const int columnsPerRow = 11;
+        // Parameter order below MUST match CsoBulkColumns.ConnectedSystemObjects exactly.
+        var columnsPerRow = CsoBulkColumns.ConnectedSystemObjects.Length;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
         var totalPersisted = 0;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"INSERT INTO ""ConnectedSystemObjects"" (""Id"", ""ConnectedSystemId"", ""Created"", ""LastUpdated"", ""TypeId"", ""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"", ""Status"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"") VALUES ");
+            sql.Append($@"INSERT INTO ""ConnectedSystemObjects"" ({BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjects)}) VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}})");
+                sql.Append('(').Append(string.Join(", ", Enumerable.Range(offset, columnsPerRow).Select(p => $"{{{p}}}"))).Append(')');
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
@@ -5100,6 +5231,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.MetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add((int)cso.JoinType);
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.PartitionId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(cso.ScopeReviewPending);
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.LastScopeEvaluatedAt, NpgsqlTypes.NpgsqlDbType.TimestampTz));
+                // SPEC-1082 D6: create writers ALWAYS write NULL for ImportStateHash/ImportStateFingerprint.
+                // Two-phase create commits parent CSO rows before attribute values; a non-null hash
+                // here could survive a subsequent value-write failure as a permanently believable lie.
+                // The only legitimate stamp is StampImportStateAsync, run after values commit.
+                parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
+                parameters.Add(BulkSqlHelpers.NullableParam((Guid?)null, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
@@ -5137,12 +5277,11 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var npgsqlConn = (NpgsqlConnection)Repository.Database.Database.GetDbConnection();
         await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(npgsqlConn);
 
+        // Writer order below MUST match CsoBulkColumns.ConnectedSystemObjectAttributeValues exactly.
         await using var writer = await npgsqlConn.BeginBinaryImportAsync(
-            """
+            $"""
             COPY "ConnectedSystemObjectAttributeValues" (
-                "Id", "ConnectedSystemObjectId", "AttributeId", "StringValue", "DateTimeValue",
-                "IntValue", "LongValue", "ByteValue", "GuidValue", "BoolValue",
-                "ReferenceValueId", "UnresolvedReferenceValue"
+                {BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectAttributeValues)}
             ) FROM STDIN (FORMAT binary)
             """);
 
@@ -5166,6 +5305,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 await writer.WriteNullAsync();
             if (av.LongValue.HasValue)
                 await writer.WriteAsync(av.LongValue.Value, NpgsqlTypes.NpgsqlDbType.Bigint);
+            else
+                await writer.WriteNullAsync();
+            if (av.DecimalValue.HasValue)
+                await writer.WriteAsync(av.DecimalValue.Value, NpgsqlTypes.NpgsqlDbType.Numeric);
             else
                 await writer.WriteNullAsync();
             if (av.ByteValue is not null)
@@ -5199,25 +5342,31 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Batch updates ConnectedSystemObject rows using UPDATE ... FROM (VALUES ...) pattern.
-    /// Only updates mutable columns: LastUpdated, Status, MetaverseObjectId, JoinType, DateJoined,
-    /// ExternalIdAttributeId, SecondaryExternalIdAttributeId.
+    /// Only the mutable columns in <see cref="CsoBulkColumns.ConnectedSystemObjectsUpdate"/> are
+    /// written; the SET and alias lists are generated from that list, so a column added to it
+    /// without extending the cast/parameter writers below fails loudly at runtime (column count
+    /// mismatch) instead of being silently dropped.
     /// </summary>
     private async Task BulkUpdateConnectedSystemObjectsRawAsync(List<ConnectedSystemObject> objects)
     {
-        const int columnsPerRow = 8; // Id + 7 mutable columns
+        // Id plus the mutable columns; cast/parameter order below MUST match
+        // CsoBulkColumns.ConnectedSystemObjectsUpdate exactly.
+        var columnsPerRow = 1 + CsoBulkColumns.ConnectedSystemObjectsUpdate.Length;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(objects, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ""LastUpdated"" = v.""LastUpdated"", ""Status"" = v.""Status"", ""MetaverseObjectId"" = v.""MetaverseObjectId"", ""JoinType"" = v.""JoinType"", ""DateJoined"" = v.""DateJoined"", ""ExternalIdAttributeId"" = v.""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"" = v.""SecondaryExternalIdAttributeId"" FROM (VALUES ");
+            sql.Append(@"UPDATE ""ConnectedSystemObjects"" AS t SET ");
+            sql.Append(string.Join(", ", CsoBulkColumns.ConnectedSystemObjectsUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
+            sql.Append(" FROM (VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::timestamp with time zone, {{{offset + 2}}}::integer, {{{offset + 3}}}::uuid, {{{offset + 4}}}::integer, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::integer, {{{offset + 7}}}::integer)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::timestamp with time zone, {{{offset + 2}}}::integer, {{{offset + 3}}}::uuid, {{{offset + 4}}}::integer, {{{offset + 5}}}::timestamp with time zone, {{{offset + 6}}}::integer, {{{offset + 7}}}::integer, {{{offset + 8}}}::integer)");
 
                 var cso = chunk[i];
                 parameters.Add(cso.Id);
@@ -5228,9 +5377,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.DateJoined, NpgsqlTypes.NpgsqlDbType.TimestampTz));
                 parameters.Add(cso.ExternalIdAttributeId);
                 parameters.Add(BulkSqlHelpers.NullableParam(cso.SecondaryExternalIdAttributeId, NpgsqlTypes.NpgsqlDbType.Integer));
+                parameters.Add(BulkSqlHelpers.NullableParam(cso.PartitionId, NpgsqlTypes.NpgsqlDbType.Integer));
             }
 
-            sql.Append(@") AS v(""Id"", ""LastUpdated"", ""Status"", ""MetaverseObjectId"", ""JoinType"", ""DateJoined"", ""ExternalIdAttributeId"", ""SecondaryExternalIdAttributeId"") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@") AS v(""Id"", ");
+            sql.Append(BulkSqlHelpers.ToQuotedList(CsoBulkColumns.ConnectedSystemObjectsUpdate));
+            sql.Append(@") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
@@ -5284,7 +5436,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         foreach (var chunk in BulkSqlHelpers.ChunkList(exports, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"UPDATE ""PendingExports"" AS t SET ""Status"" = v.""Status"", ""ErrorCount"" = v.""ErrorCount"", ""MaxRetries"" = v.""MaxRetries"", ""LastAttemptedAt"" = v.""LastAttemptedAt"", ""NextRetryAt"" = v.""NextRetryAt"", ""LastErrorMessage"" = v.""LastErrorMessage"", ""LastErrorStackTrace"" = v.""LastErrorStackTrace"", ""HasUnresolvedReferences"" = v.""HasUnresolvedReferences"", ""ConnectedSystemObjectId"" = v.""ConnectedSystemObjectId"" FROM (VALUES ");
+            // Cast/parameter order below MUST match PendingExportBulkColumns.PendingExportsExportResultUpdate exactly.
+            sql.Append(@"UPDATE ""PendingExports"" AS t SET ");
+            sql.Append(string.Join(", ", PendingExportBulkColumns.PendingExportsExportResultUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
+            sql.Append(" FROM (VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
@@ -5306,7 +5461,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(pe.ConnectedSystemObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
-            sql.Append(@") AS v(""Id"", ""Status"", ""ErrorCount"", ""MaxRetries"", ""LastAttemptedAt"", ""NextRetryAt"", ""LastErrorMessage"", ""LastErrorStackTrace"", ""HasUnresolvedReferences"", ""ConnectedSystemObjectId"") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@") AS v(""Id"", ");
+            sql.Append(BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportsExportResultUpdate));
+            sql.Append(@") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }
@@ -5319,7 +5476,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
 
     /// <summary>
     /// Bulk updates PendingExportAttributeValueChange confirmation tracking columns via raw SQL.
-    /// Called after export to persist the ExportedPendingConfirmation status set by UpdateAttributeChangeStatusesAfterExport.
+    /// Called after export to persist the ExportedPendingConfirmation status set by UpdateAttributeChangeStatusesAfterExport,
+    /// and to persist reference resolution (StringValue, UnresolvedReferenceValue, ResolvedReferenceCsoId
+    /// - issue #1079) stamped by ExportExecutionServer.TryResolveReferencesFromLookup.
     /// </summary>
     private async Task BulkUpdatePendingExportAttributeValueChangesRawAsync(List<PendingExport> exports)
     {
@@ -5330,20 +5489,23 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (allChanges.Count == 0)
             return;
 
-        const int columnsPerRow = 7; // Id + 6 mutable columns
+        const int columnsPerRow = 8; // Id + 7 mutable columns
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(allChanges, chunkSize))
         {
             var sql = new System.Text.StringBuilder();
-            sql.Append(@"UPDATE ""PendingExportAttributeValueChanges"" AS t SET ""Status"" = v.""Status"", ""ExportAttemptCount"" = v.""ExportAttemptCount"", ""LastExportedAt"" = v.""LastExportedAt"", ""StringValue"" = v.""StringValue"", ""UnresolvedReferenceValue"" = v.""UnresolvedReferenceValue"", ""LastImportedValue"" = v.""LastImportedValue"" FROM (VALUES ");
+            // Cast/parameter order below MUST match PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate exactly.
+            sql.Append(@"UPDATE ""PendingExportAttributeValueChanges"" AS t SET ");
+            sql.Append(string.Join(", ", PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate.Select(c => $@"""{c}"" = v.""{c}""")));
+            sql.Append(" FROM (VALUES ");
 
             var parameters = new List<object>();
             for (var i = 0; i < chunk.Count; i++)
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::text, {{{offset + 5}}}::text, {{{offset + 6}}}::text)");
+                sql.Append($"({{{offset}}}::uuid, {{{offset + 1}}}::integer, {{{offset + 2}}}::integer, {{{offset + 3}}}::timestamp with time zone, {{{offset + 4}}}::text, {{{offset + 5}}}::text, {{{offset + 6}}}::text, {{{offset + 7}}}::uuid)");
 
                 var avc = chunk[i];
                 parameters.Add(avc.Id);
@@ -5353,9 +5515,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.StringValue, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.UnresolvedReferenceValue, NpgsqlTypes.NpgsqlDbType.Text));
                 parameters.Add(BulkSqlHelpers.NullableParam(avc.LastImportedValue, NpgsqlTypes.NpgsqlDbType.Text));
+                parameters.Add(BulkSqlHelpers.NullableParam(avc.ResolvedReferenceCsoId, NpgsqlTypes.NpgsqlDbType.Uuid));
             }
 
-            sql.Append(@") AS v(""Id"", ""Status"", ""ExportAttemptCount"", ""LastExportedAt"", ""StringValue"", ""UnresolvedReferenceValue"", ""LastImportedValue"") WHERE t.""Id"" = v.""Id""");
+            sql.Append(@") AS v(""Id"", ");
+            sql.Append(BulkSqlHelpers.ToQuotedList(PendingExportBulkColumns.PendingExportAttributeValueChangesExportResultUpdate));
+            sql.Append(@") WHERE t.""Id"" = v.""Id""");
 
             await Repository.Database.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());
         }

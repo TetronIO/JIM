@@ -18,7 +18,7 @@ LABEL org.opencontainers.image.source="https://github.com/TetronIO/JIM"
 LABEL org.opencontainers.image.licenses="See https://junctional.io/license"
 WORKDIR /app
 
-# Create data directories writable by non-root user before switching
+# Create data directories writeable by non-root user before switching
 # Note: no LDAP/Kerberos packages needed; Scheduler only queues WorkerTasks,
 # it never communicates with connected systems directly.
 RUN mkdir -p /data/keys /var/log/jim \

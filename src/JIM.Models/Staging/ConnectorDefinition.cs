@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Interfaces;
 namespace JIM.Models.Staging;
 
@@ -137,5 +138,13 @@ public class ConnectorDefinition : IAuditable, IConnectorCapabilities
     /// the File Path setting is shown on import and export Run Profiles.
     /// </summary>
     public bool SupportsFilePaths { get; set; }
+
+    /// <summary>
+    /// Which wire standard's vocabulary Connected Systems using this Connector follow, as declared by the
+    /// Connector itself and reconciled on every startup. Advisory metadata: the portal uses it to decide
+    /// which Standard Mapping hints to show in the Attribute Flow editor. Never read by the synchronisation
+    /// engine, and not administrator-editable.
+    /// </summary>
+    public AttributeStandard SchemaStandard { get; set; }
     #endregion
 }

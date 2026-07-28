@@ -72,7 +72,7 @@ Each criterion combines:
 | Attribute type | Operators |
 |----------------|-----------|
 | Text | equals, does not equal, starts with, does not start with, ends with, does not end with, contains, does not contain |
-| Number, Long Number, Date/Time | equals, does not equal, less than, less than or equal to, greater than, greater than or equal to |
+| Number, Long Number, Decimal, Date/Time | equals, does not equal, less than, less than or equal to, greater than, greater than or equal to |
 | Boolean, GUID | equals, does not equal |
 
 For **Date/Time** attributes the editor shows the operators in calendar wording: *before*, *on or before*, *after*, *on or after*, *equals*, *does not equal*. Date/Time values are stored and compared in UTC.

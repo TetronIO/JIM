@@ -541,12 +541,34 @@ Describe 'Move-JIMMetaverseAttributePriority' {
     }
 }
 
+Describe 'New-JIMMetaverseAttribute' {
+
+    Context 'Parameter Validation' {
+
+        BeforeAll {
+            $command = Get-Command New-JIMMetaverseAttribute
+        }
+
+        It 'Should have a Type parameter whose ValidateSet includes Decimal after LongNumber' {
+            $set = $command.Parameters['Type'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $set.ValidValues | Should -Contain 'LongNumber'
+            $set.ValidValues | Should -Contain 'Decimal'
+        }
+    }
+}
+
 Describe 'Set-JIMMetaverseAttribute' {
 
     Context 'Parameter Validation' {
 
         BeforeAll {
             $command = Get-Command Set-JIMMetaverseAttribute
+        }
+
+        It 'Should have a Type parameter whose ValidateSet includes Decimal after LongNumber' {
+            $set = $command.Parameters['Type'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] }
+            $set.ValidValues | Should -Contain 'LongNumber'
+            $set.ValidValues | Should -Contain 'Decimal'
         }
 
         It 'Should have a RenderingHint parameter with the expected values' {
@@ -603,6 +625,81 @@ Describe 'Set-JIMMetaverseAttribute' {
                     $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1/schema' -and
                     $Body.type -eq 'Number' -and $Body.attributePlurality -eq 'MultiValued'
                 }
+            }
+        }
+
+        It 'Sends -Type Decimal to the schema endpoint verbatim (no alias normalisation)' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -ne 'PATCH' } { [PSCustomObject]@{ id = 1; type = 'Text'; attributePlurality = 'SingleValued' } }
+                Mock Invoke-JIMApi -ParameterFilter { $Method -eq 'PATCH' } { $null }
+
+                Set-JIMMetaverseAttribute -Id 1 -Type Decimal -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1/schema' -and
+                    $Body.type -is [string] -and $Body.type -eq 'Decimal' -and $Body.attributePlurality -eq 'SingleValued'
+                }
+            }
+        }
+
+        It 'Sends Standard Mappings as a normalised array on the attribute PATCH body' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMMetaverseAttribute -Id 1 -StandardMappings @(
+                    @{ Standard = 'Scim'; CounterpartName = 'costCenter'; Notes = 'SCIM Enterprise User extension.' },
+                    @{ Standard = 'Ldap'; CounterpartName = 'costCentre' }
+                ) -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1' -and
+                    $Body.standardMappings.Count -eq 2 -and
+                    $Body.standardMappings[0].standard -eq 'Scim' -and
+                    $Body.standardMappings[0].counterpartName -eq 'costCenter' -and
+                    $Body.standardMappings[0].notes -eq 'SCIM Enterprise User extension.' -and
+                    $Body.standardMappings[1].standard -eq 'Ldap' -and
+                    $Body.standardMappings[1].counterpartName -eq 'costCentre'
+                }
+            }
+        }
+
+        It 'Sends an empty Standard Mappings array to clear all mappings' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                Set-JIMMetaverseAttribute -Id 1 -StandardMappings @() -Confirm:$false | Out-Null
+
+                Should -Invoke Invoke-JIMApi -Times 1 -Exactly -ParameterFilter {
+                    $Method -eq 'PATCH' -and $Endpoint -eq '/api/v1/metaverse/attributes/1' -and
+                    $Body.ContainsKey('standardMappings') -and $Body.standardMappings.Count -eq 0
+                }
+            }
+        }
+
+        It 'Rejects a Standard Mapping with an unknown standard before calling the API' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                { Set-JIMMetaverseAttribute -Id 1 -StandardMappings @(@{ Standard = 'Bogus'; CounterpartName = 'x' }) -Confirm:$false -ErrorAction Stop } |
+                    Should -Throw '*Standard*'
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'PATCH' }
+            }
+        }
+
+        It 'Rejects a Standard Mapping without a counterpart attribute name before calling the API' {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                Mock Invoke-JIMApi { [PSCustomObject]@{ id = 1 } }
+
+                { Set-JIMMetaverseAttribute -Id 1 -StandardMappings @(@{ Standard = 'Scim' }) -Confirm:$false -ErrorAction Stop } |
+                    Should -Throw '*CounterpartName*'
+
+                Should -Invoke Invoke-JIMApi -Times 0 -Exactly -ParameterFilter { $Method -eq 'PATCH' }
             }
         }
     }

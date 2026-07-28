@@ -212,6 +212,38 @@ public class LdapConnectorExportAsyncTests
 
     #endregion
 
+    #region Decimal value defensive handling tests
+
+    [Test]
+    public async Task ExecuteAsync_UpdateWithDecimalValue_WritesValueInsteadOfClearingAttributeAsync()
+    {
+        // A Decimal-typed attribute change should never reach the LDAP Connector (no LDAP syntax
+        // maps to the Decimal data type), but if one ever does, the value must be written rather
+        // than falling through to null, which the connector treats as an instruction to clear the
+        // attribute in the directory (silent data loss).
+        var pendingExport = CreateUpdatePendingExportWithDecimalValue("CN=Test,DC=test,DC=local", 12345.678m);
+
+        ModifyRequest? capturedModifyRequest = null;
+        _mockExecutor.Setup(e => e.SendRequest(It.IsAny<ModifyRequest>()))
+            .Callback<DirectoryRequest>(req => capturedModifyRequest = (ModifyRequest)req)
+            .Returns(CreateDirectoryResponse<ModifyResponse>(ResultCode.Success));
+
+        var export = CreateExport(concurrency: 1);
+        var results = await export.ExecuteAsync(new List<PendingExport> { pendingExport }, CancellationToken.None);
+
+        Assert.That(results, Has.Count.EqualTo(1));
+        Assert.That(results[0].Success, Is.True);
+        Assert.That(capturedModifyRequest, Is.Not.Null);
+
+        var modification = capturedModifyRequest!.Modifications
+            .Cast<DirectoryAttributeModification>()
+            .Single(m => m.Name == "salary");
+        Assert.That(modification.Count, Is.EqualTo(1), "the Decimal value must be written, not cleared");
+        Assert.That(modification[0], Is.EqualTo("12345.678"));
+    }
+
+    #endregion
+
     #region Update with rename tests
 
     [Test]
@@ -543,6 +575,54 @@ public class LdapConnectorExportAsyncTests
                     Attribute = testAttribute,
                     ChangeType = PendingExportAttributeChangeType.Update,
                     StringValue = "Test User"
+                }
+            }
+        };
+    }
+
+    private static PendingExport CreateUpdatePendingExportWithDecimalValue(string dn, decimal decimalValue)
+    {
+        var csoType = new ConnectedSystemObjectType { Name = "user" };
+        var dnAttribute = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 1,
+            Name = "distinguishedName",
+            ConnectedSystemObjectType = csoType
+        };
+
+        var salaryAttribute = new ConnectedSystemObjectTypeAttribute
+        {
+            Id = 2,
+            Name = "salary",
+            Type = AttributeDataType.Decimal,
+            ConnectedSystemObjectType = csoType
+        };
+
+        return new PendingExport
+        {
+            Id = Guid.NewGuid(),
+            ChangeType = PendingExportChangeType.Update,
+            ConnectedSystemObject = new ConnectedSystemObject
+            {
+                Id = Guid.NewGuid(),
+                Type = csoType,
+                SecondaryExternalIdAttributeId = dnAttribute.Id,
+                AttributeValues = new List<ConnectedSystemObjectAttributeValue>
+                {
+                    new()
+                    {
+                        AttributeId = dnAttribute.Id,
+                        StringValue = dn
+                    }
+                }
+            },
+            AttributeValueChanges = new List<PendingExportAttributeValueChange>
+            {
+                new()
+                {
+                    Attribute = salaryAttribute,
+                    ChangeType = PendingExportAttributeChangeType.Update,
+                    DecimalValue = decimalValue
                 }
             }
         };

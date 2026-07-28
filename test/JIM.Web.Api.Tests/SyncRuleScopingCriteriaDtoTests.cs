@@ -33,6 +33,7 @@ public class SyncRuleScopingCriteriaDtoTests
             StringValue = "Finance",
             IntValue = 100,
             LongValue = 5_000_000_000L,
+            DecimalValue = 12345.6789m,
             DateTimeValue = new DateTime(2024, 6, 15, 0, 0, 0, DateTimeKind.Utc),
             BoolValue = true,
             GuidValue = new Guid("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
@@ -53,6 +54,7 @@ public class SyncRuleScopingCriteriaDtoTests
         Assert.That(dto.StringValue, Is.EqualTo("Finance"));
         Assert.That(dto.IntValue, Is.EqualTo(100));
         Assert.That(dto.LongValue, Is.EqualTo(5_000_000_000L));
+        Assert.That(dto.DecimalValue, Is.EqualTo(12345.6789m));
         Assert.That(dto.DateTimeValue, Is.EqualTo(new DateTime(2024, 6, 15, 0, 0, 0, DateTimeKind.Utc)));
         Assert.That(dto.BoolValue, Is.True);
         Assert.That(dto.GuidValue, Is.EqualTo(new Guid("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")));
@@ -80,11 +82,42 @@ public class SyncRuleScopingCriteriaDtoTests
         Assert.That(dto.LongValue, Is.EqualTo(4_000_000_000L));
         Assert.That(dto.StringValue, Is.Null);
         Assert.That(dto.IntValue, Is.Null);
+        Assert.That(dto.DecimalValue, Is.Null);
         Assert.That(dto.DateTimeValue, Is.Null);
         Assert.That(dto.BoolValue, Is.Null);
         Assert.That(dto.GuidValue, Is.Null);
         Assert.That(dto.AttributeDataType, Is.EqualTo("LongNumber"));
         Assert.That(dto.ConnectedSystemAttributeId, Is.EqualTo(7));
+        Assert.That(dto.ComparisonType, Is.EqualTo("GreaterThan"));
+    }
+
+    [Test]
+    public void FromEntity_DecimalValueOnly_OtherCarriersStayNull()
+    {
+        // Arrange: a Decimal-typed criterion sets ONLY DecimalValue. The other
+        // carriers must remain null in the DTO so callers can tell which was used.
+        var csAttr = new ConnectedSystemObjectTypeAttribute { Id = 8, Name = "ContractedHours", Type = AttributeDataType.Decimal };
+        var entity = new SyncRuleScopingCriteria
+        {
+            Id = 100,
+            ConnectedSystemAttribute = csAttr,
+            ComparisonType = SearchComparisonType.GreaterThan,
+            DecimalValue = 37.5m
+        };
+
+        // Act
+        var dto = SyncRuleScopingCriteriaDto.FromEntity(entity);
+
+        // Assert
+        Assert.That(dto.DecimalValue, Is.EqualTo(37.5m));
+        Assert.That(dto.StringValue, Is.Null);
+        Assert.That(dto.IntValue, Is.Null);
+        Assert.That(dto.LongValue, Is.Null);
+        Assert.That(dto.DateTimeValue, Is.Null);
+        Assert.That(dto.BoolValue, Is.Null);
+        Assert.That(dto.GuidValue, Is.Null);
+        Assert.That(dto.AttributeDataType, Is.EqualTo("Decimal"));
+        Assert.That(dto.ConnectedSystemAttributeId, Is.EqualTo(8));
         Assert.That(dto.ComparisonType, Is.EqualTo("GreaterThan"));
     }
 
@@ -102,5 +135,6 @@ public class SyncRuleScopingCriteriaDtoTests
 
         Assert.That(request.CaseSensitive, Is.True);
         Assert.That(request.LongValue, Is.Null);
+        Assert.That(request.DecimalValue, Is.Null);
     }
 }

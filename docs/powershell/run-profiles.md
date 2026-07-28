@@ -32,7 +32,7 @@ Get-JIMRunProfile -ConnectedSystemName <string> [-Name <string>]
 
 ### Output
 
-Returns one or more `PSCustomObject` instances representing Run Profiles, each containing `Id`, `Name`, `ConnectedSystemId`, `RunType`, `PageSize`, `PartitionName`, and `FilePath`.
+Returns one or more `PSCustomObject` instances representing Run Profiles, each containing `Id`, `Name`, `ConnectedSystemId`, `RunType`, `PageSize`, `PartitionName`, `FilePath`, and `VerifyImportContentHashes`.
 
 ### Examples
 
@@ -62,10 +62,10 @@ Creates a new Run Profile on a Connected System. Supports `ShouldProcess`; use `
 
 ```powershell
 # By Connected System ID (default)
-New-JIMRunProfile -ConnectedSystemId <int> -Name <string> -RunType <string> [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-PassThru] [-WhatIf] [-Confirm]
+New-JIMRunProfile -ConnectedSystemId <int> -Name <string> -RunType <string> [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes] [-PassThru] [-WhatIf] [-Confirm]
 
 # By Connected System name
-New-JIMRunProfile -ConnectedSystemName <string> -Name <string> -RunType <string> [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-PassThru] [-WhatIf] [-Confirm]
+New-JIMRunProfile -ConnectedSystemName <string> -Name <string> -RunType <string> [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -79,6 +79,7 @@ New-JIMRunProfile -ConnectedSystemName <string> -Name <string> -RunType <string>
 | `PageSize` | `int` | No | `100` | How many items to process in one batch. |
 | `PartitionId` | `int` | No | | Optional partition to scope this Run Profile to. If omitted, the Run Profile applies to the default partition. |
 | `FilePath` | `string` | No | | Optional file path for file-based connectors. |
+| `VerifyImportContentHashes` | `switch` | No | `$false` | Enables Verification Mode. Only valid when `-RunType` is `FullImport`; the API rejects it otherwise. Runs the honest attribute diff on every object instead of skipping unchanged objects by content hash. |
 | `PassThru` | `switch` | No | `$false` | Returns the created Run Profile object to the pipeline. |
 
 ### Output
@@ -114,6 +115,10 @@ Get-JIMConnectedSystem -Name "CSV*" | ForEach-Object {
 }
 ```
 
+```powershell title="Create a Full Import Run Profile with Verification Mode enabled"
+New-JIMRunProfile -ConnectedSystemId 1 -Name "Full Import (Verified)" -RunType FullImport -VerifyImportContentHashes
+```
+
 ```powershell title="Preview with WhatIf"
 New-JIMRunProfile -ConnectedSystemId 1 -Name "Delta Import" -RunType DeltaImport -WhatIf
 ```
@@ -128,13 +133,13 @@ Modifies an existing Run Profile. Supports `ShouldProcess`; use `-WhatIf` or `-C
 
 ```powershell
 # By Connected System ID (default)
-Set-JIMRunProfile -ConnectedSystemId <int> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMRunProfile -ConnectedSystemId <int> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-PassThru] [-WhatIf] [-Confirm]
 
 # By Connected System name
-Set-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-PassThru] [-WhatIf] [-Confirm]
 
 # By input object
-Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-PassThru] [-WhatIf] [-Confirm]
+Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PageSize <int>] [-PartitionId <int>] [-FilePath <string>] [-VerifyImportContentHashes <bool>] [-PassThru] [-WhatIf] [-Confirm]
 ```
 
 ### Parameters
@@ -149,6 +154,7 @@ Set-JIMRunProfile -InputObject <PSCustomObject> [-Name <string>] [-PageSize <int
 | `PageSize` | `int` | No | | New page size for the Run Profile. Omit to leave unchanged. |
 | `PartitionId` | `int` | No | | New partition ID to scope the Run Profile to. |
 | `FilePath` | `string` | No | | New file path for file-based connectors. Omit to leave unchanged. |
+| `VerifyImportContentHashes` | `bool` | No | | Enables or disables Verification Mode. Pass `$true` to enable, `$false` to disable; omit to leave unchanged. Only valid on a Full Import Run Profile; the API rejects `$true` otherwise. |
 | `PassThru` | `switch` | No | `$false` | Returns the updated Run Profile object to the pipeline. |
 
 ### Output
@@ -175,6 +181,14 @@ Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -PartitionId 5
 
 ```powershell title="Update a file-based connector's Run Profile"
 Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 7 -FilePath "C:\Data\import-v2.csv"
+```
+
+```powershell title="Enable Verification Mode temporarily"
+Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -VerifyImportContentHashes $true
+```
+
+```powershell title="Disable Verification Mode again"
+Set-JIMRunProfile -ConnectedSystemId 1 -RunProfileId 42 -VerifyImportContentHashes $false
 ```
 
 ```powershell title="Preview changes with WhatIf"
@@ -274,7 +288,7 @@ Start-JIMRunProfile -ConnectedSystemName <string> -RunProfileId <int> [-Wait] [-
 | `ConnectedSystemName` | `string` | Yes (ByName, ByNameAndId sets) | | Name of the Connected System that owns the Run Profile. Must be an exact match. |
 | `RunProfileId` | `int` | Yes (ById, ByNameAndId sets) | | ID of the Run Profile to execute. Alias: `Id`. Accepts pipeline input by property name (ById set). |
 | `RunProfileName` | `string` | Yes (ByName, ByIdAndName sets) | | Name of the Run Profile to execute. Must be an exact match. |
-| `Wait` | `switch` | No | `$false` | Blocks until execution completes, displaying a progress indicator. Polls every 2 seconds. |
+| `Wait` | `switch` | No | `$false` | Blocks until execution completes, displaying live progress: current phase, object counts, throughput and estimated time remaining. Polls the lightweight Activity progress endpoint every 2 seconds. |
 | `Timeout` | `int` | No | | Maximum number of seconds to wait when `-Wait` is specified. If exceeded, an error is thrown containing the Activity ID for manual follow-up. |
 | `PassThru` | `switch` | No | `$false` | Returns the execution response object to the pipeline. |
 
@@ -333,7 +347,7 @@ try {
 ### Notes
 
 - The Run Profile is queued as an asynchronous task on the JIM worker service. Without `-Wait`, the cmdlet returns immediately after the task is queued.
-- When `-Wait` is specified, the cmdlet polls the Activity status every 2 seconds and displays a progress bar. If authentication tokens expire during polling, the cmdlet retries up to 3 times before failing.
+- When `-Wait` is specified, the cmdlet polls the lightweight Activity progress endpoint (`/activities/{id}/progress`) every 2 seconds and displays a progress bar with the current phase, object counts, throughput and estimated time remaining. If authentication tokens expire during polling, the cmdlet retries up to 3 times before failing.
 - If `-Timeout` is exceeded, the cmdlet throws a terminating error that includes the Activity ID, allowing you to check progress manually via [Get-JIMActivity](activities.md) or the JIM web interface.
 - Run Profiles that are already executing will be rejected by the server; you do not need to check for running profiles before calling this cmdlet.
 

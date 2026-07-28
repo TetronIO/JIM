@@ -24,7 +24,7 @@ JIM requires TDD. The workflow is **Red → Green → Refactor**:
 - `test/JIM.Models.Tests/` - domain model unit tests
 - `test/JIM.Worker.Tests/` - sync engine and worker unit tests
 - `test/JIM.Web.Api.Tests/` - REST API, application server and Helpers tests
-- `test/JIM.Web.Tests/` - JIM.Web UI tests: causality display logic (plain NUnit classes) and Blazor component tests (bUnit; test-only dependency, nothing ships in containers)
+- `test/JIM.Web.Tests/` - JIM.Web UI tests: causality display logic (plain NUnit classes) and Blazor component tests (bUnit; test-only dependency, nothing ships in containers); scope rules below
 - `test/JIM.Utilities.Tests/`, `test/JIM.InMemoryData.Tests/`, `test/JIM.Workflow.Tests/` - supporting suites
 
 ## Test Structure
@@ -51,6 +51,35 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
     Assert.That(result.Id, Is.EqualTo(expectedObject.Id));
 }
 ```
+
+## Blazor component tests (bUnit)
+
+`test/JIM.Web.Tests/` renders JIM.Web's Razor components with [bUnit](https://bunit.dev) and asserts on them from NUnit (alongside its plain NUnit tests for causality display logic). Component rendering tests exist because some UI defects are only expressible at component level: the `PrefilledFormValidator` bug (the parent's `OnAfterRenderAsync` running before `MudForm`'s, so the initial validation result was overwritten) is a lifecycle-ordering fault that no plain unit test can reach.
+
+**Scope; keep it narrow.** In scope: components under `src/JIM.Web/Shared/` that carry logic or lifecycle behaviour. Out of scope: components that are pure markup, and pages, with one standing exception: the Run Profile Execution Item detail page, whose causality panel wiring is page-owned and only observable at page level. Tests arrive when a component is written or changed; the existing component set is **not** retrofitted wholesale, because broad UI coverage buys little and costs upgrade friction on every MudBlazor release.
+
+**Assert on JIM's own markup and component state, never on MudBlazor's generated CSS class names.** Those are a third party's implementation detail and churn between MudBlazor releases; a suite that breaks on every upgrade gets ignored, which is worse than no suite. Prefer `FindComponent<T>()`/`HasComponent<T>()` and a component's own parameters over DOM structure.
+
+Derive fixtures from `JimComponentTestContext`, which registers MudBlazor's services and sets bUnit's JS interop to loose mode (MudBlazor calls into JavaScript widely; without loose mode components throw on unconfigured invocations).
+
+```csharp
+[TestFixture]
+public class TextValueDisplayTests : JimComponentTestContext
+{
+    [Test]
+    public void TextValueDisplay_WhitespaceOnlyValue_RendersWhitespaceValueNotEmptyValue()
+    {
+        var cut = Render<TextValueDisplay>(p => p.Add(c => c.Value, "   "));
+
+        Assert.That(cut.HasComponent<WhitespaceValue>(), Is.True);
+    }
+}
+```
+
+Notes:
+- The project uses `Microsoft.NET.Sdk.Razor`, not the plain SDK; bUnit needs the Razor SDK's compilation support. This is why it is a separate project rather than tests added to `JIM.Web.Api.Tests`.
+- It pins `AngleSharp` forward as a direct reference. bUnit 2.7.2 resolves 1.4.0, which carries CVE-2026-54570; the pin keeps `NuGetAudit` clean without suppressing the finding. Drop it once bUnit's own floor moves past 1.5.0.
+- `CausalityBunitContext.Create()` is a thin factory over the same base for test methods that prefer a disposable local context; the configuration lives in `JimComponentTestContext` either way.
 
 ## Debugging Failing Tests
 

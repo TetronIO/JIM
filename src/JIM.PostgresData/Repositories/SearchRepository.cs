@@ -244,6 +244,7 @@ public class SearchRepository : ISearchRepository
         existing.StringValue = criterion.StringValue;
         existing.IntValue = criterion.IntValue;
         existing.LongValue = criterion.LongValue;
+        existing.DecimalValue = criterion.DecimalValue;
         existing.DateTimeValue = criterion.DateTimeValue;
         existing.BoolValue = criterion.BoolValue;
         existing.GuidValue = criterion.GuidValue;

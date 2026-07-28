@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using System.Globalization;
 using JIM.Models.Core;
 namespace JIM.Models.Search;
 
@@ -49,6 +50,11 @@ public class PredefinedSearchCriteria : ICriterionValues
     /// The value to compare against, for LongNumber attributes.
     /// </summary>
     public long? LongValue { get; set; }
+
+    /// <summary>
+    /// The value to compare against, for Decimal attributes.
+    /// </summary>
+    public decimal? DecimalValue { get; set; }
 
     /// <summary>
     /// The value to compare against, for DateTime attributes.
@@ -120,6 +126,7 @@ public class PredefinedSearchCriteria : ICriterionValues
             AttributeDataType.Text => "Text: " + StringValue,
             AttributeDataType.Number => "Number: " + IntValue,
             AttributeDataType.LongNumber => "LongNumber: " + LongValue,
+            AttributeDataType.Decimal => "Decimal: " + (DecimalValue.HasValue ? DecimalValue.Value.ToString(CultureInfo.InvariantCulture) : null),
             AttributeDataType.Boolean => "Boolean: " + (BoolValue is null ? "Null" : BoolValue.Value.ToString()),
             AttributeDataType.DateTime => DescribeDateValue(),
             AttributeDataType.Guid => "Guid: " + GuidValue,

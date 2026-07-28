@@ -1,10 +1,12 @@
 # Full Import Flow
 
-> Last updated: 2026-04-22, JIM v0.10.0
+> Last updated: 2026-07-24, JIM v0.13.0
 
 This diagram shows how objects are imported from a Connected System into JIM's connector space. Both Full Import and Delta Import use the same processor (`SyncImportTaskProcessor`); the connector handles delta filtering internally via watermark/persisted data.
 
 Since v0.7.1, the import processor uses `ISyncServer` for orchestration (settings, caching, reconciliation) and `ISyncRepository` for dedicated bulk data access (CSO writes, RPEIs).
+
+Since #1082, Full Imports keep a stored content hash on each Connected System Object: an unchanged object (incoming hash matches the stored hash and fingerprint) is skipped before hydration and diffing, and hashes are stamped only after each batch's attribute value writes have committed. A Run Profile Verification Mode disables the skip and reports any disagreement between the stored hash and the honest comparison.
 
 Since v0.8.0, LDAP connectors for OpenLDAP/Generic directories import using **parallel connections**: each container+objectType combination runs on its own dedicated `LdapConnection`, bypassing RFC 2696 paging cookie limitations (#72). CSO persistence uses **two-phase parallel writes** when writing large batches (#427). Run Profiles can optionally **target a specific partition**, filtering which containers are imported (#353).
 
@@ -65,9 +67,11 @@ flowchart TD
     %% --- Persist via ISyncRepository ---
     RefResolution --> PersistCreate[Batch create new CSOs<br/>via ISyncRepository<br/>Two-phase parallel write for large batches<br/>See Two-Phase CSO Persistence below]
     PersistCreate --> PersistUpdate[Batch update existing CSOs<br/>with change objects via ISyncRepository]
+    PersistUpdate --> StampHashes[Stamp import content hashes #1082<br/>per batch, only AFTER that batch's<br/>attribute value writes committed<br/>never touches LastUpdated]
+    StampHashes --> Reconcile
 
     %% --- Reconciliation ---
-    PersistUpdate --> Reconcile[Reconcile Pending Exports<br/>See Confirming Import below]
+    Reconcile[Reconcile Pending Exports<br/>See Confirming Import below]
     Reconcile --> ValidateRpeis[Validate RPEIs<br/>Detect orphaned create RPEIs<br/>with no CSO assigned]
     ValidateRpeis --> PersistRpeis[Add RPEIs to Activity<br/>and persist]
     PersistRpeis --> End([Import Complete])
@@ -95,7 +99,9 @@ flowchart TD
     SameBatchDup -->|2nd occurrence| BothDupErr[Error BOTH objects:<br/>Mark current as DuplicateObject<br/>Go back and mark first as DuplicateObject<br/>Remove first CSO from create list<br/>No random winner]
 
     SameBatchDup -->|First occurrence| TrackExtId[Track external ID<br/>in seenExternalIds]
-    TrackExtId --> CheckDelete{Connector says<br/>Delete?}
+    TrackExtId --> HashSkip{Content-hash skip? #1082<br/>Full Import, not Verification Mode,<br/>stored hash + fingerprint match,<br/>status Normal, not a delete,<br/>no partition backfill pending}
+    HashSkip -->|Yes| SkipObject[Skip hydration and diff<br/>Remove RPEI, count as skipped<br/>Not added to update list<br/>External ID already collected<br/>for deletion detection]
+    HashSkip -->|No| CheckDelete{Connector says<br/>Delete?}
 
     %% --- Delete path ---
     CheckDelete -->|Yes| FindExisting[Find existing CSO<br/>by external ID]
@@ -113,11 +119,11 @@ flowchart TD
     CsoExists -->|Yes| CheckProvisioning{CSO status =<br/>PendingProvisioning?}
     CheckProvisioning -->|Yes| TransitionNormal[Transition to Normal status<br/>Object confirmed in target system]
     CheckProvisioning -->|No| UpdateCso
-    TransitionNormal --> UpdateCso[Update CSO attributes<br/>Compare each import attribute<br/>against existing CSO values<br/>Only stage actual changes]
+    TransitionNormal --> UpdateCso[Update CSO attributes<br/>Compare each import attribute<br/>against existing CSO values<br/>Only stage actual changes<br/>usually a no-op for a CSO whose<br/>export was optimistically applied #1079]
     UpdateCso --> HasChanges{Attribute<br/>changes?}
     HasChanges -->|Yes| RpeiUpdated[RPEI: Updated]
     HasChanges -->|No| RpeiNoChange[No RPEI created<br/>CSO still added to update list<br/>for reference resolution]
-    RpeiUpdated --> AddToUpdate[Add to update list]
+    RpeiUpdated --> AddToUpdate[Add to update list<br/>Full Import: request hash stamp<br/>Delta Import with changes: request hash clear]
     RpeiNoChange --> AddToUpdate
 ```
 
@@ -240,3 +246,5 @@ flowchart TD
 - **Cancellation safety**<br /> When a cancellation is requested, the current page flush completes before exiting. This ensures no data loss; partially processed pages are fully persisted before the operation stops.
 
 - **Per-page change tracker clearing**<br /> `ClearChangeTracker` is called at page boundaries to detach processed entities from the EF Core change tracker, keeping memory consumption bounded regardless of total import size.
+
+- **Optimistic export apply** (#1079)<br /> No import-side behaviour changed for this feature; it is purely an export-side optimisation (see [Pending Export Lifecycle](PENDING_EXPORT_LIFECYCLE.md)). It changes the practical *outcome* of the "Update CSO attributes" step above: a CSO whose export was optimistically applied already carries the exported values, so the confirming import's set-diff typically finds nothing to stage, and no `Updated` RPEI is created for it.

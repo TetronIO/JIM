@@ -3,10 +3,12 @@
 
 using JIM.Application;
 using JIM.Application.Interfaces;
+using JIM.Data;
 using JIM.Models.Activities;
 using JIM.Models.Core;
 using JIM.Models.Scheduling;
 using JIM.Models.Tasking;
+using JIM.Utilities;
 using Serilog;
 using Serilog.Formatting.Compact;
 
@@ -41,10 +43,14 @@ namespace JIM.Scheduler;
 public class Scheduler : BackgroundService
 {
     private readonly IJimApplicationFactory _jimFactory;
+    private readonly IDatabaseNotificationListener _notificationListener;
+    private readonly AsyncWakeSignal _wakeSignal = new();
+    private Task? _listenTask;
 
-    public Scheduler(IJimApplicationFactory jimFactory)
+    public Scheduler(IJimApplicationFactory jimFactory, IDatabaseNotificationListener notificationListener)
     {
         _jimFactory = jimFactory;
+        _notificationListener = notificationListener;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -86,6 +92,12 @@ public class Scheduler : BackgroundService
             await Task.Delay(2000, stoppingToken);
         }
 
+        // Start listening for Worker Task change notifications in the background so the scheduler can
+        // react to task completion in under a second rather than waiting for the next polling cycle.
+        // The listener reconnects with backoff on failure and must never take down the scheduler;
+        // the 30-second polling cycle below remains the fallback for anything missed.
+        _listenTask = ListenForWorkerTaskChangesAsync(stoppingToken);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             // Touch the healthcheck file each polling cycle so Docker knows the main loop is alive
@@ -119,11 +131,71 @@ public class Scheduler : BackgroundService
                 Log.Error(ex, "Error during scheduler polling cycle");
             }
 
-            // Poll every 30 seconds (configurable in future)
-            await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+            // Wait for the next cycle: woken early by a Worker Task change notification, or after
+            // 30 seconds as the polling fallback (notifications are fire-and-forget hints; polling
+            // remains the safety net for anything missed while disconnected)
+            var wokenByNotification = await _wakeSignal.WaitAsync(TimeSpan.FromSeconds(30), stoppingToken);
+            if (wokenByNotification)
+            {
+                Log.Debug("Scheduler woken by Worker Task change notification; running next cycle after settling delay.");
+
+                // Short settling delay: the worker's own synchronous schedule advancement runs just
+                // after the task delete commits, so a brief pause usually lets it complete first.
+                // The polling cycle is idempotent either way.
+                await Task.Delay(TimeSpan.FromMilliseconds(500), stoppingToken);
+            }
         }
 
         Log.Information("JIM.Scheduler shutting down...");
+    }
+
+    /// <summary>
+    /// Runs the database notification listen loop for Worker Task changes until shutdown. The listener
+    /// reconnects with backoff internally; this wrapper exists to observe the task's completion so a
+    /// listener failure is logged rather than left as an unobserved exception, and never crashes the
+    /// scheduler (the polling fallback keeps schedules advancing).
+    /// </summary>
+    private async Task ListenForWorkerTaskChangesAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            await _notificationListener.ListenAsync(
+                [Constants.NotificationChannels.WorkerTaskChange],
+                HandleNotificationAsync,
+                stoppingToken);
+
+            Log.Information("ListenForWorkerTaskChangesAsync: Worker Task change notification listener stopped.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Error(ex, "ListenForWorkerTaskChangesAsync: Notification listener failed. Continuing with polling fallback only.");
+        }
+    }
+
+    /// <summary>
+    /// Handles a database notification received on the Worker Task change channel. A Delete operation
+    /// for a task that belongs to a Schedule Execution means a schedule step just completed, so the
+    /// polling loop is woken to advance the execution promptly. Unparseable payloads are ignored;
+    /// notification handling must never take down the listen loop.
+    /// </summary>
+    private Task HandleNotificationAsync(string channelName, string payload, CancellationToken cancellationToken)
+    {
+        if (!WorkerTaskChangeNotification.TryParse(payload, out var notification))
+        {
+            Log.Debug("HandleNotificationAsync: Ignoring unparseable notification payload on channel {ChannelName}.",
+                LogSanitiser.Sanitise(channelName));
+            return Task.CompletedTask;
+        }
+
+        if (notification!.Operation == WorkerTaskChangeOperation.Delete && notification.ScheduleExecutionId.HasValue)
+        {
+            Log.Debug("HandleNotificationAsync: Worker Task {TaskId} for Schedule Execution {ScheduleExecutionId} reached terminal state. Waking scheduler.",
+                notification.TaskId, notification.ScheduleExecutionId.Value);
+
+            _wakeSignal.Signal();
+        }
+
+        return Task.CompletedTask;
     }
 
     /// <summary>

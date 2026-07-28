@@ -29,6 +29,8 @@ public class ConnectedSystemObjectChangeAttributeValue
 
     public long? LongValue { get; set; }
 
+    public decimal? DecimalValue { get; set; }
+
     /// <summary>
     /// It would be inefficient, and not especially helpful to track the actual byte value changes, so just track the value lengths instead to show the change.
     /// </summary>
@@ -62,6 +64,9 @@ public class ConnectedSystemObjectChangeAttributeValue
 
         if (LongValue.HasValue)
             return LongValue.Value.ToString();
+
+        if (DecimalValue.HasValue)
+            return DecimalValue.Value.ToString(CultureInfo.InvariantCulture);
 
         if (ByteValueLength.HasValue)
             return ByteValueLength.Value.ToString();
@@ -101,6 +106,13 @@ public class ConnectedSystemObjectChangeAttributeValue
     public ConnectedSystemObjectChangeAttributeValue(ConnectedSystemObjectChangeAttribute connectedSystemObjectChangeAttribute, ValueChangeType valueChangeType, long longValue)
     {
         LongValue = longValue;
+        ConnectedSystemObjectChangeAttribute = connectedSystemObjectChangeAttribute;
+        ValueChangeType = valueChangeType;
+    }
+
+    public ConnectedSystemObjectChangeAttributeValue(ConnectedSystemObjectChangeAttribute connectedSystemObjectChangeAttribute, ValueChangeType valueChangeType, decimal decimalValue)
+    {
+        DecimalValue = decimalValue;
         ConnectedSystemObjectChangeAttribute = connectedSystemObjectChangeAttribute;
         ValueChangeType = valueChangeType;
     }

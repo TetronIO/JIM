@@ -16,22 +16,27 @@ Create, retrieve, update, and delete Synchronisation Rules.
 
 ## Get-JIMSyncRule
 
-Retrieves one or more Synchronisation Rules. When called without parameters, returns all Synchronisation Rules. Use the parameter sets to filter by ID, Connected System ID, or Connected System name.
+Retrieves one or more Synchronisation Rules. When called without parameters, returns all Synchronisation Rules. Use the parameter sets to filter by ID, Connected System ID, or Connected System name, and the `-Direction`, `-ActionType` and `-Status` filters to narrow the list further.
+
+The filters combine with AND, and each of `-Direction`, `-ActionType` and `-Status` accepts several values, which combine with OR. `-Name` narrows whatever the other filters left, so removing it returns those results. These are the same filters offered on the Synchronisation Rules page of the JIM portal.
 
 ### Syntax
 
 ```powershell
-# List all Synchronisation Rules (default)
-Get-JIMSyncRule [-Name <string>]
+# List all Synchronisation Rules (default), optionally with a piped Connected System
+Get-JIMSyncRule [-InputObject <PSCustomObject>] [-Name <string>] [-Direction <string[]>]
+    [-ActionType <string[]>] [-Status <string[]>]
 
 # By Synchronisation Rule ID
 Get-JIMSyncRule -Id <int>
 
 # By Connected System ID
-Get-JIMSyncRule -ConnectedSystemId <int> [-Name <string>]
+Get-JIMSyncRule -ConnectedSystemId <int> [-Name <string>] [-Direction <string[]>]
+    [-ActionType <string[]>] [-Status <string[]>]
 
 # By Connected System name
-Get-JIMSyncRule -ConnectedSystemName <string> [-Name <string>]
+Get-JIMSyncRule -ConnectedSystemName <string> [-Name <string>] [-Direction <string[]>]
+    [-ActionType <string[]>] [-Status <string[]>]
 ```
 
 ### Parameters
@@ -41,7 +46,13 @@ Get-JIMSyncRule -ConnectedSystemName <string> [-Name <string>]
 | `Id` | `int` | Yes (ById set) | | The ID of a specific Synchronisation Rule to retrieve |
 | `ConnectedSystemId` | `int` | No | | Filter Synchronisation Rules by Connected System ID. Accepts pipeline input. |
 | `ConnectedSystemName` | `string` | No | | Filter Synchronisation Rules by Connected System name. Must be an exact match. |
+| `InputObject` | `PSCustomObject` | No | | A Connected System object from the pipeline (for example from `Get-JIMConnectedSystem`). Its `Id` filters the rules, equivalent to `-ConnectedSystemId`. |
 | `Name` | `string` | No | | Filter Synchronisation Rules by name. Supports wildcards (e.g., `"Inbound*"`). |
+| `Direction` | `string[]` | No | | Filter by direction: `Import` (inbound) or `Export` (outbound). |
+| `ActionType` | `string[]` | No | | Filter by the action the rule performs: `Projects`, `Provisions`, or `FlowOnly`. |
+| `Status` | `string[]` | No | | Filter by state: `Enabled` or `Disabled`. |
+
+`ActionType` values map to what a rule creates: `Projects` for Import rules that project new Metaverse Objects, `Provisions` for Export rules that provision new Connected System Objects, and `FlowOnly` for rules that create no objects and only flow attribute values.
 
 ### Output
 
@@ -65,9 +76,25 @@ Get-JIMSyncRule -Name "Inbound*"
 Get-JIMSyncRule -ConnectedSystemName "Active Directory"
 ```
 
+```powershell title="Find enabled outbound rules"
+Get-JIMSyncRule -Direction Export -Status Enabled
+```
+
+```powershell title="Find the rules that create objects"
+Get-JIMSyncRule -ActionType Projects, Provisions
+```
+
+```powershell title="Combine filters to audit one system"
+Get-JIMSyncRule -ConnectedSystemName "Active Directory" -Direction Export -Status Disabled
+```
+
 ```powershell title="Pipeline from Connected System ID"
 $cs = Get-JIMConnectedSystem -Name "HR System"
 Get-JIMSyncRule -ConnectedSystemId $cs.Id
+```
+
+```powershell title="Pipe Connected Systems straight in, and filter them"
+Get-JIMConnectedSystem -Name "HR*" | Get-JIMSyncRule -Direction Import -Status Enabled
 ```
 
 ---
@@ -644,28 +671,28 @@ Adds an individual scoping criterion to a group. Each criterion compares an attr
 # By metaverse attribute ID
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -MetaverseAttributeId <int> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
     [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
     [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 
 # By metaverse attribute name
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -MetaverseAttributeName <string> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
     [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
     [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 
 # By Connected System attribute ID
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -ConnectedSystemAttributeId <int> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
     [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
     [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 
 # By Connected System attribute name
 New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
     -ConnectedSystemAttributeName <string> -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
     [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
     [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>] [-PassThru]
 ```
@@ -684,6 +711,7 @@ New-JIMScopingCriterion -SyncRuleId <int> -GroupId <int>
 | `StringValue` | `string` | No | | String value to compare against |
 | `IntValue` | `int` | No | | Integer value to compare against (`Number` attributes) |
 | `LongValue` | `long` | No | | 64-bit integer value to compare against (`LongNumber` attributes) |
+| `DecimalValue` | `decimal` | No | | Decimal value to compare against (`Decimal` attributes) |
 | `DateTimeValue` | `datetime` | No | | Date/time value to compare against (ISO 8601 format) |
 | `BoolValue` | `bool` | No | | Boolean value to compare against |
 | `GuidValue` | `guid` | No | | GUID value to compare against |
@@ -762,7 +790,7 @@ Updates an existing scoping criterion (a full replacement of its attribute, oper
 Set-JIMScopingCriterion -SyncRuleId <int> -GroupId <int> -CriterionId <int>
     (-MetaverseAttributeId <int> | -MetaverseAttributeName <string> | -ConnectedSystemAttributeId <int> | -ConnectedSystemAttributeName <string>)
     -ComparisonType <string>
-    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DateTimeValue <datetime>]
+    [-StringValue <string>] [-IntValue <int>] [-LongValue <long>] [-DecimalValue <decimal>] [-DateTimeValue <datetime>]
     [-BoolValue <bool>] [-GuidValue <guid>] [-CaseSensitive <bool>]
     [-ValueMode <string>] [-RelativeCount <int>] [-RelativeUnit <string>] [-RelativeDirection <string>]
     [-PassThru]

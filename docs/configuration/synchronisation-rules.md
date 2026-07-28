@@ -133,6 +133,12 @@ The action applies regardless of how the object came to be joined: it makes no d
 
 Configure the action in the export section of the Synchronisation Rule editor. To review the deprovisioning behaviour of every export rule for an object type in one place, use the **Downstream Deprovisioning** panel on the Metaverse Object Type page (Admin, Schema, then the object type), where the action can also be changed inline.
 
+### Seeing what a run has deprovisioned
+
+Every delete queued by a Deprovisioning Action is reported on the Activity of the run that staged it, so you can see exactly which accounts are about to be removed before the next export runs. Each queued delete appears on the deleted identity's execution item as a **Pending Export** outcome nested beneath the **MVO Deleted** outcome that caused it, naming the Connected System the account is being removed from, and is counted in the Activity's Pending Exports total. A leaver's execution item therefore reads as the whole chain: disconnected, Connected System Object deleted, identity deleted, then one Pending Export per downstream account being deprovisioned. Open the outcome to see the Pending Export's detail.
+
+This applies wherever the deletion happens: during a Synchronisation Run Profile (when the Metaverse Object Type's [deletion rule](../concepts/jml-lifecycle.md#deletion-rules) has no grace period, so the identity is deleted inline), and in the background [Metaverse Object Housekeeping](activities.md#metaverse-object-housekeeping) batch that deletes identities once their grace period expires.
+
 ## Attribute mappings
 
 Attribute mappings define which attributes to synchronise and how to transform them. Each mapping maps a source attribute (or expression) to a target attribute.
@@ -179,6 +185,19 @@ Mappings support both single-valued and multi-valued attributes. A **Multi-Value
 The Attribute Flow editor warns you at configuration time when a mapping is Multi-Valued to Single-Valued, and the mapping is flagged in the Attribute Flow list, so you can decide before running whether it is what you intend.
 
 To flow a chosen value deterministically instead of erroring, either target a Multi-Valued attribute, or use an [Expression mapping](#expression-mappings) to select one value (for example `Join()`/`Split()` or an index into the list). Reference attributes on import are exempt from this rule; they are resolved separately.
+
+### Standard Mapping hints
+
+Choosing which Metaverse Attribute a Connected System attribute belongs to is guesswork when the schema is unfamiliar, and the answer is usually already recorded: every built-in Metaverse Attribute documents its counterparts in the SCIM 2.0 and LDAP/Active Directory vocabularies as [Standard Mappings](metaverse.md#standard-mappings). The Attribute Flow editor shows them while you work:
+
+- **The counterpart name sits beside each attribute in the picker**, so `First Name` reads as `givenName` on an LDAP system, and `name.givenName` on a SCIM one. Where a mapping carries a note (`userAccountControl` needs a transform, SCIM `emails` is multi-valued), hovering the counterpart shows it.
+- **The correspondence for the attribute you picked is stated in full.** Choose `givenName` as an import source and the editor says so: "In LDAP/AD, `givenName` corresponds to the Metaverse Attribute First Name", marks that attribute **Suggested** in the picker, and offers a one-click **Use First Name** button. Export works the same way in reverse, naming the Connected System attribute the standard says should receive the value.
+- **More than one attribute can correspond to a name.** LDAP `mail` fits both the single-valued `Email` and the multi-valued `Emails`; both are offered, and JIM does not choose for you.
+- **A correspondence you cannot act on is explained rather than hidden.** Where the standard names an attribute this mapping cannot target, the editor says which and why: the types differ (`accountExpires` arrives as text where `Account Expires` is a date, so an Expression source is needed to convert it), another Attribute Flow already targets it, or the Connected System reports it read-only. The mapping's note is shown alongside, which is usually where the conversion is described.
+
+Which vocabulary applies comes from the Connector: the LDAP Connector declares LDAP/AD, so an LDAP system's editor shows LDAP counterparts and nothing else. Where a Connector declares no vocabulary (the File Connector, for example, since a delimited file's column names are whatever the file carries), the editor matches attribute names against every standard instead and labels whichever one answered.
+
+**The hints are advisory, always.** Nothing is filtered, disabled, or chosen for you: every attribute stays selectable, and an attribute with no counterpart simply shows nothing, which is not an error. Standard Mappings are never consulted during synchronisation; what flows is exactly what your Attribute Flows say. Custom attributes behave identically once you record Standard Mappings against them, and JIM does not distinguish a mapping it seeded from one you authored.
 
 ### Value processing (inbound)
 
@@ -282,6 +301,23 @@ A complete import rule for an HR system might look like:
 | | `Capitalise(cs["givenName"]) + " " + Capitalise(cs["sn"])` to `mv["Display Name"]` (expression) |
 
 This rule imports full-time employees from the HR system, joins them to existing Metaverse Objects by employee ID, creates new Metaverse Objects for new starters, and flows their attributes into the metaverse.
+
+## Finding a Synchronisation Rule
+
+Once a deployment has more than a handful of rules, the Synchronisation Rules list carries filters above the table so you can narrow it to the rules you care about:
+
+| Filter | Narrows to |
+|--------|------------|
+| **Connected System** | Rules belonging to the systems you pick. Only systems that actually have rules are offered. |
+| **Direction** | Inbound (Import) or Outbound (Export) rules. |
+| **Action** | **Projects** (Import rules that create Metaverse Objects), **Provisions** (Export rules that create Connected System Objects), or **Flow Only** (rules that create nothing and only flow attribute values). |
+| **Status** | Enabled or Disabled rules. |
+
+Each filter accepts several values, and the filters combine: picking two Connected Systems and the Outbound direction shows the outbound rules of either system. Leaving a filter empty means "all".
+
+The search box in the table's toolbar narrows whatever the filters left, matching on the rule name. Clearing the search box returns the filtered list rather than the full one, so you can keep a filter in place while searching within it.
+
+The same filters are available to automation: see `Get-JIMSyncRule`'s `-Direction`, `-ActionType` and `-Status` parameters, and the matching query parameters on the Synchronisation Rules list endpoint in the REST API.
 
 ## Manage Synchronisation Rules
 

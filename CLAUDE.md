@@ -59,13 +59,18 @@ No glazing. Do not call an idea "great", "brilliant", or "smart" without concret
 
 If the answer is "no" or "this will not work", say so in the first sentence. The more certain I sound, the more I need pushback.
 
-**Response style:** Optimise for my reading time. I care about outputs, not your reasoning.
+**Response style:** Optimise for my reading time. I am usually context-switching between several sessions and am often mentally saturated; a long response is a response I will not read. I care about outputs, not your reasoning.
 
-- Lead with the result: is it done, does it work, what is the verdict. First sentence, every time.
-- Cut the thought process, the options you did not take, and anything restating what I already know. Do not narrate how you got there; give me the outcome.
-- Be brief. If a point does not change what I think or do, drop it. Prefer a tight paragraph or a few bullets over a wall of text.
-- If you need anything from me, collect it into an **`Over to you:`** bullet list at the very end of the response; never bury an ask mid-text. If you need nothing, do not add the section.
-- For any non-trivial response, open with a one-line summary I can read in isolation: did it work, do I need to act.
+Structure every response as these three parts, in this order, and nothing else:
+
+1. **What you did:** one or two sentences, scaled to how much work it was. Never more.
+2. **Recommendations:** what comes next, as short bullets. No justification unless I ask for it.
+3. **Questions:** anything you need from me, as a numbered list at the very end under a clear heading. Omit the section entirely when you need nothing.
+
+- Cut the thought process, the options you did not take, and anything restating what I already know. Do not narrate how you got there.
+- No preamble, no recap of my request, no closing summary.
+- If a point does not change what I think or do, drop it.
+- Detail is available on request. When something genuinely needs flagging (a trade-off, a risk, a behaviour change I did not ask for), name it in one line and offer to expand, rather than expanding pre-emptively.
 
 ## Synchronisation Integrity
 
@@ -92,7 +97,7 @@ Universal rules (apply across code, scripts, docs, comments, UI text):
 - NUnit `[Test]`, `Assert.That()`, Moq; test naming `MethodName_Scenario_ExpectedResult`
 - EF Core in-memory database auto-tracks navigation properties - this masks missing `.Include()` bugs. Run integration tests when modifying repository queries.
 
-Test project locations: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Worker.Tests/`, `test/JIM.Web.Tests/` (UI: causality display logic and bUnit component tests).
+Test project locations: `test/JIM.Web.Api.Tests/`, `test/JIM.Models.Tests/`, `test/JIM.Worker.Tests/`, `test/JIM.Web.Tests/` (UI: causality display logic and bUnit component tests; scope rules in `test/CLAUDE.md`).
 
 > **Full patterns, debugging, integration testing runner:** `test/CLAUDE.md`
 
@@ -113,6 +118,8 @@ Quick reference:
 Use PowerShell (`.ps1`) for ALL automation, integration tests, and utility scripts; it is cross-platform. Never create bash/shell scripts for project automation. Exceptions: `.devcontainer/setup.sh` (runs during container creation) and `.claude/hooks/session-start.sh` (runs during sandbox bootstrap, before PowerShell exists).
 
 ## Design Principles
+
+**Surface parity (portal, REST API, PowerShell):** Every new admin-facing capability ships across all three surfaces in the same PR: read features need read parity, write features need write parity (portal dialog + REST endpoint/DTO + PowerShell parameter or cmdlet, each with tests and docs). Treat a feature as incomplete while any surface is missing; administrators script JIM as much as they click it. If parity is genuinely inapplicable (a portal-only display affordance) or is being deliberately deferred, call that out explicitly and get the user's agreement first; do not defer silently. (Rule added after #1104 shipped Standard Mappings editing portal-first, leaving REST/PowerShell writes as a gap nobody had decided on.)
 
 **Minimise environment variables:** Prefer admin UI / setup wizards. Reserve env vars for bootstrap (initial DB connection), pre-encryption secrets, and container orchestration overrides.
 

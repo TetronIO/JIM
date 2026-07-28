@@ -161,7 +161,7 @@ Each criteria group or criterion edit is captured as its own version rolled up i
 
 ### Criterion cmdlets
 
-`New-JIMPredefinedSearchCriterion` and `Set-JIMPredefinedSearchCriterion` take the attribute (by `-MetaverseAttributeId` or `-MetaverseAttributeName`), a `-ComparisonType`, and the value parameter that matches the attribute's data type (`-StringValue`, `-IntValue`, `-LongValue`, `-DateTimeValue`, `-BoolValue`, or `-GuidValue`). `-CaseSensitive $false` makes a text comparison case-insensitive.
+`New-JIMPredefinedSearchCriterion` and `Set-JIMPredefinedSearchCriterion` take the attribute (by `-MetaverseAttributeId` or `-MetaverseAttributeName`), a `-ComparisonType`, and the value parameter that matches the attribute's data type (`-StringValue`, `-IntValue`, `-LongValue`, `-DecimalValue`, `-DateTimeValue`, `-BoolValue`, or `-GuidValue`). `-CaseSensitive $false` makes a text comparison case-insensitive.
 
 For a Date/Time attribute you can compare against a date relative to now instead of a fixed `-DateTimeValue`: pass `-ValueMode Relative` with `-RelativeCount`, `-RelativeUnit` (Hours, Days, Weeks, Months, Years) and `-RelativeDirection` (Ago or FromNow). Relative is mutually exclusive with `-DateTimeValue`. See [relative dates](../configuration/synchronisation-rules.md#relative-dates-in-scope-filters) for the resolution rules.
 

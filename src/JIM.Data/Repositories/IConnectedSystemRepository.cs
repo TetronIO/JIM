@@ -92,6 +92,15 @@ public interface IConnectedSystemRepository
     public Task<ConnectedSystemRunProfileHeader?> GetConnectedSystemRunProfileHeaderAsync(int connectedSystemRunProfileId);
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(int id, bool withChangeTracking = false);
     public Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name, bool withChangeTracking = false);
+
+    /// <summary>
+    /// Gets the wire standard a Connected System's schema follows, as declared by its Connector. Returns
+    /// <see cref="AttributeStandard.NotSet"/> when the Connector declares none, and for a Connected System
+    /// that no longer exists. Advisory display data for the Attribute Flow editor's Standard Mapping hints
+    /// (#1122); never consulted by the synchronisation engine.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    public Task<AttributeStandard> GetConnectedSystemSchemaStandardAsync(int connectedSystemId);
     public Task<Guid?> GetConnectedSystemObjectIdByAttributeValueAsync(int connectedSystemId, int connectedSystemAttributeId, string attributeValue);
 
     /// <summary>
@@ -121,6 +130,18 @@ public interface IConnectedSystemRepository
     public Task<Dictionary<string, Guid>> GetAllCsoExternalIdMappingsAsync(int connectedSystemId);
 
     /// <summary>
+    /// SPEC-1082 D8: bulk-loads all CSO import state for a Connected System into a lightweight
+    /// dictionary, keyed by the same composite cache key as <see cref="GetAllCsoExternalIdMappingsAsync"/>.
+    /// </summary>
+    public Task<Dictionary<string, JIM.Models.Staging.CsoImportStateLookupEntry>> GetAllCsoImportStateLookupAsync(int connectedSystemId);
+
+    /// <summary>
+    /// SPEC-1082 D6: the only code path permitted to write ImportStateHash/ImportStateFingerprint,
+    /// and only after the batch's attribute-value writes have committed. Never touches LastUpdated.
+    /// </summary>
+    public Task StampImportStateAsync(IReadOnlyCollection<(Guid CsoId, Guid? Hash, Guid? Fingerprint)> stamps);
+
+    /// <summary>
     /// Batch-loads full CSO entity graphs by their IDs.
     /// Returns CSOs with the same Include chain as GetConnectedSystemObjectByAttributeAsync
     /// (Type.Attributes, AttributeValues.Attribute, AttributeValues.ReferenceValue.Type).
@@ -140,6 +161,16 @@ public interface IConnectedSystemRepository
     /// </summary>
     /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
     public Task<List<PendingExport>> GetPendingExportsAsync(int connectedSystemId);
+
+    /// <summary>
+    /// Retrieves the Pending Exports for a Connected System that are awaiting deferred
+    /// reference resolution: Pending status with unresolved reference attribute values.
+    /// The predicate is evaluated in SQL (backed by a partial index on
+    /// HasUnresolvedReferences) so the common zero-deferred case costs a single
+    /// index probe rather than hydrating every Pending Export for the system (#1102).
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier for the Connected System the Pending Exports relate to.</param>
+    public Task<List<PendingExport>> GetPendingExportsWithUnresolvedReferencesAsync(int connectedSystemId);
 
     /// <summary>
     /// Retrieves Pending Exports that are ready for execution, filtering at the database level.

@@ -280,6 +280,17 @@ public class MetaverseServer
     }
 
     /// <summary>
+    /// Gets the advisory Standard Mappings held by every Metaverse Attribute bound to a Metaverse Object Type,
+    /// for the Attribute Flow editor's hints (#1122). Advisory metadata: it documents how attributes correspond
+    /// to SCIM 2.0 and LDAP/AD vocabularies and must never influence what synchronisation flows.
+    /// </summary>
+    /// <param name="metaverseObjectTypeId">The unique identifier of the Metaverse Object Type.</param>
+    public async Task<List<MetaverseAttributeStandardMapping>> GetStandardMappingsForObjectTypeAsync(int metaverseObjectTypeId)
+    {
+        return await Application.Repository.Metaverse.GetStandardMappingsForObjectTypeAsync(metaverseObjectTypeId);
+    }
+
+    /// <summary>
     /// Creates a new Metaverse Attribute.
     /// </summary>
     /// <param name="attribute">The attribute to create.</param>
@@ -576,6 +587,81 @@ public class MetaverseServer
 
         attribute.Name = newName;
         await auditedUpdateAsync(attribute);
+    }
+
+    /// <summary>
+    /// Replaces the advisory Standard Mappings of a custom Metaverse Attribute through the audited path: mappings
+    /// absent from <paramref name="standardMappings"/> are removed, matching ones keep their identity (notes
+    /// updated), and new ones are added. Built-in attributes are rejected; their Standard Mappings are maintained
+    /// by the built-in schema synchronisation pass.
+    /// </summary>
+    /// <exception cref="ArgumentException">No attribute exists with the given id, or a mapping is invalid
+    /// (no standard, empty counterpart name, or a duplicate standard and counterpart name pair).</exception>
+    /// <exception cref="InvalidOperationException">The attribute is built-in.</exception>
+    public Task UpdateMetaverseAttributeStandardMappingsAsync(int attributeId, List<MetaverseAttributeStandardMapping> standardMappings, MetaverseObject? initiatedBy, string? changeReason = null) =>
+        UpdateMetaverseAttributeStandardMappingsCoreAsync(attributeId, standardMappings, attribute => UpdateMetaverseAttributeAsync(attribute, initiatedBy, changeReason));
+
+    /// <summary>
+    /// Replaces the advisory Standard Mappings of a custom Metaverse Attribute (API-key initiator overload).
+    /// </summary>
+    public Task UpdateMetaverseAttributeStandardMappingsAsync(int attributeId, List<MetaverseAttributeStandardMapping> standardMappings, ApiKey initiatedByApiKey, string? changeReason = null) =>
+        UpdateMetaverseAttributeStandardMappingsCoreAsync(attributeId, standardMappings, attribute => UpdateMetaverseAttributeAsync(attribute, initiatedByApiKey, changeReason));
+
+    private async Task UpdateMetaverseAttributeStandardMappingsCoreAsync(int attributeId, List<MetaverseAttributeStandardMapping> standardMappings, Func<MetaverseAttribute, Task> auditedUpdateAsync)
+    {
+        ArgumentNullException.ThrowIfNull(standardMappings);
+
+        if (standardMappings.Any(m => m.Standard == AttributeStandard.NotSet))
+            throw new ArgumentException("Every Standard Mapping requires a standard.", nameof(standardMappings));
+        if (standardMappings.Any(m => string.IsNullOrWhiteSpace(m.CounterpartName)))
+            throw new ArgumentException("Every Standard Mapping requires a counterpart attribute name.", nameof(standardMappings));
+
+        var duplicateGroup = standardMappings
+            .GroupBy(m => (m.Standard, CounterpartName: m.CounterpartName.Trim()))
+            .FirstOrDefault(g => g.Count() > 1);
+        if (duplicateGroup != null)
+            throw new ArgumentException($"Duplicate Standard Mapping: {duplicateGroup.Key.Standard} '{duplicateGroup.Key.CounterpartName}'.", nameof(standardMappings));
+
+        // the mappings are child rows of the attribute, so load the attribute tracked with them included
+        var attribute = await Application.Repository.Metaverse.GetMetaverseAttributeWithObjectTypesAsync(attributeId, withChangeTracking: true)
+            ?? throw new ArgumentException($"Metaverse Attribute {attributeId} not found.", nameof(attributeId));
+
+        if (attribute.BuiltIn)
+            throw new InvalidOperationException($"Cannot modify the Standard Mappings of built-in Metaverse Attribute '{attribute.Name}'; they are maintained by JIM.");
+
+        // reconcile in place so retained mappings keep their identity: remove absent, update notes on matches, add new
+        var staleMappings = attribute.StandardMappings
+            .Where(existing => !standardMappings.Any(requested => MappingKeysMatch(requested, existing)))
+            .ToList();
+        foreach (var staleMapping in staleMappings)
+            attribute.StandardMappings.Remove(staleMapping);
+
+        foreach (var requested in standardMappings)
+        {
+            var existing = attribute.StandardMappings.SingleOrDefault(m => MappingKeysMatch(requested, m));
+            if (existing == null)
+            {
+                attribute.StandardMappings.Add(new MetaverseAttributeStandardMapping
+                {
+                    Standard = requested.Standard,
+                    CounterpartName = requested.CounterpartName.Trim(),
+                    Notes = NormaliseNotes(requested.Notes)
+                });
+            }
+            else
+            {
+                existing.Notes = NormaliseNotes(requested.Notes);
+            }
+        }
+
+        await auditedUpdateAsync(attribute);
+        return;
+
+        // the duplicate check and the reconcile must agree on identity: (standard, trimmed counterpart name), ordinal
+        static bool MappingKeysMatch(MetaverseAttributeStandardMapping requested, MetaverseAttributeStandardMapping existing) =>
+            existing.Standard == requested.Standard && string.Equals(existing.CounterpartName, requested.CounterpartName.Trim(), StringComparison.Ordinal);
+
+        static string? NormaliseNotes(string? notes) => string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
     }
 
     /// <summary>

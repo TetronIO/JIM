@@ -1,0 +1,144 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@using JIM.Models.Staging
+@using JIM.Models.Staging.DTOs
+@using JIM.Web.Models
+@using JIM.Web.Services
+@using Serilog
+@inject IJimApplicationFactory JimFactory
+@inject ISnackbar Snackbar
+
+@* Thin surface over the shared ConsequenceConfirmationDialog: this component owns evaluating the *@
+@* deletion preview and performing the delete; the shared dialog owns presenting it and the consent *@
+@* rules. See engineering/plans/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2). *@
+
+<ConsequenceConfirmationDialog Loading="@(_preview == null)"
+                               LoadingText="Loading deletion preview..."
+                               IrreversibleWarning="This action is permanent and cannot be undone."
+                               Counts="@BuildCounts()"
+                               Warnings="@(_preview?.Warnings ?? [])"
+                               ConfirmationPhrase="@ConnectedSystem.Name"
+                               ConfirmButtonText="Delete Permanently"
+                               BusyText="Deleting..."
+                               OnConfirmAsync="DeleteAsync">
+    <AdditionalContent>
+        @if (_preview is { WillRunAsBackgroundJob: true })
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                Due to the size of this system, deletion will run as a background job.
+                Estimated time: @_preview.EstimatedDeletionTime.ToString(@"hh\:mm\:ss")
+            </MudAlert>
+        }
+
+        <MudCheckBox @bind-Value="_deleteChangeHistory" Color="Color.Primary">
+            <MudText>Delete change history for deleted objects</MudText>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                When enabled, all change history records for the deleted CSOs will also be deleted.
+                Leave unchecked to preserve the audit trail.
+            </MudText>
+        </MudCheckBox>
+
+        <MudTextField T="string"
+                      @bind-Value="_changeReason"
+                      Label="Reason (optional)"
+                      Variant="Variant.Outlined"
+                      FullWidth="true"
+                      Lines="2"
+                      MaxLines="6" />
+    </AdditionalContent>
+</ConsequenceConfirmationDialog>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    /// <summary>
+    /// The Connected System to delete.
+    /// </summary>
+    [Parameter]
+    public ConnectedSystem ConnectedSystem { get; set; } = null!;
+
+    private ConnectedSystemDeletionPreview? _preview;
+    private string? _changeReason;
+    private bool _deleteChangeHistory;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var jim = JimFactory.Create();
+        _preview = await jim.ConnectedSystems.GetDeletionPreviewAsync(ConnectedSystem.Id);
+    }
+
+    private IReadOnlyList<ImpactCount> BuildCounts()
+    {
+        if (_preview == null)
+            return [];
+
+        return
+        [
+            new ImpactCount { Label = "Connected System Objects", Count = _preview.ConnectedSystemObjectCount },
+            new ImpactCount { Label = "Synchronisation Rules", Count = _preview.SyncRuleCount },
+            new ImpactCount { Label = "Run Profiles", Count = _preview.RunProfileCount },
+            new ImpactCount { Label = "Partitions", Count = _preview.PartitionCount },
+            new ImpactCount { Label = "Containers", Count = _preview.ContainerCount },
+            new ImpactCount { Label = "Pending Exports", Count = _preview.PendingExportCount },
+            new ImpactCount { Label = "Activities", Count = _preview.ActivityCount, Note = "will be preserved" },
+            new ImpactCount { Label = "Metaverse Objects", Count = _preview.JoinedMvoCount, Note = "disconnected, not deleted" }
+        ];
+    }
+
+    private async Task<bool> DeleteAsync()
+    {
+        try
+        {
+            using var jim = JimFactory.Create();
+            var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
+            var result = await jim.ConnectedSystems.DeleteAsync(ConnectedSystem.Id, user, _deleteChangeHistory, _changeReason);
+
+            if (!result.Success)
+            {
+                Snackbar.Add($"Failed to delete: {result.ErrorMessage}", Severity.Error);
+                return false;
+            }
+
+            switch (result.Outcome)
+            {
+                case DeletionOutcome.CompletedImmediately:
+                    Snackbar.Add("Connected System has been deleted.", Severity.Success);
+                    break;
+
+                case DeletionOutcome.QueuedAsBackgroundJob:
+                    Snackbar.Add("Deletion has been queued as a background job. You can monitor progress in the Operations view.", Severity.Info);
+                    break;
+
+                case DeletionOutcome.QueuedAfterSync:
+                    Snackbar.Add("A sync operation is running. Deletion will proceed after it completes.", Severity.Info);
+                    break;
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Log.Error(ex, "Error deleting Connected System {Id}", ConnectedSystem.Id);
+            Snackbar.Add($"An error occurred: {ex.Message}", Severity.Error);
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Opens the delete dialog for a Connected System. Returns true when deletion was accepted,
+    /// whether it completed immediately or was queued; the caller should navigate away.
+    /// </summary>
+    public static async Task<bool> ShowAsync(IDialogService dialogService, ConnectedSystem connectedSystem)
+    {
+        var parameters = new DialogParameters<DeleteConnectedSystemDialog>
+        {
+            { x => x.ConnectedSystem, connectedSystem }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await dialogService.ShowAsync<DeleteConnectedSystemDialog>($"Delete \"{connectedSystem.Name}\" Connected System", parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false, Data: true };
+    }
+}

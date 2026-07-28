@@ -2,22 +2,21 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using Bunit;
-using MudBlazor.Services;
 
 namespace JIM.Web.Tests;
 
 /// <summary>
-/// Creates bUnit contexts configured for the causality components: MudBlazor services registered
-/// (MudChip, MudAlert and friends property-inject them) and JS interop in loose mode so MudBlazor's
-/// interop calls no-op.
+/// Creates bUnit contexts for the causality component tests. The configuration (MudBlazor services,
+/// loose JS interop, and the assertion hygiene rules that go with them) is defined once on
+/// <see cref="JimComponentTestContext"/>; this factory exists for test methods that prefer a
+/// disposable local context over fixture inheritance.
 /// </summary>
 public static class CausalityBunitContext
 {
+    private sealed class Context : JimComponentTestContext;
+
     public static BunitContext Create()
     {
-        var context = new BunitContext();
-        context.JSInterop.Mode = JSRuntimeMode.Loose;
-        context.Services.AddMudServices();
-        return context;
+        return new Context();
     }
 }

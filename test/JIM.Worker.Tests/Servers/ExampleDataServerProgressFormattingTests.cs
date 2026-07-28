@@ -32,7 +32,8 @@ public class ExampleDataServerProgressFormattingTests
         var message = ExampleDataServer.FormatPersistenceProgressMessage(progress);
 
         Assert.That(message, Does.Contain("batch 1/21"));
-        Assert.That(message, Does.Contain("(500/10,500)"));
+        Assert.That(message, Does.Not.Contain("("),
+            "The raw object counter is no longer in the message; the progress bar's overall count conveys quantity");
         Assert.That(message, Does.Not.Contain("ETA"),
             "First batch has no measured rate yet, so no ETA should be shown");
     }
@@ -53,7 +54,8 @@ public class ExampleDataServerProgressFormattingTests
         var message = ExampleDataServer.FormatPersistenceProgressMessage(progress);
 
         Assert.That(message, Does.Contain("batch 4/21"));
-        Assert.That(message, Does.Contain("(2,000/10,500)"));
+        Assert.That(message, Does.Not.Contain("("),
+            "The raw object counter is no longer in the message; the progress bar's overall count conveys quantity");
         Assert.That(message, Does.Contain("ETA"));
         Assert.That(message, Does.Contain("s"),
             "Sub-minute ETA should be rendered in seconds");
@@ -92,7 +94,8 @@ public class ExampleDataServerProgressFormattingTests
         var message = ExampleDataServer.FormatPersistenceProgressMessage(progress);
 
         Assert.That(message, Does.Contain("batch 21/21"));
-        Assert.That(message, Does.Contain("(10,500/10,500)"));
+        Assert.That(message, Does.Not.Contain("("),
+            "The raw object counter is no longer in the message; the progress bar's overall count conveys quantity");
         Assert.That(message, Does.Not.Contain("ETA"),
             "Final batch is complete so no ETA is needed");
     }

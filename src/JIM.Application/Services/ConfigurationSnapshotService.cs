@@ -230,6 +230,7 @@ public class ConfigurationSnapshotService
             Add(children, "stringValue", criterion.StringValue, "Value");
             Add(children, "intValue", Render(criterion.IntValue), "Value");
             Add(children, "longValue", Render(criterion.LongValue), "Value");
+            Add(children, "decimalValue", Render(criterion.DecimalValue), "Value");
             Add(children, "dateTimeValue", Render(criterion.DateTimeValue), "Value");
             Add(children, "boolValue", Render(criterion.BoolValue), "Value");
             Add(children, "guidValue", Render(criterion.GuidValue), "Value");
@@ -624,6 +625,7 @@ public class ConfigurationSnapshotService
         Add(children, "builtIn", Render(attribute.BuiltIn), "Built-in");
         AddEnum(children, "renderingHint", attribute.RenderingHint, "Rendering hint");
         children.Add(BuildObjectTypeAssociations(attribute.MetaverseObjectTypes));
+        children.Add(BuildStandardMappings(attribute.StandardMappings));
 
         return new ConfigurationSnapshot
         {
@@ -632,6 +634,22 @@ public class ConfigurationSnapshotService
             ObjectName = attribute.Name,
             Root = ConfigurationSnapshotNode.ObjectNode("metaverseAttribute", children, "Metaverse Attribute")
         };
+    }
+
+    private static ConfigurationSnapshotNode BuildStandardMappings(List<MetaverseAttributeStandardMapping>? standardMappings)
+    {
+        // advisory Standard Mappings (#1104) are configuration: editable for custom attributes, so edits must be
+        // diffable in the change history. Ordered by (standard, counterpart name) for stable snapshots.
+        var items = new List<ConfigurationSnapshotNode>();
+        foreach (var mapping in (standardMappings ?? []).OrderBy(m => m.Standard).ThenBy(m => m.CounterpartName, StringComparer.Ordinal))
+        {
+            var children = new List<ConfigurationSnapshotNode>();
+            AddEnum(children, "standard", mapping.Standard, "Standard");
+            Add(children, "counterpartName", mapping.CounterpartName, "Counterpart attribute name");
+            Add(children, "notes", mapping.Notes, "Notes");
+            items.Add(ConfigurationSnapshotNode.ObjectNode("standardMapping", children, $"{mapping.Standard}: {mapping.CounterpartName}", mapping.Id));
+        }
+        return ConfigurationSnapshotNode.CollectionNode("standardMappings", items, "Standard Mappings");
     }
 
     private static ConfigurationSnapshotNode BuildObjectTypeAssociations(List<MetaverseObjectType>? objectTypes)
@@ -843,6 +861,7 @@ public class ConfigurationSnapshotService
             Add(children, "stringValue", criterion.StringValue, "Value");
             Add(children, "intValue", Render(criterion.IntValue), "Value");
             Add(children, "longValue", Render(criterion.LongValue), "Value");
+            Add(children, "decimalValue", Render(criterion.DecimalValue), "Value");
             Add(children, "dateTimeValue", Render(criterion.DateTimeValue), "Value");
             Add(children, "boolValue", Render(criterion.BoolValue), "Value");
             Add(children, "guidValue", Render(criterion.GuidValue), "Value");
@@ -883,6 +902,9 @@ public class ConfigurationSnapshotService
         Add(children, "description", definition.Description, "Description");
         Add(children, "url", definition.Url, "URL");
         Add(children, "builtIn", Render(definition.BuiltIn), "Built-in");
+        // Advisory, Connector-declared, and reconciled on startup, so a change here is a change shipped in new
+        // connector code; it belongs in the definition's history even though it affects only editor hints.
+        AddEnum(children, "schemaStandard", definition.SchemaStandard, "Schema standard");
         children.Add(BuildConnectorDefinitionCapabilities(definition));
         children.Add(BuildConnectorDefinitionSettings(definition.Settings, hashKey));
         children.Add(BuildConnectorDefinitionFiles(definition.Files));
@@ -1124,6 +1146,10 @@ public class ConfigurationSnapshotService
     private static string? Render(int? value) => value?.ToString(CultureInfo.InvariantCulture);
 
     private static string? Render(long? value) => value?.ToString(CultureInfo.InvariantCulture);
+
+    // Canonical invariant form (no trailing zeros, never exponent notation) so numerically equal
+    // criteria values always snapshot identically.
+    private static string? Render(decimal? value) => value.HasValue ? DecimalAttributeValue.ToCanonicalString(value.Value) : null;
 
     private static string? Render(DateTime? value) => value?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 

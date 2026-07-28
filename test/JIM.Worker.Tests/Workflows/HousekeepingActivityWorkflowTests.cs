@@ -11,6 +11,7 @@ using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Logic;
 using JIM.Models.Staging;
+using JIM.Models.Transactional;
 using JIM.PostgresData;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -29,10 +30,12 @@ namespace JIM.Worker.Tests.Workflows;
 public class HousekeepingActivityWorkflowTests
 {
     private const int TargetSystemId = 5;
+    private const string TargetSystemName = "Target LDAP";
     private const int MvPersonTypeId = 40;
     private const int MvGroupTypeId = 50;
     private const int MvMemberAttributeId = 60;
     private const int CsGroupTypeId = 70;
+    private const int CsUserTypeId = 71;
     private const int CsMemberAttributeId = 80;
     private const int CsDnAttributeId = 81;
 
@@ -185,6 +188,50 @@ public class HousekeepingActivityWorkflowTests
             "TotalPendingExports must reflect the staged recall Pending Export");
         Assert.That(activity.TotalDeleted, Is.EqualTo(1),
             "TotalDeleted must count MvoDeleted outcomes so list views show what the batch deleted");
+    }
+
+    /// <summary>
+    /// Deletion cascade (#1044): a grace-period-expired Metaverse Object whose target Connected System Object is
+    /// matched by an export Synchronisation Rule with a Delete deprovisioning action stages a delete Pending Export.
+    /// That export deprovisions a real account, so it must be recorded on the housekeeping Activity as a consequence
+    /// of the deletion: a PendingExportCreated outcome nested beneath the deleted object's MvoDeleted outcome, not
+    /// left visible only in the service log.
+    /// </summary>
+    [Test]
+    public async Task PerformHousekeeping_EligibleMvoWithDeleteDeprovisionRule_NestsDeleteExportUnderMvoDeletedAsync()
+    {
+        // Arrange
+        var (personMvo, personTargetCso) = SeedEligiblePersonWithDeprovisionableTargetCso("Dan Deprovisioned");
+        _mockMetaverseRepository
+            .Setup(r => r.GetMetaverseObjectsEligibleForDeletionAsync(It.IsAny<int>()))
+            .ReturnsAsync([personMvo]);
+
+        // Act
+        await WorkerInstance.PerformHousekeepingAsync(Jim);
+
+        // Assert: the delete Pending Export was staged for the target Connected System Object.
+        var deletePendingExport = SyncRepo.PendingExports.Values
+            .Single(pe => pe.ChangeType == PendingExportChangeType.Delete);
+        Assert.That(deletePendingExport.ConnectedSystemObjectId, Is.EqualTo(personTargetCso.Id));
+
+        // Assert: and that it is recorded as a consequence of the deletion on the deleted object's item.
+        var activity = _createdActivities.Single(a => a.TargetType == ActivityTargetType.MetaverseObjectHousekeeping);
+        var rpeis = _persistedRpeis.Where(r => r.ActivityId == activity.Id).ToList();
+        Assert.That(rpeis.Any(r => r.ObjectChangeType == ObjectChangeType.PendingExport), Is.False,
+            "The staged export belongs on the deletion's causality tree, not on an execution item of its own");
+
+        var deletionRpei = rpeis.Single(r => r.ObjectChangeType == ObjectChangeType.Deleted);
+        var mvoDeletedOutcome = deletionRpei.SyncOutcomes
+            .Single(o => o.OutcomeType == ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted);
+        var cascadeOutcome = mvoDeletedOutcome.Children.SingleOrDefault();
+        Assert.That(cascadeOutcome, Is.Not.Null,
+            "The staged delete Pending Export must be recorded as a consequence of the Metaverse Object deletion");
+        Assert.That(cascadeOutcome!.OutcomeType, Is.EqualTo(ActivityRunProfileExecutionItemSyncOutcomeType.PendingExportCreated));
+        Assert.That(cascadeOutcome.TargetEntityId, Is.EqualTo(deletePendingExport.Id));
+        Assert.That(cascadeOutcome.TargetEntityDescription, Is.EqualTo(TargetSystemName),
+            "The outcome must name the Connected System the account is being deleted from; the identity is named by the item it hangs off");
+        Assert.That(activity.TotalPendingExports, Is.EqualTo(1),
+            "TotalPendingExports must count the staged deprovisioning export");
     }
 
     /// <summary>
@@ -378,6 +425,52 @@ public class HousekeepingActivityWorkflowTests
         SyncRepo.SeedConnectedSystemObject(targetCso);
 
         return (memberMvo, dn);
+    }
+
+    /// <summary>
+    /// Seeds an eligible Person Metaverse Object joined to a provisioned target Connected System Object of a user
+    /// type that an export Synchronisation Rule deprovisions by deleting (issue #655), so the deletion cascades
+    /// into a delete Pending Export.
+    /// </summary>
+    private (MetaverseObject Mvo, ConnectedSystemObject TargetCso) SeedEligiblePersonWithDeprovisionableTargetCso(string displayName)
+    {
+        SyncRepo.SeedSyncRule(new SyncRule
+        {
+            Id = 910,
+            Name = "Target Export Users",
+            Enabled = true,
+            Direction = SyncRuleDirection.Export,
+            ConnectedSystemId = TargetSystemId,
+            ConnectedSystem = new ConnectedSystem { Id = TargetSystemId, Name = TargetSystemName },
+            ConnectedSystemObjectTypeId = CsUserTypeId,
+            MetaverseObjectTypeId = MvPersonTypeId,
+            OutboundDeprovisionAction = OutboundDeprovisionAction.Delete
+        });
+
+        var personMvo = CreateEligiblePersonMvo(displayName);
+        SyncRepo.SeedMetaverseObject(personMvo);
+
+        var targetCso = new ConnectedSystemObject
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemId = TargetSystemId,
+            TypeId = CsUserTypeId,
+            Status = ConnectedSystemObjectStatus.Normal,
+            JoinType = ConnectedSystemObjectJoinType.Provisioned,
+            MetaverseObjectId = personMvo.Id,
+            SecondaryExternalIdAttributeId = CsDnAttributeId
+        };
+        targetCso.AttributeValues.Add(new ConnectedSystemObjectAttributeValue
+        {
+            Id = Guid.NewGuid(),
+            ConnectedSystemObject = targetCso,
+            Attribute = CsDnAttribute,
+            AttributeId = CsDnAttributeId,
+            StringValue = "uid=dan.deprovisioned,ou=People,dc=glitterband,dc=local"
+        });
+        SyncRepo.SeedConnectedSystemObject(targetCso);
+
+        return (personMvo, targetCso);
     }
 
     /// <summary>

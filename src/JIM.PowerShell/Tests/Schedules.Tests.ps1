@@ -516,6 +516,83 @@ Describe 'Add-JIMScheduleStep' {
         }
     }
 
+    Context 'Request body enum serialisation' {
+
+        BeforeEach {
+            InModuleScope JIM {
+                $script:JIMConnection = [PSCustomObject]@{ Url = 'https://jim.example.com'; AuthMethod = 'ApiKey' }
+                $script:capturedBody = $null
+
+                $script:testScheduleId = [guid]::NewGuid()
+                # As the API returns it: enum values serialised as names, not numbers (#1060).
+                $existingStep = [PSCustomObject]@{
+                    id                = [guid]::NewGuid()
+                    stepIndex         = 0
+                    stepType          = 'PowerShell'
+                    executionMode     = 'Sequential'
+                    continueOnFailure = $false
+                    connectedSystemId = $null
+                    runProfileId      = $null
+                    name              = 'Nightly maintenance'
+                    scriptPath        = '/scripts/nightly.ps1'
+                    arguments         = $null
+                    executablePath    = $null
+                    workingDirectory  = $null
+                }
+                $script:testSchedule = [PSCustomObject]@{
+                    id          = $script:testScheduleId
+                    name        = 'Test Schedule'
+                    description = $null
+                    triggerType = 'Cron'
+                    patternType = $null
+                    isEnabled   = $true
+                    daysOfWeek  = $null
+                    runTimes    = $null
+                    intervalValue = $null
+                    intervalUnit = $null
+                    intervalWindowStart = $null
+                    intervalWindowEnd = $null
+                    cronExpression = '0 1 * * *'
+                    steps       = @($existingStep)
+                }
+
+                Mock Invoke-JIMApi {
+                    if ($Method -eq 'PUT') { $script:capturedBody = $Body }
+                    $script:testSchedule
+                }
+            }
+        }
+
+        It 'Sends stepType and executionMode as enum names (the API rejects numeric enum values)' {
+            InModuleScope JIM {
+                Add-JIMScheduleStep -ScheduleId $script:testScheduleId -StepType RunProfile -ConnectedSystemId 1 -RunProfileId 2 -Confirm:$false
+
+                $script:capturedBody | Should -Not -BeNullOrEmpty
+                $newStep = $script:capturedBody.steps[-1]
+                $newStep.stepType | Should -BeExactly 'RunProfile'
+                $newStep.executionMode | Should -BeExactly 'Sequential'
+            }
+        }
+
+        It 'Sends executionMode ParallelWithPrevious as an enum name when -Parallel is used' {
+            InModuleScope JIM {
+                Add-JIMScheduleStep -ScheduleId $script:testScheduleId -StepType RunProfile -ConnectedSystemId 1 -RunProfileId 2 -Parallel -Confirm:$false
+
+                $script:capturedBody.steps[-1].executionMode | Should -BeExactly 'ParallelWithPrevious'
+            }
+        }
+
+        It 'Preserves existing steps verbatim instead of coercing their enums to numeric defaults' {
+            InModuleScope JIM {
+                Add-JIMScheduleStep -ScheduleId $script:testScheduleId -StepType RunProfile -ConnectedSystemId 1 -RunProfileId 2 -Confirm:$false
+
+                $script:capturedBody.steps.Count | Should -Be 2
+                $script:capturedBody.steps[0].stepType | Should -BeExactly 'PowerShell'
+                $script:capturedBody.steps[0].executionMode | Should -BeExactly 'Sequential'
+            }
+        }
+    }
+
     Context 'Help Documentation' {
 
         BeforeAll {

@@ -36,6 +36,18 @@ The metaverse is the authoritative identity repository:
 
 **Rule**: Extend through interfaces, not modification. Keep connectors independent.
 
+### 3a. Real-Time Notifications (#307)
+
+Services coordinate through the database, and the database also signals change: triggers on `WorkerTasks` (insert, status change, delete) and `Activities` (progress/status columns) publish PostgreSQL `NOTIFY` events on commit. Key components:
+
+- **Channels**: names in `Constants.NotificationChannels` (`JIM.Models`); Worker Task payloads parse via `WorkerTaskChangeNotification.TryParse`, Activity progress payloads are the Activity id.
+- **Listener**: `IDatabaseNotificationListener` (`JIM.Data`) implemented by `PostgresNotificationListener` (`JIM.PostgresData`); one dedicated non-pooled connection per service (`JimDbContext.BuildListenerConnectionString()`), exponential backoff reconnection, `IsConnected`/`ConnectionStateChanged` for fallback gating.
+- **Scheduler**: listens for terminal Worker Tasks belonging to a Schedule Execution and wakes its polling loop (via `AsyncWakeSignal` in `JIM.Utilities`) within ~500ms; the 30-second cycle remains the fallback.
+- **JIM.Web**: `NotificationListenerService` (hosted service) fans events out to the in-process `IUiNotificationService` relay (consumed by Blazor components; Activity progress debounced 200ms) and the `JimNotificationHub` SignalR hub at `/hubs/notifications` for non-Blazor consumers.
+- **Run Profile progress (#202)**: the lightweight progress read path is `IActivityRepository.GetActivityProgressAsync` (scalar projection plus the `ActivityStatCounter` operation breakdown from #1078; never materialises RPEIs), surfaced as `GET /api/v1/activities/{id}/progress` and consumed by the Activity detail page (push-driven via the relay, with adaptive fallback polling) and PowerShell (`Get-JIMActivity -Follow`, `Start-JIMRunProfile -Wait`). Throughput and ETA come from `IActivityEtaTracker` (JIM.Web singleton): a windowed rate over successive progress samples with counter-reset detection, shared by the endpoint and the page so all surfaces agree.
+
+**Rules**: notifications are fire-and-forget hints carrying identifiers only; consumers re-query the database for state and MUST retain a polling fallback (degraded latency, never degraded correctness). Publish new channels via database triggers (delivered on commit, cover every writer), never ad-hoc application-side `pg_notify` calls.
+
 ### 4. Architecture Diagrams
 
 JIM's architecture is documented with C4 model diagrams (System Context, Container, Component levels) on the [architecture docs page](../docs/developer/architecture.md).

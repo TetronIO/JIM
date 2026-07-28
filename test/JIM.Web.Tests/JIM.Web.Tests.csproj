@@ -1,16 +1,27 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<!--
+  JIM.Web UI tests: causality display logic (plain NUnit classes) and Blazor component
+  tests (bUnit + NUnit). Scope rules live in test/CLAUDE.md.
+
+  This project uses Microsoft.NET.Sdk.Razor (not the plain SDK) because bUnit renders
+  Razor components and requires the Razor SDK's compilation support.
+-->
+<Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Transitive override: bunit 2.7.2 brings AngleSharp 1.4.0, which has a known moderate
-         severity vulnerability (GHSA-pgww-w46g-26qg) that fails restore under NuGet audit.
-         Remove when bunit references a patched AngleSharp itself. -->
-    <PackageReference Include="AngleSharp" Version="1.5.2" />
+    <!--
+      Transitive pin, not a direct use. bUnit 2.7.2 resolves AngleSharp 1.4.0, which carries
+      CVE-2026-54570 / GHSA-pgww-w46g-26qg (mXSS via MathML annotation-xml integration points),
+      fixed in 1.5.0. Pinning forward keeps the restore audit clean without suppressing the
+      finding. Drop this reference once bUnit's own floor moves past 1.5.0.
+    -->
+    <PackageReference Include="AngleSharp" Version="1.6.0" />
     <PackageReference Include="bunit" Version="2.7.2" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="Moq" Version="4.20.72" />
