@@ -20,10 +20,60 @@
 {
     <MudAlert Class="mt-5" Severity="Severity.Warning" Variant="Variant.Outlined">Please create a <MudLink Href="/admin/connected-systems/">Connected
         System</MudLink> first.</MudAlert>
-    }
+}
+
+@* ─── Filters ─── *@
+@if (_syncRuleHeaders is { Count: > 0 })
+{
+    <MudStack Row="true" Spacing="3" Class="mt-4 flex-wrap" AlignItems="AlignItems.End">
+        <MudItem Class="flex-grow-1">
+            <MudSelect T="int" Label="Connected System" Variant="Variant.Outlined"
+                       Dense="true" Clearable="true" MultiSelection="true"
+                       SelectedValues="SelectedConnectedSystemIds"
+                       SelectedValuesChanged="OnConnectedSystemFilterChanged"
+                       MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetConnectedSystemFilterText))">
+                @foreach (var connectedSystemId in _connectedSystemFilterOptionIds)
+                {
+                    <MudSelectItem T="int" Value="@connectedSystemId">@_connectedSystemNames[connectedSystemId]</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem Class="flex-grow-1">
+            <MudSelect T="SyncRuleDirection" Label="Direction" Variant="Variant.Outlined"
+                       Dense="true" Clearable="true" MultiSelection="true"
+                       SelectedValues="SelectedDirections"
+                       SelectedValuesChanged="OnDirectionFilterChanged"
+                       MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetDirectionFilterText))">
+                <MudSelectItem T="SyncRuleDirection" Value="SyncRuleDirection.Import">Inbound</MudSelectItem>
+                <MudSelectItem T="SyncRuleDirection" Value="SyncRuleDirection.Export">Outbound</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem Class="flex-grow-1">
+            <MudSelect T="SyncRuleActionType" Label="Action" Variant="Variant.Outlined"
+                       Dense="true" Clearable="true" MultiSelection="true"
+                       SelectedValues="SelectedActionTypes"
+                       SelectedValuesChanged="OnActionTypeFilterChanged"
+                       MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetActionTypeFilterText))">
+                <MudSelectItem T="SyncRuleActionType" Value="SyncRuleActionType.Projects">Projects</MudSelectItem>
+                <MudSelectItem T="SyncRuleActionType" Value="SyncRuleActionType.Provisions">Provisions</MudSelectItem>
+                <MudSelectItem T="SyncRuleActionType" Value="SyncRuleActionType.FlowOnly">Flow Only</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem Class="flex-grow-1">
+            <MudSelect T="SyncRuleStatus" Label="Status" Variant="Variant.Outlined"
+                       Dense="true" Clearable="true" MultiSelection="true"
+                       SelectedValues="SelectedStatuses"
+                       SelectedValuesChanged="OnStatusFilterChanged"
+                       MultiSelectionTextFunc="@(new Func<IReadOnlyList<string>, string>(GetStatusFilterText))">
+                <MudSelectItem T="SyncRuleStatus" Value="SyncRuleStatus.Enabled">Enabled</MudSelectItem>
+                <MudSelectItem T="SyncRuleStatus" Value="SyncRuleStatus.Disabled">Disabled</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+    </MudStack>
+}
 
     <MudTable Items="@_syncRuleHeaders" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="@(_dense ? "mt-5 mb-5 dense-body-only" : "mt-5 mb-5")" SortLabel="Sort By"
-              Filter="new Func<SyncRuleHeader, bool>(FilterFunc1)" Outlined="true" Elevation="0">
+              Filter="new Func<SyncRuleHeader, bool>(_filter.Matches)" Outlined="true" Elevation="0">
         <ToolBarContent>
             <TableDensityToggle @bind-Dense="_dense" />
             <MudText Class="mx-2 mud-text-disabled">|</MudText>
@@ -31,9 +81,9 @@
                        Color="Color.Primary" Disabled="@(!_canCreateSyncRules)" DropShadow="false">Create Synchronisation Rule
             </MudButton>
             <MudSpacer />
-            <MudTextField @bind-Value="_searchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense"
+            <MudTextField @bind-Value="SearchString" Variant="Variant.Outlined" Placeholder="Search" Margin="Margin.Dense"
                           Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" IconSize="Size.Medium"
-                          Class="mt-0"></MudTextField>
+                          Immediate="true" DebounceInterval="300" Class="mt-0"></MudTextField>
         </ToolBarContent>
         <HeaderContent>
             <MudTh>
@@ -57,7 +107,7 @@
                 </MudTableSortLabel>
             </MudTh>
             <MudTh>
-                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => GetCapabilityText(x))">
+                <MudTableSortLabel SortBy="new Func<SyncRuleHeader, object>(x => SyncRuleFilter.GetActionType(x))">
                     <MudText Typo="Typo.button">Actions</MudText>
                 </MudTableSortLabel>
             </MudTh>
@@ -135,23 +185,22 @@
             </MudTd>
             <MudTd DataLabel="Actions">
                 <div class="d-flex align-center gap-1 flex-wrap">
-                    @if (context.Direction == SyncRuleDirection.Import && context.ProjectToMetaverse == true)
+                    @switch (SyncRuleFilter.GetActionType(context))
                     {
-                        <MudTooltip Text="Projects new objects to the Metaverse" Arrow="true" Placement="Placement.Top">
-                            <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Projects</MudChip>
-                        </MudTooltip>
-                    }
-                    @if (context.Direction == SyncRuleDirection.Export && context.ProvisionToConnectedSystem == true)
-                    {
-                        <MudTooltip Text="Provisions new objects to the Connected System" Arrow="true"
-                                    Placement="Placement.Top">
-                            <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Provisions</MudChip>
-                        </MudTooltip>
-                    }
-                    @if (!((context.Direction == SyncRuleDirection.Import && context.ProjectToMetaverse == true) ||
-                                                                                                                           (context.Direction == SyncRuleDirection.Export && context.ProvisionToConnectedSystem == true)))
-                    {
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">-</MudText>
+                        case SyncRuleActionType.Projects:
+                            <MudTooltip Text="Projects new objects to the Metaverse" Arrow="true" Placement="Placement.Top">
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Info">Projects</MudChip>
+                            </MudTooltip>
+                            break;
+                        case SyncRuleActionType.Provisions:
+                            <MudTooltip Text="Provisions new objects to the Connected System" Arrow="true"
+                                        Placement="Placement.Top">
+                                <MudChip T="string" Variant="Variant.Text" Color="Color.Warning">Provisions</MudChip>
+                            </MudTooltip>
+                            break;
+                        default:
+                            <EmptyValue />
+                            break;
                     }
                 </div>
             </MudTd>
@@ -172,15 +221,28 @@
             </MudTd>
         </RowTemplate>
         <NoRecordsContent>
-            There are no Synchronisation Rules
+            @if (_filter.IsEmpty)
+            {
+                <MudText>There are no Synchronisation Rules</MudText>
+            }
+            else
+            {
+                <MudText>No Synchronisation Rules match the current filters</MudText>
+            }
         </NoRecordsContent>
     </MudTable>
 
 @code {
     private IList<SyncRuleHeader>? _syncRuleHeaders;
-    private string _searchString = "";
     private bool _canCreateSyncRules;
     private bool _dense;
+
+    // The single holder of filter state. SyncRuleFilter.Matches is the same predicate the REST API
+    // filters through, so every surface narrows a Synchronisation Rule list identically.
+    private readonly SyncRuleFilter _filter = new();
+
+    private Dictionary<int, string> _connectedSystemNames = new();
+    private List<int> _connectedSystemFilterOptionIds = [];
 
     private readonly List<BreadcrumbItem> _breadcrumbs = new List<BreadcrumbItem>
     {
@@ -203,27 +265,69 @@
         using var jim = JimFactory.Create();
         _canCreateSyncRules = jim.ConnectedSystems.GetConnectedSystemCount() > 0;
         _syncRuleHeaders = await jim.ConnectedSystems.GetSyncRuleHeadersAsync();
+
+        // Offer only the Connected Systems that actually have Synchronisation Rules; filtering by a
+        // system with none would just empty the table.
+        _connectedSystemNames = _syncRuleHeaders
+            .GroupBy(h => h.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => g.First().ConnectedSystemName);
+        _connectedSystemFilterOptionIds = _connectedSystemNames.OrderBy(n => n.Value).Select(n => n.Key).ToList();
     }
 
-    private bool FilterFunc1(SyncRuleHeader element) => FilterFunc(element, _searchString);
-
-    private static string GetCapabilityText(SyncRuleHeader element)
+    private string SearchString
     {
-        if (element.Direction == SyncRuleDirection.Import && element.ProjectToMetaverse == true)
-            return "Projects";
-        if (element.Direction == SyncRuleDirection.Export && element.ProvisionToConnectedSystem == true)
-            return "Provisions";
-        return "";
+        get => _filter.Search ?? string.Empty;
+        set => _filter.Search = value;
     }
 
-    private static bool FilterFunc(SyncRuleHeader element, string searchString)
+    private IReadOnlyCollection<int> SelectedConnectedSystemIds => _filter.ConnectedSystemIds ?? [];
+
+    private IReadOnlyCollection<SyncRuleDirection> SelectedDirections => _filter.Directions ?? [];
+
+    private IReadOnlyCollection<SyncRuleActionType> SelectedActionTypes => _filter.ActionTypes ?? [];
+
+    private IReadOnlyCollection<SyncRuleStatus> SelectedStatuses => _filter.Statuses ?? [];
+
+    private void OnConnectedSystemFilterChanged(IReadOnlyCollection<int> selected) => _filter.ConnectedSystemIds = selected;
+
+    private void OnDirectionFilterChanged(IReadOnlyCollection<SyncRuleDirection> selected) => _filter.Directions = selected;
+
+    private void OnActionTypeFilterChanged(IReadOnlyCollection<SyncRuleActionType> selected) => _filter.ActionTypes = selected;
+
+    private void OnStatusFilterChanged(IReadOnlyCollection<SyncRuleStatus> selected) => _filter.Statuses = selected;
+
+    private string GetConnectedSystemFilterText(IReadOnlyList<string> selectedValues)
     {
-        if (string.IsNullOrWhiteSpace(searchString))
-            return true;
+        if (selectedValues.Count == 1 &&
+            int.TryParse(selectedValues[0], out var connectedSystemId) &&
+            _connectedSystemNames.TryGetValue(connectedSystemId, out var connectedSystemName))
+        {
+            return connectedSystemName;
+        }
 
-        if (element.Name.Contains(searchString, StringComparison.OrdinalIgnoreCase))
-            return true;
+        return GetMultiSelectText(selectedValues);
+    }
 
-        return false;
+    private static string GetDirectionFilterText(IReadOnlyList<string> selectedValues) =>
+        GetMultiSelectText(selectedValues, value => value == nameof(SyncRuleDirection.Import) ? "Inbound" : "Outbound");
+
+    private static string GetActionTypeFilterText(IReadOnlyList<string> selectedValues) =>
+        GetMultiSelectText(selectedValues, value => value == nameof(SyncRuleActionType.FlowOnly) ? "Flow Only" : value);
+
+    private static string GetStatusFilterText(IReadOnlyList<string> selectedValues) => GetMultiSelectText(selectedValues);
+
+    /// <summary>
+    /// Renders a multi-select's summary text: blank when nothing is selected (so the label's
+    /// placeholder shows through), the single selection's display label when one is selected, and a
+    /// count otherwise. Matches the convention used by the Activities and Operations filter bars.
+    /// </summary>
+    private static string GetMultiSelectText(IReadOnlyList<string> selectedValues, Func<string, string>? displayLabel = null)
+    {
+        return selectedValues.Count switch
+        {
+            0 => string.Empty,
+            1 => displayLabel == null ? selectedValues[0] : displayLabel(selectedValues[0]),
+            _ => $"{selectedValues.Count} selected"
+        };
     }
 }
