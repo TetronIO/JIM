@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- 🔒 LDAPS connections to a directory now genuinely validate the certificate it presents, checking the issuer, the validity period, and that the certificate was issued for the host JIM connects to, before the service account's credentials are sent. Certificates added in Admin > Certificates are honoured for the first time: they are trusted in addition to the operating system's trust store, never in place of it, so adding one can only ever allow more connections, never fewer. An internal certificate authority or a directory's own self-signed certificate both work. Previously the validation code could not run at all in JIM's containers, so adding any certificate broke LDAPS with a connectivity error instead. (#1132)
+
+### Fixed
+
+- 🐛 A setting withdrawn from a Connector no longer lingers on Connected Systems that already held a value for it. The setting was being detached from its Connector Definition rather than deleted, leaving the row behind with the saved values still pointing at it. (#1132)
+
+### Changed
+
+- 🔄 The LDAP Connector's "Certificate Validation" setting has been removed. Its "Skip Validation" option could never be honoured for an individual Connected System, and validation is now always applied to LDAPS connections. Where a directory's certificate is not trusted, add it in Admin > Certificates; where the certificate name does not match the host being connected to, give the JIM containers a host entry for that name (`extra_hosts` in Docker Compose) and use the name in the Host setting, rather than weakening validation. See the [LDAP Connector documentation](https://tetronio.github.io/JIM/connectors/jim-ldap-connector/) for both. (#1132)
+
 ## [0.14.0] - 2026-07-25
 
 ### Security

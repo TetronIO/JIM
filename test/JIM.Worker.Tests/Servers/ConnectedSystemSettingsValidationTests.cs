@@ -6,6 +6,7 @@ using JIM.Connectors;
 using JIM.Connectors.File;
 using JIM.Connectors.LDAP;
 using JIM.Data;
+using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
@@ -105,17 +106,20 @@ public class ConnectedSystemSettingsValidationTests
     [Test]
     public void CopyConnectorSettingsToConnectorDefinition_CopiesRequiredWhen()
     {
-        // Arrange
-        var connectorDefinition = new ConnectorDefinition { Name = ConnectorConstants.LdapConnectorName };
+        // Arrange: no shipped connector currently declares a conditionally-required setting, so this uses a stand-in
+        // connector rather than coupling the test to whichever connector happens to have one.
+        var connectorDefinition = new ConnectorDefinition { Name = "Conditionally Required Settings Test Connector" };
 
         // Act
-        using var ldapConnector = new LdapConnector();
-        _jim.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(ldapConnector, connectorDefinition);
+        _jim.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(new ConditionallyRequiredSettingConnector(), connectorDefinition);
 
         // Assert
-        var certificateValidation = connectorDefinition.Settings.Single(s => s.Name == "Certificate Validation");
-        Assert.That(certificateValidation.RequiredWhenSetting, Is.EqualTo("Use Secure Connection (LDAPS)?"));
-        Assert.That(certificateValidation.RequiredWhenValue, Is.EqualTo("true"));
+        var conditionalSetting = connectorDefinition.Settings.Single(s => s.Name == "Certificate Path");
+        Assert.Multiple(() =>
+        {
+            Assert.That(conditionalSetting.RequiredWhenSetting, Is.EqualTo("Use Secure Connection?"));
+            Assert.That(conditionalSetting.RequiredWhenValue, Is.EqualTo("true"));
+        });
     }
 
     [Test]
@@ -169,5 +173,26 @@ public class ConnectedSystemSettingsValidationTests
 
         connectedSystem.SettingValues.Single(sv => sv.Setting.Name == "File Path").StringValue = _tempCsvPath;
         return connectedSystem;
+    }
+}
+
+/// <summary>
+/// Stand-in connector that declares a conditionally-required setting, so the RequiredWhen copy behaviour can be
+/// covered without depending on a shipped connector happening to have one.
+/// </summary>
+internal class ConditionallyRequiredSettingConnector : IConnectorSettings
+{
+    public List<ConnectorSetting> GetSettings()
+    {
+        return
+        [
+            new() { Name = "Use Secure Connection?", Type = ConnectedSystemSettingType.CheckBox, DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.Connectivity },
+            new() { Name = "Certificate Path", Type = ConnectedSystemSettingType.String, Required = false, RequiredWhenSetting = "Use Secure Connection?", RequiredWhenValue = "true", Category = ConnectedSystemSettingCategory.Connectivity }
+        ];
+    }
+
+    public List<ConnectorSettingValueValidationResult> ValidateSettingValues(List<ConnectedSystemSettingValue> settings, Serilog.ILogger logger)
+    {
+        return [];
     }
 }
