@@ -2273,3 +2273,16 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
 :is(.mud-alert-text-success, .mud-alert-outlined-success) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
     color: var(--mud-palette-success) !important;
 }
+
+/* The hover and focus wash, and the click ripple, follow the button's own colour rather than MudBlazor's
+   defaults, which are a blue tint and a near-black ripple: both read as foreign inside a coloured alert. Written
+   against currentColor so one rule serves every severity and both themes; on a normal-severity alert it resolves
+   to the ordinary text colour, which is the right answer there too. */
+.mud-alert :is(.mud-button-text-inherit, .mud-button-outlined-inherit):hover,
+.mud-alert :is(.mud-button-text-inherit, .mud-button-outlined-inherit):focus-visible {
+    background-color: color-mix(in srgb, currentColor 12%, transparent) !important;
+}
+
+.mud-alert :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-ripple-effect {
+    background-color: currentColor !important;
+}
