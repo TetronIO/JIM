@@ -262,10 +262,11 @@ public static class ConfigurationChangeClassifier
         if (!diff.HasChanges || diff.Root == null)
             return ConfigurationChangeClass.NotClassified;
 
+        // Projected rather than mapped inside the loop, and lazily, so the break below still stops the
+        // enumeration at the first Destructive key.
         var highest = ConfigurationChangeClass.NotClassified;
-        foreach (var key in CollectChangedKeys(diff.Root))
+        foreach (var nodeClass in CollectChangedKeys(diff.Root).Select(key => ClassifyKey(diff.ObjectType, key, objectKey)))
         {
-            var nodeClass = ClassifyKey(diff.ObjectType, key, objectKey);
             if (nodeClass > highest)
                 highest = nodeClass;
 
