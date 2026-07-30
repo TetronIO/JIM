@@ -103,14 +103,7 @@ internal sealed class LdapTrustedCertificateDirectory : IDisposable
             var writtenThumbprints = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var certificate in trustedCertificates.Where(certificate => writtenThumbprints.Add(certificate.Thumbprint)))
             {
-                // The thumbprint becomes a file name. It is a hex string, so it cannot traverse anywhere today;
-                // asserted rather than assumed because the value reaches a file write and is derived from a
-                // certificate JIM did not issue.
-                var certificateFileName = $"{certificate.Thumbprint}.crt";
-                if (!string.Equals(certificateFileName, Path.GetFileName(certificateFileName), StringComparison.Ordinal))
-                    throw new ArgumentException("A certificate in the JIM certificate store has a thumbprint that cannot be used as a file name.", nameof(trustedCertificates));
-
-                var certificatePath = Path.Combine(directoryPath, certificateFileName);
+                var certificatePath = ResolveWithin(directoryPath, $"{certificate.Thumbprint}.crt");
                 System.IO.File.WriteAllText(certificatePath, certificate.ExportCertificatePem());
                 if (!OperatingSystem.IsWindows())
                     System.IO.File.SetUnixFileMode(certificatePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
@@ -162,6 +155,28 @@ internal sealed class LdapTrustedCertificateDirectory : IDisposable
     /// Copies the operating system's certificate bundle into the trust directory so that system-trusted issuers keep
     /// validating. A missing bundle is not fatal, but it does narrow what will validate, so it is logged as a warning.
     /// </summary>
+    /// <summary>
+    /// Joins a file name onto the trust directory and proves the result is still inside it.
+    /// </summary>
+    /// <remarks>
+    /// A certificate's thumbprint is a hex string, so today it cannot traverse anywhere. This is checked rather
+    /// than assumed because the name is derived from a certificate JIM did not issue and it decides where a file
+    /// is written; the trust directory's whole purpose is to hold anchors nothing else can tamper with.
+    /// </remarks>
+    private static string ResolveWithin(string directoryPath, string fileName)
+    {
+        var directoryFullPath = Path.GetFullPath(directoryPath);
+        var candidate = Path.GetFullPath(Path.Combine(directoryFullPath, fileName));
+        var prefix = directoryFullPath.EndsWith(Path.DirectorySeparatorChar)
+            ? directoryFullPath
+            : directoryFullPath + Path.DirectorySeparatorChar;
+
+        if (!candidate.StartsWith(prefix, StringComparison.Ordinal))
+            throw new ArgumentException($"'{fileName}' does not resolve to a file inside the trust directory.", nameof(fileName));
+
+        return candidate;
+    }
+
     private static void CopySystemBundle(string directoryPath, IReadOnlyList<string> candidatePaths, ILogger logger)
     {
         var bundlePath = candidatePaths.FirstOrDefault(System.IO.File.Exists);
