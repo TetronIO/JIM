@@ -73,7 +73,7 @@ The integration test infrastructure already anticipates this connector: dormant 
 | UNIQUEIDENTIFIER/RAW(16) with GUID content | Guid | |
 | VARBINARY/BLOB/RAW | Binary | |
 | DECIMAL/NUMERIC/MONEY | Decimal | Type delivered by prerequisite #1046 |
-| FLOAT/REAL | Per #1046's decision | Decimal with a documented precision caveat, or Text; decided within #1046 |
+| FLOAT/REAL | Decimal | Approximate binary types; documented precision caveat (decided 2026-07-30, as #1046 closed without recording it): binary-to-decimal round-trips are not bit-exact, and a Text mapping would reintroduce the lexicographic-comparison defect #1046 exists to fix |
 | Foreign-key columns holding another object type's anchor | Reference | Explicit per-column configuration, not inferred |
 
 9. Zoneless date/time columns are ambiguous at the wire level, so the connector must expose a per-Connected-System setting declaring how to interpret them (UTC, or a named IANA time zone), applied on import and inverted on export. Offset-carrying types need no setting. JIM stores all DateTime values in UTC internally; this setting resolves source semantics, it does not change JIM's storage model.
