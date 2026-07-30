@@ -5551,5 +5551,58 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
     }
 
+    public async Task<List<ConnectedSystemConfigurationScope>> GetConfigurationScopesAsync(IList<int> connectedSystemIds)
+    {
+        if (connectedSystemIds.Count == 0)
+            return [];
+
+        // Projected in one pass over the rules rather than four separate queries, then grouped in memory. The result
+        // set is bounded by configuration size (rules and their mappings), not by object counts, so it stays small.
+        var references = await Repository.Database.SyncRules
+            .Where(sr => connectedSystemIds.Contains(sr.ConnectedSystemId))
+            .Select(sr => new
+            {
+                sr.ConnectedSystemId,
+                SyncRuleId = sr.Id,
+                sr.MetaverseObjectTypeId,
+                FlowTargetAttributeIds = sr.AttributeFlowRules
+                    .Where(m => m.TargetMetaverseAttributeId != null)
+                    .Select(m => m.TargetMetaverseAttributeId!.Value),
+                FlowSourceAttributeIds = sr.AttributeFlowRules
+                    .SelectMany(m => m.Sources)
+                    .Where(s => s.MetaverseAttributeId != null)
+                    .Select(s => s.MetaverseAttributeId!.Value),
+                ScopingAttributeIds = sr.ObjectScopingCriteriaGroups
+                    .SelectMany(g => g.Criteria)
+                    .Where(c => c.MetaverseAttributeId != null)
+                    .Select(c => c.MetaverseAttributeId!.Value),
+                MatchingAttributeIds = sr.ObjectMatchingRules
+                    .Where(o => o.TargetMetaverseAttributeId != null)
+                    .Select(o => o.TargetMetaverseAttributeId!.Value)
+            })
+            .ToListAsync();
+
+        var bySystem = references.GroupBy(r => r.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => new ConnectedSystemConfigurationScope
+            {
+                ConnectedSystemId = g.Key,
+                SyncRuleIds = g.Select(r => r.SyncRuleId).ToHashSet(),
+                MetaverseObjectTypeIds = g.Select(r => r.MetaverseObjectTypeId).ToHashSet(),
+                MetaverseAttributeIds = g.SelectMany(r => r.FlowTargetAttributeIds
+                        .Concat(r.FlowSourceAttributeIds)
+                        .Concat(r.ScopingAttributeIds)
+                        .Concat(r.MatchingAttributeIds))
+                    .ToHashSet()
+            });
+
+        // Every requested system gets an entry, so a system with no Synchronisation Rules reports an empty scope
+        // rather than being silently absent (which a caller could mistake for "not evaluated").
+        return connectedSystemIds
+            .Select(id => bySystem.TryGetValue(id, out var scope)
+                ? scope
+                : new ConnectedSystemConfigurationScope { ConnectedSystemId = id })
+            .ToList();
+    }
+
     #endregion
 }

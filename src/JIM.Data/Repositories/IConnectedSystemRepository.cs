@@ -1044,5 +1044,16 @@ public interface IConnectedSystemRepository
     /// <param name="afterUtc">Exclusive lower bound on the date value, or null to omit the lower bound (bootstrap / open window).</param>
     /// <param name="throughUtc">Inclusive upper bound on the date value.</param>
     Task<List<Guid>> GetConnectedSystemObjectIdsByDateAttributeRangeAsync(int attributeId, DateTime? afterUtc, DateTime throughUtc);
+
+    /// <summary>
+    /// Returns, for each of the given Connected Systems, the configuration objects whose change affects that system's
+    /// synchronisation outcomes: its Synchronisation Rules, the Metaverse Object Types those rules target, and the
+    /// Metaverse Attributes those rules reference. Backs the "configuration changed since last Full Synchronisation"
+    /// indicator, which uses these sets to attribute each recorded change to precisely the systems it affects.
+    ///
+    /// Every requested system gets an entry, including ones with no Synchronisation Rules at all (an empty scope, so
+    /// only changes to the system itself count).
+    /// </summary>
+    Task<List<ConnectedSystemConfigurationScope>> GetConfigurationScopesAsync(IList<int> connectedSystemIds);
     #endregion
 }
