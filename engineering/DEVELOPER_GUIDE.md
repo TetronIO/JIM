@@ -484,6 +484,20 @@ Verify after rebuild with `jim-signing-status`. A healthy state shows:
   ssh agent:          forwarded, 1 key(s) loaded
 ```
 
+**Native Windows checkout (working outside the devcontainer):**
+
+Git Bash's bundled (MSYS) OpenSSH cannot reach the Windows OpenSSH agent's named pipe, so signing must go through the Windows OpenSSH tools instead. With the "OpenSSH Authentication Agent" service running and your key loaded (see the Windows 11 bullet above), configure the clone once:
+
+```bash
+git config gpg.format ssh
+git config user.signingkey "$USERPROFILE/.ssh/id_ed25519.pub"
+git config gpg.ssh.program "C:/Windows/System32/OpenSSH/ssh-keygen.exe"
+git config commit.gpgsign true
+git config core.hooksPath .githooks
+```
+
+Pointing `user.signingkey` at the *public* key makes ssh-keygen sign via the agent, so a passphrase-protected private key never needs decrypting in the shell. The pre-commit hook probes the Windows agent directly when the MSYS `ssh-add` cannot reach it.
+
 **Registering your SSH key as a signing key on GitHub:**
 
 The same physical SSH key can be used for both authentication and signing, but GitHub tracks them as *separate key registrations*. If you have only added your key as an authentication key, commits will be signed but GitHub will display them as "Unverified". To fix:
