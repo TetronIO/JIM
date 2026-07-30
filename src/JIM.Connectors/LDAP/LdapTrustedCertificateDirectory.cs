@@ -98,12 +98,11 @@ internal sealed class LdapTrustedCertificateDirectory : IDisposable
             if (!OperatingSystem.IsWindows())
                 System.IO.File.SetUnixFileMode(directoryPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 
+            // Filtering in the sequence rather than the body: the same certificate can legitimately appear twice in
+            // the store, and writing it twice would be harmless but pointless. Add returns false once seen.
             var writtenThumbprints = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var certificate in trustedCertificates)
+            foreach (var certificate in trustedCertificates.Where(certificate => writtenThumbprints.Add(certificate.Thumbprint)))
             {
-                if (!writtenThumbprints.Add(certificate.Thumbprint))
-                    continue;
-
                 var certificatePath = Path.Combine(directoryPath, $"{certificate.Thumbprint}.crt");
                 System.IO.File.WriteAllText(certificatePath, certificate.ExportCertificatePem());
                 if (!OperatingSystem.IsWindows())

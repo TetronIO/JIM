@@ -42,11 +42,11 @@ public class ServerCertificateCardTests : JimComponentTestContext
     {
         var cut = Render<ServerCertificateCard>(p => p.Add(c => c.Diagnostic, Diagnostic()));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Contain("dc01.corp.local"));
             Assert.That(cut.Markup, Does.Not.Contain("CN=dc01.corp.local, O=Corp, C=GB"));
-        });
+        }
     }
 
     [Test]
@@ -89,11 +89,11 @@ public class ServerCertificateCardTests : JimComponentTestContext
     {
         var cut = Render<ServerCertificateCard>(p => p.Add(c => c.Diagnostic, Diagnostic(selfSigned: true)));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Contain("Self-signed"));
             Assert.That(cut.Markup, Does.Not.Contain("Issued by"));
-        });
+        }
     }
 
     [Test]

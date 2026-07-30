@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Connectors;
+using JIM.Utilities;
 using Serilog;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -44,7 +45,7 @@ public static class ServerCertificateProbe
             using var client = new TcpClient();
             if (!client.ConnectAsync(host, port).Wait(timeout))
             {
-                logger.Debug("ServerCertificateProbe: no response from {Host}:{Port} within the timeout, so this is a connectivity problem rather than a certificate one", host, port);
+                logger.Debug("ServerCertificateProbe: no response from {Host}:{Port} within the timeout, so this is a connectivity problem rather than a certificate one", LogSanitiser.Sanitise(host), port);
                 return null;
             }
 
@@ -68,7 +69,7 @@ public static class ServerCertificateProbe
         }
         catch (Exception ex) when (ex is SocketException or IOException or AggregateException or ObjectDisposedException)
         {
-            logger.Debug(ex, "ServerCertificateProbe: could not reach {Host}:{Port} to examine its certificate", host, port);
+            logger.Debug(ex, "ServerCertificateProbe: could not reach {Host}:{Port} to examine its certificate", LogSanitiser.Sanitise(host), port);
             return null;
         }
 

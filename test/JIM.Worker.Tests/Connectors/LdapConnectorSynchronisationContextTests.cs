@@ -41,7 +41,7 @@ public class LdapConnectorSynchronisationContextTests
     [Test]
     public void OpenImportConnection_OnASingleThreadedSynchronisationContext_DoesNotDeadlock()
     {
-        var completed = new ManualResetEventSlim(false);
+        using var completed = new ManualResetEventSlim(false);
 
         RunOnSingleThreadedContext(() =>
         {

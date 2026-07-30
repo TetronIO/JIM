@@ -37,13 +37,13 @@ public class CollapsibleStackTraceTests : JimComponentTestContext
     {
         var cut = Render<CollapsibleStackTrace>(p => p.Add(c => c.StackTrace, Trace));
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             // Not merely hidden: a stack trace can run to thousands of characters, and there is no reason to send
             // them to the browser before anybody has asked to read them.
             Assert.That(cut.Markup, Does.Not.Contain("OpenImportConnection"));
             Assert.That(cut.Markup, Does.Contain("Show stack trace"));
-        });
+        }
     }
 
     [Test]
@@ -53,11 +53,11 @@ public class CollapsibleStackTraceTests : JimComponentTestContext
 
         cut.Find("button").Click();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Contain("OpenImportConnection"));
             Assert.That(cut.Markup, Does.Contain("Hide stack trace"));
-        });
+        }
     }
 
     [Test]
@@ -68,10 +68,10 @@ public class CollapsibleStackTraceTests : JimComponentTestContext
         cut.Find("button").Click();
         cut.Find("button").Click();
 
-        Assert.Multiple(() =>
+        using (Assert.EnterMultipleScope())
         {
             Assert.That(cut.Markup, Does.Not.Contain("OpenImportConnection"));
             Assert.That(cut.Markup, Does.Contain("Show stack trace"));
-        });
+        }
     }
 }

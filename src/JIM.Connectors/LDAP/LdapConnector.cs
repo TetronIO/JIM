@@ -270,7 +270,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var retryDelayMs = retryDelaySetting?.IntValue ?? LdapConnectorConstants.DEFAULT_RETRY_DELAY_MS;
 
         logger.Debug("OpenImportConnection() Trying to connect to '{Server}' on port '{Port}' with username '{Username}' via auth type {AuthType}. SSL: {UseSsl}",
-            directoryServer.StringValue, directoryServerPort.IntValue, username.StringValue, authTypeSettingValue.StringValue, useSsl);
+            LogSanitiser.Sanitise(directoryServer.StringValue), directoryServerPort.IntValue,
+            LogSanitiser.Sanitise(username.StringValue), LogSanitiser.Sanitise(authTypeSettingValue.StringValue), useSsl);
 
         // Supply the certificates from the JIM certificate store as additional trust anchors for LDAPS. The platform
         // LDAP client still performs the validation itself, so the chain, the validity period and the certificate's
@@ -293,11 +294,15 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         else if (authTypeSettingValueString == LdapConnectorConstants.SETTING_AUTH_TYPE_NTLM)
             authTypeEnumValue = AuthType.Ntlm;
 
+        // Resolved once: the setting's validation guarantees a value by the time a connection is opened, and taking
+        // it here keeps the nullable dereference out of the lambda below and the failure path further down.
+        var connectionTimeout = TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value);
+
         // Build a reusable connection factory so LdapConnectorImport can create additional
         // connections for parallel imports (one connection per container+objectType combo).
         // Captured values are immutable for the duration of the import session.
         _connectionFactory = () => CreateConnection(identifier, credential, authTypeEnumValue,
-            TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value), useSsl, logger);
+            connectionTimeout, useSsl, logger);
 
         // Execute connection with retry logic. A failure here leaves nothing behind: the trust directory is only of
         // use to a connection that was established, and a rejected certificate reports as a failure to connect, so
@@ -318,7 +323,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             // connectivity failure, go and look at what the server actually presented.
             if (useSsl)
                 ThrowIfCertificateWasRejected(directoryServer.StringValue, directoryServerPort.IntValue.Value,
-                    TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value), logger, ex);
+                    connectionTimeout, logger, ex);
 
             throw;
         }
