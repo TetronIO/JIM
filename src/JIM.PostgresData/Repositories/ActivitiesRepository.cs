@@ -1607,7 +1607,7 @@ public class ActivityRepository : IActivityRepository
         // do not count, so a system whose Full Synchronisation failed keeps reporting its changes as pending.
         return await Repository.Database.Activities
             .Where(a => a.ConnectedSystemId != null
-                        && connectedSystemIds.Contains(a.ConnectedSystemId.Value)
+                        && connectedSystemIds.Contains(a.ConnectedSystemId!.Value)
                         && a.TargetType == ActivityTargetType.ConnectedSystemRunProfile
                         && a.TargetOperationType == ActivityTargetOperationType.Execute
                         && a.ConnectedSystemRunType == ConnectedSystemRunType.FullSynchronisation

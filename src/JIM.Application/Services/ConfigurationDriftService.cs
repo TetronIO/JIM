@@ -80,10 +80,10 @@ public class ConfigurationDriftService
         var scopes = (await Application.Repository.ConnectedSystems.GetConfigurationScopesAsync(synchronisedIds))
             .ToDictionary(s => s.ConnectedSystemId);
 
-        foreach (var id in synchronisedIds)
+        // The reference point is projected alongside the id rather than looked up as the loop body's first statement,
+        // which reads as a map-only foreach to the code-quality analyser (see the Select rule in src/CLAUDE.md).
+        foreach (var (id, referencePoint) in synchronisedIds.Select(id => (id, referencePoint: lastFullSyncs[id])))
         {
-            var referencePoint = lastFullSyncs[id];
-
             // A system with no scope entry is treated as having an empty scope rather than skipped: changes to the
             // system itself still count, and silently dropping it would under-report.
             var scope = scopes.TryGetValue(id, out var found)
