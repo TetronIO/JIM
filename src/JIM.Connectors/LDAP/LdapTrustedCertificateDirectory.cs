@@ -166,7 +166,10 @@ internal sealed class LdapTrustedCertificateDirectory : IDisposable
     private static string ResolveWithin(string directoryPath, string fileName)
     {
         var directoryFullPath = Path.GetFullPath(directoryPath);
-        var candidate = Path.GetFullPath(Path.Combine(directoryFullPath, fileName));
+
+        // Resolved against the directory in one step. A rooted file name resolves to itself rather than being
+        // joined, which the containment check below then rejects, so there is no separate case to test for.
+        var candidate = Path.GetFullPath(fileName, directoryFullPath);
         var prefix = directoryFullPath.EndsWith(Path.DirectorySeparatorChar)
             ? directoryFullPath
             : directoryFullPath + Path.DirectorySeparatorChar;
