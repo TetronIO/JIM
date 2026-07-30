@@ -89,12 +89,12 @@ public class ServerCertificateProbeTests
         Assert.Multiple(() =>
         {
             Assert.That(diagnostic!.Subject, Does.Contain(_host));
-            Assert.That(diagnostic.Issuer, Is.Not.Null.And.Not.Empty);
-            Assert.That(diagnostic.Thumbprint, Is.Not.Null.And.Not.Empty);
-            Assert.That(diagnostic.SubjectAlternativeNames, Does.Contain(_host));
-            Assert.That(diagnostic.ValidFrom, Is.Not.Null);
-            Assert.That(diagnostic.ValidTo, Is.Not.Null);
-            Assert.That(diagnostic.Remediation, Is.Not.Null.And.Not.Empty);
+            Assert.That(diagnostic!.Issuer, Is.Not.Null.And.Not.Empty);
+            Assert.That(diagnostic!.Thumbprint, Is.Not.Null.And.Not.Empty);
+            Assert.That(diagnostic!.SubjectAlternativeNames, Does.Contain(_host));
+            Assert.That(diagnostic!.ValidFrom, Is.Not.Null);
+            Assert.That(diagnostic!.ValidTo, Is.Not.Null);
+            Assert.That(diagnostic!.Remediation, Is.Not.Null.And.Not.Empty);
         });
     }
 
@@ -112,7 +112,7 @@ public class ServerCertificateProbeTests
         {
             // Reported ahead of the issuer, because trusting the issuer is not what fixes this.
             Assert.That(diagnostic!.FailureReason, Is.EqualTo(ServerCertificateFailureReason.NameMismatch));
-            Assert.That(diagnostic.Remediation, Does.Contain(mismatchedHost!));
+            Assert.That(diagnostic!.Remediation, Does.Contain(mismatchedHost!));
         });
     }
 
@@ -130,7 +130,7 @@ public class ServerCertificateProbeTests
         Assert.Multiple(() =>
         {
             Assert.That(diagnostic!.FailureReason, Is.EqualTo(ServerCertificateFailureReason.Expired));
-            Assert.That(diagnostic.IsExpired, Is.True);
+            Assert.That(diagnostic!.IsExpired, Is.True);
         });
     }
 

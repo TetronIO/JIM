@@ -152,7 +152,7 @@
         return commonName != null ? commonName[3..] : distinguishedName;
     }
 
-    private static string FormatDate(DateTime? value) => value.HasValue ? value.Value.ToString("dd MMM yyyy") : "unknown";
+    private static string FormatDate(DateTime? value) => value?.ToString("dd MMM yyyy") ?? "unknown";
 
     /// <summary>
     /// Grouped into pairs, the way certificate viewers present a thumbprint, so it can be compared by eye against
