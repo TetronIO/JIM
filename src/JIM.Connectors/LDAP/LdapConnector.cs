@@ -11,6 +11,7 @@ using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
 using System.Net;
+using System.Security.Cryptography.X509Certificates;
 namespace JIM.Connectors.LDAP;
 
 public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IDisposable
@@ -340,7 +341,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     /// </remarks>
     private void ThrowIfCertificateWasRejected(string host, int port, TimeSpan timeout, ILogger logger, LdapException originalException)
     {
-        var trustedCertificates = _certificateProvider?.GetTrustedCertificatesAsync().GetAwaiter().GetResult() ?? [];
+        var trustedCertificates = GetTrustedCertificates();
 
         try
         {
@@ -708,7 +709,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             return;
         }
 
-        var trustedCertificates = _certificateProvider.GetTrustedCertificatesAsync().GetAwaiter().GetResult();
+        var trustedCertificates = GetTrustedCertificates();
 
         try
         {
@@ -732,6 +733,24 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             foreach (var certificate in trustedCertificates)
                 certificate.Dispose();
         }
+    }
+
+    /// <summary>
+    /// Reads the certificates an administrator has added to the JIM certificate store.
+    /// </summary>
+    /// <remarks>
+    /// The connector API is synchronous, so this has to block; what matters is which thread it blocks. It blocks on a
+    /// thread-pool thread, because the portal validates Connected System settings on Blazor's renderer
+    /// synchronisation context, which runs one callback at a time: awaiting the store on that context would post the
+    /// continuation behind the very call that is waiting for it, and neither would ever finish.
+    /// </remarks>
+    private List<X509Certificate2> GetTrustedCertificates()
+    {
+        if (_certificateProvider == null)
+            return [];
+
+        var provider = _certificateProvider;
+        return Task.Run(provider.GetTrustedCertificatesAsync).GetAwaiter().GetResult();
     }
 
     private ConnectorSettingValueValidationResult TestDirectoryConnectivity(List<ConnectedSystemSettingValue> settingValues, ILogger logger)

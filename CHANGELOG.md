@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - 🐛 A setting withdrawn from a Connector no longer lingers on Connected Systems that already held a value for it. The setting was being detached from its Connector Definition rather than deleted, leaving the row behind with the saved values still pointing at it. (#1132)
+- 🐛 Saving an LDAPS Connected System's settings, retrieving its schema, or retrieving its hierarchy no longer hangs indefinitely in the portal when certificates are present in Admin > Certificates. Reading the certificate store blocked the page's own thread waiting for work that could only run on that same thread, so the operation never finished and the page sat on its progress spinner. (#1132)
 
 ### Changed
 
