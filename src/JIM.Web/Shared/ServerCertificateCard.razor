@@ -17,73 +17,75 @@
                 <MudIcon Icon="@SealIcon" Size="Size.Medium" />
             </div>
 
-            <div class="jim-certificate-eyebrow">Certificate presented by @Diagnostic.Host:@Diagnostic.Port</div>
+            @* The frame stretches with the page; the content does not. It stays a centred column of a readable
+               width, which is what keeps a wide card reading as a certificate rather than a banner. *@
+            <div class="jim-certificate-content">
+                <div class="jim-certificate-eyebrow">Certificate presented by @Diagnostic.Host:@Diagnostic.Port</div>
 
-            <div class="jim-certificate-subject">@FormatDistinguishedName(Diagnostic.Subject)</div>
+                <div class="jim-certificate-subject">@FormatDistinguishedName(Diagnostic.Subject)</div>
 
-            <div class="jim-certificate-issuer">
-                @if (Diagnostic.IsSelfSigned)
-                {
-                    <span>Self-signed</span>
-                }
-                else
-                {
-                    <span>Issued by @FormatDistinguishedName(Diagnostic.Issuer)</span>
-                }
-            </div>
-
-            <div class="jim-certificate-rule"></div>
-
-            <div class="jim-certificate-fields">
-                <div class="jim-certificate-field">
-                    <span class="jim-certificate-label">Issued for</span>
-                    @if (Diagnostic.SubjectAlternativeNames.Count > 0)
+                <div class="jim-certificate-issuer">
+                    @if (Diagnostic.IsSelfSigned)
                     {
-                        <span class="jim-certificate-names">
-                            @foreach (var name in Diagnostic.SubjectAlternativeNames)
-                            {
-                                <span class="jim-certificate-name @(NameMatchesHost(name) ? "jim-certificate-name-match" : "")">@name</span>
-                            }
-                        </span>
+                        <span>Self-signed</span>
                     }
                     else
                     {
-                        <EmptyValue />
+                        <span>Issued by @FormatDistinguishedName(Diagnostic.Issuer)</span>
                     }
                 </div>
 
-                <div class="jim-certificate-field">
-                    <span class="jim-certificate-label">Valid</span>
-                    <span class="jim-certificate-value @(Diagnostic.IsExpired || Diagnostic.IsNotYetValid ? "jim-certificate-value-problem" : "")">
-                        @FormatDate(Diagnostic.ValidFrom) to @FormatDate(Diagnostic.ValidTo)
-                    </span>
-                </div>
+                <div class="jim-certificate-rule"></div>
 
-                @if (!string.IsNullOrEmpty(Diagnostic.SignatureAlgorithm))
-                {
+                <div class="jim-certificate-fields">
                     <div class="jim-certificate-field">
-                        <span class="jim-certificate-label">Signature</span>
-                        <span class="jim-certificate-value">@Diagnostic.SignatureAlgorithm</span>
+                        <span class="jim-certificate-label">Issued for</span>
+                        @if (Diagnostic.SubjectAlternativeNames.Count > 0)
+                        {
+                            <span class="jim-certificate-names">
+                                @foreach (var name in Diagnostic.SubjectAlternativeNames)
+                                {
+                                    <span class="jim-certificate-name @(NameMatchesHost(name) ? "jim-certificate-name-match" : "")">@name</span>
+                                }
+                            </span>
+                        }
+                        else
+                        {
+                            <EmptyValue />
+                        }
                     </div>
-                }
 
-                @* Last, and given a row to itself once the card is wide enough to have columns, so the thumbprint
-                   never breaks across lines. *@
-                <div class="jim-certificate-field jim-certificate-field-wide">
-                    <span class="jim-certificate-label">Thumbprint</span>
-                    <span class="jim-certificate-value jim-certificate-thumbprint">@FormatThumbprint(Diagnostic.Thumbprint)</span>
+                    <div class="jim-certificate-field">
+                        <span class="jim-certificate-label">Valid</span>
+                        <span class="jim-certificate-value @(Diagnostic.IsExpired || Diagnostic.IsNotYetValid ? "jim-certificate-value-problem" : "")">
+                            @FormatDate(Diagnostic.ValidFrom) to @FormatDate(Diagnostic.ValidTo)
+                        </span>
+                    </div>
+
+                    <div class="jim-certificate-field">
+                        <span class="jim-certificate-label">Thumbprint</span>
+                        <span class="jim-certificate-value jim-certificate-thumbprint">@FormatThumbprint(Diagnostic.Thumbprint)</span>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(Diagnostic.SignatureAlgorithm))
+                    {
+                        <div class="jim-certificate-field">
+                            <span class="jim-certificate-label">Signature</span>
+                            <span class="jim-certificate-value">@Diagnostic.SignatureAlgorithm</span>
+                        </div>
+                    }
                 </div>
-            </div>
 
-            <div class="jim-certificate-verdict">
-                <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Class="mr-2" />
-                <span class="jim-certificate-verdict-reason">@DescribeReason(Diagnostic.FailureReason)</span>
-            </div>
+                <div class="jim-certificate-verdict">
+                    <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Class="mr-2" />
+                    <span class="jim-certificate-verdict-reason">@DescribeReason(Diagnostic.FailureReason)</span>
+                </div>
 
-            @if (!string.IsNullOrEmpty(Diagnostic.Remediation))
-            {
-                <div class="jim-certificate-remediation">@Diagnostic.Remediation</div>
-            }
+                @if (!string.IsNullOrEmpty(Diagnostic.Remediation))
+                {
+                    <div class="jim-certificate-remediation">@Diagnostic.Remediation</div>
+                }
+            </div>
         </div>
     </div>
 }

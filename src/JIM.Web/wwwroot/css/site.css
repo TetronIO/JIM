@@ -2061,16 +2061,21 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
    Built entirely from MudBlazor palette variables so it follows the theme into
    dark mode rather than carrying its own colours.
    --------------------------------------------------------------------------- */
-/* Fluid, like every other block on JIM's pages: the card fills the width it is given rather than stopping short
-   of it. What changes with that width is the layout inside, via the container queries below, so a wide card gains
-   columns instead of gaining empty space. */
+/* Fluid, like every other block on JIM's pages: the frame fills the width it is given rather than stopping short
+   of it. The content inside stays a centred column (see .jim-certificate-content), so widening the page widens
+   the frame without stretching the certificate. */
 .jim-certificate {
     border: 1px solid var(--mud-palette-lines-default);
     border-radius: var(--mud-default-borderradius);
     background-color: var(--mud-palette-surface);
     padding: 6px;
     margin-top: 16px;
-    container-type: inline-size;
+}
+
+/* Sized so the thumbprint, grouped into pairs, fits on one line. */
+.jim-certificate-content {
+    max-width: 580px;
+    margin-inline: auto;
 }
 
 /* The inner rule is what reads as "certificate": a second, tighter frame
@@ -2206,44 +2211,11 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     text-align: left;
 }
 
-/* Capped to a readable measure and centred under the verdict, so a wide card does not stretch the advice into a
-   single very long line. */
 .jim-certificate-remediation {
-    margin: 8px auto 0;
-    max-width: 72ch;
+    margin-top: 8px;
     color: var(--mud-palette-text-secondary);
     font-size: 0.875rem;
-    text-align: center;
-}
-
-/* Given room, the fields become columns rather than a tall list with a wide empty margin beside it. Tracks that
-   end up with nothing in them collapse, so the fields always share the full width evenly however many there are. */
-@container (min-width: 560px) {
-    .jim-certificate-fields {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        column-gap: 32px;
-        row-gap: 16px;
-        align-items: start;
-    }
-
-    /* The label sits above its value here: a fixed label gutter would squeeze the values once the row is shared. */
-    .jim-certificate-field {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 2px;
-    }
-
-    /* Spans the whole row, because a thumbprint broken across lines is materially harder to compare by eye
-       against the one shown in Admin > Certificates. */
-    .jim-certificate-field-wide {
-        grid-column: 1 / -1;
-    }
-
-    /* With a row to itself there is no longer any need to squeeze it, so it can be read at a normal size. */
-    .jim-certificate-thumbprint {
-        font-size: 0.85rem;
-        letter-spacing: normal;
-    }
+    text-align: left;
 }
 
 /* ─── Collapsible stack trace ─── */
