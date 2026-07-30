@@ -1,9 +1,11 @@
 ﻿@page "/admin/connected-systems"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities.DTOs
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities;
 @using JIM.Web.Services
 @using System;
+@using System.Linq;
 @inject IJimApplicationFactory JimFactory
 @inject IUserPreferenceService PreferenceService
 
@@ -29,6 +31,15 @@
     <MudSpacer />
     <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled" Href="/admin/connected-systems/new" Color="Color.Primary" DropShadow="false">Create Connected System</MudButton>
 </div>
+
+@* Tracking off is a global condition, so it is stated once here rather than repeated on every row. *@
+@if (_drift != null && _drift.Values.Any(d => d.TrackingDisabled))
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-5">
+        Configuration change tracking is switched off, so JIM cannot tell which Connected Systems have configuration
+        changes waiting for a Full Synchronisation.
+    </MudAlert>
+}
 
 <MudTable Items="@_connectedSystemHeaders" Hover="true" Dense="@_dense" Breakpoint="Breakpoint.Sm" Class="@(_dense ? "mt-5 mb-5 dense-body-only" : "mt-5 mb-5")" SortLabel="Sort By" Filter="new Func<ConnectedSystemHeader,bool>(FilterFunc1)" Outlined="true" Elevation="0">
     <ToolBarContent>
@@ -82,6 +93,7 @@
                         </MudChip>
                     </MudTooltip>
                 }
+                <ConfigurationDriftIndicator Status="@GetDrift(context.Id)" ConnectedSystemName="@context.Name" />
             </MudStack>
         </MudTd>
         <MudTd DataLabel="Connector">@context.ConnectorName</MudTd>
@@ -105,6 +117,7 @@
 
 @code {
     private IList<ConnectedSystemHeader>? _connectedSystemHeaders;
+    private Dictionary<int, ConfigurationDriftStatus>? _drift;
     private string _searchString = "";
     private bool _dense;
 
@@ -119,7 +132,15 @@
     {
         using var jim = JimFactory.Create();
         _connectedSystemHeaders = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+
+        // One batched call for the whole page; the drift service issues a fixed number of queries regardless of how
+        // many systems are listed, so this does not become an N+1.
+        if (_connectedSystemHeaders.Count > 0)
+            _drift = await jim.ConfigurationDrift.GetConnectedSystemDriftAsync(_connectedSystemHeaders.Select(cs => cs.Id).ToList());
     }
+
+    private ConfigurationDriftStatus? GetDrift(int connectedSystemId) =>
+        _drift != null && _drift.TryGetValue(connectedSystemId, out var status) ? status : null;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

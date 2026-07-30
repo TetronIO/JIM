@@ -89,6 +89,49 @@ Set the mode from the **Import Behaviour** panel on the Connected System's Setti
 
 Changes destined for the Connected System that have been computed by synchronisation but not yet written back. Run an export Run Profile to flush them. Inspecting Pending Exports is the right place to look when you want to know "what is JIM about to change in this system?"
 
+## Configuration changes pending a Full Synchronisation
+
+Most configuration changes do not take effect the moment you save them. Scoping criteria, Attribute Flow, Object
+Matching Rules and schema selection all describe what synchronisation *should* do; the change reaches your data only
+when synchronisation next runs over the objects it affects. Until then the portal and the configuration are ahead of
+reality.
+
+JIM tracks this for you. A Connected System whose configuration has changed in a way that affects synchronisation
+outcomes shows an indicator in the Connected Systems list, and a notice on the Connected System page saying how many
+changes are waiting and when the last Full Synchronisation ran.
+
+**Only consequential changes count.** Renaming a Connected System or editing a description changes nothing about what
+synchronisation does, so it never raises the indicator. Changes are classified as they are recorded, and only the two
+classes that alter outcomes are counted:
+
+| Class | Examples | How it shows |
+|-------|----------|--------------|
+| Sync-affecting | Scoping criteria, Attribute Flow, Object Matching Rules, schema selection | Amber, with the number of changes |
+| Destructive | Outbound Deprovision Action, deletion rules, deselecting an Object Type or partition | Red, because applying it can cascade deletions or mass deprovisioning |
+
+**Attribution is precise.** Editing a Metaverse Attribute raises the indicator only on the Connected Systems whose
+Synchronisation Rules actually reference that attribute, not on every system. Deleting a Synchronisation Rule raises
+it on the system that rule belonged to.
+
+**Two states mean "JIM cannot tell", not "up to date":**
+
+- **Never synchronised.** The Connected System has never completed a Full Synchronisation, so no configuration has
+  ever been applied in full and there is nothing to compare against.
+- **Unknown.** Configuration change tracking is switched off (see
+  [configuration change history](activities.md#configuration-change-history)), so JIM holds no record of what changed.
+
+Both are shown distinctly rather than as a clean result, because reporting a settled configuration JIM cannot vouch
+for would be worse than reporting nothing.
+
+!!! note "The reference point is when the run started"
+    A change made while a long Full Synchronisation was still running may not have been picked up by it, so it is
+    counted as still pending. You may occasionally be prompted for a re-run you did not strictly need; the alternative
+    would be hiding a change that really was missed.
+
+Read the same status from automation with `(Get-JIMConnectedSystem -Id <id>).ConfigurationDrift`, or from the
+`configurationDrift` object on the REST Connected System response. In both cases, check `IsDeterminable` before
+treating `HasPendingChanges` as `false`.
+
 ## Common workflows
 
 **Setting up a new Connected System:**

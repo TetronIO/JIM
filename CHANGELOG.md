@@ -14,25 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - ✨ When an LDAPS connection to a directory fails because of the certificate it presented, JIM now shows you that certificate rather than an unhelpful "the server is unavailable": its subject, the names it was issued for, its issuer, validity dates and thumbprint, laid out as the certificate itself, alongside which check it failed and what to do about it. It appears when testing a Connected System's settings and on the failed Activity, with the same detail available to automation on the Activity's `errorDetail` field in the REST API. Nothing is trusted in order to show it, and a failure unrelated to the certificate reports exactly as before. (#1132)
+- ✨ The Synchronisation Rules list can now be filtered by Connected System, Direction, Action (Projects, Provisions or Flow Only) and Status. The filters combine with the existing search box, which narrows whatever the filters left.
+- ✨ The same filters are available to automation: `Get-JIMSyncRule` gains `-Direction`, `-ActionType` and `-Status`, and the Synchronisation Rules REST endpoint gains matching query parameters.
+- ✨ Connected Systems now show when their configuration has changed in a way that needs a Full Synchronisation to take effect: an indicator in the Connected Systems list and a notice on the Connected System page, stating how many changes are waiting and warning distinctly when one of them is destructive. Cosmetic changes such as renames never raise it, and a change to a Metaverse Attribute raises it only on the systems whose Synchronisation Rules actually reference that attribute. Systems that have never completed a Full Synchronisation, and the case where configuration change tracking is switched off, are reported as such rather than as "up to date". Available to automation as `(Get-JIMConnectedSystem -Id <id>).ConfigurationDrift` and on the REST Connected System response.
 
 ### Fixed
 
 - 🐛 A setting withdrawn from a Connector no longer lingers on Connected Systems that already held a value for it. The setting was being detached from its Connector Definition rather than deleted, leaving the row behind with the saved values still pointing at it. (#1132)
 - 🐛 Saving an LDAPS Connected System's settings, retrieving its schema, or retrieving its hierarchy no longer hangs indefinitely in the portal when certificates are present in Admin > Certificates. Reading the certificate store blocked the page's own thread waiting for work that could only run on that same thread, so the operation never finished and the page sat on its progress spinner. (#1132)
+- 🐛 `Get-JIMSyncRule` now returns every Synchronisation Rule rather than only the first 25, paging through the full result set.
+- 🐛 Piping a Connected System into `Get-JIMSyncRule`, as its documentation has always shown, now works instead of failing to bind.
 
 ### Changed
 
 - 🔄 Stack traces are now hidden behind a "Show stack trace" toggle wherever JIM reports an error (Activity detail, Import Results detail, the Operations history panel and Pending Export detail), so the error message itself leads. The trace is unchanged and one click away. (#1132)
 - 🔄 The LDAP Connector's "Certificate Validation" setting has been removed. Its "Skip Validation" option could never be honoured for an individual Connected System, and validation is now always applied to LDAPS connections. Where a directory's certificate is not trusted, add it in Admin > Certificates; where the certificate name does not match the host being connected to, give the JIM containers a host entry for that name (`extra_hosts` in Docker Compose) and use the name in the Host setting, rather than weakening validation. See the [LDAP Connector documentation](https://tetronio.github.io/JIM/connectors/jim-ldap-connector/) for both. (#1132)
-### Added
-
-- ✨ The Synchronisation Rules list can now be filtered by Connected System, Direction, Action (Projects, Provisions or Flow Only) and Status. The filters combine with the existing search box, which narrows whatever the filters left.
-- ✨ The same filters are available to automation: `Get-JIMSyncRule` gains `-Direction`, `-ActionType` and `-Status`, and the Synchronisation Rules REST endpoint gains matching query parameters.
-
-### Fixed
-
-- 🐛 `Get-JIMSyncRule` now returns every Synchronisation Rule rather than only the first 25, paging through the full result set.
-- 🐛 Piping a Connected System into `Get-JIMSyncRule`, as its documentation has always shown, now works instead of failing to bind.
 
 ## [0.14.0] - 2026-07-25
 

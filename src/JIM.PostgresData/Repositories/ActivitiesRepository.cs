@@ -1592,6 +1592,49 @@ public class ActivityRepository : IActivityRepository
     }
     #endregion
 
+    #region configuration drift
+    public async Task<Dictionary<int, DateTime>> GetLastFullSynchronisationStartsAsync(IList<int> connectedSystemIds)
+    {
+        if (connectedSystemIds.Count == 0)
+            return new Dictionary<int, DateTime>();
+
+        // TargetOperationType must be Execute: Run Profile CRUD activities carry ConnectedSystemRunType too (so the
+        // run type survives the profile's deletion), and without this filter deleting a Full Synchronisation Run
+        // Profile would be mistaken for having run one.
+        //
+        // CompleteWithWarning counts: a warning is a non-fatal operational note (e.g. a delta falling back to a full
+        // import), not a reason to distrust that the run applied the configuration. Errors, failures and cancellations
+        // do not count, so a system whose Full Synchronisation failed keeps reporting its changes as pending.
+        return await Repository.Database.Activities
+            .Where(a => a.ConnectedSystemId != null
+                        && connectedSystemIds.Contains(a.ConnectedSystemId!.Value)
+                        && a.TargetType == ActivityTargetType.ConnectedSystemRunProfile
+                        && a.TargetOperationType == ActivityTargetOperationType.Execute
+                        && a.ConnectedSystemRunType == ConnectedSystemRunType.FullSynchronisation
+                        && (a.Status == ActivityStatus.Complete || a.Status == ActivityStatus.CompleteWithWarning))
+            .GroupBy(a => a.ConnectedSystemId!.Value)
+            .Select(g => new { ConnectedSystemId = g.Key, LastStart = g.Max(a => a.Executed) })
+            .ToDictionaryAsync(x => x.ConnectedSystemId, x => x.LastStart);
+    }
+
+    public async Task<List<ConfigurationChangeImpactData>> GetConfigurationChangeImpactsSinceAsync(DateTime since, ConfigurationChangeClass minimumClass)
+    {
+        return await Repository.Database.Activities
+            .Where(a => a.Created >= since && a.ConfigurationChangeClass >= minimumClass)
+            .Select(a => new ConfigurationChangeImpactData
+            {
+                When = a.Created,
+                Class = a.ConfigurationChangeClass,
+                ConnectedSystemId = a.ConnectedSystemId,
+                SyncRuleId = a.SyncRuleId,
+                MetaverseObjectTypeId = a.MetaverseObjectTypeId,
+                MetaverseAttributeId = a.MetaverseAttributeId,
+                ServiceSettingKey = a.ServiceSettingKey
+            })
+            .ToListAsync();
+    }
+    #endregion
+
     // Bulk RPEI operations (BulkInsertRpeisAsync, BulkUpdateRpeiOutcomesAsync,
     // PersistRpeiCsoChangesAsync, DetachRpeisFromChangeTracker, UpdateActivityProgressOutOfBandAsync)
     // have been moved to PostgresData.SyncRepository.RpeiOperations.cs — they are Worker-only
