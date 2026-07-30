@@ -104,6 +104,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         await Repository.Database.SaveChangesAsync();
     }
 
+    public async Task DeleteConnectorDefinitionSettingsAsync(IList<ConnectorDefinitionSetting> connectorDefinitionSettings)
+    {
+        Repository.Database.ConnectorDefinitionSettings.RemoveRange(connectorDefinitionSettings);
+        await Repository.Database.SaveChangesAsync();
+    }
+
     public async Task CreateConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile)
     {
         Repository.Database.ConnectorDefinitionFiles.Add(connectorDefinitionFile);

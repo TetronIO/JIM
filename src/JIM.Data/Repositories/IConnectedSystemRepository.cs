@@ -909,6 +909,17 @@ public interface IConnectedSystemRepository
     public Task DeleteConnectedSystemPartitionAsync(ConnectedSystemPartition connectedSystemPartition);
     public Task DeleteConnectedSystemRunProfileAsync(ConnectedSystemRunProfile runProfile);
     public Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition);
+
+    /// <summary>
+    /// Deletes settings a Connector no longer declares, along with any values administrators saved against them.
+    /// </summary>
+    /// <remarks>
+    /// Detaching the setting from its Connector Definition is not sufficient: the relationship's foreign key is
+    /// nullable, so the row survives with no definition while still being referenced by saved values, and the
+    /// withdrawn setting keeps appearing on Connected Systems that hold one.
+    /// </remarks>
+    public Task DeleteConnectorDefinitionSettingsAsync(IList<ConnectorDefinitionSetting> connectorDefinitionSettings);
+
     public Task DeleteConnectorDefinitionFileAsync(ConnectorDefinitionFile connectorDefinitionFile);
     public Task DeleteSyncRuleAsync(SyncRule syncRule);
 

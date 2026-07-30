@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- 🔒 LDAPS connections to a directory now genuinely validate the certificate it presents, checking the issuer, the validity period, and that the certificate was issued for the host JIM connects to, before the service account's credentials are sent. Certificates added in Admin > Certificates are honoured for the first time: they are trusted in addition to the operating system's trust store, never in place of it, so adding one can only ever allow more connections, never fewer. An internal certificate authority or a directory's own self-signed certificate both work. Previously the validation code could not run at all in JIM's containers, so adding any certificate broke LDAPS with a connectivity error instead. (#1132)
+
+### Added
+
+- ✨ When an LDAPS connection to a directory fails because of the certificate it presented, JIM now shows you that certificate rather than an unhelpful "the server is unavailable": its subject, the names it was issued for, its issuer, validity dates and thumbprint, laid out as the certificate itself, alongside which check it failed and what to do about it. It appears when testing a Connected System's settings and on the failed Activity, with the same detail available to automation on the Activity's `errorDetail` field in the REST API. Nothing is trusted in order to show it, and a failure unrelated to the certificate reports exactly as before. (#1132)
+
+### Fixed
+
+- 🐛 A setting withdrawn from a Connector no longer lingers on Connected Systems that already held a value for it. The setting was being detached from its Connector Definition rather than deleted, leaving the row behind with the saved values still pointing at it. (#1132)
+- 🐛 Saving an LDAPS Connected System's settings, retrieving its schema, or retrieving its hierarchy no longer hangs indefinitely in the portal when certificates are present in Admin > Certificates. Reading the certificate store blocked the page's own thread waiting for work that could only run on that same thread, so the operation never finished and the page sat on its progress spinner. (#1132)
+
+### Changed
+
+- 🔄 Stack traces are now hidden behind a "Show stack trace" toggle wherever JIM reports an error (Activity detail, Import Results detail, the Operations history panel and Pending Export detail), so the error message itself leads. The trace is unchanged and one click away. (#1132)
+- 🔄 The LDAP Connector's "Certificate Validation" setting has been removed. Its "Skip Validation" option could never be honoured for an individual Connected System, and validation is now always applied to LDAPS connections. Where a directory's certificate is not trusted, add it in Admin > Certificates; where the certificate name does not match the host being connected to, give the JIM containers a host entry for that name (`extra_hosts` in Docker Compose) and use the name in the Host setting, rather than weakening validation. See the [LDAP Connector documentation](https://tetronio.github.io/JIM/connectors/jim-ldap-connector/) for both. (#1132)
 ### Added
 
 - ✨ The Synchronisation Rules list can now be filtered by Connected System, Direction, Action (Projects, Provisions or Flow Only) and Status. The filters combine with the existing search box, which narrows whatever the filters left.

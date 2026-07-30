@@ -1,0 +1,37 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@*
+    A stack trace, kept out of the way until it is asked for. The error message answers the question most of the
+    time; the trace is for the occasions it does not, and printing it unasked buries the message that matters.
+    The trace is not rendered at all while hidden, so a long one costs the page nothing.
+*@
+
+@if (!string.IsNullOrWhiteSpace(StackTrace))
+{
+    <div class="jim-stack-trace">
+        <MudButton Variant="Variant.Text"
+                   Size="Size.Small"
+                   Color="Color.Inherit"
+                   DropShadow="false"
+                   StartIcon="@(_shown ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                   OnClick="@(() => _shown = !_shown)">
+            @(_shown ? "Hide stack trace" : "Show stack trace")
+        </MudButton>
+
+        @if (_shown)
+        {
+            <pre class="jim-stack-trace-text">@StackTrace</pre>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// The stack trace to offer. Nothing is rendered when there is none.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public string? StackTrace { get; set; }
+
+    private bool _shown;
+}

@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = "User")]
 @using JIM.Models.Activities;
 @using JIM.Models.Activities.DTOs;
+@using JIM.Models.Connectors;
 @using JIM.Models.Core.DTOs;
 @using JIM.Models.Enums;
 @using JIM.Models.Staging
@@ -253,12 +254,16 @@
                 <MudText Typo="Typo.body1" Style="font-weight: 500;">@_activity.ErrorMessage</MudText>
             }
 
-            @if (!string.IsNullOrEmpty(_activity.ErrorStackTrace))
-            {
-                <MudText Typo="Typo.button" Class="mt-3">Stack Trace:</MudText>
-                <pre>@_activity.ErrorStackTrace</pre>
-            }
+            <CollapsibleStackTrace StackTrace="@_activity.ErrorStackTrace" />
         </MudAlert>
+
+        @* Some failures carry facts worth showing, not just a sentence. A rejected directory certificate is one:
+           what was presented, and by whom, is what tells an administrator whether to trust it, renew it, or reach
+           the directory by a different name. *@
+        @if (_serverCertificate != null)
+        {
+            <ServerCertificateCard Diagnostic="_serverCertificate" />
+        }
     }
 
     @if (_configChangeDetail != null)
@@ -918,6 +923,11 @@
     private Guid _loadedId;
     private MudTable<ActivityRunProfileExecutionItemHeader>? _table;
     private Activity? _activity;
+
+    /// <summary>
+    /// Structured detail for a failure caused by a directory server's certificate, when the Activity carries it.
+    /// </summary>
+    private ServerCertificateDiagnostic? _serverCertificate;
     private Activity? _parentActivity;
     private ConfigurationChangeDetail? _configChangeDetail;
     private bool _isAdministrator;
@@ -1004,6 +1014,8 @@
             NavManager.NavigateTo("../");
             return;
         }
+
+        _serverCertificate = ActivityErrorDetail.TryReadServerCertificate(_activity.ErrorDetail);
 
         // Seed the ETA sample window so the estimate appears as soon as a second sample lands.
         UpdateEtaEstimate(_activity);

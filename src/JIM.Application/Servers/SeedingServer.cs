@@ -1576,6 +1576,14 @@ internal class SeedingServer
                 ActivityInitiatorType.System, null, "System",
                 changeReason: "Connector Definition updated automatically by JIM to match the latest connector.",
                 parentActivityId: parentActivityId);
+
+            // Detaching an obsolete setting from the definition above only severs it: its foreign key is nullable, so
+            // the row survives holding no definition while every value an administrator saved against it still points
+            // at it, and the withdrawn setting keeps appearing on Connected Systems that hold one. Delete the rows so
+            // those values cascade away with them.
+            if (settingsToRemove.Count > 0)
+                await Application.Repository.ConnectedSystems.DeleteConnectorDefinitionSettingsAsync(settingsToRemove);
+
             Log.Information($"SyncConnectorDefinitionAsync: Saved changes for '{connector.Name}'");
         }
         else

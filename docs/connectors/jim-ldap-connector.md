@@ -50,7 +50,7 @@ JIM automatically detects the directory type during schema discovery by inspecti
 ### Security and Connectivity
 
 - **LDAPS (SSL/TLS)**<br /> Encrypted communication over port 636 (or custom port).
-- **Certificate validation**<br /> Full validation against system CA store and JIM-managed certificates, with an option to skip validation for testing.
+- **Certificate validation**<br /> Always on for LDAPS: the certificate chain, its validity period, and its name are all checked. Certificates added in Admin > Certificates are trusted in addition to the operating system's own trust store.
 - **Authentication types**<br /> Simple bind or NTLM authentication.
 - **Automatic retry**<br /> Configurable retry with exponential backoff for transient failures.
 
@@ -62,8 +62,7 @@ JIM automatically detects the directory type during schema discovery by inspecti
 |---------|-------------|---------|---------|
 | Host | Hostname or IP address of the directory server. IP address is fastest. | *(required)* | `dc01.corp.local` |
 | Port | Port for the LDAP connection. Use 389 for LDAP or 636 for LDAPS. | `389` | `636` |
-| Use Secure Connection (LDAPS)? | Enable LDAPS (SSL/TLS) for encrypted communication. | `false` | `true` |
-| Certificate Validation | How to validate the server's SSL certificate. Full Validation uses the system CA store plus any certificates added in Admin > Certificates. Only shown, and required, when "Use Secure Connection (LDAPS)?" is enabled. | `Full Validation` | `Skip Validation` |
+| Use Secure Connection (LDAPS)? | Enable LDAPS (SSL/TLS) for encrypted communication. Certificate validation is always applied; see [Certificate validation](#certificate-validation). | `false` | `true` |
 | Connection Timeout | Time in seconds to wait before giving up on a connection attempt. | `10` | `30` |
 
 ### Credentials
@@ -136,10 +135,42 @@ JIM's own large-scale integration testing (up to 500,000 users, with individual 
 
 LDAP traffic is unencrypted by default. In production environments, **always enable LDAPS** (SSL/TLS) to protect credentials and identity data in transit. Set the port to 636 and enable the "Use Secure Connection (LDAPS)?" setting.
 
-If your directory server uses a certificate issued by an internal certificate authority, upload the CA certificate to JIM via **Admin > Certificates** so that certificate validation can succeed.
+### Certificate validation
 
-!!! warning "Skip Validation"
-    The "Skip Validation" certificate option is provided for testing and initial setup only. It disables certificate chain verification, which exposes the connection to man-in-the-middle attacks. Never use this setting in production.
+When LDAPS is enabled, JIM validates the certificate the directory server presents. Three things are checked, and any one of them failing stops the connection before the service account's credentials are sent:
+
+- **Chain**<br /> The certificate must chain to an issuer JIM trusts: either one in the operating system's trust store, or one added in **Admin > Certificates**.
+- **Validity period**<br /> An expired or not-yet-valid certificate is rejected, including when its issuer is one you added yourself.
+- **Name**<br /> The certificate must have been issued for the value in the Host setting. A certificate for `dc01.corp.local` is not accepted when JIM connects to `10.0.0.5`, or to `dc01`.
+
+There is no per Connected System option to relax any of this.
+
+#### Trusting an internal certificate authority, or a self-signed certificate
+
+Upload the certificate to JIM via **Admin > Certificates**. Both work:
+
+- **An internal certificate authority**<br /> Upload the CA (and any intermediates). Every directory server whose certificate it issued is then trusted.
+- **The directory server's own self-signed certificate**<br /> Upload the server certificate itself. Only that certificate is then trusted, which is the tighter option where a directory has no certificate authority behind it.
+
+Certificates added this way are trusted **in addition to** the operating system's trust store, so adding one never stops a publicly-issued or already-trusted certificate from working.
+
+#### When the certificate name does not match the host you connect to
+
+This is the common obstacle: a certificate issued for a fully-qualified name, in an environment where JIM cannot resolve that name, so the Host setting holds an IP address instead. Uploading the certificate does not help, because the name still does not match.
+
+Rather than weakening validation, give JIM's containers a way to resolve the name. In Docker Compose, add a host entry to the `jim.web` and `jim.worker` services:
+
+```yaml
+services:
+  jim.worker:
+    extra_hosts:
+      - "dc01.corp.local:10.0.0.5"
+```
+
+Set the Host setting to `dc01.corp.local`. The name now resolves inside the container, the certificate matches, and the connection is fully validated. This works when DNS is unavailable or unreliable, because the mapping is static and needs no name server. The alternative is to have the certificate reissued with the name (or IP address) you actually connect to.
+
+!!! warning "Disabling validation entirely"
+    OpenLDAP's own `LDAPTLS_REQCERT=never` environment variable is honoured by the LDAP client library JIM's containers use, and switches certificate validation off. It applies to the whole container, so it affects **every** LDAPS Connected System that container serves, and it cannot be scoped to one directory. JIM's development and integration test stacks set it for their throw-away directories. Never set it in production: it exposes the service account's credentials to anyone able to intercept the connection.
 
 ### Service Account Permissions
 
@@ -167,8 +198,12 @@ If JIM cannot connect to the directory server:
 
 - Verify the hostname or IP address is correct and reachable from the JIM container (`ping` or `nslookup` from within the container).
 - Check that the port is correct (389 for LDAP, 636 for LDAPS) and not blocked by a firewall.
-- For LDAPS, ensure the server's certificate is trusted -- either by the system CA store or by uploading it to JIM via Admin > Certificates.
 - Increase the Connection Timeout if the directory server is slow to respond.
+
+!!! tip "LDAPS failures show you the certificate"
+    The LDAP client library reports a rejected certificate the same way it reports an unreachable server, so its own message ("The LDAP server is unavailable") tells you nothing. JIM therefore looks at the certificate itself when an LDAPS connection fails, and shows it to you: its subject, the names it was issued for, its issuer, its validity dates and its thumbprint, alongside which check it failed and what to do about it.
+
+    You will see it in two places: on the Connected System's settings when you test the connection, and on the failed Activity when a Run Profile could not connect. The same detail is available to automation on the Activity's `errorDetail` field in the REST API. If the connection failed for a reason that is nothing to do with the certificate, the original error stands unchanged.
 
 ### Authentication failures
 

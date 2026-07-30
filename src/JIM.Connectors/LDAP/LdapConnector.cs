@@ -1,11 +1,13 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Connectors;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
 using System.Net;
@@ -20,7 +22,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private bool _disposed;
     private ICertificateProvider? _certificateProvider;
     private ICredentialProtection? _credentialProtection;
-    private List<X509Certificate2>? _trustedCertificates;
+    private LdapTrustedCertificateDirectory? _trustDirectory;
     private LdapConnectorExport? _currentExport;
 
     #region IConnector members
@@ -55,7 +57,6 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     private readonly string _settingDirectoryServer = "Host";
     private readonly string _settingDirectoryServerPort = "Port";
     private readonly string _settingUseSecureConnection = "Use Secure Connection (LDAPS)?";
-    private readonly string _settingCertificateValidation = "Certificate Validation";
     private readonly string _settingConnectionTimeout = "Connection Timeout";
     private readonly string _settingUsername = "Username";
     private readonly string _settingPassword = "Password";
@@ -90,7 +91,6 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             new() { Name = _settingDirectoryServer, Required = true, Description = "Supply a directory server/domain controller hostname or IP address. IP address is fastest.", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.String },
             new() { Name = _settingDirectoryServerPort, Required = true, Description = "The port to connect to the directory service on. Use 389 for LDAP or 636 for LDAPS.", DefaultIntValue = LdapConnectorConstants.DEFAULT_LDAP_PORT, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
             new() { Name = _settingUseSecureConnection, Description = "Enable LDAPS (SSL/TLS) for encrypted communication. Requires appropriate port (typically 636).", DefaultCheckboxValue = false, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.CheckBox },
-            new() { Name = _settingCertificateValidation, Required = false, RequiredWhenSetting = _settingUseSecureConnection, RequiredWhenValue = "true", DefaultStringValue = LdapConnectorConstants.CERT_VALIDATION_FULL, Description = "How to validate the server's SSL certificate. Full validation uses system CA store plus any certificates added in Admin > Certificates.", Type = ConnectedSystemSettingType.DropDown, DropDownValues = new() { LdapConnectorConstants.CERT_VALIDATION_FULL, LdapConnectorConstants.CERT_VALIDATION_SKIP }, Category = ConnectedSystemSettingCategory.Connectivity },
             new() { Name = _settingConnectionTimeout, Required = true, Description = "How long to wait, in seconds, before giving up on trying to connect", DefaultIntValue = 10, Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Integer },
 
             new() { Name = "Credentials", Category = ConnectedSystemSettingCategory.Connectivity, Type = ConnectedSystemSettingType.Heading },
@@ -151,22 +151,28 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public async Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
         OpenImportConnection(settingValues, logger);
-        if (_connection == null)
-            throw new Exception("No connection available to get schema with");
 
-        var includeAuxiliaryClasses = settingValues.SingleOrDefault(q => q.Setting.Name == _settingIncludeAuxiliaryClasses)?.CheckboxValue ?? false;
+        try
+        {
+            if (_connection == null)
+                throw new InvalidOperationException("No connection available to get schema with");
 
-        var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+            var includeAuxiliaryClasses = settingValues.SingleOrDefault(q => q.Setting.Name == _settingIncludeAuxiliaryClasses)?.CheckboxValue ?? false;
 
-        // Auto-tune settings based on the detected directory type.
-        // This modifies setting values in-place; the application layer persists
-        // the Connected System after schema import, saving any changes.
-        AutoTuneExportConcurrency(settingValues, rootDse, logger);
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
 
-        var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger, rootDse, includeAuxiliaryClasses);
-        var schema = await ldapConnectorSchema.GetSchemaAsync();
-        CloseImportConnection();
-        return schema;
+            // Auto-tune settings based on the detected directory type.
+            // This modifies setting values in-place; the application layer persists
+            // the Connected System after schema import, saving any changes.
+            AutoTuneExportConcurrency(settingValues, rootDse, logger);
+
+            var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger, rootDse, includeAuxiliaryClasses);
+            return await ldapConnectorSchema.GetSchemaAsync();
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
     }
     #endregion
 
@@ -216,18 +222,24 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public async Task<List<ConnectorPartition>> GetPartitionsAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
         OpenImportConnection(settingValues, logger);
-        if (_connection == null)
-            throw new Exception("No connection available to get partitions with");
 
-        var skipHiddenPartitions = settingValues.SingleOrDefault(q => q.Setting.Name == _settingSkipHiddenPartitions)?.CheckboxValue ?? true;
+        try
+        {
+            if (_connection == null)
+                throw new InvalidOperationException("No connection available to get partitions with");
 
-        // Detect directory type so partition discovery can use the appropriate mechanism
-        var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+            var skipHiddenPartitions = settingValues.SingleOrDefault(q => q.Setting.Name == _settingSkipHiddenPartitions)?.CheckboxValue ?? true;
 
-        var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger, rootDse.DirectoryType);
-        var partitions = await ldapConnectorPartitions.GetPartitionsAsync(skipHiddenPartitions);
-        CloseImportConnection();
-        return partitions;
+            // Detect directory type so partition discovery can use the appropriate mechanism
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+
+            var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger, rootDse.DirectoryType);
+            return await ldapConnectorPartitions.GetPartitionsAsync(skipHiddenPartitions);
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
     }
     #endregion
 
@@ -242,7 +254,6 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         var password = settingValues.SingleOrDefault(q => q.Setting.Name == _settingPassword);
         var authTypeSettingValue = settingValues.SingleOrDefault(q => q.Setting.Name == _settingAuthType);
         var useSecureConnection = settingValues.SingleOrDefault(q => q.Setting.Name == _settingUseSecureConnection);
-        var certificateValidation = settingValues.SingleOrDefault(q => q.Setting.Name == _settingCertificateValidation);
         var maxRetriesSetting = settingValues.SingleOrDefault(q => q.Setting.Name == _settingMaxRetries);
         var retryDelaySetting = settingValues.SingleOrDefault(q => q.Setting.Name == _settingRetryDelay);
 
@@ -255,20 +266,18 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             throw new InvalidSettingValuesException($"Missing setting values for {_settingDirectoryServer}, {_settingDirectoryServerPort}, {_settingConnectionTimeout}, {_settingUsername},{_settingPassword}, or {_settingAuthType}.");
 
         var useSsl = useSecureConnection?.CheckboxValue ?? false;
-        var skipCertValidation = certificateValidation?.StringValue == LdapConnectorConstants.CERT_VALIDATION_SKIP;
         var maxRetries = maxRetriesSetting?.IntValue ?? LdapConnectorConstants.DEFAULT_MAX_RETRIES;
         var retryDelayMs = retryDelaySetting?.IntValue ?? LdapConnectorConstants.DEFAULT_RETRY_DELAY_MS;
 
-        logger.Debug("OpenImportConnection() Trying to connect to '{Server}' on port '{Port}' with username '{Username}' via auth type {AuthType}. SSL: {UseSsl}, SkipCertValidation: {SkipCertValidation}",
-            directoryServer.StringValue, directoryServerPort.IntValue, username.StringValue, authTypeSettingValue.StringValue, useSsl, skipCertValidation);
+        logger.Debug("OpenImportConnection() Trying to connect to '{Server}' on port '{Port}' with username '{Username}' via auth type {AuthType}. SSL: {UseSsl}",
+            LogSanitiser.Sanitise(directoryServer.StringValue), directoryServerPort.IntValue,
+            LogSanitiser.Sanitise(username.StringValue), LogSanitiser.Sanitise(authTypeSettingValue.StringValue), useSsl);
 
-        // Load JIM certificates for full validation (supplements system CA store)
-        if (useSsl && !skipCertValidation && _certificateProvider != null)
-        {
-            _trustedCertificates = _certificateProvider.GetTrustedCertificatesAsync().GetAwaiter().GetResult();
-            if (_trustedCertificates.Count > 0)
-                logger.Debug("Loaded {Count} additional trusted certificates from JIM Store", _trustedCertificates.Count);
-        }
+        // Supply the certificates from the JIM certificate store as additional trust anchors for LDAPS. The platform
+        // LDAP client still performs the validation itself, so the chain, the validity period and the certificate's
+        // name are all checked against the Directory Server value above.
+        if (useSsl && _certificateProvider != null)
+            PrepareTrustedCertificateDirectory(logger);
 
         var identifier = new LdapDirectoryIdentifier(directoryServer.StringValue, directoryServerPort.IntValue.Value);
 
@@ -285,17 +294,82 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         else if (authTypeSettingValueString == LdapConnectorConstants.SETTING_AUTH_TYPE_NTLM)
             authTypeEnumValue = AuthType.Ntlm;
 
+        // Resolved once, and reused by the connection factory below and the failure path further down. The guard
+        // above has already thrown if this setting has no value; the null-forgiving operator says so to the
+        // analyser, which does not carry null-state out of a pattern guard. A second check here would be a
+        // redundant condition, which is its own code-quality finding.
+        var connectionTimeout = TimeSpan.FromSeconds(timeoutSeconds.IntValue!.Value);
+
         // Build a reusable connection factory so LdapConnectorImport can create additional
         // connections for parallel imports (one connection per container+objectType combo).
         // Captured values are immutable for the duration of the import session.
         _connectionFactory = () => CreateConnection(identifier, credential, authTypeEnumValue,
-            TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value), useSsl, skipCertValidation, logger);
+            connectionTimeout, useSsl, logger);
 
-        // Execute connection with retry logic
-        ExecuteWithRetry(() =>
+        // Execute connection with retry logic. A failure here leaves nothing behind: the trust directory is only of
+        // use to a connection that was established, and a rejected certificate reports as a failure to connect, so
+        // without this every refused LDAPS attempt would leave one on disk.
+        try
         {
-            _connection = _connectionFactory();
-        }, maxRetries, retryDelayMs, logger);
+            ExecuteWithRetry(() =>
+            {
+                _connection = _connectionFactory();
+            }, maxRetries, retryDelayMs, logger);
+        }
+        catch (LdapException ex)
+        {
+            _trustDirectory?.Dispose();
+            _trustDirectory = null;
+
+            // "The LDAP server is unavailable" is what a refused certificate looks like, so before reporting a
+            // connectivity failure, go and look at what the server actually presented.
+            if (useSsl)
+                ThrowIfCertificateWasRejected(directoryServer.StringValue, directoryServerPort.IntValue.Value,
+                    connectionTimeout, logger, ex);
+
+            throw;
+        }
+        catch
+        {
+            _trustDirectory?.Dispose();
+            _trustDirectory = null;
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Examines the certificate the directory server presents and, when that is what refused the connection, replaces
+    /// the platform's opaque failure with one naming the certificate and what to do about it.
+    /// </summary>
+    /// <remarks>
+    /// Only ever called after a connection has already failed. The examination cannot make a connection succeed, and
+    /// deliberately trusts nothing: it exists so an administrator is told "this certificate, this problem" instead of
+    /// "the server is unavailable".
+    /// </remarks>
+    private void ThrowIfCertificateWasRejected(string host, int port, TimeSpan timeout, ILogger logger, LdapException originalException)
+    {
+        var trustedCertificates = GetTrustedCertificates();
+
+        try
+        {
+            var diagnostic = ServerCertificateProbe.Probe(host, port, trustedCertificates, timeout, logger);
+            if (diagnostic == null || diagnostic.FailureReason == ServerCertificateFailureReason.None)
+                return;
+
+            logger.Error("LDAPS connection to {Host}:{Port} was refused because of the server's certificate. Reason: {Reason}. Subject: {Subject}, Issuer: {Issuer}, Thumbprint: {Thumbprint}, Valid to: {ValidTo}",
+                LogSanitiser.Sanitise(host), port, diagnostic.FailureReason, LogSanitiser.Sanitise(diagnostic.Subject),
+                LogSanitiser.Sanitise(diagnostic.Issuer), LogSanitiser.Sanitise(diagnostic.Thumbprint), diagnostic.ValidTo);
+
+            throw new ServerCertificateRejectedException(
+                $"The directory server's certificate was rejected: {diagnostic.Remediation}",
+                diagnostic,
+                originalException);
+        }
+        finally
+        {
+            foreach (var certificate in trustedCertificates)
+                certificate.Dispose();
+        }
     }
 
     /// <summary>
@@ -309,7 +383,6 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         AuthType authType,
         TimeSpan timeout,
         bool useSsl,
-        bool skipCertValidation,
         ILogger logger)
     {
         var connection = new LdapConnection(identifier, credential, authType);
@@ -321,26 +394,18 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         {
             connection.SessionOptions.SecureSocketLayer = true;
 
-            if (skipCertValidation)
+            // The platform guard is a compile-time requirement, not a behavioural choice: both members below are
+            // unsupported on Windows. PrepareTrustedCertificateDirectory warns when that costs an administrator
+            // anything, so there is nothing further to say here.
+            if (_trustDirectory != null && !OperatingSystem.IsWindows())
             {
-                logger.Warning("Certificate validation is disabled. This is not recommended for production environments.");
-                // On Linux, setting VerifyServerCertificate can fail. Use LDAPTLS_REQCERT=never
-                // environment variable instead. On Windows, set the callback directly.
-                if (OperatingSystem.IsWindows())
-                {
-                    connection.SessionOptions.VerifyServerCertificate = (_, _) => true;
-                }
-                else
-                {
-                    logger.Debug("Skipping VerifyServerCertificate callback on Linux - using LDAPTLS_REQCERT environment variable");
-                }
+                // Adds the certificates from the JIM certificate store, alongside the operating system's own bundle,
+                // to what this connection will trust. A new TLS session context is mandatory: without it the platform
+                // LDAP client accepts the directory silently and carries on using the trust anchors it already had.
+                connection.SessionOptions.TrustedCertificatesDirectory = _trustDirectory.DirectoryPath;
+                connection.SessionOptions.StartNewTlsSessionContext();
+                logger.Debug("LDAPS: supplied the JIM certificate store as additional trust anchors for this connection");
             }
-            else if (_trustedCertificates != null && _trustedCertificates.Count > 0)
-            {
-                // Full validation with JIM certificates supplementing system store
-                connection.SessionOptions.VerifyServerCertificate = ValidateServerCertificate;
-            }
-            // else: use system default validation only
         }
 
         connection.Bind();
@@ -427,6 +492,11 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public void CloseImportConnection()
     {
         _connection?.Dispose();
+
+        // The trust directory is only read while a TLS session is being established, so it is safe to remove as soon
+        // as the connection is closed. A later Open call prepares a fresh one.
+        _trustDirectory?.Dispose();
+        _trustDirectory = null;
     }
     #endregion
 
@@ -624,71 +694,85 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
 
     #region private methods
     /// <summary>
-    /// Validates a server certificate against both system CA store and JIM certificate store.
-    /// Returns true if the certificate is trusted by either store.
+    /// Materialises the certificates held in the JIM certificate store into a temporary trust directory that LDAPS
+    /// connections from this connector instance will consult, on top of the operating system's own trust anchors.
     /// </summary>
-    private bool ValidateServerCertificate(LdapConnection connection, X509Certificate certificate)
+    /// <remarks>
+    /// A failure here is deliberately not fatal: the connection still proceeds under the operating system's trust
+    /// anchors alone, which is stricter than proceeding without them, and the administrator gets a warning naming the
+    /// cause rather than a connection that silently trusts less than they configured.
+    /// </remarks>
+    private void PrepareTrustedCertificateDirectory(ILogger logger)
     {
+        if (_certificateProvider == null)
+            return;
+
+        if (OperatingSystem.IsWindows())
+        {
+            // JIM ships as Linux containers; the platform LDAP client on Windows offers no supported way to add trust
+            // anchors to a connection. Running JIM directly on Windows is a UI development loop only, so warn and
+            // leave the operating system's own trust anchors in charge rather than pretending the store was applied.
+            logger.Warning("LDAPS: certificates from the JIM certificate store cannot be applied when JIM runs directly on Windows. The connection will use the operating system trust anchors only");
+            return;
+        }
+
+        var trustedCertificates = GetTrustedCertificates();
+
         try
         {
-            var serverCert = new X509Certificate2(certificate);
-
-            // First try standard system validation
-            using var systemChain = new X509Chain();
-            systemChain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-            if (systemChain.Build(serverCert))
+            if (trustedCertificates.Count == 0)
             {
-                Log.Debug("Server certificate validated by system CA store");
-                return true;
+                logger.Debug("No certificates in the JIM certificate store; LDAPS validation will use the operating system trust anchors only");
+                return;
             }
 
-            // System validation failed - try with JIM certificates
-            if (_trustedCertificates == null || _trustedCertificates.Count == 0)
-            {
-                Log.Warning("Server certificate not trusted by system CA store and no JIM certificates available. Thumbprint: {Thumbprint}, Subject: {Subject}",
-                    serverCert.Thumbprint, serverCert.Subject);
-                return false;
-            }
-
-            // Build chain with JIM certificates as additional trust anchors
-            using var jimChain = new X509Chain();
-            jimChain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-            jimChain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllowUnknownCertificateAuthority;
-
-            foreach (var trustedCert in _trustedCertificates)
-            {
-                jimChain.ChainPolicy.ExtraStore.Add(trustedCert);
-            }
-
-            jimChain.Build(serverCert);
-
-            // Check if any certificate in the chain is in JIM's trusted store
-            foreach (var chainElement in jimChain.ChainElements)
-            {
-                if (_trustedCertificates.Any(tc => tc.Thumbprint.Equals(chainElement.Certificate.Thumbprint, StringComparison.OrdinalIgnoreCase)))
-                {
-                    Log.Debug("Server certificate validated via JIM certificate store");
-                    return true;
-                }
-            }
-
-            Log.Warning("Server certificate validation failed. Not trusted by system or JIM store. Thumbprint: {Thumbprint}, Subject: {Subject}",
-                serverCert.Thumbprint, serverCert.Subject);
-            return false;
+            _trustDirectory?.Dispose();
+            _trustDirectory = LdapTrustedCertificateDirectory.Create(trustedCertificates, logger);
+            logger.Debug("Loaded {Count} trusted certificate(s) from the JIM certificate store for LDAPS validation", trustedCertificates.Count);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or ArgumentException or NotSupportedException or System.Security.SecurityException)
         {
-            Log.Error(ex, "Error validating server certificate");
-            return false;
+            _trustDirectory = null;
+            logger.Warning(ex, "Could not prepare the trusted certificate directory for LDAPS. Certificates from the JIM certificate store will not be used for this connection");
         }
+        finally
+        {
+            foreach (var certificate in trustedCertificates)
+                certificate.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Reads the certificates an administrator has added to the JIM certificate store.
+    /// </summary>
+    /// <remarks>
+    /// The connector API is synchronous, so this has to block; what matters is which thread it blocks. It blocks on a
+    /// thread-pool thread, because the portal validates Connected System settings on Blazor's renderer
+    /// synchronisation context, which runs one callback at a time: awaiting the store on that context would post the
+    /// continuation behind the very call that is waiting for it, and neither would ever finish.
+    /// </remarks>
+    private List<X509Certificate2> GetTrustedCertificates()
+    {
+        if (_certificateProvider == null)
+            return [];
+
+        var provider = _certificateProvider;
+        return Task.Run(provider.GetTrustedCertificatesAsync).GetAwaiter().GetResult();
     }
 
     private ConnectorSettingValueValidationResult TestDirectoryConnectivity(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
         try
         {
-            OpenImportConnection(settingValues, logger);
-            CloseImportConnection();
+            try
+            {
+                OpenImportConnection(settingValues, logger);
+            }
+            finally
+            {
+                CloseImportConnection();
+            }
+
             return new ConnectorSettingValueValidationResult
             {
                 IsValid = true
@@ -728,6 +812,8 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         {
             _connection?.Dispose();
             _connection = null;
+            _trustDirectory?.Dispose();
+            _trustDirectory = null;
         }
 
         _disposed = true;

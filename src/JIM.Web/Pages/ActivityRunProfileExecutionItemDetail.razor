@@ -866,15 +866,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                                     }
                                 </MudAlert>
 
-                                @if (!string.IsNullOrEmpty(_activityRunProfileExecutionItem.ErrorStackTrace))
-                                {
-                                    <MudExpansionPanels Elevation="0" Class="mb-5 jim-expansion-panel">
-                                        <MudExpansionPanel Text="Stack Trace" MaxHeight="400">
-                                            <pre class="jim-text-code"
-                                                 style="white-space: pre-wrap; word-wrap: break-word; overflow-x: auto; font-size: 0.8rem; margin: 0;">@_activityRunProfileExecutionItem.ErrorStackTrace</pre>
-                                        </MudExpansionPanel>
-                                    </MudExpansionPanels>
-                                }
+                                <CollapsibleStackTrace StackTrace="@_activityRunProfileExecutionItem.ErrorStackTrace" />
                             }
 
                             @* Pending Export Details - shown for PendingExport items and export-related errors *@
