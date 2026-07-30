@@ -40,7 +40,7 @@ Get-JIMConnectedSystem -Id <int> -DeletionPreview
 ### Output
 
 - **List**: Connected System headers with properties such as `Id`, `Name`, `Description`, `Status`, `ObjectCount`, `ConnectorName`, and `ConnectorId`.
-- **ById**: the full Connected System, including its nested `Connector` (use `$cs.Connector.Id` for the connector definition ID) and configuration state.
+- **ById**: the full Connected System, including its nested `Connector` (use `$cs.Connector.Id` for the connector definition ID), configuration state, and a nested `ConfigurationDrift` object (see below).
 - **ObjectTypes**: Object type definitions for the specified Connected System.
 - **DeletionPreview**: Deletion impact preview with counts and warnings.
 
@@ -61,6 +61,35 @@ Get-JIMConnectedSystem -Id 3
 ```powershell title="Retrieve object types for a Connected System"
 Get-JIMConnectedSystem -Id 3 -ObjectTypes
 ```
+
+```powershell title="Find Connected Systems needing a Full Synchronisation"
+Get-JIMConnectedSystem |
+    ForEach-Object { Get-JIMConnectedSystem -Id $_.Id } |
+    Where-Object { $_.ConfigurationDrift.HasPendingChanges } |
+    Select-Object Name, @{n='Changes';e={$_.ConfigurationDrift.ChangeCount}},
+                        @{n='Highest';e={$_.ConfigurationDrift.HighestChangeClass}}
+```
+
+#### ConfigurationDrift (ById only)
+
+Whether the configuration has changed in a way that needs a Full Synchronisation to take effect. Only Sync-affecting
+and Destructive changes count, so a rename never registers here.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `HasPendingChanges` | `bool` | Qualifying changes have been recorded since the last completed Full Synchronisation |
+| `IsDeterminable` | `bool` | The question has a meaningful answer; see the caution below |
+| `NeverFullySynchronised` | `bool` | No Full Synchronisation has ever completed, so there is no reference point |
+| `TrackingDisabled` | `bool` | Configuration change tracking is off, so JIM holds no record of what changed |
+| `LastFullSynchronisation` | `datetime?` | When the last completed Full Synchronisation started, or `$null` |
+| `MostRecentChange` | `datetime?` | When the most recent qualifying change was recorded, or `$null` |
+| `ChangeCount` | `int` | How many qualifying changes there are |
+| `HighestChangeClass` | `string` | `Cosmetic`, `SyncAffecting` or `Destructive`; `NotClassified` when there are no changes |
+
+!!! warning "Check `IsDeterminable` before treating `HasPendingChanges` as false"
+    `HasPendingChanges` is also `$false` when JIM cannot tell: when the Connected System has never completed a Full
+    Synchronisation, and when configuration change tracking is switched off. Scripts that gate a run on
+    `-not $_.ConfigurationDrift.HasPendingChanges` will skip those systems silently. Test `IsDeterminable` first.
 
 ```powershell title="Preview the impact of deleting a Connected System"
 Get-JIMConnectedSystem -Id 3 -DeletionPreview

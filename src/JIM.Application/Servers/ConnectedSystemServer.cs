@@ -5568,7 +5568,13 @@ public class ConnectedSystemServer
             TargetName = syncRule.Name,
             TargetContext = connectedSystem?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
-            TargetOperationType = ActivityTargetOperationType.Delete
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            // Deletion capture deliberately records no SyncRuleId (the rule is about to cease to exist), which would
+            // otherwise leave the deletion unattributable to any system and invisible to the "configuration changed
+            // since last Full Synchronisation" indicator: a false negative on one of the most consequential changes
+            // there is. The Connected System survives the deletion, so its id is the durable link. This does not
+            // pollute the system's own configuration history, which additionally requires a captured version.
+            ConnectedSystemId = syncRule.ConnectedSystemId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -5598,7 +5604,10 @@ public class ConnectedSystemServer
             TargetName = syncRule.Name,
             TargetContext = connectedSystem?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
-            TargetOperationType = ActivityTargetOperationType.Delete
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            // See the MetaverseObject-initiated overload above: the Connected System id is what keeps a rule deletion
+            // attributable once the rule itself is gone.
+            ConnectedSystemId = syncRule.ConnectedSystemId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 

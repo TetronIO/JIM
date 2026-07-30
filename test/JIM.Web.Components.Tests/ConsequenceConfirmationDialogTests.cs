@@ -27,12 +27,20 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
     /// <summary>
     /// Shows the dialog through MudBlazor's dialog service (the way callers open it) and returns the
     /// rendered provider so tests can assert on the dialog's markup.
+    ///
+    /// Showing a dialog is dispatched onto the renderer rather than performed inline, so the dialog's
+    /// first render is not guaranteed to have landed when the call returns. Every test here goes on to
+    /// query the dialog's markup immediately, which on a loaded machine can run before that render
+    /// completes and fail with an element that is merely not there yet. Waiting for the confirm button
+    /// (rendered unconditionally, whatever the dialog's state) makes the handover deterministic for
+    /// every test in the fixture rather than leaving each one to race.
     /// </summary>
     private IRenderedComponent<MudDialogProvider> ShowDialog(DialogParameters<ConsequenceConfirmationDialog> parameters)
     {
         var provider = Render<MudDialogProvider>();
         var dialogService = Services.GetRequiredService<IDialogService>();
         provider.InvokeAsync(() => dialogService.ShowAsync<ConsequenceConfirmationDialog>("Confirm", parameters));
+        provider.WaitForElement($"[data-testid='{ConfirmButtonMarker}']");
 
         return provider;
     }
@@ -269,14 +277,14 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
         });
 
         ConfirmButton(provider).Click();
-        var disabledWhilstRunning = ConfirmIsDisabled(provider);
+
+        // The confirmation is still in flight, so the disabled state holds until the task is released
+        // below: waiting for the re-render rather than sampling it once removes the race between the
+        // click's render batch and this assertion, without weakening what is being asserted.
+        provider.WaitForAssertion(() => Assert.That(ConfirmIsDisabled(provider), Is.True));
         release.SetResult(true);
 
-        using (Assert.EnterMultipleScope())
-        {
-            Assert.That(disabledWhilstRunning, Is.True);
-            Assert.That(callCount, Is.EqualTo(1));
-        }
+        Assert.That(callCount, Is.EqualTo(1));
     }
 
     [Test]
@@ -291,10 +299,10 @@ public class ConsequenceConfirmationDialogTests : JimComponentTestContext
         });
 
         ConfirmButton(provider).Click();
-        var markupWhilstRunning = provider.Markup;
-        release.SetResult(true);
 
-        Assert.That(markupWhilstRunning, Does.Contain("Deleting..."));
+        // As above: the busy text stays on screen until the confirmation task is released.
+        provider.WaitForAssertion(() => Assert.That(provider.Markup, Does.Contain("Deleting...")));
+        release.SetResult(true);
     }
 
     #endregion
