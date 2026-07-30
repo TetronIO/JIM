@@ -44,7 +44,7 @@ Classification is a pure function over machinery JIM already has. Nothing new is
 3. `ConfigurationChangeClassifier` maps each changed node's key to its class and returns the highest.
 4. `ConfigurationChangeCaptureService` persists the result on `Activity.ConfigurationChangeClass`.
 
-Because the class is persisted, downstream consumers (the "Configuration changed since last full synchronisation" indicator, apply-time acknowledgement, and later the preview adapters) read one indexed column rather than re-diffing history.
+Because the class is persisted, downstream consumers (the "Configuration changed since last full synchronisation" indicator, apply-time acknowledgement, and later the preview adapters) read a single column rather than deserialising and re-diffing every stored snapshot. It also records what JIM judged at the time, which a later re-diff could not reproduce if the classification changes.
 
 Classification keys off the **snapshot node key**, not the C# property name or the REST DTO. The snapshot is the one representation shared by every write surface (portal, REST API, PowerShell), so classifying there means all three surfaces are covered by construction.
 
@@ -263,7 +263,9 @@ The Service Setting snapshot's structural nodes are Class C (see the object-type
 Classification applies to **updates**, where a diff exists between two snapshots.
 
 - **Create** has no prior snapshot, so nothing is being changed and no existing object is at risk. Creates are recorded with no class.
-- **Delete** is inherently destructive and is handled by the shared `ConsequenceConfirmationDialog` and each surface's own deletion-impact evaluation, which state the consequences directly. Deletions are recorded as Class A for consistency, but the deletion dialogs, not the classifier, are what gate them.
+- **Delete** is inherently destructive and is handled by the shared `ConsequenceConfirmationDialog` and each surface's own deletion-impact evaluation, which state the consequences directly. `CaptureDeletionAsync` records Class A so history can be filtered consistently, but the deletion dialogs, not the classifier, are what gate the action.
+
+Activities predating this feature carry `NotClassified`: their class was never computed and cannot be reconstructed reliably, so the column is left honest rather than backfilled with a guess.
 
 ## Enforcement
 
