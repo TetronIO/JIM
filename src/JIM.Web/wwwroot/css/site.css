@@ -2235,3 +2235,41 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     overflow-y: auto;
     margin: 4px 0 0;
 }
+
+/* ─── Buttons inside alerts ─── */
+
+/* A button offered inside an alert belongs to that alert's message. Left to itself it renders in the page's
+   default text colour while its icon picks up MudBlazor's accent, so the label and the icon read as two unrelated
+   things sitting inside a third. Both now take the alert's severity colour from the palette, which is the
+   text-grade shade rather than the brighter one the alert's border and icon use, so the label keeps its contrast
+   against the alert's tinted background (measured 4.6:1 light, 7.5:1 dark: WCAG AA).
+
+   Scoped to buttons that asked to inherit their colour. A button that names its own Color has made a deliberate
+   choice and keeps it, which is what the filled Primary/Warning/Info buttons already sitting inside alerts rely
+   on. Filled alerts need no rule: an inheriting button already takes their text colour. The alert's own severity
+   icon is left alone.
+
+   Written against the alert rather than any one component, so every button placed in one from here on picks the
+   behaviour up without anybody having to remember it. */
+:is(.mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) {
+    color: var(--mud-palette-error) !important;
+}
+
+:is(.mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
+    color: var(--mud-palette-error) !important;
+}
+
+:is(.mud-alert-text-warning, .mud-alert-outlined-warning) :is(.mud-button-text-inherit, .mud-button-outlined-inherit),
+:is(.mud-alert-text-warning, .mud-alert-outlined-warning) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
+    color: var(--mud-palette-warning) !important;
+}
+
+:is(.mud-alert-text-info, .mud-alert-outlined-info) :is(.mud-button-text-inherit, .mud-button-outlined-inherit),
+:is(.mud-alert-text-info, .mud-alert-outlined-info) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
+    color: var(--mud-palette-info) !important;
+}
+
+:is(.mud-alert-text-success, .mud-alert-outlined-success) :is(.mud-button-text-inherit, .mud-button-outlined-inherit),
+:is(.mud-alert-text-success, .mud-alert-outlined-success) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
+    color: var(--mud-palette-success) !important;
+}

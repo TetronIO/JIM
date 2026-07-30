@@ -85,6 +85,7 @@ For a table cell (or inline value) that is null/empty, render `<EmptyValue />` (
 ## Alerts
 - ALWAYS use `Variant="Variant.Outlined"` on all `<MudAlert>` components
 - This ensures a consistent outlined style across the entire UI
+- **A button placed inside an alert should carry `Color="Color.Inherit"`** unless it genuinely needs a colour of its own. `site.css` then paints it, and its icon, in the alert's severity colour, so the action reads as part of the message rather than as something dropped into it. This works for every severity and both themes; do not hand-pick a colour per call site. A button that names its own `Color` (the filled Primary/Warning/Info actions in the Schema, Partitions and Example Data alerts) is left exactly as specified.
 
 ## Errors and stack traces
 - The **error message is the thing to read**; the stack trace is for the occasions it is not enough. Never render a stack trace unconditionally beside its message: it buries the sentence that actually answers the question, and stack traces routinely run to thousands of characters.
