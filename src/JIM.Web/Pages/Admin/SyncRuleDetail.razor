@@ -214,7 +214,7 @@ else if (_syncRule != null)
         // are saving it. A cosmetic edit (a rename, a description) shows nothing at all; cancelling aborts the save.
         var preflight = await _jim.ConfigurationChangePreflight.EvaluateSyncRuleAsync(_syncRule);
         if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
-                $"Synchronisation Rule '{_syncRule.Name}'"))
+                "Synchronisation Rule", _syncRule.Name))
             return;
 
         // offer an optional reason for the configuration change history; cancelling aborts the save

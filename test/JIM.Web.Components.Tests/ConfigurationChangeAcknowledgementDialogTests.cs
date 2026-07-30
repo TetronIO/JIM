@@ -27,7 +27,8 @@ public class ConfigurationChangeAcknowledgementDialogTests : JimComponentTestCon
         var parameters = new DialogParameters<ConfigurationChangeAcknowledgementDialog>
         {
             { x => x.Preflight, preflight },
-            { x => x.ObjectDescription, "Synchronisation Rule 'HR Inbound'" }
+            { x => x.ObjectTypeLabel, "Synchronisation Rule" },
+            { x => x.ObjectName, "HR Inbound" }
         };
 
         var provider = Render<MudDialogProvider>();
@@ -85,6 +86,26 @@ public class ConfigurationChangeAcknowledgementDialogTests : JimComponentTestCon
             Item("Enabled", ConfigurationChangeClass.SyncAffecting)));
 
         Assert.That(provider.Markup, Does.Contain("Full Synchronisation"));
+    }
+
+    [Test]
+    public void AcknowledgementDialog_NamesTheObjectBeingChangedInTheAccentColour()
+    {
+        var provider = ShowDialog(Preflight(ConfigurationChangeClass.SyncAffecting,
+            Item("Enabled", ConfigurationChangeClass.SyncAffecting)));
+
+        Assert.That(provider.Markup, Does.Contain("<span class=\"mud-primary-text\">HR Inbound</span>"),
+            "the object's own name should stand out from the type label beside it");
+    }
+
+    [Test]
+    public void AcknowledgementDialog_SeveralChanges_UsesThePluralHeading()
+    {
+        var provider = ShowDialog(Preflight(ConfigurationChangeClass.SyncAffecting,
+            Item("Enabled", ConfigurationChangeClass.SyncAffecting),
+            Item("Direction", ConfigurationChangeClass.SyncAffecting)));
+
+        Assert.That(provider.Markup, Does.Contain("Changes to"));
     }
 
     [Test]

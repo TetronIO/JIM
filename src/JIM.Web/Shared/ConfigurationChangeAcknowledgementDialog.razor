@@ -25,10 +25,16 @@
     public ConfigurationChangePreflight Preflight { get; set; } = ConfigurationChangePreflight.None;
 
     /// <summary>
-    /// What is being changed, named as the administrator knows it, e.g. "Synchronisation Rule 'HR Inbound'".
+    /// The kind of object being changed, e.g. "Synchronisation Rule". Title Case, as a JIM domain entity name.
     /// </summary>
     [Parameter]
-    public string ObjectDescription { get; set; } = "this configuration";
+    public string ObjectTypeLabel { get; set; } = "configuration";
+
+    /// <summary>
+    /// The object's own name, rendered in the accent colour so it stands out from the label beside it.
+    /// </summary>
+    [Parameter]
+    public string? ObjectName { get; set; }
 
     // A change touching dozens of properties is real (a scoping rewrite, a bulk mapping edit); listing every one
     // turns the dialog into a wall nobody reads. The most consequential lead, and the tail is counted.
@@ -59,7 +65,10 @@
     }
 
     private RenderFragment RenderChanges => @<div>
-        <MudText Typo="Typo.subtitle2" Class="mb-1">Changing on @ObjectDescription</MudText>
+        <MudText Typo="Typo.subtitle2" Class="mb-1">
+            @(Preflight.Items.Count == 1 ? "Change to" : "Changes to") @ObjectTypeLabel:
+            <span class="mud-primary-text">@ObjectName</span>
+        </MudText>
         <MudSimpleTable Dense="true" Hover="true" Elevation="0" Outlined="true">
             <tbody>
                 @foreach (var item in Preflight.Items.Take(MaxListedChanges))
@@ -108,7 +117,7 @@
     /// anything, so callers can invoke this unconditionally on every save path.
     /// </summary>
     public static async Task<bool> ConfirmAsync(IDialogService dialogService, ConfigurationChangePreflight preflight,
-        string objectDescription)
+        string objectTypeLabel, string? objectName)
     {
         ArgumentNullException.ThrowIfNull(dialogService);
         ArgumentNullException.ThrowIfNull(preflight);
@@ -119,7 +128,8 @@
         var parameters = new DialogParameters<ConfigurationChangeAcknowledgementDialog>
         {
             { x => x.Preflight, preflight },
-            { x => x.ObjectDescription, objectDescription }
+            { x => x.ObjectTypeLabel, objectTypeLabel },
+            { x => x.ObjectName, objectName }
         };
         var options = new DialogOptions
         {
