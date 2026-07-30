@@ -2050,3 +2050,239 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
 .jim-flow-option .jim-standard-hint {
     flex: 0 0 auto;
 }
+
+/* ---------------------------------------------------------------------------
+   Server certificate card (<ServerCertificateCard />)
+
+   Presents the certificate a directory server offered when a connection was
+   refused. Styled as the document itself: a ruled border, a seal, and the
+   fields laid out the way a certificate viewer presents them, so an
+   administrator recognises what they are looking at before reading a word.
+   Built entirely from MudBlazor palette variables so it follows the theme into
+   dark mode rather than carrying its own colours.
+   --------------------------------------------------------------------------- */
+/* Fluid, like every other block on JIM's pages: the frame fills the width it is given rather than stopping short
+   of it. The content inside stays a centred column (see .jim-certificate-content), so widening the page widens
+   the frame without stretching the certificate. */
+.jim-certificate {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+    background-color: var(--mud-palette-surface);
+    padding: 6px;
+    margin-top: 16px;
+}
+
+/* Sized so the thumbprint, grouped into pairs, fits on one line. */
+.jim-certificate-content {
+    max-width: 580px;
+    margin-inline: auto;
+}
+
+/* The inner rule is what reads as "certificate": a second, tighter frame
+   inside the outer border, as engraved documents have. */
+.jim-certificate-inner {
+    position: relative;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: calc(var(--mud-default-borderradius) - 1px);
+    padding: 28px 28px 20px;
+    text-align: center;
+}
+
+.jim-certificate-compact .jim-certificate-inner {
+    padding: 20px 20px 16px;
+}
+
+/* The seal sits over the top rule, the way a wax seal or foil disc overlaps a
+   certificate's border. */
+.jim-certificate-seal {
+    position: absolute;
+    top: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: var(--mud-palette-surface);
+    border: 1px solid var(--mud-palette-lines-default);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-certificate-eyebrow {
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--mud-palette-text-secondary);
+    margin-top: 6px;
+}
+
+.jim-certificate-subject {
+    font-size: 1.25rem;
+    font-weight: 500;
+    margin-top: 10px;
+    word-break: break-word;
+}
+
+.jim-certificate-issuer {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    margin-top: 4px;
+}
+
+.jim-certificate-rule {
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--mud-palette-lines-default), transparent);
+    margin: 18px auto;
+    width: 70%;
+}
+
+.jim-certificate-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    text-align: left;
+}
+
+.jim-certificate-field {
+    display: grid;
+    grid-template-columns: 7.5rem minmax(0, 1fr);
+    gap: 12px;
+    align-items: baseline;
+}
+
+.jim-certificate-label {
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-certificate-value {
+    word-break: break-word;
+}
+
+.jim-certificate-value-problem {
+    color: var(--mud-palette-error);
+    font-weight: 500;
+}
+
+/* Sized so a full 40-character SHA-1 thumbprint, grouped into pairs, stays on one line at the card's width:
+   a thumbprint split across lines is materially harder to compare against the one in Admin > Certificates. */
+.jim-certificate-thumbprint {
+    font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    letter-spacing: -0.01em;
+}
+
+.jim-certificate-names {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.jim-certificate-name {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+    padding: 1px 8px;
+    font-size: 0.8rem;
+}
+
+/* The name that satisfies the check, when there is one, so a mismatch does not
+   have to be spotted by comparing strings. */
+.jim-certificate-name-match {
+    border-color: var(--mud-palette-success);
+    color: var(--mud-palette-success);
+}
+
+.jim-certificate-verdict {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 20px;
+    padding-top: 14px;
+    border-top: 1px solid var(--mud-palette-lines-default);
+    color: var(--mud-palette-error);
+    font-weight: 500;
+}
+
+.jim-certificate-verdict-reason {
+    text-align: left;
+}
+
+.jim-certificate-remediation {
+    margin-top: 8px;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    text-align: left;
+}
+
+/* ─── Collapsible stack trace ─── */
+
+.jim-stack-trace {
+    margin-top: 8px;
+}
+
+/* Scrolls within itself rather than stretching the page: a stack trace is long in both directions. */
+.jim-stack-trace-text {
+    font-family: "IBM Plex Mono", "Lucida Console", "Courier New", monospace;
+    font-size: 0.78rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
+    max-height: 420px;
+    overflow-y: auto;
+    margin: 4px 0 0;
+}
+
+/* ─── Buttons inside alerts ─── */
+
+/* A button offered inside an alert belongs to that alert's message. Left to itself it renders in the page's
+   default text colour while its icon picks up MudBlazor's accent, so the label and the icon read as two unrelated
+   things sitting inside a third. Both now take the alert's severity colour from the palette, which is the
+   text-grade shade rather than the brighter one the alert's border and icon use, so the label keeps its contrast
+   against the alert's tinted background (measured 4.6:1 light, 7.5:1 dark: WCAG AA).
+
+   Scoped to buttons that asked to inherit their colour. A button that names its own Color has made a deliberate
+   choice and keeps it, which is what the filled Primary/Warning/Info buttons already sitting inside alerts rely
+   on. Filled alerts need no rule: an inheriting button already takes their text colour. The alert's own severity
+   icon is left alone.
+
+   Written against the alert rather than any one component, so every button placed in one from here on picks the
+   behaviour up without anybody having to remember it. */
+:is(.mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) {
+    color: var(--mud-palette-error) !important;
+}
+
+:is(.mud-alert-text-error, .mud-alert-outlined-error, .jim-alert-error) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
+    color: var(--mud-palette-error) !important;
+}
+
+:is(.mud-alert-text-warning, .mud-alert-outlined-warning) :is(.mud-button-text-inherit, .mud-button-outlined-inherit),
+:is(.mud-alert-text-warning, .mud-alert-outlined-warning) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
+    color: var(--mud-palette-warning) !important;
+}
+
+:is(.mud-alert-text-info, .mud-alert-outlined-info) :is(.mud-button-text-inherit, .mud-button-outlined-inherit),
+:is(.mud-alert-text-info, .mud-alert-outlined-info) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
+    color: var(--mud-palette-info) !important;
+}
+
+:is(.mud-alert-text-success, .mud-alert-outlined-success) :is(.mud-button-text-inherit, .mud-button-outlined-inherit),
+:is(.mud-alert-text-success, .mud-alert-outlined-success) :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-icon-root {
+    color: var(--mud-palette-success) !important;
+}
+
+/* The hover and focus wash, and the click ripple, follow the button's own colour rather than MudBlazor's
+   defaults, which are a blue tint and a near-black ripple: both read as foreign inside a coloured alert. Written
+   against currentColor so one rule serves every severity and both themes; on a normal-severity alert it resolves
+   to the ordinary text colour, which is the right answer there too. */
+.mud-alert :is(.mud-button-text-inherit, .mud-button-outlined-inherit):hover,
+.mud-alert :is(.mud-button-text-inherit, .mud-button-outlined-inherit):focus-visible {
+    background-color: color-mix(in srgb, currentColor 12%, transparent) !important;
+}
+
+.mud-alert :is(.mud-button-text-inherit, .mud-button-outlined-inherit) .mud-ripple-effect {
+    background-color: currentColor !important;
+}

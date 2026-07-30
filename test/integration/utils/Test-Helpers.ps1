@@ -321,7 +321,6 @@ function Get-DirectoryConfig {
                     Host             = "samba-ad-primary"
                     Port             = 636
                     UseSSL           = $true
-                    CertValidation   = "Skip Validation (Not Recommended)"
                     BindDN           = "CN=Administrator,CN=Users,DC=panoply,DC=local"
                     BindPassword     = "Test@123!"
                     AuthType         = "Simple"
@@ -350,7 +349,6 @@ function Get-DirectoryConfig {
                     Host             = "samba-ad-source"
                     Port             = 636
                     UseSSL           = $true
-                    CertValidation   = "Skip Validation (Not Recommended)"
                     BindDN           = "CN=Administrator,CN=Users,DC=resurgam,DC=local"
                     BindPassword     = "Test@123!"
                     AuthType         = "Simple"
@@ -379,7 +377,6 @@ function Get-DirectoryConfig {
                     Host             = "samba-ad-target"
                     Port             = 636
                     UseSSL           = $true
-                    CertValidation   = "Skip Validation (Not Recommended)"
                     BindDN           = "CN=Administrator,CN=Users,DC=gentian,DC=local"
                     BindPassword     = "Test@123!"
                     AuthType         = "Simple"
@@ -418,7 +415,6 @@ function Get-DirectoryConfig {
                     Host             = "openldap-primary"
                     Port             = 1389
                     UseSSL           = $false
-                    CertValidation   = $null
                     BindDN           = "cn=admin,dc=yellowstone,dc=local"
                     BindPassword     = "Test@123!"
                     AuthType         = "Simple"
@@ -452,7 +448,6 @@ function Get-DirectoryConfig {
                     Host             = "openldap-primary"
                     Port             = 1389
                     UseSSL           = $false
-                    CertValidation   = $null
                     BindDN           = "cn=admin,dc=yellowstone,dc=local"
                     BindPassword     = "Test@123!"
                     AuthType         = "Simple"
@@ -481,7 +476,6 @@ function Get-DirectoryConfig {
                     Host             = "openldap-primary"
                     Port             = 1389
                     UseSSL           = $false
-                    CertValidation   = $null
                     BindDN           = "cn=admin,dc=glitterband,dc=local"
                     BindPassword     = "Test@123!"
                     AuthType         = "Simple"
