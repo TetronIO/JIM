@@ -170,6 +170,38 @@ public class LdapsCertificateValidationTests
     }
 
     /// <summary>
+    /// A rejected certificate is reported as a failure to connect, so the trust directory prepared for that
+    /// connection has to be cleaned up on the failure path too, or every refused attempt leaves one on disk.
+    /// </summary>
+    [Test]
+    public void OpenImportConnection_WhenTheConnectionIsRejected_LeavesNoTrustDirectoryBehind()
+    {
+        var trustDirectoriesBefore = CountTrustDirectories();
+
+        // Deliberately neither closed nor disposed, mirroring a caller that abandons the connector once the
+        // connection attempt throws. The failure path itself has to clean up, not the caller.
+        var connector = new LdapConnector();
+        connector.SetCertificateProvider(new FakeCertificateProvider([_caCertificatePath]));
+
+        Assert.That(
+            () => connector.OpenImportConnection(BuildSettingValues(_mismatchedHostOrHost, _port), _logger),
+            Throws.TypeOf<LdapException>());
+
+        Assert.That(CountTrustDirectories(), Is.EqualTo(trustDirectoriesBefore));
+    }
+
+    /// <summary>
+    /// A host the certificate was not issued for, so the connection is refused after the trust directory has been
+    /// prepared. Falls back to the valid host, which still fails when the certificate is not trusted.
+    /// </summary>
+    private string _mismatchedHostOrHost => Environment.GetEnvironmentVariable("JIM_TEST_LDAPS_MISMATCH_HOST") ?? _host;
+
+    private static int CountTrustDirectories()
+    {
+        return Directory.GetDirectories(Path.GetTempPath(), "jim-ldap-trust-*").Length;
+    }
+
+    /// <summary>
     /// Supplies certificates from PEM files in place of the JIM certificate store.
     /// </summary>
     private sealed class FakeCertificateProvider : ICertificateProvider

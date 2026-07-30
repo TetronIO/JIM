@@ -45,6 +45,17 @@ internal sealed class LdapTrustedCertificateDirectory : IDisposable
         "/etc/ssl/ca-bundle.pem"
     ];
 
+    /// <summary>
+    /// Prefix every trust directory carries, so abandoned ones can be recognised and swept.
+    /// </summary>
+    private const string DirectoryNamePrefix = "jim-ldap-trust-";
+
+    /// <summary>
+    /// How old an abandoned trust directory must be before the sweep removes it. Comfortably longer than any single
+    /// import can run, so a directory still in use by a long-running run is never taken out from under it.
+    /// </summary>
+    private static readonly TimeSpan AbandonedDirectoryAge = TimeSpan.FromDays(7);
+
     private bool _disposed;
 
     /// <summary>
@@ -74,7 +85,9 @@ internal sealed class LdapTrustedCertificateDirectory : IDisposable
         if (trustedCertificates.Count == 0)
             throw new ArgumentException("At least one certificate is required; without one there is nothing to add to the platform's trust configuration.", nameof(trustedCertificates));
 
-        var directoryPath = Path.Combine(Path.GetTempPath(), $"jim-ldap-trust-{Guid.NewGuid():N}");
+        RemoveAbandonedDirectories(logger);
+
+        var directoryPath = Path.Combine(Path.GetTempPath(), $"{DirectoryNamePrefix}{Guid.NewGuid():N}");
         var trustDirectory = new LdapTrustedCertificateDirectory(directoryPath);
 
         try
@@ -106,6 +119,36 @@ internal sealed class LdapTrustedCertificateDirectory : IDisposable
         {
             trustDirectory.Dispose();
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Removes trust directories left behind by a process that was killed before it could clean up its own.
+    /// </summary>
+    /// <remarks>
+    /// Each directory is removed when its connection closes, but a killed process never reaches that, and a container
+    /// that is restarted rather than replaced keeps its temporary files. Sweeping here means no deployment ever needs
+    /// manual clean-up. Failures are logged and ignored: this is housekeeping, and must never stop a connection being
+    /// established.
+    /// </remarks>
+    private static void RemoveAbandonedDirectories(ILogger logger)
+    {
+        try
+        {
+            var cutoff = DateTime.UtcNow - AbandonedDirectoryAge;
+            var abandoned = Directory.EnumerateDirectories(Path.GetTempPath(), $"{DirectoryNamePrefix}*")
+                .Where(d => Directory.GetLastWriteTimeUtc(d) < cutoff)
+                .ToList();
+
+            foreach (var directory in abandoned)
+                Directory.Delete(directory, true);
+
+            if (abandoned.Count > 0)
+                logger.Debug("LdapTrustedCertificateDirectory: removed {Count} abandoned trust director(ies) left by an earlier process", abandoned.Count);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or NotSupportedException or System.Security.SecurityException)
+        {
+            logger.Debug(ex, "LdapTrustedCertificateDirectory: could not sweep abandoned trust directories");
         }
     }
 

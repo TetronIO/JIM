@@ -148,22 +148,28 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public async Task<ConnectorSchema> GetSchemaAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
         OpenImportConnection(settingValues, logger);
-        if (_connection == null)
-            throw new Exception("No connection available to get schema with");
 
-        var includeAuxiliaryClasses = settingValues.SingleOrDefault(q => q.Setting.Name == _settingIncludeAuxiliaryClasses)?.CheckboxValue ?? false;
+        try
+        {
+            if (_connection == null)
+                throw new InvalidOperationException("No connection available to get schema with");
 
-        var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+            var includeAuxiliaryClasses = settingValues.SingleOrDefault(q => q.Setting.Name == _settingIncludeAuxiliaryClasses)?.CheckboxValue ?? false;
 
-        // Auto-tune settings based on the detected directory type.
-        // This modifies setting values in-place; the application layer persists
-        // the Connected System after schema import, saving any changes.
-        AutoTuneExportConcurrency(settingValues, rootDse, logger);
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
 
-        var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger, rootDse, includeAuxiliaryClasses);
-        var schema = await ldapConnectorSchema.GetSchemaAsync();
-        CloseImportConnection();
-        return schema;
+            // Auto-tune settings based on the detected directory type.
+            // This modifies setting values in-place; the application layer persists
+            // the Connected System after schema import, saving any changes.
+            AutoTuneExportConcurrency(settingValues, rootDse, logger);
+
+            var ldapConnectorSchema = new LdapConnectorSchema(_connection, logger, rootDse, includeAuxiliaryClasses);
+            return await ldapConnectorSchema.GetSchemaAsync();
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
     }
     #endregion
 
@@ -213,18 +219,24 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public async Task<List<ConnectorPartition>> GetPartitionsAsync(List<ConnectedSystemSettingValue> settingValues, ILogger logger)
     {
         OpenImportConnection(settingValues, logger);
-        if (_connection == null)
-            throw new Exception("No connection available to get partitions with");
 
-        var skipHiddenPartitions = settingValues.SingleOrDefault(q => q.Setting.Name == _settingSkipHiddenPartitions)?.CheckboxValue ?? true;
+        try
+        {
+            if (_connection == null)
+                throw new InvalidOperationException("No connection available to get partitions with");
 
-        // Detect directory type so partition discovery can use the appropriate mechanism
-        var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+            var skipHiddenPartitions = settingValues.SingleOrDefault(q => q.Setting.Name == _settingSkipHiddenPartitions)?.CheckboxValue ?? true;
 
-        var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger, rootDse.DirectoryType);
-        var partitions = await ldapConnectorPartitions.GetPartitionsAsync(skipHiddenPartitions);
-        CloseImportConnection();
-        return partitions;
+            // Detect directory type so partition discovery can use the appropriate mechanism
+            var rootDse = LdapConnectorUtilities.GetBasicRootDseInformation(_connection, logger);
+
+            var ldapConnectorPartitions = new LdapConnectorPartitions(_connection, logger, rootDse.DirectoryType);
+            return await ldapConnectorPartitions.GetPartitionsAsync(skipHiddenPartitions);
+        }
+        finally
+        {
+            CloseImportConnection();
+        }
     }
     #endregion
 
@@ -284,11 +296,22 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         _connectionFactory = () => CreateConnection(identifier, credential, authTypeEnumValue,
             TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value), useSsl, logger);
 
-        // Execute connection with retry logic
-        ExecuteWithRetry(() =>
+        // Execute connection with retry logic. A failure here leaves nothing behind: the trust directory is only of
+        // use to a connection that was established, and a rejected certificate reports as a failure to connect, so
+        // without this every refused LDAPS attempt would leave one on disk.
+        try
         {
-            _connection = _connectionFactory();
-        }, maxRetries, retryDelayMs, logger);
+            ExecuteWithRetry(() =>
+            {
+                _connection = _connectionFactory();
+            }, maxRetries, retryDelayMs, logger);
+        }
+        catch
+        {
+            _trustDirectory?.Dispose();
+            _trustDirectory = null;
+            throw;
+        }
     }
 
     /// <summary>
@@ -665,8 +688,15 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     {
         try
         {
-            OpenImportConnection(settingValues, logger);
-            CloseImportConnection();
+            try
+            {
+                OpenImportConnection(settingValues, logger);
+            }
+            finally
+            {
+                CloseImportConnection();
+            }
+
             return new ConnectorSettingValueValidationResult
             {
                 IsValid = true

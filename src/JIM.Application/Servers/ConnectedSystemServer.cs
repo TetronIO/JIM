@@ -1317,9 +1317,18 @@ public class ConnectedSystemServer
 
         // resolve the connector so its own, connector-specific validation can run too. connectors that don't
         // implement IConnectorSettings have no such validation to add; the generic results above stand alone.
+        // validation opens real connections, so the connector is disposed here rather than left to the collector:
+        // it holds the connection and any temporary files prepared for it.
         var connector = CreateConnector(connectedSystem);
-        if (connector is IConnectorSettings settingsConnector)
-            results.AddRange(settingsConnector.ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
+        try
+        {
+            if (connector is IConnectorSettings settingsConnector)
+                results.AddRange(settingsConnector.ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
+        }
+        finally
+        {
+            (connector as IDisposable)?.Dispose();
+        }
 
         return results;
     }

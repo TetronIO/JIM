@@ -221,6 +221,50 @@ public class LdapTrustedCertificateDirectoryTests
         }
     }
 
+    /// <summary>
+    /// Every directory is removed when its connection closes, but a process killed mid-run never gets to do that, and
+    /// a container that is restarted rather than replaced keeps its temporary files. Without a sweep, debris from
+    /// those kills accumulates until someone deletes it by hand.
+    /// </summary>
+    [Test]
+    public void Create_RemovesAbandonedTrustDirectoriesLeftByAKilledProcess()
+    {
+        var abandoned = Path.Combine(Path.GetTempPath(), $"jim-ldap-trust-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(abandoned);
+        File.WriteAllText(Path.Combine(abandoned, "debris.crt"), "-- left behind --");
+        Directory.SetLastWriteTimeUtc(abandoned, DateTime.UtcNow.AddDays(-8));
+
+        var certificate = CreateCertificate("sweep.example.test");
+        using var trustDirectory = LdapTrustedCertificateDirectory.Create(new[] { certificate }, _logger, new[] { CreateFakeSystemBundle() });
+
+        Assert.That(Directory.Exists(abandoned), Is.False);
+    }
+
+    /// <summary>
+    /// A long-running import can hold its trust directory open for hours, so the sweep must only take directories old
+    /// enough that no run could still be using them.
+    /// </summary>
+    [Test]
+    public void Create_LeavesRecentTrustDirectoriesAlone()
+    {
+        var inUse = Path.Combine(Path.GetTempPath(), $"jim-ldap-trust-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(inUse);
+        Directory.SetLastWriteTimeUtc(inUse, DateTime.UtcNow.AddHours(-6));
+
+        try
+        {
+            var certificate = CreateCertificate("recent.example.test");
+            using var trustDirectory = LdapTrustedCertificateDirectory.Create(new[] { certificate }, _logger, new[] { CreateFakeSystemBundle() });
+
+            Assert.That(Directory.Exists(inUse), Is.True);
+        }
+        finally
+        {
+            if (Directory.Exists(inUse))
+                Directory.Delete(inUse, true);
+        }
+    }
+
     [Test]
     public void Create_ProducesADistinctDirectoryPerInstance()
     {

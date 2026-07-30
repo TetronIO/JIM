@@ -245,118 +245,128 @@ public class SyncImportTaskProcessor
                     callBasedImportConnector.OpenImportConnection(_connectedSystem.SettingValues, Log.Logger);
                 }
 
-                var initialPage = true;
-                var paginationTokens = new List<ConnectedSystemPaginationToken>();
-                var pageNumber = 0;
-
-                // Keep track of the original persisted data at the START of the import.
-                // This is critical for delta imports where subsequent pages must use the SAME
-                // watermark (USN) as the first page to query for changes.
-                // The connector will return a NEW watermark on the first page that we'll save
-                // AFTER all pages are processed.
-                var originalPersistedData = _connectedSystem.PersistedConnectorData;
-                string? newPersistedData = null;
-                string? connectorWarningMessage = null;
-
-                while (initialPage || paginationTokens.Count > 0)
+                try
                 {
-                    if (_cancellationTokenSource.IsCancellationRequested)
+                    var initialPage = true;
+                    var paginationTokens = new List<ConnectedSystemPaginationToken>();
+                    var pageNumber = 0;
+
+                    // Keep track of the original persisted data at the START of the import.
+                    // This is critical for delta imports where subsequent pages must use the SAME
+                    // watermark (USN) as the first page to query for changes.
+                    // The connector will return a NEW watermark on the first page that we'll save
+                    // AFTER all pages are processed.
+                    var originalPersistedData = _connectedSystem.PersistedConnectorData;
+                    string? newPersistedData = null;
+                    string? connectorWarningMessage = null;
+
+                    while (initialPage || paginationTokens.Count > 0)
                     {
-                        Log.Information("PerformImportAsync: Cancellation requested. Stopping before next import page.");
-                        break;
+                        if (_cancellationTokenSource.IsCancellationRequested)
+                        {
+                            Log.Information("PerformImportAsync: Cancellation requested. Stopping before next import page.");
+                            break;
+                        }
+
+                        // perform the import for this page
+                        // IMPORTANT: Always pass the ORIGINAL persisted data to ensure consistent
+                        // watermark queries across all pages of a delta import.
+                        ConnectedSystemImportResult result;
+                        var fetchMessage = pageNumber > 0
+                            ? $"Importing objects from Connected System (page {pageNumber + 1})"
+                            : "Importing objects from Connected System";
+                        await _syncRepo.UpdateActivityMessageAsync(_activity, fetchMessage);
+                        using (Diagnostics.Connector.StartSpan("ImportPage")
+                            .SetTag("connectedSystemId", _connectedSystem.Id)
+                            .SetTag("pageNumber", pageNumber)
+                            .SetTag("cumulativeObjectCount", totalObjectsImported)
+                            .SetTag("wallClockOffsetMs", importPhaseSw.Elapsed.TotalMilliseconds))
+                        {
+                            result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token);
+                        }
+                        pageNumber++;
+                        totalObjectsImported += result.ImportObjects.Count;
+
+                        Log.Information("MetricsCheckpoint: Import processed={ObjectsProcessed} elapsed={ElapsedMs}ms cs={ConnectedSystemName}",
+                            totalObjectsImported, (long)importPhaseSw.Elapsed.TotalMilliseconds, _connectedSystem.Name);
+
+                        // Update progress - for paginated imports we don't know the total, but we track objects imported so far
+                        _activity.ObjectsProcessed = totalObjectsImported;
+                        var pageInfo = pageNumber > 1 || result.PaginationTokens.Count > 0
+                            ? $" (page {pageNumber})"
+                            : "";
+                        var progressMessage = $"Imported {totalObjectsImported:N0} objects{pageInfo}" +
+                            throughput.FormatThroughput(totalObjectsImported);
+                        await _syncRepo.UpdateActivityMessageAsync(_activity, progressMessage);
+
+                        // add the external ids from this page worth of results to our external-id collection for later deletion calculation
+                        AddExternalIdsToCollection(result, externalIdsImported);
+
+                        // make sure we pass the pagination tokens back in on the next page (if there is one)
+                        paginationTokens = result.PaginationTokens;
+
+                        // Capture the new persisted connector data from the first page only.
+                        // Subsequent pages return null (indicating "no change"), so we only capture once.
+                        // We'll save this AFTER all pages are processed to avoid affecting watermark
+                        // queries on subsequent pages.
+                        if (result.PersistedConnectorData != null && newPersistedData == null)
+                        {
+                            Log.Debug($"ExecuteAsync: captured new persisted connector data from page {pageNumber}. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(result.PersistedConnectorData)}'");
+                            newPersistedData = result.PersistedConnectorData;
+                        }
+
+                        // Capture connector warning from the first page that reports one
+                        if (result.WarningMessage != null && connectorWarningMessage == null)
+                        {
+                            connectorWarningMessage = result.WarningMessage;
+                        }
+
+                        // process the results from this page
+                        using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", result.ImportObjects.Count))
+                        {
+                            await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, crossPageSeenExternalIds);
+                        }
+
+                        if (initialPage)
+                            initialPage = false;
+
+                        if (_cancellationTokenSource.IsCancellationRequested)
+                        {
+                            Log.Information("PerformImportAsync: Cancellation requested after processing page {Page}. Stopping.", pageNumber);
+                            break;
+                        }
                     }
 
-                    // perform the import for this page
-                    // IMPORTANT: Always pass the ORIGINAL persisted data to ensure consistent
-                    // watermark queries across all pages of a delta import.
-                    ConnectedSystemImportResult result;
-                    var fetchMessage = pageNumber > 0
-                        ? $"Importing objects from Connected System (page {pageNumber + 1})"
-                        : "Importing objects from Connected System";
-                    await _syncRepo.UpdateActivityMessageAsync(_activity, fetchMessage);
-                    using (Diagnostics.Connector.StartSpan("ImportPage")
-                        .SetTag("connectedSystemId", _connectedSystem.Id)
-                        .SetTag("pageNumber", pageNumber)
-                        .SetTag("cumulativeObjectCount", totalObjectsImported)
-                        .SetTag("wallClockOffsetMs", importPhaseSw.Elapsed.TotalMilliseconds))
+                    // Now that all pages are processed, update the persisted connector data
+                    // with the new watermark captured from the first page.
+                    if (newPersistedData != null && newPersistedData != originalPersistedData)
                     {
-                        result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token);
-                    }
-                    pageNumber++;
-                    totalObjectsImported += result.ImportObjects.Count;
-
-                    Log.Information("MetricsCheckpoint: Import processed={ObjectsProcessed} elapsed={ElapsedMs}ms cs={ConnectedSystemName}",
-                        totalObjectsImported, (long)importPhaseSw.Elapsed.TotalMilliseconds, _connectedSystem.Name);
-
-                    // Update progress - for paginated imports we don't know the total, but we track objects imported so far
-                    _activity.ObjectsProcessed = totalObjectsImported;
-                    var pageInfo = pageNumber > 1 || result.PaginationTokens.Count > 0
-                        ? $" (page {pageNumber})"
-                        : "";
-                    var progressMessage = $"Imported {totalObjectsImported:N0} objects{pageInfo}" +
-                        throughput.FormatThroughput(totalObjectsImported);
-                    await _syncRepo.UpdateActivityMessageAsync(_activity, progressMessage);
-
-                    // add the external ids from this page worth of results to our external-id collection for later deletion calculation
-                    AddExternalIdsToCollection(result, externalIdsImported);
-
-                    // make sure we pass the pagination tokens back in on the next page (if there is one)
-                    paginationTokens = result.PaginationTokens;
-
-                    // Capture the new persisted connector data from the first page only.
-                    // Subsequent pages return null (indicating "no change"), so we only capture once.
-                    // We'll save this AFTER all pages are processed to avoid affecting watermark
-                    // queries on subsequent pages.
-                    if (result.PersistedConnectorData != null && newPersistedData == null)
-                    {
-                        Log.Debug($"ExecuteAsync: captured new persisted connector data from page {pageNumber}. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(result.PersistedConnectorData)}'");
-                        newPersistedData = result.PersistedConnectorData;
+                        Log.Debug($"ExecuteAsync: updating persisted connector data after all pages. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(newPersistedData)}'");
+                        await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, newPersistedData);
                     }
 
-                    // Capture connector warning from the first page that reports one
-                    if (result.WarningMessage != null && connectorWarningMessage == null)
+                    // Record connector-level warnings on the Activity itself (not as phantom RPEIs).
+                    // Connector warnings (e.g., DeltaImportFallbackToFullImport) are operational notes about
+                    // HOW the import was performed, not errors with specific objects. Creating a phantom RPEI
+                    // with no CSO association inflates error counts and pollutes the RPEI list.
+                    if (connectorWarningMessage != null)
                     {
-                        connectorWarningMessage = result.WarningMessage;
+                        _activity.WarningMessage = connectorWarningMessage;
+                        Log.Warning("PerformImportAsync: Connector reported warning: {WarningMessage}", LogSanitiser.Sanitise(connectorWarningMessage));
                     }
 
-                    // process the results from this page
-                    using (Diagnostics.Sync.StartSpan("ProcessImportObjects").SetTag("objectCount", result.ImportObjects.Count))
+                }
+                finally
+                {
+                    using (Diagnostics.Connector.StartSpan("CloseImportConnection"))
                     {
-                        await ProcessImportObjectsAsync(result, connectedSystemObjectsToBeCreated, connectedSystemObjectsToBeUpdated, crossPageSeenExternalIds);
-                    }
-
-                    if (initialPage)
-                        initialPage = false;
-
-                    if (_cancellationTokenSource.IsCancellationRequested)
-                    {
-                        Log.Information("PerformImportAsync: Cancellation requested after processing page {Page}. Stopping.", pageNumber);
-                        break;
+                        // In a finally so an import that fails part-way still releases the connection and the
+                        // temporary trust directory prepared for it, rather than leaving both to the connector
+                        // instance being garbage collected.
+                        callBasedImportConnector.CloseImportConnection();
                     }
                 }
 
-                // Now that all pages are processed, update the persisted connector data
-                // with the new watermark captured from the first page.
-                if (newPersistedData != null && newPersistedData != originalPersistedData)
-                {
-                    Log.Debug($"ExecuteAsync: updating persisted connector data after all pages. old value: '{LogSanitiser.Sanitise(originalPersistedData)}', new value: '{LogSanitiser.Sanitise(newPersistedData)}'");
-                    await _syncServer.UpdateConnectedSystemPersistedConnectorDataAsync(_connectedSystem, newPersistedData);
-                }
-
-                // Record connector-level warnings on the Activity itself (not as phantom RPEIs).
-                // Connector warnings (e.g., DeltaImportFallbackToFullImport) are operational notes about
-                // HOW the import was performed, not errors with specific objects. Creating a phantom RPEI
-                // with no CSO association inflates error counts and pollutes the RPEI list.
-                if (connectorWarningMessage != null)
-                {
-                    _activity.WarningMessage = connectorWarningMessage;
-                    Log.Warning("PerformImportAsync: Connector reported warning: {WarningMessage}", LogSanitiser.Sanitise(connectorWarningMessage));
-                }
-
-                using (Diagnostics.Connector.StartSpan("CloseImportConnection"))
-                {
-                    callBasedImportConnector.CloseImportConnection();
-                }
                 break;
             }
             case IConnectorImportUsingFiles fileBasedImportConnector:
