@@ -140,6 +140,7 @@ Every scoping key is Class B: scoping determines which objects the rule applies 
 | Key | Class |
 |---|---|
 | `type`, `position` | B |
+| `childGroups` (nested groups) | B |
 | `metaverseAttributeId`, `connectedSystemAttributeId` | B |
 | `comparisonType`, `caseSensitive` | B |
 | `stringValue`, `intValue`, `longValue`, `decimalValue`, `dateTimeValue`, `boolValue`, `guidValue` | B |
@@ -153,6 +154,8 @@ Every scoping key is Class B: scoping determines which objects the rule applies 
 | `connectorDefinitionId` | B | Changes the connector driving import and export. |
 | `objectMatchingRuleMode` | B | Changes how matching rules combine, so which objects join. |
 | `unresolvedReferenceHandling` | B | Changes what happens to references that cannot be resolved. |
+| `objectMatchingRules` | B | Matching rules held on the system change which objects join. |
+| `settingValues` | B | Connector settings drive what the connector reads and writes. |
 | `maxExportParallelism` | C | Throughput only; explicitly excluded from preview scope by #827. |
 
 ### Run Profiles (`runProfiles`)
@@ -203,7 +206,7 @@ Every scoping key is Class B: scoping determines which objects the rule applies 
 | `deletionRule` | **A** | Governs when a Metaverse Object is deleted; changing it makes objects deletion-eligible immediately (#827 gap G5). |
 | `deletionGracePeriod` | **A** | Shortening the period brings forward deletions that were pending (#827 gap G5). |
 | `deletionTriggerConnectedSystemIds` | **A** | Changes which system disconnections trigger deletion (#827 gap G5). |
-| `attributes` | B | Binding or unbinding an attribute changes what can flow to objects of this type. |
+| `attributes`, `attributeId` | B | Binding or unbinding an attribute changes what can flow to objects of this type. |
 
 ## Metaverse Attribute
 
@@ -214,7 +217,7 @@ Every scoping key is Class B: scoping determines which objects the rule applies 
 | `attributePlurality` | B | Single versus multi-valued changes what flows. |
 | `builtIn` | C | System flag; not administrator-editable. |
 | `renderingHint` | C | Portal display only. |
-| `metaverseObjectTypes` | B | Changes which Object Types the attribute is available to. |
+| `metaverseObjectTypes`, `metaverseObjectTypeId` | B | Changes which Object Types the attribute is available to. |
 | `standardMappings.standard` | C | Interoperability hint; advisory metadata only. |
 | `standardMappings.counterpartName` | C | Interoperability hint; advisory metadata only. |
 | `standardMappings.notes` | C | Free text. |
@@ -267,3 +270,5 @@ Classification applies to **updates**, where a diff exists between two snapshots
 `ConfigurationChangeClassificationCompletenessTests` (JIM.Worker.Tests) reflects over every key `ConfigurationSnapshotService` can emit and asserts each has an explicit classification. It runs in every unit pass and in `build-and-test` on every PR, so adding a configuration property without classifying it fails the build with a message naming the key.
 
 This is the same enforcement pattern as `BulkInsertColumnCompletenessTests`, and it exists for the same reason: a hand-maintained map that nothing checks will drift, and the drift is invisible until it produces a wrong answer in front of a customer.
+
+The guard earned its place immediately: the first run caught four keys that a careful manual read of `ConfigurationSnapshotService` had missed (`childGroups` on nested scoping groups, `attributeId` and `metaverseObjectTypeId` on the association collections, and `objectMatchingRules` on Connected Systems). Do not classify by reading the source; let the test tell you what the snapshot actually emits.
