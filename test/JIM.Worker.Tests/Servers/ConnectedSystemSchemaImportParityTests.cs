@@ -52,7 +52,7 @@ public class ConnectedSystemSchemaImportParityTests
         _jim = new JimApplication(_repository.Object);
 
         // One object type with two attributes: the shape that makes the auto-select applicable.
-        _csvPath = Path.Combine(Path.GetTempPath(), $"jim-schema-parity-{Guid.NewGuid():N}.csv");
+        _csvPath = Path.Join(Path.GetTempPath(), $"jim-schema-parity-{Guid.NewGuid():N}.csv");
         File.WriteAllText(_csvPath, "id,displayName\n1,Test User\n");
     }
 

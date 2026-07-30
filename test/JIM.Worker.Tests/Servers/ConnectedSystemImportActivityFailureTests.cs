@@ -159,7 +159,7 @@ public class ConnectedSystemImportActivityFailureTests
         };
 
         connectedSystem.SettingValues.Single(sv => sv.Setting.Name == "File Path").StringValue =
-            Path.Combine(Path.GetTempPath(), $"jim-no-such-file-{Guid.NewGuid():N}.csv");
+            Path.Join(Path.GetTempPath(), $"jim-no-such-file-{Guid.NewGuid():N}.csv");
         connectedSystem.SettingValues.Single(sv => sv.Setting.Name == "Object Type").StringValue = "user";
         return connectedSystem;
     }
