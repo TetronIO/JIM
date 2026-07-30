@@ -473,6 +473,17 @@ public class Activity
     public int? ConfigurationChangeVersion { get; set; }
 
     /// <summary>
+    /// How consequential this configuration change was: destructive, sync-affecting, or cosmetic. Computed from the
+    /// properties that actually changed, so consumers (the changed-since-last-synchronisation indicator, apply-time
+    /// messaging, and the preview adapters) can filter to changes that matter without re-diffing history.
+    ///
+    /// <see cref="ConfigurationChangeClass.NotClassified"/> for creates (no prior snapshot to diff), for
+    /// non-configuration activities, and where classification could not be determined. See
+    /// engineering/CONFIGURATION_CHANGE_CLASSIFICATION.md.
+    /// </summary>
+    public ConfigurationChangeClass ConfigurationChangeClass { get; set; } = ConfigurationChangeClass.NotClassified;
+
+    /// <summary>
     /// Records which integer-keyed configuration object this activity's configuration change belongs to, by setting
     /// the target type's own column (see the target-column block above). A column already set at activity-creation
     /// time (e.g. by a granular sub-entity endpoint) is preserved. This is the single forward mapping of target type
