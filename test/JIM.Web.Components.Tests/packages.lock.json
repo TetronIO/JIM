@@ -4,9 +4,9 @@
     "net10.0": {
       "AngleSharp": {
         "type": "Direct",
-        "requested": "[1.5.2, )",
-        "resolved": "1.5.2",
-        "contentHash": "LVZ7rrr6GHbhERhTgVDarVygl1e6KwE96pronA90LBOMacDhxR4lB+xYLjn/vlnUu+xbOB2RM9fuCPEx5bdyWA=="
+        "requested": "[1.6.0, )",
+        "resolved": "1.6.0",
+        "contentHash": "kVnhnZlM4Yww2KWqW3uSL8isvhYsrTTBMSPAgoF8ZhMrLSoay6783AP6dQxAj1J9gvWKi3OIM4ZezdE2Y4ufCQ=="
       },
       "bunit": {
         "type": "Direct",
@@ -680,8 +680,8 @@
       },
       "Scalar.AspNetCore": {
         "type": "Transitive",
-        "resolved": "2.16.15",
-        "contentHash": "gCwx1CmfNIY4jlz4KAsiZrnUnz9UP+PhnM/rNQV3xcl4bnCaFVNhEBNrTMY9mi1QnsAJ32GeXCYu6DkSR2MHrQ=="
+        "resolved": "2.16.16",
+        "contentHash": "Ax0e0bIh+Upf92k1+pTBUom3e/kbpu20qsrDYmmS1NM721Eq2xF8c789x6IbiNrvW8WwySRzPv/icYYhb6idSg=="
       },
       "Serilog": {
         "type": "Transitive",
@@ -796,10 +796,10 @@
         "type": "Project",
         "dependencies": {
           "DynamicExpresso.Core": "[2.19.3, )",
-          "JIM.Connectors": "[0.13.0-dev.20260724.1431, )",
-          "JIM.Data": "[0.13.0-dev.20260724.1431, )",
-          "JIM.Models": "[0.13.0-dev.20260724.1431, )",
-          "JIM.Utilities": "[0.13.0-dev.20260724.1431, )",
+          "JIM.Connectors": "[0.14.0, )",
+          "JIM.Data": "[0.14.0, )",
+          "JIM.Models": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )",
           "Microsoft.AspNetCore.DataProtection": "[10.0.10, )",
           "Microsoft.AspNetCore.DataProtection.Extensions": "[10.0.10, )",
           "NCrontab": "[3.4.0, )",
@@ -811,15 +811,15 @@
         "type": "Project",
         "dependencies": {
           "CsvHelper": "[33.1.0, )",
-          "JIM.Models": "[0.13.0-dev.20260724.1431, )",
-          "JIM.Utilities": "[0.13.0-dev.20260724.1431, )",
+          "JIM.Models": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )",
           "System.DirectoryServices.Protocols": "[10.0.10, )"
         }
       },
       "jim.data": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0-dev.20260724.1431, )"
+          "JIM.Models": "[0.14.0, )"
         }
       },
       "jim.models": {
@@ -832,9 +832,9 @@
       "jim.postgresdata": {
         "type": "Project",
         "dependencies": {
-          "JIM.Data": "[0.13.0-dev.20260724.1431, )",
-          "JIM.Models": "[0.13.0-dev.20260724.1431, )",
-          "JIM.Utilities": "[0.13.0-dev.20260724.1431, )",
+          "JIM.Data": "[0.14.0, )",
+          "JIM.Models": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "Serilog": "[4.4.0, )"
@@ -849,7 +849,7 @@
       "jim.utilities": {
         "type": "Project",
         "dependencies": {
-          "JIM.Models": "[0.13.0-dev.20260724.1431, )",
+          "JIM.Models": "[0.14.0, )",
           "Serilog": "[4.4.0, )"
         }
       },
@@ -859,17 +859,17 @@
           "Asp.Versioning.Mvc": "[10.0.0, )",
           "Asp.Versioning.Mvc.ApiExplorer": "[10.0.0, )",
           "Humanizer.Core": "[3.0.10, )",
-          "JIM.Application": "[0.13.0-dev.20260724.1431, )",
-          "JIM.Models": "[0.13.0-dev.20260724.1431, )",
-          "JIM.PostgresData": "[0.13.0-dev.20260724.1431, )",
-          "JIM.Utilities": "[0.13.0-dev.20260724.1431, )",
+          "JIM.Application": "[0.14.0, )",
+          "JIM.Models": "[0.14.0, )",
+          "JIM.PostgresData": "[0.14.0, )",
+          "JIM.Utilities": "[0.14.0, )",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.10, )",
           "Microsoft.AspNetCore.Authentication.OpenIdConnect": "[10.0.10, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.10, )",
           "Microsoft.OpenApi": "[2.11.0, )",
           "Microsoft.VisualStudio.Azure.Containers.Tools.Targets": "[1.23.0, )",
           "MudBlazor": "[9.7.0, )",
-          "Scalar.AspNetCore": "[2.16.15, )",
+          "Scalar.AspNetCore": "[2.16.16, )",
           "Serilog.AspNetCore": "[10.0.0, )"
         }
       }

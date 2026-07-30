@@ -302,6 +302,23 @@ A complete import rule for an HR system might look like:
 
 This rule imports full-time employees from the HR system, joins them to existing Metaverse Objects by employee ID, creates new Metaverse Objects for new starters, and flows their attributes into the metaverse.
 
+## Finding a Synchronisation Rule
+
+Once a deployment has more than a handful of rules, the Synchronisation Rules list carries filters above the table so you can narrow it to the rules you care about:
+
+| Filter | Narrows to |
+|--------|------------|
+| **Connected System** | Rules belonging to the systems you pick. Only systems that actually have rules are offered. |
+| **Direction** | Inbound (Import) or Outbound (Export) rules. |
+| **Action** | **Projects** (Import rules that create Metaverse Objects), **Provisions** (Export rules that create Connected System Objects), or **Flow Only** (rules that create nothing and only flow attribute values). |
+| **Status** | Enabled or Disabled rules. |
+
+Each filter accepts several values, and the filters combine: picking two Connected Systems and the Outbound direction shows the outbound rules of either system. Leaving a filter empty means "all".
+
+The search box in the table's toolbar narrows whatever the filters left, matching on the rule name. Clearing the search box returns the filtered list rather than the full one, so you can keep a filter in place while searching within it.
+
+The same filters are available to automation: see `Get-JIMSyncRule`'s `-Direction`, `-ActionType` and `-Status` parameters, and the matching query parameters on the Synchronisation Rules list endpoint in the REST API.
+
 ## Manage Synchronisation Rules
 
 - **JIM portal**<br /> Synchronisation Rules area of the admin UI
