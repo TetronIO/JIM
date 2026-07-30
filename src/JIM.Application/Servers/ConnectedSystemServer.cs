@@ -1358,8 +1358,6 @@ public class ConnectedSystemServer
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
-        var result = new SchemaRefreshResult { Success = true };
-
         // resolve the connector, and confirm it supports schema import, before creating the activity: an
         // unsupported connector must never leave an in-flight activity behind.
         var connector = CreateConnector(connectedSystem);
@@ -1383,148 +1381,7 @@ public class ConnectedSystemServer
         try
         {
             var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
-
-            // Merge the new schema with the existing one, preserving IDs for attributes that are referenced by Synchronisation Rules
-            // This prevents FK constraint violations when attributes are used in Synchronisation Rule mappings
-            schema.ObjectTypes = schema.ObjectTypes.OrderBy(q => q.Name).ToList();
-
-            // Keep track of existing object types for merging and change tracking
-            var existingObjectTypes = connectedSystem.ObjectTypes?.ToList() ?? new List<ConnectedSystemObjectType>();
-            var existingObjectTypeNames = existingObjectTypes.Select(ot => ot.Name).ToHashSet();
-            var newObjectTypeNames = schema.ObjectTypes.Select(ot => ot.Name).ToHashSet();
-
-            connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>();
-
-            // Track removed object types
-            foreach (var removedObjectTypeName in existingObjectTypeNames.Except(newObjectTypeNames))
-            {
-                result.RemovedObjectTypes.Add(removedObjectTypeName);
-            }
-
-            foreach (var schemaObjectType in schema.ObjectTypes)
-            {
-                schemaObjectType.Attributes = schemaObjectType.Attributes.OrderBy(a => a.Name).ToList();
-
-                // Try to find an existing object type with the same name
-                var existingObjectType = existingObjectTypes.FirstOrDefault(ot => ot.Name == schemaObjectType.Name);
-
-                ConnectedSystemObjectType connectedSystemObjectType;
-                if (existingObjectType != null)
-                {
-                    // Update existing object type, preserving its ID and merging attributes
-                    result.UpdatedObjectTypes.Add(schemaObjectType.Name);
-                    connectedSystemObjectType = existingObjectType;
-                    var existingAttributes = existingObjectType.Attributes?.ToList() ?? new List<ConnectedSystemObjectTypeAttribute>();
-                    var existingAttributeNames = existingAttributes.Select(a => a.Name).ToHashSet();
-                    var newAttributeNames = schemaObjectType.Attributes.Select(a => a.Name).ToHashSet();
-
-                    connectedSystemObjectType.Attributes = new List<ConnectedSystemObjectTypeAttribute>();
-
-                    // Track removed attributes for this object type
-                    var removedAttributeNames = existingAttributeNames.Except(newAttributeNames).ToList();
-                    if (removedAttributeNames.Count > 0)
-                    {
-                        result.RemovedAttributes[schemaObjectType.Name] = removedAttributeNames;
-                    }
-
-                    // Track added attributes for this object type
-                    var addedAttributeNames = new List<string>();
-
-                    foreach (var schemaAttribute in schemaObjectType.Attributes)
-                    {
-                        // Try to find existing attribute by name
-                        var existingAttribute = existingAttributes.FirstOrDefault(a => a.Name == schemaAttribute.Name);
-
-                        if (existingAttribute != null)
-                        {
-                            // Update existing attribute properties but preserve the ID
-                            existingAttribute.Description = schemaAttribute.Description;
-                            existingAttribute.AttributePlurality = schemaAttribute.AttributePlurality;
-                            existingAttribute.Type = schemaAttribute.Type;
-                            existingAttribute.ClassName = schemaAttribute.ClassName;
-                            existingAttribute.Writability = schemaAttribute.Writability;
-                            connectedSystemObjectType.Attributes.Add(existingAttribute);
-                        }
-                        else
-                        {
-                            // Add new attribute
-                            addedAttributeNames.Add(schemaAttribute.Name);
-                            connectedSystemObjectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute
-                            {
-                                Name = schemaAttribute.Name,
-                                Description = schemaAttribute.Description,
-                                AttributePlurality = schemaAttribute.AttributePlurality,
-                                Type = schemaAttribute.Type,
-                                ClassName = schemaAttribute.ClassName,
-                                Writability = schemaAttribute.Writability
-                            });
-                        }
-                    }
-
-                    if (addedAttributeNames.Count > 0)
-                    {
-                        result.AddedAttributes[schemaObjectType.Name] = addedAttributeNames;
-                    }
-                }
-                else
-                {
-                    // Create new object type
-                    result.AddedObjectTypes.Add(schemaObjectType.Name);
-                    connectedSystemObjectType = new ConnectedSystemObjectType
-                    {
-                        Name = schemaObjectType.Name,
-                        Attributes = schemaObjectType.Attributes.Select(a => new ConnectedSystemObjectTypeAttribute
-                        {
-                            Name = a.Name,
-                            Description = a.Description,
-                            AttributePlurality = a.AttributePlurality,
-                            Type = a.Type,
-                            ClassName = a.ClassName,
-                            Writability = a.Writability
-                        }).ToList()
-                    };
-
-                    // All attributes in a new object type are considered "added"
-                    result.AddedAttributes[schemaObjectType.Name] = schemaObjectType.Attributes.Select(a => a.Name).ToList();
-                }
-
-                // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
-                // External ID attributes are automatically selected and locked to ensure the system always has the required anchor attributes.
-                var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => schemaObjectType.RecommendedExternalIdAttribute != null && a.Name == schemaObjectType.RecommendedExternalIdAttribute.Name);
-                if (attribute != null)
-                {
-                    attribute.IsExternalId = true;
-                    attribute.Selected = true;
-                    attribute.SelectionLocked = true;
-                }
-
-                // if the connector supports it (requires it), take the secondary external id from the schema and mark the attribute as such
-                // Secondary External ID attributes are also automatically selected and locked.
-                if (connectedSystem.ConnectorDefinition.SupportsSecondaryExternalId && schemaObjectType.RecommendedSecondaryExternalIdAttribute != null)
-                {
-                    var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name);
-                    if (secondaryExternalIdAttribute != null)
-                    {
-                        secondaryExternalIdAttribute.IsSecondaryExternalId = true;
-                        secondaryExternalIdAttribute.Selected = true;
-                        secondaryExternalIdAttribute.SelectionLocked = true;
-                    }
-                    else
-                        Log.Error($"Recommended Secondary External Id attribute '{schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name}' was not found in the objects list of attributes!");
-                }
-
-                connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
-            }
-
-            // Set totals
-            result.TotalObjectTypes = connectedSystem.ObjectTypes.Count;
-            result.TotalAttributes = connectedSystem.ObjectTypes.Sum(ot => ot.Attributes?.Count ?? 0);
-
-            // If the schema yielded exactly one, newly-discovered object type, auto-select it so the admin lands
-            // straight on attribute selection. Gated on "newly added" so a refresh never re-selects a type the
-            // admin previously deselected.
-            if (connectedSystem.ObjectTypes.Count == 1 && result.AddedObjectTypes.Count == 1)
-                connectedSystem.ObjectTypes[0].Selected = true;
+            var result = MergeSchemaIntoConnectedSystem(connectedSystem, schema);
 
             await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedBy);
 
@@ -1551,8 +1408,6 @@ public class ConnectedSystemServer
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
-        var result = new SchemaRefreshResult { Success = true };
-
         // resolve the connector, and confirm it supports schema import, before creating the activity: an
         // unsupported connector must never leave an in-flight activity behind.
         var connector = CreateConnector(connectedSystem);
@@ -1572,126 +1427,7 @@ public class ConnectedSystemServer
         try
         {
             var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
-
-            schema.ObjectTypes = schema.ObjectTypes.OrderBy(q => q.Name).ToList();
-
-            var existingObjectTypes = connectedSystem.ObjectTypes?.ToList() ?? new List<ConnectedSystemObjectType>();
-            var existingObjectTypeNames = existingObjectTypes.Select(ot => ot.Name).ToHashSet();
-            var newObjectTypeNames = schema.ObjectTypes.Select(ot => ot.Name).ToHashSet();
-
-            connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>();
-
-            foreach (var removedObjectTypeName in existingObjectTypeNames.Except(newObjectTypeNames))
-            {
-                result.RemovedObjectTypes.Add(removedObjectTypeName);
-            }
-
-            foreach (var schemaObjectType in schema.ObjectTypes)
-            {
-                schemaObjectType.Attributes = schemaObjectType.Attributes.OrderBy(a => a.Name).ToList();
-
-                var existingObjectType = existingObjectTypes.FirstOrDefault(ot => ot.Name == schemaObjectType.Name);
-
-                ConnectedSystemObjectType connectedSystemObjectType;
-                if (existingObjectType != null)
-                {
-                    result.UpdatedObjectTypes.Add(schemaObjectType.Name);
-                    connectedSystemObjectType = existingObjectType;
-                    var existingAttributes = existingObjectType.Attributes?.ToList() ?? new List<ConnectedSystemObjectTypeAttribute>();
-                    var existingAttributeNames = existingAttributes.Select(a => a.Name).ToHashSet();
-                    var newAttributeNames = schemaObjectType.Attributes.Select(a => a.Name).ToHashSet();
-
-                    connectedSystemObjectType.Attributes = new List<ConnectedSystemObjectTypeAttribute>();
-
-                    var removedAttributeNames = existingAttributeNames.Except(newAttributeNames).ToList();
-                    if (removedAttributeNames.Count > 0)
-                    {
-                        result.RemovedAttributes[schemaObjectType.Name] = removedAttributeNames;
-                    }
-
-                    var addedAttributeNames = new List<string>();
-
-                    foreach (var schemaAttribute in schemaObjectType.Attributes)
-                    {
-                        var existingAttribute = existingAttributes.FirstOrDefault(a => a.Name == schemaAttribute.Name);
-                        if (existingAttribute != null)
-                        {
-                            existingAttribute.Description = schemaAttribute.Description;
-                            existingAttribute.AttributePlurality = schemaAttribute.AttributePlurality;
-                            existingAttribute.Type = schemaAttribute.Type;
-                            existingAttribute.ClassName = schemaAttribute.ClassName;
-                            existingAttribute.Writability = schemaAttribute.Writability;
-                            connectedSystemObjectType.Attributes.Add(existingAttribute);
-                        }
-                        else
-                        {
-                            addedAttributeNames.Add(schemaAttribute.Name);
-                            connectedSystemObjectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute
-                            {
-                                Name = schemaAttribute.Name,
-                                Description = schemaAttribute.Description,
-                                AttributePlurality = schemaAttribute.AttributePlurality,
-                                Type = schemaAttribute.Type,
-                                ClassName = schemaAttribute.ClassName,
-                                Writability = schemaAttribute.Writability
-                            });
-                        }
-                    }
-
-                    if (addedAttributeNames.Count > 0)
-                    {
-                        result.AddedAttributes[schemaObjectType.Name] = addedAttributeNames;
-                    }
-                }
-                else
-                {
-                    result.AddedObjectTypes.Add(schemaObjectType.Name);
-                    connectedSystemObjectType = new ConnectedSystemObjectType
-                    {
-                        Name = schemaObjectType.Name,
-                        Attributes = schemaObjectType.Attributes.Select(a => new ConnectedSystemObjectTypeAttribute
-                        {
-                            Name = a.Name,
-                            Description = a.Description,
-                            AttributePlurality = a.AttributePlurality,
-                            Type = a.Type,
-                            ClassName = a.ClassName,
-                            Writability = a.Writability
-                        }).ToList()
-                    };
-
-                    result.AddedAttributes[schemaObjectType.Name] = schemaObjectType.Attributes.Select(a => a.Name).ToList();
-                }
-
-                // if there's an External Id attribute recommendation from the connector, use that
-                // External ID attributes are automatically selected and locked to ensure the system always has the required anchor attributes.
-                var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => schemaObjectType.RecommendedExternalIdAttribute != null && a.Name == schemaObjectType.RecommendedExternalIdAttribute.Name);
-                if (attribute != null)
-                {
-                    attribute.IsExternalId = true;
-                    attribute.Selected = true;
-                    attribute.SelectionLocked = true;
-                }
-
-                // Secondary External ID attributes are also automatically selected and locked.
-                if (connectedSystem.ConnectorDefinition.SupportsSecondaryExternalId && schemaObjectType.RecommendedSecondaryExternalIdAttribute != null)
-                {
-                    var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name);
-                    if (secondaryExternalIdAttribute != null)
-                    {
-                        secondaryExternalIdAttribute.IsSecondaryExternalId = true;
-                        secondaryExternalIdAttribute.Selected = true;
-                        secondaryExternalIdAttribute.SelectionLocked = true;
-                    }
-                    else
-                        Log.Error($"Recommended Secondary External Id attribute '{schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name}' was not found in the objects list of attributes!");
-                }
-
-                connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
-            }
-
-            result.TotalObjectTypes = connectedSystem.ObjectTypes.Count;
-            result.TotalAttributes = connectedSystem.ObjectTypes.Sum(ot => ot.Attributes?.Count ?? 0);
+            var result = MergeSchemaIntoConnectedSystem(connectedSystem, schema);
 
             await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedByApiKey);
 
@@ -1707,6 +1443,169 @@ public class ConnectedSystemServer
             await Application.Activities.FailActivityWithErrorAsync(activity, ex);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Merges a schema retrieved from a Connected System into that system's object types and attributes, and
+    /// reports what changed. Object types and attributes are matched by name so that existing ids survive the
+    /// refresh; this is what stops a Synchronisation Rule's mappings from being invalidated by one. Removal of
+    /// object types and attributes that the schema no longer offers is reported but not applied here.
+    /// </summary>
+    /// <remarks>
+    /// Shared by both <see cref="ImportConnectedSystemSchemaAsync(ConnectedSystem, MetaverseObject?)"/> and
+    /// <see cref="ImportConnectedSystemSchemaAsync(ConnectedSystem, ApiKey)"/>, so the same schema reaches the same
+    /// conclusion whichever surface asked for it. They were separate copies of this logic, and the copies had
+    /// drifted: only the user-initiated one auto-selected a single newly-discovered object type, so an import run
+    /// through the REST API or PowerShell left different configuration behind than the same import run through the
+    /// portal. The initiator decides who the Activity is attributed to; it does not decide what a schema means.
+    /// </remarks>
+    private static SchemaRefreshResult MergeSchemaIntoConnectedSystem(ConnectedSystem connectedSystem, ConnectorSchema schema)
+    {
+        var result = new SchemaRefreshResult { Success = true };
+
+        // Merge the new schema with the existing one, preserving IDs for attributes that are referenced by Synchronisation Rules
+        // This prevents FK constraint violations when attributes are used in Synchronisation Rule mappings
+        schema.ObjectTypes = schema.ObjectTypes.OrderBy(q => q.Name).ToList();
+
+        // Keep track of existing object types for merging and change tracking
+        var existingObjectTypes = connectedSystem.ObjectTypes?.ToList() ?? new List<ConnectedSystemObjectType>();
+        var existingObjectTypeNames = existingObjectTypes.Select(ot => ot.Name).ToHashSet();
+        var newObjectTypeNames = schema.ObjectTypes.Select(ot => ot.Name).ToHashSet();
+
+        connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>();
+
+        // Track removed object types
+        foreach (var removedObjectTypeName in existingObjectTypeNames.Except(newObjectTypeNames))
+        {
+            result.RemovedObjectTypes.Add(removedObjectTypeName);
+        }
+
+        foreach (var schemaObjectType in schema.ObjectTypes)
+        {
+            schemaObjectType.Attributes = schemaObjectType.Attributes.OrderBy(a => a.Name).ToList();
+
+            // Try to find an existing object type with the same name
+            var existingObjectType = existingObjectTypes.FirstOrDefault(ot => ot.Name == schemaObjectType.Name);
+
+            ConnectedSystemObjectType connectedSystemObjectType;
+            if (existingObjectType != null)
+            {
+                // Update existing object type, preserving its ID and merging attributes
+                result.UpdatedObjectTypes.Add(schemaObjectType.Name);
+                connectedSystemObjectType = existingObjectType;
+                var existingAttributes = existingObjectType.Attributes?.ToList() ?? new List<ConnectedSystemObjectTypeAttribute>();
+                var existingAttributeNames = existingAttributes.Select(a => a.Name).ToHashSet();
+                var newAttributeNames = schemaObjectType.Attributes.Select(a => a.Name).ToHashSet();
+
+                connectedSystemObjectType.Attributes = new List<ConnectedSystemObjectTypeAttribute>();
+
+                // Track removed attributes for this object type
+                var removedAttributeNames = existingAttributeNames.Except(newAttributeNames).ToList();
+                if (removedAttributeNames.Count > 0)
+                {
+                    result.RemovedAttributes[schemaObjectType.Name] = removedAttributeNames;
+                }
+
+                // Track added attributes for this object type
+                var addedAttributeNames = new List<string>();
+
+                foreach (var schemaAttribute in schemaObjectType.Attributes)
+                {
+                    // Try to find existing attribute by name
+                    var existingAttribute = existingAttributes.FirstOrDefault(a => a.Name == schemaAttribute.Name);
+
+                    if (existingAttribute != null)
+                    {
+                        // Update existing attribute properties but preserve the ID
+                        existingAttribute.Description = schemaAttribute.Description;
+                        existingAttribute.AttributePlurality = schemaAttribute.AttributePlurality;
+                        existingAttribute.Type = schemaAttribute.Type;
+                        existingAttribute.ClassName = schemaAttribute.ClassName;
+                        existingAttribute.Writability = schemaAttribute.Writability;
+                        connectedSystemObjectType.Attributes.Add(existingAttribute);
+                    }
+                    else
+                    {
+                        // Add new attribute
+                        addedAttributeNames.Add(schemaAttribute.Name);
+                        connectedSystemObjectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute
+                        {
+                            Name = schemaAttribute.Name,
+                            Description = schemaAttribute.Description,
+                            AttributePlurality = schemaAttribute.AttributePlurality,
+                            Type = schemaAttribute.Type,
+                            ClassName = schemaAttribute.ClassName,
+                            Writability = schemaAttribute.Writability
+                        });
+                    }
+                }
+
+                if (addedAttributeNames.Count > 0)
+                {
+                    result.AddedAttributes[schemaObjectType.Name] = addedAttributeNames;
+                }
+            }
+            else
+            {
+                // Create new object type
+                result.AddedObjectTypes.Add(schemaObjectType.Name);
+                connectedSystemObjectType = new ConnectedSystemObjectType
+                {
+                    Name = schemaObjectType.Name,
+                    Attributes = schemaObjectType.Attributes.Select(a => new ConnectedSystemObjectTypeAttribute
+                    {
+                        Name = a.Name,
+                        Description = a.Description,
+                        AttributePlurality = a.AttributePlurality,
+                        Type = a.Type,
+                        ClassName = a.ClassName,
+                        Writability = a.Writability
+                    }).ToList()
+                };
+
+                // All attributes in a new object type are considered "added"
+                result.AddedAttributes[schemaObjectType.Name] = schemaObjectType.Attributes.Select(a => a.Name).ToList();
+            }
+
+            // if there's an External Id attribute recommendation from the connector, use that. otherwise the user will have to pick one.
+            // External ID attributes are automatically selected and locked to ensure the system always has the required anchor attributes.
+            var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => schemaObjectType.RecommendedExternalIdAttribute != null && a.Name == schemaObjectType.RecommendedExternalIdAttribute.Name);
+            if (attribute != null)
+            {
+                attribute.IsExternalId = true;
+                attribute.Selected = true;
+                attribute.SelectionLocked = true;
+            }
+
+            // if the connector supports it (requires it), take the secondary external id from the schema and mark the attribute as such
+            // Secondary External ID attributes are also automatically selected and locked.
+            if (connectedSystem.ConnectorDefinition.SupportsSecondaryExternalId && schemaObjectType.RecommendedSecondaryExternalIdAttribute != null)
+            {
+                var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name);
+                if (secondaryExternalIdAttribute != null)
+                {
+                    secondaryExternalIdAttribute.IsSecondaryExternalId = true;
+                    secondaryExternalIdAttribute.Selected = true;
+                    secondaryExternalIdAttribute.SelectionLocked = true;
+                }
+                else
+                    Log.Error($"Recommended Secondary External Id attribute '{schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name}' was not found in the objects list of attributes!");
+            }
+
+            connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
+        }
+
+        // Set totals
+        result.TotalObjectTypes = connectedSystem.ObjectTypes.Count;
+        result.TotalAttributes = connectedSystem.ObjectTypes.Sum(ot => ot.Attributes?.Count ?? 0);
+
+        // If the schema yielded exactly one, newly-discovered object type, auto-select it so the admin lands
+        // straight on attribute selection. Gated on "newly added" so a refresh never re-selects a type the
+        // admin previously deselected.
+        if (connectedSystem.ObjectTypes.Count == 1 && result.AddedObjectTypes.Count == 1)
+            connectedSystem.ObjectTypes[0].Selected = true;
+
+        return result;
     }
     #endregion
 
@@ -1742,31 +1641,7 @@ public class ConnectedSystemServer
         // against it. The exception still reaches the caller; the Activity is the audit record, not the response.
         try
         {
-            var partitions = await partitionsConnector.GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
-            if (partitions.Count == 0)
-            {
-                // Zero partitions almost always means the connector could not enumerate them (connection,
-                // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
-                // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
-                activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
-            }
-
-            // Merge discovered partitions with existing ones, preserving user selections
-            var result = MergeHierarchy(connectedSystem, partitions);
-
-            // Log the changes
-            if (result.HasChanges)
-            {
-                Log.Information("Hierarchy refresh for {ConnectedSystem}: {Summary}", connectedSystem.Name, result.GetSummary());
-                if (result.HasSelectedItemsRemoved)
-                {
-                    Log.Warning("Hierarchy refresh for {ConnectedSystem} removed selected items. Removed partitions: {RemovedPartitions}, Removed containers: {RemovedContainers}",
-                        connectedSystem.Name,
-                        result.RemovedPartitions.Where(p => p.WasSelected).Select(p => p.Name),
-                        result.RemovedContainers.Where(c => c.WasSelected).Select(c => c.Name));
-                }
-                activity.Message = result.GetSummary();
-            }
+            var result = await RetrieveAndMergeHierarchyAsync(connectedSystem, partitionsConnector, activity);
 
             // Persist the changes
             await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedBy);
@@ -1817,31 +1692,7 @@ public class ConnectedSystemServer
         // Covered from here on: see the user-initiated overload above.
         try
         {
-            var partitions = await partitionsConnector.GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
-            if (partitions.Count == 0)
-            {
-                // Zero partitions almost always means the connector could not enumerate them (connection,
-                // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
-                // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
-                activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
-            }
-
-            // Merge discovered partitions with existing ones, preserving user selections
-            var result = MergeHierarchy(connectedSystem, partitions);
-
-            // Log the changes
-            if (result.HasChanges)
-            {
-                Log.Information("Hierarchy refresh for {ConnectedSystem}: {Summary}", connectedSystem.Name, result.GetSummary());
-                if (result.HasSelectedItemsRemoved)
-                {
-                    Log.Warning("Hierarchy refresh for {ConnectedSystem} removed selected items. Removed partitions: {RemovedPartitions}, Removed containers: {RemovedContainers}",
-                        connectedSystem.Name,
-                        result.RemovedPartitions.Where(p => p.WasSelected).Select(p => p.Name),
-                        result.RemovedContainers.Where(c => c.WasSelected).Select(c => c.Name));
-                }
-                activity.Message = result.GetSummary();
-            }
+            var result = await RetrieveAndMergeHierarchyAsync(connectedSystem, partitionsConnector, activity);
 
             // Persist the changes
             await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedByApiKey);
@@ -2472,6 +2323,46 @@ public class ConnectedSystemServer
             count += CountContainersRecursive(container.ChildContainers);
         }
         return count;
+    }
+
+    /// <summary>
+    /// Retrieves the hierarchy (partitions and containers) from a Connected System and merges it into that
+    /// system's existing hierarchy, preserving selections, and records what changed on the supplied Activity.
+    /// </summary>
+    /// <remarks>
+    /// Shared by both <see cref="ImportConnectedSystemHierarchyAsync(ConnectedSystem, MetaverseObject?)"/> and
+    /// <see cref="ImportConnectedSystemHierarchyAsync(ConnectedSystem, ApiKey)"/>. They were separate copies of
+    /// this logic; the initiator decides who the Activity is attributed to, not what a hierarchy means.
+    /// </remarks>
+    private static async Task<HierarchyRefreshResult> RetrieveAndMergeHierarchyAsync(ConnectedSystem connectedSystem, IConnectorPartitions partitionsConnector, Activity activity)
+    {
+        var partitions = await partitionsConnector.GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
+        if (partitions.Count == 0)
+        {
+            // Zero partitions almost always means the connector could not enumerate them (connection,
+            // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
+            // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
+            activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
+        }
+
+        // Merge discovered partitions with existing ones, preserving user selections
+        var result = MergeHierarchy(connectedSystem, partitions);
+
+        // Log the changes
+        if (result.HasChanges)
+        {
+            Log.Information("Hierarchy refresh for {ConnectedSystem}: {Summary}", connectedSystem.Name, result.GetSummary());
+            if (result.HasSelectedItemsRemoved)
+            {
+                Log.Warning("Hierarchy refresh for {ConnectedSystem} removed selected items. Removed partitions: {RemovedPartitions}, Removed containers: {RemovedContainers}",
+                    connectedSystem.Name,
+                    result.RemovedPartitions.Where(p => p.WasSelected).Select(p => p.Name),
+                    result.RemovedContainers.Where(c => c.WasSelected).Select(c => c.Name));
+            }
+            activity.Message = result.GetSummary();
+        }
+
+        return result;
     }
     #endregion
 
