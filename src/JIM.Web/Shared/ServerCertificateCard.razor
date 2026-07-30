@@ -59,11 +59,6 @@
                     </span>
                 </div>
 
-                <div class="jim-certificate-field">
-                    <span class="jim-certificate-label">Thumbprint</span>
-                    <span class="jim-certificate-value jim-certificate-thumbprint">@FormatThumbprint(Diagnostic.Thumbprint)</span>
-                </div>
-
                 @if (!string.IsNullOrEmpty(Diagnostic.SignatureAlgorithm))
                 {
                     <div class="jim-certificate-field">
@@ -71,6 +66,13 @@
                         <span class="jim-certificate-value">@Diagnostic.SignatureAlgorithm</span>
                     </div>
                 }
+
+                @* Last, and given a row to itself once the card is wide enough to have columns, so the thumbprint
+                   never breaks across lines. *@
+                <div class="jim-certificate-field jim-certificate-field-wide">
+                    <span class="jim-certificate-label">Thumbprint</span>
+                    <span class="jim-certificate-value jim-certificate-thumbprint">@FormatThumbprint(Diagnostic.Thumbprint)</span>
+                </div>
             </div>
 
             <div class="jim-certificate-verdict">

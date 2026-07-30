@@ -254,11 +254,7 @@
                 <MudText Typo="Typo.body1" Style="font-weight: 500;">@_activity.ErrorMessage</MudText>
             }
 
-            @if (!string.IsNullOrEmpty(_activity.ErrorStackTrace))
-            {
-                <MudText Typo="Typo.button" Class="mt-3">Stack Trace:</MudText>
-                <pre>@_activity.ErrorStackTrace</pre>
-            }
+            <CollapsibleStackTrace StackTrace="@_activity.ErrorStackTrace" />
         </MudAlert>
 
         @* Some failures carry facts worth showing, not just a sentence. A rejected directory certificate is one:
