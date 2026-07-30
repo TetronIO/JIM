@@ -2050,3 +2050,162 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
 .jim-flow-option .jim-standard-hint {
     flex: 0 0 auto;
 }
+
+/* ---------------------------------------------------------------------------
+   Server certificate card (<ServerCertificateCard />)
+
+   Presents the certificate a directory server offered when a connection was
+   refused. Styled as the document itself: a ruled border, a seal, and the
+   fields laid out the way a certificate viewer presents them, so an
+   administrator recognises what they are looking at before reading a word.
+   Built entirely from MudBlazor palette variables so it follows the theme into
+   dark mode rather than carrying its own colours.
+   --------------------------------------------------------------------------- */
+.jim-certificate {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+    background-color: var(--mud-palette-surface);
+    padding: 6px;
+    margin-top: 16px;
+    max-width: 640px;
+}
+
+/* The inner rule is what reads as "certificate": a second, tighter frame
+   inside the outer border, as engraved documents have. */
+.jim-certificate-inner {
+    position: relative;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: calc(var(--mud-default-borderradius) - 1px);
+    padding: 28px 28px 20px;
+    text-align: center;
+}
+
+.jim-certificate-compact .jim-certificate-inner {
+    padding: 20px 20px 16px;
+}
+
+/* The seal sits over the top rule, the way a wax seal or foil disc overlaps a
+   certificate's border. */
+.jim-certificate-seal {
+    position: absolute;
+    top: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: var(--mud-palette-surface);
+    border: 1px solid var(--mud-palette-lines-default);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-certificate-eyebrow {
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--mud-palette-text-secondary);
+    margin-top: 6px;
+}
+
+.jim-certificate-subject {
+    font-size: 1.25rem;
+    font-weight: 500;
+    margin-top: 10px;
+    word-break: break-word;
+}
+
+.jim-certificate-issuer {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    margin-top: 4px;
+}
+
+.jim-certificate-rule {
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--mud-palette-lines-default), transparent);
+    margin: 18px auto;
+    width: 70%;
+}
+
+.jim-certificate-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    text-align: left;
+}
+
+.jim-certificate-field {
+    display: grid;
+    grid-template-columns: 7.5rem minmax(0, 1fr);
+    gap: 12px;
+    align-items: baseline;
+}
+
+.jim-certificate-label {
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mud-palette-text-secondary);
+}
+
+.jim-certificate-value {
+    word-break: break-word;
+}
+
+.jim-certificate-value-problem {
+    color: var(--mud-palette-error);
+    font-weight: 500;
+}
+
+/* Sized so a full 40-character SHA-1 thumbprint, grouped into pairs, stays on one line at the card's width:
+   a thumbprint split across lines is materially harder to compare against the one in Admin > Certificates. */
+.jim-certificate-thumbprint {
+    font-family: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    letter-spacing: -0.01em;
+}
+
+.jim-certificate-names {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.jim-certificate-name {
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+    padding: 1px 8px;
+    font-size: 0.8rem;
+}
+
+/* The name that satisfies the check, when there is one, so a mismatch does not
+   have to be spotted by comparing strings. */
+.jim-certificate-name-match {
+    border-color: var(--mud-palette-success);
+    color: var(--mud-palette-success);
+}
+
+.jim-certificate-verdict {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 20px;
+    padding-top: 14px;
+    border-top: 1px solid var(--mud-palette-lines-default);
+    color: var(--mud-palette-error);
+    font-weight: 500;
+}
+
+.jim-certificate-verdict-reason {
+    text-align: left;
+}
+
+.jim-certificate-remediation {
+    margin-top: 8px;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.875rem;
+    text-align: left;
+}

@@ -2,6 +2,8 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Connectors.LDAP;
+using JIM.Models.Connectors;
+using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using Serilog;
@@ -122,8 +124,13 @@ public class LdapsCertificateValidationTests
     public void OpenImportConnection_WithAnEmptyJimStore_IsRejected()
     {
         // The issuing CA is trusted by neither the operating system nor JIM, so this must not connect. If it does,
-        // validation is not happening at all.
-        Assert.That(() => OpenConnection(_host, _port), Throws.TypeOf<LdapException>());
+        // validation is not happening at all. The failure names the certificate rather than blaming the network.
+        Assert.That(
+            () => OpenConnection(_host, _port),
+            Throws.TypeOf<ServerCertificateRejectedException>()
+                .With.Property(nameof(ServerCertificateRejectedException.Diagnostic))
+                .Property(nameof(ServerCertificateDiagnostic.FailureReason))
+                .EqualTo(ServerCertificateFailureReason.UntrustedIssuer));
     }
 
     [Test]
@@ -135,7 +142,12 @@ public class LdapsCertificateValidationTests
 
         // Same server, same trusted issuer, reached by a name the certificate was not issued for. Trusting the issuer
         // must not amount to trusting any name it ever signs.
-        Assert.That(() => OpenConnection(mismatchedHost!, _port, _caCertificatePath), Throws.TypeOf<LdapException>());
+        Assert.That(
+            () => OpenConnection(mismatchedHost!, _port, _caCertificatePath),
+            Throws.TypeOf<ServerCertificateRejectedException>()
+                .With.Property(nameof(ServerCertificateRejectedException.Diagnostic))
+                .Property(nameof(ServerCertificateDiagnostic.FailureReason))
+                .EqualTo(ServerCertificateFailureReason.NameMismatch));
     }
 
     [Test]
@@ -148,7 +160,12 @@ public class LdapsCertificateValidationTests
 
         // The issuer is in the JIM certificate store, which vouches for who signed the certificate, not for how long
         // ago it stopped being valid.
-        Assert.That(() => OpenConnection(expiredHost!, int.Parse(expiredPort!), _caCertificatePath), Throws.TypeOf<LdapException>());
+        Assert.That(
+            () => OpenConnection(expiredHost!, int.Parse(expiredPort!), _caCertificatePath),
+            Throws.TypeOf<ServerCertificateRejectedException>()
+                .With.Property(nameof(ServerCertificateRejectedException.Diagnostic))
+                .Property(nameof(ServerCertificateDiagnostic.FailureReason))
+                .EqualTo(ServerCertificateFailureReason.Expired));
     }
 
     /// <summary>
@@ -185,7 +202,7 @@ public class LdapsCertificateValidationTests
 
         Assert.That(
             () => connector.OpenImportConnection(BuildSettingValues(_mismatchedHostOrHost, _port), _logger),
-            Throws.TypeOf<LdapException>());
+            Throws.TypeOf<ServerCertificateRejectedException>());
 
         Assert.That(CountTrustDirectories(), Is.EqualTo(trustDirectoriesBefore));
     }

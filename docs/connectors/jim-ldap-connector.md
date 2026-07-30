@@ -200,8 +200,10 @@ If JIM cannot connect to the directory server:
 - Check that the port is correct (389 for LDAP, 636 for LDAPS) and not blocked by a firewall.
 - Increase the Connection Timeout if the directory server is slow to respond.
 
-!!! tip "LDAPS failures report as an unavailable server"
-    The LDAP client library reports a rejected certificate the same way it reports an unreachable server, so "The LDAP server is unavailable" on port 636 is as likely to be a certificate problem as a network one. Check the worker log for the warnings JIM writes when preparing certificates, then work through [Certificate validation](#certificate-validation): the usual causes are an issuer JIM has not been given, and a certificate whose name does not match the Host setting.
+!!! tip "LDAPS failures show you the certificate"
+    The LDAP client library reports a rejected certificate the same way it reports an unreachable server, so its own message ("The LDAP server is unavailable") tells you nothing. JIM therefore looks at the certificate itself when an LDAPS connection fails, and shows it to you: its subject, the names it was issued for, its issuer, its validity dates and its thumbprint, alongside which check it failed and what to do about it.
+
+    You will see it in two places: on the Connected System's settings when you test the connection, and on the failed Activity when a Run Profile could not connect. The same detail is available to automation on the Activity's `errorDetail` field in the REST API. If the connection failed for a reason that is nothing to do with the certificate, the original error stands unchanged.
 
 ### Authentication failures
 

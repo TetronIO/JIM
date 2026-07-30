@@ -1,0 +1,166 @@
+@using JIM.Models.Connectors
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@*
+    Presents the certificate a directory server offered when a connection to it was refused, laid out like the
+    certificate itself so it reads as the document being talked about rather than another block of error text.
+    Everything here is public certificate material; no private key or credential is ever involved.
+*@
+
+@if (Diagnostic != null)
+{
+    <div class="jim-certificate @(Compact ? "jim-certificate-compact" : "")">
+        <div class="jim-certificate-inner">
+            <div class="jim-certificate-seal">
+                <MudIcon Icon="@SealIcon" Size="Size.Medium" />
+            </div>
+
+            <div class="jim-certificate-eyebrow">Certificate presented by @Diagnostic.Host:@Diagnostic.Port</div>
+
+            <div class="jim-certificate-subject">@FormatDistinguishedName(Diagnostic.Subject)</div>
+
+            <div class="jim-certificate-issuer">
+                @if (Diagnostic.IsSelfSigned)
+                {
+                    <span>Self-signed</span>
+                }
+                else
+                {
+                    <span>Issued by @FormatDistinguishedName(Diagnostic.Issuer)</span>
+                }
+            </div>
+
+            <div class="jim-certificate-rule"></div>
+
+            <div class="jim-certificate-fields">
+                <div class="jim-certificate-field">
+                    <span class="jim-certificate-label">Issued for</span>
+                    @if (Diagnostic.SubjectAlternativeNames.Count > 0)
+                    {
+                        <span class="jim-certificate-names">
+                            @foreach (var name in Diagnostic.SubjectAlternativeNames)
+                            {
+                                <span class="jim-certificate-name @(NameMatchesHost(name) ? "jim-certificate-name-match" : "")">@name</span>
+                            }
+                        </span>
+                    }
+                    else
+                    {
+                        <EmptyValue />
+                    }
+                </div>
+
+                <div class="jim-certificate-field">
+                    <span class="jim-certificate-label">Valid</span>
+                    <span class="jim-certificate-value @(Diagnostic.IsExpired || Diagnostic.IsNotYetValid ? "jim-certificate-value-problem" : "")">
+                        @FormatDate(Diagnostic.ValidFrom) to @FormatDate(Diagnostic.ValidTo)
+                    </span>
+                </div>
+
+                <div class="jim-certificate-field">
+                    <span class="jim-certificate-label">Thumbprint</span>
+                    <span class="jim-certificate-value jim-certificate-thumbprint">@FormatThumbprint(Diagnostic.Thumbprint)</span>
+                </div>
+
+                @if (!string.IsNullOrEmpty(Diagnostic.SignatureAlgorithm))
+                {
+                    <div class="jim-certificate-field">
+                        <span class="jim-certificate-label">Signature</span>
+                        <span class="jim-certificate-value">@Diagnostic.SignatureAlgorithm</span>
+                    </div>
+                }
+            </div>
+
+            <div class="jim-certificate-verdict">
+                <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Class="mr-2" />
+                <span class="jim-certificate-verdict-reason">@DescribeReason(Diagnostic.FailureReason)</span>
+            </div>
+
+            @if (!string.IsNullOrEmpty(Diagnostic.Remediation))
+            {
+                <div class="jim-certificate-remediation">@Diagnostic.Remediation</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// The certificate and the reason it was refused.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public ServerCertificateDiagnostic? Diagnostic { get; set; }
+
+    /// <summary>
+    /// Tightens the layout for use inside a settings form, where the card sits alongside other validation output.
+    /// </summary>
+    [Parameter]
+    public bool Compact { get; set; }
+
+    private string SealIcon => Diagnostic?.FailureReason switch
+    {
+        ServerCertificateFailureReason.Expired => Icons.Material.Filled.HistoryToggleOff,
+        ServerCertificateFailureReason.NotYetValid => Icons.Material.Filled.HistoryToggleOff,
+        ServerCertificateFailureReason.NameMismatch => Icons.Material.Filled.WrongLocation,
+        ServerCertificateFailureReason.UntrustedIssuer => Icons.Material.Filled.GppMaybe,
+        ServerCertificateFailureReason.NoCertificatePresented => Icons.Material.Filled.NoEncryption,
+        _ => Icons.Material.Filled.WorkspacePremium
+    };
+
+    private static string DescribeReason(ServerCertificateFailureReason reason) => reason switch
+    {
+        ServerCertificateFailureReason.UntrustedIssuer => "Not trusted: JIM has not been given this certificate's issuer",
+        ServerCertificateFailureReason.NameMismatch => "Wrong name: this certificate was not issued for the host JIM connected to",
+        ServerCertificateFailureReason.Expired => "Expired",
+        ServerCertificateFailureReason.NotYetValid => "Not valid yet",
+        ServerCertificateFailureReason.NoCertificatePresented => "No certificate was offered",
+        ServerCertificateFailureReason.None => "No problem found with this certificate",
+        _ => "Refused for an unrecognised reason"
+    };
+
+    /// <summary>
+    /// Highlights the name that would have satisfied the check, so a mismatch is visible at a glance rather than
+    /// needing the reader to compare strings themselves.
+    /// </summary>
+    private bool NameMatchesHost(string name)
+    {
+        if (Diagnostic == null || string.IsNullOrEmpty(Diagnostic.Host))
+            return false;
+
+        return string.Equals(name, Diagnostic.Host, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Distinguished names read as "CN=dc01.corp.local, O=Corp"; the common name alone is what an administrator
+    /// recognises, so lead with it and drop the rest.
+    /// </summary>
+    private static string FormatDistinguishedName(string? distinguishedName)
+    {
+        if (string.IsNullOrWhiteSpace(distinguishedName))
+            return "Unknown";
+
+        var commonName = distinguishedName
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault(part => part.StartsWith("CN=", StringComparison.OrdinalIgnoreCase));
+
+        return commonName != null ? commonName[3..] : distinguishedName;
+    }
+
+    private static string FormatDate(DateTime? value) => value.HasValue ? value.Value.ToString("dd MMM yyyy") : "unknown";
+
+    /// <summary>
+    /// Grouped into pairs, the way certificate viewers present a thumbprint, so it can be compared by eye against
+    /// the one shown in Admin &gt; Certificates.
+    /// </summary>
+    private static string FormatThumbprint(string? thumbprint)
+    {
+        if (string.IsNullOrWhiteSpace(thumbprint))
+            return "unknown";
+
+        return string.Join(' ', Enumerable
+            .Range(0, thumbprint.Length / 2)
+            .Select(i => thumbprint.Substring(i * 2, 2)));
+    }
+}

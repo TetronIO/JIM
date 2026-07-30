@@ -1,11 +1,13 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Connectors;
 using JIM.Models.Core;
 using JIM.Models.Exceptions;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
+using JIM.Utilities;
 using Serilog;
 using System.DirectoryServices.Protocols;
 using System.Net;
@@ -306,11 +308,59 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
                 _connection = _connectionFactory();
             }, maxRetries, retryDelayMs, logger);
         }
+        catch (LdapException ex)
+        {
+            _trustDirectory?.Dispose();
+            _trustDirectory = null;
+
+            // "The LDAP server is unavailable" is what a refused certificate looks like, so before reporting a
+            // connectivity failure, go and look at what the server actually presented.
+            if (useSsl)
+                ThrowIfCertificateWasRejected(directoryServer.StringValue, directoryServerPort.IntValue.Value,
+                    TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value), logger, ex);
+
+            throw;
+        }
         catch
         {
             _trustDirectory?.Dispose();
             _trustDirectory = null;
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Examines the certificate the directory server presents and, when that is what refused the connection, replaces
+    /// the platform's opaque failure with one naming the certificate and what to do about it.
+    /// </summary>
+    /// <remarks>
+    /// Only ever called after a connection has already failed. The examination cannot make a connection succeed, and
+    /// deliberately trusts nothing: it exists so an administrator is told "this certificate, this problem" instead of
+    /// "the server is unavailable".
+    /// </remarks>
+    private void ThrowIfCertificateWasRejected(string host, int port, TimeSpan timeout, ILogger logger, LdapException originalException)
+    {
+        var trustedCertificates = _certificateProvider?.GetTrustedCertificatesAsync().GetAwaiter().GetResult() ?? [];
+
+        try
+        {
+            var diagnostic = ServerCertificateProbe.Probe(host, port, trustedCertificates, timeout, logger);
+            if (diagnostic == null || diagnostic.FailureReason == ServerCertificateFailureReason.None)
+                return;
+
+            logger.Error("LDAPS connection to {Host}:{Port} was refused because of the server's certificate. Reason: {Reason}. Subject: {Subject}, Issuer: {Issuer}, Thumbprint: {Thumbprint}, Valid to: {ValidTo}",
+                LogSanitiser.Sanitise(host), port, diagnostic.FailureReason, LogSanitiser.Sanitise(diagnostic.Subject),
+                LogSanitiser.Sanitise(diagnostic.Issuer), LogSanitiser.Sanitise(diagnostic.Thumbprint), diagnostic.ValidTo);
+
+            throw new ServerCertificateRejectedException(
+                $"The directory server's certificate was rejected: {diagnostic.Remediation}",
+                diagnostic,
+                originalException);
+        }
+        finally
+        {
+            foreach (var certificate in trustedCertificates)
+                certificate.Dispose();
         }
     }
 
