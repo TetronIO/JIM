@@ -103,7 +103,14 @@ internal sealed class LdapTrustedCertificateDirectory : IDisposable
             var writtenThumbprints = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var certificate in trustedCertificates.Where(certificate => writtenThumbprints.Add(certificate.Thumbprint)))
             {
-                var certificatePath = Path.Combine(directoryPath, $"{certificate.Thumbprint}.crt");
+                // The thumbprint becomes a file name. It is a hex string, so it cannot traverse anywhere today;
+                // asserted rather than assumed because the value reaches a file write and is derived from a
+                // certificate JIM did not issue.
+                var certificateFileName = $"{certificate.Thumbprint}.crt";
+                if (!string.Equals(certificateFileName, Path.GetFileName(certificateFileName), StringComparison.Ordinal))
+                    throw new ArgumentException("A certificate in the JIM certificate store has a thumbprint that cannot be used as a file name.", nameof(trustedCertificates));
+
+                var certificatePath = Path.Combine(directoryPath, certificateFileName);
                 System.IO.File.WriteAllText(certificatePath, certificate.ExportCertificatePem());
                 if (!OperatingSystem.IsWindows())
                     System.IO.File.SetUnixFileMode(certificatePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);

@@ -294,9 +294,11 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         else if (authTypeSettingValueString == LdapConnectorConstants.SETTING_AUTH_TYPE_NTLM)
             authTypeEnumValue = AuthType.Ntlm;
 
-        // Resolved once: the setting's validation guarantees a value by the time a connection is opened, and taking
-        // it here keeps the nullable dereference out of the lambda below and the failure path further down.
-        var connectionTimeout = TimeSpan.FromSeconds(timeoutSeconds.IntValue.Value);
+        // Resolved once, and reused by the connection factory below and the failure path further down. The guard
+        // above has already thrown if this setting has no value; the null-forgiving operator says so to the
+        // analyser, which does not carry null-state out of a pattern guard. A second check here would be a
+        // redundant condition, which is its own code-quality finding.
+        var connectionTimeout = TimeSpan.FromSeconds(timeoutSeconds.IntValue!.Value);
 
         // Build a reusable connection factory so LdapConnectorImport can create additional
         // connections for parallel imports (one connection per container+objectType combo).
