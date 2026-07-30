@@ -97,6 +97,38 @@ public class ConfigurationChangeClassificationCompletenessTests
 
     #endregion
 
+    #region Destructive consequence copy
+
+    [Test]
+    public void Consequences_EveryDestructiveKey_HasCuratedCopy()
+    {
+        // A destructive property that reaches an administrator with no stated consequence gives them a dialog
+        // demanding consent to something unnamed, which is worse than not asking: they cannot weigh it, so they
+        // click through. Every Class A key must say what it will do.
+        var snapshots = new[]
+        {
+            _service.CreateSnapshot(BuildFullSyncRule(), HashKey),
+            _service.CreateSnapshot(BuildFullConnectedSystem(), HashKey),
+            _service.CreateSnapshot(BuildFullMetaverseObjectType(), HashKey),
+            _service.CreateSnapshot(BuildFullMetaverseAttribute(), HashKey)
+        };
+
+        var missing = snapshots
+            .SelectMany(s => CollectKeys(s.Root).Distinct().Select(key => (Snapshot: s, Key: key)))
+            .Where(x => ConfigurationChangeClassifier.ClassifyKey(x.Snapshot.ObjectType, x.Key, x.Snapshot.ObjectKey)
+                        == ConfigurationChangeClass.Destructive)
+            .Where(x => !ConfigurationChangeConsequences.HasCopyFor(x.Snapshot.ObjectType, x.Key))
+            .Select(x => $"{x.Snapshot.ObjectType}.{x.Key}")
+            .Distinct()
+            .ToList();
+
+        Assert.That(missing, Is.Empty,
+            "Destructive propert(ies) with no stated consequence: " + string.Join(", ", missing) +
+            ". Add copy to ConfigurationChangeConsequences saying what the change will do.");
+    }
+
+    #endregion
+
     #region Object type coverage
 
     [Test]

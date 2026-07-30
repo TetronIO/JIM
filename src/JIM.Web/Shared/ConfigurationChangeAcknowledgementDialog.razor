@@ -1,0 +1,138 @@
+@using JIM.Models.Activities
+@using JIM.Models.Activities.DTOs
+@using JIM.Web.Models
+
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@* Thin surface over the shared ConsequenceConfirmationDialog, composing it from a configuration change     *@
+@* preflight: what is changing, what the destructive parts of it will do, and the reminder that a Full      *@
+@* Synchronisation is what makes it take effect. Every sync-affecting save surface shows this same dialog,  *@
+@* so the experience does not vary by page. It is replaced per surface by the preview-driven confirmation   *@
+@* as each adapter lands. See engineering/plans/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2, FR17).            *@
+
+<ConsequenceConfirmationDialog Consequences="@BuildConsequences()"
+                               AdditionalContent="@RenderChanges"
+                               ConfirmButtonText="Save changes"
+                               BusyText="Saving..."
+                               ConfirmButtonColour="@(Preflight.IsDestructive ? Color.Error : Color.Warning)" />
+
+@code {
+    /// <summary>
+    /// The evaluated change. Only ever passed here when it requires acknowledgement; the caller decides that.
+    /// </summary>
+    [Parameter]
+    public ConfigurationChangePreflight Preflight { get; set; } = ConfigurationChangePreflight.None;
+
+    /// <summary>
+    /// What is being changed, named as the administrator knows it, e.g. "Synchronisation Rule 'HR Inbound'".
+    /// </summary>
+    [Parameter]
+    public string ObjectDescription { get; set; } = "this configuration";
+
+    // A change touching dozens of properties is real (a scoping rewrite, a bulk mapping edit); listing every one
+    // turns the dialog into a wall nobody reads. The most consequential lead, and the tail is counted.
+    private const int MaxListedChanges = 12;
+
+    private ConsequenceGroup? BuildConsequences()
+    {
+        var destructive = Preflight.DestructiveItems.Where(i => i.Consequence != null).ToList();
+        if (destructive.Count == 0)
+            return null;
+
+        // Deliberately neutral about direction. These properties are destructive because they *decide* whether
+        // objects are removed, and the same property is equally destructive turned off: switching a Deprovisioning
+        // Action back to Disconnect is still a Class A change, and a headline announcing data loss over a change that
+        // prevents it is the sort of lie that teaches administrators to click straight through. Which way this
+        // particular change goes is the item's own business, below.
+        return new ConsequenceGroup
+        {
+            Headline = destructive.Count == 1
+                ? "This property decides whether objects are removed"
+                : "These properties decide whether objects are removed",
+            // No per-item icon: the alert already carries one, and two side by side reads as a rendering fault.
+            Items = destructive.Select(item => new ConsequenceItem
+            {
+                Text = $"{item.Label}: {item.Consequence}"
+            }).ToList()
+        };
+    }
+
+    private RenderFragment RenderChanges => @<div>
+        <MudText Typo="Typo.subtitle2" Class="mb-1">Changing on @ObjectDescription</MudText>
+        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Outlined="true">
+            <tbody>
+                @foreach (var item in Preflight.Items.Take(MaxListedChanges))
+                {
+                    <tr>
+                        <td>
+                            @item.Label
+                            @if (item.Class == ConfigurationChangeClass.Destructive)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Small" Class="ml-1" Style="vertical-align: text-bottom;" />
+                            }
+                        </td>
+                        <td class="text-right">
+                            @if (item.OldDisplayValue == null && item.NewDisplayValue == null)
+                            {
+                                @* A secret is reported as changed and never by value. *@
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">Changed</MudText>
+                            }
+                            else
+                            {
+                                <TextValueDisplay Value="@item.OldDisplayValue" />
+                                <MudIcon Icon="@Icons.Material.Filled.ArrowRightAlt" Size="Size.Small" Class="mx-1" Style="vertical-align: text-bottom;" />
+                                <TextValueDisplay Value="@item.NewDisplayValue" />
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+        @if (Preflight.Items.Count > MaxListedChanges)
+        {
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                and @((Preflight.Items.Count - MaxListedChanges).ToString("N0")) more change(s).
+            </MudText>
+        }
+        @* Guidance rather than a warning: nothing has gone wrong, but saving alone changes nothing that already exists. *@
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-3">
+            Saving does not apply this to existing objects. Run a Full Synchronisation for the Connected Systems
+            concerned to put it into effect.
+        </MudAlert>
+    </div>;
+
+    /// <summary>
+    /// Asks the administrator to acknowledge the change, returning true when the save should go ahead. A change that
+    /// needs no acknowledgement (cosmetic, unchanged, a create, or one JIM cannot judge) returns true without showing
+    /// anything, so callers can invoke this unconditionally on every save path.
+    /// </summary>
+    public static async Task<bool> ConfirmAsync(IDialogService dialogService, ConfigurationChangePreflight preflight,
+        string objectDescription)
+    {
+        ArgumentNullException.ThrowIfNull(dialogService);
+        ArgumentNullException.ThrowIfNull(preflight);
+
+        if (!preflight.RequiresAcknowledgement)
+            return true;
+
+        var parameters = new DialogParameters<ConfigurationChangeAcknowledgementDialog>
+        {
+            { x => x.Preflight, preflight },
+            { x => x.ObjectDescription, objectDescription }
+        };
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        // "Confirm a change to object removal" holds whichever way a destructive property is being moved, which
+        // "Confirm a destructive change" does not: turning deletion off is the same class of change.
+        var title = preflight.IsDestructive ? "Confirm a change to object removal" : "Confirm a configuration change";
+        var dialog = await dialogService.ShowAsync<ConfigurationChangeAcknowledgementDialog>(title, parameters, options);
+        var result = await dialog.Result;
+        return result is { Canceled: false };
+    }
+}

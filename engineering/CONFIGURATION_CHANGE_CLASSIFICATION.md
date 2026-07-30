@@ -55,7 +55,8 @@ Classification keys off the **snapshot node key**, not the C# property name or t
 1. Add the property to its `ConfigurationSnapshotService` builder as usual, giving it a stable key.
 2. Add that key to the matching table in `ConfigurationChangeClassifier`, choosing A, B or C using the model above.
 3. Add a row to the relevant table in **this document**, with the same class and a one-line reason.
-4. Run the unit tests. `ConfigurationChangeClassificationCompletenessTests` enumerates every key the snapshot service can emit and fails when one has no explicit classification, naming the key.
+4. **If you chose Class A**, add curated copy to `ConfigurationChangeConsequences` saying what the change will do, in the terms an administrator would use. Write it direction-aware: the same property switched back is the opposite consequence, and warning about deletion when the administrator has just prevented it is how a dialog earns the reflex dismissal that makes it useless. The class stays destructive in both directions, so that what was consented to and what the change history records cannot disagree; only the wording moves.
+5. Run the unit tests. `ConfigurationChangeClassificationCompletenessTests` enumerates every key the snapshot service can emit and fails when one has no explicit classification, naming the key. Its sibling assertion fails a Class A key that has no stated consequence.
 
 There is **no default class.** An unclassified key fails the build rather than being silently assumed harmless or silently assumed dangerous. This is deliberate: a default would let the map rot, and a rotten map produces a framework that warns about the wrong things, which is worse than one that does not warn at all.
 
@@ -269,7 +270,7 @@ Activities predating this feature carry `NotClassified`: their class was never c
 
 ## Enforcement
 
-`ConfigurationChangeClassificationCompletenessTests` (JIM.Worker.Tests) reflects over every key `ConfigurationSnapshotService` can emit and asserts each has an explicit classification. It runs in every unit pass and in `build-and-test` on every PR, so adding a configuration property without classifying it fails the build with a message naming the key.
+`ConfigurationChangeClassificationCompletenessTests` (JIM.Worker.Tests) reflects over every key `ConfigurationSnapshotService` can emit and asserts each has an explicit classification, and that every key classified A has curated consequence copy. It runs in every unit pass and in `build-and-test` on every PR, so adding a configuration property without classifying it fails the build with a message naming the key.
 
 This is the same enforcement pattern as `BulkInsertColumnCompletenessTests`, and it exists for the same reason: a hand-maintained map that nothing checks will drift, and the drift is invisible until it produces a wrong answer in front of a customer.
 

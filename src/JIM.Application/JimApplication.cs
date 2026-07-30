@@ -58,6 +58,7 @@ public class JimApplication : IDisposable
     public CertificateServer Certificates { get; }
     public ChangeHistoryServer ChangeHistory { get; }
     public ConfigurationChangeCaptureService ConfigurationChangeCapture { get; }
+    public ConfigurationChangePreflightService ConfigurationChangePreflight { get; }
     public ConfigurationDiffService ConfigurationDiffs { get; }
     public ConfigurationDriftService ConfigurationDrift { get; }
     public ConfigurationSnapshotService ConfigurationSnapshots { get; }
@@ -86,6 +87,7 @@ public class JimApplication : IDisposable
         Certificates = new CertificateServer(this);
         ChangeHistory = new ChangeHistoryServer(this);
         ConfigurationChangeCapture = new ConfigurationChangeCaptureService(this);
+        ConfigurationChangePreflight = new ConfigurationChangePreflightService(this);
         ConfigurationDiffs = new ConfigurationDiffService();
         ConfigurationDrift = new ConfigurationDriftService(this);
         ConfigurationSnapshots = new ConfigurationSnapshotService(this);
