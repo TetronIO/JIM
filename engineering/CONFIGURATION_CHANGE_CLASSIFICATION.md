@@ -4,7 +4,7 @@
 
 - **Status:** Done
 - **Applies to:** every configuration property captured in a `ConfigurationSnapshot`
-- **Related:** [`plans/CONFIGURATION_CHANGE_PREVIEW.md`](plans/CONFIGURATION_CHANGE_PREVIEW.md) (the framework this feeds), issue #827
+- **Related:** [`plans/doing/CONFIGURATION_CHANGE_PREVIEW.md`](plans/doing/CONFIGURATION_CHANGE_PREVIEW.md) (the framework this feeds), issue #827
 
 ## Why this exists
 

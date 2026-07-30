@@ -1,6 +1,6 @@
 # Configuration Change Preview Framework
 
-- **Status:** Planned
+- **Status:** Doing (Phase 0 complete; Phase 2 acknowledgement flow piloted on the Synchronisation Rule editor)
 - **Created:** 2026-07-16
 - **Author:** JayVDZ
 - **Issue:** [#827](https://github.com/TetronIO/JIM/issues/827)
@@ -193,7 +193,7 @@ The core scenario governs the whole framework; the rest exercise specific surfac
 ## Acceptance Criteria
 
 - [x] Framework design agreed (this PRD reviewed and approved, Jul 2026)
-- [x] Implementation plan generated from this PRD (adapter contract, result schema, dispatch, notification abstraction, UI shell) and approved (Jul 2026: [`engineering/plans/CONFIGURATION_CHANGE_PREVIEW.md`](../plans/CONFIGURATION_CHANGE_PREVIEW.md))
+- [x] Implementation plan generated from this PRD (adapter contract, result schema, dispatch, notification abstraction, UI shell) and approved (Jul 2026: [`engineering/plans/doing/CONFIGURATION_CHANGE_PREVIEW.md`](../../plans/doing/CONFIGURATION_CHANGE_PREVIEW.md))
 - [x] Per-surface adapter issues split out in severity order: G5 and G3-destructive first (Jul 2026: [#1114](https://github.com/TetronIO/JIM/issues/1114), [#1115](https://github.com/TetronIO/JIM/issues/1115)), then G4, then G1/G2, then G6 and remaining toggles as each wave starts; #204, #134, #421, #91 mode 2 re-scoped as adapter issues in the final wave
 - [ ] Interim apply-time messaging delivered as an early phase of the framework implementation plan, covering all surfaces awaiting adapters
 - [x] #307/#202 alignment recorded on those issues (Jul 2026: #307 blocks #827; sequencing and notifier contract recorded on #307 and in the implementation plan)

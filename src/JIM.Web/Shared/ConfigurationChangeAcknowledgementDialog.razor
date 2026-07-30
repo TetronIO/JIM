@@ -5,11 +5,11 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* Thin surface over the shared ConsequenceConfirmationDialog, composing it from a configuration change     *@
-@* preflight: what is changing, what the destructive parts of it will do, and the reminder that a Full      *@
-@* Synchronisation is what makes it take effect. Every sync-affecting save surface shows this same dialog,  *@
-@* so the experience does not vary by page. It is replaced per surface by the preview-driven confirmation   *@
-@* as each adapter lands. See engineering/plans/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2, FR17).            *@
+@* Thin surface over the shared ConsequenceConfirmationDialog, composing it from a configuration change      *@
+@* preflight: what is changing, what the destructive parts of it will do, and the reminder that a Full       *@
+@* Synchronisation is what makes it take effect. Every sync-affecting save surface shows this same dialog,   *@
+@* so the experience does not vary by page. It is replaced per surface by the preview-driven confirmation    *@
+@* as each adapter lands. See engineering/plans/doing/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2, FR17).       *@
 
 <ConsequenceConfirmationDialog Consequences="@BuildConsequences()"
                                AdditionalContent="@RenderChanges"

@@ -1,9 +1,9 @@
 # Configuration Change Preview Framework - Implementation Plan
 
-- **Status:** Planned
+- **Status:** Doing (Phase 0 complete; Phase 2 acknowledgement flow piloted on the Synchronisation Rule editor)
 - **Created:** 2026-07-20
 - **Issue:** [#827](https://github.com/TetronIO/JIM/issues/827)
-- **PRD:** [PRD_CONFIGURATION_CHANGE_PREVIEW.md](../prd/PRD_CONFIGURATION_CHANGE_PREVIEW.md)
+- **PRD:** [PRD_CONFIGURATION_CHANGE_PREVIEW.md](../../prd/doing/PRD_CONFIGURATION_CHANGE_PREVIEW.md)
 
 ## Overview
 
