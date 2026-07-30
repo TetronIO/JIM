@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ✨ The Synchronisation Rules list can now be filtered by Connected System, Direction, Action (Projects, Provisions or Flow Only) and Status. The filters combine with the existing search box, which narrows whatever the filters left.
 - ✨ The same filters are available to automation: `Get-JIMSyncRule` gains `-Direction`, `-ActionType` and `-Status`, and the Synchronisation Rules REST endpoint gains matching query parameters.
+- ✨ Connected Systems now show when their configuration has changed in a way that needs a Full Synchronisation to take effect: an indicator in the Connected Systems list and a notice on the Connected System page, stating how many changes are waiting and warning distinctly when one of them is destructive. Cosmetic changes such as renames never raise it, and a change to a Metaverse Attribute raises it only on the systems whose Synchronisation Rules actually reference that attribute. Systems that have never completed a Full Synchronisation, and the case where configuration change tracking is switched off, are reported as such rather than as "up to date". Available to automation as `(Get-JIMConnectedSystem -Id <id>).ConfigurationDrift` and on the REST Connected System response.
 
 ### Fixed
 

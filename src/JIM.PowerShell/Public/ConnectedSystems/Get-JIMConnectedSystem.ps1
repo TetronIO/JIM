@@ -29,6 +29,12 @@ function Get-JIMConnectedSystem {
     .OUTPUTS
         PSCustomObject representing Connected System(s), object types, or deletion preview.
 
+        The -Id form includes a ConfigurationDrift object describing whether the configuration has changed in a way
+        that needs a Full Synchronisation to take effect: HasPendingChanges, IsDeterminable, NeverFullySynchronised,
+        TrackingDisabled, LastFullSynchronisation, MostRecentChange, ChangeCount and HighestChangeClass. Note that
+        HasPendingChanges is also false when JIM cannot tell (never synchronised, or change tracking switched off),
+        so test IsDeterminable before treating false as "up to date".
+
     .EXAMPLE
         Get-JIMConnectedSystem
 
@@ -48,6 +54,11 @@ function Get-JIMConnectedSystem {
         Get-JIMConnectedSystem -Id 1 -ObjectTypes
 
         Gets the object types defined in the Connected System's schema.
+
+    .EXAMPLE
+        (Get-JIMConnectedSystem -Id 1).ConfigurationDrift
+
+        Gets whether the Connected System's configuration has changed since its last Full Synchronisation.
 
     .EXAMPLE
         Get-JIMConnectedSystem -Id 1 -DeletionPreview

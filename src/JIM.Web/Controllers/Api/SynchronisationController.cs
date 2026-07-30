@@ -96,8 +96,9 @@ public class SynchronisationController(
         // matching how the Blazor UI does it.
         var pendingExportCount = await _application.ConnectedSystems.GetPendingExportsCountAsync(connectedSystemId);
         var objectCount = await _application.ConnectedSystems.GetConnectedSystemObjectCountAsync(connectedSystemId);
+        var configurationDrift = await _application.ConfigurationDrift.GetConnectedSystemDriftAsync(connectedSystemId);
 
-        return Ok(ConnectedSystemDetailDto.FromEntity(system, pendingExportCount, objectCount));
+        return Ok(ConnectedSystemDetailDto.FromEntity(system, pendingExportCount, objectCount, configurationDrift));
     }
 
     /// <summary>

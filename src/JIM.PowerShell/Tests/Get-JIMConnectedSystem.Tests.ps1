@@ -112,6 +112,17 @@ Describe 'Get-JIMConnectedSystem' {
         It 'Should have related links' {
             $help.RelatedLinks | Should -Not -BeNullOrEmpty
         }
+
+        It 'Should document the ConfigurationDrift output shape' {
+            # The -Id form carries drift status; callers script against these property names.
+            ($help.returnValues | Out-String) | Should -Match 'ConfigurationDrift'
+        }
+
+        It 'Should warn that HasPendingChanges is false when drift cannot be determined' {
+            # A caller gating a Full Synchronisation on this flag would otherwise silently skip systems that have
+            # never been synchronised, or where change tracking is off.
+            ($help.returnValues | Out-String) | Should -Match 'IsDeterminable'
+        }
     }
 }
 

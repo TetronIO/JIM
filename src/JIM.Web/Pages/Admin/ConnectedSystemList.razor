@@ -1,9 +1,11 @@
 ﻿@page "/admin/connected-systems"
 @attribute [Authorize(Roles = "Administrator")]
+@using JIM.Models.Activities.DTOs
 @using JIM.Models.Staging.DTOs
 @using JIM.Utilities;
 @using JIM.Web.Services
 @using System;
+@using System.Linq;
 @inject IJimApplicationFactory JimFactory
 @inject IUserPreferenceService PreferenceService
 
@@ -82,6 +84,7 @@
                         </MudChip>
                     </MudTooltip>
                 }
+                <ConfigurationDriftIndicator Status="@GetDrift(context.Id)" ConnectedSystemName="@context.Name" />
             </MudStack>
         </MudTd>
         <MudTd DataLabel="Connector">@context.ConnectorName</MudTd>
@@ -105,6 +108,7 @@
 
 @code {
     private IList<ConnectedSystemHeader>? _connectedSystemHeaders;
+    private Dictionary<int, ConfigurationDriftStatus>? _drift;
     private string _searchString = "";
     private bool _dense;
 
@@ -119,7 +123,15 @@
     {
         using var jim = JimFactory.Create();
         _connectedSystemHeaders = await jim.ConnectedSystems.GetConnectedSystemHeadersAsync();
+
+        // One batched call for the whole page; the drift service issues a fixed number of queries regardless of how
+        // many systems are listed, so this does not become an N+1.
+        if (_connectedSystemHeaders.Count > 0)
+            _drift = await jim.ConfigurationDrift.GetConnectedSystemDriftAsync(_connectedSystemHeaders.Select(cs => cs.Id).ToList());
     }
+
+    private ConfigurationDriftStatus? GetDrift(int connectedSystemId) =>
+        _drift != null && _drift.TryGetValue(connectedSystemId, out var status) ? status : null;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

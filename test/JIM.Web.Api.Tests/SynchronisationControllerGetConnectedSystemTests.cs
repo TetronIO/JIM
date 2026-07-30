@@ -33,6 +33,8 @@ public class SynchronisationControllerGetConnectedSystemTests
     private Mock<IRepository> _mockRepository = null!;
     private Mock<IConnectedSystemRepository> _mockConnectedSystemRepo = null!;
     private Mock<IApiKeyRepository> _mockApiKeyRepo = null!;
+    private Mock<IServiceSettingsRepository> _mockServiceSettingsRepo = null!;
+    private Mock<IActivityRepository> _mockActivityRepo = null!;
     private Mock<ILogger<SynchronisationController>> _mockLogger = null!;
     private Mock<ICredentialProtectionService> _mockCredentialProtection = null!;
     private IExpressionEvaluator _expressionEvaluator = null!;
@@ -47,6 +49,15 @@ public class SynchronisationControllerGetConnectedSystemTests
         _mockApiKeyRepo = new Mock<IApiKeyRepository>();
         _mockRepository.Setup(r => r.ConnectedSystems).Returns(_mockConnectedSystemRepo.Object);
         _mockRepository.Setup(r => r.ApiKeys).Returns(_mockApiKeyRepo.Object);
+
+        // The endpoint annotates its response with configuration drift, which reads the change-tracking setting and
+        // the Connected System's Full Synchronisation history.
+        _mockServiceSettingsRepo = new Mock<IServiceSettingsRepository>();
+        _mockActivityRepo = new Mock<IActivityRepository>();
+        _mockRepository.Setup(r => r.ServiceSettings).Returns(_mockServiceSettingsRepo.Object);
+        _mockRepository.Setup(r => r.Activity).Returns(_mockActivityRepo.Object);
+        _mockActivityRepo.Setup(r => r.GetLastFullSynchronisationStartsAsync(It.IsAny<IList<int>>()))
+            .ReturnsAsync(new Dictionary<int, DateTime>());
         _mockLogger = new Mock<ILogger<SynchronisationController>>();
         _mockCredentialProtection = new Mock<ICredentialProtectionService>();
         _expressionEvaluator = new DynamicExpressoEvaluator();
