@@ -24,6 +24,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 🔄 Stack traces are now hidden behind a "Show stack trace" toggle wherever JIM reports an error (Activity detail, Import Results detail, the Operations history panel and Pending Export detail), so the error message itself leads. The trace is unchanged and one click away. (#1132)
 - 🔄 The LDAP Connector's "Certificate Validation" setting has been removed. Its "Skip Validation" option could never be honoured for an individual Connected System, and validation is now always applied to LDAPS connections. Where a directory's certificate is not trusted, add it in Admin > Certificates; where the certificate name does not match the host being connected to, give the JIM containers a host entry for that name (`extra_hosts` in Docker Compose) and use the name in the Host setting, rather than weakening validation. See the [LDAP Connector documentation](https://tetronio.github.io/JIM/connectors/jim-ldap-connector/) for both. (#1132)
+### Added
+
+- ✨ The Synchronisation Rules list can now be filtered by Connected System, Direction, Action (Projects, Provisions or Flow Only) and Status. The filters combine with the existing search box, which narrows whatever the filters left.
+- ✨ The same filters are available to automation: `Get-JIMSyncRule` gains `-Direction`, `-ActionType` and `-Status`, and the Synchronisation Rules REST endpoint gains matching query parameters.
+
+### Fixed
+
+- 🐛 `Get-JIMSyncRule` now returns every Synchronisation Rule rather than only the first 25, paging through the full result set.
+- 🐛 Piping a Connected System into `Get-JIMSyncRule`, as its documentation has always shown, now works instead of failing to bind.
 
 ## [0.14.0] - 2026-07-25
 

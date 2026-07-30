@@ -10,6 +10,46 @@ public enum SyncRuleDirection
     Export = 2
 }
 
+/// <summary>
+/// The object-creating action a Synchronisation Rule performs, derived from its direction and its
+/// projection/provisioning settings. Used to filter and describe rules in list views; the three
+/// values are mutually exclusive and exhaustive.
+/// </summary>
+public enum SyncRuleActionType
+{
+    /// <summary>
+    /// The Synchronisation Rule creates no objects; it only flows attribute values.
+    /// </summary>
+    FlowOnly = 0,
+
+    /// <summary>
+    /// An Import rule that projects new Metaverse Objects.
+    /// </summary>
+    Projects = 1,
+
+    /// <summary>
+    /// An Export rule that provisions new Connected System Objects.
+    /// </summary>
+    Provisions = 2
+}
+
+/// <summary>
+/// Whether a Synchronisation Rule is enabled, expressed as an enumeration so that it can be used as
+/// a filter facet alongside the other Synchronisation Rule facets.
+/// </summary>
+public enum SyncRuleStatus
+{
+    /// <summary>
+    /// The Synchronisation Rule is disabled and is skipped by the synchronisation engine.
+    /// </summary>
+    Disabled = 0,
+
+    /// <summary>
+    /// The Synchronisation Rule is enabled and is evaluated by the synchronisation engine.
+    /// </summary>
+    Enabled = 1
+}
+
 
 /// <summary>
 /// Used to provide some context to the user on what type of sources configuration has been used in a Synchronisation Rule mapping.
