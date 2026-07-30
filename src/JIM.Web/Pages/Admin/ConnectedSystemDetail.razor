@@ -27,29 +27,25 @@
 @* ─── Configuration drift notice ─── *@
 @if (_drift is { HasPendingChanges: true })
 {
+    @* Composed in C# rather than assembled from markup fragments, so the punctuation sits tight against the
+       timestamp and the singular and plural readings are both correct. *@
     var driftClass = _drift.HighestChangeClass;
     var driftCount = _drift.ChangeCount;
+    var lastSync = _drift.LastFullSynchronisation;
+    var driftWhen = lastSync.HasValue ? $" ({lastSync.Value.ToLocalTime().ToFriendlyDate()})" : string.Empty;
+    var driftLead = driftCount == 1
+        ? $"1 configuration change has been made since the last Full Synchronisation{driftWhen}."
+        : $"{driftCount:N0} configuration changes have been made since the last Full Synchronisation{driftWhen}.";
+    var driftGuidance = driftClass == ConfigurationChangeClass.Destructive
+        ? driftCount == 1
+            ? "It is destructive and can cascade deletions or mass deprovisioning the moment it is applied. Review it before running a Full Synchronisation."
+            : "At least one of them is destructive and can cascade deletions or mass deprovisioning the moment it is applied. Review them before running a Full Synchronisation."
+        : driftCount == 1
+            ? "Run a Full Synchronisation for it to take effect."
+            : "Run a Full Synchronisation for them to take effect.";
     <MudAlert Severity="@(driftClass == ConfigurationChangeClass.Destructive ? Severity.Error : Severity.Warning)"
               Variant="Variant.Outlined" Class="mt-2">
-        @(driftCount == 1 ? "1 configuration change has" : $"{driftCount:N0} configuration changes have")
-        been made since the last Full Synchronisation
-        @if (_drift.LastFullSynchronisation.HasValue)
-        {
-            var lastSync = _drift.LastFullSynchronisation.Value;
-            <text>(@lastSync.ToLocalTime().ToFriendlyDate())</text>
-        }
-        .
-        @if (driftClass == ConfigurationChangeClass.Destructive)
-        {
-            <text>
-                At least one of them is destructive and can cascade deletions or mass deprovisioning the moment it is
-                applied. Review the change history before running a Full Synchronisation.
-            </text>
-        }
-        else
-        {
-            <text>Run a Full Synchronisation for them to take effect.</text>
-        }
+        @driftLead @driftGuidance
     </MudAlert>
 }
 else if (_drift is { NeverFullySynchronised: true })
@@ -57,6 +53,13 @@ else if (_drift is { NeverFullySynchronised: true })
     <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
         This Connected System has never completed a Full Synchronisation, so its configuration has never been applied
         in full.
+    </MudAlert>
+}
+else if (_drift is { TrackingDisabled: true })
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
+        Configuration change tracking is switched off, so JIM cannot tell whether this Connected System has
+        configuration changes waiting for a Full Synchronisation.
     </MudAlert>
 }
 

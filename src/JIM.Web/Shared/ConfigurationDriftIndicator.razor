@@ -4,8 +4,10 @@
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
-@* Renders nothing at all when the configuration is settled: silence is the reward for a system that needs no action. *@
-@if (Status != null && (Status.HasPendingChanges || !Status.IsDeterminable))
+@* Renders nothing at all when the configuration is settled: silence is the reward for a system that needs no action.
+   Tracking being switched off is deliberately not rendered here either. It is a single global condition, so repeating
+   it on every row of a list states the same fact many times over; the hosting page says it once instead. *@
+@if (Status != null && (Status.HasPendingChanges || Status.NeverFullySynchronised))
 {
     <MudTooltip Text="@TooltipText" Arrow="true" Placement="Placement.Top">
         <MudChip T="string" Color="@ChipColour" Variant="Variant.Text" Icon="@ChipIcon" Class="jim-stat-chip">
@@ -30,16 +32,14 @@
 
     private Color ChipColour => Status switch
     {
-        null => Color.Default,
-        { TrackingDisabled: true } or { NeverFullySynchronised: true } => Color.Default,
+        null or { NeverFullySynchronised: true } => Color.Default,
         { HighestChangeClass: ConfigurationChangeClass.Destructive } => Color.Error,
         _ => Color.Warning
     };
 
     private string ChipIcon => Status switch
     {
-        null => Icons.Material.Filled.HelpOutline,
-        { TrackingDisabled: true } or { NeverFullySynchronised: true } => Icons.Material.Filled.HelpOutline,
+        null or { NeverFullySynchronised: true } => Icons.Material.Filled.HelpOutline,
         { HighestChangeClass: ConfigurationChangeClass.Destructive } => Icons.Material.Filled.Warning,
         _ => Icons.Material.Filled.Sync
     };
@@ -47,7 +47,6 @@
     private string ChipLabel => Status switch
     {
         null => string.Empty,
-        { TrackingDisabled: true } => "Unknown",
         { NeverFullySynchronised: true } => "Never synchronised",
         _ => Status.ChangeCount.ToString("N0")
     };
@@ -60,10 +59,6 @@
                 return string.Empty;
 
             var subject = string.IsNullOrWhiteSpace(ConnectedSystemName) ? "This Connected System" : ConnectedSystemName;
-
-            if (Status.TrackingDisabled)
-                return "Configuration change tracking is switched off, so JIM cannot tell whether the configuration " +
-                       "has changed since the last Full Synchronisation.";
 
             if (Status.NeverFullySynchronised)
                 return $"{subject} has never completed a Full Synchronisation, so its configuration has never been " +
@@ -79,9 +74,11 @@
                 ? $" since the last Full Synchronisation ({lastFullSync.Value.ToLocalTime().ToFriendlyDate()})"
                 : " since the last Full Synchronisation";
 
+            var apply = Status.ChangeCount == 1 ? "apply it" : "apply them";
+
             return Status.HighestChangeClass == ConfigurationChangeClass.Destructive
                 ? $"{changes}{since}, including a destructive change. Review before running a Full Synchronisation."
-                : $"{changes}{since}. Run a Full Synchronisation to apply them.";
+                : $"{changes}{since}. Run a Full Synchronisation to {apply}.";
         }
     }
 }
