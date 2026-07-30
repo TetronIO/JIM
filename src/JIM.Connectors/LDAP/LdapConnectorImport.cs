@@ -439,7 +439,7 @@ internal class LdapConnectorImport
             if (inner != null)
                 throw inner;
 
-            _logger.Debug(ex, "GetFullImportObjectsParallel: Combos ended without a reportable failure");
+            _logger.Warning(ex, "GetFullImportObjectsParallel: Combos faulted but no failure could be unwrapped to report");
             return;
         }
 
