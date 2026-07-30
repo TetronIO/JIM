@@ -12,10 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ✨ The Synchronisation Rules list can now be filtered by Connected System, Direction, Action (Projects, Provisions or Flow Only) and Status. The filters combine with the existing search box, which narrows whatever the filters left.
 - ✨ The same filters are available to automation: `Get-JIMSyncRule` gains `-Direction`, `-ActionType` and `-Status`, and the Synchronisation Rules REST endpoint gains matching query parameters.
 
+### Changed
+
+- 🔄 Objects are now named consistently everywhere JIM shows them. A Connected System Object resolves its name from `displayName`, then `cn`, then `name`, before falling back to its external id; a Metaverse Object resolves Display Name, then Common Name. Group objects imported from LDAP and Active Directory typically carry `cn` but no `displayName`, so they previously appeared as raw identifiers (for example `1f16ccb0-1f01-1041-8be1-eb9f4cb3f25e`) in the causality view, the Connected System Objects list, Pending Exports and change history; they now show their actual name.
+
 ### Fixed
 
 - 🐛 `Get-JIMSyncRule` now returns every Synchronisation Rule rather than only the first 25, paging through the full result set.
 - 🐛 Piping a Connected System into `Get-JIMSyncRule`, as its documentation has always shown, now works instead of failing to bind.
+- 🐛 The Pending Exports list can once again be sorted by Source Identity, and searching it by an Identity's name once again returns matches. Both silently matched nothing.
+- 🐛 The causality view no longer prints an object's identifier twice, as `<id> (<id>)`, when the object carries no name attribute at all.
 
 ## [0.14.0] - 2026-07-25
 

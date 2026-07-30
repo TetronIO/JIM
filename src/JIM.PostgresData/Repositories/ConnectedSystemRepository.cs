@@ -761,6 +761,34 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     }
 
     /// <summary>
+    /// Resolves a Connected System's name-candidate attribute ids, one list per tier of
+    /// <see cref="ObjectNaming.ConnectedSystemNameAttributes"/> and in the same order. Each object type
+    /// in the system may define its own copy of a candidate attribute (its own "cn", say), so each tier
+    /// holds every attribute id whose name matches that candidate. Matching is case-insensitive because
+    /// connector schemas belong to the customer's system, not to JIM.
+    /// <para>
+    /// Resolving ids once per query lets the sort and projection clauses filter on integer ids rather
+    /// than repeating ILike comparisons against attribute names for every row.
+    /// </para>
+    /// </summary>
+    private async Task<List<List<int>>> GetNameAttributeIdTiersAsync(int connectedSystemId)
+    {
+        var candidateNames = ObjectNaming.ConnectedSystemNameAttributes.Select(n => n.ToLower()).ToList();
+        var candidates = await Repository.Database.ConnectedSystemAttributes
+            .Where(a => a.ConnectedSystemObjectType.ConnectedSystem.Id == connectedSystemId &&
+                        candidateNames.Contains(a.Name.ToLower()))
+            .Select(a => new { a.Id, a.Name })
+            .ToListAsync();
+
+        return ObjectNaming.ConnectedSystemNameAttributes
+            .Select(candidate => candidates
+                .Where(a => string.Equals(a.Name, candidate, StringComparison.OrdinalIgnoreCase))
+                .Select(a => a.Id)
+                .ToList())
+            .ToList();
+    }
+
+    /// <summary>
     /// Retrieves a page's worth of Connected System Object Headers for a specific system, with sort and range properties.
     /// This has a max page size of 100 objects.
     /// </summary>
@@ -791,18 +819,27 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (pageSize > 100)
             pageSize = 100;
 
-        // Pre-resolve displayName attribute IDs for this Connected System to avoid repeated
-        // ILike string comparisons in the search, sort, and projection clauses.
-        // Each object type in the Connected System may have its own "displayname" attribute.
-        List<int> displayNameAttributeIds;
-        using (ActivitySource.StartActivity("Cso.Headers.LoadDisplayNameAttrIds"))
+        // Pre-resolve the name-candidate attribute IDs for this Connected System, one list per tier of
+        // ObjectNaming.ConnectedSystemNameAttributes, to avoid repeated ILike string comparisons in the
+        // sort and projection clauses. Each object type in the Connected System may define its own copy
+        // of a candidate attribute, so a tier holds every matching attribute id.
+        List<List<int>> nameAttributeIdTiers;
+        using (ActivitySource.StartActivity("Cso.Headers.LoadNameAttrIds"))
         {
-            displayNameAttributeIds = await Repository.Database.ConnectedSystemAttributes
-                .Where(a => a.ConnectedSystemObjectType.ConnectedSystem.Id == connectedSystemId &&
-                            EF.Functions.ILike(a.Name, "displayname"))
-                .Select(a => a.Id)
-                .ToListAsync();
+            nameAttributeIdTiers = await GetNameAttributeIdTiersAsync(connectedSystemId);
         }
+
+        // The sort and projection clauses below coalesce the tiers explicitly, so they must be extended
+        // if the naming policy gains a tier. ConnectedSystemNameAttributeTierCountTests fails loudly if
+        // they fall out of step.
+        var nameTier1 = nameAttributeIdTiers[0];
+        var nameTier2 = nameAttributeIdTiers[1];
+        var nameTier3 = nameAttributeIdTiers[2];
+
+        // Search matches any tier: a user typing a name should find the object whichever candidate
+        // attribute happens to carry it.
+        var allNameAttributeIds = nameAttributeIdTiers.SelectMany(tier => tier).ToList();
+
 
         var query = Repository.Database.ConnectedSystemObjects
             .Where(cso => cso.ConnectedSystem.Id == connectedSystemId);
@@ -843,9 +880,9 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         {
             var searchPattern = $"%{searchQuery}%";
             query = query.Where(cso =>
-                // Search display name (using pre-resolved attribute IDs instead of ILike on name)
+                // Search the name candidates (using pre-resolved attribute IDs instead of ILike on name)
                 cso.AttributeValues.Any(av =>
-                    displayNameAttributeIds.Contains(av.AttributeId) &&
+                    allNameAttributeIds.Contains(av.AttributeId) &&
                     av.StringValue != null &&
                     EF.Functions.ILike(av.StringValue, searchPattern)) ||
                 // Search external ID (primary)
@@ -882,15 +919,17 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .Where(av => av.AttributeId == cso.SecondaryExternalIdAttributeId)
                     .Select(av => av.StringValue)
                     .FirstOrDefault()),
+            // Sorts on the resolved name, coalescing the naming tiers in preference order so the sort
+            // key matches what the Display Name column actually renders.
             "displayname" => sortDescending
-                ? query.OrderByDescending(cso => cso.AttributeValues
-                    .Where(av => displayNameAttributeIds.Contains(av.AttributeId))
-                    .Select(av => av.StringValue)
-                    .FirstOrDefault())
-                : query.OrderBy(cso => cso.AttributeValues
-                    .Where(av => displayNameAttributeIds.Contains(av.AttributeId))
-                    .Select(av => av.StringValue)
-                    .FirstOrDefault()),
+                ? query.OrderByDescending(cso =>
+                    cso.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? cso.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? cso.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault())
+                : query.OrderBy(cso =>
+                    cso.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? cso.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? cso.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()),
             "type" => sortDescending
                 ? query.OrderByDescending(cso => cso.Type.Name)
                 : query.OrderBy(cso => cso.Type.Name),
@@ -937,10 +976,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 Status = cso.Status,
                 TypeId = cso.Type.Id,
                 TypeName = cso.Type.Name,
-                DisplayName = cso.AttributeValues
-                    .Where(av => displayNameAttributeIds.Contains(av.AttributeId))
-                    .Select(av => av.StringValue)
-                    .FirstOrDefault(),
+                DisplayName =
+                    cso.AttributeValues.Where(av => nameTier1.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? cso.AttributeValues.Where(av => nameTier2.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault()
+                    ?? cso.AttributeValues.Where(av => nameTier3.Contains(av.AttributeId)).Select(av => av.StringValue).FirstOrDefault(),
                 ExternalIdValue = cso.AttributeValues
                     .Where(av => av.AttributeId == cso.ExternalIdAttributeId)
                     .Select(av => av.StringValue)
@@ -967,12 +1006,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                     .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
                     .Select(pe => (Guid?)pe.Id)
                     .FirstOrDefault(),
-                PendingDisplayName = cso.AttributeValues.Any(av => displayNameAttributeIds.Contains(av.AttributeId))
+                // Only surfaced when the object has no name yet; the naming tiers already cover cn, so
+                // no ad-hoc attribute-name match is needed here.
+                PendingDisplayName = cso.AttributeValues.Any(av => allNameAttributeIds.Contains(av.AttributeId))
                     ? null
                     : Repository.Database.PendingExports
                         .Where(pe => pe.ConnectedSystemObjectId == cso.Id)
                         .SelectMany(pe => pe.AttributeValueChanges)
-                        .Where(avc => displayNameAttributeIds.Contains(avc.AttributeId) || EF.Functions.ILike(avc.Attribute.Name, "cn"))
+                        .Where(avc => allNameAttributeIds.Contains(avc.AttributeId))
                         .Select(avc => avc.StringValue)
                         .FirstOrDefault(),
                 PendingExternalId = Repository.Database.PendingExports
@@ -3456,8 +3497,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         if (statusList != null && statusList.Count > 0)
             query = query.Where(pe => statusList.Contains(pe.Status));
 
-        // Apply search filter - search on target identifier, source MVO display name, or error message
-        // Search is case-insensitive for user convenience
+        // Apply search filter - search on target identifier, source Metaverse Object name, or error
+        // message. Search is case-insensitive for user convenience.
+        // The Metaverse side reads the denormalised CachedDisplayName column (the object's resolved
+        // name, per ObjectNaming). It previously matched an attribute named "displayname", but the
+        // Metaverse attribute is "Display Name", so that predicate matched no rows at all and searching
+        // by a source object's name silently returned nothing.
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
             var searchPattern = $"%{searchQuery}%";
@@ -3466,9 +3511,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 (pe.ConnectedSystemObject != null && pe.ConnectedSystemObject.AttributeValues
                     .Any(av => av.AttributeId == pe.ConnectedSystemObject.ExternalIdAttributeId &&
                          av.StringValue != null && EF.Functions.ILike(av.StringValue, searchPattern))) ||
-                (pe.SourceMetaverseObject != null && pe.SourceMetaverseObject.AttributeValues
-                    .Any(av => av.Attribute != null && EF.Functions.ILike(av.Attribute.Name, "displayname") &&
-                         av.StringValue != null && EF.Functions.ILike(av.StringValue, searchPattern))));
+                (pe.SourceMetaverseObject != null && pe.SourceMetaverseObject.CachedDisplayName != null &&
+                    EF.Functions.ILike(pe.SourceMetaverseObject.CachedDisplayName, searchPattern)));
         }
 
         // Apply sorting
@@ -3493,18 +3537,16 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                         .Select(av => av.StringValue)
                         .FirstOrDefault()
                     : null),
+            // Sorts on the denormalised resolved-name column (covered by
+            // IX_MetaverseObjects_TypeId_CachedDisplayName), replacing an attribute-name match on
+            // "displayname" that never matched the actual "Display Name" attribute, so this sort did
+            // nothing at all.
             "sourcemvo" => sortDescending
                 ? query.OrderByDescending(pe => pe.SourceMetaverseObject != null
-                    ? pe.SourceMetaverseObject.AttributeValues
-                        .Where(av => av.Attribute != null && EF.Functions.ILike(av.Attribute.Name, "displayname"))
-                        .Select(av => av.StringValue)
-                        .FirstOrDefault()
+                    ? pe.SourceMetaverseObject.CachedDisplayName
                     : null)
                 : query.OrderBy(pe => pe.SourceMetaverseObject != null
-                    ? pe.SourceMetaverseObject.AttributeValues
-                        .Where(av => av.Attribute != null && EF.Functions.ILike(av.Attribute.Name, "displayname"))
-                        .Select(av => av.StringValue)
-                        .FirstOrDefault()
+                    ? pe.SourceMetaverseObject.CachedDisplayName
                     : null),
             "changes" => sortDescending
                 ? query.OrderByDescending(pe => pe.AttributeValueChanges.Count)
@@ -3528,10 +3570,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         var headers = pagedItems.Select(pe =>
         {
             // Get target object display name from CSO if available (priority: display name > external ID > secondary external ID)
-            var targetIdentifier = pe.ConnectedSystemObject?.DisplayNameOrId;
+            var targetIdentifier = pe.ConnectedSystemObject?.NameOrId;
 
             // Get source MVO display name if available
-            var sourceMvoDisplayName = pe.SourceMetaverseObject?.DisplayName;
+            var sourceMvoDisplayName = pe.SourceMetaverseObject?.NameOrId;
 
             return PendingExportHeader.FromEntity(pe, targetIdentifier, sourceMvoDisplayName);
         }).ToList();
@@ -4418,6 +4460,14 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         span?.SetTag("page", page);
         span?.SetTag("pageSize", pageSize);
 
+        // Reference values can belong to any Connected System, so their name candidates are matched by
+        // attribute name rather than by pre-resolved ids. Lowered here so the comparison translates to
+        // a plain lower(...) = ... in SQL. Coalesced in tier order below; extend alongside
+        // ObjectNaming.ConnectedSystemNameAttributes (guarded by ConnectedSystemNameAttributeTierCountTests).
+        var nameCandidate1 = ObjectNaming.ConnectedSystemNameAttributes[0].ToLower();
+        var nameCandidate2 = ObjectNaming.ConnectedSystemNameAttributes[1].ToLower();
+        var nameCandidate3 = ObjectNaming.ConnectedSystemNameAttributes[2].ToLower();
+
         var baseQuery = Repository.Database.ConnectedSystemObjectChanges
             .AsNoTracking()
             .Where(c => c.ConnectedSystemObject != null && c.ConnectedSystemObject.Id == connectedSystemObjectId);
@@ -4472,10 +4522,19 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                                         Id = vc.ReferenceValue.Id,
                                         ConnectedSystemId = vc.ReferenceValue.ConnectedSystemId,
                                         TypeName = vc.ReferenceValue.Type.Name,
-                                        // Best-effort label: prefer a "displayName" attribute, fall back to external id, then secondary external id.
+                                        // Best-effort label, mirroring ConnectedSystemObject.NameOrId: the
+                                        // ordered name candidates, then external id, then secondary external id.
                                         DisplayName =
                                             vc.ReferenceValue.AttributeValues
-                                                .Where(av => av.Attribute.Name.ToLower() == "displayname" && av.StringValue != null)
+                                                .Where(av => av.Attribute.Name.ToLower() == nameCandidate1 && av.StringValue != null)
+                                                .Select(av => av.StringValue)
+                                                .FirstOrDefault()
+                                            ?? vc.ReferenceValue.AttributeValues
+                                                .Where(av => av.Attribute.Name.ToLower() == nameCandidate2 && av.StringValue != null)
+                                                .Select(av => av.StringValue)
+                                                .FirstOrDefault()
+                                            ?? vc.ReferenceValue.AttributeValues
+                                                .Where(av => av.Attribute.Name.ToLower() == nameCandidate3 && av.StringValue != null)
                                                 .Select(av => av.StringValue)
                                                 .FirstOrDefault()
                                             ?? vc.ReferenceValue.AttributeValues

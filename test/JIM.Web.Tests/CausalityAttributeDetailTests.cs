@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Bunit;
 using JIM.Web.Causality;
+using JIM.Web.Shared;
 using JIM.Web.Shared.Causality;
 using NUnit.Framework;
 
@@ -14,6 +15,11 @@ namespace JIM.Web.Tests;
 /// <summary>
 /// bUnit tests for <see cref="CausalityAttributeDetail"/>: operation filter chips with counts,
 /// name-and-value search, the "n of m" indicator, previous-value strike-through and the empty state.
+///
+/// The attribute rows render through a standard MudTable, so these tests count rows via the
+/// <see cref="TextValueDisplay"/> component JIM renders once per row rather than via MudBlazor's
+/// generated CSS class names, which are a third party's implementation detail that churns between
+/// releases (see test/CLAUDE.md > Blazor component tests).
 /// </summary>
 [TestFixture]
 public class CausalityAttributeDetailTests
@@ -35,6 +41,15 @@ public class CausalityAttributeDetailTests
             .Add(c => c.Rows, rows ?? SampleRows()));
     }
 
+    /// <summary>
+    /// The rendered attribute row count: JIM renders exactly one value cell per row, so counting the
+    /// value component counts the rows without depending on the table's generated markup.
+    /// </summary>
+    private static int RenderedRowCount(IRenderedComponent<CausalityAttributeDetail> cut)
+    {
+        return cut.FindComponents<TextValueDisplay>().Count;
+    }
+
     [Test]
     public async Task Render_Default_ShowsAllRowsAndTheFullCountAsync()
     {
@@ -42,7 +57,7 @@ public class CausalityAttributeDetailTests
 
         var cut = RenderDetail(context);
 
-        Assert.That(cut.FindAll(".attr-row"), Has.Count.EqualTo(6));
+        Assert.That(RenderedRowCount(cut), Is.EqualTo(6));
         Assert.That(cut.Find(".attr-meta-count").TextContent.Trim(), Is.EqualTo("6 of 6"));
     }
 
@@ -79,10 +94,14 @@ public class CausalityAttributeDetailTests
         var addChip = cut.FindAll(".filter-chips button").Single(b => b.TextContent.Trim().StartsWith("Add"));
         addChip.Click();
 
-        Assert.That(cut.FindAll(".attr-row"), Has.Count.EqualTo(2));
+        Assert.That(RenderedRowCount(cut), Is.EqualTo(2));
         Assert.That(cut.Find(".attr-meta-count").TextContent.Trim(), Is.EqualTo("2 of 6"));
         var activeChip = cut.FindAll(".filter-chips button").Single(b => b.ClassList.Contains("on"));
         Assert.That(activeChip.TextContent.Trim(), Does.StartWith("Add"));
+
+        // The surviving rows really are the Add ones, not merely the right count
+        Assert.That(cut.Markup, Does.Contain("mail"));
+        Assert.That(cut.Markup, Does.Not.Contain("Display Name"));
     }
 
     [Test]
@@ -95,15 +114,15 @@ public class CausalityAttributeDetailTests
         // Matches the "mail" attribute name and the proxyAddresses value containing "example.com"
         cut.Find(".attr-search input").Input("example.com");
 
-        Assert.That(cut.FindAll(".attr-row"), Has.Count.EqualTo(2));
+        Assert.That(RenderedRowCount(cut), Is.EqualTo(2));
         Assert.That(cut.Find(".attr-meta-count").TextContent.Trim(), Is.EqualTo("2 of 6"));
 
         // Name-only match
         cut.Find(".attr-search input").Input("department");
 
-        var rows = cut.FindAll(".attr-row");
-        Assert.That(rows, Has.Count.EqualTo(1));
-        Assert.That(rows[0].QuerySelector(".attr-name")!.TextContent, Does.Contain("Department"));
+        Assert.That(RenderedRowCount(cut), Is.EqualTo(1));
+        Assert.That(cut.Markup, Does.Contain("Department"));
+        Assert.That(cut.Markup, Does.Not.Contain("Job Title"));
     }
 
     [Test]
@@ -115,8 +134,8 @@ public class CausalityAttributeDetailTests
 
         cut.Find(".attr-search input").Input("no-such-attribute");
 
-        Assert.That(cut.FindAll(".attr-row"), Is.Empty);
-        Assert.That(cut.Find(".attr-empty").TextContent, Does.Contain("No attributes match"));
+        Assert.That(RenderedRowCount(cut), Is.Zero);
+        Assert.That(cut.Markup, Does.Contain("No attributes match"));
         Assert.That(cut.Find(".attr-meta-count").TextContent.Trim(), Is.EqualTo("0 of 6"));
     }
 
@@ -127,10 +146,12 @@ public class CausalityAttributeDetailTests
 
         var cut = RenderDetail(context);
 
-        var jobTitleRow = cut.FindAll(".attr-row")
-            .Single(r => r.QuerySelector(".attr-name")!.TextContent.Contains("Job Title"));
-        Assert.That(jobTitleRow.QuerySelector(".attr-value .was")!.TextContent, Is.EqualTo("Analyst"));
-        Assert.That(jobTitleRow.QuerySelector(".attr-value")!.TextContent, Does.Contain("Director"));
+        var jobTitleRow = cut.FindAll("tbody tr").Single(r => r.TextContent.Contains("Job Title"));
+        Assert.That(jobTitleRow.QuerySelector(".attr-previous-value")!.TextContent, Is.EqualTo("Analyst"));
+        Assert.That(jobTitleRow.TextContent, Does.Contain("Director"));
+
+        // Only the superseded row carries a previous value
+        Assert.That(cut.FindAll(".attr-previous-value"), Has.Count.EqualTo(1));
     }
 
     [Test]
@@ -140,10 +161,11 @@ public class CausalityAttributeDetailTests
 
         var cut = RenderDetail(context);
 
-        var firstRow = cut.FindAll(".attr-row")[0];
-        var opBadge = firstRow.QuerySelector(".op");
-        Assert.That(opBadge, Is.Not.Null);
-        Assert.That(opBadge!.ClassList, Does.Contain("set"));
-        Assert.That(firstRow.QuerySelector(".attr-name .meta")!.TextContent, Is.EqualTo("Text · Single-valued"));
+        var displayNameRow = cut.FindAll("tbody tr").Single(r => r.TextContent.Contains("Display Name"));
+        Assert.That(displayNameRow.TextContent, Does.Contain("Set"));
+        Assert.That(displayNameRow.TextContent, Does.Contain("Text · Single-valued"));
+
+        var locationRow = cut.FindAll("tbody tr").Single(r => r.TextContent.Contains("Location"));
+        Assert.That(locationRow.TextContent, Does.Contain("Remove"));
     }
 }

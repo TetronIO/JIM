@@ -193,16 +193,7 @@ public static class CausalityGraphLayoutCalculator
     /// </summary>
     private static string GetSourceLabel(CausalityPageContext context)
     {
-        var hasDisplayName = !string.IsNullOrWhiteSpace(context.CsoDisplayName);
-        var hasExternalId = !string.IsNullOrWhiteSpace(context.CsoExternalId);
-
-        if (hasDisplayName && hasExternalId)
-            return $"{context.CsoDisplayName} ({context.CsoExternalId})";
-        if (hasDisplayName)
-            return context.CsoDisplayName!;
-        if (hasExternalId)
-            return context.CsoExternalId!;
-        return context.CsoConnectedSystemName ?? string.Empty;
+        return context.RecordLabel ?? context.CsoConnectedSystemName ?? string.Empty;
     }
 
     /// <summary>

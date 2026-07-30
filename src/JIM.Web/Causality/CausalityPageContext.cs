@@ -54,4 +54,33 @@ public sealed record CausalityPageContext(
     string? CsoExternalId,
     string? CsoObjectTypeName,
     string? MvoTypeName,
-    string? MvoTypePluralName);
+    string? MvoTypePluralName)
+{
+    /// <summary>
+    /// The record's label for display: its name qualified by its external id, or whichever of the two
+    /// is present. Null when neither is.
+    /// <para>
+    /// The two are collapsed to a single mention when they are equal, which happens whenever the record
+    /// carries none of the naming attributes and <c>ConnectedSystemObject.NameOrId</c> falls
+    /// through to the external id: rendering "1f16ccb0-... (1f16ccb0-...)" reads as two separate facts
+    /// about the object when it is really one value shown twice.
+    /// </para>
+    /// </summary>
+    public string? RecordLabel
+    {
+        get
+        {
+            var name = string.IsNullOrWhiteSpace(CsoDisplayName) ? null : CsoDisplayName;
+            var externalId = string.IsNullOrWhiteSpace(CsoExternalId) ? null : CsoExternalId;
+
+            if (name != null && externalId != null)
+            {
+                return string.Equals(name, externalId, StringComparison.Ordinal)
+                    ? name
+                    : $"{name} ({externalId})";
+            }
+
+            return name ?? externalId;
+        }
+    }
+}

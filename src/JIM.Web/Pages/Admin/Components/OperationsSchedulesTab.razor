@@ -308,9 +308,9 @@
         schedule.LastUpdated = DateTime.UtcNow;
         schedule.LastUpdatedByType = ActivityInitiatorType.User;
         schedule.LastUpdatedById = user.Id;
-        schedule.LastUpdatedByName = user.DisplayName;
+        schedule.LastUpdatedByName = user.NameOrId;
 
-        await jim.Scheduler.UpdateScheduleAsync(schedule, ActivityInitiatorType.User, user.Id, user.DisplayName);
+        await jim.Scheduler.UpdateScheduleAsync(schedule, ActivityInitiatorType.User, user.Id, user.NameOrId);
 
         var action = schedule.IsEnabled ? "enabled" : "disabled";
         Snackbar.Add($"Schedule '{schedule.Name}' has been {action}.", Severity.Success);
@@ -350,7 +350,7 @@
             scheduleWithSteps,
             ActivityInitiatorType.User,
             user.Id,
-            user.DisplayName);
+            user.NameOrId);
 
         if (execution != null)
         {
@@ -390,7 +390,7 @@
 
         using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        await jim.Scheduler.DeleteScheduleAsync(schedule, ActivityInitiatorType.User, user.Id, user.DisplayName, changeReason);
+        await jim.Scheduler.DeleteScheduleAsync(schedule, ActivityInitiatorType.User, user.Id, user.NameOrId, changeReason);
         Snackbar.Add($"Schedule '{schedule.Name}' has been deleted.", Severity.Success);
         _table?.ReloadServerData();
     }

@@ -320,9 +320,9 @@ public abstract class SyncTaskProcessorBase
                     {
                         // Fill in MVO display name if it was null at creation time
                         if (string.IsNullOrEmpty(outcome.TargetEntityDescription)
-                            && !string.IsNullOrEmpty(mvo.DisplayName))
+                            && !string.IsNullOrEmpty(mvo.NameOrId))
                         {
-                            outcome.TargetEntityDescription = mvo.DisplayName;
+                            outcome.TargetEntityDescription = mvo.NameOrId;
                         }
 
                         // Fill in MVO ID if it was null at creation time (newly projected MVOs)
@@ -584,7 +584,7 @@ public abstract class SyncTaskProcessorBase
                         // disconnection (#1086).
                         var mvoRef = connectedSystemObject.MetaverseObject;
                         Guid? mvoId = mvoRef != null && mvoRef.Id != Guid.Empty ? mvoRef.Id : changeResult.DisconnectedMvoId;
-                        string? mvoDescription = mvoRef?.DisplayName ?? changeResult.DisconnectedMvoDisplayName;
+                        string? mvoDescription = mvoRef?.NameOrId ?? changeResult.DisconnectedMvoDisplayName;
 
                         // Only put detailCount on AttributeFlow/DisconnectedOutOfScope root outcomes, not on Joined/Projected
                         int? rootDetailCount = outcomeType is ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow
@@ -717,7 +717,7 @@ public abstract class SyncTaskProcessorBase
         {
             SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
                 ActivityRunProfileExecutionItemSyncOutcomeType.NoContributor,
-                targetEntityDescription: changeResult.DisconnectedMvo.DisplayName,
+                targetEntityDescription: changeResult.DisconnectedMvo.NameOrId,
                 detailCount: clearedAttributeCount);
         }
     }
@@ -824,7 +824,7 @@ public abstract class SyncTaskProcessorBase
         var mvo = connectedSystemObject.MetaverseObject;
         var connectedSystemId = connectedSystemObject.ConnectedSystemId;
         var mvoId = mvo.Id;
-        var mvoDisplayName = mvo.DisplayName;
+        var mvoDisplayName = mvo.NameOrId;
 
         // Single RPEI for both disconnection and deletion (one-RPEI-per-CSO rule).
         // The ObjectChangeType is Disconnected (the meaningful event); CsoDeleted is recorded
@@ -1353,7 +1353,7 @@ public abstract class SyncTaskProcessorBase
                     // Only store the MVO ID if it's already persisted (non-empty).
                     // For newly projected MVOs, the ID is Guid.Empty until batch persistence.
                     var mvoId = mvo.Id != Guid.Empty ? mvo.Id : (Guid?)null;
-                    var mvoDescription = mvo.DisplayName;
+                    var mvoDescription = mvo.NameOrId;
 
                     // Attribute the projecting Synchronisation Rule on Projected outcomes (#1085);
                     // Joined/AttributeFlow roots have no single attributable rule here.
@@ -2271,7 +2271,7 @@ public abstract class SyncTaskProcessorBase
                                 {
                                     SyncOutcomeBuilder.AddChildOutcome(rpei, rootOutcome,
                                         ActivityRunProfileExecutionItemSyncOutcomeType.AttributeFlow,
-                                        targetEntityDescription: mvo.DisplayName,
+                                        targetEntityDescription: mvo.NameOrId,
                                         detailCount: rpei.AttributeFlowCount);
                                 }
                             }
@@ -3200,7 +3200,7 @@ public abstract class SyncTaskProcessorBase
                 ObjectChangeType = ObjectChangeType.PendingExport,
                 ConnectedSystemObjectId = csoId,
                 PendingExportId = pendingExport.Id,
-                DisplayNameSnapshot = deletedMvo?.DisplayName,
+                DisplayNameSnapshot = deletedMvo?.Name,
                 ExternalIdSnapshot = snapshot?.ExternalId,
                 ObjectTypeSnapshot = snapshot?.TypeName
             };
@@ -4135,7 +4135,7 @@ public abstract class SyncTaskProcessorBase
                 // Snapshot the MVO's display name BEFORE attribute recall and deletion, so the sync
                 // outcome nodes built later (after the join is broken and possibly after the MVO is
                 // deleted) can still describe the affected Metaverse Object (#1086).
-                var mvoDisplayName = mvo.DisplayName;
+                var mvoDisplayName = mvo.NameOrId;
 
                 // Query remaining CSO count BEFORE breaking the join so the count includes all current connectors.
                 // Then subtract 1 to exclude this CSO which is about to be disconnected.

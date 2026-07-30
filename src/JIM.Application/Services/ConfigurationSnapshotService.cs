@@ -783,7 +783,7 @@ public class ConfigurationSnapshotService
         var items = new List<ConfigurationSnapshotNode>();
         foreach (var member in (members ?? []).OrderBy(m => m.Id))
         {
-            var node = ConfigurationSnapshotNode.Scalar("memberId", member.Id.ToString("D"), "Member", member.DisplayName);
+            var node = ConfigurationSnapshotNode.Scalar("memberId", member.Id.ToString("D"), "Member", member.Name);
             node.ItemGuidId = member.Id;
             items.Add(node);
         }

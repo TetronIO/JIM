@@ -57,7 +57,7 @@ public static class CausalitySummaryBuilder
                 CausalityEntityKind.ConnectedSystem));
         }
 
-        var recordLabel = GetRecordLabel(context);
+        var recordLabel = context.RecordLabel;
         if (recordLabel != null)
         {
             segments.Add(new SummarySegment.Text(" processed the record for "));
@@ -75,20 +75,6 @@ public static class CausalitySummaryBuilder
         }
 
         return segments;
-    }
-
-    private static string? GetRecordLabel(CausalityPageContext context)
-    {
-        var hasDisplayName = !string.IsNullOrWhiteSpace(context.CsoDisplayName);
-        var hasExternalId = !string.IsNullOrWhiteSpace(context.CsoExternalId);
-
-        if (hasDisplayName && hasExternalId)
-            return $"{context.CsoDisplayName} ({context.CsoExternalId})";
-        if (hasDisplayName)
-            return context.CsoDisplayName;
-        if (hasExternalId)
-            return context.CsoExternalId;
-        return null;
     }
 
     private static bool StartsWithVowel(string value)

@@ -209,7 +209,7 @@ public class CausalityPanelTests
 
         Assert.That(cut.FindAll(".drawer"), Has.Count.EqualTo(1));
         Assert.That(cut.Find(".drawer-title").TextContent.Trim(), Is.EqualTo("Export queued"));
-        Assert.That(cut.FindAll(".drawer .attr-row"), Has.Count.EqualTo(3));
+        Assert.That(cut.FindAll(".drawer tbody tr"), Has.Count.EqualTo(3));
     }
 
     [Test]
@@ -249,7 +249,7 @@ public class CausalityPanelTests
 
         Assert.That(cut.FindAll(".drawer"), Has.Count.EqualTo(1));
         Assert.That(cut.Find(".drawer-title").TextContent.Trim(), Is.EqualTo("Export queued"));
-        Assert.That(cut.FindAll(".drawer .attr-row"), Has.Count.EqualTo(3));
+        Assert.That(cut.FindAll(".drawer tbody tr"), Has.Count.EqualTo(3));
     }
 
     [Test]

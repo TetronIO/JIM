@@ -400,7 +400,7 @@ public static class CausalityModelBuilder
         if (valueChange.IsPendingExportStub && !string.IsNullOrEmpty(valueChange.StringValue))
             return valueChange.StringValue;
 
-        return valueChange.ReferenceValue.DisplayNameOrId ?? valueChange.ReferenceValue.Id.ToString();
+        return valueChange.ReferenceValue.NameOrId ?? valueChange.ReferenceValue.Id.ToString();
     }
 
     private static string? GetMvoValueText(MetaverseObjectChangeAttributeValue valueChange)
@@ -408,7 +408,7 @@ public static class CausalityModelBuilder
         if (valueChange.ReferenceValue == null)
             return valueChange.ToString();
 
-        return valueChange.ReferenceValue.DisplayName ?? valueChange.ReferenceValue.Id.ToString();
+        return valueChange.ReferenceValue.NameOrId ?? valueChange.ReferenceValue.Id.ToString();
     }
 
     private static string GetTypeAndPlurality(AttributeDataType attributeType, bool isMultiValued)

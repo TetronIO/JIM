@@ -9,6 +9,7 @@ using JIM.Connectors;
 using JIM.Data;
 using JIM.Data.Repositories;
 using JIM.Models.Activities;
+using JIM.Models.Core;
 using JIM.Models.Enums;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
@@ -261,10 +262,11 @@ public class SyncExportTaskProcessor
                 executionItem.SnapshotCsoDisplayFields(exportItem.ConnectedSystemObject);
             }
 
-            // Fallback display name from attribute value changes
-            executionItem.DisplayNameSnapshot ??= exportItem.AttributeValueChanges
-                .FirstOrDefault(avc => avc.Attribute?.Name?.Equals("displayname", StringComparison.OrdinalIgnoreCase) == true)
-                ?.StringValue;
+            // Fallback name from the attribute value changes, using the shared naming policy so a
+            // provisioning export that only carries cn still names the object.
+            executionItem.DisplayNameSnapshot ??= ObjectNaming.BestRanked(
+                exportItem.AttributeValueChanges.Select(avc => (avc.Attribute?.Name, avc.StringValue)),
+                ObjectNaming.ConnectedSystemNameRank);
 
             // Set error information if the export failed
             if (!exportItem.Succeeded && !string.IsNullOrEmpty(exportItem.ErrorMessage))

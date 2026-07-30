@@ -124,7 +124,7 @@ public class CausalityTimelineViewTests
         cut.Find(".tl-expander").Click();
 
         Assert.That(cut.FindAll(".tl-inline-detail"), Has.Count.EqualTo(1));
-        Assert.That(cut.FindAll(".attr-row"), Has.Count.EqualTo(3));
+        Assert.That(cut.FindAll(".tl-inline-detail tbody tr"), Has.Count.EqualTo(3));
         Assert.That(cut.Find(".tl-expander").ClassList, Does.Contain("open"));
 
         cut.Find(".tl-expander").Click();

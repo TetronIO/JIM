@@ -191,20 +191,7 @@
         return ExpandedEventChanged.InvokeAsync(newValue);
     }
 
-    private string? GetRecordLabel()
-    {
-        var context = Model.Context;
-        var hasDisplayName = !string.IsNullOrWhiteSpace(context.CsoDisplayName);
-        var hasExternalId = !string.IsNullOrWhiteSpace(context.CsoExternalId);
-
-        if (hasDisplayName && hasExternalId)
-            return $"{context.CsoDisplayName} ({context.CsoExternalId})";
-        if (hasDisplayName)
-            return context.CsoDisplayName;
-        if (hasExternalId)
-            return context.CsoExternalId;
-        return null;
-    }
+    private string? GetRecordLabel() => Model.Context.RecordLabel;
 
     private string? GetRecordHref()
     {

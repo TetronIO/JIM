@@ -753,7 +753,7 @@ public class Worker : BackgroundService
                     {
                         Id = Guid.NewGuid(),
                         ObjectChangeType = ObjectChangeType.Deleted,
-                        DisplayNameSnapshot = mvo.DisplayName,
+                        DisplayNameSnapshot = mvo.Name,
                         ObjectTypeSnapshot = mvo.Type?.Name
                     };
                     var reportableDeleteExports = deletePendingExports.Where(pe => pe.ConnectedSystemObjectId.HasValue).ToList();
@@ -762,7 +762,7 @@ public class Worker : BackgroundService
                         var mvoDeletedOutcome = SyncOutcomeBuilder.AddRootOutcome(deletionItem,
                             ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
                             targetEntityId: mvo.Id,
-                            targetEntityDescription: mvo.DisplayName);
+                            targetEntityDescription: mvo.NameOrId);
 
                         // Deletion cascade (#1044): record each delete Pending Exports this deletion staged as a
                         // consequence of it, so the item reads as action and consequences: MVO Deleted, then one
@@ -781,7 +781,7 @@ public class Worker : BackgroundService
                         // Outcome tracking is off, so there is no deletion outcome to hang the exports off. They
                         // are still staged work an administrator must see: record one execution item each.
                         executionItems.AddRange(reportableDeleteExports
-                            .Select(pe => BuildPendingExportExecutionItem(pe, mvo.DisplayName, mvo.Type?.Name,
+                            .Select(pe => BuildPendingExportExecutionItem(pe, mvo.NameOrId, mvo.Type?.Name,
                                 csNameLookup.GetValueOrDefault(pe.ConnectedSystemId),
                                 activity, outcomeTrackingLevel, csoChangeTrackingEnabled)));
                     }
@@ -801,7 +801,7 @@ public class Worker : BackgroundService
                         ErrorType = ActivityRunProfileExecutionItemErrorType.UnhandledError,
                         ErrorMessage = ex.Message,
                         ErrorStackTrace = ex.StackTrace,
-                        DisplayNameSnapshot = mvo.DisplayName,
+                        DisplayNameSnapshot = mvo.Name,
                         ObjectTypeSnapshot = mvo.Type?.Name
                     });
                 }

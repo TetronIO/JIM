@@ -68,10 +68,10 @@ public class PendingExportDetailDto
             LastErrorMessage = pe.LastErrorMessage,
             HasUnresolvedReferences = pe.HasUnresolvedReferences,
             ConnectedSystemObjectId = pe.ConnectedSystemObjectId,
-            ConnectedSystemObjectDisplayName = pe.ConnectedSystemObject?.DisplayNameOrId,
+            ConnectedSystemObjectDisplayName = pe.ConnectedSystemObject?.NameOrId,
             ConnectedSystemObjectTypeName = pe.ConnectedSystemObject?.Type?.Name,
             SourceMetaverseObjectId = pe.SourceMetaverseObjectId,
-            SourceMetaverseObjectDisplayName = pe.SourceMetaverseObject?.DisplayName
+            SourceMetaverseObjectDisplayName = pe.SourceMetaverseObject?.Name
                 ?? pe.SourceMetaverseObjectId?.ToString(),
             SourceMetaverseObjectTypeName = pe.SourceMetaverseObject?.Type?.Name,
             AttributeChanges = pe.AttributeValueChanges

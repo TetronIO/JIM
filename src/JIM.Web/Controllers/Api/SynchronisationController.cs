@@ -1402,7 +1402,7 @@ public class SynchronisationController(
         SynchronisationWorkerTask workerTask;
         if (initiatedBy != null)
         {
-            workerTask = SynchronisationWorkerTask.ForUser(connectedSystemId, runProfileId, initiatedBy.Id, initiatedBy.DisplayName ?? "Unknown User");
+            workerTask = SynchronisationWorkerTask.ForUser(connectedSystemId, runProfileId, initiatedBy.Id, initiatedBy.NameOrId);
         }
         else
         {

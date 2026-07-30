@@ -58,7 +58,7 @@ public class MetaverseObjectHeaderDto
         {
             Id = header.Id,
             Created = header.Created,
-            DisplayName = header.DisplayName,
+            DisplayName = header.Name,
             Status = header.Status,
             Type = new MetaverseObjectTypeDto
             {

@@ -436,7 +436,7 @@
         // attribute the execution to the user
         using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        _task = ExampleDataTemplateWorkerTask.ForUser(_template.Id, user.Id, user.DisplayName ?? "Unknown User");
+        _task = ExampleDataTemplateWorkerTask.ForUser(_template.Id, user.Id, user.NameOrId);
         var result = await jim.Tasking.CreateWorkerTaskAsync(_task);
 
         if (!result.Success)

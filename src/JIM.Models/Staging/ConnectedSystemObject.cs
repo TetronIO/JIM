@@ -193,30 +193,39 @@ public class ConnectedSystemObject
         }
     }
 
+    /// <summary>
+    /// The object's name as the Connected System knows it: the first present value from
+    /// <see cref="ObjectNaming.ConnectedSystemNameAttributes"/>, or null when it carries none of them.
+    /// <para>
+    /// Use this when persisting a name alongside a separately persisted identifier (a snapshot's
+    /// display-name column, a nullable API field). For anything a person reads on screen use
+    /// <see cref="NameOrId"/>, which falls through to an identifier rather than returning null.
+    /// </para>
+    /// </summary>
     [NotMapped]
-    public string? DisplayNameOrId
+    public string? Name
     {
         get
         {
             if (AttributeValues.Count == 0)
                 return null;
 
-            // this works well for LDAP systems, where DisplayName is a common attribute, but for other systems that
-            // are not so standards based we may have to look at supporting a configurable attribute on the Connected
-            // System to use as the label.
-            var av = AttributeValues.SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true);
-            if (av != null && !string.IsNullOrEmpty(av.StringValue))
-                return av.StringValue;
-
-            // no displayName attribute on this object, try the external id
-            var externalId = ExternalIdAttributeValue?.ToStringNoName();
-            if (!string.IsNullOrEmpty(externalId))
-                return externalId;
-
-            // fall back to secondary external id (e.g. DN for LDAP systems)
-            return SecondaryExternalIdAttributeValue?.ToStringNoName();
+            return ObjectNaming.BestRanked(
+                AttributeValues.Select(av => (av.Attribute?.Name, av.StringValue)),
+                ObjectNaming.ConnectedSystemNameRank);
         }
     }
+
+    /// <summary>
+    /// The best human-readable label for this object: its <see cref="Name"/>, else the external id,
+    /// else the secondary external id (the DN, for LDAP systems). Prefer this for display; prefer
+    /// <see cref="Name"/> when the identifier is already being surfaced separately.
+    /// </summary>
+    [NotMapped]
+    public string? NameOrId => ObjectNaming.FirstPresent(
+        Name,
+        ExternalIdAttributeValue?.ToStringNoName(),
+        SecondaryExternalIdAttributeValue?.ToStringNoName());
     #endregion
 
     #region public methods
@@ -339,7 +348,7 @@ public class ConnectedSystemObject
 
     public override string ToString()
     {
-        return $"{DisplayNameOrId} ({Id})";
+        return $"{NameOrId} ({Id})";
     }
     #endregion
 }

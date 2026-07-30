@@ -36,7 +36,7 @@
                 @if (context.ReferenceValue != null)
                 {
                     <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ReferenceValue)">
-                        @context.ReferenceValue.DisplayNameOrId
+                        @context.ReferenceValue.NameOrId
                     </MudLink>
                 }
                 else if (context.UnresolvedReferenceValue != null)

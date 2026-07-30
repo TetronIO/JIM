@@ -290,7 +290,7 @@
             var items = result.Results.Select(mvo => new PendingDeletionItem
             {
                 Id = mvo.Id,
-                DisplayName = mvo.DisplayName,
+                DisplayName = mvo.NameOrId,
                 TypeName = mvo.Type?.Name ?? "Unknown",
                 TypeId = mvo.Type?.Id ?? 0,
                 TypePluralName = mvo.Type?.PluralName ?? "objects",

@@ -193,13 +193,13 @@ public class ConnectedSystemObjectDetailDto
             Status = entity.Status,
             JoinType = entity.JoinType,
             DateJoined = entity.DateJoined,
-            DisplayName = entity.DisplayNameOrId,
+            DisplayName = entity.NameOrId,
             ConnectedSystemId = entity.ConnectedSystemId,
             ConnectedSystemName = entity.ConnectedSystem?.Name ?? string.Empty,
             TypeId = entity.TypeId,
             TypeName = entity.Type?.Name ?? string.Empty,
             MetaverseObjectId = entity.MetaverseObjectId,
-            MetaverseObjectDisplayName = entity.MetaverseObject?.DisplayName,
+            MetaverseObjectDisplayName = entity.MetaverseObject?.Name,
             AttributeValues = entity.AttributeValues
                 .Select(ConnectedSystemObjectAttributeValueDto.FromEntity)
                 .ToList()

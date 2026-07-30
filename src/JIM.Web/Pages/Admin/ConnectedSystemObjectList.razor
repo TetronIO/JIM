@@ -490,7 +490,7 @@ else
         using var jim = JimFactory.Create();
         // attribute the execution to the user
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
-        var task = ClearConnectedSystemObjectsWorkerTask.ForUser(Id, user.Id, user.DisplayName ?? "Unknown User", _clearDeleteChangeHistory);
+        var task = ClearConnectedSystemObjectsWorkerTask.ForUser(Id, user.Id, user.NameOrId, _clearDeleteChangeHistory);
         var result = await jim.Tasking.CreateWorkerTaskAsync(task);
 
         if (!result.Success)

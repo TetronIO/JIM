@@ -423,11 +423,11 @@
                                 </div>
 
                                 @* Display Name (if available) *@
-                                @if (!string.IsNullOrEmpty(_metaverseObject.DisplayName))
+                                @if (!string.IsNullOrEmpty(_metaverseObject.NameOrId))
                                 {
                                     <div>
                                         <MudText Typo="Typo.button" Class="mud-text-secondary">Display Name</MudText>
-                                        <MudText Style="font-weight: 500;">@_metaverseObject.DisplayName</MudText>
+                                        <MudText Style="font-weight: 500;">@_metaverseObject.NameOrId</MudText>
                                     </div>
                                 }
 
@@ -756,7 +756,7 @@ else
                                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                             <MudChip T="string" Color="Color.Default">@context.ReferenceValue.Type.Name</MudChip>
                                             <MudLink Href="@Utilities.GetConnectedSystemObjectHref(context.ReferenceValue)">
-                                                @context.ReferenceValue.DisplayNameOrId
+                                                @context.ReferenceValue.NameOrId
                                             </MudLink>
                                             @if (context.ReferenceValue.SecondaryExternalIdAttributeValue != null)
                                             {
@@ -1000,7 +1000,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
         CsoId: _activityRunProfileExecutionItem?.ConnectedSystemObjectId,
         CsoConnectedSystemId: _connectedSystemHeader?.Id,
         CsoConnectedSystemName: _connectedSystemHeader?.Name,
-        CsoDisplayName: _activityRunProfileExecutionItem?.ConnectedSystemObject?.DisplayNameOrId
+        CsoDisplayName: _activityRunProfileExecutionItem?.ConnectedSystemObject?.NameOrId
                         ?? _activityRunProfileExecutionItem?.DisplayNameSnapshot,
         CsoExternalId: _externalIdAttributeValue?.ToStringNoName()
                        ?? _activityRunProfileExecutionItem?.ExternalIdSnapshot,
@@ -1298,7 +1298,7 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
                     @av.ReferenceValue.Type.Name
                 </MudChip>
                 <MudLink Href="@Utilities.GetMetaverseObjectHref(av.ReferenceValue)">
-                    @(av.ReferenceValue.DisplayName ?? av.ReferenceValue.Id.ToString())
+                    @(av.ReferenceValue.NameOrId ?? av.ReferenceValue.Id.ToString())
                 </MudLink>
             </span>
         }

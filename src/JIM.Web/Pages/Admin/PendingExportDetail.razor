@@ -422,7 +422,7 @@ else
         if (_pendingExport?.ConnectedSystemObject == null)
             return "Unknown";
 
-        return _pendingExport.ConnectedSystemObject.DisplayNameOrId
+        return _pendingExport.ConnectedSystemObject.NameOrId
             ?? _pendingExport.ConnectedSystemObject.Id.ToString();
     }
 
@@ -432,7 +432,7 @@ else
             return _pendingExport?.SourceMetaverseObjectId?.ToString() ?? "Unknown";
 
         // Use the built-in DisplayName property which looks up the displayname attribute
-        return _pendingExport.SourceMetaverseObject.DisplayName
+        return _pendingExport.SourceMetaverseObject.NameOrId
             ?? _pendingExport.SourceMetaverseObject.Id.ToString();
     }
 

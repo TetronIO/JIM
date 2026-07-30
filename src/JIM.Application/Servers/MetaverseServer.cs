@@ -1216,17 +1216,16 @@ public class MetaverseServer
                 changeInitiatorType);
         }
 
-        // Keep the denormalised CachedDisplayName in sync if DisplayName was affected.
-        // Callers apply additions/removals to AttributeValues before calling this method,
+        // Keep the denormalised CachedDisplayName in sync if any naming attribute was affected. It must
+        // track every tier of ObjectNaming.MetaverseNameAttributes, not just Display Name: the Metaverse
+        // list and its ORDER BY read this column without materialising attribute values, so a narrower
+        // gate leaves a Group named only by its Common Name sorting and rendering as though it had no
+        // name at all. Callers apply additions/removals to AttributeValues before calling this method,
         // so re-deriving from the current collection handles SET, UPDATE, and DELETE cases.
-        var displayNameChanged = (additions?.Any(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName) ?? false)
-            || (removals?.Any(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName) ?? false);
-        if (displayNameChanged)
-        {
-            metaverseObject.CachedDisplayName = metaverseObject.AttributeValues
-                .SingleOrDefault(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName)
-                ?.StringValue;
-        }
+        var nameAttributeChanged = (additions?.Any(av => ObjectNaming.IsMetaverseNameAttribute(av.Attribute?.Name)) ?? false)
+            || (removals?.Any(av => ObjectNaming.IsMetaverseNameAttribute(av.Attribute?.Name)) ?? false);
+        if (nameAttributeChanged)
+            metaverseObject.CachedDisplayName = ObjectNaming.MetaverseNameFrom(metaverseObject.AttributeValues);
 
         await Application.Repository.Metaverse.UpdateMetaverseObjectAsync(metaverseObject);
     }
@@ -1325,9 +1324,7 @@ public class MetaverseServer
         }
 
         // Keep the denormalised CachedDisplayName in sync with the canonical attribute value.
-        metaverseObject.CachedDisplayName = metaverseObject.AttributeValues
-            .SingleOrDefault(av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName)
-            ?.StringValue;
+        metaverseObject.CachedDisplayName = ObjectNaming.MetaverseNameFrom(metaverseObject.AttributeValues);
 
         await Application.Repository.Metaverse.CreateMetaverseObjectAsync(metaverseObject);
     }
@@ -1393,15 +1390,9 @@ public class MetaverseServer
             // Capture the MVO ID before deletion — EF Core may clear the Id property after SaveChangesAsync.
             var mvoId = metaverseObject.Id;
 
-            // Resolve display name: prefer the MVO's current DisplayName (computed from AttributeValues),
-            // but if attributes were already recalled (sync processor path), derive it from the snapshot.
-            var displayName = metaverseObject.DisplayName;
-            if (displayName == null && attributesToCapture.Count > 0)
-            {
-                var displayNameAttrValue = attributesToCapture.SingleOrDefault(
-                    av => av.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
-                displayName = displayNameAttrValue?.StringValue;
-            }
+            // Resolve the name: prefer the MVO's own resolution (computed from AttributeValues), but if
+            // attributes were already recalled (sync processor path), derive it from the snapshot.
+            var displayName = metaverseObject.Name ?? ObjectNaming.MetaverseNameFrom(attributesToCapture);
 
             // Create a deletion change record.
             // IMPORTANT: Do NOT set the MetaverseObject navigation property! Setting it causes EF Core

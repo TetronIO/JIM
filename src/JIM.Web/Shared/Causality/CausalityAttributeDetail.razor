@@ -4,10 +4,14 @@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
 
 @* The causality attribute change detail: a toolbar with a search box, count-annotated operation
-   filter chips (All/Set/Add/Remove) and an "n of m" indicator, above the attribute rows (operation
-   badge, name with demoted type and plurality, monospace value with the previous value struck
-   through where applicable). Filtering is pure C# over the supplied rows; the filter state lives in
-   this component and resets whenever it is recreated (e.g. a Timeline expander reopening). *@
+   filter chips (All/Set/Add/Remove) and an "n of m" indicator, above a standard MudTable of
+   attribute rows (operation badge, name with demoted type and plurality, value with the previous
+   value struck through where applicable). Filtering is pure C# over the supplied rows; the filter
+   state lives in this component and resets whenever it is recreated (e.g. a Timeline expander
+   reopening). No <TableDensityToggle> here deliberately: this component can render several
+   instances at once in the Timeline view, and a per-instance toggle (each triggering its own
+   preference load) would repeat visually and functionally; Dense="true" mirrors the "Attribute
+   Changes" table on ActivityRunProfileExecutionItemDetail without the toggle. *@
 
 <div class="attr-toolbar">
     <label class="attr-search">
@@ -28,42 +32,35 @@
     </div>
     <span class="attr-meta-count">@GetFilteredRows().Count of @Rows.Count</span>
 </div>
-<div class="attr-list">
-    @{
-        var filteredRows = GetFilteredRows();
-    }
-    @if (filteredRows.Count == 0)
-    {
-        <div class="attr-empty">No attributes match the current filter.</div>
-    }
-    else
-    {
-        @foreach (var row in filteredRows)
-        {
-            <div class="attr-row">
-                <span class="op @GetOperationClass(row.Operation)">@row.Operation</span>
-                <span class="attr-name">
-                    @row.Name
-                    <span class="meta">@row.TypeAndPlurality</span>
-                </span>
-                <span class="attr-value">
-                    @if (!string.IsNullOrEmpty(row.PreviousValue))
-                    {
-                        <span class="was">@row.PreviousValue</span>
-                    }
-                    @if (string.IsNullOrEmpty(row.Value))
-                    {
-                        <EmptyValue />
-                    }
-                    else
-                    {
-                        @row.Value
-                    }
-                </span>
-            </div>
-        }
-    }
-</div>
+
+<MudTable Items="@GetFilteredRows()" Hover="true" Dense="true" Outlined="true" Elevation="0">
+    <HeaderContent>
+        <MudTh Class="attr-col-shrink"><MudText Typo="Typo.button">Change</MudText></MudTh>
+        <MudTh Class="attr-col-shrink"><MudText Typo="Typo.button">Attribute</MudText></MudTh>
+        <MudTh><MudText Typo="Typo.button">Value</MudText></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Change" Class="attr-col-shrink">
+            <MudChip T="string" Variant="Variant.Text" Color="@GetOperationColor(context.Operation)" Class="ml-0">
+                @context.Operation
+            </MudChip>
+        </MudTd>
+        <MudTd DataLabel="Attribute" Class="attr-col-shrink">
+            @context.Name
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@context.TypeAndPlurality</MudText>
+        </MudTd>
+        <MudTd DataLabel="Value">
+            @if (!string.IsNullOrEmpty(context.PreviousValue))
+            {
+                <span class="mud-text-secondary attr-previous-value">@context.PreviousValue</span>
+            }
+            <TextValueDisplay Value="@context.Value" />
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText Class="pa-4">No attributes match the current filter.</MudText>
+    </NoRecordsContent>
+</MudTable>
 
 @code {
     /// <summary>
@@ -101,13 +98,17 @@
         return rows.ToList();
     }
 
-    private static string GetOperationClass(CausalityAttributeOperation operation)
+    /// <summary>
+    /// Chip colour per operation: Set is neutral (Info), Add and Remove are visually distinct
+    /// (Success/Error) to preserve the semantics the previous bespoke CSS conveyed.
+    /// </summary>
+    private static Color GetOperationColor(CausalityAttributeOperation operation)
     {
         return operation switch
         {
-            CausalityAttributeOperation.Add => "add",
-            CausalityAttributeOperation.Remove => "remove",
-            _ => "set"
+            CausalityAttributeOperation.Add => Color.Success,
+            CausalityAttributeOperation.Remove => Color.Error,
+            _ => Color.Info
         };
     }
 }

@@ -1045,7 +1045,7 @@ public class ConnectedSystemServer
     public async Task<ConnectedSystemDeletionResult> DeleteAsync(int connectedSystemId, MetaverseObject? initiatedBy, bool deleteChangeHistory = false, string? changeReason = null)
     {
         Log.Information("DeleteAsync: Starting deletion for Connected System {Id}, initiated by {User}, deleteChangeHistory={DeleteHistory}",
-            connectedSystemId, initiatedBy?.DisplayName ?? "System", deleteChangeHistory);
+            connectedSystemId, initiatedBy?.NameOrId ?? "System", deleteChangeHistory);
 
         // Get the Connected System (Core: only Name and Status are read, and Status is updated via the entity).
         var connectedSystem = await Application.Repository.ConnectedSystems.GetConnectedSystemCoreAsync(connectedSystemId);
@@ -1076,7 +1076,7 @@ public class ConnectedSystemServer
                 runningSyncTask.Id, connectedSystemId);
 
             var deleteTask = initiatedBy != null
-                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.DisplayName ?? "Unknown", evaluateMvoDeletionRules: true, deleteChangeHistory)
+                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, evaluateMvoDeletionRules: true, deleteChangeHistory)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
@@ -1094,7 +1094,7 @@ public class ConnectedSystemServer
                 connectedSystemId, csoCount, BackgroundDeletionThreshold);
 
             var deleteTask = initiatedBy != null
-                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.DisplayName ?? "Unknown", evaluateMvoDeletionRules: true, deleteChangeHistory)
+                ? DeleteConnectedSystemWorkerTask.ForUser(connectedSystemId, initiatedBy.Id, initiatedBy.NameOrId, evaluateMvoDeletionRules: true, deleteChangeHistory)
                 : new DeleteConnectedSystemWorkerTask(connectedSystemId, evaluateMvoDeletionRules: true, deleteChangeHistory);
             deleteTask.ChangeReason = changeReason;
             _ = await Application.Tasking.CreateWorkerTaskAsync(deleteTask);
@@ -2805,10 +2805,9 @@ public class ConnectedSystemServer
         // We cannot reference attribute values after deletion because they get cascade deleted with the CSO.
         // Use ToStringNoName() to get just the value without "attributeName: " prefix.
         var externalIdDisplayValue = connectedSystemObject.ExternalIdAttributeValue?.ToStringNoName();
-        // Get the displayName attribute value directly (don't use DisplayNameOrId which falls back to External ID)
-        var displayNameAttr = connectedSystemObject.AttributeValues
-            .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true);
-        var displayName = displayNameAttr?.StringValue;
+        // Name only, never NameOrId: the external id is captured separately just above, and letting it
+        // stand in for the name would persist the same value into both snapshot fields.
+        var displayName = connectedSystemObject.Name;
 
         // Snapshot all attribute values BEFORE deletion for change tracking.
         // Attribute values are cascade-deleted with the CSO, so we must capture them now.
@@ -2888,13 +2887,11 @@ public class ConnectedSystemServer
         // Capture external ID, display name, and all attribute values before deletion.
         // We cannot reference attribute values after deletion because they get cascade deleted with the CSO.
         // Use ToStringNoName() to get just the value without "attributeName: " prefix.
-        // Get displayName attribute directly (don't use DisplayNameOrId which falls back to External ID).
+        // Name only, never NameOrId: the external id is captured separately alongside it.
         var deletedObjectInfo = connectedSystemObjects
             .Select(cso => (
                 ExternalId: cso.ExternalIdAttributeValue?.ToStringNoName(),
-                DisplayName: cso.AttributeValues
-                    .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true)
-                    ?.StringValue,
+                DisplayName: cso.Name,
                 FinalAttributeValues: cso.AttributeValues
                     .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
                     .ToList()))
@@ -3585,12 +3582,11 @@ public class ConnectedSystemServer
         if (connectedSystemObjects.Count != rpeis.Count)
             throw new ArgumentException("CSO count must match execution item count");
 
+        // Name only, never NameOrId: the external id is captured separately alongside it.
         var deletedObjectInfo = connectedSystemObjects
             .Select(cso => (
                 ExternalId: cso.ExternalIdAttributeValue?.ToStringNoName(),
-                DisplayName: cso.AttributeValues
-                    .SingleOrDefault(q => q.Attribute?.Name.Equals("displayname", StringComparison.InvariantCultureIgnoreCase) == true)
-                    ?.StringValue,
+                DisplayName: cso.Name,
                 FinalAttributeValues: cso.AttributeValues
                     .Where(av => av.Attribute != null && av.Attribute.Type != AttributeDataType.NotSet)
                     .ToList()))

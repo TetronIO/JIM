@@ -266,7 +266,7 @@ public class ExampleDataController(ILogger<ExampleDataController> logger, JimApp
         ExampleDataTemplateWorkerTask workerTask;
         if (initiatedBy != null)
         {
-            workerTask = ExampleDataTemplateWorkerTask.ForUser(id, initiatedBy.Id, initiatedBy.DisplayName ?? "Unknown User");
+            workerTask = ExampleDataTemplateWorkerTask.ForUser(id, initiatedBy.Id, initiatedBy.NameOrId);
         }
         else
         {

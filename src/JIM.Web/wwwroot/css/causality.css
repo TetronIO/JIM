@@ -928,88 +928,21 @@
     color: var(--cz-text-faint);
 }
 
-.causality-panel .attr-list {
-    border: 1px solid var(--cz-line-soft);
-    border-radius: 10px;
-    overflow: hidden;
-}
-
-.causality-panel .attr-row {
-    display: grid;
-    grid-template-columns: 64px minmax(150px, 0.65fr) 1.35fr;
-    gap: 14px;
-    align-items: center;
-    padding: 8px 14px;
-    border-top: 1px solid var(--cz-line-soft);
-    font-size: 13px;
-}
-
-.causality-panel .attr-row:first-child {
-    border-top: none;
-}
-
-.causality-panel .attr-row:nth-child(odd) {
-    background: var(--cz-line-soft);
-}
-
-.causality-panel .op {
-    font-size: 10.5px;
-    font-weight: 700;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    text-align: center;
-    padding: 2.5px 0;
-    border-radius: 5px;
-    width: 52px;
-}
-
-.causality-panel .op.set {
-    color: var(--cz-info);
-    background: var(--cz-info-soft);
-}
-
-.causality-panel .op.add {
-    color: var(--cz-success);
-    background: var(--cz-success-soft);
-}
-
-.causality-panel .op.remove {
-    color: var(--cz-error);
-    background: var(--cz-error-soft);
-}
-
-.causality-panel .attr-name {
-    font-weight: 600;
-    min-width: 0;
-}
-
-.causality-panel .attr-name .meta {
-    display: block;
-    font-size: 11px;
-    font-weight: 450;
-    color: var(--cz-text-faint);
-    margin-top: 1px;
-}
-
-.causality-panel .attr-value {
-    font-family: var(--cz-mono);
-    font-size: 12.3px;
-    color: var(--cz-text);
-    word-break: break-all;
-    min-width: 0;
-}
-
-.causality-panel .attr-value .was {
-    color: var(--cz-text-faint);
+/* The attribute rows themselves are a standard MudTable (see CausalityAttributeDetail), so they need
+   no bespoke row, cell or operation-badge styling; only the superseded-value affordance has no
+   MudBlazor equivalent. */
+.causality-panel .attr-previous-value {
     text-decoration: line-through;
     margin-right: 8px;
 }
 
-.causality-panel .attr-empty {
-    padding: 18px;
-    text-align: center;
-    color: var(--cz-text-faint);
-    font-size: 13px;
+/* The Change and Attribute columns size to their content (width: 1% is the shrink-to-fit idiom for
+   table cells), leaving the remaining width to Value, which carries the long strings (DNs, addresses).
+   Both the header and the body cell need the rule: applying it to the header alone leaves the body
+   cell free to wrap, which is what squeezed "Reference · Multi-valued" onto three lines. */
+.causality-panel .attr-col-shrink {
+    width: 1%;
+    white-space: nowrap;
 }
 
 /* ─── Attribute detail drawer (Flow view) ─── */
@@ -1075,14 +1008,6 @@
         display: none;
     }
 
-    .causality-panel .attr-row {
-        grid-template-columns: 56px 1fr;
-    }
-
-    .causality-panel .attr-row .attr-value {
-        grid-column: 1 / -1;
-        padding-left: 2px;
-    }
 }
 
 /* ─── Reduced motion ─── */

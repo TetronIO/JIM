@@ -110,21 +110,33 @@ public class MetaverseObject
     /// </summary>
     public string? CachedDisplayName { get; set; }
 
+    /// <summary>
+    /// The object's name: the first present value from <see cref="ObjectNaming.MetaverseNameAttributes"/>,
+    /// falling back to <see cref="CachedDisplayName"/> when attribute values are not loaded (the
+    /// Metaverse list projects the cache without materialising them). Null when nothing resolves.
+    /// <para>
+    /// Use this when persisting a name alongside a separately persisted identifier, or feeding a
+    /// nullable API field. For anything a person reads on screen use <see cref="NameOrId"/>.
+    /// </para>
+    /// </summary>
     [NotMapped]
-    public string? DisplayName
+    public string? Name
     {
         get
         {
             if (AttributeValues.Count == 0)
                 return CachedDisplayName;
 
-            var av = AttributeValues.SingleOrDefault(q => q.Attribute?.Name == Constants.BuiltInAttributes.DisplayName);
-            if (av != null && !string.IsNullOrEmpty(av.StringValue))
-                return av.StringValue;
-
-            return CachedDisplayName;
+            return ObjectNaming.MetaverseNameFrom(AttributeValues) ?? CachedDisplayName;
         }
     }
+
+    /// <summary>
+    /// The best human-readable label for this object: its <see cref="Name"/>, else its id. Prefer this
+    /// for display; prefer <see cref="Name"/> when the identifier is already surfaced separately.
+    /// </summary>
+    [NotMapped]
+    public string NameOrId => ObjectNaming.FirstPresent(Name) ?? Id.ToString();
 
     /// <summary>
     /// Indicates if this MVO is pending deletion (has disconnection date and awaiting grace period expiry).
@@ -159,7 +171,7 @@ public class MetaverseObject
 
     public override string ToString()
     {
-        return $"{DisplayName} ({Id})";
+        return $"{Name} ({Id})";
     }
     #endregion
 }

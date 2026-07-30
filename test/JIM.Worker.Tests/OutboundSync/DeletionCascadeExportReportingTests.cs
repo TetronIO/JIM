@@ -380,16 +380,16 @@ public class DeletionCascadeExportReportingTests
             {
                 Id = Guid.NewGuid(),
                 ObjectChangeType = ObjectChangeType.Disconnected,
-                DisplayNameSnapshot = mvo.DisplayName
+                DisplayNameSnapshot = mvo.Name
             };
             var disconnectedOutcome = SyncOutcomeBuilder.AddRootOutcome(rpei,
                 ActivityRunProfileExecutionItemSyncOutcomeType.Disconnected,
                 targetEntityId: mvo.Id,
-                targetEntityDescription: mvo.DisplayName);
+                targetEntityDescription: mvo.NameOrId);
             var mvoDeletedOutcome = SyncOutcomeBuilder.AddChildOutcome(rpei, disconnectedOutcome,
                 ActivityRunProfileExecutionItemSyncOutcomeType.MvoDeleted,
                 targetEntityId: mvo.Id,
-                targetEntityDescription: mvo.DisplayName);
+                targetEntityDescription: mvo.NameOrId);
             _activity.RunProfileExecutionItems.Add(rpei);
             return (rpei, mvoDeletedOutcome);
         }
