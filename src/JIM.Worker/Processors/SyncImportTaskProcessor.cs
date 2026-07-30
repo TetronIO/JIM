@@ -251,6 +251,14 @@ public class SyncImportTaskProcessor
                     var paginationTokens = new List<ConnectedSystemPaginationToken>();
                     var pageNumber = 0;
 
+                    // A page can spend minutes inside a single connector call (root DSE query, container
+                    // enumeration, paged fetch), during which our own page message cannot move. Give the
+                    // connector a way to narrate what it is doing, straight onto the Activity message
+                    // (issue #637). Emits are serialised because a connector may fan out internally, and
+                    // a failure to narrate must never fail the import.
+                    using var connectorProgress = new ConnectorSubPhaseProgress(
+                        async subPhase => await _syncRepo.UpdateActivityMessageAsync(_activity, subPhase));
+
                     // Keep track of the original persisted data at the START of the import.
                     // This is critical for delta imports where subsequent pages must use the SAME
                     // watermark (USN) as the first page to query for changes.
@@ -282,7 +290,7 @@ public class SyncImportTaskProcessor
                             .SetTag("cumulativeObjectCount", totalObjectsImported)
                             .SetTag("wallClockOffsetMs", importPhaseSw.Elapsed.TotalMilliseconds))
                         {
-                            result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token);
+                            result = await callBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, paginationTokens, originalPersistedData, Log.Logger, _cancellationTokenSource.Token, connectorProgress.Callback);
                         }
                         pageNumber++;
                         totalObjectsImported += result.ImportObjects.Count;
@@ -376,9 +384,15 @@ public class SyncImportTaskProcessor
                 // file based connectors return all the results from the Connected System in one go. no paging.
                 await _syncRepo.UpdateActivityMessageAsync(_activity, "Importing objects from file");
                 ConnectedSystemImportResult result;
+
+                // The whole file is read inside this one call, so the connector's own narration is the
+                // only progress an operator sees until it returns (issue #637).
+                using var connectorProgress = new ConnectorSubPhaseProgress(
+                    async subPhase => await _syncRepo.UpdateActivityMessageAsync(_activity, subPhase));
+
                 using (Diagnostics.Connector.StartSpan("ReadFile"))
                 {
-                    result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token);
+                    result = await fileBasedImportConnector.ImportAsync(_connectedSystem, _connectedSystemRunProfile, Log.Logger, _cancellationTokenSource.Token, connectorProgress.Callback);
                 }
                 totalObjectsImported = result.ImportObjects.Count;
                 connectorSpan.SetTag("objectCount", totalObjectsImported);

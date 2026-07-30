@@ -455,7 +455,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         };
     }
 
-    public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, List<ConnectedSystemPaginationToken> paginationTokens, string? persistedConnectorData, ILogger logger, CancellationToken cancellationToken)
+    public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, List<ConnectedSystemPaginationToken> paginationTokens, string? persistedConnectorData, ILogger logger, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null)
     {
         logger.Verbose("ImportAsync() called");
 
@@ -471,16 +471,16 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             .SingleOrDefault(s => s.Setting.Name == _settingImportConcurrency)?.IntValue
             ?? LdapConnectorConstants.DEFAULT_IMPORT_CONCURRENCY;
 
-        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, _connectionFactory, importConcurrency, paginationTokens, persistedConnectorData, logger, cancellationToken);
+        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, _connectionFactory, importConcurrency, paginationTokens, persistedConnectorData, logger, cancellationToken, progressCallback);
 
         switch (runProfile.RunType)
         {
             case ConnectedSystemRunType.FullImport:
                 logger.Debug("ImportAsync: Full Import requested");
-                return Task.FromResult(import.GetFullImportObjects());
+                return import.GetFullImportObjectsAsync();
             case ConnectedSystemRunType.DeltaImport:
                 logger.Debug("ImportAsync: Delta Import requested");
-                return Task.FromResult(import.GetDeltaImportObjects());
+                return import.GetDeltaImportObjectsAsync();
             case ConnectedSystemRunType.FullSynchronisation:
             case ConnectedSystemRunType.DeltaSynchronisation:
             case ConnectedSystemRunType.Export:
@@ -518,7 +518,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         }
     }
 
-    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken)
+    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null)
     {
         if (_connection == null)
             throw new InvalidOperationException("Must call OpenExportConnection() before ExportAsync()!");
@@ -538,6 +538,11 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             .FirstOrDefault(s => s.Setting.Name == _settingGroupPlaceholderMemberDn)?.StringValue
             ?? LdapConnectorConstants.DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN;
 
+        // progressCallback is deliberately not used: LDAP export iterates per item, and JIM already
+        // reports accurate per-batch counts around this call. The connector's only internal phase
+        // (parent container creation) happens per object rather than as a pre-flight step, so emitting
+        // from it would replace a moving "N of M" with a message that says less. See
+        // engineering/notes/CONNECTOR_SUB_PHASE_PROGRESS.md.
         var executor = new LdapOperationExecutor(_connection);
         _currentExport = new LdapConnectorExport(executor, _exportSettings, Log.Logger, concurrency, modifyBatchSize, _directoryType, placeholderMemberDn);
         return _currentExport.ExecuteAsync(pendingExports, cancellationToken);

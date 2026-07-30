@@ -45,6 +45,13 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public bool SimulateRawSqlPersistence { get; set; }
 
+    /// <summary>
+    /// When set, <see cref="UpdateActivityMessageAsync"/> throws for exactly this message. Lets tests
+    /// prove that a failure to narrate progress (a database blip on a cosmetic write) does not fail the
+    /// synchronisation operation itself.
+    /// </summary>
+    public string? FailActivityMessageUpdateFor { get; set; }
+
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
@@ -1455,6 +1462,9 @@ public class SyncRepository : ISyncRepository
 
     public Task UpdateActivityMessageAsync(Activity activity, string message)
     {
+        if (FailActivityMessageUpdateFor != null && FailActivityMessageUpdateFor == message)
+            throw new InvalidOperationException($"Simulated failure updating the Activity message to '{message}'.");
+
         activity.Message = message;
         _activities[activity.Id] = activity;
         return Task.CompletedTask;
