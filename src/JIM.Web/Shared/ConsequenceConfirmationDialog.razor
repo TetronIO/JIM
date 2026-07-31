@@ -32,7 +32,7 @@
                                 <MudList T="string" Dense="true" Class="mt-1">
                                     @foreach (var item in blocker.Items)
                                     {
-                                        <MudListItem T="string" Icon="@item.Icon" Href="@item.Href">@item.Text</MudListItem>
+                                        <MudListItem T="string" Icon="@item.Icon" Href="@item.Href" Gutters="false">@item.Text</MudListItem>
                                     }
                                 </MudList>
                             }
@@ -99,7 +99,7 @@
                                 <MudList T="string" Dense="true" Class="mt-1">
                                     @foreach (var item in consequences.Items)
                                     {
-                                        <MudListItem T="string" Icon="@item.Icon" Href="@item.Href">@item.Text</MudListItem>
+                                        <MudListItem T="string" Icon="@item.Icon" Href="@item.Href" Gutters="false">@item.Text</MudListItem>
                                     }
                                 </MudList>
                             }
@@ -112,7 +112,7 @@
                             <MudList T="string" Dense="true">
                                 @foreach (var warning in Warnings)
                                 {
-                                    <MudListItem T="string" Icon="@Icons.Material.Filled.Warning">@warning</MudListItem>
+                                    <MudListItem T="string" Icon="@Icons.Material.Filled.Warning" Gutters="false">@warning</MudListItem>
                                 }
                             </MudList>
                         </MudAlert>
