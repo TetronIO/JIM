@@ -293,6 +293,17 @@ public class ConfigurationChangeClassificationCompletenessTests
         {
             Id = 20, Name = "sAMAccountName", IsExternalId = true, IsSecondaryExternalId = false
         });
+        // Simple Mode Object Matching Rules hang off the object type, and are the only place several matching keys
+        // appear; without one the snapshot never emits them and the guard silently covers less than it claims.
+        var simpleModeMatchingRule = new ObjectMatchingRule
+        {
+            Id = 25, Order = 0, CaseSensitive = true, MetaverseObjectTypeId = 1, TargetMetaverseAttributeId = 13
+        };
+        simpleModeMatchingRule.Sources.Add(new ObjectMatchingRuleSource
+        {
+            Id = 26, Order = 0, ConnectedSystemAttributeId = 14, Expression = "x"
+        });
+        objectType.ObjectMatchingRules.Add(simpleModeMatchingRule);
 
         var partition = new ConnectedSystemPartition
         {
@@ -308,6 +319,20 @@ public class ConfigurationChangeClassificationCompletenessTests
             ConnectorDefinitionId = 1,
             MaxExportParallelism = 4
         };
+        // Setting values, plain and encrypted. Their absence here is what let the connector-named-key gap through:
+        // every Connected System settings save failed to classify and was recorded unclassified.
+        system.SettingValues.Add(new ConnectedSystemSettingValue
+        {
+            Id = 60,
+            Setting = new ConnectorDefinitionSetting { Id = 60, Name = "File Path", Type = ConnectedSystemSettingType.String },
+            StringValue = "/mnt/import/hr.csv"
+        });
+        system.SettingValues.Add(new ConnectedSystemSettingValue
+        {
+            Id = 61,
+            Setting = new ConnectorDefinitionSetting { Id = 61, Name = "Password", Type = ConnectedSystemSettingType.StringEncrypted },
+            StringEncryptedValue = "ciphertext"
+        });
         system.ObjectTypes!.Add(objectType);
         system.Partitions = [partition];
         system.RunProfiles!.Add(new ConnectedSystemRunProfile
@@ -325,7 +350,9 @@ public class ConfigurationChangeClassificationCompletenessTests
             Name = "User",
             PluralName = "Users",
             BuiltIn = false,
-            DeletionGracePeriod = TimeSpan.FromDays(7)
+            DeletionGracePeriod = TimeSpan.FromDays(7),
+            // An empty trigger list emits no items, so the per-entry key never appeared and went unclassified.
+            DeletionTriggerConnectedSystemIds = [3]
         };
         type.Attributes.Add(new MetaverseAttribute { Id = 2, Name = "displayName" });
         return type;

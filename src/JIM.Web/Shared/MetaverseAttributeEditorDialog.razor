@@ -442,11 +442,22 @@
 
     private async Task SubmitAsync()
     {
+        using var jim = JimFactory.Create();
+
+        if (_isEdit)
+        {
+            // ask the administrator to acknowledge anything sync-affecting first (a type or plurality change reshapes
+            // every Attribute Flow targeting this attribute); a rename or a Standard Mapping edit shows nothing.
+            var preflight = await jim.ConfigurationChangePreflight.EvaluateMetaverseAttributeAsync(BuildProposedAttribute());
+            if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
+                    "Metaverse Attribute", _name.Trim()))
+                return;
+        }
+
         var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, _isEdit ? "Save" : "Create");
         if (cancelled)
             return;
 
-        using var jim = JimFactory.Create();
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         var trimmedName = _name.Trim();
 
@@ -486,6 +497,26 @@
 
         MudDialog.Close(DialogResult.Ok(true));
     }
+
+    /// <summary>
+    /// The attribute as this dialog is about to leave it, for the preflight to compare against its last captured
+    /// snapshot. <see cref="ApplyEditAsync"/> gets there through several separate calls (schema, rename, rendering
+    /// hint, Standard Mappings) rather than one entity save, so the proposed state has to be assembled here; the two
+    /// must stay in step, and every field either one touches is set below.
+    /// </summary>
+    private MetaverseAttribute BuildProposedAttribute() => new()
+    {
+        Id = Attribute!.Id,
+        Name = _name.Trim(),
+        Type = _type,
+        AttributePlurality = _plurality,
+        BuiltIn = Attribute.BuiltIn,
+        // Matches ApplyEditAsync, which only writes the rendering hint for a multi-valued attribute.
+        RenderingHint = _plurality == AttributePlurality.MultiValued ? _renderingHint : Attribute.RenderingHint,
+        // Object Type associations are not editable once an attribute exists, so they carry over untouched.
+        MetaverseObjectTypes = Attribute.MetaverseObjectTypes,
+        StandardMappings = _mappings
+    };
 
     private async Task ApplyEditAsync(JimApplication jim, MetaverseObject user, string? changeReason)
     {

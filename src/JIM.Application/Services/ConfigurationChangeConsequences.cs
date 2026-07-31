@@ -77,6 +77,15 @@ public static class ConfigurationChangeConsequences
                 "This changes which Connected System disconnections trigger deletion. Metaverse Objects already " +
                 "disconnected from a newly added trigger system become eligible for deletion immediately.",
 
+            // One entry within that list. An addition has no old value; a removal has no new one.
+            (ConfigurationSnapshotService.MetaverseObjectTypeObjectType, "connectedSystemId") =>
+                string.IsNullOrEmpty(oldValue)
+                    ? "Adding this Connected System as a deletion trigger takes effect immediately: Metaverse Objects " +
+                      "of this type already disconnected from it become eligible for deletion without any further " +
+                      "change being made to them."
+                    : "Removing this Connected System as a deletion trigger stops disconnections from it making " +
+                      "Metaverse Objects of this type eligible for deletion.",
+
             _ => null
         };
     }

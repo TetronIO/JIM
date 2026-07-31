@@ -321,21 +321,13 @@ The same filters are available to automation: see `Get-JIMSyncRule`'s `-Directio
 
 ## Confirming a change before you save it
 
-Saving a Synchronisation Rule can be harmless or far-reaching, and the two sit side by side on the same page: renaming a rule is beside the Deprovisioning Action that decides whether leavers' accounts are deleted. So JIM judges each save by the properties that actually changed, and reacts only where it matters:
+Saving a Synchronisation Rule can be harmless or far-reaching, and the two sit side by side on the same page: renaming a rule is beside the Deprovisioning Action that decides whether leavers' accounts are deleted. JIM judges each save by the properties that actually changed:
 
 - **Cosmetic changes** (name, description) save straight away with no prompt.
 - **Changes that affect synchronisation** (scope, mappings, Object Matching Rules, direction, enabling or disabling the rule) show a confirmation listing exactly what is changing, from which value to which, and remind you that a Full Synchronisation is what puts it into effect.
 - **Destructive changes** (Deprovisioning Action, Inbound Out-of-Scope Action) additionally state, in plain terms, what the change will do: which objects will be deleted rather than disconnected, or disconnected rather than left joined.
 
-Cancelling the confirmation abandons the save; nothing is written.
-
-!!! note "Saving is not applying"
-
-    A saved configuration change does not reach existing objects until synchronisation runs again. The Connected System pages show a [changed-since indicator](connected-systems.md#configuration-changes-pending-a-full-synchronisation) so you can see at a glance which systems have configuration waiting for a Full Synchronisation.
-
-The confirmation appears only when JIM can tell what changed, which means [configuration change tracking](service-settings.md) must be switched on. With tracking off, JIM has no recorded baseline to compare against and stays silent rather than guessing.
-
-Changes made through the REST API and PowerShell are not prompted. An automated call names the property it is setting, so consent is already explicit; the change is classified and recorded in the configuration change history exactly as a portal change is.
+The same rules apply across every configuration surface; see [Configuration changes](configuration-changes.md) for the full picture, including when JIM stays silent.
 
 ## Manage Synchronisation Rules
 
@@ -345,6 +337,7 @@ Changes made through the REST API and PowerShell are not prompted. An automated 
 
 ## See also
 
+- [Configuration changes](configuration-changes.md) -- how JIM classifies and confirms configuration changes
 - [Connected Systems](connected-systems.md) -- the systems a Synchronisation Rule connects to
 - [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md) -- where Synchronisation Rules fit in the import/sync/export flow
 - [Concepts: Attribute Priority](../concepts/attribute-priority.md) -- how JIM resolves which source wins when several rules feed the same attribute, and the "Null is a value" setting

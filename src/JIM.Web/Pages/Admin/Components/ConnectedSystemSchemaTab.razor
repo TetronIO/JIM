@@ -871,6 +871,14 @@
     {
         // attribute the update to the user
         using var jim = JimFactory.Create();
+
+        // deselecting an Object Type obsoletes every Connected System Object imported from it, and deprovisions
+        // whatever they are joined to. Until now that saved silently; ask the administrator to acknowledge it first.
+        var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
+        if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
+                "Connected System", ConnectedSystem.Name))
+            return;
+
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         await jim.ConnectedSystems.UpdateConnectedSystemSchemaAsync(ConnectedSystem, user);
         Snackbar.Add("Your attribute changes have been saved.", Severity.Success);

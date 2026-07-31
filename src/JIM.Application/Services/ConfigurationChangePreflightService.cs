@@ -3,7 +3,9 @@
 
 using JIM.Models.Activities;
 using JIM.Models.Activities.DTOs;
+using JIM.Models.Core;
 using JIM.Models.Logic;
+using JIM.Models.Staging;
 
 namespace JIM.Application.Services;
 
@@ -45,23 +47,106 @@ public class ConfigurationChangePreflightService
         if (proposed.Id == 0)
             return ConfigurationChangePreflight.None;
 
-        var baselineJson = await GetBaselineAsync(() =>
-            Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SynchronisationRule, proposed.Id));
+        return await EvaluateAsync(
+            () => Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.SynchronisationRule, proposed.Id),
+            hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey));
+    }
+
+    /// <summary>
+    /// Evaluates an unsaved Connected System against its last captured state. One entry point serves the details,
+    /// settings, schema and partitions tabs, because all four edit and save the same entity; the snapshot covers every
+    /// property any of them can reach, so each save path asks the same question and gets a consistent answer.
+    /// </summary>
+    /// <param name="proposed">The Connected System as edited but not yet saved.</param>
+    public async Task<ConfigurationChangePreflight> EvaluateConnectedSystemAsync(ConnectedSystem proposed)
+    {
+        ArgumentNullException.ThrowIfNull(proposed);
+
+        if (proposed.Id == 0)
+            return ConfigurationChangePreflight.None;
+
+        return await EvaluateAsync(
+            () => Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.ConnectedSystem, proposed.Id),
+            hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey));
+    }
+
+    /// <summary>
+    /// Evaluates an unsaved Metaverse Object Type against its last captured state. This is the one surface whose
+    /// destructive properties (the deletion rule, its grace period and its trigger systems) take effect without a
+    /// synchronisation run in between, which is why the consequence copy for them says so explicitly.
+    /// </summary>
+    /// <param name="proposed">The object type as edited but not yet saved.</param>
+    public async Task<ConfigurationChangePreflight> EvaluateMetaverseObjectTypeAsync(MetaverseObjectType proposed)
+    {
+        ArgumentNullException.ThrowIfNull(proposed);
+
+        if (proposed.Id == 0)
+            return ConfigurationChangePreflight.None;
+
+        return await EvaluateAsync(
+            () => Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.MetaverseObjectType, proposed.Id),
+            hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey));
+    }
+
+    /// <summary>
+    /// Evaluates an unsaved Metaverse Attribute against its last captured state.
+    /// </summary>
+    /// <param name="proposed">The attribute as edited but not yet saved. The editor applies its changes through
+    /// several separate calls (schema, rename, rendering hint, Standard Mappings), each of which captures its own
+    /// change version; the administrator performed one save, so they are asked to acknowledge it once, over the union
+    /// of what they changed.</param>
+    public async Task<ConfigurationChangePreflight> EvaluateMetaverseAttributeAsync(MetaverseAttribute proposed)
+    {
+        ArgumentNullException.ThrowIfNull(proposed);
+
+        if (proposed.Id == 0)
+            return ConfigurationChangePreflight.None;
+
+        return await EvaluateAsync(
+            () => Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.MetaverseAttribute, proposed.Id),
+            hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey));
+    }
+
+    /// <summary>
+    /// Evaluates an unsaved Service Setting against its last captured state. Service Settings are string-keyed rather
+    /// than id-keyed, so the baseline is looked up by <see cref="ServiceSetting.Key"/>.
+    /// </summary>
+    /// <param name="proposed">The setting carrying the value about to be stored: for an edit, the new value; for a
+    /// revert, a null value (the setting's own definition of "use the default"). Encrypted settings are captured as a
+    /// keyed hash and are classified Cosmetic to a one, so passing a plaintext value here cannot change the
+    /// answer.</param>
+    public async Task<ConfigurationChangePreflight> EvaluateServiceSettingAsync(ServiceSetting proposed)
+    {
+        ArgumentNullException.ThrowIfNull(proposed);
+        ArgumentException.ThrowIfNullOrEmpty(proposed.Key);
+
+        return await EvaluateAsync(
+            () => Application.Activities.GetLatestConfigurationChangeSnapshotAsync(ActivityTargetType.ServiceSetting, proposed.Key),
+            hashKey => Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey));
+    }
+
+    /// <summary>
+    /// The shared body of every entry point: fetch the baseline, build the proposed snapshot, compare. Kept in one
+    /// place so a surface cannot acquire its own subtly different notion of what "changed" means.
+    /// </summary>
+    private async Task<ConfigurationChangePreflight> EvaluateAsync(
+        Func<Task<string?>> getBaselineSnapshotAsync,
+        Func<byte[], ConfigurationSnapshot> buildProposedSnapshot)
+    {
+        // Only consults the store when change tracking is on. With tracking off no new baselines are written, so
+        // whatever is stored has gone stale: diffing against it would present changes made days ago as though they
+        // were part of this save. "Unknown" is the honest answer, and it is the same answer the changed-since
+        // indicator gives.
+        if (!await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync())
+            return ConfigurationChangePreflight.Unknown;
+
+        var baselineJson = await getBaselineSnapshotAsync();
         if (baselineJson == null)
             return ConfigurationChangePreflight.Unknown;
 
         var hashKey = await Application.ServiceSettings.GetOrCreateConfigurationChangeHashKeyAsync();
-        return Evaluate(ConfigurationSnapshotService.Deserialise(baselineJson),
-            Application.ConfigurationSnapshots.CreateSnapshot(proposed, hashKey));
+        return Evaluate(ConfigurationSnapshotService.Deserialise(baselineJson), buildProposedSnapshot(hashKey));
     }
-
-    // Only consults the store when change tracking is on. With tracking off no new baselines are written, so whatever
-    // is stored has gone stale: diffing against it would present changes made days ago as though they were part of
-    // this save. "Unknown" is the honest answer, and it is the same answer the changed-since indicator gives.
-    private async Task<string?> GetBaselineAsync(Func<Task<string?>> getSnapshotAsync) =>
-        await Application.ServiceSettings.GetConfigurationChangeTrackingEnabledAsync()
-            ? await getSnapshotAsync()
-            : null;
 
     /// <summary>
     /// The shared comparison, kept separate from the per-surface entry points so every surface produces an identically
@@ -112,9 +197,28 @@ public class ConfigurationChangePreflightService
 
         // An object or collection node contributes its own label to the path of everything beneath it. Descent is
         // unconditional: a container is only as changed as its leaves, and it is the leaves that get classified.
-        var childAncestors = new List<string>(ancestorLabels) { node.Label ?? node.Key };
+        var childAncestors = new List<string>(ancestorLabels) { DescribeNode(node) };
         foreach (var child in node.Children ?? [])
             CollectItems(child, childAncestors, objectType, objectKey, items);
+    }
+
+    /// <summary>
+    /// The label to use for an object or collection node within a property's path. Collection items are labelled by
+    /// their kind ("Object Type", "Partition", "Run Profile"), which identifies nothing once the tree is flattened
+    /// into a list: "Object Types &gt; Object Type &gt; Selected" is the same sentence for all twelve of them. Where the
+    /// node carries a name, the name replaces the kind, which the parent collection's own label already supplies.
+    /// </summary>
+    private static string DescribeNode(ConfigurationDiffNode node)
+    {
+        var label = node.Label ?? node.Key;
+        if (node.NodeType != ConfigurationSnapshotNodeType.Object)
+            return label;
+
+        // The new name where there is one, else the old: a rename in the same save should still identify the item by
+        // what the administrator is looking at, and a removed item only has an old name.
+        var nameNode = node.Children?.FirstOrDefault(c => c.Key == "name" && c.NodeType == ConfigurationSnapshotNodeType.Scalar);
+        var name = nameNode?.NewValue ?? nameNode?.OldValue;
+        return string.IsNullOrEmpty(name) ? label : name;
     }
 
     private static ConfigurationChangePreflightItem BuildItem(ConfigurationDiffNode node,

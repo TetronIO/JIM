@@ -157,7 +157,24 @@ Every scoping key is Class B: scoping determines which objects the rule applies 
 | `unresolvedReferenceHandling` | B | Changes what happens to references that cannot be resolved. |
 | `objectMatchingRules` | B | Matching rules held on the system change which objects join. |
 | `settingValues` | B | Connector settings drive what the connector reads and writes. |
+| `settingValue` | B | One individual setting value, whatever the connector calls it (see the note below). |
 | `maxExportParallelism` | C | Throughput only; explicitly excluded from preview scope by #827. |
+
+> **One key for every setting value.** A Connected System's setting values are all recorded under the single node key `settingValue` (`ConfigurationSnapshotService.SettingValueNodeKey`), with the connector's own setting name carried as the node's *label* and the setting id as its ItemId. They were previously keyed by that setting name, which put an open, connector-author-controlled key space in front of a classifier that has no default class: every Connected System settings change failed to classify and was recorded unclassified. A node key is a stable machine key, and a display name supplied by a third party is neither stable nor enumerable.
+
+### Simple Mode Object Matching Rules (`objectMatchingRules`, `sources`)
+
+Simple Mode matching rules attach to a Connected System Object Type rather than to a Synchronisation Rule, so they appear in the Connected System's snapshot under the same keys the Advanced Mode rules use on the Synchronisation Rule, and carry the same classes.
+
+| Key | Class | Reason |
+|---|---|---|
+| `objectMatchingRule`, `order` | B | Rule identity and evaluation order change which rule decides a join. |
+| `caseSensitive` | B | Changes whether two values are considered the same, so which objects match. |
+| `metaverseObjectTypeId` | B | Changes which Metaverse Object Type the rule matches against. |
+| `targetMetaverseAttributeId` | B | Changes the Metaverse attribute matched on. |
+| `sources`, `source` | B | Changes what is compared. |
+| `connectedSystemAttributeId` | B | Changes the Connected System attribute matched on. |
+| `expression` | B | Changes the computed value matched on. |
 
 ### Run Profiles (`runProfiles`)
 
@@ -207,6 +224,7 @@ Every scoping key is Class B: scoping determines which objects the rule applies 
 | `deletionRule` | **A** | Governs when a Metaverse Object is deleted; changing it makes objects deletion-eligible immediately (#827 gap G5). |
 | `deletionGracePeriod` | **A** | Shortening the period brings forward deletions that were pending (#827 gap G5). |
 | `deletionTriggerConnectedSystemIds` | **A** | Changes which system disconnections trigger deletion (#827 gap G5). |
+| `connectedSystemId` | **A** | One Connected System within that list; adding a trigger makes objects already disconnected from it deletion-eligible immediately (#827 gap G5). |
 | `attributes`, `attributeId` | B | Binding or unbinding an attribute changes what can flow to objects of this type. |
 
 ## Metaverse Attribute
@@ -275,3 +293,5 @@ Activities predating this feature carry `NotClassified`: their class was never c
 This is the same enforcement pattern as `BulkInsertColumnCompletenessTests`, and it exists for the same reason: a hand-maintained map that nothing checks will drift, and the drift is invisible until it produces a wrong answer in front of a customer.
 
 The guard earned its place immediately: the first run caught four keys that a careful manual read of `ConfigurationSnapshotService` had missed (`childGroups` on nested scoping groups, `attributeId` and `metaverseObjectTypeId` on the association collections, and `objectMatchingRules` on Connected Systems). Do not classify by reading the source; let the test tell you what the snapshot actually emits.
+
+**The guard is only as good as its fixtures.** It drives the snapshot service with objects the tests build, so a property the fixture leaves empty emits no node and is never checked. Three real gaps hid behind exactly that, all found while rolling the acknowledgement flow across the remaining surfaces (Jul 2026): the Connected System fixture had no setting values and no Simple Mode Object Matching Rule, and the Metaverse Object Type fixture had an empty deletion-trigger list. Every one of them meant a live configuration change was being recorded with no class at all, which in turn made the changed-since indicator under-report. When you add a property, populate it in the fixture in the same change; an optional collection left empty is a hole in the guard, not a covered case.
