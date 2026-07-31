@@ -47,7 +47,7 @@ The integration test infrastructure already anticipates this connector: dormant 
 
 **Connectivity and configuration**
 
-1. The connector must present discrete Connectivity settings (database type, host, port, database/service name, username, password, TLS options, connection timeout) and build the provider connection string internally. The password must use the `StringEncrypted` setting type so it is encrypted at rest via the existing credential protection mechanism and redacted from configuration snapshots.
+1. The connector must present discrete Connectivity settings (database type, host, port, database/service name, username, password, TLS options, connection timeout) and build the provider connection string internally. The password must use the `StringEncrypted` setting type so it is encrypted at rest via the existing credential protection mechanism and redacted from configuration snapshots. TLS server-certificate validation must follow the certificate-store precedent established by [#1142](https://github.com/TetronIO/JIM/pull/1142): certificates added in Admin > Certificates are supplied as additional trust anchors alongside the operating system's bundle (never in place of it), and a refused server certificate is surfaced to the administrator with its details rather than a generic connectivity error. A blanket trust-server-certificate toggle is not an acceptable substitute.
 2. Provider-specific settings (for example Oracle service name vs SID) must use the existing conditional-settings framework (`RequiredWhenSetting`/`RequiredWhenValue`, `RequiredGroup` cardinalities) rather than free-text conventions.
 3. `IConnectorSettings.ValidateSettingValues` must perform a live connectivity test (open connection, trivial query, close), following the LDAP Connector's pattern, so invalid configuration cannot be saved.
 4. Priority 1 providers: Microsoft SQL Server and Oracle Database. Priority 2: PostgreSQL and MySQL/MariaDB. The provider abstraction (`ISqlProvider` or equivalent) must isolate dialect differences: parameter prefix, identifier quoting, paging syntax, schema-catalogue queries, type mapping, and generated-key retrieval.
@@ -73,7 +73,7 @@ The integration test infrastructure already anticipates this connector: dormant 
 | UNIQUEIDENTIFIER/RAW(16) with GUID content | Guid | |
 | VARBINARY/BLOB/RAW | Binary | |
 | DECIMAL/NUMERIC/MONEY | Decimal | Type delivered by prerequisite #1046 |
-| FLOAT/REAL | Per #1046's decision | Decimal with a documented precision caveat, or Text; decided within #1046 |
+| FLOAT/REAL | Decimal | Approximate binary types; documented precision caveat (decided 2026-07-30, as #1046 closed without recording it): binary-to-decimal round-trips are not bit-exact, and a Text mapping would reintroduce the lexicographic-comparison defect #1046 exists to fix |
 | Foreign-key columns holding another object type's anchor | Reference | Explicit per-column configuration, not inferred |
 
 9. Zoneless date/time columns are ambiguous at the wire level, so the connector must expose a per-Connected-System setting declaring how to interpret them (UTC, or a named IANA time zone), applied on import and inverted on export. Offset-carrying types need no setting. JIM stores all DateTime values in UTC internally; this setting resolves source semantics, it does not change JIM's storage model.
