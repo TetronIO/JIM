@@ -117,6 +117,7 @@ public class ConfigurationSnapshotService
         AddReference(children, "connectedSystemId", rule.ConnectedSystemId, rule.ConnectedSystem?.Name, "Connected System");
         AddReference(children, "connectedSystemObjectTypeId", rule.ConnectedSystemObjectTypeId, rule.ConnectedSystemObjectType?.Name, "Connected System Object Type");
         AddReference(children, "metaverseObjectTypeId", rule.MetaverseObjectTypeId, rule.MetaverseObjectType?.Name, "Metaverse Object Type");
+        children.Add(BuildInitialPassword(rule.InitialPassword));
         children.Add(BuildAttributeFlowRules(rule.AttributeFlowRules));
         children.Add(BuildObjectMatchingRules(rule.ObjectMatchingRules));
         children.Add(BuildScopingCriteriaGroups("objectScopingCriteriaGroups", "Scope", rule.ObjectScopingCriteriaGroups));
@@ -128,6 +129,48 @@ public class ConfigurationSnapshotService
             ObjectName = rule.Name,
             Root = ConfigurationSnapshotNode.ObjectNode("synchronisationRule", children, "Synchronisation Rule")
         };
+    }
+
+    /// <summary>
+    /// Records the initial-password configuration in the change history.
+    /// <para>
+    /// Deciding that JIM will set a password on every account a rule provisions, and what those passwords look
+    /// like, is exactly the sort of change an auditor asks who made and when. Only the configuration is
+    /// recorded; no password value exists at this point and none ever reaches a snapshot.
+    /// </para>
+    /// </summary>
+    private ConfigurationSnapshotNode BuildInitialPassword(SyncRuleInitialPassword? initialPassword)
+    {
+        var children = new List<ConfigurationSnapshotNode>();
+        if (initialPassword == null)
+        {
+            // Rendered rather than omitted, so that configuring a rule for the first time shows as a change from
+            // "off" instead of appearing out of nowhere.
+            Add(children, "enabled", Render(false), "Enabled");
+            return ConfigurationSnapshotNode.ObjectNode("initialPassword", children, "Initial Password");
+        }
+
+        Add(children, "enabled", Render(initialPassword.Enabled), "Enabled");
+        AddEnum(children, "source", initialPassword.Source, "Password settings source");
+        AddEnum(children, "expiryBehaviour", initialPassword.ExpiryBehaviour, "Expiry behaviour");
+        Add(children, "enableAccount", Render(initialPassword.EnableAccount), "Enable the account");
+
+        var policy = initialPassword.CustomPolicy;
+        AddEnum(children, "style", policy.Style, "Style");
+        Add(children, "length", Render(policy.Length), "Length");
+        Add(children, "minimumUppercase", Render(policy.MinimumUppercase), "Minimum uppercase letters");
+        Add(children, "minimumLowercase", Render(policy.MinimumLowercase), "Minimum lowercase letters");
+        Add(children, "minimumDigits", Render(policy.MinimumDigits), "Minimum digits");
+        Add(children, "minimumSymbols", Render(policy.MinimumSymbols), "Minimum symbols");
+        Add(children, "permittedSymbols", policy.PermittedSymbols, "Permitted symbols");
+        Add(children, "wordCount", Render(policy.WordCount), "Word count");
+        AddEnum(children, "wordSeparator", policy.WordSeparator, "Word separator");
+        AddEnum(children, "wordCapitalisation", policy.WordCapitalisation, "Word capitalisation");
+        Add(children, "appendedDigitCount", Render(policy.AppendedDigitCount), "Appended digits");
+        Add(children, "appendSymbol", Render(policy.AppendSymbol), "Append a symbol");
+        Add(children, "excludeAmbiguousCharacters", Render(policy.ExcludeAmbiguousCharacters), "Exclude ambiguous characters");
+
+        return ConfigurationSnapshotNode.ObjectNode("initialPassword", children, "Initial Password", initialPassword.Id);
     }
 
     private ConfigurationSnapshotNode BuildAttributeFlowRules(List<SyncRuleMapping> mappings)

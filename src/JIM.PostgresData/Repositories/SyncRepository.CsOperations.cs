@@ -1042,7 +1042,9 @@ public partial class SyncRepository
 
     private async Task BulkInsertPendingExportsRawAsync(List<PendingExport> exports)
     {
-        const int columnsPerRow = 14;
+        // Taken from the column list rather than written out, so that adding a column cannot leave the
+        // placeholder count behind it.
+        var columnsPerRow = PendingExportBulkColumns.PendingExports.Length;
         var chunkSize = BulkSqlHelpers.MaxParametersPerStatement / columnsPerRow;
 
         foreach (var chunk in BulkSqlHelpers.ChunkList(exports, chunkSize))
@@ -1056,7 +1058,7 @@ public partial class SyncRepository
             {
                 if (i > 0) sql.Append(", ");
                 var offset = i * columnsPerRow;
-                sql.Append($"({{{offset}}}, {{{offset + 1}}}, {{{offset + 2}}}, {{{offset + 3}}}, {{{offset + 4}}}, {{{offset + 5}}}, {{{offset + 6}}}, {{{offset + 7}}}, {{{offset + 8}}}, {{{offset + 9}}}, {{{offset + 10}}}, {{{offset + 11}}}, {{{offset + 12}}}, {{{offset + 13}}})");
+                sql.Append('(').Append(string.Join(", ", Enumerable.Range(offset, columnsPerRow).Select(p => $"{{{p}}}"))).Append(')');
 
                 var pe = chunk[i];
                 parameters.Add(pe.Id);
@@ -1073,6 +1075,7 @@ public partial class SyncRepository
                 parameters.Add(BulkSqlHelpers.NullableParam(pe.SourceMetaverseObjectId, NpgsqlTypes.NpgsqlDbType.Uuid));
                 parameters.Add(pe.HasUnresolvedReferences);
                 parameters.Add(pe.CreatedAt);
+                parameters.Add(BulkSqlHelpers.NullableParam(pe.ProvisioningSyncRuleId, NpgsqlTypes.NpgsqlDbType.Integer));
             }
 
             await _context.Database.ExecuteSqlRawAsync(sql.ToString(), parameters.ToArray());

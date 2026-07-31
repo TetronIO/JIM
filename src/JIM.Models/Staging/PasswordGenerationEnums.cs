@@ -34,6 +34,28 @@ public enum PasswordGenerationStyle
 }
 
 /// <summary>
+/// Where a Synchronisation Rule's initial-password generator takes its settings from.
+/// </summary>
+public enum InitialPasswordSource
+{
+    /// <summary>
+    /// Follow the password policy JIM discovered on the Connected System, and keep following it if the target's
+    /// policy is re-read and has changed.
+    /// <para>
+    /// The default, and the reason the common case needs no configuration. Where nothing was discovered, this
+    /// falls back to JIM's own defaults, which satisfy a stock Active Directory domain.
+    /// </para>
+    /// </summary>
+    Discovered = 0,
+
+    /// <summary>
+    /// Use the configuration held on this Synchronisation Rule, which an administrator has set deliberately and
+    /// which JIM will not change underneath them.
+    /// </summary>
+    Custom = 1
+}
+
+/// <summary>
 /// What goes between the words of a generated passphrase.
 /// <para>
 /// Deliberately a separate axis from <see cref="PasswordWordCapitalisation"/>. The two combine to express every

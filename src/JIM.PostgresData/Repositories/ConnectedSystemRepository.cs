@@ -4642,6 +4642,10 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ThenInclude(afr => afr.Sources)
             .ThenInclude(s => s.MetaverseAttribute)
             .Include(sr => sr.ConnectedSystem)
+            // Required, not optional: the configuration snapshot reads this navigation, and an unloaded
+            // navigation is indistinguishable from an unconfigured one. Without the Include, every change
+            // history entry would record the initial password as switched off, however it was really set.
+            .Include(sr => sr.InitialPassword)
             .Include(sr => sr.ConnectedSystemObjectType)
             .ThenInclude(csot => csot.Attributes.OrderBy(a => a.Name))
             .Include(sr => sr.ObjectScopingCriteriaGroups)

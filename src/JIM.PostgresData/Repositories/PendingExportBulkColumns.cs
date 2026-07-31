@@ -21,7 +21,7 @@ internal static class PendingExportBulkColumns
         "Id", "ConnectedSystemId", "ConnectedSystemObjectId", "ChangeType", "Status",
         "ErrorCount", "MaxRetries", "LastAttemptedAt", "NextRetryAt",
         "LastErrorMessage", "LastErrorStackTrace", "SourceMetaverseObjectId",
-        "HasUnresolvedReferences", "CreatedAt"
+        "HasUnresolvedReferences", "CreatedAt", "ProvisioningSyncRuleId"
     ];
 
     /// <summary>
@@ -47,11 +47,13 @@ internal static class PendingExportBulkColumns
 
     /// <summary>
     /// Columns deliberately excluded from every Pending Export update list: the identity, source
-    /// and creation timestamp are immutable once staged.
+    /// and creation timestamp are immutable once staged. ProvisioningSyncRuleId joins them because
+    /// it records which rule's provisioning decision produced this export, which is a fact about
+    /// how it came to exist and cannot change afterwards.
     /// </summary>
     internal static readonly string[] PendingExportsUpdateExclusions =
     [
-        "Id", "ConnectedSystemId", "SourceMetaverseObjectId", "CreatedAt"
+        "Id", "ConnectedSystemId", "SourceMetaverseObjectId", "CreatedAt", "ProvisioningSyncRuleId"
     ];
 
     /// <summary>
