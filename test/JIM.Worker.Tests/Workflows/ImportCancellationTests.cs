@@ -209,7 +209,8 @@ public class ImportCancellationTests : WorkflowTestBase
             List<ConnectedSystemPaginationToken> paginationTokens,
             string? persistedConnectorData,
             ILogger logger,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            Func<string, Task>? progressCallback = null)
         {
             // Determine current page from pagination tokens
             var currentPage = paginationTokens.Count == 0 ? 1 :

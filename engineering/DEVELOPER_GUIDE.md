@@ -722,34 +722,57 @@ public interface IRepository
 **Rule**: Application layer depends on `IRepository`, not concrete implementations.
 
 ### 3. Connector Pattern
-Implement connectors for external systems:
+
+Connectors implement `IConnector` (identity only) plus whichever capability interfaces they support. The four *interaction* interfaces are the ones that move data; a connector implements the import and/or export interface matching how it talks to its system (calls or files), never both mechanisms for the same direction. Authoritative signatures live in `src/JIM.Models/Interfaces/`:
+
 ```csharp
 public interface IConnector
 {
-    Task<ConnectorCapabilities> GetCapabilitiesAsync();
-    Task<bool> TestConnectionAsync();
-    // ... other required methods
+    string Name { get; }
+    string? Description { get; }
+    string? Url { get; }
 }
 
-// Optional interfaces for specific capabilities
-public interface IConnectorImportUsingCalls : IConnector
+// Import via API calls: JIM calls this repeatedly, once per page, until no pagination tokens come back.
+public interface IConnectorImportUsingCalls
 {
-    Task<List<ConnectedSystemObject>> ImportAsync(ConnectedSystem system);
+    void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger);
+
+    Task<ConnectedSystemImportResult> ImportAsync(
+        ConnectedSystem connectedSystem,
+        ConnectedSystemRunProfile runProfile,
+        List<ConnectedSystemPaginationToken> paginationTokens,
+        string? persistedConnectorData,
+        ILogger logger,
+        CancellationToken cancellationToken,
+        Func<string, Task>? progressCallback = null);
+
+    void CloseImportConnection();
 }
 
-public interface IConnectorExportUsingCalls : IConnector
+// Export via API calls: one result per Pending Export, in the same order.
+public interface IConnectorExportUsingCalls
 {
-    Task<ConnectorExportResult> ExportAsync(
-        ConnectedSystemObject cso, PendingExport export,
-        CancellationToken cancellationToken = default);
+    void OpenExportConnection(IList<ConnectedSystemSettingValue> settings);
+
+    Task<List<ConnectedSystemExportResult>> ExportAsync(
+        IList<PendingExport> pendingExports,
+        CancellationToken cancellationToken,
+        Func<string, Task>? progressCallback = null);
+
+    void CloseExportConnection();
 }
 ```
+
+`IConnectorImportUsingFiles` and `IConnectorExportUsingFiles` mirror these without the open/close lifecycle: a file-based connector reads or writes the whole file in a single call.
 
 **Connector Capabilities**: Connectors declare capabilities via `IConnectorCapabilities` properties:
 - `SupportsExport`, `SupportsImport`, `SupportsDeltaImport`, etc.
 - `SupportsParallelExport`: when `true`, the Connected System UI shows the `MaxExportParallelism` setting, enabling parallel batch processing with separate DbContext and connector instances per batch
 
-**Rule**: Keep connectors stateless. Store configuration in `ConnectedSystem.Configuration`.
+**Reporting to administrators**: the optional `progressCallback` narrates a connector's internal sub-phases onto the Activity message while a long call is running; it is one of several feedback channels (settings validation, per-object export results, run-level warnings, exceptions, logging), each appropriate to a different moment and severity. The guidance for connector authors is in the public [Writing Custom Connectors](../docs/developer/connectors.md) page; the design rationale is in [`notes/CONNECTOR_SUB_PHASE_PROGRESS.md`](notes/CONNECTOR_SUB_PHASE_PROGRESS.md).
+
+**Rule**: Keep connectors stateless between calls. Anything that must survive to the next run goes in `ConnectedSystemImportResult.PersistedConnectorData`, which JIM stores and replays; anything needed only for the next page goes in `PaginationTokens`.
 
 ### 4. Activity Logging
 Log all significant operations for audit:

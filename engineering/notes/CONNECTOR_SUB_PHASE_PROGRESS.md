@@ -2,9 +2,15 @@
 
 > Design note for a standardised sub-phase progress capability across all connector interaction interfaces. Captured ahead of implementation so future PRs have a shared reference.
 
-## Status: Design (2026-04-22)
+## Status: Implemented (2026-07-30)
 
-Feature is designed but not yet implemented. Tracked by [#637](https://github.com/TetronIO/JIM/issues/637).
+Implemented under [#637](https://github.com/TetronIO/JIM/issues/637). The design below is what shipped, with these deviations, each explained where it appears:
+
+- **Emits are serialised and guarded by a shared helper**, `ConnectorSubPhaseProgress` (JIM.Utilities), rather than each caller hand-rolling a lambda. Two of the five wiring points hand the callback to code that fans out internally (parallel export batches; the LDAP connector's parallel container+objectType combos), and the report delegate writes the Activity message through a shared DbContext, so unserialised emits would be a concurrent-use crash. The helper also swallows (and logs) a reporting failure, because narration is cosmetic and must never fail a synchronisation run; cancellation still propagates.
+- **The File connector's import emits rolling row progress** ("Parsed 50,000 rows...") rather than the catalogue's single "Parsing {N:N0} rows...". The row total is not known until the file has been read, and the read is the long part.
+- **No "Enumerating containers in {partition}..." emit.** Container enumeration happens at configuration time (`IConnectorPartitions`), not during an import; at import time the selected containers are already in memory. The per-container fetch message names the container instead, which is the same information without claiming work that is not happening.
+- **LDAP export sub-phases (phase 5) were not implemented.** They were optional in the plan. The connector's only internal phase, parent container creation, happens per object inside the export loop rather than as a pre-flight step, so emitting from it would replace a moving "N of M" with a message that says less. The interface still carries the callback, so a future connector (or a change to this one) can use it; `LdapConnector.ExportAsync` documents why it ignores it.
+- **Unit-test coverage stops at the LDAP connector.** Its emit points are interleaved with live `LdapConnection` calls, which the unit tier cannot reach (this is why `ILdapOperationExecutor` exists on the export side only). The File connector's emits, the helper's behaviour, and both server and worker wiring points are unit-tested; the LDAP path is covered by runtime validation and the integration suite.
 
 ## Background
 
@@ -197,7 +203,7 @@ Each phase is suggested to be delivered as a separate PR so the change lands inc
 - Existing `Func<ExportProgressInfo, Task>?` callbacks throughout `ExportExecutionServer` are untouched. The new `Func<string, Task>?` is a distinct, narrower callback handed specifically to connectors.
 - Connectors authored against the current interface continue to compile once the parameter is added with a default value; no existing connector needs to change before the new facility is useful.
 
-## Open Questions
+## Resolved Questions
 
-1. **Throttling expectations**: should we document a minimum emit interval (e.g. "no more than one emit per 500 ms")? Or leave it to connector authors on the basis that sub-phase emits are naturally sparse? Current lean: leave it to authors; revisit if we see a connector that emits too frequently in practice.
-2. **LdapConnector import sub-phase granularity**: LDAP import has substantially different shapes per directory type (AD USN vs OpenLDAP accesslog vs generic changelog). Should each path have its own documented sub-phase sequence before implementation starts, or is it enough to follow the catalogue above as a starting point?
+1. **Throttling expectations**: left to connector authors, as the design leaned. The interface documentation states the expectation ("emit on phase transitions rather than per item"), and where an emit is naturally repetitive the connector paces it itself: the File connector's import reports every 10,000 rows, and the LDAP connector's fetch emits are per page. `ConnectorSubPhaseProgress` deliberately does not rate-limit, because dropping an emit would leave the Activity showing a stale message for exactly as long as the phase it dropped, which is the failure this feature exists to fix. If a third-party connector ever emits per item, the fix is a rate limiter with a trailing flush, not a plain drop.
+2. **LdapConnector import sub-phase granularity**: the catalogue was enough. Each delta strategy emits its own watermark message (USN, accesslog timestamp, changelog number), and all paths share the root DSE and per-container fetch messages.
