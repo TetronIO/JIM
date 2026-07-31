@@ -15,9 +15,9 @@ The integration test infrastructure already anticipates this connector: dormant 
 
 ## Goals
 
-- An administrator can configure a Connected System against Microsoft SQL Server or Oracle Database entirely from the admin UI, with credentials encrypted at rest and connectivity validated at save time.
+- An administrator can configure a Connected System against Microsoft SQL Server or Oracle Database from any of the three admin surfaces (portal, REST API, PowerShell), with credentials encrypted at rest and connectivity validated at save time.
 - JIM can discover schema (tables, views, columns, data types) from a configured database and map columns onto Connected System Object Types and attributes.
-- Full imports work against tables or views, including multi-valued attributes and reference attributes sourced from related tables, at 100,000-row scale within existing Run Profile paging behaviour.
+- Full imports work against tables or views, including multi-valued attributes and reference attributes sourced from related tables, at 500,000-row scale (the platform's supported scale, per the passing `Scale500k25kGroups` template) within existing Run Profile paging behaviour.
 - Delta imports work via at least two dialect-agnostic mechanisms (change-log table and watermark column), with the same graceful fallback-to-full-import behaviour the LDAP Connector established.
 - Exports create, update and delete rows (including related-table rows) transactionally per object, returning database-generated keys as external IDs.
 - All operations surface as Activities with per-object Run Profile Execution Items, identical to the existing connectors.
@@ -109,7 +109,7 @@ The integration test infrastructure already anticipates this connector: dormant 
 
 ### Non-Functional Requirements
 
-- 100,000-row full import completes within the same order of magnitude as the LDAP Connector at equivalent scale, without unbounded memory growth (streaming reads, page-at-a-time materialisation).
+- 500,000-row full import completes within the same order of magnitude as the LDAP Connector at equivalent scale, without unbounded memory growth (streaming reads, page-at-a-time materialisation).
 - Air-gap deployable: no internet access at runtime, no native driver installation, all providers bundled as managed NuGet packages.
 - Every new NuGet package passes the Third-Party Dependency Governance workflow before adoption, including licence review (the Oracle managed driver ships under Oracle's free-use distribution licence and needs explicit sign-off and customer-facing documentation of its terms).
 
@@ -132,7 +132,7 @@ Integration coverage must be a **provider × capability matrix**, not a single h
 | Type-mapping round-trip | Each mapped SQL type imports and exports losslessly, including zoneless DateTime interpretation and exact-numeric Decimal round-trip |
 | Configuration validation | Save-time connectivity test passes/fails correctly (wrong credentials, unreachable host) |
 
-The full matrix must run green for Priority 1 providers (SQL Server, Oracle) before first release, and for each Priority 2 provider before it is declared supported. Because the full matrix is expensive, the regular integration gate may run a representative subset (at minimum: one provider end-to-end plus configuration validation on all providers), with the full matrix required before release; the split is decided at plan time within the existing runner's scenario structure. At least one provider must additionally run the 100,000-row scale import.
+The full matrix must run green for Priority 1 providers (SQL Server, Oracle) before first release, and for each Priority 2 provider before it is declared supported. Because the full matrix is expensive, the regular integration gate may run a representative subset (at minimum: one provider end-to-end plus configuration validation on all providers), with the full matrix required before release; the split is decided at plan time within the existing runner's scenario structure. At least one provider must additionally run the 500,000-row scale import.
 
 ## Examples and Scenarios
 
@@ -183,7 +183,8 @@ The full matrix must run green for Priority 1 providers (SQL Server, Oracle) bef
 
 | Doc | Change |
 |------|--------|
-| `docs/connectors/jim-sql-connector.md` | New connector guide: configuration per provider, delta mode guidance (change-log table recommended; watermark limitations), type mapping, security/least-privilege guidance, Oracle driver licence note |
+| `docs/connectors/jim-sql-connector.md` | New connector guide: configuration per provider, delta mode guidance (change-log table recommended; watermark limitations), type mapping, security/least-privilege guidance, Oracle driver licence note. Must also state that JIM is open to supporting a wider range of database servers (PostgreSQL, MySQL/MariaDB and others) when there is demand, inviting feedback via the [Ideas category of GitHub Discussions](https://github.com/TetronIO/JIM/discussions/categories/ideas) |
+| Delta import setup guides | Public documentation must cover setting up each delta import mode end to end (change-log table; watermark column). If a mode needs a full page to cover properly, give it a dedicated page linked from the SQL Connector page rather than compressing it |
 | `docs/connectors/index.md` (or equivalent nav) | Add the new connector |
 | `engineering/DEVELOPER_GUIDE.md` | Note the provider abstraction if it introduces a new architectural component |
 
@@ -210,15 +211,15 @@ Additionally:
 
 ## Acceptance Criteria
 
-- [ ] An administrator can configure, validate and save a SQL Server Connected System and an Oracle Connected System entirely via the admin UI, with the password encrypted at rest via the existing credential protection mechanism.
+- [ ] An administrator can configure, validate and save a SQL Server Connected System and an Oracle Connected System from each of the three admin surfaces (portal, REST API, PowerShell), with the password encrypted at rest via the existing credential protection mechanism.
 - [ ] Schema discovery lists tables/views and columns with correct JIM type mapping for both Priority 1 providers.
-- [ ] Full import stages objects from a table/view including multi-valued attributes from a related table and reference attributes carrying anchors, verified at 100,000 rows.
+- [ ] Full import stages objects from a table/view including multi-valued attributes from a related table and reference attributes carrying anchors, verified at 500,000 rows.
 - [ ] Delta import works in change-log-table mode including deletion propagation, and in watermark mode with documented create/update-only semantics; a missing watermark falls back with the standard warning.
 - [ ] Export creates, updates and deletes rows transactionally including related-table maintenance, returning database-generated keys as external IDs, with per-object error isolation and auto-confirmation.
 - [ ] All operations are recorded as Activities with per-object Run Profile Execution Items.
 - [ ] No native drivers: fully managed providers, air-gap deployable, dependency governance completed for each provider package.
 - [ ] The full provider × capability integration matrix (see Testing Requirements) runs green against real SQL Server and Oracle Database Free containers in the existing runner; unit tests cover the provider dialect layer, type mapping and query generation.
-- [ ] Public documentation ships in the same release: per-provider configuration guide, delta mode guidance, type mapping and licensing notes.
+- [ ] Public documentation ships in the same release: per-provider configuration guide, delta import setup guidance for both modes (dedicated pages if a single page cannot cover a mode's setup end to end), type mapping and licensing notes, and the wider-database-support feedback callout pointing at GitHub Discussions Ideas.
 
 ## Additional Context
 
