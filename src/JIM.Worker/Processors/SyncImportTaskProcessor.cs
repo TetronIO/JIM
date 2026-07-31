@@ -1149,17 +1149,57 @@ public class SyncImportTaskProcessor
             if (importedObject.ChangeType == ObjectChangeType.Deleted || string.IsNullOrEmpty(importedObject.ObjectType))
                 continue;
 
-            // find the object type for the imported object in our schema
-            var connectedSystemObjectType = _connectedSystem.ObjectTypes.Single(q => q.Name.Equals(importedObject.ObjectType, StringComparison.OrdinalIgnoreCase));
+            // Find the object type for the imported object in our schema. An object naming a type that is
+            // not in the schema, or arriving without its external ID attribute, cannot be matched to a CSO
+            // and so cannot protect one from deletion; skip it here and let ProcessImportObjectsAsync
+            // report it against its own Run Profile Execution Item. These were Single() calls, which threw
+            // and took the entire import down before a single object could be reported.
+            var connectedSystemObjectType = _connectedSystem.ObjectTypes.SingleOrDefault(q => q.Name.Equals(importedObject.ObjectType, StringComparison.OrdinalIgnoreCase));
+            if (connectedSystemObjectType == null)
+            {
+                Log.Debug("AddExternalIdsToCollection: Imported object names object type '{ObjectType}', which is not in the schema. Excluding it from deletion detection",
+                    LogSanitiser.Sanitise(importedObject.ObjectType));
+                continue;
+            }
 
             // what is the external id attribute for this object type in our schema?
             var externalIdAttributeName = connectedSystemObjectType.Attributes.Single(q => q.IsExternalId).Name;
+            var externalIdAttribute = importedObject.Attributes.SingleOrDefault(q => q.Name.Equals(externalIdAttributeName, StringComparison.OrdinalIgnoreCase));
+            if (externalIdAttribute == null)
+            {
+                Log.Debug("AddExternalIdsToCollection: Imported object of type '{ObjectType}' has no '{ExternalIdAttribute}' attribute. Excluding it from deletion detection",
+                    LogSanitiser.Sanitise(importedObject.ObjectType), LogSanitiser.Sanitise(externalIdAttributeName));
+                continue;
+            }
+
+            // Objects the Connector flagged with an error stay in this collection when they do have a
+            // usable external ID: they exist in the Connected System, and deleting their CSO because one
+            // attribute failed to parse would be data loss.
             externalIdsImported.Add(new ExternalIdPair
             {
                 ConnectedSystemObjectTypeId = connectedSystemObjectType.Id,
-                ConnectedSystemImportObjectAttribute = importedObject.Attributes.Single(q => q.Name.Equals(externalIdAttributeName, StringComparison.OrdinalIgnoreCase))
+                ConnectedSystemImportObjectAttribute = externalIdAttribute
             });
         }
+    }
+
+    /// <summary>
+    /// Translates a Connector's classification of an import problem into JIM's Run Profile Execution Item
+    /// vocabulary, so administrators filter Connector-reported problems the same way as JIM's own.
+    /// </summary>
+    private static ActivityRunProfileExecutionItemErrorType MapConnectorImportError(ConnectedSystemImportObjectError connectorError)
+    {
+        return connectorError switch
+        {
+            ConnectedSystemImportObjectError.CouldNotDetermineObjectType => ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType,
+            ConnectedSystemImportObjectError.ExternalIdAttributes => ActivityRunProfileExecutionItemErrorType.MissingExternalIdAttributeValue,
+            ConnectedSystemImportObjectError.ConfigurationError => ActivityRunProfileExecutionItemErrorType.ConnectorConfigurationError,
+            ConnectedSystemImportObjectError.AttributeValueError => ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError,
+
+            // A Connector built against a newer JIM could report a classification this build does not know.
+            // Surface it as an error rather than dropping it; the Connector's message still explains it.
+            _ => ActivityRunProfileExecutionItemErrorType.UnhandledError
+        };
     }
 
     /// <summary>
@@ -1365,6 +1405,32 @@ public class SyncImportTaskProcessor
             {
             try
             {
+                // The Connector may have flagged a problem with this object while reading it. Record that
+                // first, before JIM's own validation: a flagged object would otherwise trip a later check
+                // and report a misleading cause (i.e. "missing external ID" when the truth is that the row
+                // would not parse). The Connector chose the severity and JIM honours it, rather than
+                // re-deciding: an object-level problem means there is nothing importable, whereas an
+                // attribute-level one means the object is sound apart from a single value.
+                if (importObject.ErrorType is not null and not ConnectedSystemImportObjectError.NotSet)
+                {
+                    activityRunProfileExecutionItem.ErrorType = MapConnectorImportError(importObject.ErrorType.Value);
+                    activityRunProfileExecutionItem.ErrorMessage = importObject.ErrorMessage;
+
+                    if (importObject.ErrorType != ConnectedSystemImportObjectError.AttributeValueError)
+                    {
+                        Log.Warning("ProcessImportObjectsAsync: Connector reported {ErrorType} for the imported object at index {Index}. Skipping it: {ErrorMessage}",
+                            importObject.ErrorType, importIndex, LogSanitiser.Sanitise(importObject.ErrorMessage));
+                        continue;
+                    }
+
+                    // An attribute value that would not parse is not a reason to withhold the whole object:
+                    // its identity and every other attribute are intact, the Connector deliberately returned
+                    // it rather than stopping, and skipping it would freeze the identity (name, department,
+                    // leaver status) over one malformed value. The error above records what did not flow.
+                    Log.Warning("ProcessImportObjectsAsync: Connector reported an attribute value error for the imported object at index {Index}. Importing the values that did parse: {ErrorMessage}",
+                        importIndex, LogSanitiser.Sanitise(importObject.ErrorMessage));
+                }
+
                 // validate the results.
                 // are any of the attribute values duplicated? stop processing if so
                 var duplicateAttributeNames = importObject.Attributes.GroupBy(a => a.Name, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1).Select(n => n.Key).ToList();

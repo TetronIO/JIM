@@ -21,6 +21,7 @@ Administrators see all of it in one place: the [Activity](../configuration/activ
 | `ValidateSettingValues` | Bad or incomplete configuration, before any run happens | Inline in the portal when settings are saved or tested |
 | `progressCallback` | Narrating a long phase while it is running | The Activity message, replacing the previous message |
 | `ConnectedSystemExportResult.Failed(...)` | One Pending Export failed; the rest are fine | One Run Profile Execution Item per failed object |
+| `ConnectedSystemImportObject.ErrorType` | One imported object has a problem; the rest are fine | One Run Profile Execution Item per flagged object |
 | `ConnectedSystemImportResult.WarningMessage` | The run succeeded but the administrator should know something | A warning on the Activity |
 | Throwing an exception | The run cannot produce trustworthy data | The Activity fails, carrying your message |
 | The supplied `ILogger` | Diagnostics for whoever reads the logs | JIM's log output, never the portal |
@@ -76,6 +77,25 @@ Each failure becomes a Run Profile Execution Item on the Activity, so the admini
 
 Succeed with feedback too: `ConnectedSystemExportResult.Succeeded(externalId, secondaryExternalId)` is how a system-assigned identifier (an `objectGUID`, an autonumber primary key) gets back into JIM's Connected System Object, so it can confirm the export on the next import.
 
+### Reporting a single object that failed to import
+
+Set `ErrorType` and `ErrorMessage` on the `ConnectedSystemImportObject` and return it in the result as normal. Each flagged object becomes a Run Profile Execution Item carrying your message, and the Activity completes with a warning (or fails, if every object was flagged).
+
+**JIM honours the severity your classification implies**, so choose it deliberately:
+
+| `ConnectedSystemImportObjectError` | Means | What JIM does |
+|-----------------------------------|-------|---------------|
+| `CouldNotDetermineObjectType` | The object's type is unknown, so nothing can be done with it | Reports it; the object is not imported |
+| `ExternalIdAttributes` | The object arrived without the attribute that identifies it | Reports it; the object is not imported |
+| `ConfigurationError` | The Connected System's configuration in JIM prevents processing it | Reports it; the object is not imported |
+| `AttributeValueError` | One attribute value would not parse; the rest of the object is sound | Reports it, **and imports the object with the values that did parse** |
+
+The last row is the important distinction. An object-level problem means there is nothing importable. An attribute-level problem does not: the object's identity and every other attribute are intact, so withholding it would freeze that identity (name, department, leaver status) over a single malformed value, and for a new joiner would mean never provisioning them at all. Flag the attribute, return the object, and let the administrator fix the source data.
+
+An object you flag still counts as present in the Connected System for deletion detection, provided it carries a usable external ID, so a row that failed to parse never causes its Connected System Object to be deleted as absent.
+
+Do not use this channel for a problem that affects the whole run; throw instead, as below.
+
 ### Reporting something the whole run should carry
 
 Set `ConnectedSystemImportResult.WarningMessage` (with an optional `WarningErrorType`) for a non-fatal operational note about **how** the run was performed. The run completes, and the warning is recorded on the Activity.
@@ -87,9 +107,6 @@ The canonical example is JIM's LDAP Connector: when a Delta Import finds no usab
 Throw when the run cannot produce data JIM should trust. JIM fails the Activity and records your exception against it, which is the correct outcome: a partially-imported Connected System that looks complete is far more damaging than a failed run. Prefer the specific exception types in `JIM.Models.Exceptions` (`InvalidSettingValuesException`, `CannotPerformDeltaImportException`, `LdapCommunicationException` and friends) so JIM can present the failure meaningfully.
 
 Never swallow an exception to keep a run alive. If you can genuinely continue, the object-level and warning channels above exist precisely so you can report the problem without hiding it.
-
-!!! note "Per-object import errors are not surfaced yet"
-    `ConnectedSystemImportObject` carries `ErrorType` and `ErrorMessage` fields, but JIM does not currently read them, so a problem reported that way is silently dropped. Until that is wired up, report a bad row by throwing (if the whole import is untrustworthy) or via `WarningMessage` (if it is not), rather than relying on those fields.
 
 ### Logging
 
