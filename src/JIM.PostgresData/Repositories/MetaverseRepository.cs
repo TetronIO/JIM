@@ -131,7 +131,11 @@ public class MetaverseRepository : IMetaverseRepository
     /// </remarks>
     public async Task UpdateMetaverseObjectTypeAsync(MetaverseObjectType metaverseObjectType)
     {
+        // AsTracking is not optional: JIM.Web configures the context NoTracking, so without it this read returns a
+        // detached entity, SetValues writes to an entry SaveChanges never looks at, and the update silently does
+        // nothing while reporting success.
         var tracked = await Repository.Database.MetaverseObjectTypes
+            .AsTracking()
             .SingleOrDefaultAsync(t => t.Id == metaverseObjectType.Id)
             ?? throw new InvalidOperationException($"Metaverse Object Type {metaverseObjectType.Id} no longer exists.");
 

@@ -35,10 +35,15 @@ public class MetaverseObjectTypeUpdateDatabaseTests
 {
     private string _connectionString = null!;
 
+    // NoTracking, because that is what JIM.Web configures (JIM.Web/Program.cs, and JimDbContext's own default) and
+    // this fixture exists to reproduce what the portal does. A tracking context hides the whole class of fault this
+    // guards: a repository read that assumes it got a tracked entity back gets a detached one instead, and every
+    // change it then makes is silently discarded at SaveChanges.
     private JimDbContext NewContext()
     {
         var options = new DbContextOptionsBuilder<JimDbContext>()
             .UseNpgsql(_connectionString)
+            .UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
             .Options;
         return new JimDbContext(options);
@@ -152,7 +157,47 @@ public class MetaverseObjectTypeUpdateDatabaseTests
         });
     }
 
-    private async Task<(int ObjectTypeId, Guid InitiatorId)> SeedObjectTypeWithBoundAttributesAsync()
+    [Test]
+    public async Task UpdateMetaverseObjectTypeAsync_InitiatorIsOfTheTypeBeingEdited_StillPersistsTheChangeAsync()
+    {
+        // The portal's shape, which the two tests above do not reproduce: resolving the signed-in administrator loads
+        // their Metaverse Object with its Type included, and that Type is usually the very object type being edited
+        // (an administrator is a User, and User is the type whose deletion rules are being changed). The object type
+        // is therefore already in the change tracker, carrying the database's values, before the update runs.
+        var (objectTypeId, initiatorId) = await SeedObjectTypeWithBoundAttributesAsync(initiatorIsOfTheSameType: true);
+
+        MetaverseObjectType detached;
+        await using (var loadContext = NewContext())
+        {
+            detached = await loadContext.MetaverseObjectTypes
+                .Include(t => t.Attributes)
+                .SingleAsync(t => t.Id == objectTypeId);
+        }
+
+        detached.DeletionGracePeriod = TimeSpan.FromDays(5);
+
+        await using (var saveContext = NewContext())
+        {
+            var jim = new JimApplication(new PostgresDataRepository(saveContext));
+
+            // Exactly what Helpers.GetUserAsync does, and the reason the object type is already tracked.
+            var initiator = await saveContext.MetaverseObjects
+                .Include(o => o.Type)
+                .SingleAsync(o => o.Id == initiatorId);
+
+            await jim.Metaverse.UpdateMetaverseObjectTypeAsync(detached, initiator);
+        }
+
+        await using var verify = NewContext();
+        var reloaded = await verify.MetaverseObjectTypes.SingleAsync(t => t.Id == objectTypeId);
+        Assert.That(reloaded.DeletionGracePeriod, Is.EqualTo(TimeSpan.FromDays(5)),
+            "the edit must win over the copy of the object type the initiator lookup happened to put in the tracker");
+    }
+
+    private Task<(int ObjectTypeId, Guid InitiatorId)> SeedObjectTypeWithBoundAttributesAsync() =>
+        SeedObjectTypeWithBoundAttributesAsync(initiatorIsOfTheSameType: false);
+
+    private async Task<(int ObjectTypeId, Guid InitiatorId)> SeedObjectTypeWithBoundAttributesAsync(bool initiatorIsOfTheSameType)
     {
         await using var seed = NewContext();
         var objectType = new MetaverseObjectType { Name = "Device", PluralName = "Devices", BuiltIn = false };
@@ -167,7 +212,11 @@ public class MetaverseObjectTypeUpdateDatabaseTests
 
         // an initiator is required so the update's Activity can be attributed to a security principal
         var userType = new MetaverseObjectType { Name = "User", PluralName = "Users", BuiltIn = true };
-        var initiator = new MetaverseObject { Type = userType, CachedDisplayName = "Test Administrator" };
+        var initiator = new MetaverseObject
+        {
+            Type = initiatorIsOfTheSameType ? objectType : userType,
+            CachedDisplayName = "Test Administrator"
+        };
 
         seed.MetaverseObjectTypes.Add(objectType);
         seed.MetaverseObjectTypes.Add(userType);
