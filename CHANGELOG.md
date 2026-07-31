@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🐛 `Get-JIMSyncRule` now returns every Synchronisation Rule rather than only the first 25, paging through the full result set.
 - 🐛 Changes to a Connected System's connector settings, and to its Simple Mode Object Matching Rules, are now classified in the configuration change history instead of being recorded without a classification. Because the changed-since indicator reads that classification, those changes were not raising it; a Connected System could have a pending settings change and still report as up to date.
 - 🐛 Adding or removing a Connected System from a Metaverse Object Type's deletion trigger list is likewise now classified, and recorded as destructive.
+- 🐛 Saving a Metaverse Object Type's Deletion Rules now works. It previously failed with a database error on any object type that had attributes bound, which is every real one: the save re-inserted the type's existing attribute bindings instead of leaving them alone. Nothing was written, and the change history recorded the attempt with no detail.
 - 🐛 Piping a Connected System into `Get-JIMSyncRule`, as its documentation has always shown, now works instead of failing to bind.
 
 ### Changed
