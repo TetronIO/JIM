@@ -1436,34 +1436,11 @@ else if (_activityRunProfileExecutionItem.ObjectChangeType == ObjectChangeType.N
 
     /// <summary>
     /// Returns an appropriate error title based on the error type (import vs sync vs export phase).
+    /// The mapping itself lives in Helpers so that a test can prove every error type is covered.
     /// </summary>
     private string GetErrorPhaseTitle()
     {
-        return _activityRunProfileExecutionItem?.ErrorType switch
-        {
-            // Import-phase errors - object rejected before CSO creation
-            ActivityRunProfileExecutionItemErrorType.DuplicateObject => "Import Rejected",
-            ActivityRunProfileExecutionItemErrorType.MissingExternalIdAttributeValue => "Import Rejected",
-            ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes => "Import Rejected",
-            ActivityRunProfileExecutionItemErrorType.UnsupportedExternalIdAttributeType => "Import Rejected",
-            ActivityRunProfileExecutionItemErrorType.CsoCreationFailed => "Import Rejected",
-
-            // Sync-phase errors - CSO exists but sync failed
-            ActivityRunProfileExecutionItemErrorType.AmbiguousMatch => "Synchronisation Failed",
-            ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType => "Synchronisation Failed",
-            ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin => "Synchronisation Failed",
-            ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute => "Synchronisation Failed",
-            ActivityRunProfileExecutionItemErrorType.UnresolvedReference => "Synchronisation Failed",
-            ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued => "Synchronisation Failed",
-
-            // Export-phase errors
-            ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed => "Export Pending",
-            ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed => "Export Failed",
-
-            // Generic/unhandled
-            ActivityRunProfileExecutionItemErrorType.UnhandledError => "Operation Failed",
-            _ => "Synchronisation Failed"
-        };
+        return Helpers.GetErrorPhaseTitle(_activityRunProfileExecutionItem?.ErrorType);
     }
 
     /// <summary>
