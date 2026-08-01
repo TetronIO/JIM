@@ -1601,6 +1601,22 @@ public class ExportEvaluationServer
     }
 
     /// <summary>
+    /// Records which Synchronisation Rule's provisioning decision produced an export, for a Create only.
+    /// <para>
+    /// This is the one moment the answer is known for certain. Delivering an initial password happens much
+    /// later, once the account exists in the target and has an external id, and by then working out which rule
+    /// was responsible would mean re-evaluating scope against rules that may have been edited in the meantime:
+    /// expensive, and capable of reaching a different answer than the one that created the account.
+    /// </para>
+    /// <para>
+    /// Deliberately null for updates and deletes. Only a create brings an account into existence, and a stamp on
+    /// anything else would let delivery fire again later in that account's life.
+    /// </para>
+    /// </summary>
+    private static int? ProvisioningRuleFor(PendingExportChangeType changeType, SyncRule exportRule) =>
+        changeType == PendingExportChangeType.Create ? exportRule.Id : null;
+
+    /// <summary>
     /// Creates or updates a PendingExport for an MVO change to a target system.
     /// For provisioning (Create) scenarios, also creates a CSO with Status=PendingProvisioning
     /// to establish the CSO↔MVO relationship before the object exists in the target system.
@@ -1697,7 +1713,8 @@ public class ExportEvaluationServer
             Status = PendingExportStatus.Pending,
             SourceMetaverseObjectId = mvo.Id,
             AttributeValueChanges = attributeChanges,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            ProvisioningSyncRuleId = ProvisioningRuleFor(changeType, exportRule)
         };
 
         await SyncRepo.CreatePendingExportAsync(pendingExport);
@@ -1817,7 +1834,8 @@ public class ExportEvaluationServer
             Status = PendingExportStatus.Pending,
             SourceMetaverseObjectId = mvo.Id,
             AttributeValueChanges = attributeChanges,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            ProvisioningSyncRuleId = ProvisioningRuleFor(changeType, exportRule)
         };
 
         // Save immediately - batching causes memory pressure with large datasets (5000+ objects)
@@ -2204,7 +2222,8 @@ public class ExportEvaluationServer
             SourceMetaverseObjectId = mvo.Id,
             AttributeValueChanges = attributeChanges,
             CreatedAt = DateTime.UtcNow,
-            HasUnresolvedReferences = hasUnresolvedReferences
+            HasUnresolvedReferences = hasUnresolvedReferences,
+            ProvisioningSyncRuleId = ProvisioningRuleFor(changeType, exportRule)
         };
 
         if (hasUnresolvedReferences)

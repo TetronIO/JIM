@@ -12,6 +12,7 @@ using JIM.Models.Search;
 using JIM.Models.Security;
 using JIM.Models.Staging;
 using JIM.Application.Utilities;
+using JIM.Utilities;
 using Serilog;
 using System.Diagnostics;
 
@@ -1421,37 +1422,17 @@ internal class SeedingServer
     /// </summary>
     internal static bool ApplyConnectorDeclarations(IConnectorCapabilities connectorCapabilities, ConnectorDefinition definition)
     {
-        var changed =
-            definition.SupportsFullImport != connectorCapabilities.SupportsFullImport ||
-            definition.SupportsDeltaImport != connectorCapabilities.SupportsDeltaImport ||
-            definition.SupportsExport != connectorCapabilities.SupportsExport ||
-            definition.SupportsPartitions != connectorCapabilities.SupportsPartitions ||
-            definition.SupportsPartitionContainers != connectorCapabilities.SupportsPartitionContainers ||
-            definition.SupportsSecondaryExternalId != connectorCapabilities.SupportsSecondaryExternalId ||
-            definition.SupportsUserSelectedExternalId != connectorCapabilities.SupportsUserSelectedExternalId ||
-            definition.SupportsUserSelectedAttributeTypes != connectorCapabilities.SupportsUserSelectedAttributeTypes ||
-            definition.SupportsAutoConfirmExport != connectorCapabilities.SupportsAutoConfirmExport ||
-            definition.SupportsParallelExport != connectorCapabilities.SupportsParallelExport ||
-            definition.SupportsPaging != connectorCapabilities.SupportsPaging ||
-            definition.SupportsFilePaths != connectorCapabilities.SupportsFilePaths ||
-            definition.SchemaStandard != connectorCapabilities.SchemaStandard;
-
-        if (!changed)
+        // Driven off the shape of IConnectorCapabilities rather than a written-out list of every declaration.
+        // A hand-written list is the failure this exists to avoid: declaring a capability and forgetting to add
+        // it here leaves the flag permanently false in the database with nothing failing, so the Connector
+        // advertises a feature the rest of JIM cannot see. Declaring it on the interface is the only step.
+        var changed = ConnectorCapabilityMirror.GetDifferences(connectorCapabilities, definition);
+        if (changed.Count == 0)
             return false;
 
-        definition.SupportsFullImport = connectorCapabilities.SupportsFullImport;
-        definition.SupportsDeltaImport = connectorCapabilities.SupportsDeltaImport;
-        definition.SupportsExport = connectorCapabilities.SupportsExport;
-        definition.SupportsPartitions = connectorCapabilities.SupportsPartitions;
-        definition.SupportsPartitionContainers = connectorCapabilities.SupportsPartitionContainers;
-        definition.SupportsSecondaryExternalId = connectorCapabilities.SupportsSecondaryExternalId;
-        definition.SupportsUserSelectedExternalId = connectorCapabilities.SupportsUserSelectedExternalId;
-        definition.SupportsUserSelectedAttributeTypes = connectorCapabilities.SupportsUserSelectedAttributeTypes;
-        definition.SupportsAutoConfirmExport = connectorCapabilities.SupportsAutoConfirmExport;
-        definition.SupportsParallelExport = connectorCapabilities.SupportsParallelExport;
-        definition.SupportsPaging = connectorCapabilities.SupportsPaging;
-        definition.SupportsFilePaths = connectorCapabilities.SupportsFilePaths;
-        definition.SchemaStandard = connectorCapabilities.SchemaStandard;
+        ConnectorCapabilityMirror.CopyTo(connectorCapabilities, definition);
+        Log.Debug("ApplyConnectorDeclarations: Updated declarations for '{ConnectorName}': {ChangedDeclarations}",
+            LogSanitiser.Sanitise(definition.Name), string.Join(", ", changed));
         return true;
     }
 

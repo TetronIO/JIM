@@ -85,6 +85,62 @@ Whichever mode is selected, genuine data-quality issues remain discoverable:
 
 Set the mode from the **Import Behaviour** panel on the Connected System's Settings tab, with `Set-JIMConnectedSystem -UnresolvedReferenceHandling`, or via the REST API.
 
+## Credential attributes are never managed
+
+Some attributes hold credential material, or a hash of it. JIM will never import them, never let you select them for management, and never let you name them as the source or target of an Attribute Flow:
+
+`unicodePwd`, `userPassword`, `dBCSPwd`, `ntPwdHistory`, `lmPwdHistory`, `supplementalCredentials`, `unixUserPassword`, `msDS-ManagedPassword`
+
+There are two reasons. Most of these cannot be read back meaningfully (a directory returns nothing at all for `unicodePwd`, and opaque blobs for the history attributes), so anything imported would be empty or meaningless and every subsequent synchronisation would see a spurious change. The rest hold live credential material, and anything that reaches the Metaverse is replicated onward to every other Connected System in scope, written into change history, and rendered in the portal.
+
+Passwords are synchronised through JIM's dedicated password channel instead. That channel writes a password to a Connected System and never reads it back, so it is never held in the Metaverse. For LDAP and Active Directory the LDAP Connector writes `unicodePwd` itself, with the correct encoding; see [Setting Passwords](../connectors/jim-ldap-connector.md#setting-passwords) for the connection requirements.
+
+What you will see:
+
+- **Schema refresh**<br /> Credential attributes found in the Connected System are reported as blocked. They are counted as neither added nor removed, because neither is true.
+- **Attribute selection**<br /> The Selected switch is disabled, with a tooltip explaining why. Selecting one through the REST API or PowerShell is rejected.
+- **Attribute Flow**<br /> Credential attributes do not appear in the source or target attribute lists, and naming one through the REST API or PowerShell is rejected.
+- **Upgrades**<br /> If a credential attribute was selected on an existing deployment, the next schema refresh deselects and locks it rather than deleting it, so any Synchronisation Rule that references it stays intact. Remove those Attribute Flows and use the password channel instead.
+
+Attributes that merely *look* credential-bearing, such as `pwdLastSet`, `badPwdCount` and `pwdProperties`, are unaffected and remain fully selectable; they carry no credential material.
+
+## Password policy and the password channel
+
+Where a Connected System can accept passwords, its Schema tab carries a Password Channel panel. It has two jobs: showing you the password rules JIM read from the system itself, and letting you check the channel works before you rely on it.
+
+### Discovered password policy
+
+During schema discovery JIM reads the target's password policy and records it, so that configuring a generated password does not mean retyping rules the system already publishes. What is shown depends on what the system exposes: minimum length, whether complexity is required and how many character categories that means, password history length, and maximum and minimum password age.
+
+**A discovered policy is a floor, not a guarantee.** Two things routinely make the real rule stricter than the published one:
+
+- **Policies that apply to only some accounts.** Active Directory calls these Fine-Grained Password Policies. Reading them normally requires privileges JIM's service account should not hold, so JIM detects whether any exist rather than enumerating them, and reports one of three answers: none exist, some exist, or it could not tell. "Could not tell" is shown as its own state rather than being treated as "none", because an empty result from a directory is exactly what a caller with no rights over them receives. Where the panel says policies exist or that it could not tell, treat the figures shown as a minimum.
+- **Custom password filters.** A system can run its own password rules that are exposed over no protocol at all and cannot be discovered by anything. A password that satisfies everything on this panel can still be refused.
+
+For that reason, handling a refusal is part of how the password channel works rather than an error case, and no amount of discovery removes the need for it.
+
+Only Active Directory and Samba AD publish a policy a client can read. Other directories keep their password rules in configuration that an ordinary connection cannot see, and there is no cross-vendor standard for exposing them, so JIM reports that it found nothing rather than implying the system has no rules.
+
+### Checking the password channel
+
+The **Check password channel** button runs a read-only preflight. It sets no password on anything, so it is safe to run against production at any time.
+
+It reports on four things:
+
+| Check | What it means |
+|-------|---------------|
+| **Encryption** | Whether the connection is encrypted. A warning rather than a failure, because JIM permits an unencrypted password channel; Active Directory refuses one itself, so there it is very likely to be what stops a password set. |
+| **Password mechanism** | Whether the mechanism JIM would use is available: writing `unicodePwd` for Active Directory, or the LDAP Password Modify extended operation elsewhere. A system offering neither is reported as a failure, because JIM will not fall back to writing a password attribute directly. |
+| **Reset rights** | Whether the account JIM connects as may reset passwords in each container it manages. Reported per container, since directories grant rights per part of the tree. |
+| **Policy discovery** | Whether the password policy could be read, so the generator can be pre-filled from it. Never a failure: an unreadable policy means you configure the rules by hand. |
+
+Each check returns passed, warning, failed, or **could not tell**, and the last of those is deliberately distinct. A directory withholds what a caller may not see by omitting it, not by refusing: an attribute simply absent from a result, or a search returning no rows, both with a success code. Reporting either as a failure would tell you an account lacks rights it demonstrably has. Where the panel says JIM could not tell, the answer has to be confirmed at the system itself.
+
+A preflight is not stored. Reachability, permissions and policy all change without JIM being told, so a result kept on file would go on reassuring you long after it stopped being true.
+
+!!! note "The reset rights check needs somewhere to look"
+    Rights are checked in the containers this Connected System manages, by reading the permissions of one ordinary account in each. Select the containers to manage on the Partitions and Containers tab first, or the check has nowhere to look and says so. Accounts held in a directory's privileged groups are skipped: directories periodically overwrite their permissions from a template and switch off inheritance, so a delegation made on the container does not apply to them and sampling one would report the whole container as denied.
+
 ## Pending Exports
 
 Changes destined for the Connected System that have been computed by synchronisation but not yet written back. Run an export Run Profile to flush them. Inspecting Pending Exports is the right place to look when you want to know "what is JIM about to change in this system?"
