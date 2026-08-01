@@ -70,7 +70,7 @@ public class ActivityPhase
     /// How long the phase took, or null while it is still running or if it never ran.
     /// </summary>
     [NotMapped]
-    public TimeSpan? Duration => Started.HasValue && Ended.HasValue ? Ended.Value - Started.Value : null;
+    public TimeSpan? Duration => Started is { } started && Ended is { } ended ? ended - started : null;
 
     /// <summary>
     /// The prefix applied to a Connector's own phase keys when they are recorded, so that a
