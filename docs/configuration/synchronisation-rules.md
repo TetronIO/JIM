@@ -319,6 +319,16 @@ The search box in the table's toolbar narrows whatever the filters left, matchin
 
 The same filters are available to automation: see `Get-JIMSyncRule`'s `-Direction`, `-ActionType` and `-Status` parameters, and the matching query parameters on the Synchronisation Rules list endpoint in the REST API.
 
+## Confirming a change before you save it
+
+Saving a Synchronisation Rule can be harmless or far-reaching, and the two sit side by side on the same page: renaming a rule is beside the Deprovisioning Action that decides whether leavers' accounts are deleted. JIM judges each save by the properties that actually changed:
+
+- **Cosmetic changes** (name, description) save straight away with no prompt.
+- **Changes that affect synchronisation** (scope, mappings, Object Matching Rules, direction, enabling or disabling the rule) show a confirmation listing exactly what is changing, from which value to which, and remind you that a Full Synchronisation is what puts it into effect.
+- **Destructive changes** (Deprovisioning Action, Inbound Out-of-Scope Action) additionally state, in plain terms, what the change will do: which objects will be deleted rather than disconnected, or disconnected rather than left joined.
+
+The same rules apply across every configuration surface; see [Configuration changes](configuration-changes.md) for the full picture, including when JIM stays silent.
+
 ## Manage Synchronisation Rules
 
 - **JIM portal**<br /> Synchronisation Rules area of the admin UI
@@ -327,6 +337,7 @@ The same filters are available to automation: see `Get-JIMSyncRule`'s `-Directio
 
 ## See also
 
+- [Configuration changes](configuration-changes.md) -- how JIM classifies and confirms configuration changes
 - [Connected Systems](connected-systems.md) -- the systems a Synchronisation Rule connects to
 - [Concepts: Synchronisation Pipeline](../concepts/synchronisation-pipeline.md) -- where Synchronisation Rules fit in the import/sync/export flow
 - [Concepts: Attribute Priority](../concepts/attribute-priority.md) -- how JIM resolves which source wins when several rules feed the same attribute, and the "Null is a value" setting

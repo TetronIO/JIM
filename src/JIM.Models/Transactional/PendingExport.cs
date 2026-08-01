@@ -2,6 +2,7 @@
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
 using JIM.Models.Core;
+using JIM.Models.Logic;
 using JIM.Models.Staging;
 namespace JIM.Models.Transactional;
 
@@ -102,6 +103,25 @@ public class PendingExport
     public bool HasUnresolvedReferences { get; set; }
 
     #endregion
+
+    /// <summary>
+    /// The Synchronisation Rule whose provisioning decision produced this export, recorded only for a
+    /// <see cref="PendingExportChangeType.Create"/>.
+    /// <para>
+    /// Recorded here because it is knowable exactly once, at the moment the provisioning decision is made, and
+    /// is needed much later, when the account exists and can be given its first password. Working it out again
+    /// at export time would mean re-evaluating scope against rules that may have been edited in the meantime,
+    /// which is both expensive and capable of reaching a different answer than the one that created the account.
+    /// </para>
+    /// <para>
+    /// Null for updates and deletes, for exports staged before this was recorded, and for a create whose rule
+    /// has since been deleted. A null therefore means "no initial password to deliver" rather than "look it up
+    /// another way".
+    /// </para>
+    /// </summary>
+    public SyncRule? ProvisioningSyncRule { get; set; }
+
+    public int? ProvisioningSyncRuleId { get; set; }
 
     /// <summary>
     /// When this Pending Export was created.

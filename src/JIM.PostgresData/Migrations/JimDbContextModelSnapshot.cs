@@ -1529,6 +1529,37 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("SyncRules");
                 });
 
+            modelBuilder.Entity("JIM.Models.Logic.SyncRuleInitialPassword", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("EnableAccount")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("ExpiryBehaviour")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SyncRuleId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SyncRuleId")
+                        .IsUnique();
+
+                    b.ToTable("SyncRuleInitialPasswords");
+                });
+
             modelBuilder.Entity("JIM.Models.Logic.SyncRuleMapping", b =>
                 {
                     b.Property<int>("Id")
@@ -2759,6 +2790,52 @@ namespace JIM.PostgresData.Migrations
                     b.ToTable("ConnectedSystemPartitions");
                 });
 
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPasswordPolicy", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool?>("ComplexityRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("ConnectedSystemId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Discovered")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FineGrainedPolicySignal")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeSpan?>("MaximumPasswordAge")
+                        .HasColumnType("interval");
+
+                    b.Property<int?>("MinimumLength")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeSpan?>("MinimumPasswordAge")
+                        .HasColumnType("interval");
+
+                    b.Property<int?>("PasswordHistoryLength")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RecognisedCharacterClasses")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RequiredCharacterClassCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConnectedSystemId")
+                        .IsUnique();
+
+                    b.ToTable("ConnectedSystemPasswordPolicies");
+                });
+
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemRunProfile", b =>
                 {
                     b.Property<int>("Id")
@@ -2959,6 +3036,12 @@ namespace JIM.PostgresData.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<bool>("SupportsPartitions")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SupportsPasswordPolicyDiscovery")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SupportsPasswordSet")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("SupportsSecondaryExternalId")
@@ -3251,6 +3334,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<DateTime?>("NextRetryAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("ProvisioningSyncRuleId")
+                        .HasColumnType("integer");
+
                     b.Property<Guid?>("SourceMetaverseObjectId")
                         .HasColumnType("uuid");
 
@@ -3267,6 +3353,10 @@ namespace JIM.PostgresData.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_PendingExports_ConnectedSystemObjectId_Unique")
                         .HasFilter("\"ConnectedSystemObjectId\" IS NOT NULL");
+
+                    b.HasIndex("ProvisioningSyncRuleId")
+                        .HasDatabaseName("IX_PendingExports_ProvisioningSyncRuleId")
+                        .HasFilter("\"ProvisioningSyncRuleId\" IS NOT NULL");
 
                     b.HasIndex("SourceMetaverseObjectId");
 
@@ -3842,6 +3932,73 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("MetaverseObjectType");
                 });
 
+            modelBuilder.Entity("JIM.Models.Logic.SyncRuleInitialPassword", b =>
+                {
+                    b.HasOne("JIM.Models.Logic.SyncRule", "SyncRule")
+                        .WithOne("InitialPassword")
+                        .HasForeignKey("JIM.Models.Logic.SyncRuleInitialPassword", "SyncRuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.OwnsOne("JIM.Models.Staging.PasswordGenerationPolicy", "CustomPolicy", b1 =>
+                        {
+                            b1.Property<int>("SyncRuleInitialPasswordId")
+                                .HasColumnType("integer");
+
+                            b1.Property<bool>("AppendSymbol")
+                                .HasColumnType("boolean");
+
+                            b1.Property<int>("AppendedDigitCount")
+                                .HasColumnType("integer");
+
+                            b1.Property<bool>("ExcludeAmbiguousCharacters")
+                                .HasColumnType("boolean");
+
+                            b1.Property<int>("Length")
+                                .HasColumnType("integer");
+
+                            b1.Property<int>("MinimumDigits")
+                                .HasColumnType("integer");
+
+                            b1.Property<int>("MinimumLowercase")
+                                .HasColumnType("integer");
+
+                            b1.Property<int>("MinimumSymbols")
+                                .HasColumnType("integer");
+
+                            b1.Property<int>("MinimumUppercase")
+                                .HasColumnType("integer");
+
+                            b1.Property<string>("PermittedSymbols")
+                                .IsRequired()
+                                .HasColumnType("text");
+
+                            b1.Property<int>("Style")
+                                .HasColumnType("integer");
+
+                            b1.Property<int>("WordCapitalisation")
+                                .HasColumnType("integer");
+
+                            b1.Property<int>("WordCount")
+                                .HasColumnType("integer");
+
+                            b1.Property<int>("WordSeparator")
+                                .HasColumnType("integer");
+
+                            b1.HasKey("SyncRuleInitialPasswordId");
+
+                            b1.ToTable("SyncRuleInitialPasswords");
+
+                            b1.WithOwner()
+                                .HasForeignKey("SyncRuleInitialPasswordId");
+                        });
+
+                    b.Navigation("CustomPolicy")
+                        .IsRequired();
+
+                    b.Navigation("SyncRule");
+                });
+
             modelBuilder.Entity("JIM.Models.Logic.SyncRuleMapping", b =>
                 {
                     b.HasOne("JIM.Models.Logic.SyncRule", "SyncRule")
@@ -4182,6 +4339,17 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystem");
                 });
 
+            modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemPasswordPolicy", b =>
+                {
+                    b.HasOne("JIM.Models.Staging.ConnectedSystem", "ConnectedSystem")
+                        .WithOne("PasswordPolicy")
+                        .HasForeignKey("JIM.Models.Staging.ConnectedSystemPasswordPolicy", "ConnectedSystemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ConnectedSystem");
+                });
+
             modelBuilder.Entity("JIM.Models.Staging.ConnectedSystemRunProfile", b =>
                 {
                     b.HasOne("JIM.Models.Staging.ConnectedSystem", null)
@@ -4305,6 +4473,11 @@ namespace JIM.PostgresData.Migrations
                         .HasForeignKey("ConnectedSystemObjectId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("JIM.Models.Logic.SyncRule", "ProvisioningSyncRule")
+                        .WithMany()
+                        .HasForeignKey("ProvisioningSyncRuleId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("JIM.Models.Core.MetaverseObject", "SourceMetaverseObject")
                         .WithMany()
                         .HasForeignKey("SourceMetaverseObjectId")
@@ -4313,6 +4486,8 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("ConnectedSystem");
 
                     b.Navigation("ConnectedSystemObject");
+
+                    b.Navigation("ProvisioningSyncRule");
 
                     b.Navigation("SourceMetaverseObject");
                 });
@@ -4447,6 +4622,8 @@ namespace JIM.PostgresData.Migrations
 
                     b.Navigation("AttributeFlowRules");
 
+                    b.Navigation("InitialPassword");
+
                     b.Navigation("ObjectMatchingRules");
 
                     b.Navigation("ObjectScopingCriteriaGroups");
@@ -4494,6 +4671,8 @@ namespace JIM.PostgresData.Migrations
                     b.Navigation("Objects");
 
                     b.Navigation("Partitions");
+
+                    b.Navigation("PasswordPolicy");
 
                     b.Navigation("PendingExports");
 

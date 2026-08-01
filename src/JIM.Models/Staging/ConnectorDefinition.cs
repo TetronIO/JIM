@@ -140,6 +140,19 @@ public class ConnectorDefinition : IAuditable, IConnectorCapabilities
     public bool SupportsFilePaths { get; set; }
 
     /// <summary>
+    /// Does the Connector support setting a password on an object in the Connected System? When true, the
+    /// Connector also implements IConnectorPasswordManagement. Independent of SupportsExport, because passwords
+    /// travel on their own write-only channel rather than through Attribute Flow.
+    /// </summary>
+    public bool SupportsPasswordSet { get; set; }
+
+    /// <summary>
+    /// Can the Connector read the password policy the Connected System enforces? When true, the Connector also
+    /// implements IConnectorPasswordPolicyDiscovery and JIM reads the policy during schema import.
+    /// </summary>
+    public bool SupportsPasswordPolicyDiscovery { get; set; }
+
+    /// <summary>
     /// Which wire standard's vocabulary Connected Systems using this Connector follow, as declared by the
     /// Connector itself and reconciled on every startup. Advisory metadata: the portal uses it to decide
     /// which Standard Mapping hints to show in the Attribute Flow editor. Never read by the synchronisation
