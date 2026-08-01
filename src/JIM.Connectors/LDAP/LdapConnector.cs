@@ -14,7 +14,7 @@ using System.Net;
 using System.Security.Cryptography.X509Certificates;
 namespace JIM.Connectors.LDAP;
 
-public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IDisposable
+public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorPartitions, IConnectorImportUsingCalls, IConnectorExportUsingCalls, IConnectorCertificateAware, IConnectorCredentialAware, IConnectorContainerCreation, IConnectorRecommendedExportParallelism, IConnectorPhases, IDisposable
 {
     private LdapConnection? _connection;
     private Func<LdapConnection>? _connectionFactory;
@@ -455,7 +455,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         };
     }
 
-    public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, List<ConnectedSystemPaginationToken> paginationTokens, string? persistedConnectorData, ILogger logger, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null)
+    public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, List<ConnectedSystemPaginationToken> paginationTokens, string? persistedConnectorData, ILogger logger, CancellationToken cancellationToken, IConnectorProgress progress)
     {
         logger.Verbose("ImportAsync() called");
 
@@ -471,7 +471,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             .SingleOrDefault(s => s.Setting.Name == _settingImportConcurrency)?.IntValue
             ?? LdapConnectorConstants.DEFAULT_IMPORT_CONCURRENCY;
 
-        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, _connectionFactory, importConcurrency, paginationTokens, persistedConnectorData, logger, cancellationToken, progressCallback);
+        var import = new LdapConnectorImport(connectedSystem, runProfile, _connection, _connectionFactory, importConcurrency, paginationTokens, persistedConnectorData, logger, cancellationToken, progress);
 
         switch (runProfile.RunType)
         {
@@ -518,7 +518,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         }
     }
 
-    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null)
+    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, IConnectorProgress progress)
     {
         if (_connection == null)
             throw new InvalidOperationException("Must call OpenExportConnection() before ExportAsync()!");
@@ -538,7 +538,7 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
             .FirstOrDefault(s => s.Setting.Name == _settingGroupPlaceholderMemberDn)?.StringValue
             ?? LdapConnectorConstants.DEFAULT_GROUP_PLACEHOLDER_MEMBER_DN;
 
-        // progressCallback is deliberately not used: LDAP export iterates per item, and JIM already
+        // progress is deliberately not used for export: LDAP export iterates per item, and JIM already
         // reports accurate per-batch counts around this call. The connector's only internal phase
         // (parent container creation) happens per object rather than as a pre-flight step, so emitting
         // from it would replace a moving "N of M" with a message that says less. See
@@ -599,6 +599,38 @@ public class LdapConnector : IConnector, IConnectorCapabilities, IConnectorSetti
         return exportConcurrency >= CAPABLE_DIRECTORY_CONCURRENCY_THRESHOLD
             ? RECOMMENDED_EXPORT_PARALLELISM
             : null;
+    }
+    #endregion
+
+    #region IConnectorPhases members
+    /// <summary>
+    /// The steps this Connector performs, so an administrator watching a directory import can see
+    /// where the time is going rather than one message at a time. A Delta Import asks the directory
+    /// what has changed before fetching anything, and against Active Directory asks separately for
+    /// deleted objects, so it has a longer journey than a Full Import.
+    /// </summary>
+    /// <remarks>
+    /// Export declares nothing: it iterates per object, and JIM already reports accurate per-batch
+    /// counts around the call, so a step would say less than the counts already do.
+    /// </remarks>
+    public IReadOnlyList<ConnectorPhase> GetPhases(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile)
+    {
+        return runProfile.RunType switch
+        {
+            ConnectedSystemRunType.FullImport =>
+            [
+                new ConnectorPhase(LdapConnectorPhases.RootDse, LdapConnectorPhases.RootDseName),
+                new ConnectorPhase(LdapConnectorPhases.Fetch, LdapConnectorPhases.FetchName)
+            ],
+            ConnectedSystemRunType.DeltaImport =>
+            [
+                new ConnectorPhase(LdapConnectorPhases.RootDse, LdapConnectorPhases.RootDseName),
+                new ConnectorPhase(LdapConnectorPhases.QueryChanges, LdapConnectorPhases.QueryChangesName),
+                new ConnectorPhase(LdapConnectorPhases.Fetch, LdapConnectorPhases.FetchName),
+                new ConnectorPhase(LdapConnectorPhases.QueryDeletions, LdapConnectorPhases.QueryDeletionsName)
+            ],
+            _ => []
+        };
     }
     #endregion
 

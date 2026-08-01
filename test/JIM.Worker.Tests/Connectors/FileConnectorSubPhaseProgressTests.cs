@@ -53,28 +53,58 @@ public class FileConnectorSubPhaseProgressTests
     #region Export
 
     [Test]
-    public async Task ExportAsync_WithProgressCallback_ReportsLoadMergeAndWriteInOrderAsync()
+    public async Task ExportAsync_WithProgressReporter_EntersLoadMergeAndWriteInOrderAsync()
     {
         // Arrange
         var settingValues = CreateExportSettingValues(_testExportPath);
         var pendingExports = CreateCreatePendingExports("emp001", "emp002");
-        var messages = new List<string>();
+        var progress = new RecordingConnectorProgress();
 
         // Act
-        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None,
-            message =>
-            {
-                messages.Add(message);
-                return Task.CompletedTask;
-            });
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, progress);
 
         // Assert
-        Assert.That(messages, Is.EqualTo(new[]
+        Assert.That(progress.PhaseKeys, Is.EqualTo(new[]
         {
-            "Loading existing export file...",
+            FileConnectorPhases.LoadExistingFile,
+            FileConnectorPhases.Merge,
+            FileConnectorPhases.Write
+        }), "The steps an administrator sees must be the declared ones, entered in the order the work happens");
+    }
+
+    [Test]
+    public async Task ExportAsync_WithProgressReporter_NarratesTheScaleOfTheWorkAsync()
+    {
+        // Arrange - a step's name says what is happening; the message says how much of it there is.
+        var settingValues = CreateExportSettingValues(_testExportPath);
+        var pendingExports = CreateCreatePendingExports("emp001", "emp002");
+        var progress = new RecordingConnectorProgress();
+
+        // Act
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, progress);
+
+        // Assert
+        Assert.That(progress.Messages, Is.EqualTo(new[]
+        {
             "Merging 2 changes into file...",
             "Writing 2 rows to output file..."
         }));
+    }
+
+    [Test]
+    public async Task ExportAsync_EveryPhaseEntered_WasDeclaredUpFrontAsync()
+    {
+        // A phase entered but never declared still shows, appended to the end of the stepper, but it
+        // cannot be shown as still to come. Every phase this Connector enters must be declared.
+        var settingValues = CreateExportSettingValues(_testExportPath);
+        var pendingExports = CreateCreatePendingExports("emp001");
+        var progress = new RecordingConnectorProgress();
+        var runProfile = new ConnectedSystemRunProfile { RunType = ConnectedSystemRunType.Export };
+        var declared = _connector.GetPhases(new ConnectedSystem { Name = "Target" }, runProfile).Select(p => p.Key).ToList();
+
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, progress);
+
+        Assert.That(declared, Is.SupersetOf(progress.PhaseKeys));
     }
 
     [Test]
@@ -82,29 +112,24 @@ public class FileConnectorSubPhaseProgressTests
     {
         // Arrange
         var settingValues = CreateExportSettingValues(_testExportPath);
-        var messages = new List<string>();
+        var progress = new RecordingConnectorProgress();
 
         // Act
-        await _connector.ExportAsync(settingValues, new List<PendingExport>(), CancellationToken.None,
-            message =>
-            {
-                messages.Add(message);
-                return Task.CompletedTask;
-            });
+        await _connector.ExportAsync(settingValues, new List<PendingExport>(), CancellationToken.None, progress);
 
         // Assert
-        Assert.That(messages, Is.Empty, "Nothing to export means no file work to narrate");
+        Assert.That(progress.Messages, Is.Empty, "Nothing to export means no file work to narrate");
     }
 
     [Test]
-    public async Task ExportAsync_WithoutProgressCallback_StillExportsAsync()
+    public async Task ExportAsync_WithTheNoOpProgressReporter_StillExportsAsync()
     {
         // Arrange
         var settingValues = CreateExportSettingValues(_testExportPath);
         var pendingExports = CreateCreatePendingExports("emp001");
 
         // Act
-        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(results, Has.Count.EqualTo(1));
@@ -115,16 +140,15 @@ public class FileConnectorSubPhaseProgressTests
     [Test]
     public async Task ExportAsync_WhenProgressCallbackThrows_StillExportsAsync()
     {
-        // Arrange - the connector reports progress directly; the caller is responsible for guarding
-        // its own delegate (ConnectorSubPhaseProgress does this), so a throwing delegate here proves
-        // the connector does not swallow export results on a progress failure.
+        // Arrange - guarding the reporter is JIM's job, not the Connector's, so this uses the real
+        // reporter with a delegate that throws: the export must still complete.
         var settingValues = CreateExportSettingValues(_testExportPath);
         var pendingExports = CreateCreatePendingExports("emp001");
-        using var progress = new ConnectorSubPhaseProgress(
+        using var progress = new ConnectorProgress(
             _ => throw new InvalidOperationException("activity update failed"));
 
         // Act
-        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, progress.Callback);
+        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, progress);
 
         // Assert
         Assert.That(results, Has.Count.EqualTo(1));
@@ -147,20 +171,16 @@ public class FileConnectorSubPhaseProgressTests
             FilePath = filePath,
             RunType = ConnectedSystemRunType.FullImport
         };
-        var messages = new List<string>();
+        var progress = new RecordingConnectorProgress();
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None,
-            message =>
-            {
-                messages.Add(message);
-                return Task.CompletedTask;
-            });
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, progress);
 
         // Assert
         Assert.That(result.ImportObjects, Has.Count.EqualTo(25_000));
-        Assert.That(messages[0], Is.EqualTo("Reading CSV file..."));
-        Assert.That(messages.Skip(1), Is.EqualTo(new[]
+        Assert.That(progress.PhaseKeys, Is.EqualTo(new[] { FileConnectorPhases.Read }),
+            "Reading and parsing a file is one pass, so it is one step");
+        Assert.That(progress.Messages, Is.EqualTo(new[]
         {
             "Parsed 10,000 rows...",
             "Parsed 20,000 rows...",
@@ -179,22 +199,17 @@ public class FileConnectorSubPhaseProgressTests
             FilePath = filePath,
             RunType = ConnectedSystemRunType.FullImport
         };
-        var messages = new List<string>();
+        var progress = new RecordingConnectorProgress();
 
         // Act
-        await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None,
-            message =>
-            {
-                messages.Add(message);
-                return Task.CompletedTask;
-            });
+        await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, progress);
 
         // Assert
-        Assert.That(messages, Is.EqualTo(new[] { "Reading CSV file...", "Parsed 3 rows..." }));
+        Assert.That(progress.Messages, Is.EqualTo(new[] { "Parsed 3 rows..." }));
     }
 
     [Test]
-    public async Task ImportAsync_WithoutProgressCallback_StillImportsAsync()
+    public async Task ImportAsync_WithTheNoOpProgressReporter_StillImportsAsync()
     {
         // Arrange
         var filePath = CreateCsvFile(rowCount: 5);
@@ -206,7 +221,7 @@ public class FileConnectorSubPhaseProgressTests
         };
 
         // Act
-        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None);
+        var result = await _connector.ImportAsync(connectedSystem, runProfile, _logger, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(result.ImportObjects, Has.Count.EqualTo(5));
