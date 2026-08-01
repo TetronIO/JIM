@@ -205,6 +205,28 @@ public class ExportExecutionServer
     }
 
     /// <summary>
+    /// Builds the sub-phase progress reporter handed to a connector (issue #637). The connector supplies
+    /// only a human-readable message describing what it is doing internally; JIM keeps ownership of the
+    /// phase and the counts, which the connector cannot meaningfully populate.
+    /// </summary>
+    /// <param name="progressCallback">The caller's progress callback, or null when it wants no progress.</param>
+    /// <param name="infoFactory">Wraps a connector sub-phase message into a progress report carrying this
+    /// call site's current counts.</param>
+    /// <param name="sharedGate">The call site's own progress gate, where it has one, so that connector
+    /// emits and JIM's own emits serialise against each other rather than racing on a shared DbContext.</param>
+    private static ConnectorSubPhaseProgress CreateConnectorProgress(
+        Func<ExportProgressInfo, Task>? progressCallback,
+        Func<string, ExportProgressInfo> infoFactory,
+        SemaphoreSlim? sharedGate = null)
+    {
+        return new ConnectorSubPhaseProgress(
+            progressCallback == null
+                ? null
+                : async subPhase => await progressCallback(infoFactory(subPhase)),
+            sharedGate: sharedGate);
+    }
+
+    /// <summary>
     /// Loads all executable exports for a Connected System, identifies CREATE+DELETE and
     /// UPDATE+DELETE pairs targeting the same CSO, and deletes the reconciled exports from the DB.
     /// Returns the total number of Pending Exports removed.
@@ -401,6 +423,15 @@ public class ExportExecutionServer
                 var deferredExports = new List<PendingExport>();
                 var processedCount = 0;
                 var processedIds = new HashSet<Guid>();
+
+                // Sub-phase narration from the connector, carrying the counts JIM owns (issue #637).
+                using var connectorProgress = CreateConnectorProgress(progressCallback, subPhase => new ExportProgressInfo
+                {
+                    Phase = ExportPhase.Executing,
+                    TotalExports = result.TotalPendingExports,
+                    ProcessedExports = processedCount,
+                    Message = subPhase
+                });
                 DateTime? cursorCreatedAt = null;
                 Guid? cursorId = null;
                 var exportPhaseStopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -495,7 +526,7 @@ public class ExportExecutionServer
                                 .SetTag("cumulativeObjectCount", processedCount + immediateExports.Count)
                                 .SetTag("wallClockOffsetMs", exportPhaseStopwatch.Elapsed.TotalMilliseconds))
                             {
-                                exportResults = await connector.ExportAsync(immediateExports, cancellationToken);
+                                exportResults = await connector.ExportAsync(immediateExports, cancellationToken, connectorProgress.Callback);
                             }
 
                             // Process results
@@ -826,6 +857,16 @@ public class ExportExecutionServer
         // the live counters plus processedCount would double-count completed deferred items.
         var immediateProcessedCount = result.SuccessCount + result.FailedCount;
         var processedCount = 0;
+
+        // Sub-phase narration from the connector, carrying the counts JIM owns (issue #637).
+        using var connectorProgress = CreateConnectorProgress(progressCallback, subPhase => new ExportProgressInfo
+        {
+            Phase = ExportPhase.Executing,
+            TotalExports = result.TotalPendingExports,
+            ProcessedExports = immediateProcessedCount + processedCount,
+            Message = subPhase
+        });
+
         foreach (var batch in batches)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -850,7 +891,7 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
                 .SetTag("batchSize", batch.Count))
             {
-                exportResults = await connector.ExportAsync(batch, cancellationToken);
+                exportResults = await connector.ExportAsync(batch, cancellationToken, connectorProgress.Callback);
             }
 
             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
@@ -895,6 +936,16 @@ public class ExportExecutionServer
         // Serialise progress reporting to protect the caller's shared DbContext
         using var progressSemaphore = new SemaphoreSlim(1, 1);
         var processedCount = 0;
+
+        // Sub-phase narration from the batch connectors, on the same gate as the per-batch progress
+        // below so that concurrent batches cannot report through the caller's DbContext at once.
+        using var connectorProgress = CreateConnectorProgress(progressCallback, subPhase => new ExportProgressInfo
+        {
+            Phase = ExportPhase.Executing,
+            TotalExports = result.TotalPendingExports,
+            ProcessedExports = processedExportsOffset + Volatile.Read(ref processedCount),
+            Message = subPhase
+        }, progressSemaphore);
 
         // Lock for thread-safe result aggregation
         var resultLock = new object();
@@ -949,7 +1000,7 @@ public class ExportExecutionServer
                     await batchRepo.MarkPendingExportsAsExecutingAsync(batch);
 
                     // Execute batch via connector
-                    var exportResults = await batchConnector.ExportAsync(batch, cancellationToken);
+                    var exportResults = await batchConnector.ExportAsync(batch, cancellationToken, connectorProgress.Callback);
 
                     // Process results using the batch's own repository
                     var batchResult = new ExportExecutionResult();
@@ -1570,8 +1621,18 @@ public class ExportExecutionServer
                 Message = $"Exporting {pendingExports.Count} changes to file"
             });
 
-            // File-based export - execute all at once (file connectors typically batch internally)
-            var exportResults = await connector.ExportAsync(connectedSystem.SettingValues, pendingExports, cancellationToken);
+            // File-based export - execute all at once (file connectors typically batch internally).
+            // The counts cannot move while the connector holds the call, so its sub-phase narration is
+            // the only thing that tells an operator the run is alive (issue #637).
+            using var connectorProgress = CreateConnectorProgress(progressCallback, subPhase => new ExportProgressInfo
+            {
+                Phase = ExportPhase.Executing,
+                TotalExports = result.TotalPendingExports,
+                ProcessedExports = result.SuccessCount + result.FailedCount,
+                Message = subPhase
+            });
+
+            var exportResults = await connector.ExportAsync(connectedSystem.SettingValues, pendingExports, cancellationToken, connectorProgress.Callback);
 
             // Check if the connector supports auto-confirm and the setting is enabled
             var autoConfirm = false;

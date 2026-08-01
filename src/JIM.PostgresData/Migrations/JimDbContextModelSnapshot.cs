@@ -85,6 +85,9 @@ namespace JIM.PostgresData.Migrations
                         .HasMaxLength(45)
                         .HasColumnType("character varying(45)");
 
+                    b.Property<int>("ConfigurationChangeClass")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ConfigurationChangeSnapshot")
                         .HasColumnType("jsonb");
 
@@ -120,6 +123,9 @@ namespace JIM.PostgresData.Migrations
 
                     b.Property<DateTime?>("DeletedRecordsToDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErrorDetail")
+                        .HasColumnType("text");
 
                     b.Property<string>("ErrorMessage")
                         .HasColumnType("text");
@@ -3001,6 +3007,9 @@ namespace JIM.PostgresData.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int>("SchemaStandard")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("SupportsAutoConfirmExport")
                         .HasColumnType("boolean");

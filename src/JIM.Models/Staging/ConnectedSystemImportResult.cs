@@ -28,8 +28,9 @@ public class ConnectedSystemImportResult
     public string? PersistedConnectorData { get; set; }
 
     /// <summary>
-    /// Optional warning message from the connector. When set, the import will complete with a warning
-    /// status and the message will be recorded as an RPEI. Use this to communicate non-fatal operational
+    /// Optional warning message from the connector. When set, the import completes and the message is
+    /// recorded on the Activity itself, deliberately not as an RPEI (a phantom RPEI with no CSO
+    /// association would inflate the error counts). Use this to communicate non-fatal operational
     /// issues to the administrator (e.g., a delta import that fell back to a full import).
     /// </summary>
     public string? WarningMessage { get; set; }

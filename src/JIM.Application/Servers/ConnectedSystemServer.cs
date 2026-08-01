@@ -236,6 +236,17 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// Gets the wire standard a Connected System's schema follows, as declared by its Connector, so the portal
+    /// can show the right Standard Mapping hints in the Attribute Flow editor (#1122). Returns
+    /// <see cref="AttributeStandard.NotSet"/> when the Connector declares none, or the Connected System is gone.
+    /// </summary>
+    /// <param name="connectedSystemId">The unique identifier of the Connected System.</param>
+    public async Task<AttributeStandard> GetConnectedSystemSchemaStandardAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetConnectedSystemSchemaStandardAsync(connectedSystemId);
+    }
+
+    /// <summary>
     /// Creates a Connector Definition, recording a Create Activity and version-1 configuration snapshot. Attributed via
     /// the initiator triad, so seeding and any future upload UI/API share one audited path. No principal-carrying caller
     /// exists yet (built-in definitions are seeded); the triad lets that caller arrive without a signature change.
@@ -1311,9 +1322,18 @@ public class ConnectedSystemServer
 
         // resolve the connector so its own, connector-specific validation can run too. connectors that don't
         // implement IConnectorSettings have no such validation to add; the generic results above stand alone.
+        // validation opens real connections, so the connector is disposed here rather than left to the collector:
+        // it holds the connection and any temporary files prepared for it.
         var connector = CreateConnector(connectedSystem);
-        if (connector is IConnectorSettings settingsConnector)
-            results.AddRange(settingsConnector.ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
+        try
+        {
+            if (connector is IConnectorSettings settingsConnector)
+                results.AddRange(settingsConnector.ValidateSettingValues(connectedSystem.SettingValues, Log.Logger));
+        }
+        finally
+        {
+            (connector as IDisposable)?.Dispose();
+        }
 
         return results;
     }
@@ -1343,8 +1363,6 @@ public class ConnectedSystemServer
     {
         ValidateConnectedSystemParameter(connectedSystem);
 
-        var result = new SchemaRefreshResult { Success = true };
-
         // resolve the connector, and confirm it supports schema import, before creating the activity: an
         // unsupported connector must never leave an in-flight activity behind.
         var connector = CreateConnector(connectedSystem);
@@ -1361,14 +1379,105 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
-        var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
+        // Everything from here on is covered, so that a Connected System whose schema cannot be read finishes
+        // its Activity as a failure carrying the reason, rather than leaving one in flight for ever with nothing
+        // recorded against it. The exception still reaches the caller; the Activity is the audit record, not the
+        // response.
+        try
+        {
+            var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
+            var result = MergeSchemaIntoConnectedSystem(connectedSystem, schema);
+
+            // Read the target's password policy while connected, so initial password settings can be pre-filled
+            // from the system rather than retyped by an administrator.
+            await DiscoverPasswordPolicyAsync(connector, connectedSystem, result);
+
+            await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedBy);
+
+            // A schema import changes the system's configuration (object types and attributes); capture it onto the
+            // ImportSchema activity so the change is versioned in the system's history. Reloaded, as ids are assigned on save.
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+
+            // finish the activity
+            await Application.Activities.CompleteActivityAsync(activity);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Imports a Connected System schema (initiated by API key).
+    /// </summary>
+    public async Task<SchemaRefreshResult> ImportConnectedSystemSchemaAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        // resolve the connector, and confirm it supports schema import, before creating the activity: an
+        // unsupported connector must never leave an in-flight activity behind.
+        var connector = CreateConnector(connectedSystem);
+        if (connector is not IConnectorSchema schemaConnector)
+            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support schema import.");
+
+        var activity = new Activity
+        {
+            TargetName = connectedSystem.Name,
+            TargetType = ActivityTargetType.ConnectedSystem,
+            TargetOperationType = ActivityTargetOperationType.ImportSchema,
+            ConnectedSystemId = connectedSystem.Id
+        };
+        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
+
+        // Covered from here on: see the user-initiated overload above.
+        try
+        {
+            var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
+            var result = MergeSchemaIntoConnectedSystem(connectedSystem, schema);
+
+            // Read the target's password policy while connected, so initial password settings can be pre-filled
+            // from the system rather than retyped by an administrator.
+            await DiscoverPasswordPolicyAsync(connector, connectedSystem, result);
+
+            await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedByApiKey);
+
+            // Capture the configuration change onto the ImportSchema activity: see the user-initiated overload above.
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+
+            await Application.Activities.CompleteActivityAsync(activity);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Merges a schema retrieved from a Connected System into that system's object types and attributes, and
+    /// reports what changed. Object types and attributes are matched by name so that existing ids survive the
+    /// refresh; this is what stops a Synchronisation Rule's mappings from being invalidated by one. Removal of
+    /// object types and attributes that the schema no longer offers is reported but not applied here.
+    /// </summary>
+    /// <remarks>
+    /// Shared by both <see cref="ImportConnectedSystemSchemaAsync(ConnectedSystem, MetaverseObject?)"/> and
+    /// <see cref="ImportConnectedSystemSchemaAsync(ConnectedSystem, ApiKey)"/>, so the same schema reaches the same
+    /// conclusion whichever surface asked for it. They were separate copies of this logic, and the copies had
+    /// drifted: only the user-initiated one auto-selected a single newly-discovered object type, so an import run
+    /// through the REST API or PowerShell left different configuration behind than the same import run through the
+    /// portal. The initiator decides who the Activity is attributed to; it does not decide what a schema means.
+    /// </remarks>
+    private static SchemaRefreshResult MergeSchemaIntoConnectedSystem(ConnectedSystem connectedSystem, ConnectorSchema schema)
+    {
+        var result = new SchemaRefreshResult { Success = true };
 
         // Credential attributes must never enter JIM's schema as new, manageable attributes.
         FilterCredentialAttributesFromSchema(connectedSystem, schema, result);
-
-        // Read the target's password policy while connected, so initial password settings can be pre-filled from
-        // the system rather than retyped by an administrator.
-        await DiscoverPasswordPolicyAsync(connector, connectedSystem, result);
 
         // Merge the new schema with the existing one, preserving IDs for attributes that are referenced by Synchronisation Rules
         // This prevents FK constraint violations when attributes are used in Synchronisation Rule mappings
@@ -1515,182 +1624,6 @@ public class ConnectedSystemServer
         // admin previously deselected.
         if (connectedSystem.ObjectTypes.Count == 1 && result.AddedObjectTypes.Count == 1)
             connectedSystem.ObjectTypes[0].Selected = true;
-
-        await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedBy);
-
-        // A schema import changes the system's configuration (object types and attributes); capture it onto the
-        // ImportSchema activity so the change is versioned in the system's history. Reloaded, as ids are assigned on save.
-        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
-
-        // finish the activity
-        await Application.Activities.CompleteActivityAsync(activity);
-
-        return result;
-    }
-
-    /// <summary>
-    /// Imports a Connected System schema (initiated by API key).
-    /// </summary>
-    public async Task<SchemaRefreshResult> ImportConnectedSystemSchemaAsync(ConnectedSystem connectedSystem, ApiKey initiatedByApiKey)
-    {
-        ValidateConnectedSystemParameter(connectedSystem);
-
-        var result = new SchemaRefreshResult { Success = true };
-
-        // resolve the connector, and confirm it supports schema import, before creating the activity: an
-        // unsupported connector must never leave an in-flight activity behind.
-        var connector = CreateConnector(connectedSystem);
-        if (connector is not IConnectorSchema schemaConnector)
-            throw new NotSupportedException($"The '{connectedSystem.ConnectorDefinition.Name}' connector does not support schema import.");
-
-        var activity = new Activity
-        {
-            TargetName = connectedSystem.Name,
-            TargetType = ActivityTargetType.ConnectedSystem,
-            TargetOperationType = ActivityTargetOperationType.ImportSchema,
-            ConnectedSystemId = connectedSystem.Id
-        };
-        await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
-
-        var schema = await schemaConnector.GetSchemaAsync(connectedSystem.SettingValues, Log.Logger);
-
-        // Credential attributes must never enter JIM's schema as new, manageable attributes. See the
-        // user-initiated overload above; both routes share this enforcement so they cannot drift.
-        FilterCredentialAttributesFromSchema(connectedSystem, schema, result);
-
-        // Read the target's password policy while connected, so initial password settings can be pre-filled from
-        // the system rather than retyped by an administrator.
-        await DiscoverPasswordPolicyAsync(connector, connectedSystem, result);
-
-        schema.ObjectTypes = schema.ObjectTypes.OrderBy(q => q.Name).ToList();
-
-        var existingObjectTypes = connectedSystem.ObjectTypes?.ToList() ?? new List<ConnectedSystemObjectType>();
-        var existingObjectTypeNames = existingObjectTypes.Select(ot => ot.Name).ToHashSet();
-        var newObjectTypeNames = schema.ObjectTypes.Select(ot => ot.Name).ToHashSet();
-
-        connectedSystem.ObjectTypes = new List<ConnectedSystemObjectType>();
-
-        foreach (var removedObjectTypeName in existingObjectTypeNames.Except(newObjectTypeNames))
-        {
-            result.RemovedObjectTypes.Add(removedObjectTypeName);
-        }
-
-        foreach (var schemaObjectType in schema.ObjectTypes)
-        {
-            schemaObjectType.Attributes = schemaObjectType.Attributes.OrderBy(a => a.Name).ToList();
-
-            var existingObjectType = existingObjectTypes.FirstOrDefault(ot => ot.Name == schemaObjectType.Name);
-
-            ConnectedSystemObjectType connectedSystemObjectType;
-            if (existingObjectType != null)
-            {
-                result.UpdatedObjectTypes.Add(schemaObjectType.Name);
-                connectedSystemObjectType = existingObjectType;
-                var existingAttributes = existingObjectType.Attributes?.ToList() ?? new List<ConnectedSystemObjectTypeAttribute>();
-                var existingAttributeNames = existingAttributes.Select(a => a.Name).ToHashSet();
-                var newAttributeNames = schemaObjectType.Attributes.Select(a => a.Name).ToHashSet();
-
-                connectedSystemObjectType.Attributes = new List<ConnectedSystemObjectTypeAttribute>();
-
-                var removedAttributeNames = existingAttributeNames.Except(newAttributeNames).ToList();
-                if (removedAttributeNames.Count > 0)
-                {
-                    result.RemovedAttributes[schemaObjectType.Name] = removedAttributeNames;
-                }
-
-                var addedAttributeNames = new List<string>();
-
-                foreach (var schemaAttribute in schemaObjectType.Attributes)
-                {
-                    var existingAttribute = existingAttributes.FirstOrDefault(a => a.Name == schemaAttribute.Name);
-                    if (existingAttribute != null)
-                    {
-                        existingAttribute.Description = schemaAttribute.Description;
-                        existingAttribute.AttributePlurality = schemaAttribute.AttributePlurality;
-                        existingAttribute.Type = schemaAttribute.Type;
-                        existingAttribute.ClassName = schemaAttribute.ClassName;
-                        existingAttribute.Writability = schemaAttribute.Writability;
-                        connectedSystemObjectType.Attributes.Add(existingAttribute);
-                    }
-                    else
-                    {
-                        addedAttributeNames.Add(schemaAttribute.Name);
-                        connectedSystemObjectType.Attributes.Add(new ConnectedSystemObjectTypeAttribute
-                        {
-                            Name = schemaAttribute.Name,
-                            Description = schemaAttribute.Description,
-                            AttributePlurality = schemaAttribute.AttributePlurality,
-                            Type = schemaAttribute.Type,
-                            ClassName = schemaAttribute.ClassName,
-                            Writability = schemaAttribute.Writability
-                        });
-                    }
-                }
-
-                if (addedAttributeNames.Count > 0)
-                {
-                    result.AddedAttributes[schemaObjectType.Name] = addedAttributeNames;
-                }
-            }
-            else
-            {
-                result.AddedObjectTypes.Add(schemaObjectType.Name);
-                connectedSystemObjectType = new ConnectedSystemObjectType
-                {
-                    Name = schemaObjectType.Name,
-                    Attributes = schemaObjectType.Attributes.Select(a => new ConnectedSystemObjectTypeAttribute
-                    {
-                        Name = a.Name,
-                        Description = a.Description,
-                        AttributePlurality = a.AttributePlurality,
-                        Type = a.Type,
-                        ClassName = a.ClassName,
-                        Writability = a.Writability
-                    }).ToList()
-                };
-
-                result.AddedAttributes[schemaObjectType.Name] = schemaObjectType.Attributes.Select(a => a.Name).ToList();
-            }
-
-            // if there's an External Id attribute recommendation from the connector, use that
-            // External ID attributes are automatically selected and locked to ensure the system always has the required anchor attributes.
-            var attribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => schemaObjectType.RecommendedExternalIdAttribute != null && a.Name == schemaObjectType.RecommendedExternalIdAttribute.Name);
-            if (attribute != null)
-            {
-                attribute.IsExternalId = true;
-                attribute.Selected = true;
-                attribute.SelectionLocked = true;
-            }
-
-            // Secondary External ID attributes are also automatically selected and locked.
-            if (connectedSystem.ConnectorDefinition.SupportsSecondaryExternalId && schemaObjectType.RecommendedSecondaryExternalIdAttribute != null)
-            {
-                var secondaryExternalIdAttribute = connectedSystemObjectType.Attributes.SingleOrDefault(a => a.Name == schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name);
-                if (secondaryExternalIdAttribute != null)
-                {
-                    secondaryExternalIdAttribute.IsSecondaryExternalId = true;
-                    secondaryExternalIdAttribute.Selected = true;
-                    secondaryExternalIdAttribute.SelectionLocked = true;
-                }
-                else
-                    Log.Error($"Recommended Secondary External Id attribute '{schemaObjectType.RecommendedSecondaryExternalIdAttribute.Name}' was not found in the objects list of attributes!");
-            }
-
-            connectedSystem.ObjectTypes.Add(connectedSystemObjectType);
-        }
-
-        // See the user-initiated overload above.
-        QuarantineCredentialAttributes(connectedSystem);
-
-        result.TotalObjectTypes = connectedSystem.ObjectTypes.Count;
-        result.TotalAttributes = connectedSystem.ObjectTypes.Sum(ot => ot.Attributes?.Count ?? 0);
-
-        await PersistConnectedSystemSchemaUpdateAsync(connectedSystem, initiatedByApiKey);
-
-        // Capture the configuration change onto the ImportSchema activity: see the user-initiated overload above.
-        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
-
-        await Application.Activities.CompleteActivityAsync(activity);
 
         return result;
     }
@@ -1936,43 +1869,30 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
-        var partitions = await partitionsConnector.GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
-        if (partitions.Count == 0)
+        // Everything from here on is covered, so that a Connected System that cannot be read finishes its Activity
+        // as a failure carrying the reason, rather than leaving one in flight for ever with nothing recorded
+        // against it. The exception still reaches the caller; the Activity is the audit record, not the response.
+        try
         {
-            // Zero partitions almost always means the connector could not enumerate them (connection,
-            // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
-            // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
-            activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
+            var result = await RetrieveAndMergeHierarchyAsync(connectedSystem, partitionsConnector, activity);
+
+            // Persist the changes
+            await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedBy);
+
+            // A hierarchy import changes the system's configuration (partitions and containers); capture it onto the
+            // ImportHierarchy activity so the change is versioned in the system's history. Reloaded, as ids are assigned on save.
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+
+            // finish the activity
+            await Application.Activities.CompleteActivityAsync(activity);
+
+            return result;
         }
-
-        // Merge discovered partitions with existing ones, preserving user selections
-        var result = MergeHierarchy(connectedSystem, partitions);
-
-        // Log the changes
-        if (result.HasChanges)
+        catch (Exception ex)
         {
-            Log.Information("Hierarchy refresh for {ConnectedSystem}: {Summary}", connectedSystem.Name, result.GetSummary());
-            if (result.HasSelectedItemsRemoved)
-            {
-                Log.Warning("Hierarchy refresh for {ConnectedSystem} removed selected items. Removed partitions: {RemovedPartitions}, Removed containers: {RemovedContainers}",
-                    connectedSystem.Name,
-                    result.RemovedPartitions.Where(p => p.WasSelected).Select(p => p.Name),
-                    result.RemovedContainers.Where(c => c.WasSelected).Select(c => c.Name));
-            }
-            activity.Message = result.GetSummary();
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
         }
-
-        // Persist the changes
-        await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedBy);
-
-        // A hierarchy import changes the system's configuration (partitions and containers); capture it onto the
-        // ImportHierarchy activity so the change is versioned in the system's history. Reloaded, as ids are assigned on save.
-        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
-
-        // finish the activity
-        await Application.Activities.CompleteActivityAsync(activity);
-
-        return result;
     }
 
     /// <summary>
@@ -2002,42 +1922,27 @@ public class ConnectedSystemServer
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 
-        var partitions = await partitionsConnector.GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
-        if (partitions.Count == 0)
+        // Covered from here on: see the user-initiated overload above.
+        try
         {
-            // Zero partitions almost always means the connector could not enumerate them (connection,
-            // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
-            // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
-            activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
+            var result = await RetrieveAndMergeHierarchyAsync(connectedSystem, partitionsConnector, activity);
+
+            // Persist the changes
+            await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedByApiKey);
+
+            // Capture the configuration change onto the ImportHierarchy activity: see the user-initiated overload above.
+            await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
+
+            // finish the activity
+            await Application.Activities.CompleteActivityAsync(activity);
+
+            return result;
         }
-
-        // Merge discovered partitions with existing ones, preserving user selections
-        var result = MergeHierarchy(connectedSystem, partitions);
-
-        // Log the changes
-        if (result.HasChanges)
+        catch (Exception ex)
         {
-            Log.Information("Hierarchy refresh for {ConnectedSystem}: {Summary}", connectedSystem.Name, result.GetSummary());
-            if (result.HasSelectedItemsRemoved)
-            {
-                Log.Warning("Hierarchy refresh for {ConnectedSystem} removed selected items. Removed partitions: {RemovedPartitions}, Removed containers: {RemovedContainers}",
-                    connectedSystem.Name,
-                    result.RemovedPartitions.Where(p => p.WasSelected).Select(p => p.Name),
-                    result.RemovedContainers.Where(c => c.WasSelected).Select(c => c.Name));
-            }
-            activity.Message = result.GetSummary();
+            await Application.Activities.FailActivityWithErrorAsync(activity, ex);
+            throw;
         }
-
-        // Persist the changes
-        await PersistConnectedSystemUpdateAsync(connectedSystem, initiatedByApiKey);
-
-        // Capture the configuration change onto the ImportHierarchy activity: see the user-initiated overload above.
-        await CaptureConnectedSystemConfigurationChangeAsync(activity, connectedSystem.Id);
-
-        // finish the activity
-        await Application.Activities.CompleteActivityAsync(activity);
-
-        return result;
     }
 
     /// <summary>
@@ -2651,6 +2556,46 @@ public class ConnectedSystemServer
             count += CountContainersRecursive(container.ChildContainers);
         }
         return count;
+    }
+
+    /// <summary>
+    /// Retrieves the hierarchy (partitions and containers) from a Connected System and merges it into that
+    /// system's existing hierarchy, preserving selections, and records what changed on the supplied Activity.
+    /// </summary>
+    /// <remarks>
+    /// Shared by both <see cref="ImportConnectedSystemHierarchyAsync(ConnectedSystem, MetaverseObject?)"/> and
+    /// <see cref="ImportConnectedSystemHierarchyAsync(ConnectedSystem, ApiKey)"/>. They were separate copies of
+    /// this logic; the initiator decides who the Activity is attributed to, not what a hierarchy means.
+    /// </remarks>
+    private static async Task<HierarchyRefreshResult> RetrieveAndMergeHierarchyAsync(ConnectedSystem connectedSystem, IConnectorPartitions partitionsConnector, Activity activity)
+    {
+        var partitions = await partitionsConnector.GetPartitionsAsync(connectedSystem.SettingValues, Log.Logger);
+        if (partitions.Count == 0)
+        {
+            // Zero partitions almost always means the connector could not enumerate them (connection,
+            // authentication, or scope problem) rather than a genuinely empty directory. Warn the admin;
+            // MergeHierarchy deliberately leaves the existing hierarchy untouched in this case (#876).
+            activity.WarningMessage = "The hierarchy refresh retrieved no partitions from the Connected System, so the existing hierarchy was left unchanged. This usually indicates a connection, authentication, or scope problem rather than an empty directory; check the Connected System's settings and connectivity, then try again.";
+        }
+
+        // Merge discovered partitions with existing ones, preserving user selections
+        var result = MergeHierarchy(connectedSystem, partitions);
+
+        // Log the changes
+        if (result.HasChanges)
+        {
+            Log.Information("Hierarchy refresh for {ConnectedSystem}: {Summary}", connectedSystem.Name, result.GetSummary());
+            if (result.HasSelectedItemsRemoved)
+            {
+                Log.Warning("Hierarchy refresh for {ConnectedSystem} removed selected items. Removed partitions: {RemovedPartitions}, Removed containers: {RemovedContainers}",
+                    connectedSystem.Name,
+                    result.RemovedPartitions.Where(p => p.WasSelected).Select(p => p.Name),
+                    result.RemovedContainers.Where(c => c.WasSelected).Select(c => c.Name));
+            }
+            activity.Message = result.GetSummary();
+        }
+
+        return result;
     }
     #endregion
 
@@ -5872,7 +5817,13 @@ public class ConnectedSystemServer
             TargetName = syncRule.Name,
             TargetContext = connectedSystem?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
-            TargetOperationType = ActivityTargetOperationType.Delete
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            // Deletion capture deliberately records no SyncRuleId (the rule is about to cease to exist), which would
+            // otherwise leave the deletion unattributable to any system and invisible to the "configuration changed
+            // since last Full Synchronisation" indicator: a false negative on one of the most consequential changes
+            // there is. The Connected System survives the deletion, so its id is the durable link. This does not
+            // pollute the system's own configuration history, which additionally requires a captured version.
+            ConnectedSystemId = syncRule.ConnectedSystemId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedBy);
 
@@ -5902,7 +5853,10 @@ public class ConnectedSystemServer
             TargetName = syncRule.Name,
             TargetContext = connectedSystem?.Name,
             TargetType = ActivityTargetType.SynchronisationRule,
-            TargetOperationType = ActivityTargetOperationType.Delete
+            TargetOperationType = ActivityTargetOperationType.Delete,
+            // See the MetaverseObject-initiated overload above: the Connected System id is what keeps a rule deletion
+            // attributable once the rule itself is gone.
+            ConnectedSystemId = syncRule.ConnectedSystemId
         };
         await Application.Activities.CreateActivityAsync(activity, initiatedByApiKey);
 

@@ -369,6 +369,14 @@ public class ActivityDetailDto
     public string? ErrorStackTrace { get; set; }
 
     /// <summary>
+    /// Structured detail about the failure, as JSON, where there is something specific worth acting on beyond the
+    /// message. An LDAPS connection refused because of the directory server's certificate records that certificate
+    /// here: its subject, issuer, the names it was issued for, its validity dates, its thumbprint, and which check
+    /// it failed. Null for failures with no structured detail.
+    /// </summary>
+    public string? ErrorDetail { get; set; }
+
+    /// <summary>
     /// The run type if this is a sync activity.
     /// </summary>
     public ConnectedSystemRunType? ConnectedSystemRunType { get; set; }
@@ -445,6 +453,7 @@ public class ActivityDetailDto
             WarningMessage = activity.WarningMessage,
             ErrorMessage = activity.ErrorMessage,
             ErrorStackTrace = activity.ErrorStackTrace,
+            ErrorDetail = activity.ErrorDetail,
             ConnectedSystemRunType = activity.ConnectedSystemRunType,
             ConnectedSystemId = activity.ConnectedSystemId,
             ConnectedSystemRunProfileId = activity.ConnectedSystemRunProfileId,

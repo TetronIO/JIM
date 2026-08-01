@@ -330,6 +330,7 @@ public class ActivityServer
     {
         var now = DateTime.UtcNow;
         activity.ErrorMessage = GetFullExceptionMessage(exception);
+        activity.ErrorDetail = ActivityErrorDetail.TryDescribe(exception);
 
         // Only persist stack traces for unexpected errors (bugs), not for operational errors
         // that have clear, user-actionable messages

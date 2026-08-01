@@ -1414,6 +1414,29 @@ internal class SeedingServer
     }
 
     /// <summary>
+    /// Copies everything a Connector declares about itself (capability flags and the advisory schema standard)
+    /// onto its Connector Definition, and reports whether anything actually changed so the caller can decide
+    /// whether to persist and audit an update.
+    /// Shared by the create and startup-reconcile paths: a declaration added to <see cref="IConnectorCapabilities"/>
+    /// is applied to fresh installs and existing deployments alike, from one place.
+    /// </summary>
+    internal static bool ApplyConnectorDeclarations(IConnectorCapabilities connectorCapabilities, ConnectorDefinition definition)
+    {
+        // Driven off the shape of IConnectorCapabilities rather than a written-out list of every declaration.
+        // A hand-written list is the failure this exists to avoid: declaring a capability and forgetting to add
+        // it here leaves the flag permanently false in the database with nothing failing, so the Connector
+        // advertises a feature the rest of JIM cannot see. Declaring it on the interface is the only step.
+        var changed = ConnectorCapabilityMirror.GetDifferences(connectorCapabilities, definition);
+        if (changed.Count == 0)
+            return false;
+
+        ConnectorCapabilityMirror.CopyTo(connectorCapabilities, definition);
+        Log.Debug("ApplyConnectorDeclarations: Updated declarations for '{ConnectorName}': {ChangedDeclarations}",
+            LogSanitiser.Sanitise(definition.Name), string.Join(", ", changed));
+        return true;
+    }
+
+    /// <summary>
     /// Synchronises a single connector definition with the latest settings from the connector code.
     /// Updates settings if they have changed (e.g., category, description, default values).
     /// </summary>
@@ -1447,15 +1470,11 @@ internal class SeedingServer
             Log.Information($"SyncConnectorDefinitionAsync: Removed duplicate setting '{duplicate.Name}' from '{connector.Name}'");
         }
 
-        // Update capability flags. Driven off IConnectorCapabilities itself, so a newly declared capability is
-        // mirrored without this method needing to know about it.
-        var changedCapabilities = ConnectorCapabilityMirror.GetDifferences(connectorCapabilities, existingDefinition);
-        if (changedCapabilities.Count > 0)
+        // Update the Connector's own declarations (capability flags and schema standard)
+        if (ApplyConnectorDeclarations(connectorCapabilities, existingDefinition))
         {
-            ConnectorCapabilityMirror.CopyTo(connectorCapabilities, existingDefinition);
             hasChanges = true;
-            Log.Information("SyncConnectorDefinitionAsync: Updated capability flags for '{ConnectorName}': {ChangedCapabilities}",
-                LogSanitiser.Sanitise(connector.Name), string.Join(", ", changedCapabilities));
+            Log.Information($"SyncConnectorDefinitionAsync: Updated declarations for '{connector.Name}'");
         }
 
         // Sync settings - update existing and add new ones
@@ -1538,6 +1557,14 @@ internal class SeedingServer
                 ActivityInitiatorType.System, null, "System",
                 changeReason: "Connector Definition updated automatically by JIM to match the latest connector.",
                 parentActivityId: parentActivityId);
+
+            // Detaching an obsolete setting from the definition above only severs it: its foreign key is nullable, so
+            // the row survives holding no definition while every value an administrator saved against it still points
+            // at it, and the withdrawn setting keeps appearing on Connected Systems that hold one. Delete the rows so
+            // those values cascade away with them.
+            if (settingsToRemove.Count > 0)
+                await Application.Repository.ConnectedSystems.DeleteConnectorDefinitionSettingsAsync(settingsToRemove);
+
             Log.Information($"SyncConnectorDefinitionAsync: Saved changes for '{connector.Name}'");
         }
         else
@@ -1682,7 +1709,10 @@ internal class SeedingServer
             BuiltIn = true
         };
 
-        ConnectorCapabilityMirror.CopyTo(connectorCapabilities, connectorDefinition);
+        // Same method the startup reconcile uses, so a declaration added to a Connector cannot reach fresh
+        // installs while being forgotten on upgrades, or the other way round.
+        ApplyConnectorDeclarations(connectorCapabilities, connectorDefinition);
+
         Application.ConnectedSystems.CopyConnectorSettingsToConnectorDefinition(connectorSettings, connectorDefinition);
         return connectorDefinition;
     }

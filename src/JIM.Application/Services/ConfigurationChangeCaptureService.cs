@@ -104,6 +104,11 @@ public class ConfigurationChangeCaptureService
                 return;
 
             activity.ConfigurationChangeSnapshot = ConfigurationSnapshotService.Serialise(snapshot);
+
+            // Deleting a configuration object is inherently destructive, whatever its properties were. The deletion
+            // dialogs, not the classifier, are what gate the action; this records what happened for consumers
+            // filtering history by class.
+            activity.ConfigurationChangeClass = ConfigurationChangeClass.Destructive;
         }
         catch (Exception ex) when (ex is InvalidOperationException or NullReferenceException or FormatException or JsonException or DbException)
         {
@@ -145,10 +150,18 @@ public class ConfigurationChangeCaptureService
             // stored in a jsonb column, and PostgreSQL normalises the text (key ordering, spacing) so the string
             // read back never equals a fresh serialisation.
             var latest = ConfigurationSnapshotService.Deserialise(await getLatestSnapshotAsync());
-            if (latest != null && !Application.ConfigurationDiffs.Diff(latest, snapshot).HasChanges)
+            if (latest != null)
             {
-                Log.Debug("CaptureChangeAsync: configuration of {Target} is unchanged from its latest snapshot; no new version recorded.", targetDescription);
-                return;
+                var diff = Application.ConfigurationDiffs.Diff(latest, snapshot);
+                if (!diff.HasChanges)
+                {
+                    Log.Debug("CaptureChangeAsync: configuration of {Target} is unchanged from its latest snapshot; no new version recorded.", targetDescription);
+                    return;
+                }
+
+                // Classified from the diff that was computed anyway. A create (latest == null) has no prior state to
+                // diff, so nothing is at risk and the class stays NotClassified.
+                activity.ConfigurationChangeClass = ClassifyOrDefault(diff, snapshot.ObjectKey, targetDescription);
             }
 
             activity.ConfigurationChangeVersion = await getNextVersionAsync();
@@ -161,6 +174,25 @@ public class ConfigurationChangeCaptureService
             // the change history simply misses this snapshot. The failure is logged (never silent) so the gap is
             // diagnosable.
             Log.Warning(ex, "CaptureChangeAsync: failed to capture configuration snapshot for {Target}; the change was saved but its history snapshot was not recorded.", targetDescription);
+        }
+    }
+
+    /// <summary>
+    /// Classifies the change, degrading to <see cref="ConfigurationChangeClass.NotClassified"/> rather than losing
+    /// the snapshot when a property has no classification. The completeness tests exist to stop that reaching a
+    /// deployment, but if it ever does, an audit gap is a far worse outcome than an unclassified entry: the change
+    /// history is the record customers rely on, whilst the class only decides how loudly JIM warns.
+    /// </summary>
+    private static ConfigurationChangeClass ClassifyOrDefault(ConfigurationDiff diff, string? objectKey, string targetDescription)
+    {
+        try
+        {
+            return ConfigurationChangeClassifier.Classify(diff, objectKey);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Log.Warning(ex, "CaptureChangeAsync: could not classify the configuration change for {Target}; the snapshot was recorded without a classification. Classify the property named above; see engineering/CONFIGURATION_CHANGE_CLASSIFICATION.md.", targetDescription);
+            return ConfigurationChangeClass.NotClassified;
         }
     }
 

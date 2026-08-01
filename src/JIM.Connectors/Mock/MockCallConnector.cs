@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
@@ -33,6 +34,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
     public bool SupportsParallelExport => true;
     public bool SupportsPaging => true;
     public bool SupportsFilePaths => false;
+    public AttributeStandard SchemaStandard => AttributeStandard.NotSet;
 
     public bool SupportsPasswordSet => true;
 
@@ -218,7 +220,8 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         List<ConnectedSystemPaginationToken> paginationTokens,
         string? persistedConnectorData,
         ILogger logger,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<string, Task>? progressCallback = null)
     {
         // Record the persisted data passed on each call for test verification
         ImportPersistedDataHistory.Add(persistedConnectorData);
@@ -253,7 +256,7 @@ public class MockCallConnector : IConnector, IConnectorCapabilities, IConnectorI
         // No-op for mock
     }
 
-    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken)
+    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<PendingExport> pendingExports, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null)
     {
         if (ExportExceptionToThrow != null)
             throw ExportExceptionToThrow;

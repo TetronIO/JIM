@@ -58,10 +58,6 @@ internal static class LdapConnectorConstants
     internal const int DEFAULT_LDAPS_PORT = 636;
     internal const int DEFAULT_LDAP_PORT = 389;
 
-    // Certificate validation options
-    internal const string CERT_VALIDATION_FULL = "Full Validation";
-    internal const string CERT_VALIDATION_SKIP = "Skip Validation (Not Recommended)";
-
     // Retry settings
     internal const int DEFAULT_MAX_RETRIES = 3;
     internal const int DEFAULT_RETRY_DELAY_MS = 1000;

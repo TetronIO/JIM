@@ -1,6 +1,8 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Core;
+
 namespace JIM.Models.Interfaces;
 
 /// <summary>
@@ -104,4 +106,17 @@ public interface IConnectorCapabilities
     /// which lead an administrator to quite different conclusions.
     /// </summary>
     public bool SupportsPasswordPolicyDiscovery { get; }
+
+    /// <summary>
+    /// Which wire standard's vocabulary the Connected System's schema follows, if any. Purely advisory:
+    /// the portal uses it to show the right Standard Mapping hints in the Attribute Flow editor, so an
+    /// administrator mapping an LDAP system's "givenName" can see which Metaverse Attribute the standard
+    /// corresponds to. It is never consulted by the synchronisation engine.
+    ///
+    /// Declare a standard only when the system's attribute names genuinely come from that vocabulary
+    /// (an LDAP directory, a SCIM 2.0 service). Systems whose schema is arbitrary or inferred, such as
+    /// delimited files, should leave this as <see cref="AttributeStandard.NotSet"/>; the editor then
+    /// matches attribute names against every standard instead, and labels whichever one answered.
+    /// </summary>
+    public AttributeStandard SchemaStandard => AttributeStandard.NotSet;
 }

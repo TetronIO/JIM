@@ -1,0 +1,285 @@
+@* Copyright (c) Tetron Limited. All rights reserved. *@
+@* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
+
+@using JIM.Web.Models
+
+@* Shared confirmation dialog for a destructive or otherwise consequential configuration change. It  *@
+@* states what will happen, refuses outright when something blocks the change, and can demand the    *@
+@* administrator type a phrase before the action becomes available. Callers supply the impact; this  *@
+@* component owns the consent rules so every surface enforces them identically.                      *@
+@* See engineering/plans/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2) and test/CLAUDE.md.               *@
+
+<MudDialog>
+    <DialogContent>
+        @if (Loading)
+        {
+            <div class="d-flex justify-center align-center pa-8">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                <MudText Class="ml-4">@LoadingText</MudText>
+            </div>
+        }
+        else
+        {
+            <MudStack Spacing="4">
+                @if (Blocked)
+                {
+                    @foreach (var blocker in Blockers)
+                    {
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                            <MudText Typo="Typo.subtitle2">@blocker.Headline</MudText>
+                            @if (blocker.Items.Count > 0)
+                            {
+                                <MudList T="string" Dense="true" Class="mt-1">
+                                    @foreach (var item in blocker.Items)
+                                    {
+                                        <MudListItem T="string" Icon="@item.Icon" Href="@item.Href">@item.Text</MudListItem>
+                                    }
+                                </MudList>
+                            }
+                            @if (!string.IsNullOrEmpty(blocker.Body))
+                            {
+                                <MudText Typo="Typo.body2" Class="mt-1">@blocker.Body</MudText>
+                            }
+                            @if (!string.IsNullOrEmpty(blocker.LinkHref))
+                            {
+                                <MudLink Href="@blocker.LinkHref" Class="mt-1 d-inline-flex align-center">
+                                    <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="mr-1" />@blocker.LinkText
+                                </MudLink>
+                            }
+                        </MudAlert>
+                    }
+                }
+                else
+                {
+                    @if (!string.IsNullOrEmpty(IrreversibleWarning))
+                    {
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                            @IrreversibleWarning
+                        </MudAlert>
+                    }
+
+                    @if (!string.IsNullOrEmpty(SafeMessage))
+                    {
+                        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
+                            @SafeMessage
+                        </MudAlert>
+                    }
+
+                    @if (Counts.Count > 0)
+                    {
+                        <MudSimpleTable Dense="true" Hover="true" Elevation="0" Outlined="true">
+                            <tbody>
+                                @foreach (var count in Counts)
+                                {
+                                    <tr>
+                                        <td>
+                                            @count.Label
+                                            @if (!string.IsNullOrEmpty(count.Note))
+                                            {
+                                                <MudText Typo="Typo.caption" Class="mud-text-secondary ml-1">(@count.Note)</MudText>
+                                            }
+                                        </td>
+                                        <td class="text-right">@count.Count.ToString("N0")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+
+                    @if (Consequences is { } consequences)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                            <MudText Typo="Typo.subtitle2">@consequences.Headline</MudText>
+                            @if (!string.IsNullOrEmpty(consequences.Note))
+                            {
+                                <MudText Typo="Typo.body2" Class="mt-1 mb-1">@consequences.Note</MudText>
+                            }
+                            @if (consequences.Items.Count > 0)
+                            {
+                                <MudList T="string" Dense="true" Class="mt-1">
+                                    @foreach (var item in consequences.Items)
+                                    {
+                                        <MudListItem T="string" Icon="@item.Icon" Href="@item.Href">@item.Text</MudListItem>
+                                    }
+                                </MudList>
+                            }
+                        </MudAlert>
+                    }
+
+                    @if (Warnings.Count > 0)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                            <MudList T="string" Dense="true">
+                                @foreach (var warning in Warnings)
+                                {
+                                    <MudListItem T="string" Icon="@Icons.Material.Filled.Warning">@warning</MudListItem>
+                                }
+                            </MudList>
+                        </MudAlert>
+                    }
+
+                    @AdditionalContent
+
+                    @if (PhraseRequired)
+                    {
+                        <div data-testid="jim-consequence-phrase">
+                            <MudText Typo="Typo.body2" Class="mb-1">Type <b>@ConfirmationPhrase</b> to confirm</MudText>
+                            <MudTextField @bind-Value="_typedPhrase" Variant="Variant.Outlined" Immediate="true"
+                                          Placeholder="@ConfirmationPhrase" AutoFocus="true"
+                                          Adornment="Adornment.End"
+                                          AdornmentIcon="@(PhraseSatisfied ? Icons.Material.Filled.CheckCircle : null)" />
+                        </div>
+                    }
+                }
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" DropShadow="false" data-testid="jim-consequence-cancel">
+            @(Blocked ? "Close" : "Cancel")
+        </MudButton>
+        <MudButton Color="@ConfirmButtonColour" Variant="Variant.Filled" DropShadow="false"
+                   Disabled="@(!CanConfirm)" OnClick="ConfirmAsync" data-testid="jim-consequence-confirm">
+            @if (_busy)
+            {
+                <MudProgressCircular Class="ms-n1" Indeterminate="true" />
+                <span class="ms-2">@BusyText</span>
+            }
+            else
+            {
+                @ConfirmButtonText
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    /// <summary>
+    /// True while the caller is still evaluating the change's impact. Confirmation is unavailable
+    /// until it completes: there is nothing to consent to yet.
+    /// </summary>
+    [Parameter]
+    public bool Loading { get; set; }
+
+    /// <summary>
+    /// Text shown beside the progress indicator whilst <see cref="Loading"/>.
+    /// </summary>
+    [Parameter]
+    public string LoadingText { get; set; } = "Evaluating impact...";
+
+    /// <summary>
+    /// Reasons the change cannot proceed. Any blocker makes the dialog read-only: the confirm action
+    /// is disabled and the typed confirmation is not offered.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<ConsequenceBlocker> Blockers { get; set; } = [];
+
+    /// <summary>
+    /// Stated prominently above everything else when the change cannot be undone. Suppressed whilst
+    /// blocked, where nothing irreversible can happen yet.
+    /// </summary>
+    [Parameter]
+    public string? IrreversibleWarning { get; set; }
+
+    /// <summary>
+    /// Reassurance shown when nothing blocks the change, for example that no object data is at risk.
+    /// Suppressed whilst blocked.
+    /// </summary>
+    [Parameter]
+    public string? SafeMessage { get; set; }
+
+    /// <summary>
+    /// The change's numeric impact, where counts communicate better than an enumerated list.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<ImpactCount> Counts { get; set; } = [];
+
+    /// <summary>
+    /// The side effects the administrator is being asked to accept.
+    /// </summary>
+    [Parameter]
+    public ConsequenceGroup? Consequences { get; set; }
+
+    /// <summary>
+    /// Advisories that do not block the change but should be read before proceeding.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<string> Warnings { get; set; } = [];
+
+    /// <summary>
+    /// Surface-specific content (extra options, a reason field) rendered below the standard sections
+    /// and above the typed confirmation.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? AdditionalContent { get; set; }
+
+    /// <summary>
+    /// When set, the administrator must type this phrase exactly (ordinal comparison, surrounding
+    /// whitespace trimmed) before the confirm action becomes available. Leave null to confirm with a
+    /// single click.
+    /// </summary>
+    [Parameter]
+    public string? ConfirmationPhrase { get; set; }
+
+    /// <summary>
+    /// Label for the confirm button, naming the action and its scale where useful.
+    /// </summary>
+    [Parameter]
+    public string ConfirmButtonText { get; set; } = "Confirm";
+
+    /// <summary>
+    /// Label shown on the confirm button whilst the action runs.
+    /// </summary>
+    [Parameter]
+    public string BusyText { get; set; } = "Working...";
+
+    /// <summary>
+    /// Colour of the confirm button. Defaults to Error, since this dialog exists for destructive
+    /// changes; soften it only where the change genuinely is not destructive.
+    /// </summary>
+    [Parameter]
+    public Color ConfirmButtonColour { get; set; } = Color.Error;
+
+    /// <summary>
+    /// Performs the change. Return true when it succeeded, which closes the dialog; return false to
+    /// keep the dialog open so the administrator retains their context and can retry. The caller owns
+    /// error reporting; an exception propagates rather than being swallowed here.
+    /// </summary>
+    [Parameter]
+    public Func<Task<bool>>? OnConfirmAsync { get; set; }
+
+    private bool _busy;
+    private string? _typedPhrase;
+
+    private bool Blocked => Blockers.Count > 0;
+
+    private bool PhraseRequired => !Blocked && !string.IsNullOrEmpty(ConfirmationPhrase);
+
+    private bool PhraseSatisfied =>
+        !PhraseRequired || string.Equals(_typedPhrase?.Trim(), ConfirmationPhrase, StringComparison.Ordinal);
+
+    private bool CanConfirm => !Loading && !Blocked && !_busy && PhraseSatisfied;
+
+    private async Task ConfirmAsync()
+    {
+        if (!CanConfirm)
+            return;
+
+        _busy = true;
+        try
+        {
+            var succeeded = OnConfirmAsync == null || await OnConfirmAsync();
+            if (succeeded)
+                MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

@@ -945,6 +945,9 @@ public class ConfigurationSnapshotService
         Add(children, "description", definition.Description, "Description");
         Add(children, "url", definition.Url, "URL");
         Add(children, "builtIn", Render(definition.BuiltIn), "Built-in");
+        // Advisory, Connector-declared, and reconciled on startup, so a change here is a change shipped in new
+        // connector code; it belongs in the definition's history even though it affects only editor hints.
+        AddEnum(children, "schemaStandard", definition.SchemaStandard, "Schema standard");
         children.Add(BuildConnectorDefinitionCapabilities(definition));
         children.Add(BuildConnectorDefinitionSettings(definition.Settings, hashKey));
         children.Add(BuildConnectorDefinitionFiles(definition.Files));

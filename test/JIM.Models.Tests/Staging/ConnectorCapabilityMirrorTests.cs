@@ -3,7 +3,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
+using JIM.Models.Core;
 using JIM.Models.Interfaces;
 using JIM.Models.Staging;
 using NUnit.Framework;
@@ -28,17 +30,18 @@ public class ConnectorCapabilityMirrorTests
         typeof(IConnectorCapabilities).GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
     /// <summary>
-    /// Every capability is a bool. The mirror and its tests assume this, so assert it rather than let a future
-    /// non-bool capability be silently skipped by the round-trip tests below.
+    /// Every declaration is one the tests below can exercise: a bool or an enum, for which two distinct values
+    /// can be produced. A declaration of some other shape would be silently skipped by the round-trip tests
+    /// rather than failing them, so it is rejected here instead.
     /// </summary>
     [Test]
-    public void IConnectorCapabilities_EveryCapability_IsABoolean()
+    public void IConnectorCapabilities_EveryDeclaration_CanBeExercised()
     {
         Assert.That(CapabilityProperties, Is.Not.Empty);
 
         foreach (var property in CapabilityProperties)
-            Assert.That(property.PropertyType, Is.EqualTo(typeof(bool)),
-                $"Capability '{property.Name}' is not a bool. ConnectorCapabilityMirror copies capabilities generically and assumes they are all booleans.");
+            Assert.That(property.PropertyType == typeof(bool) || property.PropertyType.IsEnum, Is.True,
+                $"Declaration '{property.Name}' is neither a bool nor an enum, so these tests cannot produce two distinct values for it and would skip it silently.");
     }
 
     /// <summary>
@@ -66,8 +69,8 @@ public class ConnectorCapabilityMirrorTests
         ConnectorCapabilityMirror.CopyTo(source, target);
 
         foreach (var property in CapabilityProperties)
-            Assert.That(ReadCapability(target, property.Name), Is.True,
-                $"Capability '{property.Name}' was not copied onto the Connector Definition. Every capability on IConnectorCapabilities must be mirrored.");
+            Assert.That(ReadCapability(target, property.Name), Is.EqualTo(DistinctValue(property.PropertyType, 1)),
+                $"Declaration '{property.Name}' was not copied onto the Connector Definition. Everything on IConnectorCapabilities must be mirrored.");
     }
 
     /// <summary>
@@ -83,8 +86,8 @@ public class ConnectorCapabilityMirrorTests
         ConnectorCapabilityMirror.CopyTo(CapabilityStub.WithAll(false), target);
 
         foreach (var property in CapabilityProperties)
-            Assert.That(ReadCapability(target, property.Name), Is.False,
-                $"Capability '{property.Name}' was not cleared on the Connector Definition when the Connector stopped declaring it.");
+            Assert.That(ReadCapability(target, property.Name), Is.EqualTo(DistinctValue(property.PropertyType, 0)),
+                $"Declaration '{property.Name}' was not reverted on the Connector Definition when the Connector stopped declaring it.");
     }
 
     /// <summary>
@@ -118,12 +121,33 @@ public class ConnectorCapabilityMirrorTests
         Assert.That(ConnectorCapabilityMirror.Differs(source, target), Is.False);
     }
 
-    private static bool ReadCapability(ConnectorDefinition definition, string name)
+    private static object? ReadCapability(ConnectorDefinition definition, string name)
     {
         var property = typeof(ConnectorDefinition).GetProperty(name)
             ?? throw new InvalidOperationException($"ConnectorDefinition has no property '{name}'.");
 
-        return (bool)property.GetValue(definition)!;
+        return property.GetValue(definition);
+    }
+
+    /// <summary>
+    /// Two distinct values for a declaration, so that copying and difference detection can be proved for any
+    /// declaration type rather than only for flags. Index 0 is the "off" value and index 1 the "on" one.
+    /// </summary>
+    private static object DistinctValue(Type type, int which)
+    {
+        if (type == typeof(bool))
+            return which != 0;
+
+        if (type.IsEnum)
+        {
+            var values = Enum.GetValues(type);
+            if (values.Length < 2)
+                throw new InvalidOperationException($"Enum '{type.Name}' has fewer than two values, so no change to it can be detected.");
+
+            return values.GetValue(which == 0 ? 0 : values.Length - 1)!;
+        }
+
+        throw new InvalidOperationException($"No distinct values can be produced for declaration type '{type.Name}'.");
     }
 
     /// <summary>
@@ -131,47 +155,53 @@ public class ConnectorCapabilityMirrorTests
     /// </summary>
     private sealed class CapabilityStub : IConnectorCapabilities
     {
-        private readonly Dictionary<string, bool> _values = new();
+        private readonly Dictionary<string, object> _values = new();
 
-        public static CapabilityStub WithAll(bool value)
+        public static CapabilityStub WithAll(bool on)
         {
             var stub = new CapabilityStub();
             foreach (var property in CapabilityProperties)
-                stub._values[property.Name] = value;
+                stub._values[property.Name] = DistinctValue(property.PropertyType, on ? 1 : 0);
 
             return stub;
         }
 
-        public void Set(string name, bool value) => _values[name] = value;
+        public void Set(string name, bool on)
+        {
+            var property = CapabilityProperties.Single(p => p.Name == name);
+            _values[name] = DistinctValue(property.PropertyType, on ? 1 : 0);
+        }
 
-        private bool Get(string name) => _values[name];
+        private T Get<T>(string name) => (T)_values[name];
 
-        public bool SupportsFullImport => Get(nameof(SupportsFullImport));
+        public bool SupportsFullImport => Get<bool>(nameof(SupportsFullImport));
 
-        public bool SupportsDeltaImport => Get(nameof(SupportsDeltaImport));
+        public bool SupportsDeltaImport => Get<bool>(nameof(SupportsDeltaImport));
 
-        public bool SupportsExport => Get(nameof(SupportsExport));
+        public bool SupportsExport => Get<bool>(nameof(SupportsExport));
 
-        public bool SupportsPartitions => Get(nameof(SupportsPartitions));
+        public bool SupportsPartitions => Get<bool>(nameof(SupportsPartitions));
 
-        public bool SupportsPartitionContainers => Get(nameof(SupportsPartitionContainers));
+        public bool SupportsPartitionContainers => Get<bool>(nameof(SupportsPartitionContainers));
 
-        public bool SupportsSecondaryExternalId => Get(nameof(SupportsSecondaryExternalId));
+        public bool SupportsSecondaryExternalId => Get<bool>(nameof(SupportsSecondaryExternalId));
 
-        public bool SupportsUserSelectedExternalId => Get(nameof(SupportsUserSelectedExternalId));
+        public bool SupportsUserSelectedExternalId => Get<bool>(nameof(SupportsUserSelectedExternalId));
 
-        public bool SupportsUserSelectedAttributeTypes => Get(nameof(SupportsUserSelectedAttributeTypes));
+        public bool SupportsUserSelectedAttributeTypes => Get<bool>(nameof(SupportsUserSelectedAttributeTypes));
 
-        public bool SupportsAutoConfirmExport => Get(nameof(SupportsAutoConfirmExport));
+        public bool SupportsAutoConfirmExport => Get<bool>(nameof(SupportsAutoConfirmExport));
 
-        public bool SupportsParallelExport => Get(nameof(SupportsParallelExport));
+        public bool SupportsParallelExport => Get<bool>(nameof(SupportsParallelExport));
 
-        public bool SupportsPaging => Get(nameof(SupportsPaging));
+        public bool SupportsPaging => Get<bool>(nameof(SupportsPaging));
 
-        public bool SupportsFilePaths => Get(nameof(SupportsFilePaths));
+        public bool SupportsFilePaths => Get<bool>(nameof(SupportsFilePaths));
 
-        public bool SupportsPasswordSet => Get(nameof(SupportsPasswordSet));
+        public bool SupportsPasswordSet => Get<bool>(nameof(SupportsPasswordSet));
 
-        public bool SupportsPasswordPolicyDiscovery => Get(nameof(SupportsPasswordPolicyDiscovery));
+        public bool SupportsPasswordPolicyDiscovery => Get<bool>(nameof(SupportsPasswordPolicyDiscovery));
+
+        public AttributeStandard SchemaStandard => Get<AttributeStandard>(nameof(SchemaStandard));
     }
 }

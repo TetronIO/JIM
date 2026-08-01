@@ -1,6 +1,7 @@
 // Copyright (c) Tetron Limited. All rights reserved.
 // Licensed under the Tetron Commercial License. See LICENSE file in the project root.
 
+using JIM.Models.Activities.DTOs;
 using JIM.Models.Staging;
 using JIM.Models.Staging.DTOs;
 
@@ -32,6 +33,12 @@ public class ConnectedSystemDetailDto
     public UnresolvedReferenceHandling UnresolvedReferenceHandling { get; set; }
 
     /// <summary>
+    /// Whether the configuration has changed in a way that needs a Full Synchronisation to take effect. Null on the
+    /// create and update responses, which describe the write that just happened rather than the system's readiness.
+    /// </summary>
+    public ConfigurationDriftDto? ConfigurationDrift { get; set; }
+
+    /// <summary>
     /// Creates a detailed DTO from a ConnectedSystem entity.
     /// </summary>
     /// <param name="entity">The Connected System entity.</param>
@@ -43,10 +50,15 @@ public class ConnectedSystemDetailDto
     /// Pre-computed Connected System Object count. Required because GetConnectedSystemAsync
     /// does not load the Objects navigation property (it can be very large).
     /// </param>
-    public static ConnectedSystemDetailDto FromEntity(ConnectedSystem entity, int pendingExportCount = 0, int objectCount = 0)
+    /// <param name="configurationDrift">
+    /// Pre-computed configuration drift status, or null to omit it (create and update responses do not carry it).
+    /// </param>
+    public static ConnectedSystemDetailDto FromEntity(ConnectedSystem entity, int pendingExportCount = 0, int objectCount = 0,
+        ConfigurationDriftStatus? configurationDrift = null)
     {
         return new ConnectedSystemDetailDto
         {
+            ConfigurationDrift = configurationDrift == null ? null : ConfigurationDriftDto.FromStatus(configurationDrift),
             Id = entity.Id,
             Name = entity.Name,
             Description = entity.Description,

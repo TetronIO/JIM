@@ -75,6 +75,18 @@ hide:
 
     Versioned who/what/when audit across every configuration type, with secret redaction and a reason-for-change prompt.
 
+-   :material-shape-plus:{ .lg .middle } **[Extensible Metaverse Schema](configuration/metaverse.md)**
+
+    ---
+
+    Create your own Metaverse Object Types and Attributes from the portal, REST API or PowerShell, with safe deletion and full audit. Built-in attributes carry SCIM 2.0 and LDAP Standard Mappings.
+
+-   :material-lightning-bolt:{ .lg .middle } **[Real-Time Operations](configuration/activities.md)**
+
+    ---
+
+    Run Profile progress, throughput and time remaining stream live to the portal, pushed from the database rather than polled, with `Get-JIMActivity -Follow` for the terminal.
+
 </div>
 
 ## 🎯 Scenarios

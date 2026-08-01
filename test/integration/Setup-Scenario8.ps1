@@ -332,7 +332,6 @@ $portSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Port" }
 $usernameSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Username" }
 $passwordSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Password" }
 $useSSLSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Use Secure Connection (LDAPS)?" }
-$certValidationSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Certificate Validation" }
 $connectionTimeoutSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Connection Timeout" }
 $authTypeSetting = $ldapConnectorFull.settings | Where-Object { $_.name -eq "Authentication Type" }
 
@@ -363,7 +362,6 @@ if ($portSetting) { $sourceSettings[$portSetting.id] = @{ intValue = $sourcePort
 if ($usernameSetting) { $sourceSettings[$usernameSetting.id] = @{ stringValue = $sourceBindDN } }
 if ($passwordSetting) { $sourceSettings[$passwordSetting.id] = @{ stringValue = $sourcePassword } }
 if ($useSSLSetting) { $sourceSettings[$useSSLSetting.id] = @{ checkboxValue = $sourceUseSSL } }
-if ($sourceUseSSL -and $certValidationSetting) { $sourceSettings[$certValidationSetting.id] = @{ stringValue = "Skip Validation (Not Recommended)" } }
 if ($connectionTimeoutSetting) { $sourceSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
 if ($authTypeSetting) { $sourceSettings[$authTypeSetting.id] = @{ stringValue = "Simple" } }
 
@@ -398,7 +396,6 @@ if ($portSetting) { $targetSettings[$portSetting.id] = @{ intValue = $targetPort
 if ($usernameSetting) { $targetSettings[$usernameSetting.id] = @{ stringValue = $targetBindDN } }
 if ($passwordSetting) { $targetSettings[$passwordSetting.id] = @{ stringValue = $targetPassword } }
 if ($useSSLSetting) { $targetSettings[$useSSLSetting.id] = @{ checkboxValue = $targetUseSSL } }
-if ($targetUseSSL -and $certValidationSetting) { $targetSettings[$certValidationSetting.id] = @{ stringValue = "Skip Validation (Not Recommended)" } }
 if ($connectionTimeoutSetting) { $targetSettings[$connectionTimeoutSetting.id] = @{ intValue = 30 } }
 if ($authTypeSetting) { $targetSettings[$authTypeSetting.id] = @{ stringValue = "Simple" } }
 

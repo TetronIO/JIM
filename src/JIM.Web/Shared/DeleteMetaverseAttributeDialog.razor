@@ -4,83 +4,27 @@
 @using JIM.Models.Core
 @using JIM.Models.Core.DTOs
 @using JIM.Utilities
+@using JIM.Web.Models
 @using JIM.Web.Services
 @inject IJimApplicationFactory JimFactory
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
-<MudDialog>
-    <DialogContent>
-        @if (_impact == null)
-        {
-            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
-        }
-        else
-        {
-            <MudStack Spacing="4">
-                @if (_impact.BlockedByValues)
-                {
-                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
-                        <MudText Typo="Typo.subtitle2">@_impact.TotalObjectsWithValues.ToString("N0") object(s) have a value</MudText>
-                        <MudList T="string" Dense="true" Class="mt-1">
-                            @foreach (var count in _impact.ObjectTypeValueCounts)
-                            {
-                                <MudListItem T="string" Icon="@Icons.Material.Filled.Person"
-                                             Href="@Utilities.GetMetaverseObjectHasAttributeSearchHref(count.MetaverseObjectTypePluralName, _impact.AttributeName)">
-                                    @count.MetaverseObjectTypeName: <b>@count.ObjectCount.ToString("N0")</b> with a value
-                                </MudListItem>
-                            }
-                        </MudList>
-                    </MudAlert>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        Clear these values first (stop the source flow and let it deprovision, or bulk-clear), then delete.
-                    </MudText>
-                }
-                else
-                {
-                    <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true">
-                        No object holds a value for this attribute. Safe to delete; no object data will be lost.
-                    </MudAlert>
+@* Thin surface over the shared ConsequenceConfirmationDialog: this component owns evaluating the *@
+@* deletion impact and performing the delete; the shared dialog owns presenting it and the consent *@
+@* rules. See engineering/plans/CONFIGURATION_CHANGE_PREVIEW.md (Phase 2). *@
 
-                    @if (_impact.References.Count > 0)
-                    {
-                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
-                            <MudText Typo="Typo.subtitle2">These @_impact.References.Count reference(s) will also be removed</MudText>
-                            <MudList T="string" Dense="true" Class="mt-1">
-                                @foreach (var reference in _impact.References)
-                                {
-                                    <MudListItem T="string" Icon="@Icons.Material.Filled.Link">
-                                        @reference.Description
-                                    </MudListItem>
-                                }
-                            </MudList>
-                        </MudAlert>
-
-                        <div>
-                            <MudText Typo="Typo.body2" Class="mb-1">Type <b>@_impact.AttributeName</b> to confirm</MudText>
-                            <MudTextField @bind-Value="_confirmText" Variant="Variant.Outlined" Immediate="true"
-                                          Placeholder="@_impact.AttributeName" AutoFocus="true"
-                                          Adornment="Adornment.End"
-                                          AdornmentIcon="@(ConfirmMatches() ? Icons.Material.Filled.CheckCircle : null)" />
-                        </div>
-                    }
-                }
-            </MudStack>
-        }
-    </DialogContent>
-    <DialogActions>
-        <MudButton OnClick="Cancel">@(_impact?.BlockedByValues == true ? "Close" : "Cancel")</MudButton>
-        <MudButton Color="Color.Error" Variant="Variant.Filled"
-                   Disabled="@(!CanDelete())" OnClick="DeleteAsync">
-            @DeleteButtonText()
-        </MudButton>
-    </DialogActions>
-</MudDialog>
+<ConsequenceConfirmationDialog Loading="@(_impact == null)"
+                               LoadingText="Evaluating deletion impact..."
+                               Blockers="@BuildBlockers()"
+                               SafeMessage="No object holds a value for this attribute. Safe to delete; no object data will be lost."
+                               Consequences="@BuildConsequences()"
+                               ConfirmationPhrase="@BuildConfirmationPhrase()"
+                               ConfirmButtonText="@BuildConfirmButtonText()"
+                               BusyText="Deleting..."
+                               OnConfirmAsync="DeleteAsync" />
 
 @code {
-    [CascadingParameter]
-    private IMudDialogInstance MudDialog { get; set; } = null!;
-
     [CascadingParameter]
     private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
@@ -91,7 +35,6 @@
     public MetaverseAttribute Attribute { get; set; } = null!;
 
     private AttributeDeletionImpact? _impact;
-    private string _confirmText = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -99,32 +42,75 @@
         _impact = await jim.Metaverse.EvaluateAttributeDeletionAsync(Attribute);
     }
 
-    private bool ConfirmMatches() =>
-        _impact != null && string.Equals(_confirmText, _impact.AttributeName, StringComparison.Ordinal);
-
-    private bool CanDelete()
+    private IReadOnlyList<ConsequenceBlocker> BuildBlockers()
     {
-        if (_impact == null || _impact.BlockedByValues || _impact.BuiltIn)
-            return false;
+        if (_impact == null)
+            return [];
 
-        // References present require the typed confirmation; unreferenced deletes do not.
-        return _impact.References.Count == 0 || ConfirmMatches();
+        var blockers = new List<ConsequenceBlocker>();
+
+        if (_impact.BuiltIn)
+        {
+            blockers.Add(new ConsequenceBlocker
+            {
+                Headline = "This is a built-in attribute",
+                Body = "Built-in attributes are part of JIM's own schema and cannot be deleted."
+            });
+        }
+
+        if (_impact.BlockedByValues)
+        {
+            blockers.Add(new ConsequenceBlocker
+            {
+                Headline = $"{_impact.TotalObjectsWithValues:N0} object(s) have a value",
+                Items = _impact.ObjectTypeValueCounts.Select(count => new ConsequenceItem
+                {
+                    Text = $"{count.MetaverseObjectTypeName}: {count.ObjectCount:N0} with a value",
+                    Icon = Icons.Material.Filled.Person,
+                    Href = Utilities.GetMetaverseObjectHasAttributeSearchHref(count.MetaverseObjectTypePluralName, _impact.AttributeName)
+                }).ToList(),
+                Body = "Clear these values first (stop the source flow and let it deprovision, or bulk-clear), then delete."
+            });
+        }
+
+        return blockers;
     }
 
-    private string DeleteButtonText()
+    private ConsequenceGroup? BuildConsequences()
+    {
+        if (_impact == null || _impact.References.Count == 0)
+            return null;
+
+        return new ConsequenceGroup
+        {
+            Headline = $"These {_impact.References.Count} reference(s) will also be removed",
+            Items = _impact.References.Select(reference => new ConsequenceItem
+            {
+                Text = reference.Description,
+                Icon = Icons.Material.Filled.Link
+            }).ToList()
+        };
+    }
+
+    // References present require the typed confirmation; unreferenced deletes do not.
+    private string? BuildConfirmationPhrase() =>
+        _impact is { References.Count: > 0 } ? _impact.AttributeName : null;
+
+    private string BuildConfirmButtonText()
     {
         if (_impact == null)
             return "Delete";
+
         return _impact.References.Count > 0
             ? $"Delete + {_impact.References.Count} reference(s)"
             : "Delete";
     }
 
-    private async Task DeleteAsync()
+    private async Task<bool> DeleteAsync()
     {
         var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Delete");
         if (cancelled)
-            return;
+            return false;
 
         try
         {
@@ -134,20 +120,19 @@
             if (!impact.Deleted)
             {
                 Snackbar.Add("The attribute could not be deleted; it may now hold stored values. Refresh and try again.", Severity.Warning);
-                return;
+                return false;
             }
+
             Snackbar.Add($"Deleted attribute \"{impact.AttributeName}\".", Severity.Success);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             Snackbar.Add($"Failed to delete attribute: {ex.Message}", Severity.Error);
-            return;
+            return false;
         }
 
-        MudDialog.Close(DialogResult.Ok(true));
+        return true;
     }
-
-    private void Cancel() => MudDialog.Cancel();
 
     /// <summary>
     /// Opens the delete dialog for a Metaverse Attribute. Returns true when the attribute was deleted.

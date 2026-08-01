@@ -40,6 +40,10 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     public bool SupportsPasswordSet => false;
 
     public bool SupportsPasswordPolicyDiscovery => false;
+
+    // A delimited file's column names are whatever the file happens to carry, so no standard vocabulary is
+    // claimed; the Attribute Flow editor falls back to matching names against every standard.
+    public AttributeStandard SchemaStandard => AttributeStandard.NotSet;
     #endregion
 
     #region IConnectorSettings members
@@ -479,19 +483,22 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #endregion
 
     #region IConnectorImportUsingFiles members
-    public async Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken)
+    public async Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null)
     {
         logger.Verbose("ImportAsync() called");
 
         if (string.IsNullOrEmpty(runProfile.FilePath))
             throw new InvalidDataException($"ImportAsync: FilePath is missing or empty!");
 
+        if (progressCallback != null)
+            await progressCallback("Reading CSV file...");
+
         var reader = GetCsvReader(runProfile.FilePath, connectedSystem.SettingValues, logger);
         var objectTypeInfo = GetFileConnectorObjectTypeInfo(connectedSystem.SettingValues, logger);
         var stopOnFirstError = GetStopOnFirstErrorSetting(connectedSystem.SettingValues);
         var multiValueDelimiter = GetMultiValueDelimiterSetting(connectedSystem.SettingValues);
-        var import = new FileConnectorImport(connectedSystem, reader, objectTypeInfo, stopOnFirstError, multiValueDelimiter, logger, cancellationToken);
-            
+        var import = new FileConnectorImport(connectedSystem, reader, objectTypeInfo, stopOnFirstError, multiValueDelimiter, logger, cancellationToken, progressCallback);
+
         switch (runProfile.RunType)
         {
             case ConnectedSystemRunType.FullImport:
@@ -510,13 +517,13 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #endregion
 
     #region IConnectorExportUsingFiles members
-    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<ConnectedSystemSettingValue> settings, IList<PendingExport> pendingExports, CancellationToken cancellationToken)
+    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<ConnectedSystemSettingValue> settings, IList<PendingExport> pendingExports, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null)
     {
         var logger = Log.ForContext<FileConnector>();
         logger.Verbose("ExportAsync() called with {Count} Pending Exports", pendingExports.Count);
 
-        var export = new FileConnectorExport(settings, pendingExports, logger);
-        return Task.FromResult(export.Execute());
+        var export = new FileConnectorExport(settings, pendingExports, logger, progressCallback);
+        return export.ExecuteAsync();
     }
     #endregion
 

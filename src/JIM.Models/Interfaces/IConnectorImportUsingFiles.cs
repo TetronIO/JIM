@@ -17,5 +17,6 @@ public interface IConnectorImportUsingFiles
     /// <param name="runProfile">Defines what type of import is being performed, i.e. delta import or full import.</param>
     /// <param name="logger">The object that enables log entries to be created.</param>
     /// <param name="cancellationToken">Enables the import to be stopped early, if required.</param>
-    public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken);
+    /// <param name="progressCallback">Optional callback for narrating your internal sub-phases (i.e. "Reading CSV file...", "Parsed 50,000 rows..."). JIM surfaces each message on the Activity, replacing the previous one, so operators can tell a healthy long-running import from a stuck one. The whole file is read in this one call, so this is the only progress an operator sees until it returns. The vocabulary is yours; emit on phase transitions rather than per row, and skip building messages entirely when this is null.</param>
+    public Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null);
 }

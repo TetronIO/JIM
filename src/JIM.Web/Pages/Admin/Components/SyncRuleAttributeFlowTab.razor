@@ -3,8 +3,11 @@
 @using JIM.Models.Staging
 @using JIM.Models.Utility
 @using JIM.Utilities
+@using JIM.Application
+@using JIM.Web.Models
 @inject IDialogService DialogService
 @inject IJSRuntime JS
+@inject IJimApplicationFactory JimFactory
 
 @* Copyright (c) Tetron Limited. All rights reserved. *@
 @* Licensed under the Tetron Commercial License. See LICENSE file in the project root. *@
@@ -12,7 +15,7 @@
 <MudPaper Class="pa-4" Outlined="true">
     <div class="d-flex align-center justify-space-between">
         <MudButton StartIcon="@Icons.Material.Filled.Add" Variant="Variant.Filled"
-            OnClick="HandleOpenAddAttributeFlowRuleDialog" Color="Color.Default"
+            OnClick="HandleOpenAddAttributeFlowRuleDialogAsync" Color="Color.Default"
             Disabled="DisableAddAttributeFlowButton()" DropShadow="false">Add Attribute Flow</MudButton>
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
             <MudTooltip Text="Table view" Arrow="true" Placement="Placement.Top">
@@ -207,7 +210,7 @@
                     <div class="d-flex justify-end gap-2">
                         <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Color="Color.Primary"
                             Size="Size.Small" aria-label="edit"
-                            OnClick="@(() => HandleEditAttributeFlowRule(context))" />
+                            OnClick="@(() => HandleEditAttributeFlowRuleAsync(context))" />
                         <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error"
                             Size="Size.Small" aria-label="delete"
                             OnClick="@(() => HandleAttributeFlowRuleDeleteClickAsync(context))" />
@@ -239,7 +242,7 @@
                         <div class="d-flex gap-2" style="flex-shrink: 0;">
                             <MudIconButton Icon="@Icons.Material.Outlined.Edit" Variant="Variant.Filled" Color="Color.Primary"
                                 Size="Size.Small" aria-label="edit"
-                                OnClick="@(() => HandleEditAttributeFlowRule(attributeFlowRule))" />
+                                OnClick="@(() => HandleEditAttributeFlowRuleAsync(attributeFlowRule))" />
                             <MudIconButton Icon="@Icons.Material.Outlined.Delete" Variant="Variant.Filled" Color="Color.Error"
                                 Size="Size.Small" aria-label="delete"
                                 OnClick="@(() => HandleAttributeFlowRuleDeleteClickAsync(attributeFlowRule))" />
@@ -389,9 +392,16 @@
                                 Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@MetaverseAttributeLabel">
                                 @foreach (var metaverseAttribute in SyncRule.MetaverseObjectType.Attributes)
                                 {
-                                    <MudSelectItem Value="@metaverseAttribute">@metaverseAttribute.Name <span
-                                            style="@($"color:{Colors.Gray.Darken1};")">(@metaverseAttribute.Type :
-                                            @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></MudSelectItem>
+                                    <MudSelectItem Value="@metaverseAttribute">
+                                        <div class="jim-flow-option">
+                                            <span>@metaverseAttribute.Name <span
+                                                style="@($"color:{Colors.Gray.Darken1};")">(@metaverseAttribute.Type :
+                                                @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></span>
+                                            <span class="jim-flow-option-spacer"></span>
+                                            <StandardMappingHintLabel Hints="_standardMappingHints.ForAttribute(metaverseAttribute.Id)"
+                                                                      ShowStandard="_standardMappingHints.HasMixedStandards" />
+                                        </div>
+                                    </MudSelectItem>
                                 }
                             </MudSelect>
                         }
@@ -410,20 +420,61 @@
             _attributeFlowMappingSource.MetaverseAttribute != null ||
             !string.IsNullOrWhiteSpace(_attributeFlowMappingSource.Expression))
             {
+                @* ─── Standard Mapping hint (#1122) ─── *@
+                var suggestions = GetStandardMappingSuggestions();
+                @if (suggestions.Count > 0)
+                {
+                    var selectable = suggestions.Where(s => s.Status == StandardMappingSuggestionStatus.Available).ToList();
+                    var unavailable = suggestions.Where(s => s.Status != StandardMappingSuggestionStatus.Available).ToList();
+
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-5">
+                        @if (selectable.Count > 0)
+                        {
+                            @GetStandardMappingSuggestionText(selectable)
+                        }
+                        @foreach (var blocked in unavailable)
+                        {
+                            <MudText Typo="Typo.body1" Class="@(selectable.Count > 0 ? "mt-2" : null)">
+                                @GetUnavailableCorrespondenceText(blocked, selectable.Count > 0)
+                            </MudText>
+                        }
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">
+                            Standard Mappings are guidance only; any attribute can be chosen, and they never affect what synchronisation flows.
+                        </MudText>
+                        @if (selectable.Count > 0)
+                        {
+                            <div class="d-flex flex-wrap gap-2 mt-3">
+                                @foreach (var suggestion in selectable)
+                                {
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" DropShadow="false"
+                                        OnClick="@(() => ApplyStandardMappingSuggestion(suggestion))">Use @suggestion.TargetName</MudButton>
+                                }
+                            </div>
+                        }
+                    </MudAlert>
+                }
+
                 <MudText Class="mt-5">Will flow to:</MudText>
                 if (SyncRule.Direction == SyncRuleDirection.Import)
                 {
                     <MudSelect T="MetaverseAttribute" @bind-Value="_attributeFlowMapping.TargetMetaverseAttribute"
                         Label="Metaverse Attribute" Placeholder="Please select the target Metaverse attribute" Required="true"
                         Class="mt-5" Variant="Variant.Outlined" ToStringFunc="@MetaverseAttributeLabel">
-                        @foreach (var metaverseAttribute in SyncRule.MetaverseObjectType.Attributes.Where(q =>
-                                    !SyncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping &&
-                                    afr.TargetMetaverseAttribute != null &&
-                                    afr.TargetMetaverseAttribute.Id == q.Id)))
+                        @foreach (var metaverseAttribute in AvailableTargetMetaverseAttributes())
                         {
                             <MudSelectItem Disabled="IsAttributeFlowTargetDisabled(metaverseAttribute)" Value="@metaverseAttribute">
-                                @metaverseAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@metaverseAttribute.Type :
-                                    @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
+                                <div class="jim-flow-option">
+                                    <span>@metaverseAttribute.Name <span style="@($"color:{Colors.Gray.Darken1};")">(@metaverseAttribute.Type :
+                                        @metaverseAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></span>
+                                    @if (IsSuggested(suggestions, metaverseAttribute))
+                                    {
+                                        <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary">Suggested</MudChip>
+                                    }
+                                    <span class="jim-flow-option-spacer"></span>
+                                    <StandardMappingHintLabel Hints="_standardMappingHints.ForAttribute(metaverseAttribute.Id)"
+                                                             Emphasised="IsSuggested(suggestions, metaverseAttribute)"
+                                                             ShowStandard="_standardMappingHints.HasMixedStandards" />
+                                </div>
                             </MudSelectItem>
                         }
                     </MudSelect>
@@ -465,18 +516,20 @@
                         @bind-Value="_attributeFlowMapping.TargetConnectedSystemAttribute" Label="Connected System Attribute"
                         Placeholder="Please select the target Connected System attribute" Required="true" Class="mt-5"
                         Variant="Variant.Outlined">
-                        @* Credential attributes are excluded entirely: they are handled by JIM's password channel, never by Attribute Flow *@
-                        @foreach (var connectedSystemAttribute in SyncRule.ConnectedSystemObjectType!.Attributes.Where(q =>
-                                    !CredentialAttributes.IsCredentialAttribute(q.Name) &&
-                                    !SyncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping &&
-                                    afr.TargetConnectedSystemAttribute != null &&
-                                    afr.TargetConnectedSystemAttribute.Id == q.Id)))
+                        @foreach (var connectedSystemAttribute in AvailableTargetConnectedSystemAttributes())
                         {
                             <MudSelectItem Disabled="IsAttributeFlowTargetDisabled(connectedSystemAttribute)"
                                 Value="@connectedSystemAttribute">
-                                @connectedSystemAttribute.Name <span
-                                    style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type :
-                                    @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span>
+                                <div class="jim-flow-option">
+                                    <span>@connectedSystemAttribute.Name <span
+                                        style="@($"color:{Colors.Gray.Darken1};")">(@connectedSystemAttribute.Type :
+                                        @connectedSystemAttribute.AttributePlurality.ToString().SplitOnCapitalLetters())</span></span>
+                                    @if (IsSuggested(suggestions, connectedSystemAttribute))
+                                    {
+                                        <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary">Suggested</MudChip>
+                                    }
+                                    <span class="jim-flow-option-spacer"></span>
+                                </div>
                             </MudSelectItem>
                         }
                     </MudSelect>
@@ -526,6 +579,11 @@
     private bool _attributeFlowTableView = true;
     private bool _isEditingAttributeFlow;
 
+    // Advisory Standard Mapping hints for the dialog's attribute pickers (#1122). Loaded when the dialog opens
+    // and cached for as long as the rule keeps pointing at the same Connected System and Metaverse Object Type.
+    private StandardMappingHints _standardMappingHints = StandardMappingHints.Empty;
+    private (int ConnectedSystemId, int MetaverseObjectTypeId)? _loadedStandardMappingHintsKey;
+
     // Tooltip for the Multi-Valued to Single-Valued indicator in the Attribute Flow list (#435).
     private const string MvaToSvaIndicatorTooltip =
         "This mapping flows a Multi-Valued source to a Single-Valued target. Any object with more than one value will " +
@@ -554,14 +612,21 @@
         return false;
     }
 
-    private void HandleOpenAddAttributeFlowRuleDialog()
+    private async Task HandleOpenAddAttributeFlowRuleDialogAsync()
     {
         _attributeFlowMapping = new SyncRuleMapping();
         _attributeFlowMappingSource = new SyncRuleMappingSource();
         _attributeFlowMapping.Sources.Add(_attributeFlowMappingSource);
         _attributeFlowMappingSourceType = null;
         _isEditingAttributeFlow = false;
+        await LoadStandardMappingHintsAsync();
         _addAttributeFlowRuleDialogVisible = true;
+    }
+
+    private async Task HandleEditAttributeFlowRuleAsync(SyncRuleMapping mapping)
+    {
+        await LoadStandardMappingHintsAsync();
+        HandleEditAttributeFlowRule(mapping);
     }
 
     private void HandleEditAttributeFlowRule(SyncRuleMapping mapping)
@@ -591,6 +656,232 @@
         _attributeFlowMappingSource.ConnectedSystemAttribute = null;
         _attributeFlowMappingSource.MetaverseAttribute = null;
         _attributeFlowMappingSource.Expression = null;
+    }
+
+    /// <summary>
+    /// Loads the advisory Standard Mapping hints for the Connected System and Metaverse Object Type this
+    /// Synchronisation Rule targets (#1122), on its own short-lived context: these are read-only display data
+    /// and must stay clear of the tracked rule graph the editor saves. Cached until the rule is re-pointed,
+    /// and a rule without both ends chosen yet simply has no hints.
+    /// </summary>
+    private async Task LoadStandardMappingHintsAsync()
+    {
+        // The FK scalar is only populated once the rule has been saved; while a new rule is being created the
+        // chosen Connected System is on the navigation property alone, and hints should work there too.
+        var connectedSystemId = SyncRule.ConnectedSystemId != 0 ? SyncRule.ConnectedSystemId : SyncRule.ConnectedSystem?.Id ?? 0;
+        if (SyncRule.MetaverseObjectType == null || connectedSystemId == 0)
+        {
+            _standardMappingHints = StandardMappingHints.Empty;
+            _loadedStandardMappingHintsKey = null;
+            return;
+        }
+
+        var key = (connectedSystemId, SyncRule.MetaverseObjectType.Id);
+        if (_loadedStandardMappingHintsKey == key)
+            return;
+
+        using var jim = JimFactory.Create();
+        var connectedSystemStandard = await jim.ConnectedSystems.GetConnectedSystemSchemaStandardAsync(connectedSystemId);
+        var mappings = await jim.Metaverse.GetStandardMappingsForObjectTypeAsync(SyncRule.MetaverseObjectType.Id);
+        _standardMappingHints = StandardMappingHints.Build(mappings, connectedSystemStandard);
+        _loadedStandardMappingHintsKey = key;
+    }
+
+    /// <summary>
+    /// The Metaverse Attributes the target picker offers on an import rule: the Object Type's attributes, less
+    /// those already targeted by another Attribute Flow. Shared with the suggestion logic so the editor cannot
+    /// suggest something the picker does not list.
+    /// </summary>
+    private IEnumerable<MetaverseAttribute> AvailableTargetMetaverseAttributes() =>
+        SyncRule.MetaverseObjectType!.Attributes.Where(q =>
+            !SyncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping &&
+                                                    afr.TargetMetaverseAttribute != null &&
+                                                    afr.TargetMetaverseAttribute.Id == q.Id));
+
+    /// <summary>
+    /// The Connected System attributes the target picker offers on an export rule; the export-side sibling of
+    /// <see cref="AvailableTargetMetaverseAttributes"/>.
+    /// </summary>
+    /// <summary>
+    /// The Connected System attributes an Attribute Flow may target: everything not already taken by another
+    /// flow on this rule, less anything holding credential material. Credential attributes are excluded
+    /// entirely because they are written by JIM's password channel and must never travel through Attribute
+    /// Flow; naming one through the REST API or PowerShell is rejected for the same reason.
+    /// </summary>
+    private IEnumerable<ConnectedSystemObjectTypeAttribute> AvailableTargetConnectedSystemAttributes() =>
+        SyncRule.ConnectedSystemObjectType!.Attributes.Where(q =>
+            !CredentialAttributes.IsCredentialAttribute(q.Name) &&
+            !SyncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping &&
+                                                    afr.TargetConnectedSystemAttribute != null &&
+                                                    afr.TargetConnectedSystemAttribute.Id == q.Id));
+
+    /// <summary>
+    /// The targets the Standard Mappings say the chosen source attribute corresponds to (#1122). Empty for an
+    /// Expression source (there is no attribute name to match on) and for a source attribute the standard says
+    /// nothing about. More than one target can correspond to a name, in which case all of them are offered and
+    /// none is chosen. A correspondence the editor cannot act on is returned too, carrying the reason: a
+    /// standard that describes a correspondence JIM then says nothing about is worse than no hint at all,
+    /// because the administrator is left looking for an attribute that is not in the list.
+    /// </summary>
+    private List<StandardMappingSuggestion> GetStandardMappingSuggestions()
+    {
+        if (_attributeFlowMappingSourceType != "Attribute" || !_standardMappingHints.HasHints)
+            return [];
+
+        if (SyncRule.Direction == SyncRuleDirection.Import)
+        {
+            var matches = _standardMappingHints.MatchesForAttributeName(_attributeFlowMappingSource?.ConnectedSystemAttribute?.Name);
+            if (matches.Count == 0)
+                return [];
+
+            // Resolved against every attribute on the Object Type, not just the selectable ones, so a target
+            // that is missing from the picker can be explained rather than quietly disappearing.
+            return matches
+                .Select(match => new { Match = match, Attribute = SyncRule.MetaverseObjectType!.Attributes.FirstOrDefault(a => a.Id == match.MetaverseAttributeId) })
+                .Where(x => x.Attribute != null)
+                .Select(x => new StandardMappingSuggestion
+                {
+                    Status = ClassifyTarget(x.Attribute!),
+                    MetaverseAttribute = x.Attribute,
+                    TargetName = x.Attribute!.Name,
+                    StandardLabel = x.Match.StandardLabel,
+                    CounterpartName = x.Match.CounterpartName,
+                    Notes = x.Match.Notes
+                })
+                .ToList();
+        }
+
+        var sourceMetaverseAttribute = _attributeFlowMappingSource?.MetaverseAttribute;
+        if (sourceMetaverseAttribute == null)
+            return [];
+
+        // On export the correspondence runs the other way: the chosen Metaverse Attribute's counterpart names
+        // are the Connected System attribute names the standard says should receive it, so a correspondence
+        // only stands where the system's schema actually has an attribute of that name.
+        return _standardMappingHints.ForAttribute(sourceMetaverseAttribute.Id)
+            .SelectMany(hint => SyncRule.ConnectedSystemObjectType!.Attributes
+                .Where(candidate => string.Equals(candidate.Name, hint.CounterpartName, StringComparison.OrdinalIgnoreCase))
+                .Select(candidate => new StandardMappingSuggestion
+                {
+                    Status = ClassifyTarget(candidate),
+                    ConnectedSystemAttribute = candidate,
+                    TargetName = candidate.Name,
+                    StandardLabel = hint.StandardLabel,
+                    CounterpartName = hint.CounterpartName,
+                    Notes = hint.Notes
+                }))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Why a corresponding Metaverse Attribute is or is not selectable as this mapping's target. Defers to
+    /// <see cref="IsAttributeFlowTargetDisabled(MetaverseAttribute)"/> for the type rule rather than restating
+    /// it, so the explanation cannot drift from what the picker actually allows.
+    /// </summary>
+    private StandardMappingSuggestionStatus ClassifyTarget(MetaverseAttribute attribute)
+    {
+        if (SyncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping && afr.TargetMetaverseAttribute?.Id == attribute.Id))
+            return StandardMappingSuggestionStatus.AlreadyTargeted;
+
+        return IsAttributeFlowTargetDisabled(attribute) ? StandardMappingSuggestionStatus.TypeMismatch : StandardMappingSuggestionStatus.Available;
+    }
+
+    /// <summary>
+    /// The export-side sibling of <see cref="ClassifyTarget(MetaverseAttribute)"/>. Read-only is tested first:
+    /// it also disables the target, but "the system will not accept writes to this attribute" is a more useful
+    /// thing to be told than "the types differ".
+    /// </summary>
+    private StandardMappingSuggestionStatus ClassifyTarget(ConnectedSystemObjectTypeAttribute attribute)
+    {
+        if (attribute.Writability == AttributeWritability.ReadOnly)
+            return StandardMappingSuggestionStatus.ReadOnlyTarget;
+
+        if (SyncRule.AttributeFlowRules.Any(afr => afr != _attributeFlowMapping && afr.TargetConnectedSystemAttribute?.Id == attribute.Id))
+            return StandardMappingSuggestionStatus.AlreadyTargeted;
+
+        return IsAttributeFlowTargetDisabled(attribute) ? StandardMappingSuggestionStatus.TypeMismatch : StandardMappingSuggestionStatus.Available;
+    }
+
+    private static bool IsSuggested(List<StandardMappingSuggestion> suggestions, MetaverseAttribute attribute) =>
+        suggestions.Any(s => s.MetaverseAttribute != null && s.MetaverseAttribute.Id == attribute.Id);
+
+    private static bool IsSuggested(List<StandardMappingSuggestion> suggestions, ConnectedSystemObjectTypeAttribute attribute) =>
+        suggestions.Any(s => s.ConnectedSystemAttribute != null && s.ConnectedSystemAttribute.Id == attribute.Id);
+
+    /// <summary>
+    /// The sentence stating the correspondence the Standard Mappings describe (#1122). Attribute and counterpart
+    /// names are rendered as inline code, so the result is raw markup; each name is HTML-encoded because it is
+    /// Connected System or Metaverse schema data.
+    /// </summary>
+    private MarkupString GetStandardMappingSuggestionText(List<StandardMappingSuggestion> suggestions)
+    {
+        static string Code(string? name) => $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(name)}</code>";
+
+        var first = suggestions[0];
+        // The picker's compact "SCIM 2.0 · LDAP/AD" label does not read as prose; spell the conjunction out.
+        var standard = System.Net.WebUtility.HtmlEncode(first.StandardLabel.Replace(" · ", " and ", StringComparison.Ordinal));
+        var targets = string.Join(" and ", suggestions.Select(s => Code(s.TargetName)));
+        var notes = string.Join(" ", suggestions
+            .Select(s => s.Notes)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.Ordinal)
+            .Select(System.Net.WebUtility.HtmlEncode));
+
+        var sentence = SyncRule.Direction == SyncRuleDirection.Import
+            ? $"In {standard}, {Code(first.CounterpartName)} corresponds to the Metaverse " +
+              $"{(suggestions.Count == 1 ? "Attribute" : "Attributes")} {targets}."
+            : $"In {standard}, {Code(_attributeFlowMappingSource?.MetaverseAttribute?.Name)} corresponds to " +
+              $"{targets} in this Connected System.";
+
+        return (MarkupString)(string.IsNullOrEmpty(notes) ? sentence : $"{sentence} {notes}");
+    }
+
+    /// <summary>
+    /// The sentence for a correspondence the editor cannot act on: what the standard says, then why this
+    /// mapping cannot express it, then the mapping's own note where it has one (which is usually where the
+    /// conversion an Expression source would need is described). Raw markup, encoded as above.
+    /// </summary>
+    private MarkupString GetUnavailableCorrespondenceText(StandardMappingSuggestion suggestion, bool continuesFromSuggestion)
+    {
+        static string Code(string? name) => $"<code class=\"jim-code-inline\">{System.Net.WebUtility.HtmlEncode(name)}</code>";
+
+        var standard = System.Net.WebUtility.HtmlEncode(suggestion.StandardLabel.Replace(" · ", " and ", StringComparison.Ordinal));
+        var sourceName = SyncRule.Direction == SyncRuleDirection.Import
+            ? _attributeFlowMappingSource?.ConnectedSystemAttribute?.Name
+            : _attributeFlowMappingSource?.MetaverseAttribute?.Name;
+
+        // Following a sentence that has already named the standard and the source, repeating both reads as boilerplate.
+        var correspondence = continuesFromSuggestion
+            ? $"It also corresponds to {Code(suggestion.TargetName)}, "
+            : $"In {standard}, {Code(sourceName)} corresponds to {Code(suggestion.TargetName)}, ";
+        var reason = suggestion.Status switch
+        {
+            StandardMappingSuggestionStatus.TypeMismatch =>
+                "which holds a different data type, so the value cannot flow to it directly. An Expression source can convert it.",
+            StandardMappingSuggestionStatus.AlreadyTargeted =>
+                "which another Attribute Flow on this Synchronisation Rule already targets.",
+            StandardMappingSuggestionStatus.ReadOnlyTarget =>
+                "which this Connected System reports as read-only, so no Attribute Flow can write to it.",
+            _ => "which is not available as a target."
+        };
+
+        var notes = string.IsNullOrWhiteSpace(suggestion.Notes) ? null : System.Net.WebUtility.HtmlEncode(suggestion.Notes.Trim());
+        return (MarkupString)(notes == null ? correspondence + reason : $"{correspondence}{reason} {notes}");
+    }
+
+    /// <summary>
+    /// Accepts a suggestion by setting it as the mapping's target; a convenience for a picker that can run to
+    /// dozens of attributes, not an endorsement. The administrator can change the target afterwards as normal.
+    /// </summary>
+    private void ApplyStandardMappingSuggestion(StandardMappingSuggestion suggestion)
+    {
+        if (_attributeFlowMapping == null)
+            return;
+
+        if (SyncRule.Direction == SyncRuleDirection.Import)
+            _attributeFlowMapping.TargetMetaverseAttribute = suggestion.MetaverseAttribute;
+        else
+            _attributeFlowMapping.TargetConnectedSystemAttribute = suggestion.ConnectedSystemAttribute;
     }
 
     /// <summary>

@@ -65,6 +65,15 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await query.SingleOrDefaultAsync(cd => cd.Id == id);
     }
 
+    public async Task<AttributeStandard> GetConnectedSystemSchemaStandardAsync(int connectedSystemId)
+    {
+        // A scalar projection: the caller wants one enum for a display hint, not a Connected System graph.
+        return await Repository.Database.ConnectedSystems
+            .Where(cs => cs.Id == connectedSystemId)
+            .Select(cs => cs.ConnectorDefinition.SchemaStandard)
+            .SingleOrDefaultAsync();
+    }
+
     public async Task<ConnectorDefinition?> GetConnectorDefinitionAsync(string name, bool withChangeTracking = false)
     {
         IQueryable<ConnectorDefinition> query = Repository.Database.ConnectorDefinitions
@@ -92,6 +101,12 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     public async Task DeleteConnectorDefinitionAsync(ConnectorDefinition connectorDefinition)
     {
         Repository.Database.ConnectorDefinitions.Remove(connectorDefinition);
+        await Repository.Database.SaveChangesAsync();
+    }
+
+    public async Task DeleteConnectorDefinitionSettingsAsync(IList<ConnectorDefinitionSetting> connectorDefinitionSettings)
+    {
+        Repository.Database.ConnectorDefinitionSettings.RemoveRange(connectorDefinitionSettings);
         await Repository.Database.SaveChangesAsync();
     }
 
@@ -426,6 +441,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private void MarkConnectedSystemGraphForUpdate(ConnectedSystem connectedSystem)
     {
+        // Track the Connected System FIRST, and keep it first. Adding a new partition or container below uses
+        // DbSet.Add, which walks the graph and marks every entity it can reach for insertion; a new partition's
+        // navigation leads straight back here, and on to the Connector Definition and its settings. When those are
+        // detached (the portal loads the Connected System in one scope and saves it in another), the save then fails
+        // on a duplicate Connector Definition key and no hierarchy can be retrieved at all. EF Core stops walking at
+        // an entity that is already tracked, so tracking this one first confines each Add to what is genuinely new.
+        //
+        // UpdateDetachedSafe is used rather than Update() because Update() does the same graph walk from here:
+        // after ClearChangeTracker() it would traverse Objects → MVO → Type → Attributes, causing PK violations on
+        // the MetaverseObjectType ↔ MetaverseAttribute join table.
+        Repository.UpdateDetachedSafe(connectedSystem);
+
         // Handle new partitions and containers explicitly - EF Core doesn't automatically detect new items
         // in collections that were loaded from a separate query and then modified.
         // Also handle existing partitions/containers that are detached (e.g. when the entity was loaded
@@ -437,12 +464,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (partition.Id == 0)
                 {
-                    // New partition - add it to the context
+                    // New partition - add it, along with any containers discovered under it.
                     Repository.Database.ConnectedSystemPartitions.Add(partition);
                 }
                 else
                 {
-                    // Existing partition - ensure it's tracked and marked as modified
+                    // Existing partition - ensure it's tracked and marked as modified. Tracked before its
+                    // containers for the same reason the Connected System is tracked before its partitions.
                     Repository.UpdateDetachedSafe(partition);
 
                     if (partition.Containers != null)
@@ -466,7 +494,8 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         }
 
         // Same again for a discovered password policy. UpdateDetachedSafe does not traverse the graph, so without
-        // this a policy read during schema import is silently discarded on save.
+        // this a policy read during schema import is silently discarded on save. Placed after the Connected System
+        // itself is tracked, above: Add walks the graph, and a new policy's navigation leads straight back here.
         if (connectedSystem.PasswordPolicy != null)
         {
             if (connectedSystem.PasswordPolicy.Id == 0)
@@ -474,11 +503,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             else
                 Repository.UpdateDetachedSafe(connectedSystem.PasswordPolicy);
         }
-
-        // Use detach-safe update to avoid graph traversal on detached ConnectedSystem entities.
-        // After ClearChangeTracker(), Update() would traverse Objects → MVO → Type → Attributes
-        // causing PK violations on the MetaverseObjectType ↔ MetaverseAttribute join table.
-        Repository.UpdateDetachedSafe(connectedSystem);
     }
 
     /// <summary>
@@ -5561,6 +5585,59 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
         return await Repository.Database.Database
             .SqlQueryRaw<Guid>(sql, parameters.ToArray())
             .ToListAsync();
+    }
+
+    public async Task<List<ConnectedSystemConfigurationScope>> GetConfigurationScopesAsync(IList<int> connectedSystemIds)
+    {
+        if (connectedSystemIds.Count == 0)
+            return [];
+
+        // Projected in one pass over the rules rather than four separate queries, then grouped in memory. The result
+        // set is bounded by configuration size (rules and their mappings), not by object counts, so it stays small.
+        var references = await Repository.Database.SyncRules
+            .Where(sr => connectedSystemIds.Contains(sr.ConnectedSystemId))
+            .Select(sr => new
+            {
+                sr.ConnectedSystemId,
+                SyncRuleId = sr.Id,
+                sr.MetaverseObjectTypeId,
+                FlowTargetAttributeIds = sr.AttributeFlowRules
+                    .Where(m => m.TargetMetaverseAttributeId != null)
+                    .Select(m => m.TargetMetaverseAttributeId!.Value),
+                FlowSourceAttributeIds = sr.AttributeFlowRules
+                    .SelectMany(m => m.Sources)
+                    .Where(s => s.MetaverseAttributeId != null)
+                    .Select(s => s.MetaverseAttributeId!.Value),
+                ScopingAttributeIds = sr.ObjectScopingCriteriaGroups
+                    .SelectMany(g => g.Criteria)
+                    .Where(c => c.MetaverseAttributeId != null)
+                    .Select(c => c.MetaverseAttributeId!.Value),
+                MatchingAttributeIds = sr.ObjectMatchingRules
+                    .Where(o => o.TargetMetaverseAttributeId != null)
+                    .Select(o => o.TargetMetaverseAttributeId!.Value)
+            })
+            .ToListAsync();
+
+        var bySystem = references.GroupBy(r => r.ConnectedSystemId)
+            .ToDictionary(g => g.Key, g => new ConnectedSystemConfigurationScope
+            {
+                ConnectedSystemId = g.Key,
+                SyncRuleIds = g.Select(r => r.SyncRuleId).ToHashSet(),
+                MetaverseObjectTypeIds = g.Select(r => r.MetaverseObjectTypeId).ToHashSet(),
+                MetaverseAttributeIds = g.SelectMany(r => r.FlowTargetAttributeIds
+                        .Concat(r.FlowSourceAttributeIds)
+                        .Concat(r.ScopingAttributeIds)
+                        .Concat(r.MatchingAttributeIds))
+                    .ToHashSet()
+            });
+
+        // Every requested system gets an entry, so a system with no Synchronisation Rules reports an empty scope
+        // rather than being silently absent (which a caller could mistake for "not evaluated").
+        return connectedSystemIds
+            .Select(id => bySystem.TryGetValue(id, out var scope)
+                ? scope
+                : new ConnectedSystemConfigurationScope { ConnectedSystemId = id })
+            .ToList();
     }
 
     #endregion

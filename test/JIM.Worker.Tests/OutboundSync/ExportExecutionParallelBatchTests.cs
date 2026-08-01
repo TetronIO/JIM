@@ -299,8 +299,8 @@ public class ExportExecutionParallelBatchTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, Func<string, Task>? _) =>
             {
                 var currentCall = Interlocked.Increment(ref callCount);
                 if (currentCall >= 2)
@@ -613,8 +613,8 @@ public class ExportExecutionParallelBatchTests
         var mockConnector = new Mock<IConnector>();
         var mockExportConnector = mockConnector.As<IConnectorExportUsingCalls>();
         mockConnector.Setup(c => c.Name).Returns("Test Connector");
-        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _) =>
+        mockExportConnector.Setup(c => c.ExportAsync(It.IsAny<IList<PendingExport>>(), It.IsAny<CancellationToken>(), It.IsAny<Func<string, Task>?>()))
+            .ReturnsAsync((IList<PendingExport> exports, CancellationToken _, Func<string, Task>? _) =>
                 exports.Select(_ => defaultResult).ToList());
         return mockConnector;
     }

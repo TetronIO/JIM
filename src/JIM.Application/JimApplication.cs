@@ -59,6 +59,7 @@ public class JimApplication : IDisposable
     public ChangeHistoryServer ChangeHistory { get; }
     public ConfigurationChangeCaptureService ConfigurationChangeCapture { get; }
     public ConfigurationDiffService ConfigurationDiffs { get; }
+    public ConfigurationDriftService ConfigurationDrift { get; }
     public ConfigurationSnapshotService ConfigurationSnapshots { get; }
     public ConnectedSystemServer ConnectedSystems { get; }
     public ExampleDataServer ExampleData { get; }
@@ -86,6 +87,7 @@ public class JimApplication : IDisposable
         ChangeHistory = new ChangeHistoryServer(this);
         ConfigurationChangeCapture = new ConfigurationChangeCaptureService(this);
         ConfigurationDiffs = new ConfigurationDiffService();
+        ConfigurationDrift = new ConfigurationDriftService(this);
         ConfigurationSnapshots = new ConfigurationSnapshotService(this);
         ConnectedSystems = new ConnectedSystemServer(this);
         ExampleData = new ExampleDataServer(this);

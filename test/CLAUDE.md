@@ -44,6 +44,34 @@ public async Task GetObjectAsync_WithValidId_ReturnsObject()
 }
 ```
 
+## Blazor component tests (bUnit)
+
+`test/JIM.Web.Components.Tests/` renders JIM.Web's Razor components with [bUnit](https://bunit.dev) and asserts on them from NUnit. It exists because some UI defects are only expressible at component level: the `PrefilledFormValidator` bug (the parent's `OnAfterRenderAsync` running before `MudForm`'s, so the initial validation result was overwritten) is a lifecycle-ordering fault that no plain unit test can reach.
+
+**Scope; keep it narrow.** In scope: components under `src/JIM.Web/Shared/` that carry logic or lifecycle behaviour. Out of scope: pages, and components that are pure markup. Tests arrive when a component is written or changed; the existing component set is **not** retrofitted wholesale, because broad UI coverage buys little and costs upgrade friction on every MudBlazor release.
+
+**Assert on JIM's own markup and component state, never on MudBlazor's generated CSS class names.** Those are a third party's implementation detail and churn between MudBlazor releases; a suite that breaks on every upgrade gets ignored, which is worse than no suite. Prefer `FindComponent<T>()`/`HasComponent<T>()` and a component's own parameters over DOM structure.
+
+Derive fixtures from `JimComponentTestContext`, which registers MudBlazor's services and sets bUnit's JS interop to loose mode (MudBlazor calls into JavaScript widely; without loose mode components throw on unconfigured invocations).
+
+```csharp
+[TestFixture]
+public class TextValueDisplayTests : JimComponentTestContext
+{
+    [Test]
+    public void TextValueDisplay_WhitespaceOnlyValue_RendersWhitespaceValueNotEmptyValue()
+    {
+        var cut = Render<TextValueDisplay>(p => p.Add(c => c.Value, "   "));
+
+        Assert.That(cut.HasComponent<WhitespaceValue>(), Is.True);
+    }
+}
+```
+
+Notes:
+- The project uses `Microsoft.NET.Sdk.Razor`, not the plain SDK; bUnit needs the Razor SDK's compilation support. This is why it is a separate project rather than tests added to `JIM.Web.Api.Tests`.
+- It pins `AngleSharp` forward as a direct reference. bUnit 2.7.2 resolves 1.4.0, which carries CVE-2026-54570; the pin keeps `NuGetAudit` clean without suppressing the finding. Drop it once bUnit's own floor moves past 1.5.0.
+
 ## Debugging Failing Tests
 
 - Claude Code cannot interactively debug with breakpoints like an IDE

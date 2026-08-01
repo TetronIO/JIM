@@ -68,6 +68,17 @@ public class Activity
     public string? ErrorStackTrace { get; set; }
 
     /// <summary>
+    /// Structured detail about the failure, as JSON, for failures where there is something specific worth showing an
+    /// administrator beyond the message. Populated today by LDAPS certificate rejections, which record the certificate
+    /// the directory server presented so the portal can show it and name what to do about it.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately open-ended: the shape is owned by whatever produced the failure, and the portal renders what it
+    /// recognises. Never holds secrets; a certificate is public by definition.
+    /// </remarks>
+    public string? ErrorDetail { get; set; }
+
+    /// <summary>
     /// Connector-level warning message describing a non-fatal operational note about the activity.
     /// For example, when a delta import falls back to a full import because the watermark was unavailable.
     /// This is displayed on the activity detail page and causes the activity to complete with warning status.
@@ -471,6 +482,17 @@ public class Activity
     /// Null for non-configuration activities.
     /// </summary>
     public int? ConfigurationChangeVersion { get; set; }
+
+    /// <summary>
+    /// How consequential this configuration change was: destructive, sync-affecting, or cosmetic. Computed from the
+    /// properties that actually changed, so consumers (the changed-since-last-synchronisation indicator, apply-time
+    /// messaging, and the preview adapters) can filter to changes that matter without re-diffing history.
+    ///
+    /// <see cref="ConfigurationChangeClass.NotClassified"/> for creates (no prior snapshot to diff), for
+    /// non-configuration activities, and where classification could not be determined. See
+    /// engineering/CONFIGURATION_CHANGE_CLASSIFICATION.md.
+    /// </summary>
+    public ConfigurationChangeClass ConfigurationChangeClass { get; set; } = ConfigurationChangeClass.NotClassified;
 
     /// <summary>
     /// Records which integer-keyed configuration object this activity's configuration change belongs to, by setting
