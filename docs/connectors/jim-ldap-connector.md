@@ -172,6 +172,22 @@ Set the Host setting to `dc01.corp.local`. The name now resolves inside the cont
 !!! warning "Disabling validation entirely"
     OpenLDAP's own `LDAPTLS_REQCERT=never` environment variable is honoured by the LDAP client library JIM's containers use, and switches certificate validation off. It applies to the whole container, so it affects **every** LDAPS Connected System that container serves, and it cannot be scoped to one directory. JIM's development and integration test stacks set it for their throw-away directories. Never set it in production: it exposes the service account's credentials to anyone able to intercept the connection.
 
+### Setting Passwords
+
+Credential attributes such as `unicodePwd` and `userPassword` are never imported and can never be used in an Attribute Flow; see [Credential attributes are never managed](../configuration/connected-systems.md#credential-attributes-are-never-managed) for the full list and the reasoning. The LDAP Connector writes passwords itself, on a separate channel, with two rules specific to directories.
+
+**Use LDAPS.** A password set puts the password on the wire, so an unencrypted connection exposes it to anyone on the network path. JIM will not stop you: if "Use Secure Connection (LDAPS)?" is off, passwords are still set and a warning is written to the service log on every run, because some deployments genuinely cannot offer TLS on their directory and locking them out of password management entirely helps nobody. It is your decision, and enabling LDAPS is strongly recommended.
+
+Active Directory decides for itself regardless. It refuses a password write unless the connection is encrypted or the bind is signed and sealed, so in practice LDAPS is required there; JIM reports that refusal with encryption named as the likely fix.
+
+**Directories other than Active Directory use the standard extended operation.** JIM sets passwords through the LDAP Password Modify extended operation (RFC 3062) and never writes the `userPassword` attribute directly. Directories apply their configured password hashing to the extended operation, but store a directly written `userPassword` value exactly as supplied, which would leave the password readable in the directory. If a directory does not advertise support for the extended operation, JIM reports a configuration fault rather than falling back to an unsafe write.
+
+Active Directory and Samba AD use `unicodePwd`, which the Connector encodes correctly on your behalf.
+
+**Check the channel before relying on it.** The Connected System's Schema tab carries a Password Channel panel with a read-only preflight covering the things that commonly stop a password set: encryption, the mechanism, whether the service account may actually reset passwords where JIM provisions, and whether the domain password policy could be read. It writes nothing, so it is safe to run against production. See [Password policy and the password channel](../configuration/connected-systems.md#password-policy-and-the-password-channel).
+
+There is no way to prove the whole chain without really setting a password somewhere, and JIM does not offer one: every route to it is a password reset against a real account. The preflight covers what surrounds the password, which is where most failures are.
+
 ### Service Account Permissions
 
 The LDAP service account used by JIM should follow the principle of least privilege:
@@ -180,6 +196,9 @@ The LDAP service account used by JIM should follow the principle of least privil
 - **For export (provisioning)**<br /> Grant create, modify, and delete permissions on the target containers. For Active Directory, this typically means delegated control over the relevant OUs.
 - **For container provisioning**<br /> If "Create Containers as Needed" is enabled, the service account must have permission to create organisational units.
 - **For delta import**<br /> The service account needs read access to the directory's change tracking mechanism (USN attributes for AD, accesslog for OpenLDAP).
+- **For setting passwords**<br /> Grant the **Reset Password** permission on the containers JIM manages. In Active Directory this is a control access right, delegated on the OU (Delegate Control, "Reset user passwords and force password change at next logon"), and it is a separate thing from write access to attributes: an account with full write permission on an OU still cannot set a password without it. **The service account does not need to be a Domain Admin**, and should not be.
+- **For checking reset rights**<br /> To answer the reset-rights preflight rather than reporting that it could not tell, the service account also needs read access to the `nTSecurityDescriptor` attribute of accounts in those containers. Reading an object's permissions is normally covered by ordinary read access; where it is not, the check reports an unknown rather than a denial.
+- **For discovering Fine-Grained Password Policies**<br /> Detecting whether any exist requires read access to the domain's Password Settings Container (`CN=Password Settings Container,CN=System,<domain DN>`), which by default is restricted to Domain Admins. Without it JIM reports that it could not tell, and treats the domain policy it read as a floor. Granting read on that container is optional; it buys a definite answer in the Password Channel panel and nothing else.
 
 !!! tip "Dedicated service account"
     Always use a dedicated service account for JIM rather than sharing credentials with other applications or using a personal account. This simplifies auditing and ensures that permission changes do not inadvertently affect JIM's operations.

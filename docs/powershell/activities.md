@@ -168,7 +168,7 @@ Get-JIMActivityChildren -Id <guid> -All [-Force] [-PageSize <int>]
 | `Id` | `guid` | Yes | | ID of the parent activity whose children to retrieve. Accepts pipeline input by property name. |
 | `Page` | `int` | No (Page set) | `1` | Page number for the child activity list. Cannot be used with `-All`. |
 | `PageSize` | `int` | No | `50` | Number of child activities per page. Maximum is 100. |
-| `All` | `switch` | Yes (All set) | | Automatically paginates through all child activities and returns every one. Cannot be used with `-Page`. Fetches at most 1000 pages and then stops with a warning; use `-Force` to fetch beyond the cap. |
+| `All` | `switch` | Yes (All set) | | Automatically paginates through all child activities and returns every one. Cannot be used with `-Page`. Fetches at most 1000 pages and then stops with a warning; use `-Force` to fetch beyond the cap, up to the API's maximum retrieval depth of 1,000,000 rows. |
 | `Force` | `switch` | No (All set) | | Override the `-All` 1000-page ceiling and fetch every page regardless of size. Only valid with `-All`. |
 
 ### Output

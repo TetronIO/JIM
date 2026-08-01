@@ -81,6 +81,15 @@
                 Found <strong>@result.TotalObjectTypes.ToString("N0")</strong> object type(s) with <strong>@result.TotalAttributes.ToString("N0")</strong> attribute(s).
             </MudText>
 
+            @if (result.BlockedCredentialAttributeCount > 0)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2 mb-2">
+                    <strong>@result.BlockedCredentialAttributeCount credential attribute(s) blocked:</strong>
+                    @(string.Join(", ", result.BlockedCredentialAttributes.SelectMany(kvp => kvp.Value).Distinct())).
+                    These hold credential material and are never managed by JIM. Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse.
+                </MudAlert>
+            }
+
             @if (!result.HasChanges)
             {
                 <MudText Color="Color.Success">No changes detected. The schema is up to date.</MudText>
@@ -147,6 +156,13 @@
             <MudText Color="Color.Error">@result.ErrorMessage</MudText>
         }
     </MudAlert>
+}
+
+@* Only meaningful where the Connector can set passwords at all; on one that cannot, there is no policy to read and
+   no channel to check. *@
+@if (ConnectedSystem.ConnectorDefinition.SupportsPasswordSet)
+{
+    <ConnectedSystemPasswordPolicyPanel ConnectedSystem="ConnectedSystem" />
 }
 
 <MudDialog @bind-Visible="_editSchemaAttributeDialogVisible" Options="_dialogOptions">
@@ -501,7 +517,13 @@
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Selected">
-                    @if (context.IsExternalId || context.IsSecondaryExternalId)
+                    @if (CredentialAttributes.IsCredentialAttribute(context.Name))
+                    {
+                        <MudTooltip Text="This attribute holds credential material and cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, which writes to the Connected System without ever reading the value back into the Metaverse; they never flow through an Attribute Flow." Arrow="true" Placement="Placement.Top">
+                            <MudSwitch Value="false" Color="@Color.Primary" Disabled="true" />
+                        </MudTooltip>
+                    }
+                    else if (context.IsExternalId || context.IsSecondaryExternalId)
                     {
                         <MudTooltip Text="This attribute cannot be unselected because it is the External ID or Secondary External ID. These attributes must remain selected for sync operations to function correctly." Arrow="true" Placement="Placement.Top">
                             <MudSwitch Value="@context.Selected" Color="@Color.Primary" Disabled="true" />
@@ -862,6 +884,14 @@
     {
         // attribute the update to the user
         using var jim = JimFactory.Create();
+
+        // deselecting an Object Type obsoletes every Connected System Object imported from it, and deprovisions
+        // whatever they are joined to. Until now that saved silently; ask the administrator to acknowledge it first.
+        var preflight = await jim.ConfigurationChangePreflight.EvaluateConnectedSystemAsync(ConnectedSystem);
+        if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
+                "Connected System", ConnectedSystem.Name))
+            return;
+
         var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
         await jim.ConnectedSystems.UpdateConnectedSystemSchemaAsync(ConnectedSystem, user);
         Snackbar.Add("Your attribute changes have been saved.", Severity.Success);
@@ -1006,16 +1036,21 @@
         _schemaSearchString = string.Empty;
         ((HashSet<string>)AttributeClassFilterSelectedValues).Clear();
 
-        // convert the csv to a list and trim the entries
-        // go through each attribute on the object type and select it
-        foreach (var attributeName in _attributeSelectionCsv.Split(','))
-        {
-            var attribute = _selectedObjectType.Attributes.SingleOrDefault(a => a.Name.Equals(attributeName.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (attribute == null)
-                continue;
+        // convert the csv to a list, trim the entries, and resolve each to an attribute on the object type
+        var matchedAttributes = _attributeSelectionCsv.Split(',')
+            .Select(name => _selectedObjectType.Attributes.SingleOrDefault(a => a.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .Where(a => a != null)
+            .Select(a => a!)
+            .ToList();
 
+        // credential attributes are skipped: this path bypasses the table's disabled switch, so it needs its own guard
+        var skippedCredentialAttributes = matchedAttributes
+            .Where(a => CredentialAttributes.IsCredentialAttribute(a.Name))
+            .Select(a => a.Name)
+            .ToList();
+
+        foreach (var attribute in matchedAttributes.Where(a => !CredentialAttributes.IsCredentialAttribute(a.Name)))
             attribute.Selected = true;
-        }
 
         // filter by selected
         _attributeSelectedFilter = true;
@@ -1025,6 +1060,9 @@
 
         // all done, let the user know
         Snackbar.Add("Attributes selected.", Severity.Success);
+
+        if (skippedCredentialAttributes.Count > 0)
+            Snackbar.Add($"Skipped {string.Join(", ", skippedCredentialAttributes)}: credential attributes cannot be managed by JIM. Passwords are synchronised through JIM's dedicated password channel, not through Attribute Flow.", Severity.Warning);
     }
 
     private bool DisableSelectedSchemaObjectType(ConnectedSystemObjectType connectedSystemObjectType)

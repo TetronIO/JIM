@@ -66,6 +66,16 @@ public class ConnectedSystem : IAuditable
     public string? PersistedConnectorData { get; set; }
 
     /// <summary>
+    /// The password policy JIM discovered on this Connected System, where the Connector is able to read one.
+    /// Null when the Connector cannot discover policies, or when nothing has been discovered yet.
+    /// <para>
+    /// Used to pre-fill initial password generation so an administrator does not have to retype rules the target
+    /// already enforces. Refreshed whenever the schema is imported.
+    /// </para>
+    /// </summary>
+    public ConnectedSystemPasswordPolicy? PasswordPolicy { get; set; }
+
+    /// <summary>
     /// Determines where Object Matching Rules are configured for this Connected System.
     /// ConnectedSystem (default): Rules are defined per object type and shared across Synchronisation Rules.
     /// SyncRule: Rules are defined per Synchronisation Rule for advanced scenarios.

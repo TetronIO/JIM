@@ -317,6 +317,22 @@
         }
     }
 
+    /// <summary>
+    /// The setting as it will be stored, for the preflight to compare against its last captured snapshot. Only the
+    /// value moves; the update and revert paths change nothing else, and IsOverridden is derived from the value. A
+    /// StringEncrypted setting is stored encrypted but snapshotted as a keyed hash of its *decrypted* value, so
+    /// passing the plaintext here is not just harmless but exact: retyping the same secret correctly reports no change.
+    /// </summary>
+    private static ServiceSetting WithValue(ServiceSetting setting, string? value) => new()
+    {
+        Key = setting.Key,
+        DisplayName = setting.DisplayName,
+        Category = setting.Category,
+        ValueType = setting.ValueType,
+        DefaultValue = setting.DefaultValue,
+        Value = value
+    };
+
     private async Task ShowEditDialog(ServiceSetting setting)
     {
         var parameters = new DialogParameters<EditSettingDialog>
@@ -330,14 +346,22 @@
 
         if (result is { Canceled: false, Data: string newValue })
         {
-            // offer an optional reason for the configuration change history; cancelling aborts the save
-            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
-            if (cancelled)
-                return;
-
             try
             {
                 using var jim = JimFactory.Create();
+
+                // nearly every Service Setting is operational and saves in silence; the ones that steer
+                // synchronisation are acknowledged first.
+                var preflight = await jim.ConfigurationChangePreflight.EvaluateServiceSettingAsync(WithValue(setting, newValue));
+                if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
+                        "Service Setting", setting.DisplayName))
+                    return;
+
+                // offer an optional reason for the configuration change history; cancelling aborts the save
+                var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService);
+                if (cancelled)
+                    return;
+
                 var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
                 await jim.ServiceSettings.UpdateSettingValueAsync(setting.Key, newValue, user, changeReason);
                 await LoadSettingsAsync();
@@ -359,14 +383,22 @@
 
         if (confirm == true)
         {
-            // offer an optional reason for the configuration change history; cancelling aborts the revert
-            var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Revert");
-            if (cancelled)
-                return;
-
             try
             {
                 using var jim = JimFactory.Create();
+
+                // a revert is a value change like any other; whether it needs acknowledging depends on the setting.
+                // A null value is the setting's own way of saying "use the default", matching what the revert stores.
+                var preflight = await jim.ConfigurationChangePreflight.EvaluateServiceSettingAsync(WithValue(setting, null));
+                if (!await ConfigurationChangeAcknowledgementDialog.ConfirmAsync(DialogService, preflight,
+                        "Service Setting", setting.DisplayName))
+                    return;
+
+                // offer an optional reason for the configuration change history; cancelling aborts the revert
+                var (cancelled, changeReason) = await ChangeReasonDialog.ShowAsync(DialogService, "Revert");
+                if (cancelled)
+                    return;
+
                 var user = await Helpers.GetUserAsync(jim, AuthenticationStateTask);
                 await jim.ServiceSettings.RevertSettingToDefaultAsync(setting.Key, user, changeReason);
                 await LoadSettingsAsync();

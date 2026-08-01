@@ -102,6 +102,7 @@ nav:
       - Case Sensitivity: concepts/case-sensitivity.md
   - Configuration:
       - configuration/index.md
+      - Configuration Changes: configuration/configuration-changes.md
       - Connected Systems: configuration/connected-systems.md
       - Run Profiles: configuration/run-profiles.md
       - Synchronisation Rules: configuration/synchronisation-rules.md

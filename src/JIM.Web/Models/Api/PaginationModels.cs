@@ -8,25 +8,15 @@ namespace JIM.Web.Models.Api;
 /// <summary>
 /// Standard pagination parameters for list endpoints.
 /// </summary>
-public class PaginationRequest
+public class PaginationRequest : IValidatableObject
 {
-    /// <summary>
-    /// The maximum page number any paginated endpoint will accept. Requests beyond this depth are
-    /// rejected with a 400 rather than silently clamped, so a caller learns they have over-paged and
-    /// PostgreSQL is never asked to grind through a huge <c>OFFSET</c> scan.
-    /// Sized consistently with the PowerShell <c>-All</c> ceiling: at the maximum page size of 100
-    /// this caps retrieval at roughly 100,000 objects (1,000 pages x 100). Change this single
-    /// constant to adjust the ceiling across every paginated endpoint.
-    /// </summary>
-    public const int MaxPage = 1000;
-
     private int _page = 1;
     private int _pageSize = 25;
 
     /// <summary>
-    /// The page number (1-based). Defaults to 1. Must not exceed <see cref="MaxPage"/>.
+    /// The page number (1-based). Defaults to 1. Must be within the retrieval depth ceiling; see
+    /// <see cref="PaginationLimits"/> and <see cref="Validate"/>.
     /// </summary>
-    [Range(1, MaxPage, ErrorMessage = "Page must not exceed 1000. Requests beyond this depth are rejected to protect database performance at scale; narrow the result set with a filter or search rather than paging so deep.")]
     public int Page
     {
         get => _page;
@@ -36,11 +26,11 @@ public class PaginationRequest
     /// <summary>
     /// The number of items per page. Defaults to 25, max 100.
     /// </summary>
-    [Range(1, 100, ErrorMessage = "Page size must be between 1 and 100.")]
+    [Range(1, PaginationLimits.MaxPageSize, ErrorMessage = "Page size must be between 1 and 100.")]
     public int PageSize
     {
         get => _pageSize;
-        set => _pageSize = value < 1 ? 25 : (value > 100 ? 100 : value);
+        set => _pageSize = value < 1 ? 25 : (value > PaginationLimits.MaxPageSize ? PaginationLimits.MaxPageSize : value);
     }
 
     /// <summary>
@@ -72,6 +62,17 @@ public class PaginationRequest
     /// Whether sorting is descending.
     /// </summary>
     public bool IsDescending => SortDirection.Equals("desc", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Enforces the retrieval depth ceiling. Expressed here rather than as a <c>[Range]</c> on
+    /// <see cref="Page"/> because the limit is a maximum offset (page x page size), which no single-property
+    /// attribute can express; <c>[ApiController]</c> surfaces the failure as a 400 either way.
+    /// </summary>
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (!PaginationLimits.IsWithinDepth(Page, PageSize))
+            yield return new ValidationResult(PaginationLimits.DepthExceededMessage(Page, PageSize), [nameof(Page)]);
+    }
 }
 
 /// <summary>
