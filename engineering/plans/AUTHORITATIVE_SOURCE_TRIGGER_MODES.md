@@ -55,7 +55,9 @@ UI labels: "All sources disconnect" and "Specific source(s) disconnect". Because
    The split between enum numeric default and property initialiser is deliberate: existing rows read the added column's default value `0` (`SpecificSourcesDisconnect`), preserving #115 behaviour with no backfill, while new entities constructed in code, the portal, or the API start at the safe default (`AllSourcesDisconnect`). A unit test pins each side of this.
 3. `MetaverseObject`:
    - `int? DeletionTriggeredBySystemId` plus `string? DeletionTriggeredBySystemName` (name snapshot survives system deletion). Set when a deletion is scheduled; cleared with the other deletion markers. This makes cancellation precise (see below) and lets the Pending Deletions page show what triggered each scheduled deletion.
-4. Validation (unchanged from #115, enforced at API and portal): `WhenAuthoritativeSourceDisconnected` requires at least one selected source.
+   - `string? DeletionPolicySnapshotJson`: the decision-time policy snapshot (see below), captured at mark-time so housekeeping can carry it onto the final deletion record after the grace period.
+4. New model class `MvoDeletionPolicySnapshot` (`JIM.Models/Sync/`), serialised to the JSON columns: deletion rule, trigger mode, selected sources (ids and names), grace period, triggering system (id and name), and the source systems still connected at decision time.
+5. Validation (unchanged from #115, enforced at API and portal): `WhenAuthoritativeSourceDisconnected` requires at least one selected source.
 
 ### Evaluation changes (`JIM.Application` / `JIM.Worker`)
 
@@ -92,12 +94,20 @@ Wire into `EstablishJoinAsync` and the `FlushPendingMvoDeletionsAsync` same-page
 
 `MetaverseServer.MarkOrphanedMvosForDeletionAsync` (invoked by `ConnectedSystemServer.ExecuteDeletionAsync` when `EvaluateMvoDeletionRules` is set) and `GetMvosOrphanedByConnectedSystemDeletionAsync` must apply the same mode semantics when deciding which MVOs the system's deletion orphans: in All mode, deleting one of two still-connected sources must not mark MVOs whose other source remains. `ConnectedSystemDeletionPreview` counts must agree with what execution will do.
 
+### Decision-time policy snapshot (causality integrity)
+
+Deletion decisions must remain explainable after the configuration changes. Today the RPEI detail page renders deletion rule context from the object type's *current* configuration, which silently misrepresents historic decisions once an admin edits the rule (an interim caveat labelling the display as current configuration shipped ahead of this work). The durable fix: capture the facts that produced each decision, at decision time, on the decision record itself. This follows the established event-time denormalisation pattern (`DeletionInitiatedByName`, `CreatedByName`, the pre-deletion display name capture for #1086).
+
+- `ActivityRunProfileExecutionItems` gains `DeletionPolicySnapshotJson` (`MvoDeletionPolicySnapshot`, above), written whenever a deletion rule evaluation records an outcome: scheduled, deleted, or evaluated-but-not-triggered. For grace period deletions the snapshot is captured at mark-time (on the MVO) and copied onto the housekeeping deletion record at execution, so the final record reflects the policy that scheduled it, not the policy at execution time.
+- The snapshot is the source of truth for rendering: `MvoDeletionDecision.Reason` strings become a rendering of the snapshot in the mode vocabulary (for example "All sources mode: 1 of 2 sources remains connected (Active Directory)"), and the refined Causality view (#1087) reads the same structured facts.
+- No configuration version pointer is stored: timestamp correlation against configuration change history covers deep audit without coupling the causality view to snapshot reconstruction.
+- The RPEI columns hit the raw SQL bulk writers: `RpeiBulkColumns` and its writers must be extended, with the completeness and `RequiresPostgres` round-trip tests updated (same guard as the `MetaverseObjects` columns).
+
 ### Surfacing decisions
 
-- `MvoDeletionDecision.Reason` strings adopt the mode vocabulary (for example "All sources mode: 1 of 2 sources remains connected (Active Directory)"), flowing through to RPEI outcomes and the Causality view (#1086).
-- `ActivityRunProfileExecutionItemDetail.razor` deletion rule context panel shows the mode alongside the configured sources.
+- `ActivityRunProfileExecutionItemDetail.razor` renders deletion rule context from the decision-time snapshot when present; legacy records without a snapshot fall back to current configuration with the already-shipped "current configuration" caveat.
 - `PendingDeletionList.razor` gains a "Triggered by" column from the new snapshot fields.
-- `ConfigurationSnapshotService` snapshots the mode so configuration change history diffs it.
+- `ConfigurationSnapshotService` snapshots the trigger mode so configuration change history diffs it.
 
 ### Surface parity
 
@@ -109,20 +119,20 @@ All three surfaces ship in the same PR (per the surface parity rule):
 
 ### Migration and bulk-write guard
 
-- EF migration adds `DeletionTriggerMode` to `MetaverseObjectTypes` with column default `0` (`SpecificSourcesDisconnect`) so existing rows keep #115 behaviour, and `DeletionTriggeredBySystemId` / `DeletionTriggeredBySystemName` to `MetaverseObjects`.
-- The `MetaverseObjects` columns hit the raw SQL bulk writers: extend `MvoBulkInsertColumns` and its writers (values in list order), place the columns consciously in update or exclusion lists, and extend the `RequiresPostgres` round-trip test. `BulkInsertColumnCompletenessTests` will fail until this is done; that is the guard working as designed.
+- EF migration adds `DeletionTriggerMode` to `MetaverseObjectTypes` with column default `0` (`SpecificSourcesDisconnect`) so existing rows keep #115 behaviour; `DeletionTriggeredBySystemId`, `DeletionTriggeredBySystemName` and `DeletionPolicySnapshotJson` to `MetaverseObjects`; and `DeletionPolicySnapshotJson` to `ActivityRunProfileExecutionItems`.
+- The `MetaverseObjects` and `ActivityRunProfileExecutionItems` columns hit the raw SQL bulk writers: extend `MvoBulkInsertColumns` and `RpeiBulkColumns` plus their writers (values in list order), place the columns consciously in update or exclusion lists, and extend the `RequiresPostgres` round-trip tests. `BulkInsertColumnCompletenessTests` will fail until this is done; that is the guard working as designed.
 
 ## Implementation Phases
 
 Each phase is red-first TDD: failing tests, minimum implementation, green, refactor.
 
-1. **Model, migration, snapshot, bulk-write guard.** Enum, `MetaverseObjectType` and `MetaverseObject` properties, migration (including the existing-rows-keep-Specific / new-entities-default-All split, pinned by tests), `MvoBulkInsertColumns` extension plus round-trip test, `ConfigurationSnapshotService` coverage.
+1. **Model, migration, snapshot, bulk-write guard.** Enum, `MetaverseObjectType`, `MetaverseObject` and RPEI properties, `MvoDeletionPolicySnapshot` model, migration (including the existing-rows-keep-Specific / new-entities-default-All split, pinned by tests), `MvoBulkInsertColumns` and `RpeiBulkColumns` extensions plus round-trip tests, `ConfigurationSnapshotService` coverage.
 2. **Engine evaluation.** New `EvaluateMvoDeletionRule` signature and mode matrix (unit tests: each mode times disconnecting-system-in/out-of-list times remaining-source permutations, empty-list fallback, Internal origin protection unchanged). `ShouldCancelScheduledDeletion` matrix including the null-trigger fallback.
-3. **Worker wiring.** `GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync` (raw SQL), both disconnect call sites, trigger recording, mode-aware cancellation in `EstablishJoinAsync` and `FlushPendingMvoDeletionsAsync`. `DeletionRuleWorkflowTests` additions for All-mode end-to-end marking, plus rejoin cancellation workflows.
+3. **Worker wiring.** `GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync` (raw SQL), both disconnect call sites, trigger recording, policy snapshot capture on evaluation outcomes (including the mark-time capture and housekeeping carry-through), mode-aware cancellation in `EstablishJoinAsync` and `FlushPendingMvoDeletionsAsync`. `DeletionRuleWorkflowTests` additions for All-mode end-to-end marking, snapshot persistence, plus rejoin cancellation workflows.
 4. **Connected System deletion alignment.** Mode-aware orphan marking and deletion preview counts, with unit coverage.
 5. **REST API.** DTOs, shared validation helper, controller tests.
 6. **PowerShell.** Parameter, Pester tests, cmdlet docs.
-7. **Portal UI.** Deletion Rules panel per mockup, list page tooltip, RPEI detail context, Pending Deletions "Triggered by" column.
+7. **Portal UI.** Deletion Rules panel per mockup, list page tooltip, RPEI detail context rendered from the decision-time snapshot (current-configuration fallback for legacy records), Pending Deletions "Triggered by" column.
 8. **Integration, docs, changelog.** Extend the deletion rules integration scenario (Scenario 4) with an All mode case and a mode-aware cancellation case; regression-run Scenario 8. Update `docs/developer/diagrams/MVO_DELETION_AND_GRACE_PERIOD.md`, admin docs under `docs/`, `DELETION_RULES_DESIGN.md`, and `CHANGELOG.md` (user-facing feature entry plus docs).
 
 ## Success Criteria
@@ -130,7 +140,7 @@ Each phase is red-first TDD: failing tests, minimum implementation, green, refac
 - Both modes behave per the table above at both disconnect call sites, on the Connected System deletion path, and in housekeeping.
 - A rejoin during grace cancels a scheduled deletion only when the mode's trigger condition no longer holds; a non-trigger system rejoining no longer cancels.
 - Existing configurations behave identically after migration (Specific mode), demonstrated by the unchanged pre-existing workflow tests; newly configured object types default to All mode on every surface.
-- Decision reasons name the mode and the relevant sources on RPEI outcomes, Pending Deletions, and Causality surfaces.
+- Decision reasons name the mode and the relevant sources on RPEI outcomes, Pending Deletions, and Causality surfaces, rendered from the decision-time policy snapshot so they remain accurate after configuration changes.
 - Portal, REST, and PowerShell parity in one PR; `dotnet build JIM.sln` and `dotnet test JIM.sln` clean; integration scenarios green.
 
 ## Risks and Mitigations
@@ -142,6 +152,7 @@ Each phase is red-first TDD: failing tests, minimum implementation, green, refac
 | Cancellation decisions for deletions scheduled before upgrade (no recorded trigger) | Explicit null fallback to current cancel-on-any-rejoin behaviour; covered by a dedicated test. |
 | Connected System deletion preview and execution disagreeing under new modes | Preview and execution share the mode-aware predicate; unit tests assert agreement. |
 | In-memory provider masking join/tracking bugs in new raw SQL | `RequiresPostgres` round-trip and tracked-instance regression tests per the raw SQL rules in `src/CLAUDE.md`. |
+| RPEI row growth from policy snapshots at leaver-cohort scale | Compact JSON written only on deletion-evaluation outcomes (a small fraction of RPEIs); a 100k-leaver cohort adds roughly 30 MB, small relative to the attribute change payloads those RPEIs already carry. |
 
 ## Dependencies
 
