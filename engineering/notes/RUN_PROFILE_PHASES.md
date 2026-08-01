@@ -26,7 +26,7 @@ The point of a stepper is the steps you have not reached. That is only expressib
 
 A declaration is an expectation, not a promise. A phase the run turns out not to need is recorded as **skipped** when a later phase is entered, so a Delta Import's deletion detection reads as "not needed" rather than sitting pending forever.
 
-Skipping is for work the run *could* have done. Work a run is structurally incapable of is left out of the declaration entirely, via `ActivityPhaseSet.Declare`'s inapplicable-phase set: a file-based import opens no connection, so declaring one would put a greyed-out step in every file-based run's stepper, for ever, saying nothing. The reporter decides this, because it is the only place that knows both the run type and the Connector.
+Skipping is for work the run *could* have done. Work a run is structurally incapable of is left out of the declaration entirely, via `ActivityPhaseSet.Declare`'s inapplicable-phase set: a file-based import opens no connection, so declaring one would put a permanently not-needed step in every file-based run's stepper, saying nothing. The reporter decides this, because it is the only place that knows both the run type and the Connector.
 
 ### Connector phases nest; they are not peers
 

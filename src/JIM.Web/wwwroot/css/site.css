@@ -2408,6 +2408,15 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     color: var(--mud-palette-success-text);
 }
 
+/* A skipped step was passed, not left behind, so its marker joins the green rail: ringed rather
+   than filled, because it did no work of its own. Grey here broke the line of progress into
+   fragments and read as something having gone wrong. */
+.jim-phase-h-label--skipped {
+    border-width: 2px;
+    border-color: var(--mud-palette-success);
+    color: var(--mud-palette-success);
+}
+
 .jim-phase-h-label--failed {
     border-color: var(--mud-palette-error);
     background-color: var(--mud-palette-error);
