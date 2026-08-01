@@ -103,6 +103,31 @@ public enum ActivityRunProfileExecutionItemSyncOutcomeTrackingLevel
 }
 
 /// <summary>
+/// How a phase of a Run Profile execution turned out (#454). A phase is recorded as Pending when
+/// the run starts and moves on from there as the run progresses.
+/// </summary>
+public enum ActivityPhaseStatus
+{
+    /// <summary>Declared for this run, not reached yet.</summary>
+    Pending = 0,
+
+    /// <summary>Currently running.</summary>
+    Active = 1,
+
+    /// <summary>Ran and finished.</summary>
+    Completed = 2,
+
+    /// <summary>
+    /// Never ran, because the run did not need it. A Delta Import performs no deletion detection;
+    /// a file-based import opens no connection. Recorded when a later phase is entered.
+    /// </summary>
+    Skipped = 3,
+
+    /// <summary>The run failed or was cancelled while this phase was running.</summary>
+    Failed = 4
+}
+
+/// <summary>
 /// The dimension a persisted Activity stat counter row counts along. Each Run Profile Activity's
 /// execution stats are maintained as incremental (ActivityId, Dimension, Key) counter rows so the
 /// stats read is O(counter rows) instead of aggregating every Run Profile Execution Item; see

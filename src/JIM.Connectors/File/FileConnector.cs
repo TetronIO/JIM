@@ -13,7 +13,7 @@ using Serilog;
 using System.Globalization;
 namespace JIM.Connectors.File;
 
-public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingFiles, IConnectorExportUsingFiles
+public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSettings, IConnectorSchema, IConnectorImportUsingFiles, IConnectorExportUsingFiles, IConnectorPhases
 {
     #region IConnector members
     public string Name => ConnectorConstants.FileConnectorName;
@@ -483,21 +483,20 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #endregion
 
     #region IConnectorImportUsingFiles members
-    public async Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null)
+    public async Task<ConnectedSystemImportResult> ImportAsync(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile, ILogger logger, CancellationToken cancellationToken, IConnectorProgress progress)
     {
         logger.Verbose("ImportAsync() called");
 
         if (string.IsNullOrEmpty(runProfile.FilePath))
             throw new InvalidDataException($"ImportAsync: FilePath is missing or empty!");
 
-        if (progressCallback != null)
-            await progressCallback("Reading CSV file...");
+        await progress.EnterPhaseAsync(FileConnectorPhases.Read);
 
         var reader = GetCsvReader(runProfile.FilePath, connectedSystem.SettingValues, logger);
         var objectTypeInfo = GetFileConnectorObjectTypeInfo(connectedSystem.SettingValues, logger);
         var stopOnFirstError = GetStopOnFirstErrorSetting(connectedSystem.SettingValues);
         var multiValueDelimiter = GetMultiValueDelimiterSetting(connectedSystem.SettingValues);
-        var import = new FileConnectorImport(connectedSystem, reader, objectTypeInfo, stopOnFirstError, multiValueDelimiter, logger, cancellationToken, progressCallback);
+        var import = new FileConnectorImport(connectedSystem, reader, objectTypeInfo, stopOnFirstError, multiValueDelimiter, logger, cancellationToken, progress);
 
         switch (runProfile.RunType)
         {
@@ -517,13 +516,39 @@ public class FileConnector : IConnector, IConnectorCapabilities, IConnectorSetti
     #endregion
 
     #region IConnectorExportUsingFiles members
-    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<ConnectedSystemSettingValue> settings, IList<PendingExport> pendingExports, CancellationToken cancellationToken, Func<string, Task>? progressCallback = null)
+    public Task<List<ConnectedSystemExportResult>> ExportAsync(IList<ConnectedSystemSettingValue> settings, IList<PendingExport> pendingExports, CancellationToken cancellationToken, IConnectorProgress progress)
     {
         var logger = Log.ForContext<FileConnector>();
         logger.Verbose("ExportAsync() called with {Count} Pending Exports", pendingExports.Count);
 
-        var export = new FileConnectorExport(settings, pendingExports, logger, progressCallback);
+        var export = new FileConnectorExport(settings, pendingExports, logger, progress);
         return export.ExecuteAsync();
+    }
+    #endregion
+
+    #region IConnectorPhases members
+    /// <summary>
+    /// The steps this Connector performs, so an administrator can see the whole journey through a
+    /// file rather than one message at a time. An export merges pending changes into whatever the
+    /// file already holds, so it has three distinct steps; an import is a single pass over the
+    /// file, so claiming more than one step would be a fiction.
+    /// </summary>
+    public IReadOnlyList<ConnectorPhase> GetPhases(ConnectedSystem connectedSystem, ConnectedSystemRunProfile runProfile)
+    {
+        return runProfile.RunType switch
+        {
+            ConnectedSystemRunType.Export =>
+            [
+                new ConnectorPhase(FileConnectorPhases.LoadExistingFile, FileConnectorPhases.LoadExistingFileName),
+                new ConnectorPhase(FileConnectorPhases.Merge, FileConnectorPhases.MergeName),
+                new ConnectorPhase(FileConnectorPhases.Write, FileConnectorPhases.WriteName)
+            ],
+            ConnectedSystemRunType.FullImport or ConnectedSystemRunType.DeltaImport =>
+            [
+                new ConnectorPhase(FileConnectorPhases.Read, FileConnectorPhases.ReadName)
+            ],
+            _ => []
+        };
     }
     #endregion
 

@@ -178,6 +178,22 @@ public class BulkInsertColumnCompletenessTests
     }
 
     [Test]
+    public void ActivityPhaseBulkColumns_MatchMappedColumnsExactly()
+    {
+        AssertColumnListMatchesModel(typeof(JIM.Models.Activities.ActivityPhase), "ActivityPhases", ActivityPhaseBulkColumns.ActivityPhases);
+    }
+
+    [Test]
+    public void ActivityPhaseUpdateColumns_HaveAConsciousHomeForEveryColumn()
+    {
+        AssertUpdateListsCoverInsertList(
+            "ActivityPhases",
+            ActivityPhaseBulkColumns.ActivityPhases,
+            [ActivityPhaseBulkColumns.ActivityPhasesUpdate],
+            ActivityPhaseBulkColumns.ActivityPhasesUpdateExclusions);
+    }
+
+    [Test]
     public void PendingExportBulkColumns_MatchMappedColumnsExactly()
     {
         AssertColumnListMatchesModel(typeof(JIM.Models.Transactional.PendingExport), "PendingExports", PendingExportBulkColumns.PendingExports);

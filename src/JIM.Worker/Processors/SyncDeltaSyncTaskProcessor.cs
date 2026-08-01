@@ -30,8 +30,9 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         ConnectedSystem connectedSystem,
         ConnectedSystemRunProfile connectedSystemRunProfile,
         Activity activity,
-        CancellationTokenSource cancellationTokenSource)
-        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource)
+        CancellationTokenSource cancellationTokenSource,
+        ActivityPhaseReporter? phaseReporter = null)
+        : base(syncEngine, syncServer, syncRepository, connectedSystem, connectedSystemRunProfile, activity, cancellationTokenSource, phaseReporter)
     {
     }
 
@@ -44,7 +45,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
 
         Log.Verbose("PerformDeltaSyncAsync: Starting");
 
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Preparing delta sync");
+        await _phases.EnterAsync(RunPhaseKeys.SyncPrepare, "Preparing delta sync");
 
         // Determine the watermark - when was the last successful sync?
         var lastSyncTimestamp = _connectedSystem.LastSyncCompletedAt ?? DateTime.MinValue;
@@ -135,7 +136,7 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         // Page size is configurable via service settings for performance tuning.
         var pageSize = await _syncServer.GetSyncPageSizeAsync();
         var totalCsoPages = Convert.ToInt16(Math.Ceiling((double)totalCsosToProcess / pageSize));
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing modified Connected System Objects");
+        await _phases.EnterAsync(RunPhaseKeys.SyncProcessObjects, "Processing modified Connected System Objects");
 
         using var processCsosSpan = Diagnostics.Sync.StartSpan("ProcessModifiedConnectedSystemObjects");
         processCsosSpan.SetTag("totalObjects", totalCsosToProcess);
@@ -143,7 +144,6 @@ public class SyncDeltaSyncTaskProcessor : SyncTaskProcessorBase
         processCsosSpan.SetTag("totalPages", totalCsoPages);
 
         var throughput = new ThroughputTracker();
-        await _syncRepo.UpdateActivityMessageAsync(_activity, "Processing modified Connected System Objects");
 
         for (var page = 1; page <= totalCsoPages; page++)
         {

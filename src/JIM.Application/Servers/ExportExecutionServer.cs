@@ -205,24 +205,32 @@ public class ExportExecutionServer
     }
 
     /// <summary>
-    /// Builds the sub-phase progress reporter handed to a connector (issue #637). The connector supplies
-    /// only a human-readable message describing what it is doing internally; JIM keeps ownership of the
-    /// phase and the counts, which the connector cannot meaningfully populate.
+    /// Builds the progress reporter handed to a connector (issues #637, #454). The connector supplies
+    /// its own phase key and a human-readable message describing what it is doing internally; JIM keeps
+    /// ownership of the orchestration phase and the counts, which the connector cannot meaningfully
+    /// populate, and of turning a connector phase key into the step an administrator sees.
     /// </summary>
     /// <param name="progressCallback">The caller's progress callback, or null when it wants no progress.</param>
     /// <param name="infoFactory">Wraps a connector sub-phase message into a progress report carrying this
     /// call site's current counts.</param>
     /// <param name="sharedGate">The call site's own progress gate, where it has one, so that connector
     /// emits and JIM's own emits serialise against each other rather than racing on a shared DbContext.</param>
-    private static ConnectorSubPhaseProgress CreateConnectorProgress(
+    private static ConnectorProgress CreateConnectorProgress(
         Func<ExportProgressInfo, Task>? progressCallback,
         Func<string, ExportProgressInfo> infoFactory,
         SemaphoreSlim? sharedGate = null)
     {
-        return new ConnectorSubPhaseProgress(
-            progressCallback == null
-                ? null
-                : async subPhase => await progressCallback(infoFactory(subPhase)),
+        if (progressCallback == null)
+            return new ConnectorProgress(report: null);
+
+        return new ConnectorProgress(
+            report: async message => await progressCallback(infoFactory(message)),
+            enterPhase: async (phaseKey, message) =>
+            {
+                var info = infoFactory(message ?? string.Empty);
+                info.ConnectorPhaseKey = phaseKey;
+                await progressCallback(info);
+            },
             sharedGate: sharedGate);
     }
 
@@ -526,7 +534,7 @@ public class ExportExecutionServer
                                 .SetTag("cumulativeObjectCount", processedCount + immediateExports.Count)
                                 .SetTag("wallClockOffsetMs", exportPhaseStopwatch.Elapsed.TotalMilliseconds))
                             {
-                                exportResults = await connector.ExportAsync(immediateExports, cancellationToken, connectorProgress.Callback);
+                                exportResults = await connector.ExportAsync(immediateExports, cancellationToken, connectorProgress);
                             }
 
                             // Process results
@@ -891,7 +899,7 @@ public class ExportExecutionServer
             using (Diagnostics.Diagnostics.Connector.StartSpan("ExportDeferredBatch")
                 .SetTag("batchSize", batch.Count))
             {
-                exportResults = await connector.ExportAsync(batch, cancellationToken, connectorProgress.Callback);
+                exportResults = await connector.ExportAsync(batch, cancellationToken, connectorProgress);
             }
 
             using (Diagnostics.Diagnostics.Database.StartSpan("ProcessDeferredBatchSuccess")
@@ -1000,7 +1008,7 @@ public class ExportExecutionServer
                     await batchRepo.MarkPendingExportsAsExecutingAsync(batch);
 
                     // Execute batch via connector
-                    var exportResults = await batchConnector.ExportAsync(batch, cancellationToken, connectorProgress.Callback);
+                    var exportResults = await batchConnector.ExportAsync(batch, cancellationToken, connectorProgress);
 
                     // Process results using the batch's own repository
                     var batchResult = new ExportExecutionResult();
@@ -1632,7 +1640,7 @@ public class ExportExecutionServer
                 Message = subPhase
             });
 
-            var exportResults = await connector.ExportAsync(connectedSystem.SettingValues, pendingExports, cancellationToken, connectorProgress.Callback);
+            var exportResults = await connector.ExportAsync(connectedSystem.SettingValues, pendingExports, cancellationToken, connectorProgress);
 
             // Check if the connector supports auto-confirm and the setting is enabled
             var autoConfirm = false;

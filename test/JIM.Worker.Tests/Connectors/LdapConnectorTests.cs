@@ -3,6 +3,7 @@
 
 using JIM.Connectors.LDAP;
 using JIM.Models.Interfaces;
+using JIM.Utilities;
 using JIM.Models.Staging;
 using Moq;
 using NUnit.Framework;
@@ -370,7 +371,7 @@ public class LdapConnectorTests
         var pendingExports = new List<JIM.Models.Transactional.PendingExport>();
 
         var exception = Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await _connector.ExportAsync(pendingExports, CancellationToken.None));
+            await _connector.ExportAsync(pendingExports, CancellationToken.None, ConnectorProgress.None));
         Assert.That(exception!.Message, Does.Contain("OpenExportConnection"));
     }
 

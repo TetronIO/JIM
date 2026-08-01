@@ -3,6 +3,8 @@
 
 using JIM.Connectors.File;
 using JIM.Models.Core;
+using JIM.Models.Interfaces;
+using JIM.Utilities;
 using JIM.Models.Staging;
 using JIM.Models.Transactional;
 using Serilog;
@@ -50,7 +52,7 @@ public class FileConnectorExportTests
         var pendingExports = new List<PendingExport>();
 
         // Act
-        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(File.Exists(_testExportPath), Is.False);
@@ -82,7 +84,7 @@ public class FileConnectorExportTests
         var pendingExports = CreateSingleCreatePendingExport("emp001");
 
         // Act & Assert
-        Assert.ThrowsAsync<JIM.Models.Exceptions.InvalidSettingValuesException>(async () => await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None));
+        Assert.ThrowsAsync<JIM.Models.Exceptions.InvalidSettingValuesException>(async () => await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None));
         return Task.CompletedTask;
     }
 
@@ -121,7 +123,7 @@ public class FileConnectorExportTests
         };
 
         // Act
-        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(results, Has.Count.EqualTo(1));
@@ -141,7 +143,7 @@ public class FileConnectorExportTests
         var pendingExports = CreateSingleCreatePendingExport("emp001");
 
         // Act
-        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         var lines = File.ReadAllLines(_testExportPath);
@@ -167,7 +169,7 @@ public class FileConnectorExportTests
         var pendingExports = CreateSingleCreatePendingExport("emp001");
 
         // Act
-        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         var content = File.ReadAllText(_testExportPath);
@@ -184,7 +186,7 @@ public class FileConnectorExportTests
         var pendingExports = CreateSingleCreatePendingExport("emp001");
 
         // Act
-        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(results, Has.Count.EqualTo(1));
@@ -237,7 +239,7 @@ public class FileConnectorExportTests
         };
 
         // Act
-        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(results, Has.Count.EqualTo(1));
@@ -256,7 +258,7 @@ public class FileConnectorExportTests
         pendingExports.AddRange(CreateSingleCreatePendingExport("emp003", "Bob Wilson", "bwilson@panoply.org"));
 
         // Act
-        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(results, Has.Count.EqualTo(3));
@@ -281,11 +283,11 @@ public class FileConnectorExportTests
         // Arrange - create initial file with one row
         var settingValues = CreateExportSettingValues(_testExportPath);
         var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org");
-        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None, ConnectorProgress.None);
 
         // Act - update the display name
         var updateExports = CreateSingleUpdatePendingExport("emp001", "displayName", "John Updated");
-        var results = await _connector.ExportAsync(settingValues, updateExports, CancellationToken.None);
+        var results = await _connector.ExportAsync(settingValues, updateExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(results, Has.Count.EqualTo(1));
@@ -303,11 +305,11 @@ public class FileConnectorExportTests
         // Arrange - create initial file with one row
         var settingValues = CreateExportSettingValues(_testExportPath);
         var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org");
-        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None, ConnectorProgress.None);
 
         // Act - update only display name, email should be preserved
         var updateExports = CreateSingleUpdatePendingExport("emp001", "displayName", "John Updated");
-        await _connector.ExportAsync(settingValues, updateExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, updateExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         var content = File.ReadAllText(_testExportPath);
@@ -323,11 +325,11 @@ public class FileConnectorExportTests
         var createExports = new List<PendingExport>();
         createExports.AddRange(CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org"));
         createExports.AddRange(CreateSingleCreatePendingExport("emp002", "Jane Doe", "jdoe@panoply.org"));
-        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None, ConnectorProgress.None);
 
         // Act - update only emp001
         var updateExports = CreateSingleUpdatePendingExport("emp001", "displayName", "John Updated");
-        await _connector.ExportAsync(settingValues, updateExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, updateExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert - emp002 should still be there
         var content = File.ReadAllText(_testExportPath);
@@ -348,11 +350,11 @@ public class FileConnectorExportTests
         var createExports = new List<PendingExport>();
         createExports.AddRange(CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org"));
         createExports.AddRange(CreateSingleCreatePendingExport("emp002", "Jane Doe", "jdoe@panoply.org"));
-        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None, ConnectorProgress.None);
 
         // Act - delete emp001
         var deleteExports = CreateSingleDeletePendingExport("emp001");
-        var results = await _connector.ExportAsync(settingValues, deleteExports, CancellationToken.None);
+        var results = await _connector.ExportAsync(settingValues, deleteExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(results, Has.Count.EqualTo(1));
@@ -371,11 +373,11 @@ public class FileConnectorExportTests
         // Arrange - create file with one row
         var settingValues = CreateExportSettingValues(_testExportPath);
         var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org");
-        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None, ConnectorProgress.None);
 
         // Act - delete a row that doesn't exist
         var deleteExports = CreateSingleDeletePendingExport("emp999");
-        var results = await _connector.ExportAsync(settingValues, deleteExports, CancellationToken.None);
+        var results = await _connector.ExportAsync(settingValues, deleteExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert - should still succeed (idempotent)
         Assert.That(results, Has.Count.EqualTo(1));
@@ -394,14 +396,14 @@ public class FileConnectorExportTests
         var createExports = new List<PendingExport>();
         createExports.AddRange(CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org"));
         createExports.AddRange(CreateSingleCreatePendingExport("emp002", "Jane Doe", "jdoe@panoply.org"));
-        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None, ConnectorProgress.None);
 
         // Act - create emp003, update emp001, delete emp002
         var mixedExports = new List<PendingExport>();
         mixedExports.AddRange(CreateSingleCreatePendingExport("emp003", "Bob Wilson", "bwilson@panoply.org"));
         mixedExports.AddRange(CreateSingleUpdatePendingExport("emp001", "displayName", "John Updated"));
         mixedExports.AddRange(CreateSingleDeletePendingExport("emp002"));
-        var results = await _connector.ExportAsync(settingValues, mixedExports, CancellationToken.None);
+        var results = await _connector.ExportAsync(settingValues, mixedExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(results, Has.Count.EqualTo(3));
@@ -428,7 +430,7 @@ public class FileConnectorExportTests
         var pendingExports = CreateSingleCreatePendingExport("emp001");
 
         // Act
-        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         var header = File.ReadLines(_testExportPath).First();
@@ -448,7 +450,7 @@ public class FileConnectorExportTests
         var pendingExports = CreateSingleCreatePendingExport("emp001");
 
         // Act
-        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(File.Exists(_testExportPath), Is.True);
@@ -462,11 +464,11 @@ public class FileConnectorExportTests
         // Arrange - create initial file
         var settingValues = CreateExportSettingValues(_testExportPath);
         var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org");
-        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None, ConnectorProgress.None);
 
         // Act - create again with same External ID (should overwrite)
         var duplicateCreate = CreateSingleCreatePendingExport("emp001", "John Updated", "jupdated@panoply.org");
-        var results = await _connector.ExportAsync(settingValues, duplicateCreate, CancellationToken.None);
+        var results = await _connector.ExportAsync(settingValues, duplicateCreate, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(results[0].Success, Is.True);
@@ -486,7 +488,7 @@ public class FileConnectorExportTests
         var pendingExports = CreateSingleCreatePendingExport("emp001");
 
         // Act
-        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         var header = File.ReadLines(_testExportPath).First();
@@ -529,7 +531,7 @@ public class FileConnectorExportTests
         };
 
         // Act
-        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         var content = File.ReadAllText(_testExportPath);
@@ -544,7 +546,7 @@ public class FileConnectorExportTests
         var pendingExports = CreateSingleDecimalCreatePendingExport(12345.678m);
 
         // Act
-        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         var content = File.ReadAllText(_testExportPath);
@@ -560,7 +562,7 @@ public class FileConnectorExportTests
         var pendingExports = CreateSingleDecimalCreatePendingExport(1234.50m);
 
         // Act
-        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         var content = File.ReadAllText(_testExportPath);
@@ -576,7 +578,7 @@ public class FileConnectorExportTests
         var pendingExports = CreateSingleDecimalCreatePendingExport(0.0000001m);
 
         // Act
-        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         var content = File.ReadAllText(_testExportPath);
@@ -612,7 +614,7 @@ public class FileConnectorExportTests
         };
 
         // Act
-        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         var content = File.ReadAllText(_testExportPath);
@@ -648,7 +650,7 @@ public class FileConnectorExportTests
         };
 
         // Act
-        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         var content = File.ReadAllText(_testExportPath);
@@ -693,7 +695,7 @@ public class FileConnectorExportTests
         };
 
         // Act
-        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(results[0].Success, Is.True);
@@ -757,7 +759,7 @@ public class FileConnectorExportTests
         };
 
         // Act
-        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        var results = await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         Assert.That(results[0].Success, Is.True);
@@ -795,7 +797,7 @@ public class FileConnectorExportTests
         };
 
         // Act
-        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, pendingExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert
         var content = File.ReadAllText(_testExportPath);
@@ -812,7 +814,7 @@ public class FileConnectorExportTests
         // Arrange - create initial file
         var settingValues = CreateExportSettingValues(_testExportPath);
         var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@panoply.org");
-        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None, ConnectorProgress.None);
 
         // Act - remove email attribute
         var objectType = new ConnectedSystemObjectType { Id = 1, Name = "User" };
@@ -845,7 +847,7 @@ public class FileConnectorExportTests
             }
         };
 
-        await _connector.ExportAsync(settingValues, updateExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, updateExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert - the row should still exist but email should be empty
         var lines = File.ReadAllLines(_testExportPath);
@@ -896,7 +898,7 @@ public class FileConnectorExportTests
         // First, create the file with a Create export so the Update has something to update
         var settingValues = CreateExportSettingValues(_testExportPath);
         var createExports = CreateSingleCreatePendingExport("emp001", "John Smith", "jsmith@test.com");
-        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None);
+        await _connector.ExportAsync(settingValues, createExports, CancellationToken.None, ConnectorProgress.None);
 
         // Now create an Update export where:
         // - AttributeValueChanges does NOT contain the External ID attribute (only the changed attr)
@@ -961,7 +963,7 @@ public class FileConnectorExportTests
         };
 
         // Act
-        var results = await _connector.ExportAsync(settingValues, updateExports, CancellationToken.None);
+        var results = await _connector.ExportAsync(settingValues, updateExports, CancellationToken.None, ConnectorProgress.None);
 
         // Assert — should succeed, not fail with "No External ID attribute"
         Assert.That(results, Has.Count.EqualTo(1));
