@@ -204,6 +204,7 @@
     @if (_phases.Count > 0)
     {
         <MudPaper Class="pa-4 mt-6" Outlined="true">
+            <MudText Typo="Typo.h5" Class="mb-4">Steps</MudText>
             <RunPhaseStepper Phases="_phases" Message="@(_activity.Status == ActivityStatus.InProgress ? _activity.Message : null)" />
         </MudPaper>
     }
