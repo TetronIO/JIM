@@ -1836,10 +1836,18 @@ public class ConnectedSystemServer
     /// password to configure here.
     /// </para>
     /// </summary>
+    /// <para>
+    /// Takes an id and loads the Connected System itself rather than accepting one from the caller. A caller
+    /// that reached the system through a Synchronisation Rule holds one whose ConnectorDefinition navigation is
+    /// not loaded, and this needs the Connector's name to instantiate it; accepting that graph threw and took
+    /// the whole editor down with it. Loading here means the method cannot be handed a graph it cannot use.
+    /// </para>
     /// <remarks>Do not make static, it needs to be available on the instance</remarks>
-    public IReadOnlyCollection<PasswordExpiryBehaviour> GetSupportedPasswordExpiryBehaviours(ConnectedSystem connectedSystem)
+    public async Task<IReadOnlyCollection<PasswordExpiryBehaviour>> GetSupportedPasswordExpiryBehavioursAsync(int connectedSystemId)
     {
-        ValidateConnectedSystemParameter(connectedSystem);
+        var connectedSystem = await GetConnectedSystemCoreAsync(connectedSystemId);
+        if (connectedSystem == null)
+            return [];
 
         return CreateConnector(connectedSystem) is IConnectorPasswordManagement passwordConnector
             ? passwordConnector.SupportedExpiryBehaviours

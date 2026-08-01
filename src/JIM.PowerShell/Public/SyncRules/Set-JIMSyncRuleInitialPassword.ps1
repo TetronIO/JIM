@@ -262,14 +262,17 @@ function Set-JIMSyncRuleInitialPassword {
                 return
             }
 
+            # The stored names come back normalised to PascalCase by ConvertTo-JIMOutputObject, and the
+            # parameter names are PascalCase too, so a changed setting overwrites the copied one rather than
+            # sitting beside it under a differently-cased key. JSON binding is case-insensitive at the far end,
+            # but a body carrying both spellings of the same setting is a trap for whoever reads it next.
             $policy = @{}
-            foreach ($property in $current.customPolicy.PSObject.Properties) {
+            foreach ($property in $current.CustomPolicy.PSObject.Properties) {
                 $policy[$property.Name] = $property.Value
             }
 
             foreach ($parameter in $changedPolicyParameters) {
-                # The API's property names are the parameter names with a lowercase first letter.
-                $policy[$parameter.Substring(0, 1).ToLowerInvariant() + $parameter.Substring(1)] = $PSBoundParameters[$parameter]
+                $policy[$parameter] = $PSBoundParameters[$parameter]
             }
 
             $body.customPolicy = $policy

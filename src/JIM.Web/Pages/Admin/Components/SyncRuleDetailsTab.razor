@@ -174,7 +174,7 @@
                                     DiscoveredPolicy="@DiscoveredPasswordPolicy"
                                     SupportedExpiryBehaviours="@SupportedExpiryBehaviours"
                                     Assessment="@InitialPasswordAssessment"
-                                    ConnectorName="@(SyncRule.ConnectedSystem?.ConnectorDefinition.Name ?? "Connected System's")"
+                                    ConnectorName="@PasswordConnectorName"
                                     OnChanged="HandleInitialPasswordChangedAsync" />
 }
 
@@ -222,6 +222,13 @@
     private ConnectedSystemPasswordPolicy? DiscoveredPasswordPolicy { get; set; }
 
     private IReadOnlyCollection<PasswordExpiryBehaviour> SupportedExpiryBehaviours { get; set; } = [];
+
+    /// <summary>
+    /// The Connector's name, for the section's prose. Resolved from the Connected System loaded here rather
+    /// than from SyncRule.ConnectedSystem.ConnectorDefinition, which a Synchronisation Rule's include chain
+    /// does not load: dereferencing it threw and took the whole tab down with it.
+    /// </summary>
+    private string PasswordConnectorName { get; set; } = "Connected System's";
 
     private PasswordGenerationAssessment? InitialPasswordAssessment { get; set; }
 
@@ -281,7 +288,11 @@
         // Read explicitly rather than off SyncRule.ConnectedSystem.PasswordPolicy: the rule's include chain does
         // not carry it, and an unloaded navigation would look exactly like a target with no policy at all.
         DiscoveredPasswordPolicy = await jim.ConnectedSystems.GetPasswordPolicyAsync(SyncRule.ConnectedSystem.Id);
-        SupportedExpiryBehaviours = jim.ConnectedSystems.GetSupportedPasswordExpiryBehaviours(SyncRule.ConnectedSystem);
+        SupportedExpiryBehaviours = await jim.ConnectedSystems.GetSupportedPasswordExpiryBehavioursAsync(SyncRule.ConnectedSystem.Id);
+
+        var connectedSystem = await jim.ConnectedSystems.GetConnectedSystemCoreAsync(SyncRule.ConnectedSystem.Id);
+        PasswordConnectorName = connectedSystem?.ConnectorDefinition?.Name ?? "Connected System's";
+
         AssessInitialPassword(jim);
     }
 
