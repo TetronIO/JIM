@@ -1811,6 +1811,42 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
+    /// The password policy JIM last discovered on a Connected System, or null where none was discovered.
+    /// <para>
+    /// Read explicitly rather than off a Connected System navigation, because a caller that reached the system
+    /// through a Synchronisation Rule would find that navigation unloaded, which looks exactly like a target
+    /// that published no policy.
+    /// </para>
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public async Task<ConnectedSystemPasswordPolicy?> GetPasswordPolicyAsync(int connectedSystemId)
+    {
+        return await Application.Repository.ConnectedSystems.GetPasswordPolicyAsync(connectedSystemId);
+    }
+
+    /// <summary>
+    /// The password expiry behaviours this Connected System's Connector is able to apply.
+    /// <para>
+    /// Read from the Connector rather than from anything persisted, because it is a property of the code and
+    /// changes with a Connector upgrade rather than with configuration. Offering an administrator a behaviour
+    /// the Connector cannot apply would let them save a setting that is quietly downgraded on every account.
+    /// </para>
+    /// <para>
+    /// Empty when the Connector cannot set passwords at all, which is the caller's cue that there is no initial
+    /// password to configure here.
+    /// </para>
+    /// </summary>
+    /// <remarks>Do not make static, it needs to be available on the instance</remarks>
+    public IReadOnlyCollection<PasswordExpiryBehaviour> GetSupportedPasswordExpiryBehaviours(ConnectedSystem connectedSystem)
+    {
+        ValidateConnectedSystemParameter(connectedSystem);
+
+        return CreateConnector(connectedSystem) is IConnectorPasswordManagement passwordConnector
+            ? passwordConnector.SupportedExpiryBehaviours
+            : [];
+    }
+
+    /// <summary>
     /// Collects the external ids of every container the Connected System manages, walking the whole hierarchy.
     /// <para>
     /// These are where JIM would be provisioning, and so where rights actually need to hold. Permissions are

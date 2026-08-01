@@ -4641,6 +4641,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
     }
 
+    public async Task<ConnectedSystemPasswordPolicy?> GetPasswordPolicyAsync(int connectedSystemId)
+    {
+        return await Repository.Database.ConnectedSystemPasswordPolicies
+            .AsNoTracking()
+            .SingleOrDefaultAsync(pp => pp.ConnectedSystemId == connectedSystemId);
+    }
+
     public async Task<SyncRule?> GetSyncRuleAsync(int id)
     {
         // AsTracking() is essential here even though the DbContext default is NoTracking:
