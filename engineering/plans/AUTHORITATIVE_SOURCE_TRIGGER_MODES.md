@@ -8,14 +8,11 @@
 
 Extend the `WhenAuthoritativeSourceDisconnected` deletion rule with a configurable trigger mode so Metaverse Object deletion can require **all** selected authoritative sources to disconnect rather than **any**. Also make grace period cancellation mode-aware, so a rejoin only cancels a scheduled deletion when the trigger condition no longer holds.
 
-Two design iterations are already settled (2026-08-01, UI mockup agreed):
-
-- The original priority ordering / hierarchy concept from issue #119 was dropped.
-- A third "specific source(s)" mode was considered and dropped as redundant: it is expressible by simply selecting fewer sources under Any mode. The final design is two modes over one selection list.
+The design was settled on 2026-08-01 (UI mockup agreed): the original priority ordering / hierarchy concept from issue #119 was dropped, and a proposed three-mode variant was collapsed to two modes over one selection list. All sources disconnect is the default; Specific source(s) disconnect carries the pre-existing behaviour (any selected source disconnecting triggers deletion).
 
 ## Business Value
 
-- Prevents deletion when only one of multiple redundant sources has an issue (for example an HR system rebuild), the single biggest deletion-safety gap in the current Any-only behaviour.
+- Prevents deletion when only one of multiple redundant sources has an issue (for example an HR system rebuild), the single biggest deletion-safety gap in the current any-source-triggers behaviour.
 - Supports enterprises with multiple identity sources (global plus regional HR) without forcing a single system to be the sole lifecycle authority.
 - Fixes an existing over-broad behaviour: today any system rejoining during a grace period cancels the scheduled deletion, even a system that had nothing to do with triggering it.
 
@@ -24,11 +21,11 @@ Two design iterations are already settled (2026-08-01, UI mockup agreed):
 | Mode | Behaviour |
 |------|-----------|
 | `AllSourcesDisconnect` (default for new configurations) | Delete only once no selected source retains a joined Connected System Object. Non-source connectors (targets) do not block deletion. |
-| `AnySourceDisconnects` | Delete when any selected source disconnects, even if others remain connected. Current behaviour; existing configurations keep this mode. |
+| `SpecificSourcesDisconnect` | Delete when any one of the selected sources disconnects, even if others remain connected. Current behaviour; existing configurations keep this mode. |
 
-The "delete when one specific system disconnects, regardless of others" scenario needs no third mode: select only that system and use Any mode.
+UI labels: "All sources disconnect" and "Specific source(s) disconnect". Because the Specific label alone does not state the OR semantics, its helper text always reads "delete when any one of the selected sources disconnects".
 
-**Defaults:** the safe mode (All) is the default for newly configured object types. Existing configurations created under #115 must keep Any semantics, so the migration is behaviour-preserving (see Migration below). Source selection remains opt-in: the selection list starts empty for a newly configured rule and the existing "at least one source required" validation stands; a contributing system is never a deletion trigger unless an administrator selects it.
+**Defaults:** the safe mode (All) is the default for newly configured object types. Existing configurations created under #115 must keep Specific semantics, so the migration is behaviour-preserving (see Migration below). Source selection remains opt-in: the selection list starts empty for a newly configured rule and the existing "at least one source required" validation stands; a contributing system is never a deletion trigger unless an administrator selects it.
 
 ## Technical Architecture
 
@@ -46,7 +43,7 @@ The "delete when one specific system disconnects, regardless of others" scenario
    ```csharp
    public enum AuthoritativeSourceTriggerMode
    {
-       AnySourceDisconnects = 0,      // matches pre-existing rows, which read the column default
+       SpecificSourcesDisconnect = 0, // matches pre-existing rows, which read the column default
        AllSourcesDisconnect = 1
    }
    ```
@@ -55,7 +52,7 @@ The "delete when one specific system disconnects, regardless of others" scenario
    public AuthoritativeSourceTriggerMode DeletionTriggerMode { get; set; }
        = AuthoritativeSourceTriggerMode.AllSourcesDisconnect;
    ```
-   The split between enum numeric default and property initialiser is deliberate: existing rows read the added column's default value `0` (`AnySourceDisconnects`), preserving #115 behaviour with no backfill, while new entities constructed in code, the portal, or the API start at the safe default (`AllSourcesDisconnect`). A unit test pins each side of this.
+   The split between enum numeric default and property initialiser is deliberate: existing rows read the added column's default value `0` (`SpecificSourcesDisconnect`), preserving #115 behaviour with no backfill, while new entities constructed in code, the portal, or the API start at the safe default (`AllSourcesDisconnect`). A unit test pins each side of this.
 3. `MetaverseObject`:
    - `int? DeletionTriggeredBySystemId` plus `string? DeletionTriggeredBySystemName` (name snapshot survives system deletion). Set when a deletion is scheduled; cleared with the other deletion markers. This makes cancellation precise (see below) and lets the Pending Deletions page show what triggered each scheduled deletion.
 4. Validation (unchanged from #115, enforced at API and portal): `WhenAuthoritativeSourceDisconnected` requires at least one selected source.
@@ -70,7 +67,7 @@ The "delete when one specific system disconnects, regardless of others" scenario
        IReadOnlyCollection<int> remainingConnectedSystemIds);
    ```
    `remainingCsoCount` is derived (`remainingConnectedSystemIds.Count`, counting one entry per CSO). Decision logic per mode:
-   - Any: trigger if `disconnectingSystemId` is in the source list.
+   - Specific: trigger if `disconnectingSystemId` is in the source list.
    - All: trigger if `disconnectingSystemId` is in the source list AND no remaining joined CSO belongs to any listed source.
    - Empty source list keeps the existing warn-and-fall-back-to-last-connector behaviour.
 2. Replace the worker call sites' count query with a new raw SQL repository method `GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(mvoId)` returning the Connected System id of each joined CSO (one row per CSO). This is one query where two pieces of information are needed, so the hot path (see the #986/#993/#1003 performance work) gains no extra round trip; the existing count-only call sites it replaces are removed. Callers exclude the disconnecting CSO exactly as the count-minus-one logic does today.
@@ -85,7 +82,7 @@ bool ShouldCancelScheduledDeletion(MetaverseObject mvo, int rejoiningSystemId);
 ```
 
 - `WhenLastConnectorDisconnected`: any rejoin cancels (a connector now exists; the condition no longer holds). Current behaviour, still correct.
-- `WhenAuthoritativeSourceDisconnected`, Any mode: cancel only when the rejoining system is the recorded `DeletionTriggeredBySystemId` (the disconnection that caused the scheduling has been undone). Re-deriving "is some source still disconnected" from current state is not possible without join history, which is exactly why the triggering system is recorded.
+- `WhenAuthoritativeSourceDisconnected`, Specific mode: cancel only when the rejoining system is the recorded `DeletionTriggeredBySystemId` (the disconnection that caused the scheduling has been undone). Re-deriving "is some source still disconnected" from current state is not possible without join history, which is exactly why the triggering system is recorded.
 - All mode: cancel when the rejoining system is any listed source (the "all sources gone" condition is now false).
 - Null `DeletionTriggeredBySystemId` (rows marked before this feature ships): fall back to the current cancel-on-any-rejoin behaviour rather than stranding a scheduled deletion.
 
@@ -106,20 +103,20 @@ Wire into `EstablishJoinAsync` and the `FlushPendingMvoDeletionsAsync` same-page
 
 All three surfaces ship in the same PR (per the surface parity rule):
 
-- **Portal** (`MetaverseObjectTypeDetail.razor`): per the agreed mockup; the existing per-system selection checkboxes are retained, with a Deletion Trigger radio group above them (All / Any, All pre-selected for new configurations) and a live plain-language summary alert restating trigger, sources by name, and grace period. `SchemaObjectTypeList.razor` deletion rule tooltip includes the mode.
+- **Portal** (`MetaverseObjectTypeDetail.razor`): per the agreed mockup; the existing per-system selection checkboxes are retained, with a Deletion Trigger radio group above them ("All sources disconnect" / "Specific source(s) disconnect", All pre-selected for new configurations) and a live plain-language summary alert restating trigger, sources by name, and grace period. `SchemaObjectTypeList.razor` deletion rule tooltip includes the mode.
 - **REST** (`MetaverseController`, `MetaverseObjectTypeDetailDto` and create/update requests): `DeletionTriggerMode` (string enum, consistent with existing enum serialisation). Omitted on create means `AllSourcesDisconnect`; omitted on update means unchanged. Extract the currently duplicated create/update validation into a shared helper rather than duplicating it further.
 - **PowerShell** (`New-JIMMetaverseObjectType` / `Set-JIMMetaverseObjectType`): `-DeletionTriggerMode` (`ValidateSet`), Pester coverage including `EnumSerialisation.Tests.ps1`, and `docs/powershell/metaverse.md` updates.
 
 ### Migration and bulk-write guard
 
-- EF migration adds `DeletionTriggerMode` to `MetaverseObjectTypes` with column default `0` (`AnySourceDisconnects`) so existing rows keep #115 behaviour, and `DeletionTriggeredBySystemId` / `DeletionTriggeredBySystemName` to `MetaverseObjects`.
+- EF migration adds `DeletionTriggerMode` to `MetaverseObjectTypes` with column default `0` (`SpecificSourcesDisconnect`) so existing rows keep #115 behaviour, and `DeletionTriggeredBySystemId` / `DeletionTriggeredBySystemName` to `MetaverseObjects`.
 - The `MetaverseObjects` columns hit the raw SQL bulk writers: extend `MvoBulkInsertColumns` and its writers (values in list order), place the columns consciously in update or exclusion lists, and extend the `RequiresPostgres` round-trip test. `BulkInsertColumnCompletenessTests` will fail until this is done; that is the guard working as designed.
 
 ## Implementation Phases
 
 Each phase is red-first TDD: failing tests, minimum implementation, green, refactor.
 
-1. **Model, migration, snapshot, bulk-write guard.** Enum, `MetaverseObjectType` and `MetaverseObject` properties, migration (including the existing-rows-keep-Any / new-entities-default-All split, pinned by tests), `MvoBulkInsertColumns` extension plus round-trip test, `ConfigurationSnapshotService` coverage.
+1. **Model, migration, snapshot, bulk-write guard.** Enum, `MetaverseObjectType` and `MetaverseObject` properties, migration (including the existing-rows-keep-Specific / new-entities-default-All split, pinned by tests), `MvoBulkInsertColumns` extension plus round-trip test, `ConfigurationSnapshotService` coverage.
 2. **Engine evaluation.** New `EvaluateMvoDeletionRule` signature and mode matrix (unit tests: each mode times disconnecting-system-in/out-of-list times remaining-source permutations, empty-list fallback, Internal origin protection unchanged). `ShouldCancelScheduledDeletion` matrix including the null-trigger fallback.
 3. **Worker wiring.** `GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync` (raw SQL), both disconnect call sites, trigger recording, mode-aware cancellation in `EstablishJoinAsync` and `FlushPendingMvoDeletionsAsync`. `DeletionRuleWorkflowTests` additions for All-mode end-to-end marking, plus rejoin cancellation workflows.
 4. **Connected System deletion alignment.** Mode-aware orphan marking and deletion preview counts, with unit coverage.
@@ -132,7 +129,7 @@ Each phase is red-first TDD: failing tests, minimum implementation, green, refac
 
 - Both modes behave per the table above at both disconnect call sites, on the Connected System deletion path, and in housekeeping.
 - A rejoin during grace cancels a scheduled deletion only when the mode's trigger condition no longer holds; a non-trigger system rejoining no longer cancels.
-- Existing configurations behave identically after migration (Any mode), demonstrated by the unchanged pre-existing workflow tests; newly configured object types default to All mode on every surface.
+- Existing configurations behave identically after migration (Specific mode), demonstrated by the unchanged pre-existing workflow tests; newly configured object types default to All mode on every surface.
 - Decision reasons name the mode and the relevant sources on RPEI outcomes, Pending Deletions, and Causality surfaces.
 - Portal, REST, and PowerShell parity in one PR; `dotnet build JIM.sln` and `dotnet test JIM.sln` clean; integration scenarios green.
 
@@ -140,7 +137,7 @@ Each phase is red-first TDD: failing tests, minimum implementation, green, refac
 
 | Risk | Mitigation |
 |------|------------|
-| Existing configurations silently flipping to the new All default | Column default `0` maps existing rows to Any; property initialiser gives new entities All; both sides pinned by dedicated tests. |
+| Existing configurations silently flipping to the new All default | Column default `0` maps existing rows to Specific; property initialiser gives new entities All; both sides pinned by dedicated tests. |
 | Hot-path regression from fetching system ids per disconnection | The id-list query replaces the existing count query (one query either way); raw SQL per the worker hot-path rule; validate against the cohort deprovisioning scale scenarios. |
 | Cancellation decisions for deletions scheduled before upgrade (no recorded trigger) | Explicit null fallback to current cancel-on-any-rejoin behaviour; covered by a dedicated test. |
 | Connected System deletion preview and execution disagreeing under new modes | Preview and execution share the mode-aware predicate; unit tests assert agreement. |
