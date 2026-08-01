@@ -3321,16 +3321,6 @@ public class ConnectedSystemServer
     }
 
     /// <summary>
-    /// Returns the count of Connected System Objects joined to a specific Metaverse Object.
-    /// Used to determine if an MVO has any remaining connectors before deletion.
-    /// </summary>
-    /// <param name="metaverseObjectId">The MVO ID to count joined CSOs for.</param>
-    public async Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
-    {
-        return await Application.Repository.ConnectedSystems.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(metaverseObjectId);
-    }
-
-    /// <summary>
     /// Returns the count of reference attribute values across all CSOs in a Connected System that are unresolved
     /// (i.e. the referenced object could not be found during the last import run).
     /// A non-zero result indicates that group member references or other reference attributes are broken.

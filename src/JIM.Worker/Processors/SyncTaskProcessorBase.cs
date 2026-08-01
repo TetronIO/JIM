@@ -832,10 +832,12 @@ public abstract class SyncTaskProcessorBase
         // Reuse deletionExecutionItem (already created above) and change its type to Disconnected.
         deletionExecutionItem.ObjectChangeType = ObjectChangeType.Disconnected;
 
-        // Query remaining CSO count BEFORE breaking the join so the count includes all current connectors.
-        // Then subtract 1 to exclude this CSO which is about to be disconnected.
-        var totalCsoCount = await _syncRepo.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
-        var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
+        // Query the joined Connected System ids BEFORE breaking the join so the list includes all current
+        // connectors, then exclude ONE occurrence of this CSO's system id (the CSO about to be
+        // disconnected). A second CSO joined from the same system must remain in the list; this mirrors
+        // the previous count-minus-one logic exactly.
+        var remainingConnectedSystemIds = await _syncRepo.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(mvoId);
+        remainingConnectedSystemIds.Remove(connectedSystemId);
 
         // Snapshot the MVO's current attribute values before recall removes them.
         // This snapshot is used by MarkMvoForDeletionAsync to capture the final state
@@ -849,7 +851,7 @@ public abstract class SyncTaskProcessorBase
         // If the MVO will be deleted immediately, attribute recall is nugatory work —
         // the attributes, MVO update, and export evaluations would all be discarded
         // when the MVO is deleted moments later in FlushPendingMvoDeletionsAsync.
-        var mvoDeletionDecision = await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingCsoCount);
+        var mvoDeletionDecision = await ProcessMvoDeletionRuleAsync(mvo, connectedSystemId, remainingConnectedSystemIds);
         var mvoDeletionFate = mvoDeletionDecision.Fate;
 
         // Recall the obsoleting system's contributed attributes (where the object type opts in), re-electing a
@@ -1032,20 +1034,23 @@ public abstract class SyncTaskProcessorBase
     /// Handles three deletion rules:
     /// - Manual: No automatic deletion
     /// - WhenLastConnectorDisconnected: Delete when ALL CSOs are disconnected
-    /// - WhenAuthoritativeSourceDisconnected: Delete when ANY authoritative source disconnects
+    /// - WhenAuthoritativeSourceDisconnected: Delete per the configured trigger mode (when any selected
+    ///   source disconnects, or only once no selected source remains connected) (#119)
     /// Following industry-standard identity management practices, this method NEVER deletes the MVO directly.
     /// Instead, it sets LastConnectorDisconnectedDate and lets housekeeping handle actual deletion.
     /// </summary>
     /// <param name="mvo">The Metaverse Object to evaluate for deletion.</param>
     /// <param name="disconnectingSystemId">The ID of the Connected System whose CSO was disconnected.</param>
-    /// <param name="remainingCsoCount">The count of remaining CSOs still joined to the MVO.</param>
+    /// <param name="remainingConnectedSystemIds">The Connected System ID of each CSO still joined to the
+    /// MVO after disconnection: one entry per CSO, duplicates preserved when a system holds multiple
+    /// joined CSOs.</param>
     /// <returns>
     /// The applied deletion decision, including the fate, the human-readable reason and any grace
     /// period, so callers can surface the reason on MvoDeleted/MvoDeletionScheduled outcomes (#1086).
     /// </returns>
-    protected async Task<MvoDeletionDecision> ProcessMvoDeletionRuleAsync(MetaverseObject mvo, int disconnectingSystemId, int remainingCsoCount)
+    protected async Task<MvoDeletionDecision> ProcessMvoDeletionRuleAsync(MetaverseObject mvo, int disconnectingSystemId, IReadOnlyCollection<int> remainingConnectedSystemIds)
     {
-        var decision = _syncEngine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId, remainingCsoCount);
+        var decision = _syncEngine.EvaluateMvoDeletionRule(mvo, disconnectingSystemId, remainingConnectedSystemIds);
         var appliedFate = await ApplyMvoDeletionDecisionAsync(mvo, decision);
 
         // The applied fate should always match the engine's decision (both derive from the same grace
@@ -4116,16 +4121,18 @@ public abstract class SyncTaskProcessorBase
                 // deleted) can still describe the affected Metaverse Object (#1086).
                 var mvoDisplayName = mvo.DisplayName;
 
-                // Query remaining CSO count BEFORE breaking the join so the count includes all current connectors.
-                // Then subtract 1 to exclude this CSO which is about to be disconnected.
-                var totalCsoCount = await _syncRepo.GetConnectedSystemObjectCountByMetaverseObjectIdAsync(mvoId);
-                var remainingCsoCount = Math.Max(0, totalCsoCount - 1);
+                // Query the joined Connected System ids BEFORE breaking the join so the list includes all
+                // current connectors, then exclude ONE occurrence of this CSO's system id (the CSO about
+                // to be disconnected). A second CSO joined from the same system must remain in the list;
+                // this mirrors the previous count-minus-one logic exactly.
+                var remainingConnectedSystemIds = await _syncRepo.GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(mvoId);
+                remainingConnectedSystemIds.Remove(_connectedSystem.Id);
 
                 // Evaluate the MVO deletion rule BEFORE attribute recall (#390 optimisation).
                 // If the MVO will be deleted immediately, attribute recall is nugatory work —
                 // the attributes, MVO update, and export evaluations would all be discarded
                 // when the MVO is deleted moments later in FlushPendingMvoDeletionsAsync.
-                var mvoDeletionDecision = await ProcessMvoDeletionRuleAsync(mvo, _connectedSystem.Id, remainingCsoCount);
+                var mvoDeletionDecision = await ProcessMvoDeletionRuleAsync(mvo, _connectedSystem.Id, remainingConnectedSystemIds);
                 var mvoDeletionFate = mvoDeletionDecision.Fate;
 
                 // Check if we should remove contributed attributes based on the object type setting.

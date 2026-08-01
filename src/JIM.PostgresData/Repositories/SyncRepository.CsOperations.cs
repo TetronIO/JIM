@@ -1298,6 +1298,35 @@ public partial class SyncRepository
         return targets;
     }
 
+    /// <summary>
+    /// Gets the Connected System ID of each CSO joined to the given MVO: one row per CSO, duplicates
+    /// preserved when a system holds multiple joined CSOs (#119). Raw SQL per the worker hot-path rule;
+    /// replaces the previous count-only query at the disconnect call sites, so it costs the same single
+    /// round trip. Read-side SELECT: a deliberate projection subset, exempt from the bulk column list rule.
+    /// </summary>
+    public async Task<List<int>> GetJoinedConnectedSystemIdsByMetaverseObjectIdAsync(Guid metaverseObjectId)
+    {
+        var systemIds = new List<int>();
+        var connection = _context.Database.GetDbConnection();
+        await using var connectionLease = await RawSqlConnectionLease.AcquireAsync(connection);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            @"SELECT ""ConnectedSystemId""
+              FROM ""ConnectedSystemObjects""
+              WHERE ""MetaverseObjectId"" = @mvoId";
+        var mvoIdParameter = command.CreateParameter();
+        mvoIdParameter.ParameterName = "mvoId";
+        mvoIdParameter.Value = metaverseObjectId;
+        command.Parameters.Add(mvoIdParameter);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            systemIds.Add(reader.GetInt32(0));
+
+        return systemIds;
+    }
+
     public async Task<Dictionary<Guid, ConnectedSystemObjectDisplaySnapshot>> GetConnectedSystemObjectDisplaySnapshotsAsync(IReadOnlyCollection<Guid> csoIds)
     {
         if (csoIds.Count == 0)

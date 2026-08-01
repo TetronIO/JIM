@@ -4016,12 +4016,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             .ToListAsync();
     }
 
-    public async Task<int> GetConnectedSystemObjectCountByMetaverseObjectIdAsync(Guid metaverseObjectId)
-    {
-        return await Repository.Database.ConnectedSystemObjects
-            .CountAsync(cso => cso.MetaverseObjectId == metaverseObjectId);
-    }
-
     public async Task<ConnectedSystemObject?> GetConnectedSystemObjectByMetaverseObjectIdAsync(Guid metaverseObjectId, int connectedSystemId)
     {
         return await Repository.Database.ConnectedSystemObjects
