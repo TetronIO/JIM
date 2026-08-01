@@ -234,8 +234,11 @@ Simple Mode matching rules attach to a Connected System Object Type rather than 
 | `containers.name` | C | Label only. |
 | `containers.externalId` | C | Identifier recorded from the Connected System, not administrator-set. |
 | `containers.hidden` | C | Portal display only. |
+| `container` **when removed** | **A** | Deselecting a container takes every object imported through it out of scope, exactly as deselecting a partition does (#827 gap G4). |
 
-> **Known gap.** Container *selection* is not currently captured in the Connected System snapshot; only `hidden` is. Until selection is added to `ConfigurationSnapshotService`, the container half of #827 gap G4 cannot be classified or previewed. Capturing it is a prerequisite for the G4 adapter.
+**How container selection is captured, and why removal carries its own class.** The snapshot records only the containers the administrator has *selected*, because selection carries subtree-inclusion semantics: descendants of a selected container are stored with `Selected: false` and are in scope implicitly, so a stored flag would not mean what it says, and capturing the whole discovered tree would put thousands of directory OUs into every snapshot version. Selection therefore shows up as a container appearing in or disappearing from `containers`, rather than as a scalar flip like `partitions.selected`.
+
+That is why containers are the one place where a key's class depends on *how* it changed. `ConfigurationChangeClassifier.ConnectedSystemRemovalKeys` classifies a removed `container` Class A while every other change to it keeps the cosmetic class of its own scalars. Classifying the key Class A outright would instead make a directory-side OU rename destructive, which would train administrators to dismiss the warning that matters. Adding this table to another object type is a deliberate act: prefer an explicit scalar (as partitions and Object Types have) whenever the model allows one.
 
 ## Metaverse Object Type
 

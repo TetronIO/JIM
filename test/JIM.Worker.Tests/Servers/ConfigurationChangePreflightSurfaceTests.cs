@@ -369,7 +369,19 @@ public class ConfigurationChangePreflightSurfaceTests
         ],
         Partitions =
         [
-            new ConnectedSystemPartition { Id = 50, Name = "EMEA", ExternalId = "DC=emea", Selected = true }
+            // Populated rather than left empty on purpose: three classification defects hid behind fixtures whose
+            // collections were empty, because a collection that is absent from both snapshots can never diff.
+            new ConnectedSystemPartition
+            {
+                Id = 50,
+                Name = "EMEA",
+                ExternalId = "DC=emea",
+                Selected = true,
+                Containers =
+                [
+                    new ConnectedSystemContainer { Id = 60, Name = "Users", ExternalId = "OU=Users,DC=emea", Selected = true }
+                ]
+            }
         ]
     };
 

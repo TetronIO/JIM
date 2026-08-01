@@ -167,12 +167,18 @@ public class ConfigurationChangePreflightService
         foreach (var child in diff.Root.Children ?? [])
             CollectItems(child, [], proposed.ObjectType, proposed.ObjectKey, items);
 
-        if (items.Count == 0)
-            return ConfigurationChangePreflight.None;
-
         return new ConfigurationChangePreflight
         {
-            HighestClass = items.Max(i => i.Class),
+            // The classifier's verdict over the whole diff, never the maximum over the items below. The two are not
+            // the same reduction: the items are the changed *scalars*, whereas the classifier also weighs the
+            // collection and object nodes above them. Where a collection's own key outranks every scalar inside its
+            // items (`partitions` is Class B; a container's name, external id and hidden flag are all Class C),
+            // taking the maximum over the items answers Cosmetic to a change the capture then records as
+            // synchronisation-affecting: the administrator saves in silence and only learns of it from the change
+            // history. Deriving both from ConfigurationChangeClassifier.Classify makes the promise this class already
+            // documents (the acknowledgement and the recorded class cannot disagree) true by construction rather than
+            // by coincidence.
+            HighestClass = ConfigurationChangeClassifier.Classify(diff, proposed.ObjectKey),
             // Most consequential first, then alphabetically so the list is stable between renders of the same change.
             Items = items
                 .OrderByDescending(i => i.Class)
@@ -195,8 +201,19 @@ public class ConfigurationChangePreflightService
             return;
         }
 
+        // A collection item that appeared or disappeared is one change, not one per property it happens to carry.
+        // Descending would describe the mechanism (its name, external id and hidden flag each going to nothing)
+        // rather than the act, and would bury the line that matters under the ones that do not.
+        if (node.NodeType == ConfigurationSnapshotNodeType.Object &&
+            node.ChangeType is ConfigurationDiffChangeType.Added or ConfigurationDiffChangeType.Removed)
+        {
+            items.Add(BuildCollectionItemChange(node, ancestorLabels, objectType, objectKey));
+            return;
+        }
+
         // An object or collection node contributes its own label to the path of everything beneath it. Descent is
-        // unconditional: a container is only as changed as its leaves, and it is the leaves that get classified.
+        // otherwise unconditional: a container is only as changed as its leaves, and it is the leaves that get
+        // classified.
         var childAncestors = new List<string>(ancestorLabels) { DescribeNode(node) };
         foreach (var child in node.Children ?? [])
             CollectItems(child, childAncestors, objectType, objectKey, items);
@@ -231,10 +248,37 @@ public class ConfigurationChangePreflightService
         {
             Key = node.Key,
             Label = label,
-            Class = ConfigurationChangeClassifier.ClassifyKey(objectType, node.Key, objectKey),
+            Class = ConfigurationChangeClassifier.ClassifyKey(objectType, node.Key, objectKey, node.ChangeType),
+            ChangeType = node.ChangeType,
             OldDisplayValue = ForDisplay(node.OldDisplayValue, node.OldValue),
             NewDisplayValue = ForDisplay(node.NewDisplayValue, node.NewValue),
             Consequence = ConfigurationChangeConsequences.For(objectType, node.Key, node.OldValue, node.NewValue)
+        };
+    }
+
+    /// <summary>
+    /// One item added to or removed from a collection, described as the single act it is. It carries no before-and-
+    /// after pair, because nothing was edited: the item's name identifies it in the label, and the change type says
+    /// which way it went.
+    /// </summary>
+    private static ConfigurationChangePreflightItem BuildCollectionItemChange(ConfigurationDiffNode node,
+        IReadOnlyList<string> ancestorLabels, string objectType, string? objectKey)
+    {
+        var name = DescribeNode(node);
+        var label = ancestorLabels.Count == 0 ? name : string.Join(" > ", ancestorLabels.Append(name));
+        var added = node.ChangeType == ConfigurationDiffChangeType.Added;
+
+        return new ConfigurationChangePreflightItem
+        {
+            Key = node.Key,
+            Label = label,
+            Class = ConfigurationChangeClassifier.ClassifyKey(objectType, node.Key, objectKey, node.ChangeType),
+            ChangeType = node.ChangeType,
+            IsCollectionItem = true,
+            // The consequence copy is direction-aware off the value pair, so the item's name stands in for the value
+            // on whichever side it exists: present before and gone after is a removal, and the reverse an addition.
+            Consequence = ConfigurationChangeConsequences.For(objectType, node.Key,
+                added ? null : name, added ? name : null)
         };
     }
 
