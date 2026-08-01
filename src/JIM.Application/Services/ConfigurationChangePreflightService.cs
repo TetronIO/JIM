@@ -167,12 +167,18 @@ public class ConfigurationChangePreflightService
         foreach (var child in diff.Root.Children ?? [])
             CollectItems(child, [], proposed.ObjectType, proposed.ObjectKey, items);
 
-        if (items.Count == 0)
-            return ConfigurationChangePreflight.None;
-
         return new ConfigurationChangePreflight
         {
-            HighestClass = items.Max(i => i.Class),
+            // The classifier's verdict over the whole diff, never the maximum over the items below. The two are not
+            // the same reduction: the items are the changed *scalars*, whereas the classifier also weighs the
+            // collection and object nodes above them. Where a collection's own key outranks every scalar inside its
+            // items (`partitions` is Class B; a container's name, external id and hidden flag are all Class C),
+            // taking the maximum over the items answers Cosmetic to a change the capture then records as
+            // synchronisation-affecting: the administrator saves in silence and only learns of it from the change
+            // history. Deriving both from ConfigurationChangeClassifier.Classify makes the promise this class already
+            // documents (the acknowledgement and the recorded class cannot disagree) true by construction rather than
+            // by coincidence.
+            HighestClass = ConfigurationChangeClassifier.Classify(diff, proposed.ObjectKey),
             // Most consequential first, then alphabetically so the list is stable between renders of the same change.
             Items = items
                 .OrderByDescending(i => i.Class)

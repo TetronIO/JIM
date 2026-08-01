@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 🐛 Changing which containers a Connected System imports from now asks you to confirm the change before saving, as every other synchronisation-affecting edit does. Selecting or deselecting a container saved in silence, and the change was then recorded in the configuration change history as synchronisation-affecting, so the confirmation you were shown and the record kept afterwards disagreed.
 - 🐛 Problems a Connector reports with an individual imported object now appear on the Activity instead of being discarded. A row whose value would not parse is imported with the values that did parse and the failure is reported against that object; an object the Connector could not identify at all is reported and skipped. Previously none of it was recorded anywhere, so an import of malformed data finished looking clean. (#637)
 - 🐛 A Full Import no longer fails outright when a single imported object names an object type that is not in the Connected System's schema. The run now reports that object and imports the rest. (#637)
 - 🐛 A setting withdrawn from a Connector no longer lingers on Connected Systems that already held a value for it. The setting was being detached from its Connector Definition rather than deleted, leaving the row behind with the saved values still pointing at it. (#1132)

@@ -160,8 +160,13 @@ public static class ConfigurationChangeClassifier
         ["connectedSystemAttributeId"] = B,
         ["expression"] = B,
 
-        // Partitions and containers. Deselecting a partition removes the objects imported from it;
-        // `selected` above covers both, since both carry Class A.
+        // Partitions and containers. Deselecting a partition removes the objects imported from it, which `selected`
+        // above classifies Class A. A *container's* selection is not a scalar at all: the snapshot records only the
+        // containers the administrator selected, so selecting or deselecting one shows up as an item appearing in or
+        // disappearing from `containers`. The collection keys below are therefore what carry a container selection
+        // change, and every scalar inside a container (its name, external id and hidden flag) is genuinely cosmetic.
+        // See engineering/CONFIGURATION_CHANGE_CLASSIFICATION.md for why the tree is not captured whole, and for the
+        // open question of whether a container deselection should be raised from B to A as partitions are.
         ["partitions"] = B,
         ["partition"] = B,
         ["externalId"] = C,

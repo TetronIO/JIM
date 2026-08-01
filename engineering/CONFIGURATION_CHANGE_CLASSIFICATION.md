@@ -211,7 +211,9 @@ Simple Mode matching rules attach to a Connected System Object Type rather than 
 | `containers.externalId` | C | Identifier recorded from the Connected System, not administrator-set. |
 | `containers.hidden` | C | Portal display only. |
 
-> **Known gap.** Container *selection* is not currently captured in the Connected System snapshot; only `hidden` is. Until selection is added to `ConfigurationSnapshotService`, the container half of #827 gap G4 cannot be classified or previewed. Capturing it is a prerequisite for the G4 adapter.
+**How container selection is captured.** The snapshot records only the containers the administrator has *selected*, because selection carries subtree-inclusion semantics: descendants of a selected container are stored with `Selected: false` and are in scope implicitly, so a stored flag would not mean what it says, and capturing the whole discovered tree would put thousands of directory OUs into every snapshot version. Selection therefore shows up as a container appearing in or disappearing from `containers`, not as a scalar flip. That is why the table above has no `containers.selected` row, and why the collection key `containers` is what carries the change.
+
+> **Open question.** Deselecting a *partition* or a Connected System Object Type is Class A; deselecting a *container* takes objects out of scope in exactly the same way but currently classifies B, because a removal is only visible on the collection node and `CollectChangedKeys` does not distinguish a removed item from a modified one. Raising it to A means making the classifier change-type aware (a removed `container` is Class A; a modified one is not), which would otherwise flag every directory-side OU rename as destructive. Not yet decided; tracked against #827 gap G4.
 
 ## Metaverse Object Type
 
