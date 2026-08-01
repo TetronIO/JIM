@@ -10,7 +10,7 @@ Every configuration property carries one of three classes:
 |---|---|---|
 | Cosmetic | Labels and display: a name, a description, an icon, a page size. | Nothing. The save goes straight through. |
 | Sync-affecting | Changes what synchronisation does: scope, mappings, matching, connector settings, enabling or disabling a rule. | Asks you to confirm, listing exactly what is changing and from which value to which. |
-| Destructive | Decides whether objects are removed: Deprovisioning Actions, Object Type and partition selection, deletion rules. | As above, and additionally states in plain terms what the change will do. |
+| Destructive | Decides whether objects are removed: Deprovisioning Actions, Object Type, partition and container selection, deletion rules. | As above, and additionally states in plain terms what the change will do. |
 
 The class is worked out from the properties you actually changed, not from the page you changed them on. Renaming a Synchronisation Rule saves in silence even though the Deprovisioning Action sits on the same form; changing both in one save is treated as destructive.
 
@@ -31,7 +31,7 @@ Cancelling the confirmation abandons the save. Nothing is written.
 | Surface | Changes that can trigger it |
 |---|---|
 | [Synchronisation Rules](synchronisation-rules.md) | Direction, enabling, provisioning and projection, scope, Attribute Flow, Object Matching Rules; **destructive:** Deprovisioning Action, Inbound Out-of-Scope Action |
-| [Connected Systems](connected-systems.md) (Details, Settings, Schema, Partitions & Containers) | Connector settings, matching mode, unresolved reference handling, attribute selection; **destructive:** deselecting an Object Type or a partition |
+| [Connected Systems](connected-systems.md) (Details, Settings, Schema, Partitions & Containers) | Connector settings, matching mode, unresolved reference handling, attribute selection, selecting a container; **destructive:** deselecting an Object Type, a partition or a container |
 | [Metaverse Object Types](metaverse.md#deletion-behaviour) | Attribute bindings; **destructive:** deletion rule, grace period, deletion trigger systems. The Deprovisioning Action dropdown on this page edits Synchronisation Rules and is confirmed the same way. |
 | [Metaverse Attributes](metaverse.md#attributes) | Data type, plurality, Object Type bindings |
 | [Service Settings](service-settings.md) | The few settings that steer synchronisation; nearly all Service Settings are operational and save in silence |

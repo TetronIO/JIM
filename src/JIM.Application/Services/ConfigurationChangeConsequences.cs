@@ -64,6 +64,17 @@ public static class ConfigurationChangeConsequences
                       "synchronisation."
                     : "Selecting this brings its objects into scope for import on the next Import Run Profile.",
 
+            // A container's selection is its presence in the snapshot, so this key arrives as a whole container being
+            // added or removed rather than as a flag moving. Same consequence as deselecting a partition, phrased for
+            // the narrower thing being taken out of scope.
+            (ConfigurationSnapshotService.ConnectedSystemObjectType, "container") =>
+                string.IsNullOrEmpty(newValue)
+                    ? "Deselecting this container stops the objects beneath it being imported. The Connected System " +
+                      "Objects already imported from it become obsolete, and whatever they are joined to is " +
+                      "deprovisioned on the next synchronisation."
+                    : "Selecting this container brings the objects beneath it into scope for import on the next " +
+                      "Import Run Profile.",
+
             (ConfigurationSnapshotService.MetaverseObjectTypeObjectType, "deletionRule") =>
                 "This takes effect immediately: Metaverse Objects of this type that already satisfy the new rule become " +
                 "eligible for deletion on the next synchronisation or housekeeping pass, without any further change " +
