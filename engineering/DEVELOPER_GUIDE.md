@@ -484,6 +484,20 @@ Verify after rebuild with `jim-signing-status`. A healthy state shows:
   ssh agent:          forwarded, 1 key(s) loaded
 ```
 
+**Native Windows checkout (working outside the devcontainer):**
+
+Git Bash's bundled (MSYS) OpenSSH cannot reach the Windows OpenSSH agent's named pipe, so signing must go through the Windows OpenSSH tools instead. With the "OpenSSH Authentication Agent" service running and your key loaded (see the Windows 11 bullet above), configure the clone once:
+
+```bash
+git config gpg.format ssh
+git config user.signingkey "$USERPROFILE/.ssh/id_ed25519.pub"
+git config gpg.ssh.program "C:/Windows/System32/OpenSSH/ssh-keygen.exe"
+git config commit.gpgsign true
+git config core.hooksPath .githooks
+```
+
+Pointing `user.signingkey` at the *public* key makes ssh-keygen sign via the agent, so a passphrase-protected private key never needs decrypting in the shell. The pre-commit hook probes the Windows agent directly when the MSYS `ssh-add` cannot reach it.
+
 **Registering your SSH key as a signing key on GitHub:**
 
 The same physical SSH key can be used for both authentication and signing, but GitHub tracks them as *separate key registrations*. If you have only added your key as an authentication key, commits will be signed but GitHub will display them as "Unverified". To fix:
@@ -708,34 +722,57 @@ public interface IRepository
 **Rule**: Application layer depends on `IRepository`, not concrete implementations.
 
 ### 3. Connector Pattern
-Implement connectors for external systems:
+
+Connectors implement `IConnector` (identity only) plus whichever capability interfaces they support. The four *interaction* interfaces are the ones that move data; a connector implements the import and/or export interface matching how it talks to its system (calls or files), never both mechanisms for the same direction. Authoritative signatures live in `src/JIM.Models/Interfaces/`:
+
 ```csharp
 public interface IConnector
 {
-    Task<ConnectorCapabilities> GetCapabilitiesAsync();
-    Task<bool> TestConnectionAsync();
-    // ... other required methods
+    string Name { get; }
+    string? Description { get; }
+    string? Url { get; }
 }
 
-// Optional interfaces for specific capabilities
-public interface IConnectorImportUsingCalls : IConnector
+// Import via API calls: JIM calls this repeatedly, once per page, until no pagination tokens come back.
+public interface IConnectorImportUsingCalls
 {
-    Task<List<ConnectedSystemObject>> ImportAsync(ConnectedSystem system);
+    void OpenImportConnection(List<ConnectedSystemSettingValue> settingValues, ILogger logger);
+
+    Task<ConnectedSystemImportResult> ImportAsync(
+        ConnectedSystem connectedSystem,
+        ConnectedSystemRunProfile runProfile,
+        List<ConnectedSystemPaginationToken> paginationTokens,
+        string? persistedConnectorData,
+        ILogger logger,
+        CancellationToken cancellationToken,
+        Func<string, Task>? progressCallback = null);
+
+    void CloseImportConnection();
 }
 
-public interface IConnectorExportUsingCalls : IConnector
+// Export via API calls: one result per Pending Export, in the same order.
+public interface IConnectorExportUsingCalls
 {
-    Task<ConnectorExportResult> ExportAsync(
-        ConnectedSystemObject cso, PendingExport export,
-        CancellationToken cancellationToken = default);
+    void OpenExportConnection(IList<ConnectedSystemSettingValue> settings);
+
+    Task<List<ConnectedSystemExportResult>> ExportAsync(
+        IList<PendingExport> pendingExports,
+        CancellationToken cancellationToken,
+        Func<string, Task>? progressCallback = null);
+
+    void CloseExportConnection();
 }
 ```
+
+`IConnectorImportUsingFiles` and `IConnectorExportUsingFiles` mirror these without the open/close lifecycle: a file-based connector reads or writes the whole file in a single call.
 
 **Connector Capabilities**: Connectors declare capabilities via `IConnectorCapabilities` properties:
 - `SupportsExport`, `SupportsImport`, `SupportsDeltaImport`, etc.
 - `SupportsParallelExport`: when `true`, the Connected System UI shows the `MaxExportParallelism` setting, enabling parallel batch processing with separate DbContext and connector instances per batch
 
-**Rule**: Keep connectors stateless. Store configuration in `ConnectedSystem.Configuration`.
+**Reporting to administrators**: the optional `progressCallback` narrates a connector's internal sub-phases onto the Activity message while a long call is running; it is one of several feedback channels (settings validation, per-object export results, run-level warnings, exceptions, logging), each appropriate to a different moment and severity. The guidance for connector authors is in the public [Writing Custom Connectors](../docs/developer/connectors.md) page; the design rationale is in [`notes/CONNECTOR_SUB_PHASE_PROGRESS.md`](notes/CONNECTOR_SUB_PHASE_PROGRESS.md).
+
+**Rule**: Keep connectors stateless between calls. Anything that must survive to the next run goes in `ConnectedSystemImportResult.PersistedConnectorData`, which JIM stores and replays; anything needed only for the next page goes in `PaginationTokens`.
 
 ### 4. Activity Logging
 Log all significant operations for audit:

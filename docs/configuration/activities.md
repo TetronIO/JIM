@@ -96,6 +96,15 @@ While a Run Profile executes, its progress is available in real time on every su
 
 Throughput and the estimated time remaining are derived from recent progress samples, so they reflect the current phase of the run rather than a whole-run average; they appear once enough samples exist and adapt as the run moves between phases.
 
+### Connector sub-phase messages
+
+Some of a run's wall-clock time is spent inside the Connector, on work JIM cannot count objects for: reading an export file before merging changes into it, writing the merged file back out, querying a directory's root DSE, or fetching a page of objects from a container. Connectors narrate these sub-phases, and the message appears in the same place as the rest of the run's progress:
+
+- **File connector**<br /> "Loading existing export file...", "Merging 100,000 changes into file..." and "Writing 100,000 rows to output file..." during an export; "Reading CSV file..." and a rolling "Parsed 50,000 rows..." during an import.
+- **LDAP connector**<br /> "Querying root DSE...", "Fetching User objects from Employees (page 3)..." during a Full Import; the equivalent watermark queries ("Querying changes since USN 1,204,933...", "Querying deleted objects in contoso.com...") during a Delta Import.
+
+Object counts do not move while a sub-phase message is showing, because the Connector has not returned any objects yet. That is the point of these messages: a message that keeps changing is how you tell a healthy long-running phase from a stuck one. The counts resume as soon as the Connector returns.
+
 ## Common workflows
 
 **Monitoring a Run Profile execution:**

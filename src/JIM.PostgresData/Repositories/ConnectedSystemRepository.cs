@@ -440,6 +440,18 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
     /// </summary>
     private void MarkConnectedSystemGraphForUpdate(ConnectedSystem connectedSystem)
     {
+        // Track the Connected System FIRST, and keep it first. Adding a new partition or container below uses
+        // DbSet.Add, which walks the graph and marks every entity it can reach for insertion; a new partition's
+        // navigation leads straight back here, and on to the Connector Definition and its settings. When those are
+        // detached (the portal loads the Connected System in one scope and saves it in another), the save then fails
+        // on a duplicate Connector Definition key and no hierarchy can be retrieved at all. EF Core stops walking at
+        // an entity that is already tracked, so tracking this one first confines each Add to what is genuinely new.
+        //
+        // UpdateDetachedSafe is used rather than Update() because Update() does the same graph walk from here:
+        // after ClearChangeTracker() it would traverse Objects → MVO → Type → Attributes, causing PK violations on
+        // the MetaverseObjectType ↔ MetaverseAttribute join table.
+        Repository.UpdateDetachedSafe(connectedSystem);
+
         // Handle new partitions and containers explicitly - EF Core doesn't automatically detect new items
         // in collections that were loaded from a separate query and then modified.
         // Also handle existing partitions/containers that are detached (e.g. when the entity was loaded
@@ -451,12 +463,13 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
             {
                 if (partition.Id == 0)
                 {
-                    // New partition - add it to the context
+                    // New partition - add it, along with any containers discovered under it.
                     Repository.Database.ConnectedSystemPartitions.Add(partition);
                 }
                 else
                 {
-                    // Existing partition - ensure it's tracked and marked as modified
+                    // Existing partition - ensure it's tracked and marked as modified. Tracked before its
+                    // containers for the same reason the Connected System is tracked before its partitions.
                     Repository.UpdateDetachedSafe(partition);
 
                     if (partition.Containers != null)
@@ -478,11 +491,6 @@ public class ConnectedSystemRepository : IConnectedSystemRepository
                 Repository.UpdateDetachedSafe(settingValue);
             }
         }
-
-        // Use detach-safe update to avoid graph traversal on detached ConnectedSystem entities.
-        // After ClearChangeTracker(), Update() would traverse Objects → MVO → Type → Attributes
-        // causing PK violations on the MetaverseObjectType ↔ MetaverseAttribute join table.
-        Repository.UpdateDetachedSafe(connectedSystem);
     }
 
     /// <summary>

@@ -185,6 +185,64 @@ public static class Helpers
         return $"{Math.Round(timeSpan.TotalMilliseconds)} ms";
     }
 
+    /// <summary>
+    /// The heading shown above a Run Profile Execution Item's error, naming the phase the error belongs to.
+    /// Every <see cref="ActivityRunProfileExecutionItemErrorType"/> must appear here; a missing entry reads
+    /// as a confident statement about the wrong phase rather than as an obvious omission, so
+    /// ErrorPhaseTitleTests asserts the coverage.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<ActivityRunProfileExecutionItemErrorType, string> ErrorPhaseTitles =
+        new Dictionary<ActivityRunProfileExecutionItemErrorType, string>
+        {
+            // No error at all.
+            [ActivityRunProfileExecutionItemErrorType.NotSet] = "No Error",
+
+            // Import-phase errors: the object was rejected before its Connected System Object was created.
+            [ActivityRunProfileExecutionItemErrorType.DuplicateObject] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.MissingExternalIdAttributeValue] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.DuplicateImportedAttributes] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.UnsupportedExternalIdAttributeType] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.CsoCreationFailed] = "Import Rejected",
+            [ActivityRunProfileExecutionItemErrorType.ConnectorConfigurationError] = "Import Rejected",
+
+            // The object imported; a single attribute value did not. Neither "Rejected" nor "Failed" is
+            // true here, and saying either sends an administrator hunting for a problem that does not exist.
+            [ActivityRunProfileExecutionItemErrorType.ImportAttributeValueError] = "Attribute Not Imported",
+
+            // Import-phase diagnostics: the object imported and its changes were applied.
+            [ActivityRunProfileExecutionItemErrorType.ImportHashVerificationFailed] = "Import Verification",
+            [ActivityRunProfileExecutionItemErrorType.DeltaImportFallbackToFullImport] = "Import Fell Back",
+
+            // Synchronisation-phase errors: the Connected System Object exists but synchronisation failed.
+            [ActivityRunProfileExecutionItemErrorType.AmbiguousMatch] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.CouldNotMatchObjectType] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.CouldNotJoinDueToExistingJoin] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.UnexpectedAttribute] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.UnresolvedReference] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.MultiValuedToSingleValued] = "Synchronisation Failed",
+            [ActivityRunProfileExecutionItemErrorType.ExpressionEvaluationError] = "Synchronisation Failed",
+
+            // Export-phase errors.
+            [ActivityRunProfileExecutionItemErrorType.ExportNotConfirmed] = "Export Pending",
+            [ActivityRunProfileExecutionItemErrorType.ExportConfirmationFailed] = "Export Failed",
+            [ActivityRunProfileExecutionItemErrorType.InvalidGeneratedExternalId] = "Export Failed",
+
+            // Generic.
+            [ActivityRunProfileExecutionItemErrorType.UnhandledError] = "Operation Failed"
+        };
+
+    /// <summary>
+    /// Returns the heading for a Run Profile Execution Item's error, naming the phase it belongs to.
+    /// </summary>
+    public static string GetErrorPhaseTitle(ActivityRunProfileExecutionItemErrorType? errorType)
+    {
+        if (errorType.HasValue && ErrorPhaseTitles.TryGetValue(errorType.Value, out var title))
+            return title;
+
+        // Unreachable while ErrorPhaseTitleTests passes; a neutral fallback beats an empty heading.
+        return "Operation Failed";
+    }
+
     #region mudblazor related
     public static Color GetActivityMudBlazorColorForStatus(ActivityStatus status)
     {
