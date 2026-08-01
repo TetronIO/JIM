@@ -4,14 +4,16 @@
 using Bunit;
 using JIM.Models.Activities;
 using JIM.Web.Shared;
+using MudBlazor;
 using NUnit.Framework;
 
 namespace JIM.Web.Components.Tests;
 
 /// <summary>
-/// The Activity detail page's phase stepper (#454). The behaviour worth pinning is what an
-/// administrator can tell at a glance: which step is running, which are done and how long they
-/// took, which are still to come, and that a step the run skipped does not read as a failure.
+/// The horizontal phase stepper (#454): the run read left to right as a stepped progress bar. What
+/// is worth pinning is the part a screenshot cannot prove on its own: that each leg's fill reflects
+/// the step it leaves, so the rail reads as one bar across the whole run rather than a bar that
+/// restarts at every step.
 /// </summary>
 [TestFixture]
 public class RunPhaseStepperTests : JimComponentTestContext
@@ -40,64 +42,117 @@ public class RunPhaseStepperTests : JimComponentTestContext
 
     private static List<ActivityPhase> ImportInProgress() =>
     [
-        Phase(RunPhaseKeys.ImportConnect, "Connecting to Connected System", 0, ActivityPhaseStatus.Completed,
-            started: Started, ended: Started.AddSeconds(12)),
-        Phase(RunPhaseKeys.ImportFetch, "Importing objects", 1, ActivityPhaseStatus.Active, started: Started.AddSeconds(12)),
+        Phase(RunPhaseKeys.ImportConnect, "Connecting to Connected System", 0, ActivityPhaseStatus.Skipped),
+        Phase(RunPhaseKeys.ImportFetch, "Importing objects", 1, ActivityPhaseStatus.Active, started: Started),
         Phase(ActivityPhase.QualifyConnectorKey("read"), "Reading the file", 2, ActivityPhaseStatus.Active,
-            parentKey: RunPhaseKeys.ImportFetch, started: Started.AddSeconds(13)),
-        Phase(RunPhaseKeys.ImportDeletions, "Processing deletions", 3, ActivityPhaseStatus.Skipped),
-        Phase(RunPhaseKeys.ImportSave, "Saving changes", 4, ActivityPhaseStatus.Pending)
+            parentKey: RunPhaseKeys.ImportFetch, started: Started),
+        Phase(RunPhaseKeys.ImportSave, "Saving changes", 3, ActivityPhaseStatus.Pending)
     ];
+
+    private static IEnumerable<string> ConnectorWidths(IRenderedComponent<RunPhaseStepper> cut) =>
+        cut.FindAll(".jim-phase-h-connector-fill").Select(e => e.GetAttribute("style") ?? string.Empty);
+
+    /// <summary>
+    /// Tooltip text is rendered by MudBlazor's popover provider rather than into the component's own
+    /// markup, so it is read from the tooltip components' parameters.
+    /// </summary>
+    private static IEnumerable<string> TooltipTexts(IRenderedComponent<RunPhaseStepper> cut) =>
+        cut.FindComponents<MudTooltip>().Select(c => c.Instance.Text ?? string.Empty);
 
     [Test]
     public void RunPhaseStepper_NoPhases_RendersNothing()
     {
-        // Activities that are not Run Profile executions, and runs that predate phase recording.
         var cut = Render<RunPhaseStepper>(p => p.Add(c => c.Phases, new List<ActivityPhase>()));
 
         Assert.That(cut.Markup.Trim(), Is.Empty);
     }
 
     [Test]
-    public void RunPhaseStepper_WithPhases_ShowsEveryTopLevelStepIncludingThoseStillToCome()
+    public void RunPhaseStepper_WithPhases_ShowsEveryTopLevelStep()
     {
         var cut = Render<RunPhaseStepper>(p => p.Add(c => c.Phases, ImportInProgress()));
 
         Assert.That(cut.Markup, Does.Contain("Connecting to Connected System"));
         Assert.That(cut.Markup, Does.Contain("Importing objects"));
-        Assert.That(cut.Markup, Does.Contain("Processing deletions"));
-        Assert.That(cut.Markup, Does.Contain("Saving changes"),
-            "Showing what is still to come is the reason the stepper exists; a progress bar cannot say it");
+        Assert.That(cut.Markup, Does.Contain("Saving changes"));
     }
 
     [Test]
-    public void RunPhaseStepper_CompletedStep_ShowsHowLongItTook()
+    public void RunPhaseStepper_LegLeavingTheRunningStep_FillsToThatStepsOwnProgress()
+    {
+        var cut = Render<RunPhaseStepper>(p => p
+            .Add(c => c.Phases, ImportInProgress())
+            .Add(c => c.StepProgress, 0.5d));
+
+        // Legs, in order: after the skipped step (done), after the running step (half).
+        var widths = ConnectorWidths(cut).ToList();
+        Assert.That(widths, Has.Count.EqualTo(2), "A leg sits between each pair of steps, so three steps have two legs");
+        Assert.That(widths[0], Does.Contain("100"));
+        Assert.That(widths[1], Does.Contain("50"));
+    }
+
+    [Test]
+    public void RunPhaseStepper_LegLeavingAStepThatRan_IsFullWhateverTheOutcome()
+    {
+        // Completed, skipped and failed all mean "the run is past this step", so the leg is full;
+        // otherwise a skipped step would leave a permanent gap in the rail.
+        var phases = new List<ActivityPhase>
+        {
+            Phase(RunPhaseKeys.ImportConnect, "Connecting to Connected System", 0, ActivityPhaseStatus.Completed, started: Started, ended: Started.AddSeconds(5)),
+            Phase(RunPhaseKeys.ImportFetch, "Importing objects", 1, ActivityPhaseStatus.Skipped),
+            Phase(RunPhaseKeys.ImportSave, "Saving changes", 2, ActivityPhaseStatus.Failed, started: Started, ended: Started.AddMinutes(1)),
+            Phase(RunPhaseKeys.ImportRecordResults, "Recording results", 3, ActivityPhaseStatus.Pending)
+        };
+
+        var cut = Render<RunPhaseStepper>(p => p.Add(c => c.Phases, phases));
+
+        Assert.That(ConnectorWidths(cut).Take(3).All(w => w.Contains("100")), Is.True);
+    }
+
+    [Test]
+    public void RunPhaseStepper_LegAheadOfTheRun_IsEmpty()
+    {
+        var cut = Render<RunPhaseStepper>(p => p
+            .Add(c => c.Phases, ImportInProgress())
+            .Add(c => c.StepProgress, 0.5d));
+
+        var widths = ConnectorWidths(cut).ToList();
+        Assert.That(widths[^1], Does.Not.Contain("100"));
+    }
+
+    [Test]
+    public void RunPhaseStepper_RunningStepWithNothingToCount_LeavesItsLegEmptyRatherThanGuessing()
+    {
+        var cut = Render<RunPhaseStepper>(p => p
+            .Add(c => c.Phases, ImportInProgress())
+            .Add(c => c.StepProgress, null));
+
+        var widths = ConnectorWidths(cut).ToList();
+        Assert.That(widths[1], Does.Contain("0"));
+    }
+
+    [Test]
+    public void RunPhaseStepper_RunningStep_IsMarkedActiveSoTheEyeLandsOnIt()
     {
         var cut = Render<RunPhaseStepper>(p => p.Add(c => c.Phases, ImportInProgress()));
 
-        Assert.That(cut.Markup, Does.Contain("12 sec"));
+        Assert.That(cut.FindAll(".jim-phase-h-label--active"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".jim-phase-h-connector-fill--active"), Has.Count.EqualTo(1));
     }
 
     [Test]
-    public void RunPhaseStepper_RunningStep_ShowsNoDurationYet()
+    public void RunPhaseStepper_SkippedStep_ExplainsItselfWithoutACaptionUnderEveryStep()
     {
-        var cut = Render<RunPhaseStepper>(p => p.Add(c => c.Phases,
-            new List<ActivityPhase> { Phase(RunPhaseKeys.ImportSave, "Saving changes", 0, ActivityPhaseStatus.Active, started: Started) }));
-
-        Assert.That(cut.FindAll(".jim-phase-step-duration"), Is.Empty);
-    }
-
-    [Test]
-    public void RunPhaseStepper_SkippedStep_SaysItWasNotNeededRatherThanReadingAsAFailure()
-    {
+        // The rail stays clean: the marker's muted state and its tooltip carry the explanation,
+        // rather than a caption sitting under every step that did not run normally.
         var cut = Render<RunPhaseStepper>(p => p.Add(c => c.Phases, ImportInProgress()));
 
-        Assert.That(cut.Markup, Does.Contain("not needed"));
-        Assert.That(cut.FindAll(".jim-phase-step--skipped"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".jim-phase-h-label--skipped"), Has.Count.EqualTo(1));
+        Assert.That(TooltipTexts(cut), Does.Contain("Not needed for this run"));
     }
 
     [Test]
-    public void RunPhaseStepper_FailedStep_IsMarkedAsWhereTheRunFailed()
+    public void RunPhaseStepper_FailedStep_SaysWhereTheRunFailed()
     {
         var phases = new List<ActivityPhase>
         {
@@ -107,73 +162,56 @@ public class RunPhaseStepperTests : JimComponentTestContext
 
         var cut = Render<RunPhaseStepper>(p => p.Add(c => c.Phases, phases));
 
-        Assert.That(cut.Markup, Does.Contain("failed here"));
-        Assert.That(cut.FindAll(".jim-phase-step--failed"), Has.Count.EqualTo(1));
+        Assert.That(cut.FindAll(".jim-phase-h-label--failed"), Has.Count.EqualTo(1));
+        Assert.That(TooltipTexts(cut), Does.Contain("The run failed at this step"));
     }
 
     [Test]
-    public void RunPhaseStepper_ConnectorSteps_NestInsideTheStepThatCalledTheConnector()
+    public void RunPhaseStepper_CompletedStep_ShowsHowLongItTook()
     {
-        var cut = Render<RunPhaseStepper>(p => p.Add(c => c.Phases, ImportInProgress()));
-
-        Assert.That(cut.FindAll(".jim-phase-substep"), Has.Count.EqualTo(1));
-        Assert.That(cut.Markup, Does.Contain("Reading the file"));
-        Assert.That(cut.FindAll(".jim-phase-step"), Has.Count.EqualTo(4),
-            "A Connector's steps are detail inside the step that called it, so the top-level step count is the Connector's business only");
-    }
-
-    [Test]
-    public void RunPhaseStepper_ConnectorStepsOfAStepNotRunning_AreNotShown()
-    {
-        // The Connector's detail belongs to the step in flight; showing every Connector step for
-        // every phase would bury the one thing the administrator is watching.
         var phases = new List<ActivityPhase>
         {
-            Phase(RunPhaseKeys.ImportFetch, "Importing objects", 0, ActivityPhaseStatus.Completed, started: Started, ended: Started.AddMinutes(1)),
-            Phase(ActivityPhase.QualifyConnectorKey("read"), "Reading the file", 1, ActivityPhaseStatus.Completed,
-                parentKey: RunPhaseKeys.ImportFetch, started: Started, ended: Started.AddMinutes(1)),
-            Phase(RunPhaseKeys.ImportSave, "Saving changes", 2, ActivityPhaseStatus.Active, started: Started.AddMinutes(1))
+            Phase(RunPhaseKeys.ImportFetch, "Importing objects", 0, ActivityPhaseStatus.Completed, started: Started, ended: Started.AddMinutes(4)),
+            Phase(RunPhaseKeys.ImportSave, "Saving changes", 1, ActivityPhaseStatus.Active, started: Started.AddMinutes(4))
         };
 
         var cut = Render<RunPhaseStepper>(p => p.Add(c => c.Phases, phases));
 
-        Assert.That(cut.FindAll(".jim-phase-substep"), Is.Empty);
+        Assert.That(cut.Markup, Does.Contain("4 min"));
     }
 
     [Test]
-    public void RunPhaseStepper_WithAMessage_ShowsItUnderTheStepItDescribes()
+    public void RunPhaseStepper_ConnectorSteps_AppearBeneathTheRailWhileTheirStepRuns()
+    {
+        // A horizontal rail has no room for a Connector's own steps, so they sit under it, and only
+        // while the step that called the Connector is the one running.
+        var cut = Render<RunPhaseStepper>(p => p.Add(c => c.Phases, ImportInProgress()));
+
+        Assert.That(cut.FindAll(".jim-phase-substep"), Has.Count.EqualTo(1));
+        Assert.That(cut.Markup, Does.Contain("Reading the file"));
+    }
+
+    [Test]
+    public void RunPhaseStepper_WithAMessage_ShowsItBeneathTheRail()
     {
         var cut = Render<RunPhaseStepper>(p => p
             .Add(c => c.Phases, ImportInProgress())
             .Add(c => c.Message, "Parsed 50,000 rows..."));
 
-        var activeStep = cut.Find(".jim-phase-step--active");
-        Assert.That(activeStep.InnerHtml, Does.Contain("Parsed 50,000 rows..."));
+        Assert.That(cut.Find(".jim-phase-h-detail").InnerHtml, Does.Contain("Parsed 50,000 rows..."));
     }
 
     [Test]
-    public void RunPhaseStepper_WithNoMessage_ShowsNoMessageLine()
+    public void RunPhaseStepper_FinishedRun_ShowsNoLiveDetail()
     {
-        var cut = Render<RunPhaseStepper>(p => p.Add(c => c.Phases, ImportInProgress()));
-
-        Assert.That(cut.FindAll(".jim-phase-step-message"), Is.Empty);
-    }
-
-    [Test]
-    public void RunPhaseStepper_Phases_RenderInRunOrderWhateverOrderTheyArrive()
-    {
-        var phases = ImportInProgress();
-        phases.Reverse();
+        var phases = new List<ActivityPhase>
+        {
+            Phase(RunPhaseKeys.ImportFetch, "Importing objects", 0, ActivityPhaseStatus.Completed, started: Started, ended: Started.AddMinutes(1)),
+            Phase(RunPhaseKeys.ImportSave, "Saving changes", 1, ActivityPhaseStatus.Completed, started: Started.AddMinutes(1), ended: Started.AddMinutes(2))
+        };
 
         var cut = Render<RunPhaseStepper>(p => p.Add(c => c.Phases, phases));
 
-        var names = cut.FindAll(".jim-phase-step-name").Select(e => e.TextContent).ToList();
-        Assert.That(names, Is.EqualTo(new[]
-        {
-            "Connecting to Connected System",
-            "Importing objects",
-            "Processing deletions",
-            "Saving changes"
-        }));
+        Assert.That(cut.FindAll(".jim-phase-h-detail"), Is.Empty);
     }
 }

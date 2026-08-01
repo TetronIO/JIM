@@ -2287,62 +2287,9 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     background-color: currentColor !important;
 }
 
-/* ─── Run phase stepper (#454) ───
-   The journey through a Run Profile execution on the Activity detail page. A vertical rail so the
-   step names, their durations and the Connector's own steps all have room to read, at any step
-   count, without the layout reflowing as a run progresses. */
-.jim-phase-stepper {
-    display: flex;
-    flex-direction: column;
-}
-
-.jim-phase-step {
-    display: flex;
-    gap: 0.75rem;
-    position: relative;
-    padding-bottom: 0.75rem;
-}
-
-/* The rail joining the steps, drawn behind the markers and stopping at the last step. */
-.jim-phase-step:not(:last-child)::before {
-    content: "";
-    position: absolute;
-    left: 0.6875rem;
-    top: 1.5rem;
-    bottom: 0;
-    width: 1px;
-    background-color: var(--mud-palette-lines-default);
-}
-
-.jim-phase-step-marker {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.375rem;
-    height: 1.375rem;
-    flex: 0 0 auto;
-    margin-top: 0.125rem;
-    border-radius: 50%;
-    background-color: var(--mud-palette-surface);
-    z-index: 1;
-}
-
-.jim-phase-step-marker .mud-icon-root {
-    font-size: 1.125rem;
-}
-
-.jim-phase-step-body {
-    min-width: 0;
-    flex: 1 1 auto;
-}
-
-.jim-phase-step-heading {
-    display: flex;
-    align-items: baseline;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
-
+/* ─── Run phase step shared styling (#454) ───
+   Used by the phase stepper on the Activity detail page: the step name, its duration, the live
+   message beneath the rail, and the Connector's own steps shown while their step runs. */
 .jim-phase-step-duration,
 .jim-phase-step-note {
     color: var(--mud-palette-text-secondary);
@@ -2351,48 +2298,6 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
 .jim-phase-step-message {
     color: var(--mud-palette-text-secondary);
     margin-top: 0.125rem;
-}
-
-/* Pending: present, but visibly not started, so "what is left" reads at a glance. */
-.jim-phase-step--pending .jim-phase-step-name,
-.jim-phase-step--pending .jim-phase-step-marker .mud-icon-root {
-    color: var(--mud-palette-text-disabled);
-}
-
-/* Skipped: the run did not need this step. Muted like pending, and labelled, so it never reads as
-   an error. */
-.jim-phase-step--skipped .jim-phase-step-name,
-.jim-phase-step--skipped .jim-phase-step-marker .mud-icon-root,
-.jim-phase-step--skipped .jim-phase-step-note {
-    color: var(--mud-palette-text-disabled);
-}
-
-.jim-phase-step--completed .jim-phase-step-marker .mud-icon-root {
-    color: var(--mud-palette-success);
-}
-
-.jim-phase-step--failed .jim-phase-step-marker .mud-icon-root,
-.jim-phase-step--failed .jim-phase-step-note {
-    color: var(--mud-palette-error);
-}
-
-.jim-phase-step--active .jim-phase-step-name {
-    font-weight: 500;
-}
-
-/* The active step's marker reuses the Operations Queue worker icon and its animation, so work in
-   flight reads the same way wherever it appears in the portal. */
-.jim-phase-step--active .jim-phase-step-marker .mud-icon-root {
-    color: var(--mud-palette-primary);
-    animation: jim-worker-icon-tick 6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-.jim-phase-substeps {
-    display: flex;
-    flex-direction: column;
-    gap: 0.125rem;
-    margin-top: 0.375rem;
-    padding-left: 0.125rem;
 }
 
 .jim-phase-substep {
@@ -2428,7 +2333,6 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .jim-phase-step--active .jim-phase-step-marker .mud-icon-root,
     .jim-phase-substep--active .jim-phase-substep-icon {
         animation: none;
     }
@@ -2437,6 +2341,12 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
 /* ─── Run phase stepper, horizontal (#454) ───
    Reads left to right as a stepped progress bar: a marker per step, and a filling line between
    markers showing how far through the step it leaves the run is. */
+.jim-phase-stepper-h {
+    /* One token drives the marker and the connector's alignment to its centre, so resizing the
+       markers cannot leave the rail running through them off-centre. */
+    --jim-phase-marker-size: 1.75rem;
+}
+
 .jim-phase-stepper-h .mud-stepper-nav {
     padding: 0;
     overflow-x: auto;
@@ -2463,8 +2373,8 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 2.25rem;
-    height: 2.25rem;
+    width: var(--jim-phase-marker-size);
+    height: var(--jim-phase-marker-size);
     border-radius: 50%;
     border: 1px solid var(--mud-palette-lines-default);
     background-color: var(--mud-palette-surface);
@@ -2472,7 +2382,7 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
 }
 
 .jim-phase-h-label .mud-icon-root {
-    font-size: 1.125rem;
+    font-size: 0.9375rem;
 }
 
 .jim-phase-h-label--completed {
@@ -2539,9 +2449,9 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     /* Aligned to the centre of the step markers (2.25rem circle, 0.25rem track), so the rail reads
        as one line through them however many lines a step's label wraps to. */
     align-self: flex-start;
-    /* 2.5rem lands the track on the centre of the step markers; measured against the rendered
-       page rather than derived, because the marker's offset depends on MudBlazor's own nav padding. */
-    margin-top: 2.5rem;
+    /* The marker's own centre, plus the 1.5rem MudBlazor pads above it (measured against the
+       rendered page), less half the track's height. */
+    margin-top: calc(1.5rem + (var(--jim-phase-marker-size) / 2) - 0.125rem);
 }
 
 .jim-phase-h-connector-track {

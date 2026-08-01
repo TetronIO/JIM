@@ -328,4 +328,55 @@ public class ActivityPhaseSetTests
     }
 
     #endregion
+
+    #region Phases a run cannot perform
+
+    [Test]
+    public void Declare_WithInapplicablePhases_LeavesThemOutEntirely()
+    {
+        // A file-based import opens no connection. Recording that step and greying it out on every
+        // such run would put a step in the journey that never happens, which says nothing.
+        var set = ActivityPhaseSet.Declare(Guid.NewGuid(), ConnectedSystemRunType.FullImport, null,
+            new HashSet<string> { RunPhaseKeys.ImportConnect });
+
+        Assert.That(set.Phases.Any(p => p.Key == RunPhaseKeys.ImportConnect), Is.False);
+        Assert.That(set.Phases.Select(p => p.Order), Is.EqualTo(Enumerable.Range(0, set.Phases.Count)),
+            "Leaving a phase out must not leave a gap in the ordering");
+    }
+
+    [Test]
+    public void Declare_WithInapplicablePhases_KeepsEveryOtherPhase()
+    {
+        var set = ActivityPhaseSet.Declare(Guid.NewGuid(), ConnectedSystemRunType.FullImport, null,
+            new HashSet<string> { RunPhaseKeys.ImportConnect });
+
+        var expected = RunProfilePhaseCatalogue.GetPhases(ConnectedSystemRunType.FullImport)
+            .Where(p => p.Key != RunPhaseKeys.ImportConnect)
+            .Select(p => p.Key);
+        Assert.That(set.Phases.Select(p => p.Key), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void Declare_WithInapplicableHostPhase_StillNestsNothingRatherThanFailing()
+    {
+        var set = ActivityPhaseSet.Declare(Guid.NewGuid(), ConnectedSystemRunType.FullImport,
+            [new ConnectorPhase("read", "Reading the file")],
+            new HashSet<string> { RunPhaseKeys.ImportFetch });
+
+        Assert.That(set.Phases.Any(p => p.ParentKey != null), Is.False);
+    }
+
+    [Test]
+    public void Declare_SkippingIsStillUsedForPhasesTheRunCouldHavePerformed()
+    {
+        // The distinction that matters: a step the run could have taken but did not is worth
+        // showing as skipped, because its absence is a fact about this run.
+        var set = ActivityPhaseSet.Declare(Guid.NewGuid(), ConnectedSystemRunType.DeltaImport, null);
+        set.Enter(RunPhaseKeys.ImportFetch, T0);
+        set.Enter(RunPhaseKeys.ImportSave, T0.AddMinutes(1));
+
+        Assert.That(set.Phases.Single(p => p.Key == RunPhaseKeys.ImportDeletions).Status, Is.EqualTo(ActivityPhaseStatus.Skipped));
+    }
+
+    #endregion
 }

@@ -103,7 +103,7 @@ A Run Profile execution is a journey through several steps, and the Activity sho
 - **Completed steps** carry how long they took, so a run that took four hours can be read afterwards to see where the four hours went.
 - **The step running now** is highlighted, with the Connector's own steps and the current message shown beneath it.
 - **Steps still to come** are greyed, so "how much is left" is answerable at a glance.
-- **Steps marked "not needed"** were never performed because this run did not require them: a Delta Import performs no deletion detection, and a file-based import opens no connection. This is normal, not a problem.
+- **Greyed steps with a dash** were not needed on this run: a Delta Import performs no deletion detection, for example. Hovering the step says so. This is normal, not a problem. Work a run could never do at all (a file-based import opens no connection) is not shown as a step.
 - **A failed run** marks the step it failed in, which is where to look first.
 
 The progress bar beneath the steps counts objects within the step currently running. Several steps count their own work, so the bar restarts as the run moves between them: that is the step advancing, not progress being lost.

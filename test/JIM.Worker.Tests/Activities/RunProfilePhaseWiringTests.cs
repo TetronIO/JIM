@@ -42,8 +42,8 @@ public class RunProfilePhaseWiringTests : WorkflowTestBase
         var phases = SyncRepo.ActivityPhases.OrderBy(p => p.Order).ToList();
         Assert.That(phases.Single(p => p.Key == RunPhaseKeys.ImportFetch).Status, Is.EqualTo(ActivityPhaseStatus.Completed));
         Assert.That(phases.Single(p => p.Key == RunPhaseKeys.ImportSave).Status, Is.EqualTo(ActivityPhaseStatus.Completed));
-        Assert.That(phases.Single(p => p.Key == RunPhaseKeys.ImportConnect).Status, Is.EqualTo(ActivityPhaseStatus.Skipped),
-            "A file-based import opens no connection, so that step must read as skipped rather than pending forever");
+        Assert.That(phases.Any(p => p.Key == RunPhaseKeys.ImportConnect), Is.False,
+            "A file-based import opens no connection, so the step is not part of this run's journey at all: showing it greyed out on every file-based run would say nothing");
     }
 
     [Test]

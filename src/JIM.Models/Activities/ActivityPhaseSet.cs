@@ -74,7 +74,17 @@ public class ActivityPhaseSet
     /// The phases the Connector declared, or null when it declared none. Ignored for run types that
     /// do not call a Connector, as there would be nowhere to nest them.
     /// </param>
-    public static ActivityPhaseSet Declare(Guid activityId, ConnectedSystemRunType runType, IEnumerable<ConnectorPhase>? connectorPhases)
+    /// <param name="inapplicablePhaseKeys">
+    /// JIM phases this particular run cannot perform, and so should not show at all. A phase that a
+    /// run <em>could</em> perform but did not is a different thing, and is recorded as skipped; this
+    /// is for work the run was never capable of, such as opening a connection for a file-based
+    /// import, which would otherwise sit in every such run's stepper as a step that never happens.
+    /// </param>
+    public static ActivityPhaseSet Declare(
+        Guid activityId,
+        ConnectedSystemRunType runType,
+        IEnumerable<ConnectorPhase>? connectorPhases,
+        IReadOnlySet<string>? inapplicablePhaseKeys = null)
     {
         var hostKey = RunProfilePhaseCatalogue.GetConnectorHostPhaseKey(runType);
         var nested = hostKey == null
@@ -82,7 +92,10 @@ public class ActivityPhaseSet
             : (connectorPhases ?? []).DistinctBy(p => p.Key, StringComparer.Ordinal).ToList();
 
         var phases = new List<ActivityPhase>();
-        foreach (var declared in RunProfilePhaseCatalogue.GetPhases(runType))
+        var applicable = RunProfilePhaseCatalogue.GetPhases(runType)
+            .Where(p => inapplicablePhaseKeys == null || !inapplicablePhaseKeys.Contains(p.Key));
+
+        foreach (var declared in applicable)
         {
             phases.Add(NewPhase(activityId, declared.Key, declared.Name, parentKey: null, order: phases.Count));
 

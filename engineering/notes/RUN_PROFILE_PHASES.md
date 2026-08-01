@@ -24,7 +24,9 @@ The point of a stepper is the steps you have not reached. That is only expressib
 - `RunProfilePhaseCatalogue` (JIM.Models) is the single declaration of JIM's own phases per run type. Adding or renaming a step is an entry here plus the `RunPhaseKeys` constant at the worker call site that enters it; `RunProfilePhaseCatalogueTests` fails if the two drift apart.
 - `IConnectorPhases.GetPhases(connectedSystem, runProfile)` is the Connector's declaration, read once before the run. A Connector that declares nothing still works: it narrates into the JIM step that called it.
 
-A declaration is an expectation, not a promise. A phase the run turns out not to need is recorded as **skipped** when a later phase is entered, so a Delta Import's deletion detection and a file-based import's connection step read as "not needed" rather than sitting pending forever.
+A declaration is an expectation, not a promise. A phase the run turns out not to need is recorded as **skipped** when a later phase is entered, so a Delta Import's deletion detection reads as "not needed" rather than sitting pending forever.
+
+Skipping is for work the run *could* have done. Work a run is structurally incapable of is left out of the declaration entirely, via `ActivityPhaseSet.Declare`'s inapplicable-phase set: a file-based import opens no connection, so declaring one would put a greyed-out step in every file-based run's stepper, for ever, saying nothing. The reporter decides this, because it is the only place that knows both the run type and the Connector.
 
 ### Connector phases nest; they are not peers
 
@@ -60,7 +62,7 @@ The issue's comment proposed splitting live progress text out of `Activity.Messa
 
 - **Option 1 (free-form `CurrentPhase` string, UI infers position) was rejected**, for the text-matching reason above.
 - **Option 3 (phase list on the Activity) is what shipped**, because it is the only one that delivers per-step durations after a page refresh, and on Activities opened days later.
-- **MudStepper was not used.** It is built for interactive wizards: it manages an active index, renders navigation actions, and has no nesting. The stepper here is read-only, nested, and needs skipped and failed states, so it is hand-rolled from MudBlazor primitives with JIM's own CSS.
+- **MudStepper is used, horizontally, with all three of its templates.** `LabelTemplate` draws the step marker (an icon for the work that step does), `TitleTemplate` its label and duration, and `ConnectorTemplate` the line between two steps, which is what makes the rail a stepped progress bar: each leg belongs to the step it leaves and fills with that step's own progress. Its wizard behaviour is suppressed (`ActionContent` empty, `OnPreviewInteraction` cancels every click), and its fixed 175px step basis is overridden, because at seven steps it squeezed the connectors to nothing. A Connector's own steps and the live message sit beneath the rail, which is the one thing a horizontal layout cannot hold inline.
 
 ## Per-Connector phase catalogue
 

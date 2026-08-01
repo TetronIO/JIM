@@ -205,7 +205,7 @@
     {
         <MudPaper Class="pa-4 mt-6" Outlined="true">
             <MudText Typo="Typo.h5" Class="mb-4">Steps</MudText>
-            <RunPhaseStepperHorizontal Phases="_phases"
+            <RunPhaseStepper Phases="_phases"
                                        Message="@(_activity.Status == ActivityStatus.InProgress ? _activity.Message : null)"
                                        StepProgress="@StepProgressFraction" />
         </MudPaper>

@@ -70,7 +70,8 @@ public sealed class ActivityPhaseReporter
     {
         var log = logger ?? Log.ForContext<ActivityPhaseReporter>();
         var connectorPhases = GetConnectorPhases(connector, connectedSystem, runProfile, log);
-        var phases = ActivityPhaseSet.Declare(activity.Id, runProfile.RunType, connectorPhases);
+        var phases = ActivityPhaseSet.Declare(
+            activity.Id, runProfile.RunType, connectorPhases, GetInapplicablePhaseKeys(connector));
         var reporter = new ActivityPhaseReporter(syncRepo, activity, phases, log);
 
         if (phases.Phases.Count > 0)
@@ -169,6 +170,27 @@ public sealed class ActivityPhaseReporter
             // Losing a step is a cosmetic loss; failing the run over it would not be.
             _logger.Warning(ex, "ActivityPhaseReporter: Failed while {What}. The run continues", LogSanitiser.Sanitise(what));
         }
+    }
+
+    /// <summary>
+    /// The JIM phases this run cannot perform, given the Connector it runs against, so they are not
+    /// shown at all.
+    /// </summary>
+    /// <remarks>
+    /// This is narrower than skipping. A step a run could have taken but did not (deletion detection
+    /// on a Delta Import) is worth showing as skipped, because its absence is a fact about the run.
+    /// Work the Connector is structurally incapable of is not: a file-based import opens no
+    /// connection, so a connection step would appear greyed out on every file-based run, for ever,
+    /// saying nothing.
+    /// </remarks>
+    private static IReadOnlySet<string> GetInapplicablePhaseKeys(IConnector? connector)
+    {
+        var inapplicable = new HashSet<string>(StringComparer.Ordinal);
+
+        if (connector is not IConnectorImportUsingCalls)
+            inapplicable.Add(RunPhaseKeys.ImportConnect);
+
+        return inapplicable;
     }
 
     private static IReadOnlyList<ConnectorPhase>? GetConnectorPhases(
