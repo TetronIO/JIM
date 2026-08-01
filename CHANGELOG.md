@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 🔄 Search boxes across the portal now filter as you type instead of waiting for you to click away. Every list, table and dialog search box behaves the same way, with a short pause after the last keystroke so a search that queries the database is not run per character. The multi-criteria query forms on Deleted Objects and Admin > Logs are unchanged: those apply when you press Search or Refresh, as before. (#864)
 - 🔄 Stack traces are now hidden behind a "Show stack trace" toggle wherever JIM reports an error (Activity detail, Import Results detail, the Operations history panel and Pending Export detail), so the error message itself leads. The trace is unchanged and one click away. (#1132)
 - 🔄 The LDAP Connector's "Certificate Validation" setting has been removed. Its "Skip Validation" option could never be honoured for an individual Connected System, and validation is now always applied to LDAPS connections. Where a directory's certificate is not trusted, add it in Admin > Certificates; where the certificate name does not match the host being connected to, give the JIM containers a host entry for that name (`extra_hosts` in Docker Compose) and use the name in the Host setting, rather than weakening validation. See the [LDAP Connector documentation](https://tetronio.github.io/JIM/connectors/jim-ldap-connector/) for both. (#1132)
 
