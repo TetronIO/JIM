@@ -672,6 +672,22 @@ public interface ISyncRepository
     Task<DateTime?> GetLatestSyncRuleConfigurationChangeAsync();
 
     /// <summary>
+    /// Narrows a set of Synchronisation Rule IDs to those that ask for an initial password on the accounts
+    /// they provision.
+    /// <para>
+    /// Asked at the moment a batch of Creates has succeeded, rather than stamped onto the export when it was
+    /// staged, so that switching initial passwords on takes effect for work already queued. The alternative
+    /// would silently skip every account provisioned between the export being staged and the administrator
+    /// enabling the feature.
+    /// </para>
+    /// <para>
+    /// Also what keeps the work list proportional to the deployments that use it: a system that provisions a
+    /// hundred thousand accounts and asks for no passwords stages nothing at all.
+    /// </para>
+    /// </summary>
+    Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds);
+
+    /// <summary>
     /// Gets the object types (schema) for a Connected System.
     /// Used during sync to resolve attribute mappings.
     /// </summary>

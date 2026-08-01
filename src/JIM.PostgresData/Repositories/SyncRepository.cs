@@ -330,6 +330,20 @@ public partial class SyncRepository : ISyncRepository
         return latestRuleChange > latestMappingChange ? latestRuleChange : latestMappingChange;
     }
 
+    public async Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        if (syncRuleIds.Count == 0)
+            return [];
+
+        var enabled = await _context.SyncRuleInitialPasswords
+            .AsNoTracking()
+            .Where(ip => ip.Enabled && syncRuleIds.Contains(ip.SyncRuleId))
+            .Select(ip => ip.SyncRuleId)
+            .ToListAsync();
+
+        return [.. enabled];
+    }
+
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)
         => _repo.ConnectedSystems.GetObjectTypesAsync(connectedSystemId);
 

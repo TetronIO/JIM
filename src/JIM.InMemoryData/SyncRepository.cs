@@ -53,6 +53,13 @@ public class SyncRepository : ISyncRepository
     /// </summary>
     public string? FailActivityMessageUpdateFor { get; set; }
 
+    /// <summary>
+    /// When set, <see cref="StageInitialPasswordsAsync"/> throws it. Lets tests prove that failing to record
+    /// that a newly provisioned account is owed a password leaves the export that created the account
+    /// successful, which is the whole reason the password is staged rather than delivered inline.
+    /// </summary>
+    public Exception? FailInitialPasswordStagingWith { get; set; }
+
     private readonly Dictionary<int, ConnectedSystem> _connectedSystems = new();
     private readonly Dictionary<int, SyncRule> _syncRules = new();
     private readonly Dictionary<int, ConnectedSystemObjectType> _objectTypes = new();
@@ -1326,6 +1333,9 @@ public class SyncRepository : ISyncRepository
 
     public Task StageInitialPasswordsAsync(IEnumerable<PendingInitialPassword> pendingInitialPasswords)
     {
+        if (FailInitialPasswordStagingWith != null)
+            throw FailInitialPasswordStagingWith;
+
         foreach (var pending in pendingInitialPasswords)
         {
             // One outstanding record per account, matching the unique index in the real schema: two would mean
@@ -1665,6 +1675,15 @@ public class SyncRepository : ISyncRepository
             .Concat(_syncRules.Values.SelectMany(r => r.AttributeFlowRules).Select(m => m.LastUpdated ?? m.Created))
             .ToList();
         return Task.FromResult<DateTime?>(timestamps.Count > 0 ? timestamps.Max() : null);
+    }
+
+    public Task<HashSet<int>> GetSyncRuleIdsWithInitialPasswordEnabledAsync(IReadOnlyCollection<int> syncRuleIds)
+    {
+        var enabled = _syncRules.Values
+            .Where(r => syncRuleIds.Contains(r.Id) && r.InitialPassword is { Enabled: true })
+            .Select(r => r.Id)
+            .ToHashSet();
+        return Task.FromResult(enabled);
     }
 
     public Task<List<ConnectedSystemObjectType>> GetObjectTypesAsync(int connectedSystemId)

@@ -178,6 +178,15 @@ public class ExportExecutionServer
             connectedSystem.Name, result.OptimisticApplyAppliedCount, result.OptimisticApplySkippedCount,
             result.OptimisticApplyFailedCount, result.OptimisticApplyUnresolvedReferenceCount);
 
+        // #1121: only worth a line when the run actually provisioned accounts owed a password; every other
+        // deployment would otherwise get a pair of zeroes on every export.
+        if (result.InitialPasswordsStagedCount > 0 || result.InitialPasswordStagingFailedCount > 0)
+        {
+            Log.Information("ExecuteExportsAsync: Initial password summary for {SystemName}: {StagedCount} newly provisioned accounts " +
+                "recorded as owed an initial password, {FailedCount} that could not be recorded",
+                connectedSystem.Name, result.InitialPasswordsStagedCount, result.InitialPasswordStagingFailedCount);
+        }
+
         // Report completion
         await ReportProgressAsync(progressCallback, new ExportProgressInfo
         {
@@ -1025,6 +1034,8 @@ public class ExportExecutionServer
                         result.OptimisticApplySkippedCount += batchResult.OptimisticApplySkippedCount;
                         result.OptimisticApplyFailedCount += batchResult.OptimisticApplyFailedCount;
                         result.OptimisticApplyUnresolvedReferenceCount += batchResult.OptimisticApplyUnresolvedReferenceCount;
+                        result.InitialPasswordsStagedCount += batchResult.InitialPasswordsStagedCount;
+                        result.InitialPasswordStagingFailedCount += batchResult.InitialPasswordStagingFailedCount;
                         if (batchCompletedCallback == null)
                             result.ProcessedExportItems.AddRange(batchResult.ProcessedExportItems);
                         if (batchContainerIds != null)
@@ -1131,6 +1142,7 @@ public class ExportExecutionServer
         var exportsToUpdate = new List<PendingExport>();
         var csosToUpdate = new List<(ConnectedSystemObject cso, ConnectedSystemExportResult exportResult)>();
         var successfulNonDeleteExports = new List<PendingExport>();
+        var provisionedAccounts = new List<PendingExport>();
 
         for (var i = 0; i < batch.Count; i++)
         {
@@ -1194,6 +1206,12 @@ public class ExportExecutionServer
                 result.OptimisticApplySkippedCount++;
             else
                 successfulNonDeleteExports.Add(export);
+
+            // #1121: an account that has just come into existence may be owed an initial password. Only a
+            // Create can be: an Update changes an account that already has one, and resetting that would be a
+            // password reset nobody asked for.
+            if (export.ChangeType == PendingExportChangeType.Create && export.ConnectedSystemObject != null && export.ProvisioningSyncRuleId.HasValue)
+                provisionedAccounts.Add(export);
         }
 
         // Batch update all Pending Exports
@@ -1212,12 +1230,94 @@ public class ExportExecutionServer
             await BatchUpdateCsosAfterSuccessfulExportAsync(csosToUpdate, repository);
         }
 
+        // #1121: runs AFTER BatchUpdateCsosAfterSuccessfulExportAsync, because the delivery pass finds the
+        // account in the Connected System by the external ID that call has just assigned; staging first would
+        // record work against an account JIM could not yet address.
+        if (provisionedAccounts.Count > 0)
+        {
+            await StageInitialPasswordsForBatchAsync(provisionedAccounts, result, repository);
+        }
+
         // Issue #1079: optimistic export apply. Runs LAST, after BatchUpdateCsosAfterSuccessfulExportAsync,
         // so its external-Id additions are already reflected in each CSO's in-memory AttributeValues
         // (D9's dedupe guarantee depends on this ordering; see D11).
         if (successfulNonDeleteExports.Count > 0)
         {
             await ApplyOptimisticExportUpdatesAsync(successfulNonDeleteExports, result, repository);
+        }
+    }
+
+    /// <summary>
+    /// Records that this batch's newly provisioned accounts are owed an initial password (issue #1121).
+    /// <para>
+    /// Staged, not delivered. Setting a password is a round trip to the Connected System, and doing it here
+    /// would put a second network call inside the loop that is persisting the results of one that has already
+    /// succeeded: slow at scale, and structurally able to take a successful export down with it. A later pass
+    /// opens one password connection per Connected System and works through what is outstanding.
+    /// </para>
+    /// <para>
+    /// Which rules ask for a password is read now rather than stamped onto the export when it was staged, so
+    /// that switching the feature on reaches work already queued, and so that a deployment not using it writes
+    /// no rows at all.
+    /// </para>
+    /// <para>
+    /// Failure is contained but not swallowed. The accounts exist in the Connected System and their exports are
+    /// already recorded as successful; marking them failed would have JIM retry the Create, duplicating objects
+    /// or erroring for ever. Unlike the optimistic apply below, though, nothing self-heals a password nobody
+    /// knows is owed, so this logs an Error and counts it on the result for the Activity to report, rather than
+    /// passing quietly.
+    /// </para>
+    /// </summary>
+    private static async Task StageInitialPasswordsForBatchAsync(
+        List<PendingExport> provisionedAccounts,
+        ExportExecutionResult result,
+        ISyncRepository repository)
+    {
+        using var span = Diagnostics.Diagnostics.Database.StartSpan("StageInitialPasswords")
+            .SetTag("count", provisionedAccounts.Count);
+
+        // Declared out here so the failure count below is the number of accounts genuinely owed a password,
+        // once that is known. A failure in the lookup itself leaves it null, and every provisioned account in
+        // the batch is reported as unrecorded because JIM cannot tell which of them needed recording.
+        List<PendingInitialPassword>? staging = null;
+        try
+        {
+            var provisioningRuleIds = provisionedAccounts
+                .Select(pe => pe.ProvisioningSyncRuleId!.Value)
+                .Distinct()
+                .ToList();
+
+            var rulesAskingForAPassword = await repository.GetSyncRuleIdsWithInitialPasswordEnabledAsync(provisioningRuleIds);
+            if (rulesAskingForAPassword.Count == 0)
+                return;
+
+            staging = provisionedAccounts
+                .Where(pe => rulesAskingForAPassword.Contains(pe.ProvisioningSyncRuleId!.Value))
+                .Select(pe => new PendingInitialPassword
+                {
+                    ConnectedSystemObjectId = pe.ConnectedSystemObject!.Id,
+                    ConnectedSystemId = pe.ConnectedSystemId,
+                    SyncRuleId = pe.ProvisioningSyncRuleId!.Value,
+                    Status = PendingInitialPasswordStatus.Pending,
+                    CreatedAt = DateTime.UtcNow
+                })
+                .ToList();
+
+            if (staging.Count == 0)
+                return;
+
+            await repository.StageInitialPasswordsAsync(staging);
+            result.InitialPasswordsStagedCount += staging.Count;
+            Log.Debug("StageInitialPasswordsForBatchAsync: Staged initial passwords for {Count} newly provisioned accounts on Connected System {ConnectedSystemId}",
+                staging.Count, provisionedAccounts[0].ConnectedSystemId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            var unrecorded = staging?.Count ?? provisionedAccounts.Count;
+            result.InitialPasswordStagingFailedCount += unrecorded;
+            Log.Error(ex, "StageInitialPasswordsForBatchAsync: Could not record that {Count} newly provisioned accounts on Connected System {ConnectedSystemId} " +
+                "are owed an initial password. The accounts were created successfully; export them again to stage the passwords",
+                unrecorded, provisionedAccounts[0].ConnectedSystemId);
         }
     }
 
