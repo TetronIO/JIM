@@ -106,7 +106,7 @@ A Run Profile execution is a journey through several steps, and the Activity sho
 - **A green ring with a dash** marks a step that was not needed on this run: a Delta Import performs no deletion detection, for example. It is green because the run is past it; it is a ring rather than a filled tick because it did no work of its own. Hovering the step says so. This is normal, not a problem. Work a run could never do at all (a file-based import opens no connection) is not shown as a step.
 - **A failed run** marks the step it failed in, which is where to look first.
 
-The progress bar beneath the steps counts objects within the step currently running. Several steps count their own work, so the bar restarts as the run moves between them: that is the step advancing, not progress being lost.
+The progress bar beneath the steps counts objects within the step currently running, and the leg of the rail leaving that step fills to match, so the same progress reads at a glance and in exact numbers. Several steps count their own work, so the bar restarts as the run moves between them: that is the step advancing, not progress being lost.
 
 ### Connector steps and messages
 

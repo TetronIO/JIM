@@ -199,59 +199,62 @@
         </MudGrid>
     </MudPaper>
 
-    @* The run's steps: what is done, what is running, and what is still to come (#454). Shown while
-       the run is in flight and afterwards, where the durations answer where the time went. *@
-    @if (_phases.Count > 0)
+    @* Where the run has got to: the steps (#454), and how far through the running step it is. One
+       panel, because they answer the same question at two resolutions. The steps outlive the run;
+       the counters below them only exist while it is in flight. *@
+    @if (_phases.Count > 0 || _activity.Status == ActivityStatus.InProgress)
     {
         <MudPaper Class="pa-4 mt-6" Outlined="true">
-            <MudText Typo="Typo.h5" Class="mb-4">Steps</MudText>
-            <RunPhaseStepper Phases="_phases"
-                                       Message="@(_activity.Status == ActivityStatus.InProgress ? _activity.Message : null)"
-                                       StepProgress="@StepProgressFraction" />
-        </MudPaper>
-    }
+            <MudText Typo="Typo.h5" Class="mb-4">Progress</MudText>
 
-    @if (_activity.Status == ActivityStatus.InProgress)
-    {
-        var progress = _activity.ObjectsToProcess > 0
-            ? (double)_activity.ObjectsProcessed / _activity.ObjectsToProcess * 100
-            : 0;
-        var isIndeterminate = _activity.ObjectsToProcess == 0;
+            @if (_phases.Count > 0)
+            {
+                <RunPhaseStepper Phases="_phases"
+                                 Message="@(_activity.Status == ActivityStatus.InProgress ? _activity.Message : null)"
+                                 StepProgress="@StepProgressFraction" />
+            }
 
-        <MudPaper Class="pa-4 mt-6" Outlined="true">
-            <MudStack Spacing="2">
-                @* The message rides with the step it belongs to in the stepper above; repeating it
-                   here would print the same sentence twice on the page. *@
-                @if (_phases.Count == 0 && !string.IsNullOrEmpty(_activity.Message))
-                {
-                    <MudText Typo="Typo.body1" Style="white-space: pre-line;">@_activity.Message</MudText>
-                }
-                @if (isIndeterminate)
-                {
-                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" Size="Size.Large" />
-                }
-                else
-                {
-                    <MudProgressLinear Value="@progress" Color="Color.Primary" Rounded="true" Size="Size.Large" />
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        @_activity.ObjectsProcessed.ToString("N0") of @_activity.ObjectsToProcess.ToString("N0") objects
-                        (@progress.ToString("F1")%)
-                    </MudText>
-                }
-                @* Throughput and ETA (issue #202), derived from successive progress samples. *@
-                @if (_etaEstimate.ObjectsPerSecond.HasValue)
-                {
-                    var objectsPerSecond = _etaEstimate.ObjectsPerSecond.Value;
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        @if (_etaEstimate.EstimatedSecondsRemaining.HasValue)
-                        {
-                            var remaining = TimeSpan.FromSeconds(Math.Round(_etaEstimate.EstimatedSecondsRemaining.Value));
-                            <span>About @remaining.ToAbbreviatedString() remaining; </span>
-                        }
-                        <span>@FormatRate(objectsPerSecond) objects/second</span>
-                    </MudText>
-                }
-            </MudStack>
+            @if (_activity.Status == ActivityStatus.InProgress)
+            {
+                var progress = _activity.ObjectsToProcess > 0
+                    ? (double)_activity.ObjectsProcessed / _activity.ObjectsToProcess * 100
+                    : 0;
+                var isIndeterminate = _activity.ObjectsToProcess == 0;
+
+                <MudStack Spacing="2" Class="@(_phases.Count > 0 ? "mt-3" : "")">
+                    @* With steps, the message rides with the step it describes; without them there is
+                       nowhere else for it to go. *@
+                    @if (_phases.Count == 0 && !string.IsNullOrEmpty(_activity.Message))
+                    {
+                        <MudText Typo="Typo.body1" Style="white-space: pre-line;">@_activity.Message</MudText>
+                    }
+                    @if (isIndeterminate)
+                    {
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Rounded="true" Size="Size.Large" />
+                    }
+                    else
+                    {
+                        <MudProgressLinear Value="@progress" Color="Color.Primary" Rounded="true" Size="Size.Large" />
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            @_activity.ObjectsProcessed.ToString("N0") of @_activity.ObjectsToProcess.ToString("N0") objects
+                            (@progress.ToString("F1")%)
+                        </MudText>
+                    }
+                    @* Throughput and ETA (issue #202), derived from successive progress samples. *@
+                    @if (_etaEstimate.ObjectsPerSecond.HasValue)
+                    {
+                        var objectsPerSecond = _etaEstimate.ObjectsPerSecond.Value;
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            @if (_etaEstimate.EstimatedSecondsRemaining.HasValue)
+                            {
+                                var remaining = TimeSpan.FromSeconds(Math.Round(_etaEstimate.EstimatedSecondsRemaining.Value));
+                                <span>About @remaining.ToAbbreviatedString() remaining; </span>
+                            }
+                            <span>@FormatRate(objectsPerSecond) objects/second</span>
+                        </MudText>
+                    }
+                </MudStack>
+            }
         </MudPaper>
     }
 
