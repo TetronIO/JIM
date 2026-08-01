@@ -2363,6 +2363,23 @@ html[lang] .mud-paper .mud-table.attribute-change-table .mud-table-empty-row {
     padding-inline: 0.25rem;
 }
 
+/* MudBlazor renders each step as a clickable button, and this stepper cancels every click. Take the
+   affordance away too, or a step offers a click that does nothing: no hover fill, no pointer, no
+   ripple. Hovering still works, because the marker's tooltip is what a hover is for here.
+   The selector repeats MudBlazor's own (.mud-stepper .mud-stepper-nav .mud-step.mud-clickable:hover)
+   with the wrapper in front, so it wins on specificity rather than on !important. */
+.jim-phase-stepper-h .mud-stepper .mud-stepper-nav .mud-step.mud-clickable,
+.jim-phase-stepper-h .mud-stepper .mud-stepper-nav .mud-step.mud-clickable:hover,
+.jim-phase-stepper-h .mud-stepper .mud-stepper-nav .mud-step.mud-clickable:focus-visible,
+.jim-phase-stepper-h .mud-stepper .mud-stepper-nav .mud-step.mud-clickable:active {
+    cursor: default;
+    background-color: transparent;
+}
+
+.jim-phase-stepper-h .mud-stepper-nav .mud-step .mud-ripple-effect {
+    display: none;
+}
+
 /* The stepper's own content area and action bar have nothing to show here: this is a report on a
    run, not a wizard, so the rail is the whole component. */
 .jim-phase-stepper-h .mud-stepper-content {
