@@ -444,15 +444,8 @@ public class CertificateServer : ICertificateProvider
             return false;
         }
 
-        try
-        {
-            return connector is IConnectorSecureEndpoint;
-        }
-        finally
-        {
-            if (connector is IDisposable disposable)
-                disposable.Dispose();
-        }
+        using var connectorDisposable = connector as IDisposable;
+        return connector is IConnectorSecureEndpoint;
     }
 
     /// <summary>
@@ -603,22 +596,16 @@ public class CertificateServer : ICertificateProvider
             return (connectedSystem, null, ServerCertificateReadOutcome.NotConfiguredForSecureConnection, $"The '{connectorName}' connector is not available, so JIM cannot tell where this Connected System connects.");
         }
 
-        try
-        {
-            if (connector is not IConnectorSecureEndpoint secureEndpointConnector)
-                return (connectedSystem, null, ServerCertificateReadOutcome.NotConfiguredForSecureConnection, $"The '{connectorName}' connector does not make encrypted connections, so there is no server certificate to look at.");
+        using var connectorDisposable = connector as IDisposable;
 
-            var endpoint = secureEndpointConnector.ResolveSecureEndpoint(connectedSystem.SettingValues);
-            if (endpoint == null)
-                return (connectedSystem, null, ServerCertificateReadOutcome.NotConfiguredForSecureConnection, $"The '{connectedSystem.Name}' Connected System is not configured to make an encrypted connection, so there is no server certificate to look at.");
+        if (connector is not IConnectorSecureEndpoint secureEndpointConnector)
+            return (connectedSystem, null, ServerCertificateReadOutcome.NotConfiguredForSecureConnection, $"The '{connectorName}' connector does not make encrypted connections, so there is no server certificate to look at.");
 
-            return (connectedSystem, endpoint, ServerCertificateReadOutcome.Read, null);
-        }
-        finally
-        {
-            if (connector is IDisposable disposable)
-                disposable.Dispose();
-        }
+        var endpoint = secureEndpointConnector.ResolveSecureEndpoint(connectedSystem.SettingValues);
+        if (endpoint == null)
+            return (connectedSystem, null, ServerCertificateReadOutcome.NotConfiguredForSecureConnection, $"The '{connectedSystem.Name}' Connected System is not configured to make an encrypted connection, so there is no server certificate to look at.");
+
+        return (connectedSystem, endpoint, ServerCertificateReadOutcome.Read, null);
     }
 
     /// <summary>

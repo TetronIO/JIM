@@ -203,7 +203,7 @@ public class SynchronisationControllerServerCertificateTests
 
         Assert.That(result, Is.Not.Null);
         Assert.That(result!.StatusCode, Is.EqualTo(StatusCodes.Status201Created));
-        var response = result.Value as TrustServerCertificateResponse;
+        var response = result!.Value as TrustServerCertificateResponse;
         Assert.That(response, Is.Not.Null);
         Assert.Multiple(() =>
         {
