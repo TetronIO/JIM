@@ -107,7 +107,7 @@ The settings listed below are the ones most commonly adjusted; the full list is 
 | `Security.RateLimiting.UnauthenticatedRequestsPerMinute` | Unauthenticated API requests per minute | Security | The maximum REST API requests per minute for an unauthenticated client (per IP address). | `30` |
 
 !!! tip "Editing service settings"
-    Navigate to **Admin > Service Settings**, use the filter and search box to locate the setting by key or display name, and click the edit icon. Changes are audited: the settings page shows who last modified each value and when.
+    Navigate to **Admin > Service Settings**, use the filter and search box to locate the setting by key or display name, and click the edit icon. The search box filters as you type, as it does on every list in the portal. Changes are audited: the settings page shows who last modified each value and when.
 
 ---
 
